@@ -41,10 +41,17 @@ build/rpi/v8:
 	--output=out --target=binaries --progress=plain 
 	-f build/docker/Dockerfile .
 
+## run/live: run the application with reloading on file changes
+.PHONY: run/live
+run/live:
+	@go run cmd/haptics/main.go
+
+## clean: clean up build output files
 .PHONY: clean
 clean:
 	@rm -rf out
 
+## clean: clean up project and return to a pristine state
 .PHONY: distclean
 distclean: clean
 	@docker builder prune -af

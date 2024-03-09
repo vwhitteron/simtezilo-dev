@@ -28,6 +28,8 @@ github.com/stretchr/testify v1.8.4 h1:CcVxjf3Q8PM0mHUKJCdn+eZZtm5yQwehR5yeSVQQcU
 github.com/stretchr/testify v1.8.4/go.mod h1:sz/lmYIOXD/1dqDmKjjqLyZ2RngseejIcXlSw2iwfAo=
 github.com/vwhitteron/gt-telemetry v0.0.0-20240306105242-6238429475a5 h1:7fexlkEmfe2m+PKEohlRT90/s0aUC4GAHdtsBJg22jE=
 github.com/vwhitteron/gt-telemetry v0.0.0-20240306105242-6238429475a5/go.mod h1:qBTrFEV1rK6qVtejOMtsEjb8xSB+KReLJbgJCXyXhf0=
+github.com/vwhitteron/gt-telemetry v0.0.0-20240309073332-06cac61cc5ab h1:aXptVOxM9VST3imKeXd9ZEjjxCAFcUvjd0NqQo6Xxbo=
+github.com/vwhitteron/gt-telemetry v0.0.0-20240309073332-06cac61cc5ab/go.mod h1:qBTrFEV1rK6qVtejOMtsEjb8xSB+KReLJbgJCXyXhf0=
 golang.org/x/crypto v0.0.0-20210421170649-83a5a9bb288b/go.mod h1:T9bdIzuCu7OtxOm1hfPfRQxPLYneinmdGuTeoZ9dtd4=
 golang.org/x/crypto v0.21.0 h1:X31++rzVUdKhX5sWmSOFZxx8UW/ldWx55cbf08iNAMA=
 golang.org/x/crypto v0.21.0/go.mod h1:0BP7YvVV9gBbVKyeTG0Gyn+gZm94bibOW5BjDEYAOMs=

@@ -7,7 +7,7 @@ require (
 	github.com/gopxl/beep v1.4.0
 	github.com/manx98/go-st7789 v0.0.2-beta
 	github.com/stianeikeland/go-rpio/v4 v4.6.0
-	github.com/vwhitteron/gt-telemetry v0.0.0-20240306105242-6238429475a5
+	github.com/vwhitteron/gt-telemetry v0.0.0-20240309073332-06cac61cc5ab
 )
 
 require (

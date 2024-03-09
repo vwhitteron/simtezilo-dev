@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/gopxl/beep"
+	"github.com/gopxl/beep/effects"
 	"github.com/gopxl/beep/speaker"
 	"github.com/gopxl/beep/vorbis"
 	telemetry_client "github.com/vwhitteron/gt-telemetry"
@@ -39,6 +40,7 @@ func main() {
 
 	lastGear := 20
 	lastVehicleModel := ""
+	volume := float64(0.5)
 	for {
 		currentGear := gt.Telemetry.CurrentGear()
 
@@ -50,6 +52,12 @@ func main() {
 		if lastVehicleModel != gt.Telemetry.VehicleModel() {
 			fmt.Printf("Vehicle: %s %s\n", gt.Telemetry.VehicleManufacturer(), gt.Telemetry.VehicleModel())
 			lastVehicleModel = gt.Telemetry.VehicleModel()
+			switch gt.Telemetry.VehicleType() {
+			case "street":
+				volume = -2
+			case "race":
+				volume = 1
+			}
 		}
 
 		if currentGear == 15 { // Neutral
@@ -61,7 +69,16 @@ func main() {
 			lastGear = currentGear
 			go func() {
 				thump := buffer.Streamer(0, buffer.Len())
-				speaker.Play(thump)
+				if volume == 1 {
+					speaker.Play(thump)
+				} else {
+					intensity := &effects.Volume{
+						Streamer: thump,
+						Base:     2,
+						Volume:   volume,
+					}
+					speaker.Play(intensity)
+				}
 			}()
 
 			// debounce
