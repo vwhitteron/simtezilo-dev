@@ -14,6 +14,12 @@ type packet struct {
 	data []byte
 }
 
+type metricDuration struct {
+	min time.Duration
+	max time.Duration
+	avg time.Duration
+}
+
 func main() {
 	f, err := os.Create("assets/replay/test.gtz")
 	if err != nil {
@@ -39,6 +45,9 @@ func main() {
 
 	fmt.Println("Waiting for replay to start")
 
+	processMetrics := metricDuration{}
+	fileWriteMetrics := metricDuration{}
+
 	framesCaptured := -1
 	lastTimeOfDay := time.Duration(0)
 	sequenceID := ^uint32(0)
@@ -50,6 +59,8 @@ func main() {
 			time.Sleep(4 * time.Millisecond)
 			continue
 		}
+
+		frameStartTime := time.Now()
 
 		diff = gt.Telemetry.SequenceID() - sequenceID
 		sequenceID = gt.Telemetry.SequenceID()
@@ -96,16 +107,48 @@ func main() {
 				fmt.Printf("Dropped %d frames\n", diff-1)
 			}
 
+			writeStart := time.Now()
 			_, err := buffer.Write(gt.DecipheredPacket)
 			if err != nil {
 				log.Fatal(err)
 			}
+
+			fileWriteMetrics.update(time.Now().Sub(writeStart))
+
 			framesCaptured++
 			lastTimeOfDay = gt.Telemetry.TimeOfDay()
 		}
 
-		time.Sleep(4 * time.Millisecond)
+		processMetrics.update(time.Now().Sub(frameStartTime))
+
+		// nextFrame := (15 * time.Millisecond) - time.Now().Sub(frameStartTime)
+		nextFrame := 4 * time.Millisecond
+		time.Sleep(nextFrame)
+
+		if framesCaptured%300 == 0 {
+			fmt.Printf("\nFrames captured: %d\n", framesCaptured)
+			processMetrics.Print()
+			fileWriteMetrics.Print()
+		}
 	}
 
 	fmt.Printf("Capture complete, total frames: %d\n", framesCaptured)
+}
+
+func (m *metricDuration) update(d time.Duration) {
+	if d < m.min {
+		m.min = d
+	}
+	if d > m.max {
+		m.max = d
+	}
+	m.avg = (m.avg + d) / 2
+}
+
+func (m *metricDuration) Print() {
+	fmt.Printf("Min: %d ms, Max: %d ms , Avg: %d ms\n",
+		m.min.Milliseconds(),
+		m.max.Milliseconds(),
+		m.avg.Milliseconds(),
+	)
 }
