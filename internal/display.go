@@ -1,11 +1,13 @@
 package internal
 
 import (
+	"fmt"
 	"image/color"
 
 	_ "image/png"
 
 	"github.com/vwhitteron/go-pirateaudio/display"
+	"github.com/vwhitteron/go-pirateaudio/textview"
 )
 
 type spriteBox struct {
@@ -13,14 +15,15 @@ type spriteBox struct {
 }
 
 type Display struct {
-	LCD      *display.Display
+	lcd      *display.Display
 	rotation int
+	sprites  *spriteSet
 }
 
-func NewPirateAudioDisplay(rotation int) (*Display, error) {
+func NewPirateAudioDisplay(rotation int, spriteFile string) (*Display, error) {
 	lcd, err := display.Init()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("initializing display: %w", err)
 	}
 
 	switch rotation {
@@ -36,14 +39,37 @@ func NewPirateAudioDisplay(rotation int) (*Display, error) {
 
 	lcd.FillScreen(color.RGBA{R: 0, G: 0, B: 0, A: 0})
 
-	return &Display{LCD: lcd, rotation: rotation}, nil
+	sprites, err := NewSpriteSet(spriteFile)
+	if err != nil {
+		return nil, fmt.Errorf("loading sprite set: %w", err)
+	}
+
+	return &Display{
+		lcd:      lcd,
+		rotation: rotation,
+		sprites:  sprites,
+	}, nil
 }
 
-// func (d *Display) Show(screen string) {
-// 	d.LCD.DrawRaw(img)
-// }
+func (d *Display) Clear() {
+	d.lcd.FillScreen(color.RGBA{R: 0, G: 0, B: 0, A: 0})
+}
+
+func (d *Display) Show(sprite string) {
+	img := d.sprites.GetSprite(sprite)
+	d.lcd.DrawRAW(img)
+}
+
+func (d *Display) ShowText(text string) {
+	d.Clear()
+	opts := textview.DefaultOpts
+	opts.FGColor = textview.GREEN
+	opts.FontSize = 64
+	tv := textview.NewWithOptions(opts)
+	tv.DrawChars(text)
+}
 
 func (d *Display) Close() {
-	d.LCD.PowerOff()
-	d.LCD.Close()
+	d.lcd.PowerOff()
+	d.lcd.Close()
 }
