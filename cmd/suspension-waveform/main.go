@@ -37,16 +37,17 @@ func main() {
 	sequenceId := uint32(0)
 	for {
 		if sequenceId == client.Telemetry.SequenceID() {
-			time.Sleep(8 * time.Millisecond)
+			time.Sleep(4 * time.Millisecond)
 			continue
 		}
 
 		sequenceId = client.Telemetry.SequenceID()
 
 		height := client.Telemetry.SuspensionHeightMillimeters().FrontLeft
-		delta := height - lastHeight
+		// delta := height - lastHeight
 		// value := byte(int16(60000 * (delta / client.Telemetry.RideHeightMillimeters())))
-		value := byte(int16(60000 * (delta / 100)))
+		// value := byte(int16(60000 * (delta / 100)))
+		value := byte(int16(60000 * (height / 100)))
 
 		err = buffer.WriteByte(value)
 		if err != nil {
@@ -67,6 +68,6 @@ func main() {
 			fmt.Println("Flushed 60 bytes")
 		}
 
-		time.Sleep(16 * time.Millisecond)
+		time.Sleep(4 * time.Millisecond)
 	}
 }

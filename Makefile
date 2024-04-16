@@ -23,22 +23,25 @@ build/darwin/silicon:
 ## build/rpi/v6: build the application for Raspberry Pi ARMv6 (1*, Zero*)
 .PHONY: build/rpi/v6
 build/rpi/v6:
-	@docker build --build-arg GOOS=linux --build-arg GOARCH=arm --build-arg GOARM=6 \
-	--output=out --target=binaries --progress=plain 
+	@docker build \
+	--build-arg GOOS=linux --build-arg GOARCH=arm --build-arg GOARM=6 \
+	--output=out --target=binaries --progress=plain \
 	-f build/docker/Dockerfile .
 
-## build/rpi/v6: build the application for Raspberry Pi ARMv7 (2B)
+## build/rpi/v7: build the application for Raspberry Pi ARMv7 (2B)
 .PHONY: build/rpi/v7
 build/rpi/v7:
-	@docker build --build-arg GOOS=linux --build-arg GOARCH=arm --build-arg GOARM=7 \
-	--output=out --target=binaries --progress=plain 
+	@docker build \
+	--build-arg GOOS=linux --build-arg GOARCH=arm --build-arg GOARM=7 \
+	--output=out --target=binaries --progress=plain \
 	-f build/docker/Dockerfile .
 
-## build/rpi/v6: build the application for Raspberry Pi ARMv8 (2B[+1.2], 3*, 4*, Zero 2W)
+## build/rpi/v8: build the application for Raspberry Pi ARMv8 (2B[+1.2], 3*, 4*, Zero 2W)
 .PHONY: build/rpi/v8
 build/rpi/v8:
-	@docker build --build-arg GOOS=linux --build-arg GOARCH=arm64 \
-	--output=out --target=binaries --progress=plain 
+	@docker build \
+	--build-arg GOOS=linux --build-arg GOARCH=arm64 \
+	--output=out --target=binaries --progress=plain \
 	-f build/docker/Dockerfile .
 
 ## run/live: run the application with reloading on file changes
@@ -50,6 +53,7 @@ run/live:
 .PHONY: clean
 clean:
 	@rm -rf out
+	@go clean -cache
 
 ## clean: clean up project and return to a pristine state
 .PHONY: distclean

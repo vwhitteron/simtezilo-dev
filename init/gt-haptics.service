@@ -1,0 +1,16 @@
+[Unit]
+Description=Gran Turismo Haptics Server
+After=network.target
+Wants=network.target
+
+[Service]
+ExecStartPre=/bin/sh -c 'until ping -q -c1 10.255.1.1; do sleep 1; done;'
+ExecStart=/opt/gt-haptics/haptics-linux-arm-6 -d /opt/gt-haptics/assets
+Type=simple
+Restart=always
+
+[Install]
+WantedBy=network.target
+
+[Socket]
+ListenDatagram=0.0.0.0:33740

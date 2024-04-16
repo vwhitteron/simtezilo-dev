@@ -1,110 +1,81 @@
 package main
 
 import (
-	"fmt"
-	"image/png"
+	"flag"
+	"image/color"
 	"log"
 	"os"
 	"time"
 
-	ST7789 "github.com/manx98/go-st7789"
-	"github.com/stianeikeland/go-rpio/v4"
+	"github.com/vwhitteron/go-pirateaudio/buttons"
+	"github.com/vwhitteron/go-pirateaudio/display"
+	"github.com/vwhitteron/go-pirateaudio/textview"
 )
 
-// displayPNG
-//
-//	@Description: 显示GIF图片
-//	@param ctx
-//	@param canvas 画布
-//	@param filePath GIF路径
-func displayPNG(canvas *ST7789.Canvas, filePath string) {
-	f, err := os.OpenFile(filePath, os.O_RDONLY, os.ModePerm)
-	if err != nil {
-		log.Fatalf("failed to open: %v", err)
-	}
-	defer func() {
-		if err = f.Close(); err != nil {
-			log.Fatalf("failed to close: %v", err)
-		}
-	}()
-	all, err := png.Decode(f)
-	if err != nil {
-		log.Fatalf("failed to decode: %v", err)
-	}
-
-	fmt.Println("Displaying image...")
-	canvas.DrawImage(all)
-	canvas.Flush()
-	fmt.Println("Image displayed!")
-}
-
-type MyPin struct {
-	rpio.Pin
-}
-
-func (m *MyPin) SetOutput() {
-	m.Mode(rpio.Output)
-}
-
-type MySpi struct {
-}
-
-func (m *MySpi) SpiSpeed(speed uint32) {
-	rpio.SpiSpeed(int(speed))
-}
-
-func (m *MySpi) SetSpiMode3() {
-	rpio.SpiMode(1, 1)
-}
-
-func (m *MySpi) SpiTransmit(data []byte) {
-	rpio.SpiTransmit(data...)
-}
-
 func main() {
-	if err := rpio.Open(); err != nil {
-		log.Fatalf("failed to open rpio: %v", err)
-	}
-	defer func() {
-		if err := rpio.Close(); err != nil {
-			log.Fatalf("failed to close gpio: %v", err)
-		}
-	}()
+	var image string
+	var rotation int
+	var off bool
 
-	fmt.Println("Initialized, waiting for button press")
+	flag.StringVar(&image, "i", "assets/image/gt-telemetry.png", "Image to display. Default is gt-telemetry.png")
+	flag.IntVar(&rotation, "r", 0, "Display rotation. Default is 0 degress")
+	flag.BoolVar(&off, "o", false, "Turn off the display. Default is false")
+	flag.Parse()
 
-	// buttonA := rpio.Pin(5)
-	// lastResA := buttonA.Read()
-	// for {
-	// 	resA := buttonA.Read()
-
-	// 	if resA == lastResA {
-	// 		continue
-	// 	}
-
-	// 	lastResA = resA
-
-	// 	fmt.Printf("Button A: %+v\n", resA)
-	// 	time.Sleep(5 * time.Millisecond)
-	// }
-
-	err := rpio.SpiBegin(rpio.Spi0)
+	dsp, err := display.Init()
 	if err != nil {
-		log.Fatalf("failed to begin gpio: %v", err)
+		panic(err)
 	}
-	device := ST7789.NewST7789(
-		&MySpi{},
-		&MyPin{rpio.Pin(25)},
-		&MyPin{rpio.Pin(27)},
-		&MyPin{rpio.Pin(24)},
-		ST7789.Screen240X240,
-	)
-	canvas := device.GetFullScreenCanvas()
-	displayPNG(canvas, "./assets/pictures/testimage.png")
+	defer dsp.Close()
 
-	time.Sleep(5 * time.Second)
-	fmt.Println("Cleaning up")
+	if off {
+		dsp.PowerOff()
+		os.Exit(0)
+	}
 
-	canvas.Clear()
-	canvas.Flush()
+	img, err := os.Open(image)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer img.Close()
+
+	// Set the screen color to white
+	dsp.FillScreen(color.RGBA{R: 0, G: 0, B: 0, A: 0})
+
+	// Rotate before pushing pixels, so the image appears rotated
+	switch rotation {
+	case 90:
+		dsp.Rotate(display.ROTATION_90)
+	case 180:
+		dsp.Rotate(display.ROTATION_180)
+	case 270:
+		dsp.Rotate(display.ROTATION_270)
+	default:
+		dsp.Rotate(display.NO_ROTATION)
+	}
+
+	dsp.DrawImage(img)
+
+	buttons.OnButtonAPressed(func() {
+		dsp.FillScreen(color.RGBA{R: 0, G: 0, B: 0, A: 0})
+		opts := textview.DefaultOpts
+		opts.FGColor = textview.GREEN
+		tv := textview.NewWithOptions(opts)
+		tv.Draw("")
+		time.Sleep(3 * time.Second)
+		tv.DrawChars("Wake up, Neo...")
+		time.Sleep(3 * time.Second)
+		tv.DrawChars("The Matrix has you...")
+		time.Sleep(3 * time.Second)
+		tv.DrawChars("Follow the white rabbit.")
+	})
+
+	buttons.OnButtonXPressed(func() {
+		dsp.PowerOff()
+		os.Exit(0)
+	})
+
+	for {
+		time.Sleep(1)
+	}
 }
