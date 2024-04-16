@@ -4,9 +4,8 @@ ARG GO_VERSION=1.22
 FROM golang:${GO_VERSION}-bullseye AS base
 WORKDIR /src
 RUN --mount=type=cache,target=/go/pkg/mod/ \
-    # --mount=type=bind,source=go.sum,target=go.sum \
-    # --mount=type=bind,source=go.mod,target=go.mod \
-    --mount=type=bind,target=. \
+    --mount=type=bind,source=go.sum,target=go.sum \
+    --mount=type=bind,source=go.mod,target=go.mod \
     go mod download -x
 RUN dpkg --add-architecture armel
 RUN apt-get update && apt-get install -y libasound2-dev:armel gcc-arm-linux-gnueabi
@@ -23,9 +22,9 @@ RUN --mount=type=bind,target=. find /src -type f
 RUN --mount=type=cache,target=/go/pkg/mod/ \
     --mount=type=bind,target=. \
     GOOS=${GOOS} GOARCH=${GOARCH} GOARM=${GOARM} go build -o /out/haptics-${GOOS}-${GOARCH}-${GOARM} ./cmd/haptics/main.go
-# RUN --mount=type=cache,target=/go/pkg/mod/ \
-#     --mount=type=bind,target=. \
-#     GOOS=${GOOS} GOARCH=${GOARCH} GOARM=${GOARM} go build -o /out/pirateaudio-${GOOS}-${GOARCH}-${GOARM} ./cmd/pirateaudio/main.go
+RUN --mount=type=cache,target=/go/pkg/mod/ \
+    --mount=type=bind,target=. \
+    GOOS=${GOOS} GOARCH=${GOARCH} GOARM=${GOARM} go build -o /out/pirateaudio-${GOOS}-${GOARCH}-${GOARM} ./cmd/pirateaudio/main.go
 
 
 

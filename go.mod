@@ -5,7 +5,7 @@ go 1.22.0
 require (
 	github.com/bwmarrin/discordgo v0.28.1
 	github.com/gopxl/beep v1.4.1
-	github.com/vwhitteron/go-pirateaudio v0.0.0-20240416015814-a80c75874715
+	github.com/vwhitteron/go-pirateaudio v0.0.0-20240416123501-f1119ae2a6db
 	github.com/vwhitteron/gt-telemetry v0.0.0-20240402073456-dc9c40dcec4c
 )
 
@@ -29,5 +29,3 @@ require (
 	periph.io/x/conn/v3 v3.7.0 // indirect
 	periph.io/x/host/v3 v3.8.2 // indirect
 )
-
-replace github.com/vwhitteron/go-pirateaudio => ./lib/go-pirateaudio
