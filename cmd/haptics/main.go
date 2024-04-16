@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"strconv"
 	"time"
 
 	_ "image/png"
@@ -60,12 +61,22 @@ func main() {
 		fmt.Printf("Gain: %-02.0f dB\n", gain)
 	})
 
+	sprites := []string{"splash", "error", "gear1", "gear2", "gear3", "gear4", "gear5", "gear6", "gear7", "gear8"}
+	index := 0
 	buttons.OnButtonXPressed(func() {
-		display.Show("gear1")
+		index += 1
+		if index >= len(sprites) {
+			index = len(sprites) - 1
+		}
+		display.Show(sprites[index])
 	})
 
 	buttons.OnButtonYPressed(func() {
-		display.Show("splash")
+		index -= 1
+		if index < 0 {
+			index = 0
+		}
+		display.Show(sprites[index])
 	})
 
 	gt, err := telemetry_client.NewGTClient(telemetry_client.Config{
@@ -129,6 +140,7 @@ func main() {
 			lastGear = currentGear
 			go func() {
 				audio.Play("gearChange", volume)
+				display.Show("gear" + strconv.Itoa(currentGear))
 			}()
 
 			// debounce
