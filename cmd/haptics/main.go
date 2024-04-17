@@ -2,7 +2,7 @@ package main
 
 import (
 	"flag"
-	"fmt"
+	"image"
 	"log"
 	"strconv"
 	"time"
@@ -48,7 +48,7 @@ func main() {
 			audio.Play("gearChange", gain)
 		}()
 
-		fmt.Printf("Gain: %-02.0f dB\n", gain)
+		log.Printf("Gain: %-02.0f dB\n", gain)
 	})
 
 	buttons.OnButtonBPressed(func() {
@@ -58,7 +58,7 @@ func main() {
 			audio.Play("gearChange", gain)
 		}()
 
-		fmt.Printf("Gain: %-02.0f dB\n", gain)
+		log.Printf("Gain: %-02.0f dB\n", gain)
 	})
 
 	sprites := []string{"splash", "error", "gear1", "gear2", "gear3", "gear4", "gear5", "gear6", "gear7", "gear8"}
@@ -89,29 +89,24 @@ func main() {
 
 	go gt.Run()
 
-	lastGear := 20
-	lastVehicleModel := ""
-	// rideHeight := float32(150)
-	// lastSuspensionHeight := telemetry_client.CornerSet{}
-	// lastPacketTime := Time.Duration(0)
+	lastGear := 1024
+	currentVehicleID := uint32(0)
 	var volume = float64(0)
 	for {
 		currentGear := gt.Telemetry.CurrentGear()
 
-		if lastGear == 20 {
+		if lastGear == 1024 {
 			lastGear = currentGear
 			continue
 		}
 
-		if lastVehicleModel != gt.Telemetry.VehicleModel() {
-			fmt.Printf("Vehicle: [%d] %s %s\n",
+		if currentVehicleID != gt.Telemetry.VehicleID() {
+			log.Printf("Vehicle: [%d] %s %s\n",
 				gt.Telemetry.VehicleID(),
 				gt.Telemetry.VehicleManufacturer(),
 				gt.Telemetry.VehicleModel(),
 			)
-			lastVehicleModel = gt.Telemetry.VehicleModel()
-			// rideHeight = gt.Telemetry.RideHeightMillimeters()
-			// rideHeight = 1
+			currentVehicleID = gt.Telemetry.VehicleID()
 			switch gt.Telemetry.VehicleType() {
 			case "street":
 				volume = -3 + gain
@@ -120,10 +115,6 @@ func main() {
 			default:
 				volume = -3 + gain
 			}
-		}
-
-		if currentGear == 15 { // Neutral
-			continue
 		}
 
 		if currentGear != lastGear {
@@ -136,31 +127,26 @@ func main() {
 				continue
 			}
 
-			fmt.Printf("Gear: %d (%0.1f dB)\n", currentGear, volume)
+			log.Printf("Gear: %d (%0.1f dB)\n", currentGear, volume)
 			lastGear = currentGear
 			go func() {
-				audio.Play("gearChange", volume)
-				display.Show("gear" + strconv.Itoa(currentGear))
+				if currentGear != 15 { // Neutral gear
+					audio.Play("gearChange", volume)
+				}
 			}()
-
-			// debounce
-			// time.Sleep(200 * time.Millisecond)
+			gearName := ""
+			switch currentGear {
+			case 15:
+				gearName = "N"
+			case 0:
+				gearName = "R"
+			default:
+				gearName = strconv.Itoa(currentGear)
+			}
+			canvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
+			display.ShowTextCentered(canvas, gearName)
 		}
 
-		// if lastPacketTime > 0 {
-		// 	timeDiff := (gt.Telemetry.TimeOfDay() - lastPacketTime)
-
-		// 	shockFL := (lastSuspensionHeight.FrontLeft - gt.Telemetry.SuspensionHeightMillimeters().FrontLeft) / timeDiff
-		// 	shockFR := (lastSuspensionHeight.FrontRight - gt.Telemetry.SuspensionHeightMillimeters().FrontRight) / timeDiff
-		// 	shockRL := (lastSuspensionHeight.RearLeft - gt.Telemetry.SuspensionHeightMillimeters().RearLeft) / timeDiff
-		// 	shockRR := (lastSuspensionHeight.RearRight - gt.Telemetry.SuspensionHeightMillimeters().RearRight) / timeDiff
-		// 	fmt.Printf("Suspension: %0.2f %0.2f %0.2f %0.2f [%0.02f]\n", shockFL, shockFR, shockRL, shockRR, shockHeight)
-		// }
-		// if (impulseFL + impulseFR + impulseRL + impulseRR) > 2 {
-		// 	fmt.Printf("Suspension: %0.2f %0.2f %0.2f %0.2f [%0.02f]\n", impulseFL, impulseFR, impulseRL, impulseRR, rideHeight)
-		// }
-
-		// lastSuspensionHeight = gt.Telemetry.SuspensionHeightMillimeters()
 		time.Sleep(4 * time.Millisecond)
 	}
 }
