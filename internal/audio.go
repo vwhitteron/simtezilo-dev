@@ -2,7 +2,6 @@ package internal
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"time"
 
@@ -10,14 +9,21 @@ import (
 	"github.com/gopxl/beep/effects"
 	"github.com/gopxl/beep/speaker"
 	"github.com/gopxl/beep/vorbis"
+	"github.com/rs/zerolog"
 )
 
 type AudioOut struct {
 	samples map[string]*beep.Buffer
+	log     zerolog.Logger
 }
 
-func NewAudioOutputDevice(assetDir string) (*AudioOut, error) {
-	thumpFile := assetDir + "/audio/thump.ogg"
+type AudioOutOpts struct {
+	AssetDir string
+	Logger   zerolog.Logger
+}
+
+func NewAudioOutputDevice(opts AudioOutOpts) (*AudioOut, error) {
+	thumpFile := opts.AssetDir + "/audio/thump.ogg"
 	thump, err := os.Open(thumpFile)
 	if err != nil {
 		return nil, fmt.Errorf("reading file %q: %w", thumpFile, err)
@@ -42,12 +48,13 @@ func NewAudioOutputDevice(assetDir string) (*AudioOut, error) {
 
 	return &AudioOut{
 		samples: buffers,
+		log:     opts.Logger,
 	}, nil
 }
 
 func (a *AudioOut) Play(name string, gain float64) {
 	if _, ok := a.samples[name]; !ok {
-		log.Printf("unable to play unknown audio stream %q", name)
+		a.log.Info().Msgf("unable to play unknown audio stream %q", name)
 	}
 
 	streamer := a.samples[name].Streamer(0, a.samples[name].Len())

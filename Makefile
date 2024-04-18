@@ -47,7 +47,7 @@ build/rpi/v8:
 ## run/live: run the application with reloading on file changes
 .PHONY: run/live
 run/live:
-	@go run cmd/haptics/main.go
+	@go run cmd/haptics/main.go -r -l debug -p=false
 
 ## clean: clean up build output files
 .PHONY: clean

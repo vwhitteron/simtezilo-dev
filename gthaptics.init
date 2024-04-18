@@ -1,0 +1,48 @@
+#!/bin/bash
+### BEGIN INIT INFO
+# Provides: gthaptics
+# Required-Start:    $all
+# Required-Stop: 
+# Default-Start:     3 
+# Default-Stop:      6
+# Short-Description: Gran Turismo 7 Haptics Client
+### END INIT INFO
+
+
+start() {
+    echo "Starting gthaptics"
+    /home/admin/haptics-linux-arm-6 &
+    return
+}
+
+
+stop() {
+    echo "Stopping gthaptics"
+    killall haptics-linux-arm-6
+    return
+}
+
+case "$1" in
+    start)
+        start
+        ;;
+    stop)
+        stop
+        ;;
+    status)
+        echo "Unsupported"
+        ;;
+    restart)
+        stop
+        start
+        ;;
+    reload)
+       echo "Unsupported"
+       ;;
+    *)
+       echo "Usage:  {start|stop|status|reload|restart}"
+       exit 1
+       ;;
+esac
+
+exit $?

@@ -11,8 +11,12 @@ type spriteSet struct {
 	sprite map[string]image.Rectangle
 }
 
-func NewSpriteSet(assetDir string) (*spriteSet, error) {
-	path := assetDir + "/image/sprites.png"
+type SpriteSetOpts struct {
+	AssetDir string
+}
+
+func NewSpriteSet(opts SpriteSetOpts) (*spriteSet, error) {
+	path := opts.AssetDir + "/image/sprites.png"
 	data, err := os.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("loading image %q: %e", path, err)
@@ -41,8 +45,6 @@ func NewSpriteSet(assetDir string) (*spriteSet, error) {
 		"gear8": image.Rect(5*240, 1*240, 6*240, 2*240),
 	}
 
-	fmt.Printf("Sprite image bounds: %+v\n", img.Bounds())
-
 	return &spriteSet{
 		image:  img.(*image.RGBA),
 		sprite: collection,
@@ -54,9 +56,5 @@ func (s *spriteSet) GetSprite(name string) image.Image {
 		name = "error"
 	}
 
-	img := s.image.SubImage(s.sprite[name])
-
-	fmt.Printf("%q image bounds: %+v\n", name, img.Bounds())
-
-	return img
+	return s.image.SubImage(s.sprite[name])
 }
