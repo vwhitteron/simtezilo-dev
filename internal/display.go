@@ -11,7 +11,7 @@ type Display interface {
 	PowerOff()
 	Show(string)
 	ShowText(string)
-	ShowTextCentered(*image.RGBA, string)
+	ShowTextCentered(*image.RGBA, string, int)
 }
 
 type NullDisplay struct{}
@@ -32,4 +32,4 @@ func (d NullDisplay) Show(string) {}
 
 func (d NullDisplay) ShowText(string) {}
 
-func (d NullDisplay) ShowTextCentered(*image.RGBA, string) {}
+func (d NullDisplay) ShowTextCentered(*image.RGBA, string, int) {}

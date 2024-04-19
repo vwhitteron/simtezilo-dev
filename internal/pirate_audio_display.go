@@ -114,9 +114,9 @@ func (d *PirateAudioDisplay) ShowText(text string) {
 	tv.DrawChars(text)
 }
 
-func (d *PirateAudioDisplay) ShowTextCentered(canvas *image.RGBA, text string) {
+func (d *PirateAudioDisplay) ShowTextCentered(canvas *image.RGBA, text string, size int) {
 	fontFace := truetype.NewFace(d.font, &truetype.Options{
-		Size:    48,
+		Size:    float64(size),
 		DPI:     265,
 		Hinting: font.HintingFull,
 	})

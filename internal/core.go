@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"fmt"
 	"image"
 	"os"
 	"strconv"
@@ -151,6 +152,9 @@ func (c *Core) setupButtons() {
 	buttons.OnButtonAPressed(func() {
 		c.masterGain += 1
 
+		canvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
+		c.display.ShowTextCentered(canvas, fmt.Sprintf("%0.0f db", c.masterGain), 24)
+
 		go func() {
 			c.audio.Play("gearChange", c.masterGain)
 		}()
@@ -164,6 +168,9 @@ func (c *Core) setupButtons() {
 
 	buttons.OnButtonBPressed(func() {
 		c.masterGain -= 1
+
+		canvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
+		c.display.ShowTextCentered(canvas, fmt.Sprintf("%0.0f dB", c.masterGain), 24)
 
 		go func() {
 			c.audio.Play("gearChange", c.masterGain)
@@ -282,7 +289,7 @@ func (c *Core) updateDisplay() {
 			gearName = strconv.Itoa(currentGear)
 		}
 		canvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
-		c.display.ShowTextCentered(canvas, gearName)
+		c.display.ShowTextCentered(canvas, gearName, 48)
 	}
 }
 
