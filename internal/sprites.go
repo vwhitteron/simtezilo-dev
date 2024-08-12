@@ -29,20 +29,8 @@ func NewSpriteSet(opts SpriteSetOpts) (*spriteSet, error) {
 	data.Close()
 
 	collection := map[string]image.Rectangle{
-		// Row 1
 		"splash": image.Rect(0*240, 0*240, 1*240, 1*240),
 		"error":  image.Rect(1*240, 0*240, 2*240, 1*240),
-		"gear1":  image.Rect(2*240, 0*240, 3*240, 1*240),
-		"gear2":  image.Rect(3*240, 0*240, 4*240, 1*240),
-		"gear3":  image.Rect(4*240, 0*240, 5*240, 1*240),
-		"gear4":  image.Rect(5*240, 0*240, 6*240, 1*240),
-		// Row 2
-		"gearN": image.Rect(0*240, 1*240, 1*240, 2*240),
-		"gearR": image.Rect(1*240, 1*240, 2*240, 2*240),
-		"gear5": image.Rect(2*240, 1*240, 3*240, 2*240),
-		"gear6": image.Rect(3*240, 1*240, 4*240, 2*240),
-		"gear7": image.Rect(4*240, 1*240, 5*240, 2*240),
-		"gear8": image.Rect(5*240, 1*240, 6*240, 2*240),
 	}
 
 	return &spriteSet{

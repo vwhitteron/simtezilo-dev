@@ -33,7 +33,7 @@ func main() {
 
 	dg.AddHandler(ready)
 
-	gt, err := telemetry_client.NewGTClient("255.255.255.255", "info")
+	gt, err := telemetry_client.NewGTClient(telemetry_client.GTClientOpts{})
 	if err != nil {
 		fmt.Println("Error creating GT client: ", err)
 		os.Exit(1)

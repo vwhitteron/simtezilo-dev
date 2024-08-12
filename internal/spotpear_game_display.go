@@ -4,45 +4,77 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"log"
 	"os"
+	"sync"
 
 	_ "image/png"
 
 	"github.com/golang/freetype"
 	"github.com/golang/freetype/truetype"
-	"github.com/rubiojr/go-pirateaudio/display"
+	"github.com/rubiojr/go-pirateaudio/st7789"
 	"github.com/rubiojr/go-pirateaudio/textview"
 	"golang.org/x/image/font"
 	"golang.org/x/image/math/fixed"
+	"periph.io/x/conn/v3/driver/driverreg"
+	"periph.io/x/conn/v3/gpio/gpioreg"
+	"periph.io/x/conn/v3/spi"
+	"periph.io/x/conn/v3/spi/spireg"
+	"periph.io/x/host/v3"
 )
 
-type PirateAudioDisplay struct {
+type SpotpearGameDisplay struct {
+	port spi.PortCloser
+	dev  *st7789.Device
+
 	font        *truetype.Font
-	lcd         *display.Display
 	orientation int
 	sprites     *spriteSet
 }
 
-type PirateAudioDisplayOpts struct {
+type SpotpearGameDisplayOpts struct {
 	Orientation int
 	AssetDir    string
 }
 
-func NewPirateAudioDisplay(opts PirateAudioDisplayOpts) (*PirateAudioDisplay, error) {
-	lcd, err := display.Init()
+var once sync.Once
+
+func init() {
+	if _, err := host.Init(); err != nil {
+		log.Fatal(err)
+	}
+
+	if _, err := driverreg.Init(); err != nil {
+		log.Fatal(err)
+	}
+
+}
+
+func NewSpotpearGameDisplay(opts SpotpearGameDisplayOpts) (*SpotpearGameDisplay, error) {
+	var err error
+	var spiPort spi.PortCloser
+	var spiDev *st7789.Device
+	once.Do(func() {
+		spiPort, err = spireg.Open("SPI0.1")
+		if err != nil {
+			return
+		}
+		dataComm := gpioreg.ByName("GPIO25")
+		spiDev, err = st7789.NewSPI(spiPort.(spi.Port), dataComm, &st7789.DefaultOpts)
+	})
 	if err != nil {
 		return nil, fmt.Errorf("initializing display: %w", err)
 	}
 
 	switch opts.Orientation {
 	case 90:
-		lcd.Rotate(display.ROTATION_90)
+		spiDev.SetRotation(st7789.ROTATION_90)
 	case 180:
-		lcd.Rotate(display.ROTATION_180)
+		spiDev.SetRotation(st7789.ROTATION_180)
 	case 270:
-		lcd.Rotate(display.ROTATION_270)
+		spiDev.SetRotation(st7789.ROTATION_270)
 	default:
-		lcd.Rotate(display.NO_ROTATION)
+		spiDev.SetRotation(st7789.ROTATION_NONE)
 	}
 
 	sprites, err := NewSpriteSet(SpriteSetOpts{AssetDir: opts.AssetDir})
@@ -66,9 +98,10 @@ func NewPirateAudioDisplay(opts PirateAudioDisplayOpts) (*PirateAudioDisplay, er
 		return nil, fmt.Errorf("parsing font: %w", err)
 	}
 
-	display := &PirateAudioDisplay{
+	display := &SpotpearGameDisplay{
+		port:        spiPort,
+		dev:         spiDev,
 		font:        freetypeFont,
-		lcd:         lcd,
 		orientation: opts.Orientation,
 		sprites:     sprites,
 	}
@@ -78,30 +111,30 @@ func NewPirateAudioDisplay(opts PirateAudioDisplayOpts) (*PirateAudioDisplay, er
 	return display, nil
 }
 
-func (d *PirateAudioDisplay) Clear() {
-	d.lcd.FillScreen(color.RGBA{R: 0, G: 0, B: 0, A: 0})
+func (d *SpotpearGameDisplay) Clear() {
+	d.dev.FillScreen(color.RGBA{R: 0, G: 0, B: 0, A: 0})
 }
 
-func (d *PirateAudioDisplay) Close() {
+func (d *SpotpearGameDisplay) Close() {
 	d.Clear()
-	d.lcd.PowerOff()
-	d.lcd.Close()
+	d.dev.PowerOff()
+	d.port.Close()
 }
 
-func (d *PirateAudioDisplay) PowerOn() {
-	d.lcd.PowerOn()
+func (d *SpotpearGameDisplay) PowerOn() {
+	d.dev.PowerOn()
 }
 
-func (d *PirateAudioDisplay) PowerOff() {
-	d.lcd.PowerOff()
+func (d *SpotpearGameDisplay) PowerOff() {
+	d.dev.PowerOff()
 }
 
-func (d *PirateAudioDisplay) Show(sprite string) {
+func (d *SpotpearGameDisplay) Show(sprite string) {
 	img := d.sprites.GetSprite(sprite)
-	d.lcd.DrawRAW(img)
+	d.dev.DrawRAW(img)
 }
 
-func (d *PirateAudioDisplay) ShowText(text string) {
+func (d *SpotpearGameDisplay) ShowText(text string) {
 	d.Clear()
 	opts := textview.DefaultOpts
 	opts.FGColor = textview.GREEN
@@ -110,7 +143,7 @@ func (d *PirateAudioDisplay) ShowText(text string) {
 	tv.DrawChars(text)
 }
 
-func (d *PirateAudioDisplay) ShowTextCentered(canvas *image.RGBA, text string, size int) {
+func (d *SpotpearGameDisplay) ShowTextCentered(canvas *image.RGBA, text string, size int) {
 	fontFace := truetype.NewFace(d.font, &truetype.Options{
 		Size:    float64(size),
 		DPI:     265,
@@ -137,5 +170,5 @@ func (d *PirateAudioDisplay) ShowTextCentered(canvas *image.RGBA, text string, s
 
 	fontDrawer.DrawString(text)
 
-	d.lcd.DrawRAW(canvas)
+	d.dev.DrawRAW(canvas)
 }

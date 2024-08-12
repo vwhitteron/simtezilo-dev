@@ -11,7 +11,7 @@ import (
 )
 
 func main() {
-	config := telemetry_client.Config{
+	config := telemetry_client.GTClientOpts{
 		StatsEnabled: true,
 	}
 
@@ -32,7 +32,7 @@ func main() {
 
 	buffer := bufio.NewWriter(file)
 
-	lastHeight := float32(0)
+	// lastHeight := float32(0)
 
 	sequenceId := uint32(0)
 	for {
