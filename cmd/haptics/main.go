@@ -35,9 +35,11 @@ func main() {
 	var replayMode bool
 	var source string
 	var webEnabled bool
+	var chassisHapticsDisabled bool
+	var gearChangeHapticsDisabled bool
 
 	flag.StringVar(&assetDir, "a", "./assets", "Path to the assets directory. Default is './assets'")
-	flag.Float64Var(&gain, "g", -14, "Gain in decibels. Default is -14")
+	flag.Float64Var(&gain, "g", -14.5, "Gain in decibels. Default is -14.5")
 	flag.StringVar(&logLevel, "l", "warn", "Log level. Default is 'warn'")
 	flag.IntVar(&orientation, "o", 0, "Display orientation. Default is 0 degrees")
 	flag.BoolVar(&pirateAudioEnabled, "p", false, "Enable Pirate Audio features. Default is false")
@@ -45,6 +47,8 @@ func main() {
 	flag.BoolVar(&replayMode, "r", false, "Output haptics for replays as well as live sessions. Default is false")
 	flag.StringVar(&source, "s", "udp://255.255.255.255:33739", "Telemetry data source. Default is udp://255.255.255.255:33739")
 	flag.BoolVar(&webEnabled, "w", false, "Enable web server. Default is false")
+	flag.BoolVar(&chassisHapticsDisabled, "disableChassisHaptics", false, "Disable chassis haptics. Default is false")
+	flag.BoolVar(&gearChangeHapticsDisabled, "disableGearChangeHaptics", false, "Disable gear change haptics. Default is false")
 	flag.Parse()
 
 	log.Printf("GT-Pi version %s\n", build)
@@ -67,8 +71,13 @@ func main() {
 	}
 
 	core, err := internal.NewCore(internal.CoreOptions{
-		AssetDir:           assetDir,
-		Gain:               gain,
+		Done:     done,
+		AssetDir: assetDir,
+		Gain:     gain,
+		HapticsOutput: internal.HapticsOutput{
+			ChassisEnabled:    !chassisHapticsDisabled,
+			GearChangeEnabled: !gearChangeHapticsDisabled,
+		},
 		LogLevel:           logLevel,
 		Orientation:        orientation,
 		PirateAudioEnabled: pirateAudioEnabled,

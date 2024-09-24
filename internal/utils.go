@@ -28,6 +28,14 @@ func vectorMagnitude(vector telemetry_client.Vector) float64 {
 	return math.Sqrt(float64(vector.X*vector.X + vector.Y*vector.Y + vector.Z*vector.Z))
 }
 
+func vectorMagnitudeZBiased(vector telemetry_client.Vector) float64 {
+	xComp := vector.X * vector.X * 0.25
+	yComp := vector.Y * vector.Y * 0.25
+	zComp := vector.Z * vector.Z
+
+	return math.Sqrt(float64(xComp + yComp + zComp))
+}
+
 func volumeToGain(volume float64) float64 {
 	return math.Pow(10, (volume / 10))
 }

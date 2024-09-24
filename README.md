@@ -30,3 +30,27 @@ Recommended gain setting is -15dB
 With `dtparam=audio=off` set, Alsa should see the Butkicker USB device as the only audio output.
 
 Recommended gain setting is 0dB.
+
+
+# Notes
+
+## Disable/fix USB audio device ordering
+`/lib/modprove.d/aliases.conf`
+Comment out the following
+#options snd-usb-audio index=-2
+
+## Fix asound audio rerouting
+`~/.asound.rc`
+```
+pcm.!default { 
+   type hw 
+#   card PRO 
+   card 0 
+} 
+ 
+ctl.!default { 
+   type hw 
+#   card PRO 
+   card 0 
+}
+```

@@ -5,6 +5,7 @@ go 1.22.5
 require (
 	fyne.io/fyne/v2 v2.5.0
 	github.com/bwmarrin/discordgo v0.28.1
+	github.com/ebitengine/oto/v3 v3.2.0
 	github.com/goccy/go-json v0.10.3
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0
 	github.com/gopxl/beep v1.4.1
@@ -13,6 +14,7 @@ require (
 	github.com/rs/zerolog v1.33.0
 	github.com/rubiojr/go-pirateaudio v0.0.0-20240620105206-e7f0a1f5f0d9
 	github.com/vwhitteron/gt-telemetry v0.0.0-20240726095205-019b5756dbb8
+	github.com/youpy/go-wav v0.3.2
 	golang.org/x/image v0.18.0
 	periph.io/x/conn/v3 v3.7.0
 	periph.io/x/host/v3 v3.8.2
@@ -22,7 +24,6 @@ require (
 	fyne.io/systray v1.11.0 // indirect
 	github.com/BurntSushi/toml v1.4.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/ebitengine/oto/v3 v3.2.0 // indirect
 	github.com/ebitengine/purego v0.7.1 // indirect
 	github.com/fogleman/gg v1.3.0 // indirect
 	github.com/fredbi/uri v1.1.0 // indirect
@@ -55,7 +56,9 @@ require (
 	github.com/srwiley/oksvg v0.0.0-20221011165216-be6e8873101c // indirect
 	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef // indirect
 	github.com/stretchr/testify v1.9.0 // indirect
+	github.com/youpy/go-riff v0.1.0 // indirect
 	github.com/yuin/goldmark v1.7.4 // indirect
+	github.com/zaf/g711 v0.0.0-20190814101024-76a4a538f52b // indirect
 	golang.org/x/crypto v0.25.0 // indirect
 	golang.org/x/mobile v0.0.0-20240716161057-1ad2df20a8b6 // indirect
 	golang.org/x/net v0.27.0 // indirect

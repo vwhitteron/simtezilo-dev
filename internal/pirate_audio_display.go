@@ -88,6 +88,24 @@ func (d *PirateAudioDisplay) Close() {
 	d.lcd.Close()
 }
 
+func (d *PirateAudioDisplay) GetOrientation() int {
+	return d.orientation
+}
+
+func (d *PirateAudioDisplay) SetOrientation(orientation int) {
+	d.orientation = orientation
+	switch orientation {
+	case 90:
+		d.lcd.Rotate(display.ROTATION_90)
+	case 180:
+		d.lcd.Rotate(display.ROTATION_180)
+	case 270:
+		d.lcd.Rotate(display.ROTATION_270)
+	default:
+		d.lcd.Rotate(display.NO_ROTATION)
+	}
+}
+
 func (d *PirateAudioDisplay) PowerOn() {
 	d.lcd.PowerOn()
 }
