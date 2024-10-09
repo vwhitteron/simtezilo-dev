@@ -2,7 +2,7 @@ import * as SciChart from 'scichart';
 
 const fifoCapacity = 300;
 
-async function initSciChart2() {
+async function initSciChart() {
     const socket = new WebSocket('ws://localhost:8080/ws');
 
     SciChart.SciChartSurface.UseCommunityLicense()
@@ -64,4 +64,4 @@ async function createThrottleBrakeChart(socket: WebSocket) {
     });
 }
 
-initSciChart2();
+initSciChart();

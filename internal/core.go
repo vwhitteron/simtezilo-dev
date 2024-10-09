@@ -12,6 +12,7 @@ import (
 	"github.com/gopxl/beep/speaker"
 	"github.com/gorilla/websocket"
 	"github.com/rs/zerolog"
+	"github.com/vwhitteron/gt-pi/internal/signal"
 	telemetry_client "github.com/vwhitteron/gt-telemetry"
 )
 
@@ -20,13 +21,22 @@ type displayContent struct {
 }
 
 type physics struct {
-	sequenceID     uint32
+	sequenceID uint32
+
+	attitudeAcceleration float64
+	attitudeJerk         float64
+	attitudeSnap         float64
+	attitudeDelta        telemetry_client.SymmetryAxes
+	attitudeVector       telemetry_client.SymmetryAxes
+
 	acceleration   float64
 	jerk           float64
 	snap           float64
 	crackle        float64
 	velocityDelta  telemetry_client.Vector
 	velocityVector telemetry_client.Vector
+
+	audioOutValue float64
 }
 
 type physicsTracker struct {
@@ -48,10 +58,16 @@ type HapticsOutput struct {
 	GearChangeEnabled bool
 }
 
+type audioBuffer struct {
+	slotSize int
+	slots    int
+	buffer   []float64
+}
+
 type Core struct {
 	assetDir           string
-	audio              *AudioOut
-	audioBuffer        []float64
+	audioDevice        *AudioOutDevice
+	audioBuffer        audioBuffer
 	chartDataChannel   chan map[string]float32
 	display            Display
 	displayContent     displayContent
@@ -144,7 +160,7 @@ func NewCore(opts CoreOptions) (*Core, error) {
 			Msg("init")
 	}
 
-	audio, err := NewAudioOutputDevice(AudioOutOpts{
+	audioDevice, err := NewAudioOutputDevice(AudioOutDeviceOpts{
 		AssetDir: opts.AssetDir,
 		Logger:   log.With().Str("component", "audio").Logger(),
 	})
@@ -198,15 +214,12 @@ func NewCore(opts CoreOptions) (*Core, error) {
 		fadeInIncrement: 0,
 	}
 
-	audioBuffer := zeroedBuffer(266)
-
 	return &Core{
-		assetDir:         opts.AssetDir,
-		audio:            audio,
-		audioBuffer:      audioBuffer,
-		chartDataChannel: make(chan map[string]float32, 600),
-		display:          display,
-		// done:               make(chan bool),
+		assetDir:           opts.AssetDir,
+		audioDevice:        audioDevice,
+		audioBuffer:        newAudioBuffer(133, 6),
+		chartDataChannel:   make(chan map[string]float32, 600),
+		display:            display,
 		done:               opts.Done,
 		gearShiftGain:      0,
 		gt:                 gt,
@@ -266,6 +279,14 @@ func (c *Core) Run() {
 
 func (c *Core) Close() {
 	c.display.Close()
+}
+
+func newAudioBuffer(slotSize int, slots int) audioBuffer {
+	return audioBuffer{
+		slotSize: slotSize,
+		slots:    slots,
+		buffer:   zeroedBuffer(slotSize * slots),
+	}
 }
 
 func zeroedBuffer(length int) []float64 {
@@ -376,12 +397,26 @@ func (c *Core) physicsEvents() {
 
 func (c *Core) chassisHaptics(windowMilliseconds float64, seqDelta uint32) {
 	c.physics.current.velocityVector = c.gt.Telemetry.VelocityVector()
+	c.physics.current.attitudeVector = c.gt.Telemetry.RotationVector()
 
-	c.physics.current.velocityDelta = vectorDelta(c.physics.current.velocityVector, c.physics.last.velocityVector)
-	c.physics.current.acceleration = vectorMagnitudeZBiased(c.physics.current.velocityDelta) / windowMilliseconds
-	if c.gt.Telemetry.GroundSpeedKPH() < 100 {
-		c.physics.current.acceleration = c.physics.current.acceleration * float64(c.gt.Telemetry.GroundSpeedKPH()/100)
+	// chassis attitude
+	c.physics.current.attitudeDelta = symmetryAxisDelta(c.physics.current.attitudeVector, c.physics.last.attitudeVector)
+	c.physics.current.attitudeAcceleration = symmetryAxisMagnitude(c.physics.current.attitudeDelta) / windowMilliseconds
+
+	c.physics.last.attitudeJerk = c.physics.current.attitudeJerk
+	c.physics.current.attitudeJerk = (c.physics.current.attitudeAcceleration - c.physics.last.attitudeAcceleration) / windowMilliseconds
+	if c.physics.current.attitudeJerk > 10 {
+		c.physics.current.attitudeJerk = 10
+	} else if c.physics.current.attitudeJerk < -10 {
+		c.physics.current.attitudeJerk = -10
 	}
+
+	c.physics.last.attitudeSnap = c.physics.current.attitudeSnap
+	c.physics.current.attitudeSnap = (c.physics.current.attitudeJerk - c.physics.last.attitudeJerk) / windowMilliseconds
+
+	// chassis position
+	c.physics.current.velocityDelta = vectorDelta(c.physics.current.velocityVector, c.physics.last.velocityVector)
+	c.physics.current.acceleration = vectorMagnitudeBiased(c.physics.current.velocityDelta, 0.25, 0.25, 1) / windowMilliseconds
 
 	c.physics.last.jerk = c.physics.current.jerk
 	c.physics.current.jerk = (c.physics.current.acceleration - c.physics.last.acceleration) / windowMilliseconds
@@ -394,106 +429,114 @@ func (c *Core) chassisHaptics(windowMilliseconds float64, seqDelta uint32) {
 
 	c.physics.last.sequenceID = c.physics.current.sequenceID
 
-	c.generateBump(seqDelta)
+	if seqDelta <= 1 || vectorMagnitude(c.physics.current.velocityVector) > 0.28 {
+		c.generateBump(seqDelta)
+	}
 }
 
 func (c *Core) generateBump(seqDelta uint32) {
-	bufferLen := len(c.audioBuffer)
-
-	switch seqDelta {
-	case 0:
-		return
-	case 1:
-		c.shiftBuffer(bufferLen)
-	default:
-		c.log.Warn().Uint32("delta", seqDelta).Msg("sequence ID delta greater than 1")
-		for i := 0; i < bufferLen-1; i++ {
-			c.audioBuffer[i] = 0
-		}
-	}
-
-	startTime := time.Now()
-
-	sampleLen := bufferLen / 2
-
-	// exponent 0.5, scale 1/47.5 (1/57.0)
-	// exponent 0.4, scale 1/29.75 (1/36.0)
-	// log10, scale 0.08
-	// log2, scale 0.025
-	thisAmplitude := functionExponent(c.physics.current.jerk, 0.4)
-	thisAmplitude = functionScale(thisAmplitude, 1/36.0)
-
-	// clamp large bump values
-	if thisAmplitude > 1.2 {
-		thisAmplitude = 1.2
-	} else if thisAmplitude < -1.2 {
-		thisAmplitude = -1.2
-	}
-
-	snap := functionExponent(c.physics.current.jerk, 0.5)
-	snap = functionScale(snap, 1/47.5)
-	impact := thisAmplitude * snap
-	periodReduction := 0.0
-	if impact < 6 {
-		periodReduction = snap * 10
-		if periodReduction > 30 {
-			periodReduction = 30
-		}
-	}
-
 	if !c.hapticsOutput.ChassisEnabled {
-		for i := 0; i < sampleLen; i++ {
-			c.audioBuffer[i] = 0
+		for i := 0; i < c.audioBuffer.slotSize; i++ {
+			c.audioBuffer.buffer[i] = 0
 		}
 
 		return
 	}
 
-	periodLen := float64(sampleLen) / 2
+	bufferLen := c.audioBuffer.slotSize * c.audioBuffer.slots
+
+	if seqDelta == 0 {
+		return
+	} else if seqDelta < uint32(c.audioBuffer.slots) {
+		c.shiftBuffer2(int(seqDelta))
+	} else {
+		c.log.Warn().Uint32("delta", seqDelta).Msg("sequence ID delta greater than 1")
+		for i := 0; i < bufferLen; i++ {
+			c.audioBuffer.buffer[i] = 0
+		}
+	}
+
+	// startTime := time.Now()
+
+	// exponent 0.5, scale 1/47.5 (1/57.0) - small bumps slightly too loud
+	// exponent 0.4, scale 1/29.75 (1/36.0) - best balance of small, med and large bumps
+	// log10, scale 0.08 - small bumps too loud
+	// log2, scale 0.025 - small bumps too loud
+	// sig := (c.physics.current.jerk - (c.physics.current.attitudeJerk * 10))
+	sig := signal.LargestMagnitude(c.physics.current.jerk, (c.physics.current.attitudeJerk * 50))
+	thisAmplitude := signal.Exponent(sig, 0.56)
+	thisAmplitude = signal.Scale(thisAmplitude, 1/80.0)
+	thisAmplitude = signal.Limit(thisAmplitude, 0.8)
+
+	snap := signal.LargestMagnitude(c.physics.current.snap, (c.physics.current.attitudeSnap * 100))
+	snap = signal.Scale(snap, 1/1000.0)
+
+	periodReduction := snap
+
+	maxPulseLen := 133.0
+	pulseLen := maxPulseLen
 
 	if periodReduction > 0 {
-		periodLen = periodLen - periodReduction
-	} else if periodReduction < 0 {
-		periodLen = periodLen + periodReduction
+		pulseLen -= periodReduction
+	} else {
+		pulseLen += periodReduction
 	}
 
-	waveLen := periodLen * 2
-	offset := periodLen / 2
-	samplePeriod := math.Pi / periodLen
+	if pulseLen < 100 {
+		pulseLen = 100
+	}
+
+	waveOffset := pulseLen / 2
+	waveSamplePeriod := math.Pi / pulseLen
 
 	peak := 0.0
-	for i := range sampleLen {
-		if float64(i) > waveLen {
-			c.audioBuffer[i] = 0
-		} else {
-			sineValue := thisAmplitude*math.Sin(samplePeriod*(float64(i)-offset)) + thisAmplitude
+	for i := 0; i < bufferLen-1; i++ {
+		sineValue := thisAmplitude*math.Sin(waveSamplePeriod*(float64(i)-waveOffset)) + thisAmplitude
 
-			c.audioBuffer[i] = sineValue
+		c.audioBuffer.buffer[i] = sineValue
 
-			if sineValue > 0 && sineValue > peak {
-				peak = sineValue
-			} else if sineValue < 0 && sineValue < peak {
-				peak = sineValue
-			}
+		if sineValue > 0 && sineValue > peak {
+			peak = sineValue
+		} else if sineValue < 0 && sineValue < peak {
+			peak = sineValue
 		}
 	}
 
-	if c.log.GetLevel() != zerolog.DebugLevel {
-		return
-	}
+	c.physics.last.audioOutValue = c.physics.current.audioOutValue
+	c.physics.current.audioOutValue = peak
 
-	if peak > 1 || peak < -1 {
-		duration := time.Since(startTime)
-		fmt.Printf("INPUT:  jerk: %0.05f, snap: %0.05f, impact: %0.05f, time: %v seq: %d\n", c.physics.current.jerk, c.physics.current.snap, impact, duration, c.physics.current.sequenceID)
-		fmt.Printf("OUTPUT: peak: %0.05f, amplitude: %0.05f, reduce: %0.05f, samplePeriod: %0.05f, periodLen: %0.05f, waveLen: %0.05f\n\n", peak, thisAmplitude, periodReduction, samplePeriod, periodLen, waveLen)
+	// duration := time.Since(startTime)
+	// fmt.Printf("INPUT:  jerk: %0.05f, snap: %0.05f, time: %v seq: %d\n", c.physics.current.jerk, c.physics.current.snap, duration, c.physics.current.sequenceID)
+	// fmt.Printf("OUTPUT: peak: %0.05f, amplitude: %0.05f, reduce: %0.05f, samplePeriod: %0.05f, pulseLen: %0.05f, maxPulseLen: %0.05f\n\n", peak, thisAmplitude, periodReduction, waveSamplePeriod, pulseLen, maxPulseLen)
+}
+
+func (c *Core) shiftBuffer(slots int) {
+	offset := slots * c.audioBuffer.slotSize
+
+	for i := 0; i < offset-1; i++ {
+		c.audioBuffer.buffer[i+offset] = c.audioBuffer.buffer[i]
 	}
 }
 
-func (c *Core) shiftBuffer(length int) {
-	offset := length / 2
+func (c *Core) shiftBuffer2(slots int) {
+	bufferMax := (c.audioBuffer.slotSize * c.audioBuffer.slots) - 1
+	offset := slots * c.audioBuffer.slotSize
 
-	for i := 0; i < offset-1; i++ {
-		c.audioBuffer[i+offset] = c.audioBuffer[i]
+	for i := bufferMax - offset; i >= 0; i-- {
+		c.audioBuffer.buffer[i+offset] = c.audioBuffer.buffer[i]
+	}
+}
+
+func (c *Core) shiftBuffer3(slots int) {
+	bufferMax := (c.audioBuffer.slotSize * c.audioBuffer.slots) - 1
+	offset := slots * c.audioBuffer.slotSize
+
+	for i := 0; i <= bufferMax; i++ {
+		if i < bufferMax-offset {
+			c.audioBuffer.buffer[i] = c.audioBuffer.buffer[i+offset]
+		} else {
+			c.audioBuffer.buffer[i] = 0
+		}
 	}
 }
 
@@ -518,7 +561,7 @@ func (c *Core) resetState(seq uint32, currentGear int) {
 	c.mixerGain.fadeInIncrement = (c.mixerGain.fader - c.mixerGain.master) / (frameRate * 2)
 	c.physics.last = physics{}
 	c.physics.current = physics{}
-	c.audioBuffer = zeroedBuffer(int(len(c.audioBuffer)))
+	c.audioBuffer.buffer = zeroedBuffer(c.audioBuffer.slotSize * c.audioBuffer.slots)
 
 	return
 }
@@ -538,11 +581,21 @@ func (c *Core) updateDisplay() {
 		return
 	}
 
+	if c.timeSinceLive > 3600 {
+		c.display.PowerOff()
+	}
+
 	if c.gt.Telemetry.Flags().Live == false && c.replayMode == false {
+		canvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
+		c.display.ShowTextCentered(canvas, "Waiting...", 16)
+
 		c.timeSinceLive += 1
 
 		return
 	}
+
+	c.display.PowerOn()
+	c.timeSinceLive = 0
 
 	canvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
 	c.display.ShowTextCentered(canvas, gearName(currentGear), gearFontSize)
@@ -594,7 +647,7 @@ func (c *Core) gearChange(currentGear int) {
 	if c.hapticsOutput.GearChangeEnabled {
 		gain := c.gearShiftGain + c.mixerGain.fader
 		if currentGear != NeutralGear {
-			c.audio.Play("gearchange", gain)
+			c.audioDevice.Play("gearchange", gain)
 		}
 
 		c.log.Info().
@@ -664,16 +717,19 @@ func (c *Core) sendWebTelemetry() {
 
 	go func() {
 		c.chartDataChannel <- map[string]float32{
-			"timeOfDay": float32(c.gt.Telemetry.TimeOfDay().Milliseconds()),
-			"throttle":  c.gt.Telemetry.ThrottlePercent(),
-			"brake":     c.gt.Telemetry.BrakePercent(),
-			"rpm":       c.gt.Telemetry.EngineRPM(),
-			"speed":     c.gt.Telemetry.GroundSpeedKPH(),
-			"velocityX": c.physics.last.velocityVector.X,
-			"velocityY": c.physics.last.velocityVector.Y,
-			"velocityZ": c.physics.last.velocityVector.Z,
-			"gforce":    float32(c.lastAcceleration) / gravityConstant,
-			"snap":      float32(c.physics.last.jerk),
+			"timeOfDay":    float32(c.gt.Telemetry.TimeOfDay().Milliseconds()),
+			"throttle":     c.gt.Telemetry.ThrottlePercent(),
+			"brake":        c.gt.Telemetry.BrakePercent(),
+			"rpm":          c.gt.Telemetry.EngineRPM(),
+			"speed":        c.gt.Telemetry.GroundSpeedKPH(),
+			"velocityX":    c.physics.current.velocityVector.X,
+			"velocityY":    c.physics.current.velocityVector.Y,
+			"velocityZ":    c.physics.current.velocityVector.Z,
+			"gforce":       float32(c.physics.current.acceleration) / gravityConstant,
+			"jerk":         float32(c.physics.current.jerk),
+			"snap":         float32(c.physics.current.snap),
+			"attitudeJerk": float32(c.physics.current.attitudeJerk),
+			"output":       float32(c.physics.current.audioOutValue),
 		}
 	}()
 }

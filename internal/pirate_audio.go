@@ -22,7 +22,7 @@ func (c *Core) setupPirateAudioButtons() {
 		c.display.ShowTextCentered(canvas, fmt.Sprintf("%0.0f dB", c.mixerGain.master), volumeFontSize)
 
 		go func() {
-			c.audio.Play("gearChange", c.mixerGain.master)
+			c.audioDevice.Play("gearChange", c.mixerGain.master)
 		}()
 
 		c.log.Info().
@@ -41,7 +41,7 @@ func (c *Core) setupPirateAudioButtons() {
 		c.display.ShowTextCentered(canvas, fmt.Sprintf("%0.0f dB", c.mixerGain.master), volumeFontSize)
 
 		go func() {
-			c.audio.Play("gearChange", c.mixerGain.master)
+			c.audioDevice.Play("gearChange", c.mixerGain.master)
 		}()
 
 		c.log.Info().
