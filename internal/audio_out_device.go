@@ -10,6 +10,7 @@ import (
 	"github.com/gopxl/beep/speaker"
 	"github.com/gopxl/beep/vorbis"
 	"github.com/rs/zerolog"
+	"github.com/vwhitteron/gt-pi/internal/audio"
 )
 
 type AudioOutDevice struct {
@@ -82,13 +83,13 @@ func (a *AudioOutDevice) Play(name string, gain float64) {
 }
 
 type BumpStream struct {
-	audioBuffer *audioBuffer
+	audioBuffer *audio.AudioBuffer
 	physics     *physicsTracker
 	gain        *float64
 	enabled     bool
 }
 
-func NewBumpStream(buffer *audioBuffer, physics *physicsTracker, gain *float64, enabled bool) BumpStream {
+func NewBumpStream(buffer *audio.AudioBuffer, physics *physicsTracker, gain *float64, enabled bool) BumpStream {
 	return BumpStream{
 		audioBuffer: buffer,
 		physics:     physics,
@@ -103,11 +104,11 @@ func (b BumpStream) Stream(samples [][2]float64) (n int, ok bool) {
 	// fmt.Printf("Buffer: %v\n", buffer.buffer)
 
 	for i := range samples {
-		sample := buffer.buffer[i] * *b.gain
+		sample := buffer.Buffer[i] * *b.gain
 		samples[i][0] = sample
 		samples[i][1] = sample
 
-		// buffer.buffer[i] = 0
+		buffer.Buffer[i] = 0
 	}
 
 	return len(samples), true

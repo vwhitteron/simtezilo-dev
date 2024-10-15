@@ -14,40 +14,36 @@ func (c *Core) setupWaveshareButtons() {
 	}
 
 	buttons.OnButtonUpPressed(func() {
-		c.mixerGain.master += 1
-		c.mixerGain.fader = c.mixerGain.master
-		c.mixerGain.streamer = volumeToGain(c.mixerGain.fader)
+		c.mixerGain.MasterIncrease(1)
 
 		canvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
-		c.display.ShowTextCentered(canvas, fmt.Sprintf("%0.0f db", c.mixerGain.master), volumeFontSize)
+		c.display.ShowTextCentered(canvas, fmt.Sprintf("%0.0f db", c.mixerGain.Master), volumeFontSize)
 
 		go func() {
-			c.audioDevice.Play("gearChange", c.mixerGain.master)
+			c.audioDevice.Play("gearChange", c.mixerGain.Master)
 		}()
 
 		c.log.Info().
 			Str("button", "Up").
 			Str("action", "increase master gain").
-			Float64("master_gain", c.mixerGain.master).
+			Float64("master_gain", c.mixerGain.Master).
 			Msg("button press")
 	})
 
 	buttons.OnButtonDownPressed(func() {
-		c.mixerGain.master -= 1
-		c.mixerGain.fader = c.mixerGain.master
-		c.mixerGain.streamer = volumeToGain(c.mixerGain.fader)
+		c.mixerGain.MasterDecrease(1)
 
 		canvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
-		c.display.ShowTextCentered(canvas, fmt.Sprintf("%0.0f dB", c.mixerGain.master), volumeFontSize)
+		c.display.ShowTextCentered(canvas, fmt.Sprintf("%0.0f dB", c.mixerGain.Master), volumeFontSize)
 
 		go func() {
-			c.audioDevice.Play("gearChange", c.mixerGain.master)
+			c.audioDevice.Play("gearChange", c.mixerGain.Master)
 		}()
 
 		c.log.Info().
 			Str("button", "Down").
 			Str("action", "decrease master gain").
-			Float64("master_gain", c.mixerGain.master).
+			Float64("master_gain", c.mixerGain.Master).
 			Msg("button press")
 	})
 

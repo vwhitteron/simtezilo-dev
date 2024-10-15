@@ -14,40 +14,36 @@ func (c *Core) setupPirateAudioButtons() {
 	}
 
 	buttons.OnButtonAPressed(func() {
-		c.mixerGain.master += 0.25
-		c.mixerGain.fader = c.mixerGain.master
-		c.mixerGain.streamer = volumeToGain(c.mixerGain.fader)
+		c.mixerGain.MasterIncrease(0.25)
 
 		canvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
-		c.display.ShowTextCentered(canvas, fmt.Sprintf("%0.0f dB", c.mixerGain.master), volumeFontSize)
+		c.display.ShowTextCentered(canvas, fmt.Sprintf("%0.0f dB", c.mixerGain.Master), volumeFontSize)
 
 		go func() {
-			c.audioDevice.Play("gearChange", c.mixerGain.master)
+			c.audioDevice.Play("gearChange", c.mixerGain.Master)
 		}()
 
 		c.log.Info().
 			Str("button", "A").
 			Str("action", "increase master gain").
-			Float64("master_gain", c.mixerGain.master).
+			Float64("master_gain", c.mixerGain.Master).
 			Msg("button press")
 	})
 
 	buttons.OnButtonBPressed(func() {
-		c.mixerGain.master -= 0.25
-		c.mixerGain.fader = c.mixerGain.master
-		c.mixerGain.streamer = volumeToGain(c.mixerGain.fader)
+		c.mixerGain.MasterDecrease(0.25)
 
 		canvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
-		c.display.ShowTextCentered(canvas, fmt.Sprintf("%0.0f dB", c.mixerGain.master), volumeFontSize)
+		c.display.ShowTextCentered(canvas, fmt.Sprintf("%0.0f dB", c.mixerGain.Master), volumeFontSize)
 
 		go func() {
-			c.audioDevice.Play("gearChange", c.mixerGain.master)
+			c.audioDevice.Play("gearChange", c.mixerGain.Master)
 		}()
 
 		c.log.Info().
 			Str("button", "B").
 			Str("action", "decrease master gain").
-			Float64("master_gain", c.mixerGain.master).
+			Float64("master_gain", c.mixerGain.Master).
 			Msg("button press")
 	})
 
