@@ -1,4 +1,4 @@
-package internal
+package sprites
 
 import (
 	"fmt"
@@ -6,7 +6,7 @@ import (
 	"os"
 )
 
-type spriteSet struct {
+type SpriteSet struct {
 	image  *image.RGBA
 	sprite map[string]image.Rectangle
 }
@@ -15,7 +15,7 @@ type SpriteSetOpts struct {
 	AssetDir string
 }
 
-func NewSpriteSet(opts SpriteSetOpts) (*spriteSet, error) {
+func NewSpriteSet(opts SpriteSetOpts) (*SpriteSet, error) {
 	path := opts.AssetDir + "/image/sprites.png"
 	data, err := os.Open(path)
 	if err != nil {
@@ -33,13 +33,13 @@ func NewSpriteSet(opts SpriteSetOpts) (*spriteSet, error) {
 		"error":  image.Rect(1*240, 0*240, 2*240, 1*240),
 	}
 
-	return &spriteSet{
+	return &SpriteSet{
 		image:  img.(*image.RGBA),
 		sprite: collection,
 	}, nil
 }
 
-func (s *spriteSet) GetSprite(name string) image.Image {
+func (s *SpriteSet) GetSprite(name string) image.Image {
 	if _, ok := s.sprite[name]; !ok {
 		name = "error"
 	}

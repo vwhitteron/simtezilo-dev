@@ -1,4 +1,4 @@
-package internal
+package waveshare
 
 import (
 	"fmt"
@@ -14,7 +14,8 @@ import (
 	"github.com/golang/freetype"
 	"github.com/golang/freetype/truetype"
 	"github.com/rubiojr/go-pirateaudio/textview"
-	"github.com/vwhitteron/gt-pi/internal/st7789"
+	"github.com/vwhitteron/gt-pi/internal/display/sprites"
+	"github.com/vwhitteron/gt-pi/internal/hardware/lcd/st7789"
 	"golang.org/x/image/font"
 	"golang.org/x/image/math/fixed"
 	"periph.io/x/conn/v3/driver/driverreg"
@@ -24,17 +25,17 @@ import (
 	"periph.io/x/host/v3"
 )
 
-type Waveshare14972Display struct {
+type Waveshare14972LCD struct {
 	port spi.PortCloser
 	dev  *st7789.Device
 
 	font    *truetype.Font
-	sprites *spriteSet
+	sprites *sprites.SpriteSet
 
 	Orientation int
 }
 
-type Waveshare14972DisplayOpts struct {
+type Waveshare14972LCDOpts struct {
 	Orientation int
 	AssetDir    string
 }
@@ -52,10 +53,10 @@ func init() {
 
 }
 
-func NewWaveshare14972Display(opts Waveshare14972DisplayOpts) (*Waveshare14972Display, error) {
+func NewWaveshare14972Display(opts Waveshare14972LCDOpts) (*Waveshare14972LCD, error) {
 	var err error
 	var spiPort spi.PortCloser
-	var spiDev *st7789.Device
+	var lcdDevice *st7789.Device
 	once.Do(func() {
 		spiPort, err = spireg.Open("SPI0.0")
 		if err != nil {
@@ -72,31 +73,31 @@ func NewWaveshare14972Display(opts Waveshare14972DisplayOpts) (*Waveshare14972Di
 			Backlight: gpioreg.ByName("GPIO24"),
 		}
 
-		spiDev, err = st7789.NewSPI(spiPort.(spi.Port), dataComm, st7789Opts)
+		lcdDevice, err = st7789.NewSPI(spiPort.(spi.Port), dataComm, st7789Opts)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("initializing display: %w", err)
 	}
 
-	err = spiDev.Reset()
+	err = lcdDevice.Reset()
 	if err != nil {
 		return nil, fmt.Errorf("resetting display: %w", err)
 	}
 
-	waveshareDisplayInit(spiDev)
+	waveshareDisplayInit(lcdDevice)
 
 	switch opts.Orientation {
 	case 90:
-		spiDev.SetRotation(st7789.ROTATION_90)
+		lcdDevice.SetRotation(st7789.ROTATION_90)
 	case 180:
-		spiDev.SetRotation(st7789.ROTATION_180)
+		lcdDevice.SetRotation(st7789.ROTATION_180)
 	case 270:
-		spiDev.SetRotation(st7789.ROTATION_270)
+		lcdDevice.SetRotation(st7789.ROTATION_270)
 	default:
-		spiDev.SetRotation(st7789.ROTATION_NONE)
+		lcdDevice.SetRotation(st7789.ROTATION_NONE)
 	}
 
-	sprites, err := NewSpriteSet(SpriteSetOpts{AssetDir: opts.AssetDir})
+	sprites, err := sprites.NewSpriteSet(sprites.SpriteSetOpts{AssetDir: opts.AssetDir})
 	if err != nil {
 		return nil, fmt.Errorf("loading sprite set: %w", err)
 	}
@@ -117,44 +118,44 @@ func NewWaveshare14972Display(opts Waveshare14972DisplayOpts) (*Waveshare14972Di
 		return nil, fmt.Errorf("parsing font: %w", err)
 	}
 
-	display := &Waveshare14972Display{
+	lcd := &Waveshare14972LCD{
 		port:        spiPort,
-		dev:         spiDev,
+		dev:         lcdDevice,
 		font:        freetypeFont,
 		Orientation: opts.Orientation,
 		sprites:     sprites,
 	}
 
-	display.Clear()
+	lcd.Clear()
 
-	return display, nil
+	return lcd, nil
 }
 
-func (d *Waveshare14972Display) Clear() {
-	d.dev.FillScreen(color.RGBA{R: 0, G: 0, B: 0, A: 0})
+func (l *Waveshare14972LCD) Clear() {
+	l.dev.FillScreen(color.RGBA{R: 0, G: 0, B: 0, A: 0})
 }
 
-func (d *Waveshare14972Display) Close() {
-	d.Clear()
-	d.dev.PowerOff()
-	d.port.Close()
+func (l *Waveshare14972LCD) Close() {
+	l.Clear()
+	l.dev.PowerOff()
+	l.port.Close()
 }
 
-func (d *Waveshare14972Display) PowerOn() {
-	d.dev.PowerOn()
+func (l *Waveshare14972LCD) PowerOn() {
+	l.dev.PowerOn()
 }
 
-func (d *Waveshare14972Display) PowerOff() {
-	d.dev.PowerOff()
+func (l *Waveshare14972LCD) PowerOff() {
+	l.dev.PowerOff()
 }
 
-func (d *Waveshare14972Display) Show(sprite string) {
-	img := d.sprites.GetSprite(sprite)
-	d.dev.DrawRAW(img)
+func (l *Waveshare14972LCD) Show(sprite string) {
+	img := l.sprites.GetSprite(sprite)
+	l.dev.DrawRAW(img)
 }
 
-func (d *Waveshare14972Display) ShowText(text string) {
-	d.Clear()
+func (l *Waveshare14972LCD) ShowText(text string) {
+	l.Clear()
 	opts := textview.DefaultOpts
 	opts.FGColor = textview.GREEN
 	opts.FontSize = 64
@@ -162,8 +163,8 @@ func (d *Waveshare14972Display) ShowText(text string) {
 	tv.DrawChars(text)
 }
 
-func (d *Waveshare14972Display) ShowTextCentered(canvas *image.RGBA, text string, size int) {
-	fontFace := truetype.NewFace(d.font, &truetype.Options{
+func (l *Waveshare14972LCD) ShowTextCentered(canvas *image.RGBA, text string, size int) {
+	fontFace := truetype.NewFace(l.font, &truetype.Options{
 		Size:    float64(size),
 		DPI:     265,
 		Hinting: font.HintingFull,
@@ -189,27 +190,27 @@ func (d *Waveshare14972Display) ShowTextCentered(canvas *image.RGBA, text string
 
 	fontDrawer.DrawString(text)
 
-	d.dev.DrawRAW(canvas)
+	l.dev.DrawRAW(canvas)
 }
 
-func (d *Waveshare14972Display) GetOrientation() int {
-	return d.Orientation
+func (l *Waveshare14972LCD) GetOrientation() int {
+	return l.Orientation
 }
 
-func (d *Waveshare14972Display) SetOrientation(rotation int) {
+func (l *Waveshare14972LCD) SetOrientation(rotation int) {
 	switch rotation {
 	case 90:
-		d.dev.SetRotation(st7789.ROTATION_90)
-		d.Orientation = rotation
+		l.dev.SetRotation(st7789.ROTATION_90)
+		l.Orientation = rotation
 	case 180:
-		d.dev.SetRotation(st7789.ROTATION_180)
-		d.Orientation = rotation
+		l.dev.SetRotation(st7789.ROTATION_180)
+		l.Orientation = rotation
 	case 270:
-		d.dev.SetRotation(st7789.ROTATION_270)
-		d.Orientation = rotation
+		l.dev.SetRotation(st7789.ROTATION_270)
+		l.Orientation = rotation
 	default:
-		d.dev.SetRotation(st7789.ROTATION_NONE)
-		d.Orientation = 0
+		l.dev.SetRotation(st7789.ROTATION_NONE)
+		l.Orientation = 0
 	}
 }
 

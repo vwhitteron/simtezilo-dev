@@ -2,7 +2,6 @@ package internal
 
 const frameRate = 60
 const gravityConstant = 9.81
-const maxGain = 0
 const vehicleMaxSpeedKPH = 700
 const vehicleTeleportDisplacement = (vehicleMaxSpeedKPH / 3.6) / frameRate
 const pitLaneSpeedLimit = 60 / 3.6
@@ -27,6 +26,9 @@ var gearNames = map[int]string{
 	10: "10",
 	15: "N",
 }
+
+// Audio settings
+// const maxGain = 0
 
 // Display settings
 const gearFontSize = 48

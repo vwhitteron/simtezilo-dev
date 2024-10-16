@@ -6,7 +6,7 @@ import (
 	"github.com/rs/zerolog"
 )
 
-type MixerGain struct {
+type Mixer struct {
 	Master   float64
 	Streamer float64
 
@@ -18,8 +18,8 @@ type MixerGain struct {
 	logger zerolog.Logger
 }
 
-func NewAudioMixer(gain float64, logger zerolog.Logger) MixerGain {
-	return MixerGain{
+func NewAudioMixer(gain float64, logger zerolog.Logger) Mixer {
+	return Mixer{
 		Master:   gain,
 		Streamer: gain,
 
@@ -32,7 +32,7 @@ func NewAudioMixer(gain float64, logger zerolog.Logger) MixerGain {
 	}
 }
 
-func (m *MixerGain) MasterDecrease(change float64) {
+func (m *Mixer) MasterDecrease(change float64) {
 	currentGain := m.Master
 
 	m.Master -= change
@@ -44,7 +44,7 @@ func (m *MixerGain) MasterDecrease(change float64) {
 
 }
 
-func (m *MixerGain) MasterIncrease(change float64) {
+func (m *Mixer) MasterIncrease(change float64) {
 	currentGain := m.Master
 
 	m.Master += change
@@ -55,26 +55,26 @@ func (m *MixerGain) MasterIncrease(change float64) {
 	}
 }
 
-func (m *MixerGain) GetGearChangeGain() float64 {
+func (m *Mixer) GetGearChangeGain() float64 {
 	return m.fader - m.gearChange
 }
 
-func (m *MixerGain) SetGearChangeGain(gain float64) {
+func (m *Mixer) SetGearChangeGain(gain float64) {
 	m.logger.Debug().Float64("gain", gain).Msg("set gear change gain")
 
 	m.gearChange = gain
 }
 
-func (m *MixerGain) SetFader(gain float64) {
+func (m *Mixer) SetFader(gain float64) {
 	m.fader = gain
 	m.Streamer = volumeToGain(m.fader)
 }
 
-func (m *MixerGain) SetFadeInTime(samples float64) {
+func (m *Mixer) SetFadeInTime(samples float64) {
 	m.fadeInIncrement = (m.fader - m.Master) / samples
 }
 
-func (m *MixerGain) FadeInHaptics() {
+func (m *Mixer) FadeInHaptics() {
 	if m.fader == m.Master {
 		return
 	}

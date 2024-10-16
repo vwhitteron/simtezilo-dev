@@ -1,4 +1,4 @@
-package buttons
+package hardware
 
 import (
 	"fmt"

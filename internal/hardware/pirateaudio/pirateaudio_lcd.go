@@ -1,4 +1,4 @@
-package internal
+package pirateaudio
 
 import (
 	"fmt"
@@ -12,40 +12,41 @@ import (
 	"github.com/golang/freetype/truetype"
 	"github.com/rubiojr/go-pirateaudio/display"
 	"github.com/rubiojr/go-pirateaudio/textview"
+	"github.com/vwhitteron/gt-pi/internal/display/sprites"
 	"golang.org/x/image/font"
 	"golang.org/x/image/math/fixed"
 )
 
-type PirateAudioDisplay struct {
+type PirateAudioLCD struct {
 	font        *truetype.Font
-	lcd         *display.Display
+	device      *display.Display
 	orientation int
-	sprites     *spriteSet
+	sprites     *sprites.SpriteSet
 }
 
-type PirateAudioDisplayOpts struct {
+type PirateAudioLCDOpts struct {
 	Orientation int
 	AssetDir    string
 }
 
-func NewPirateAudioDisplay(opts PirateAudioDisplayOpts) (*PirateAudioDisplay, error) {
-	lcd, err := display.Init()
+func NewPirateAudioLCD(opts PirateAudioLCDOpts) (*PirateAudioLCD, error) {
+	lcdDevice, err := display.Init()
 	if err != nil {
 		return nil, fmt.Errorf("initializing display: %w", err)
 	}
 
 	switch opts.Orientation {
 	case 90:
-		lcd.Rotate(display.ROTATION_90)
+		lcdDevice.Rotate(display.ROTATION_90)
 	case 180:
-		lcd.Rotate(display.ROTATION_180)
+		lcdDevice.Rotate(display.ROTATION_180)
 	case 270:
-		lcd.Rotate(display.ROTATION_270)
+		lcdDevice.Rotate(display.ROTATION_270)
 	default:
-		lcd.Rotate(display.NO_ROTATION)
+		lcdDevice.Rotate(display.NO_ROTATION)
 	}
 
-	sprites, err := NewSpriteSet(SpriteSetOpts{AssetDir: opts.AssetDir})
+	sprites, err := sprites.NewSpriteSet(sprites.SpriteSetOpts{AssetDir: opts.AssetDir})
 	if err != nil {
 		return nil, fmt.Errorf("loading sprite set: %w", err)
 	}
@@ -66,61 +67,61 @@ func NewPirateAudioDisplay(opts PirateAudioDisplayOpts) (*PirateAudioDisplay, er
 		return nil, fmt.Errorf("parsing font: %w", err)
 	}
 
-	display := &PirateAudioDisplay{
+	lcd := &PirateAudioLCD{
 		font:        freetypeFont,
-		lcd:         lcd,
+		device:      lcdDevice,
 		orientation: opts.Orientation,
 		sprites:     sprites,
 	}
 
-	display.Clear()
+	lcd.Clear()
 
-	return display, nil
+	return lcd, nil
 }
 
-func (d *PirateAudioDisplay) Clear() {
-	d.lcd.FillScreen(color.RGBA{R: 0, G: 0, B: 0, A: 0})
+func (l *PirateAudioLCD) Clear() {
+	l.device.FillScreen(color.RGBA{R: 0, G: 0, B: 0, A: 0})
 }
 
-func (d *PirateAudioDisplay) Close() {
-	d.Clear()
-	d.lcd.PowerOff()
-	d.lcd.Close()
+func (l *PirateAudioLCD) Close() {
+	l.Clear()
+	l.device.PowerOff()
+	l.device.Close()
 }
 
-func (d *PirateAudioDisplay) GetOrientation() int {
-	return d.orientation
+func (l *PirateAudioLCD) GetOrientation() int {
+	return l.orientation
 }
 
-func (d *PirateAudioDisplay) SetOrientation(orientation int) {
-	d.orientation = orientation
+func (l *PirateAudioLCD) SetOrientation(orientation int) {
+	l.orientation = orientation
 	switch orientation {
 	case 90:
-		d.lcd.Rotate(display.ROTATION_90)
+		l.device.Rotate(display.ROTATION_90)
 	case 180:
-		d.lcd.Rotate(display.ROTATION_180)
+		l.device.Rotate(display.ROTATION_180)
 	case 270:
-		d.lcd.Rotate(display.ROTATION_270)
+		l.device.Rotate(display.ROTATION_270)
 	default:
-		d.lcd.Rotate(display.NO_ROTATION)
+		l.device.Rotate(display.NO_ROTATION)
 	}
 }
 
-func (d *PirateAudioDisplay) PowerOn() {
-	d.lcd.PowerOn()
+func (l *PirateAudioLCD) PowerOn() {
+	l.device.PowerOn()
 }
 
-func (d *PirateAudioDisplay) PowerOff() {
-	d.lcd.PowerOff()
+func (l *PirateAudioLCD) PowerOff() {
+	l.device.PowerOff()
 }
 
-func (d *PirateAudioDisplay) Show(sprite string) {
-	img := d.sprites.GetSprite(sprite)
-	d.lcd.DrawRAW(img)
+func (l *PirateAudioLCD) Show(sprite string) {
+	img := l.sprites.GetSprite(sprite)
+	l.device.DrawRAW(img)
 }
 
-func (d *PirateAudioDisplay) ShowText(text string) {
-	d.Clear()
+func (l *PirateAudioLCD) ShowText(text string) {
+	l.Clear()
 	opts := textview.DefaultOpts
 	opts.FGColor = textview.GREEN
 	opts.FontSize = 64
@@ -128,8 +129,8 @@ func (d *PirateAudioDisplay) ShowText(text string) {
 	tv.DrawChars(text)
 }
 
-func (d *PirateAudioDisplay) ShowTextCentered(canvas *image.RGBA, text string, size int) {
-	fontFace := truetype.NewFace(d.font, &truetype.Options{
+func (l *PirateAudioLCD) ShowTextCentered(canvas *image.RGBA, text string, size int) {
+	fontFace := truetype.NewFace(l.font, &truetype.Options{
 		Size:    float64(size),
 		DPI:     265,
 		Hinting: font.HintingFull,
@@ -155,5 +156,5 @@ func (d *PirateAudioDisplay) ShowTextCentered(canvas *image.RGBA, text string, s
 
 	fontDrawer.DrawString(text)
 
-	d.lcd.DrawRAW(canvas)
+	l.device.DrawRAW(canvas)
 }

@@ -1,4 +1,4 @@
-package internal
+package spotpear
 
 import (
 	"fmt"
@@ -14,6 +14,7 @@ import (
 	"github.com/golang/freetype/truetype"
 	"github.com/rubiojr/go-pirateaudio/st7789"
 	"github.com/rubiojr/go-pirateaudio/textview"
+	"github.com/vwhitteron/gt-pi/internal/display/sprites"
 	"golang.org/x/image/font"
 	"golang.org/x/image/math/fixed"
 	"periph.io/x/conn/v3/driver/driverreg"
@@ -29,7 +30,7 @@ type SpotpearGameDisplay struct {
 
 	font        *truetype.Font
 	orientation int
-	sprites     *spriteSet
+	sprites     *sprites.SpriteSet
 }
 
 type SpotpearGameDisplayOpts struct {
@@ -53,14 +54,14 @@ func init() {
 func NewSpotpearGameDisplay(opts SpotpearGameDisplayOpts) (*SpotpearGameDisplay, error) {
 	var err error
 	var spiPort spi.PortCloser
-	var spiDev *st7789.Device
+	var lcdDevice *st7789.Device
 	once.Do(func() {
 		spiPort, err = spireg.Open("SPI0.1")
 		if err != nil {
 			return
 		}
 		dataComm := gpioreg.ByName("GPIO25")
-		spiDev, err = st7789.NewSPI(spiPort.(spi.Port), dataComm, &st7789.DefaultOpts)
+		lcdDevice, err = st7789.NewSPI(spiPort.(spi.Port), dataComm, &st7789.DefaultOpts)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("initializing display: %w", err)
@@ -68,16 +69,16 @@ func NewSpotpearGameDisplay(opts SpotpearGameDisplayOpts) (*SpotpearGameDisplay,
 
 	switch opts.Orientation {
 	case 90:
-		spiDev.SetRotation(st7789.ROTATION_90)
+		lcdDevice.SetRotation(st7789.ROTATION_90)
 	case 180:
-		spiDev.SetRotation(st7789.ROTATION_180)
+		lcdDevice.SetRotation(st7789.ROTATION_180)
 	case 270:
-		spiDev.SetRotation(st7789.ROTATION_270)
+		lcdDevice.SetRotation(st7789.ROTATION_270)
 	default:
-		spiDev.SetRotation(st7789.ROTATION_NONE)
+		lcdDevice.SetRotation(st7789.ROTATION_NONE)
 	}
 
-	sprites, err := NewSpriteSet(SpriteSetOpts{AssetDir: opts.AssetDir})
+	sprites, err := sprites.NewSpriteSet(sprites.SpriteSetOpts{AssetDir: opts.AssetDir})
 	if err != nil {
 		return nil, fmt.Errorf("loading sprite set: %w", err)
 	}
@@ -98,17 +99,17 @@ func NewSpotpearGameDisplay(opts SpotpearGameDisplayOpts) (*SpotpearGameDisplay,
 		return nil, fmt.Errorf("parsing font: %w", err)
 	}
 
-	display := &SpotpearGameDisplay{
+	lcd := &SpotpearGameDisplay{
 		port:        spiPort,
-		dev:         spiDev,
+		dev:         lcdDevice,
 		font:        freetypeFont,
 		orientation: opts.Orientation,
 		sprites:     sprites,
 	}
 
-	display.Clear()
+	lcd.Clear()
 
-	return display, nil
+	return lcd, nil
 }
 
 func (d *SpotpearGameDisplay) Clear() {

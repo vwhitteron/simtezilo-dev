@@ -1,4 +1,4 @@
-package internal
+package audio
 
 import (
 	"fmt"
@@ -10,10 +10,12 @@ import (
 	"github.com/gopxl/beep/speaker"
 	"github.com/gopxl/beep/vorbis"
 	"github.com/rs/zerolog"
-	"github.com/vwhitteron/gt-pi/internal/audio"
+	"github.com/vwhitteron/gt-pi/internal/physics"
 )
 
-type AudioOutDevice struct {
+const maxGain = 0
+
+type OutputDevice struct {
 	samples map[string]*beep.Buffer
 	log     zerolog.Logger
 }
@@ -23,7 +25,7 @@ type AudioOutDeviceOpts struct {
 	Logger   zerolog.Logger
 }
 
-func NewAudioOutputDevice(opts AudioOutDeviceOpts) (*AudioOutDevice, error) {
+func NewAudioOutputDevice(opts AudioOutDeviceOpts) (*OutputDevice, error) {
 	audioSamples := []string{
 		"gearchange",
 	}
@@ -55,13 +57,13 @@ func NewAudioOutputDevice(opts AudioOutDeviceOpts) (*AudioOutDevice, error) {
 		streamer.Close()
 	}
 
-	return &AudioOutDevice{
+	return &OutputDevice{
 		samples: buffers,
 		log:     opts.Logger,
 	}, nil
 }
 
-func (a *AudioOutDevice) Play(name string, gain float64) {
+func (a *OutputDevice) Play(name string, gain float64) {
 	if _, ok := a.samples[name]; !ok {
 		a.log.Info().Msgf("unable to play unknown audio stream %q", name)
 		return
@@ -83,25 +85,22 @@ func (a *AudioOutDevice) Play(name string, gain float64) {
 }
 
 type BumpStream struct {
-	audioBuffer *audio.AudioBuffer
-	physics     *physicsTracker
+	audioBuffer *AudioBuffer
+	physics     *physics.PhysicsTracker
 	gain        *float64
 	enabled     bool
 }
 
-func NewBumpStream(buffer *audio.AudioBuffer, physics *physicsTracker, gain *float64, enabled bool) BumpStream {
+func NewBumpStream(buffer *AudioBuffer, physics *physics.PhysicsTracker, gain *float64) BumpStream {
 	return BumpStream{
 		audioBuffer: buffer,
 		physics:     physics,
 		gain:        gain,
-		enabled:     enabled,
 	}
 }
 
 func (b BumpStream) Stream(samples [][2]float64) (n int, ok bool) {
 	buffer := *b.audioBuffer
-
-	// fmt.Printf("Buffer: %v\n", buffer.buffer)
 
 	for i := range samples {
 		sample := buffer.Buffer[i] * *b.gain
