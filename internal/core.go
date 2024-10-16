@@ -45,7 +45,7 @@ type Core struct {
 	replayMode       bool
 	seq              uint32
 	timeOfDay        time.Duration
-	timeSinceLive    int
+	lastLive         time.Time
 	vehicleID        uint32
 	webEnabled       bool
 	webSocketClients int
@@ -90,7 +90,7 @@ func NewCore(opts CoreOptions) (*Core, error) {
 	}
 
 	audioMixer := audio.NewAudioMixer(opts.Gain, log)
-	audioBuffer := audio.NewAudioBuffer(133, 6)
+	audioBuffer := audio.NewAudioBuffer(133, 20)
 	audioDevice, err := audio.NewAudioOutputDevice(audio.AudioOutDeviceOpts{
 		AssetDir: opts.AssetDir,
 		Logger:   log.With().Str("component", "audio").Logger(),
@@ -205,7 +205,7 @@ func NewCore(opts CoreOptions) (*Core, error) {
 		physics:          physics.PhysicsTracker{},
 		replayMode:       opts.ReplayMode,
 		seq:              uint32(0),
-		timeSinceLive:    1000,
+		lastLive:         time.Time{},
 		vehicleID:        0,
 		webEnabled:       opts.WebEnabled,
 		webSocketClients: 0,
@@ -228,7 +228,7 @@ func (c *Core) Run() {
 	// speaker.Init(44100, 44100/15)
 	go speaker.Play(chassisStreamer)
 
-	ticker60fps := time.NewTicker((1000 / 60) * time.Millisecond)
+	ticker60fps := time.NewTicker((1000 / 120) * time.Millisecond)
 	ticker15fps := time.NewTicker((1000 / 15) * time.Millisecond)
 
 	c.log.Info().Str("component", "core").Str("result", "success").Msg("main loop started")
@@ -238,9 +238,9 @@ func (c *Core) Run() {
 		case <-c.done:
 			return
 		case <-ticker60fps.C:
+			go c.sendWebTelemetry()
 			c.physicsEvents()
 			c.checkSessionComplete()
-			c.updatePhysicsTracker()
 		case <-ticker15fps.C:
 			c.updateDisplay()
 		}
@@ -252,8 +252,6 @@ func (c *Core) Close() {
 }
 
 func (c *Core) physicsEvents() {
-	go c.sendWebTelemetry()
-
 	seq := c.gt.Telemetry.SequenceID()
 
 	// Do nothing until the sequence ID advances
@@ -342,6 +340,7 @@ func (c *Core) physicsEvents() {
 	c.gearChange(currentGear)
 
 	c.seq = seq
+	c.physics.Last = c.physics.Current
 }
 
 func (c *Core) chassisHaptics(windowMilliseconds float64, seqDelta uint32) {
@@ -352,11 +351,12 @@ func (c *Core) chassisHaptics(windowMilliseconds float64, seqDelta uint32) {
 		return
 	}
 
-	// no hpatics if telemetry packets dropped/missed
-	// if seqDelta > 1 {
-	// 	c.log.Debug().Uint32("delta", seqDelta).Msg("missed packets, skipping haptics")
-	// 	return
-	// }
+	// no haptics if telemetry packets dropped/missed
+	if seqDelta > 1 {
+		c.log.Debug().Uint32("delta", seqDelta).Msg("missed packets, skipping haptics")
+
+		return
+	}
 
 	// no haptics if vehicle speed velocity lower than 30cm per second
 	if vector.Magnitude(c.physics.Current.VelocityVector) < 0.28 {
@@ -387,8 +387,10 @@ func (c *Core) updatePhysics(windowMilliseconds float64) {
 
 	// chassis position
 	c.physics.Current.VelocityDelta = vector.Delta(c.physics.Current.VelocityVector, c.physics.Last.VelocityVector)
-	biaseddVelocityDelta := vector.Scale(c.physics.Current.VelocityDelta, 0.25, 0.25, 1)
-	c.physics.Current.Acceleration = vector.Magnitude(biaseddVelocityDelta) / windowMilliseconds
+	// FIXME: not sure if the xy biasing helps at all
+	// biaseddVelocityDelta := vector.Scale(c.physics.Current.VelocityDelta, 0.25, 0.25, 1)
+	// c.physics.Current.Acceleration = vector.Magnitude(biaseddVelocityDelta) / windowMilliseconds
+	c.physics.Current.Acceleration = vector.Magnitude(c.physics.Current.VelocityDelta) / windowMilliseconds
 
 	c.physics.Last.Jerk = c.physics.Current.Jerk
 	c.physics.Current.Jerk = (c.physics.Current.Acceleration - c.physics.Last.Acceleration) / windowMilliseconds
@@ -403,18 +405,18 @@ func (c *Core) updatePhysics(windowMilliseconds float64) {
 }
 
 func (c *Core) generateBump(seqDelta uint32) {
-	// bufferLen := c.audioBuffer.slotSize * c.audioBuffer.slots
 	bufferLen := c.audioBuffer.GetLength()
 
 	if seqDelta == 0 {
 		return
-	} else if seqDelta < uint32(c.audioBuffer.Slots) {
-		c.audioBuffer.ShiftBuffer(int(seqDelta))
-	} else {
-		c.log.Warn().Uint32("delta", seqDelta).Msg("sequence ID delta greater than 1")
-		for i := 0; i < bufferLen; i++ {
-			c.audioBuffer.Buffer[i] = 0
-		}
+		// FIXME: probably no longer needed as the buffer is now shifted by the audio streamer
+		// } else if seqDelta < uint32(c.audioBuffer.Slots) {
+		// 	c.audioBuffer.ShiftBufferSlots(int(seqDelta))
+		// } else {
+		// 	c.log.Warn().Uint32("delta", seqDelta).Msg("sequence ID delta greater than 1")
+		// 	for i := 0; i < bufferLen; i++ {
+		// 		c.audioBuffer.Buffer[i] = 0
+		// 	}
 	}
 
 	startTime := time.Now()
@@ -435,43 +437,36 @@ func (c *Core) generateBump(seqDelta uint32) {
 	}
 
 	snap := signal.LargestMagnitude(c.physics.Current.Snap, (c.physics.Current.AttitudeSnap * 100))
-	snap = signal.Scale(snap, 1/1000.0)
 
-	pulseReduction := snap
-
-	pulseWidthMax := 133.0
+	pulseWidthMax := 143.0
 	pulseWidth := pulseWidthMax
 
-	if pulseReduction > 0 {
-		pulseWidth -= pulseReduction
-	} else {
-		pulseWidth += pulseReduction
-	}
+	pulseReduction := signal.Abs(signal.Scale(snap, 1/1000.0))
+	// pulseReduction := signal.Abs(snap)
+	pulseWidth -= pulseReduction
 
-	if pulseWidth < 100 {
-		pulseWidth = 100
+	// 50Hz max
+	if pulseWidth < 80 {
+		pulseWidth = 80
 	}
 
 	waveOffset := pulseWidth / 2
 	waveSamplePeriod := math.Pi / pulseWidth
 
-	peak := 0.0
-	for i := 0; i < bufferLen-1; i++ {
-		sineValue := (pulse*math.Sin(waveSamplePeriod*(float64(i)-waveOffset)) + pulse) / 2
-
-		c.audioBuffer.Buffer[i] = sineValue
-
-		if sineValue > 0 && sineValue > peak {
-			peak = sineValue
-		} else if sineValue < 0 && sineValue < peak {
-			peak = sineValue
-		}
+	pulseBuffer := make([]float64, bufferLen)
+	for i := 0; i < int(pulseWidth*2); i++ {
+		pulseBuffer[i] = (pulse*math.Sin(waveSamplePeriod*(float64(i)-waveOffset)) + pulse) / 2
 	}
 
-	c.physics.Last.AudioOutValue = c.physics.Current.AudioOutValue
-	c.physics.Current.AudioOutValue = peak
+	c.audioBuffer.Write(pulseBuffer)
 
-	if peak > 1.0 {
+	c.physics.Last.AudioOutValue = c.physics.Current.AudioOutValue
+	// FIXME: temporarily report output frequency in telemetry dashboard
+	// freq := 1 / ((2 * pulseWidth) / 8000)
+	// c.physics.Current.AudioOutValue = freq
+	c.physics.Current.AudioOutValue = pulse
+
+	if pulse > 1.0 {
 		c.log.Debug().
 			Float64("jerk", c.physics.Current.Jerk).
 			Float64("snap", c.physics.Current.Snap).
@@ -479,9 +474,8 @@ func (c *Core) generateBump(seqDelta uint32) {
 			Uint32("sequence_id", c.physics.Current.SequenceID).
 			Msg("Bump inputs")
 		c.log.Debug().
-			Float64("peak", peak).
 			Float64("amplitude", pulse).
-			Float64("pusleReduce", pulseReduction).
+			Float64("pulseReduce", pulseReduction).
 			Float64("samplePeriod", waveSamplePeriod).
 			Float64("pulseWidth", pulseWidth).
 			Msg("Bump outputs")
@@ -532,30 +526,26 @@ func (c *Core) updateDisplay() {
 		return
 	}
 
-	if c.timeSinceLive > 3600 {
-		c.lcdDevice.PowerOff()
-	}
-
 	if c.gt.Telemetry.Flags().Live == false && c.replayMode == false {
+		if time.Since(c.lastLive) > 10*time.Second {
+			c.lcdDevice.PowerOff()
+
+			return
+		}
+
 		canvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
 		c.lcdDevice.ShowTextCentered(canvas, "Waiting...", 16)
-
-		c.timeSinceLive += 1
 
 		return
 	}
 
 	c.lcdDevice.PowerOn()
-	c.timeSinceLive = 0
+	c.lastLive = time.Now()
 
 	canvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
 	c.lcdDevice.ShowTextCentered(canvas, gearName(currentGear), gearFontSize)
 
 	c.displayContent.gear = currentGear
-}
-
-func (c *Core) updatePhysicsTracker() {
-	c.physics.Last = c.physics.Current
 }
 
 func (c *Core) updateVehicle(currentVehicleID uint32, currentGear int) {

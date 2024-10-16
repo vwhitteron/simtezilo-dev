@@ -1,9 +1,13 @@
 package audio
 
+import "sync"
+
 type AudioBuffer struct {
 	SlotSize int
 	Slots    int
 	Buffer   []float64
+
+	mu sync.Mutex
 }
 
 func NewAudioBuffer(slotSize int, slots int) AudioBuffer {
@@ -19,6 +23,9 @@ func NewAudioBuffer(slotSize int, slots int) AudioBuffer {
 }
 
 func (b *AudioBuffer) ClearBuffer() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
 	for i := 0; i < len(b.Buffer); i++ {
 		b.Buffer[i] = 0
 	}
@@ -28,7 +35,43 @@ func (b *AudioBuffer) GetLength() int {
 	return len(b.Buffer)
 }
 
-func (b *AudioBuffer) ShiftBuffer(slots int) {
+func (b *AudioBuffer) Write(samples []float64) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	for i := 0; i < len(samples); i++ {
+		b.Buffer[i] = (b.Buffer[i] + samples[i]) * 0.66
+	}
+}
+
+func (b *AudioBuffer) Read(length int) []float64 {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	samples := make([]float64, length)
+
+	for i := 0; i < length; i++ {
+		samples[i] = b.Buffer[i]
+	}
+
+	return samples
+}
+
+func (b *AudioBuffer) ShiftBuffer(samples int) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	bufferMax := len(b.Buffer) - samples
+
+	for i := 0; i < bufferMax; i++ {
+		b.Buffer[i] = b.Buffer[i+samples]
+	}
+}
+
+func (b *AudioBuffer) ShiftBufferSlots(slots int) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
 	b.shiftBuffer2(slots)
 }
 

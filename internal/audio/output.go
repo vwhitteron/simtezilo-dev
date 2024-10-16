@@ -100,15 +100,15 @@ func NewBumpStream(buffer *AudioBuffer, physics *physics.PhysicsTracker, gain *f
 }
 
 func (b BumpStream) Stream(samples [][2]float64) (n int, ok bool) {
-	buffer := *b.audioBuffer
+	buffer := b.audioBuffer.Read(len(samples))
 
 	for i := range samples {
-		sample := buffer.Buffer[i] * *b.gain
+		sample := buffer[i] * *b.gain
 		samples[i][0] = sample
 		samples[i][1] = sample
-
-		buffer.Buffer[i] = 0
 	}
+
+	b.audioBuffer.ShiftBuffer(len(samples))
 
 	return len(samples), true
 }

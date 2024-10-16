@@ -2,15 +2,23 @@ package signal
 
 import "math"
 
-func Exponent(source float64, exponent float64) float64 {
-	isNeg := false
-
-	if source < 0 {
-		isNeg = true
-		source = -source
+func Abs(value float64) float64 {
+	if value < 0 {
+		return -value
 	}
 
-	result := math.Pow(source, exponent)
+	return value
+}
+
+func Exponent(value float64, exponent float64) float64 {
+	isNeg := false
+
+	if value < 0 {
+		isNeg = true
+		value = -value
+	}
+
+	result := math.Pow(value, exponent)
 
 	if isNeg {
 		result = -result
@@ -19,15 +27,15 @@ func Exponent(source float64, exponent float64) float64 {
 	return result
 }
 
-func Log2(source float64) float64 {
+func Log2(value float64) float64 {
 	isNeg := false
 
-	if source < 0 {
+	if value < 0 {
 		isNeg = true
-		source = -source
+		value = -value
 	}
 
-	compressed := math.Log2(source + 1)
+	compressed := math.Log2(value + 1)
 
 	if isNeg {
 		compressed = -compressed
@@ -36,15 +44,15 @@ func Log2(source float64) float64 {
 	return compressed
 }
 
-func Log10(source float64) float64 {
+func Log10(value float64) float64 {
 	isNeg := false
 
-	if source < 0 {
+	if value < 0 {
 		isNeg = true
-		source = -source
+		value = -value
 	}
 
-	compressed := math.Log10(source + 1)
+	compressed := math.Log10(value + 1)
 
 	if isNeg {
 		compressed = -compressed
@@ -53,9 +61,9 @@ func Log10(source float64) float64 {
 	return compressed
 }
 
-func Scale(source float64, scale float64) float64 {
+func Scale(value float64, scale float64) float64 {
 
-	return source * scale
+	return value * scale
 }
 
 func Limit(value float64, max float64) float64 {
@@ -70,30 +78,30 @@ func Limit(value float64, max float64) float64 {
 	return value
 }
 
-func LargestMagnitude(a float64, b float64) float64 {
+func LargestMagnitude(valueA float64, valueB float64) float64 {
 	aIsNeg := false
 	bIsNeg := false
 
-	if a < 0 {
+	if valueA < 0 {
 		aIsNeg = true
-		a = -a
+		valueA = -valueA
 	}
 
-	if b < 0 {
+	if valueB < 0 {
 		bIsNeg = true
-		b = -b
+		valueB = -valueB
 	}
 
 	maxVal := 0.0
 
-	if a > b {
-		maxVal = a
+	if valueA > valueB {
+		maxVal = valueA
 
 		if aIsNeg {
 			maxVal = -maxVal
 		}
 	} else {
-		maxVal = b
+		maxVal = valueB
 
 		if bIsNeg {
 			maxVal = -maxVal

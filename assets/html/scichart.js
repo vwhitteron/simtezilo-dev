@@ -219,7 +219,7 @@ async function initSciChart() {
             xyDataSeriesBrake.appendRange([i], [data.brake]);
             xyDataSeriesGforce.appendRange([i], [data.output]);
             xyDataSeriesJerk.appendRange([i], [data.jerk]);
-            xyDataSeriesSnap.appendRange([i], [data.attitudeJerk]);
+            xyDataSeriesSnap.appendRange([i], [data.snap]);
 
             if (sciChartSurfaceRPM.zoomState !== SciChart.EZoomState.UserZooming) {
                 xAxisRPM.visibleRange = new SciChart.NumberRange(i - fifoCapacity, i);
