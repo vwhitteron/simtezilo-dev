@@ -1,6 +1,9 @@
 package audio
 
-import "sync"
+import (
+	"math"
+	"sync"
+)
 
 type AudioBuffer struct {
 	SlotSize int
@@ -36,11 +39,45 @@ func (b *AudioBuffer) GetLength() int {
 }
 
 func (b *AudioBuffer) Write(samples []float64) {
+	b.writeAGC(samples)
+	// b.writeSimple(samples)
+}
+
+func (b *AudioBuffer) writeSimple(samples []float64) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
 	for i := 0; i < len(samples); i++ {
 		b.Buffer[i] = (b.Buffer[i] + samples[i]) * 0.66
+	}
+}
+
+func (b *AudioBuffer) writeAGC(samples []float64) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	peak := 0.0
+	mixedSamples := make([]float64, len(samples))
+	for i := 0; i < len(samples); i++ {
+		new := b.Buffer[i] + samples[i]
+
+		newAbs := math.Abs(new)
+
+		if newAbs > peak {
+			peak = newAbs
+		}
+
+		mixedSamples[i] = new
+	}
+
+	scale := 1.0
+
+	if peak > 1.0 {
+		scale = 1.0 / peak
+	}
+
+	for i := 0; i < len(samples); i++ {
+		b.Buffer[i] = mixedSamples[i] * scale
 	}
 }
 

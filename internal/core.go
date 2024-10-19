@@ -372,7 +372,11 @@ func (c *Core) updatePhysics(windowMilliseconds float64) {
 
 	// chassis attitude
 	c.physics.Current.AttitudeDelta = symmetryaxis.Delta(c.physics.Current.AttitudeVector, c.physics.Last.AttitudeVector)
-	c.physics.Current.AttitudeAcceleration = symmetryaxis.Magnitude(c.physics.Current.AttitudeDelta) / windowMilliseconds
+
+	// ignore yaw jerk/snap as it causes vibration during heavy rotation (high G-force corners, spin out, etc)
+	biasedAttitudeDelta := symmetryaxis.Scale(c.physics.Current.AttitudeDelta, 1.0, 0.25, 1.0)
+
+	c.physics.Current.AttitudeAcceleration = symmetryaxis.Magnitude(biasedAttitudeDelta) / windowMilliseconds
 
 	c.physics.Last.AttitudeJerk = c.physics.Current.AttitudeJerk
 	c.physics.Current.AttitudeJerk = (c.physics.Current.AttitudeAcceleration - c.physics.Last.AttitudeAcceleration) / windowMilliseconds
@@ -387,9 +391,6 @@ func (c *Core) updatePhysics(windowMilliseconds float64) {
 
 	// chassis position
 	c.physics.Current.VelocityDelta = vector.Delta(c.physics.Current.VelocityVector, c.physics.Last.VelocityVector)
-	// FIXME: not sure if the xy biasing helps at all
-	// biaseddVelocityDelta := vector.Scale(c.physics.Current.VelocityDelta, 0.25, 0.25, 1)
-	// c.physics.Current.Acceleration = vector.Magnitude(biaseddVelocityDelta) / windowMilliseconds
 	c.physics.Current.Acceleration = vector.Magnitude(c.physics.Current.VelocityDelta) / windowMilliseconds
 
 	c.physics.Last.Jerk = c.physics.Current.Jerk
@@ -425,29 +426,24 @@ func (c *Core) generateBump(seqDelta uint32) {
 	// exponent 0.4, scale 1/29.75 (1/36.0) - best balance of small, med and large bumps
 	// log10, scale 0.08 - small bumps too loud
 	// log2, scale 0.025 - small bumps too loud
-	// sig := (c.physics.Current.jerk - (c.physics.Current.attitudeJerk * 10))
 	sig := signal.LargestMagnitude(c.physics.Current.Jerk, (c.physics.Current.AttitudeJerk * 50))
-	pulse := signal.Exponent(sig, 0.56)
-	pulse = signal.Scale(pulse, 1/36.0)
-	p1 := pulse
-	pulse = signal.Limit(pulse, 1.0)
+	pulseAmplitude := signal.Exponent(sig, pulseExponent)
+	pulseAmplitude = signal.Scale(pulseAmplitude, pulseScaleAdjustment)
+	p1 := pulseAmplitude
+	pulseAmplitude, wasLimited := signal.Limit(pulseAmplitude, pulseMaxAmplitude)
 
-	if pulse < p1 {
+	if wasLimited {
 		c.log.Debug().Float64("pulse", p1).Msg("limiter")
 	}
 
 	snap := signal.LargestMagnitude(c.physics.Current.Snap, (c.physics.Current.AttitudeSnap * 100))
 
-	pulseWidthMax := 143.0
+	pulseReduction := signal.Abs(signal.Scale(snap, 1/800.0))
 	pulseWidth := pulseWidthMax
-
-	pulseReduction := signal.Abs(signal.Scale(snap, 1/1000.0))
-	// pulseReduction := signal.Abs(snap)
 	pulseWidth -= pulseReduction
 
-	// 50Hz max
-	if pulseWidth < 80 {
-		pulseWidth = 80
+	if pulseWidth < pulseWidthMin {
+		pulseWidth = pulseWidthMin
 	}
 
 	waveOffset := pulseWidth / 2
@@ -455,18 +451,18 @@ func (c *Core) generateBump(seqDelta uint32) {
 
 	pulseBuffer := make([]float64, bufferLen)
 	for i := 0; i < int(pulseWidth*2); i++ {
-		pulseBuffer[i] = (pulse*math.Sin(waveSamplePeriod*(float64(i)-waveOffset)) + pulse) / 2
+		angle := waveSamplePeriod * (float64(i) - waveOffset)
+		pulseBuffer[i] = ((pulseAmplitude * math.Sin(angle)) + pulseAmplitude) / 2
 	}
 
 	c.audioBuffer.Write(pulseBuffer)
 
 	c.physics.Last.AudioOutValue = c.physics.Current.AudioOutValue
 	// FIXME: temporarily report output frequency in telemetry dashboard
-	// freq := 1 / ((2 * pulseWidth) / 8000)
-	// c.physics.Current.AudioOutValue = freq
-	c.physics.Current.AudioOutValue = pulse
+	c.physics.Current.AudioOutValue = pulseWidthToFrequency(pulseWidth)
+	// c.physics.Current.AudioOutValue = pulseAmplitude
 
-	if pulse > 1.0 {
+	if pulseAmplitude > 1.0 {
 		c.log.Debug().
 			Float64("jerk", c.physics.Current.Jerk).
 			Float64("snap", c.physics.Current.Snap).
@@ -474,7 +470,7 @@ func (c *Core) generateBump(seqDelta uint32) {
 			Uint32("sequence_id", c.physics.Current.SequenceID).
 			Msg("Bump inputs")
 		c.log.Debug().
-			Float64("amplitude", pulse).
+			Float64("amplitude", pulseAmplitude).
 			Float64("pulseReduce", pulseReduction).
 			Float64("samplePeriod", waveSamplePeriod).
 			Float64("pulseWidth", pulseWidth).

@@ -29,7 +29,17 @@ var gearNames = map[int]string{
 
 // Audio settings
 // const maxGain = 0
+const audioSampleRateHz = 8000
 
 // Display settings
 const gearFontSize = 48
 const volumeFontSize = 24
+
+// Haptics settings
+const pulseExponent = float64(0.56)
+const pulseScaleAdjustment = float64(1 / 54.0)
+const pulseMaxAmplitude = float64(1.0)
+const pulseMaxFrequencyHz = float64(40)
+const pulseMinFrequencyHz = float64(23)
+const pulseWidthMax = audioSampleRateHz / (2 * pulseMinFrequencyHz)
+const pulseWidthMin = audioSampleRateHz / (2 * pulseMaxFrequencyHz)

@@ -66,16 +66,16 @@ func Scale(value float64, scale float64) float64 {
 	return value * scale
 }
 
-func Limit(value float64, max float64) float64 {
+func Limit(value float64, max float64) (float64, bool) {
 	if value > max {
-		return max
+		return max, true
 	}
 
 	if value < -max {
-		return -max
+		return -max, true
 	}
 
-	return value
+	return value, false
 }
 
 func LargestMagnitude(valueA float64, valueB float64) float64 {
