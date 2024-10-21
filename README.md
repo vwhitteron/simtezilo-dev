@@ -1,6 +1,6 @@
-# GT Pi #
+# RaceSig #
 
-Software for Raspberry Pi to read Gran Turismo telemetry and output the data to multiple interfaces:
+Software for processing sim racing telemetry signals and outputting the data to various interfaces:
 
 * Haptic devices
 * LCD dasboard

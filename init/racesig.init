@@ -1,24 +1,24 @@
 #!/bin/bash
 ### BEGIN INIT INFO
-# Provides: gthaptics
+# Provides: racesig
 # Required-Start:    $all
 # Required-Stop: 
 # Default-Start:     3 
 # Default-Stop:      6
-# Short-Description: Gran Turismo 7 Haptics Client
+# Short-Description: Sim racing telemetry signal processing client
 ### END INIT INFO
 
 
 start() {
-    echo "Starting gthaptics"
-    /home/admin/haptics-linux-arm-6 &
+    echo "Starting RaceSig"
+    /home/admin/racesig-linux-arm-6 &
     return
 }
 
 
 stop() {
-    echo "Stopping gthaptics"
-    killall haptics-linux-arm-6
+    echo "Stopping RaceSig"
+    killall racesig-linux-arm-6
     return
 }
 

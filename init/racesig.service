@@ -1,11 +1,11 @@
 [Unit]
-Description=Gran Turismo Haptics Server
+Description=Sim racing telemetry signal processing client
 After=network.target
 Wants=network.target
 
 [Service]
 ExecStartPre=/bin/sh -c 'until ping -q -c1 10.255.1.1; do sleep 1; done;'
-ExecStart=/opt/gt-haptics/haptics -a /opt/gt-haptics/assets -h pirateaudio -l warn
+ExecStart=/opt/racesig/racesig -a /opt/racesig/assets -h pirateaudio -l warn
 Type=simple
 Restart=always
 

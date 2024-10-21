@@ -10,7 +10,7 @@ import (
 
 	_ "image/png"
 
-	"github.com/vwhitteron/gt-pi/internal"
+	"github.com/vwhitteron/racesig-dev/internal"
 )
 
 var build string
@@ -40,14 +40,14 @@ func main() {
 	flag.Float64Var(&gain, "g", -14.5, "Gain in decibels. Default is -14.5")
 	flag.StringVar(&logLevel, "l", "warn", "Log level. Default is 'warn'")
 	flag.IntVar(&orientation, "o", 0, "Display orientation. [*0, 90, 180, 270] degrees")
-	flag.StringVar(&hardware, "h", "null", "Enable RPi hardware HAT. [pirateaudio, waveshare, *null]")
+	flag.StringVar(&hardware, "h", "none", "Enable RPi hardware HAT. [pirateaudio, waveshare, *none]")
 	flag.BoolVar(&profilingEnabled, "profiling", false, "Enable profiling. Default is false")
 	flag.BoolVar(&replayMode, "r", false, "Output haptics for replays as well as live sessions. Default is false")
 	flag.StringVar(&source, "s", "udp://255.255.255.255:33739", "Telemetry data source. Default is udp://255.255.255.255:33739")
 	flag.BoolVar(&webEnabled, "w", false, "Enable web server. Default is false")
 	flag.Parse()
 
-	log.Printf("GT-Pi version %s\n", build)
+	log.Printf("RaceSig version %s\n", build)
 
 	profiler, err := internal.NewPyroscopeProfiler(
 		"http://10.255.1.128:4040",

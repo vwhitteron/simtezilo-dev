@@ -5,8 +5,8 @@ import (
 	"image"
 
 	"github.com/rs/zerolog"
-	"github.com/vwhitteron/gt-pi/internal/audio"
-	"github.com/vwhitteron/gt-pi/internal/hardware"
+	"github.com/vwhitteron/racesig-dev/internal/audio"
+	"github.com/vwhitteron/racesig-dev/internal/hardware"
 )
 
 const volumeFontSize = 24

@@ -36,7 +36,7 @@ RUN --mount=type=bind,target=. find /src -type f
 RUN --mount=type=cache,target=/go/pkg/mod/ \
     --mount=type=bind,target=. \
     GOOS=${GOOS} GOARCH=arm \
-    go build -ldflags "-X main.build=${BUILDTIME}" -o /out/haptics-${GOOS}-armhf ./cmd/haptics/main.go
+    go build -ldflags "-X main.build=${BUILDTIME}" -o /out/racesig-${GOOS}-armhf ./cmd/racesig/main.go
 
 FROM base-armel as build-app-armel
 WORKDIR /src
@@ -51,7 +51,7 @@ RUN --mount=type=bind,target=. find /src -type f
 RUN --mount=type=cache,target=/go/pkg/mod/ \
     --mount=type=bind,target=. \
     GOOS=${GOOS} GOARCH=arm GOARM=${GOARM} \
-    go build -ldflags "-X main.build=${BUILDTIME}" -o /out/haptics-${GOOS}-armel-${GOARM} ./cmd/haptics/main.go
+    go build -ldflags "-X main.build=${BUILDTIME}" -o /out/racesig-${GOOS}-armel-${GOARM} ./cmd/racesig/main.go
 
 FROM base-armel as build-app-armel-8
 WORKDIR /src
@@ -65,7 +65,7 @@ RUN --mount=type=bind,target=. find /src -type f
 RUN --mount=type=cache,target=/go/pkg/mod/ \
     --mount=type=bind,target=. \
     GOOS=${GOOS} GOARCH=arm \
-    go build -ldflags "-X main.build=${BUILDTIME}" -o /out/haptics-${GOOS}-armel-8 ./cmd/haptics/main.go
+    go build -ldflags "-X main.build=${BUILDTIME}" -o /out/racesig-${GOOS}-armel-8 ./cmd/racesig/main.go
 
 FROM base-arm64 as build-app-arm64-8
 WORKDIR /src
@@ -77,24 +77,24 @@ RUN --mount=type=bind,target=. find /src -type f
 RUN --mount=type=cache,target=/go/pkg/mod/ \
     --mount=type=bind,target=. \
     GOOS=${GOOS} GOARCH=arm64 \
-    go build -ldflags "-X main.build=${BUILDTIME}" -o /out/haptics-${GOOS}-arm64-8 ./cmd/haptics/main.go
+    go build -ldflags "-X main.build=${BUILDTIME}" -o /out/racesig-${GOOS}-arm64-8 ./cmd/racesig/main.go
 
 
 
 FROM scratch AS binaries-armhf
 ARG GOOS
 ARG GOARM
-COPY --from=build-app-armhf /out/*-${GOOS}-armhf /
+COPY --from=build-app-armhf /out/racesig-${GOOS}-armhf /
 
 FROM scratch AS binaries-armel
 ARG GOOS
 ARG GOARM
-COPY --from=build-app-armel /out/*-${GOOS}-armel-${GOARM} /
+COPY --from=build-app-armel /out/racesig-${GOOS}-armel-${GOARM} /
 
 FROM scratch AS binaries-armel-8
 ARG GOOS
-COPY --from=build-app-armel-8 /out/*-${GOOS}-armel-8 /
+COPY --from=build-app-armel-8 /out/racesig-${GOOS}-armel-8 /
 
 FROM scratch AS binaries-arm64-8
 ARG GOOS
-COPY --from=build-app-arm64-8 /out/*-${GOOS}-arm64-8 /
+COPY --from=build-app-arm64-8 /out/racesig-${GOOS}-arm64-8 /

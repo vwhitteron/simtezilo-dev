@@ -1,4 +1,4 @@
-module github.com/vwhitteron/gt-pi
+module github.com/vwhitteron/racesig-dev
 
 go 1.22.5
 

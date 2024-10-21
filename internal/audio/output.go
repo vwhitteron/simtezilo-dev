@@ -10,7 +10,7 @@ import (
 	"github.com/gopxl/beep/speaker"
 	"github.com/gopxl/beep/vorbis"
 	"github.com/rs/zerolog"
-	"github.com/vwhitteron/gt-pi/internal/physics"
+	"github.com/vwhitteron/racesig-dev/internal/physics"
 )
 
 const maxGain = 0
