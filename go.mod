@@ -1,4 +1,4 @@
-module github.com/vwhitteron/racesig-dev
+module github.com/vwhitteron/simtezilo-dev
 
 go 1.22.5
 

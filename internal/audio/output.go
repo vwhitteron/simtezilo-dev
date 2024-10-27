@@ -3,7 +3,7 @@ package audio
 import (
 	"github.com/gopxl/beep"
 	"github.com/rs/zerolog"
-	"github.com/vwhitteron/racesig-dev/internal/physics"
+	"github.com/vwhitteron/simtezilo-dev/internal/physics"
 )
 
 const maxGain = 0

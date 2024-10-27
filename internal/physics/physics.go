@@ -2,8 +2,8 @@ package physics
 
 import (
 	telemetry_client "github.com/vwhitteron/gt-telemetry"
-	"github.com/vwhitteron/racesig-dev/internal/physics/symmetryaxis"
-	"github.com/vwhitteron/racesig-dev/internal/physics/vector"
+	"github.com/vwhitteron/simtezilo-dev/internal/physics/symmetryaxis"
+	"github.com/vwhitteron/simtezilo-dev/internal/physics/vector"
 )
 
 type Physics struct {

@@ -73,7 +73,7 @@ func NewConfig(filename string) *Config {
 		},
 	}
 
-	viper.SetEnvPrefix("RACESIG")
+	viper.SetEnvPrefix("SIMTEZILO")
 	viper.SetEnvKeyReplacer(strings.NewReplacer(`.`, `_`))
 	viper.AutomaticEnv()
 
@@ -90,8 +90,8 @@ func NewConfig(filename string) *Config {
 
 	viper.SetConfigName(filename)
 	viper.SetConfigType("toml")
-	viper.AddConfigPath("/boot/racesig/")
-	viper.AddConfigPath("/opt/racesig/")
+	viper.AddConfigPath("/boot/simtezilo/")
+	viper.AddConfigPath("/opt/simtezilo/")
 	viper.AddConfigPath(".")
 	err := viper.ReadInConfig()
 	if err != nil {

@@ -1,6 +1,6 @@
 [app]
 # Base directory where the asset files are stored
-assetDir = "./assets"
+assetDir = "/opt/simtezilo/assets"
 
 # Log level (trace, debug, info, warn, error, fatal, panic, off)
 logLevel = "warn"

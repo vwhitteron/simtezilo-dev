@@ -10,7 +10,7 @@ import (
 
 	_ "image/png"
 
-	"github.com/vwhitteron/racesig-dev/internal"
+	"github.com/vwhitteron/simtezilo-dev/internal"
 )
 
 var build string
@@ -47,7 +47,7 @@ func main() {
 	flag.BoolVar(&webEnabled, "w", false, "Enable web server. Default is false")
 	flag.Parse()
 
-	log.Printf("RaceSig version %s\n", build)
+	log.Printf("Simtezilo version %s\n", build)
 
 	profiler, err := internal.NewPyroscopeProfiler(
 		"http://10.255.1.128:4040",

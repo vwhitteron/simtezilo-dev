@@ -12,7 +12,7 @@ import (
 	"github.com/golang/freetype/truetype"
 	"github.com/rubiojr/go-pirateaudio/display"
 	"github.com/rubiojr/go-pirateaudio/textview"
-	"github.com/vwhitteron/racesig-dev/internal/display/sprites"
+	"github.com/vwhitteron/simtezilo-dev/internal/display/sprites"
 	"golang.org/x/image/font"
 	"golang.org/x/image/math/fixed"
 )

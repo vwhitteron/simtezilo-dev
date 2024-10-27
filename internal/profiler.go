@@ -35,7 +35,7 @@ func (p *PyroscopeProfiler) Start() error {
 	runtime.SetBlockProfileRate(5)
 
 	profiler, err := pyroscope.Start(pyroscope.Config{
-		ApplicationName: "racesig",
+		ApplicationName: "simtezilo",
 		ServerAddress:   p.endpoint,
 		Logger:          pyroscope.StandardLogger,
 		// Logger: nil, FIXME

@@ -5,7 +5,7 @@ Wants=network.target
 
 [Service]
 ExecStartPre=/bin/sh -c 'until ping -q -c1 10.255.1.1; do sleep 1; done;'
-ExecStart=/opt/racesig/racesig -a /opt/racesig/assets -h pirateaudio -l warn
+ExecStart=/opt/simtezilo/simtezilo
 Type=simple
 Restart=always
 

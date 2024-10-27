@@ -4,7 +4,7 @@ import (
 	"atomicgo.dev/keyboard"
 	"atomicgo.dev/keyboard/keys"
 	"github.com/rs/zerolog"
-	"github.com/vwhitteron/racesig-dev/internal/audio"
+	"github.com/vwhitteron/simtezilo-dev/internal/audio"
 )
 
 func SetupNullDeviceButtons(audioMixer *audio.Mixer, done chan bool, log zerolog.Logger) func() {

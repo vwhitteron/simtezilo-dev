@@ -1,4 +1,4 @@
-# RaceSig #
+# Simtezilo #
 
 Software for processing sim racing telemetry signals and outputting the data to various interfaces:
 
