@@ -9,18 +9,19 @@ import (
 	"time"
 
 	json "github.com/goccy/go-json"
+	"github.com/gopxl/beep"
 	"github.com/gopxl/beep/speaker"
 	"github.com/gorilla/websocket"
 	"github.com/rs/zerolog"
 	telemetry_client "github.com/vwhitteron/gt-telemetry"
 	"github.com/vwhitteron/racesig-dev/internal/audio"
+	"github.com/vwhitteron/racesig-dev/internal/audioeffects"
 	"github.com/vwhitteron/racesig-dev/internal/config"
 	"github.com/vwhitteron/racesig-dev/internal/hardware"
 	"github.com/vwhitteron/racesig-dev/internal/hardware/nulldevice"
 	"github.com/vwhitteron/racesig-dev/internal/hardware/pirateaudio"
 	"github.com/vwhitteron/racesig-dev/internal/hardware/waveshare"
 	"github.com/vwhitteron/racesig-dev/internal/physics"
-	"github.com/vwhitteron/racesig-dev/internal/physics/symmetryaxis"
 	"github.com/vwhitteron/racesig-dev/internal/physics/vector"
 	"github.com/vwhitteron/racesig-dev/internal/signal"
 )
@@ -31,10 +32,13 @@ type displayContent struct {
 
 type Core struct {
 	assetDir         string
+	audioBuffer      *audio.AudioBuffer
 	audioDevice      *audio.OutputDevice
-	audioBuffer      audio.AudioBuffer
+	audioEffects     *audioeffects.Samples
+	audioMixer       *audio.Mixer
 	buttonsFn        func()
 	chartDataChannel chan map[string]float32
+	config           *config.Config
 	lcdDevice        hardware.LCD
 	displayContent   displayContent
 	done             chan bool
@@ -42,11 +46,10 @@ type Core struct {
 	physics          physics.PhysicsTracker
 	lastGear         int
 	log              zerolog.Logger
-	audioMixer       audio.Mixer
 	replayMode       bool
 	seq              uint32
 	timeOfDay        time.Duration
-	lastLive         time.Time
+	lastActive       time.Time
 	vehicleID        uint32
 	webEnabled       bool
 	webSocketClients int
@@ -67,7 +70,9 @@ type CoreOptions struct {
 func NewCore(opts CoreOptions) (*Core, error) {
 	log := zerolog.New(os.Stderr).With().Timestamp().Logger()
 
-	switch opts.LogLevel {
+	config := config.NewConfig("config.toml")
+
+	switch config.App.LogLevel {
 	case "trace":
 		zerolog.SetGlobalLevel(zerolog.TraceLevel)
 	case "debug":
@@ -90,8 +95,17 @@ func NewCore(opts CoreOptions) (*Core, error) {
 		log.Warn().Str("log_level", opts.LogLevel).Msg("unknown log level, setting level to warn")
 	}
 
-	audioMixer := audio.NewAudioMixer(opts.Gain, log)
-	audioBuffer := audio.NewAudioBuffer(133, 20)
+	audioEffects := audioeffects.NewAudioEffects(config.Audio.SampleRateHz)
+
+	audioMixer := audio.NewAudioMixer(config.Audio.MasterGain, log)
+	audioMixer.AddChannel("gear", float64(config.Audio.GearStreetVolume/100))
+	audioMixer.AddChannel("chassis", float64(config.Audio.ChassisVolume/100))
+	// audioMixer.SetGearChangeVolume(config.Audio.GearStreetVolume)
+	// audioMixer.SetChassisVolume(config.Audio.ChassisVolume)
+
+	bufferSize := config.Audio.SampleRateHz / 60
+	audioBuffer := audio.NewAudioBuffer(bufferSize, 20, audioMixer, log)
+
 	audioDevice, err := audio.NewAudioOutputDevice(audio.AudioOutDeviceOpts{
 		AssetDir: opts.AssetDir,
 		Logger:   log.With().Str("component", "audio").Logger(),
@@ -109,7 +123,7 @@ func NewCore(opts CoreOptions) (*Core, error) {
 	}
 
 	var lcdDevice hardware.LCD
-	buttonsFn := func() {}
+	var buttonsFn func()
 
 	switch opts.Hardware {
 	case "pirateaudio":
@@ -132,7 +146,12 @@ func NewCore(opts CoreOptions) (*Core, error) {
 			Str("result", "success").
 			Msg("init")
 
-		buttonsFn = pirateaudio.SetupPirateAudioButtons(lcdDevice, audioDevice, audioMixer, log)
+		buttonsFn = pirateaudio.SetupPirateAudioButtons(
+			lcdDevice,
+			audioDevice,
+			audioMixer,
+			log,
+		)
 	case "waveshare":
 		var err error
 		lcdDevice, err = waveshare.NewWaveshare14972Display(waveshare.Waveshare14972LCDOpts{
@@ -155,11 +174,13 @@ func NewCore(opts CoreOptions) (*Core, error) {
 
 		buttonsFn = waveshare.SetupWaveshareButtons(lcdDevice, audioDevice, audioMixer, log)
 	default:
-		lcdDevice = nulldevice.NewNullDisplay()
+		lcdDevice = nulldevice.NewNullDeviceDisplay()
 		log.Debug().
 			Str("component", "null display").
 			Str("result", "success").
 			Msg("init")
+
+		buttonsFn = nulldevice.SetupNullDeviceButtons(audioMixer, opts.Done, log)
 	}
 
 	log.Debug().
@@ -191,22 +212,26 @@ func NewCore(opts CoreOptions) (*Core, error) {
 
 	lcdDevice.Show("splash")
 
+	physics := physics.NewPhysicsTracker()
+
 	return &Core{
 		assetDir:         opts.AssetDir,
 		audioBuffer:      audioBuffer,
 		audioDevice:      audioDevice,
+		audioEffects:     audioEffects,
 		audioMixer:       audioMixer,
 		buttonsFn:        buttonsFn,
 		chartDataChannel: make(chan map[string]float32, 600),
+		config:           config,
 		done:             opts.Done,
 		gt:               gt,
-		lastGear:         1024,
+		lastGear:         NullGear,
 		lcdDevice:        lcdDevice,
 		log:              log,
-		physics:          physics.PhysicsTracker{},
+		physics:          physics,
 		replayMode:       opts.ReplayMode,
 		seq:              uint32(0),
-		lastLive:         time.Time{},
+		lastActive:       time.Time{},
 		vehicleID:        0,
 		webEnabled:       opts.WebEnabled,
 		webSocketClients: 0,
@@ -222,11 +247,14 @@ func (c *Core) Run() {
 	go StartWebChartServer(c)
 
 	chassisStreamer := audio.NewBumpStream(
-		&c.audioBuffer,
+		c.audioBuffer,
 		&c.physics,
-		&c.audioMixer.Streamer,
+		c.audioMixer,
 	)
-	// speaker.Init(44100, 44100/15)
+	speaker.Init(
+		beep.SampleRate(c.config.Audio.SampleRateHz),
+		c.config.Audio.SampleRateHz/15,
+	)
 	go speaker.Play(chassisStreamer)
 
 	ticker60fps := time.NewTicker((1000 / 120) * time.Millisecond)
@@ -292,7 +320,7 @@ func (c *Core) physicsEvents() {
 	}
 
 	// Initialise the gear if it hasn't been set yet
-	if c.lastGear == 1024 {
+	if c.lastGear == NullGear {
 		c.seq = seq
 		c.lastGear = currentGear
 
@@ -330,22 +358,22 @@ func (c *Core) physicsEvents() {
 		return
 	}
 
-	c.audioMixer.FadeInHaptics()
-
 	c.physics.Current.SequenceID = seq
 
-	windowMilliseconds := (float64(seqDelta) / frameRate)
+	c.audioMixer.FadeInHaptics2(3 * time.Second)
 
-	c.chassisHaptics(windowMilliseconds, seqDelta)
-
-	c.gearChange(currentGear)
+	c.processHaptics(seqDelta)
 
 	c.seq = seq
 	c.physics.Last = c.physics.Current
 }
 
-func (c *Core) chassisHaptics(windowMilliseconds float64, seqDelta uint32) {
-	c.updatePhysics(windowMilliseconds)
+func (c *Core) processHaptics(seqDelta uint32) {
+	windowMilliseconds := (float64(seqDelta) / frameRate)
+
+	// c.audioMixer.FadeInHaptics()
+
+	c.physics.Update(windowMilliseconds, c.gt)
 
 	// no haptics if sequence ID has not advanced
 	if seqDelta < 1 {
@@ -354,72 +382,18 @@ func (c *Core) chassisHaptics(windowMilliseconds float64, seqDelta uint32) {
 
 	// no haptics if telemetry packets dropped/missed
 	if seqDelta > 1 {
-		c.log.Debug().Uint32("delta", seqDelta).Msg("missed packets, skipping haptics")
+		// FIXME: no longer ignore missed packets?
+		// c.log.Debug().Uint32("delta", seqDelta).Msg("missed packets, skipping haptics")
+		c.log.Debug().Uint32("delta", seqDelta).Msg("missed packets")
 
-		return
+		// return
 	}
 
-	// no haptics if vehicle speed velocity lower than 30cm per second
-	if vector.Magnitude(c.physics.Current.VelocityVector) < 0.28 {
-		return
-	}
-
-	c.generateBump(seqDelta)
+	c.generateBump()
 }
 
-func (c *Core) updatePhysics(windowMilliseconds float64) {
-	c.physics.Current.VelocityVector = c.gt.Telemetry.VelocityVector()
-	c.physics.Current.AttitudeVector = c.gt.Telemetry.RotationVector()
-
-	// chassis attitude
-	c.physics.Current.AttitudeDelta = symmetryaxis.Delta(c.physics.Current.AttitudeVector, c.physics.Last.AttitudeVector)
-
-	// ignore yaw jerk/snap as it causes vibration during heavy rotation (high G-force corners, spin out, etc)
-	biasedAttitudeDelta := symmetryaxis.Scale(c.physics.Current.AttitudeDelta, 1.0, 0.25, 1.0)
-
-	c.physics.Current.AttitudeAcceleration = symmetryaxis.Magnitude(biasedAttitudeDelta) / windowMilliseconds
-
-	c.physics.Last.AttitudeJerk = c.physics.Current.AttitudeJerk
-	c.physics.Current.AttitudeJerk = (c.physics.Current.AttitudeAcceleration - c.physics.Last.AttitudeAcceleration) / windowMilliseconds
-	if c.physics.Current.AttitudeJerk > 10 {
-		c.physics.Current.AttitudeJerk = 10
-	} else if c.physics.Current.AttitudeJerk < -10 {
-		c.physics.Current.AttitudeJerk = -10
-	}
-
-	c.physics.Last.AttitudeSnap = c.physics.Current.AttitudeSnap
-	c.physics.Current.AttitudeSnap = (c.physics.Current.AttitudeJerk - c.physics.Last.AttitudeJerk) / windowMilliseconds
-
-	// chassis position
-	c.physics.Current.VelocityDelta = vector.Delta(c.physics.Current.VelocityVector, c.physics.Last.VelocityVector)
-	c.physics.Current.Acceleration = vector.Magnitude(c.physics.Current.VelocityDelta) / windowMilliseconds
-
-	c.physics.Last.Jerk = c.physics.Current.Jerk
-	c.physics.Current.Jerk = (c.physics.Current.Acceleration - c.physics.Last.Acceleration) / windowMilliseconds
-
-	c.physics.Last.Snap = c.physics.Current.Snap
-	c.physics.Current.Snap = (c.physics.Current.Jerk - c.physics.Last.Jerk) / windowMilliseconds
-
-	c.physics.Last.Crackle = c.physics.Current.Crackle
-	c.physics.Current.Crackle = (c.physics.Current.Snap - c.physics.Last.Snap) / windowMilliseconds
-
-	c.physics.Last.SequenceID = c.physics.Current.SequenceID
-}
-
-func (c *Core) generateBump(seqDelta uint32) {
+func (c *Core) generateBump() {
 	bufferLen := c.audioBuffer.GetLength()
-
-	if seqDelta == 0 {
-		return
-		// FIXME: probably no longer needed as the buffer is now shifted by the audio streamer
-		// } else if seqDelta < uint32(c.audioBuffer.Slots) {
-		// 	c.audioBuffer.ShiftBufferSlots(int(seqDelta))
-		// } else {
-		// 	c.log.Warn().Uint32("delta", seqDelta).Msg("sequence ID delta greater than 1")
-		// 	for i := 0; i < bufferLen; i++ {
-		// 		c.audioBuffer.Buffer[i] = 0
-		// 	}
-	}
 
 	startTime := time.Now()
 
@@ -427,7 +401,7 @@ func (c *Core) generateBump(seqDelta uint32) {
 	// exponent 0.4, scale 1/29.75 (1/36.0) - best balance of small, med and large bumps
 	// log10, scale 0.08 - small bumps too loud
 	// log2, scale 0.025 - small bumps too loud
-	sig := signal.LargestMagnitude(c.physics.Current.Jerk, (c.physics.Current.AttitudeJerk * 50))
+	sig := signal.LargestMagnitude(c.physics.Current.Jerk, (c.physics.Current.AttitudeJerk * 50)) // FIXME: large rotational bumps too heavy
 	pulseAmplitude := signal.Exponent(sig, pulseExponent)
 	pulseAmplitude = signal.Scale(pulseAmplitude, pulseScaleAdjustment)
 	p1 := pulseAmplitude
@@ -452,16 +426,37 @@ func (c *Core) generateBump(seqDelta uint32) {
 
 	pulseBuffer := make([]float64, bufferLen)
 	for i := 0; i < int(pulseWidth*2); i++ {
-		angle := waveSamplePeriod * (float64(i) - waveOffset)
-		pulseBuffer[i] = ((pulseAmplitude * math.Sin(angle)) + pulseAmplitude) / 2
+		phase := waveSamplePeriod * (float64(i) - waveOffset)
+		pulseBuffer[i] = ((pulseAmplitude * math.Sin(phase)) + pulseAmplitude) / 2
 	}
 
-	c.audioBuffer.Write(pulseBuffer)
+	// no haptics if vehicle speed velocity lower than 30cm per second
+	if vector.Magnitude(c.physics.Current.VelocityVector) >= 0.28 {
+		c.audioBuffer.Write("chassis", pulseBuffer)
+	}
+
+	if c.physics.Current.TransmissionGear != NullGear {
+
+		if c.physics.Current.TransmissionGear != c.physics.Last.TransmissionGear {
+			gearChangeSample := c.audioEffects.GetSample("gearchange")
+			c.audioBuffer.Write("gear", gearChangeSample)
+
+			c.log.Info().
+				Int("sequence_id", int(c.seq)).
+				Int("gear", c.physics.Current.TransmissionGear).
+				Msg("gear change")
+		}
+
+	} else {
+		c.log.Info().
+			Int("sequence_id", int(c.seq)).
+			Msg("no gear")
+	}
 
 	c.physics.Last.AudioOutValue = c.physics.Current.AudioOutValue
 	// FIXME: temporarily report output frequency in telemetry dashboard
-	c.physics.Current.AudioOutValue = pulseWidthToFrequency(pulseWidth)
-	// c.physics.Current.AudioOutValue = pulseAmplitude
+	// c.physics.Current.AudioOutValue = pulseWidthToFrequency(pulseWidth)
+	c.physics.Current.AudioOutValue = pulseAmplitude
 
 	if pulseAmplitude > 1.0 {
 		c.log.Debug().
@@ -497,10 +492,8 @@ func (c *Core) resetState(seq uint32, currentGear int) {
 	c.lastGear = currentGear
 
 	c.audioMixer.SetFader(-30)
-	c.audioMixer.SetFadeInTime(frameRate * 2)
 
-	c.physics.Last = physics.Physics{}
-	c.physics.Current = physics.Physics{}
+	c.physics = physics.NewPhysicsTracker()
 
 	c.audioBuffer.ClearBuffer()
 
@@ -511,7 +504,6 @@ func (c *Core) silenceHaptics() {
 	c.audioBuffer.ClearBuffer()
 
 	c.audioMixer.SetFader(-30)
-	c.audioMixer.SetFadeInTime(frameRate * 2)
 
 	return
 }
@@ -519,25 +511,25 @@ func (c *Core) silenceHaptics() {
 func (c *Core) updateDisplay() {
 	currentGear := c.lastGear
 
-	if c.displayContent.gear == currentGear {
+	if c.displayContent.gear == currentGear || currentGear == NullGear {
 		return
 	}
 
-	if c.gt.Telemetry.Flags().Live == false && c.replayMode == false {
-		if time.Since(c.lastLive) > 10*time.Second {
-			c.lcdDevice.PowerOff()
+	// if (c.gt.Telemetry.Flags().Live == false && c.replayMode == false) || c.gt.Telemetry.Flags().GamePaused == true {
+	// 	if time.Since(c.lastActive) > 10*time.Second {
+	// 		c.lcdDevice.PowerOff()
 
-			return
-		}
+	// 		return
+	// 	}
 
-		canvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
-		c.lcdDevice.ShowTextCentered(canvas, "Waiting...", 16)
+	// 	canvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
+	// 	c.lcdDevice.ShowTextCentered(canvas, "Waiting...", 16)
 
-		return
-	}
+	// 	return
+	// }
 
 	c.lcdDevice.PowerOn()
-	c.lastLive = time.Now()
+	c.lastActive = time.Now()
 
 	canvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
 	c.lcdDevice.ShowTextCentered(canvas, gearName(currentGear), gearFontSize)
@@ -556,47 +548,31 @@ func (c *Core) updateVehicle(currentVehicleID uint32, currentGear int) {
 		Str("type", vehicleType).
 		Msg("vehicle updated")
 
+	var volume float64
 	switch vehicleType {
 	case "race":
-		c.audioMixer.SetGearChangeGain(0)
-	case "street":
-		c.audioMixer.SetGearChangeGain(-2)
+		volume = float64(c.config.Audio.GearRaceVolume) / 100
+	// case "street":
+	// 	volume = c.config.Audio.GearStreetVolume
 	default:
-		c.audioMixer.SetGearChangeGain(-2)
-	}
-	c.lastGear = currentGear
-}
-
-func (c *Core) gearChange(currentGear int) {
-	if c.lastGear == currentGear {
-		return
+		volume = float64(c.config.Audio.GearStreetVolume) / 100
 	}
 
-	c.lastGear = currentGear
-
-	if c.gt.Telemetry.Flags().Loading == true {
-		return
+	err := c.audioMixer.SetChannelVolume("gear", volume)
+	if err != nil {
+		c.log.Error().Err(err).Str("channel", "gear").Msg("failed to set volume")
 	}
-
-	if c.replayMode == false && c.gt.Telemetry.Flags().Live == false {
-		return
-	}
-
-	gain := c.audioMixer.GetGearChangeGain()
-	if currentGear != NeutralGear {
-		c.audioDevice.Play("gearchange", gain)
-	}
-
 	c.log.Info().
-		Int("sequence_id", int(c.seq)).
-		Int("gear", currentGear).
-		Float64("audio_gain", gain).
-		Msg("gear change")
+		Str("channel", "gear").
+		Float64("volume", volume).
+		Msg("volume set")
+
+	c.lastGear = currentGear
 }
 
 func (c *Core) checkSessionComplete() {
 	if c.gt.Finished {
-		c.resetState(0, 1024)
+		c.resetState(0, NullGear)
 		c.log.Info().Msg("session finished")
 		c.done <- true
 	}
@@ -664,7 +640,7 @@ func (c *Core) sendWebTelemetry() {
 			"gforce":       float32(c.physics.Current.Acceleration) / gravityConstant,
 			"jerk":         float32(c.physics.Current.Jerk),
 			"snap":         float32(c.physics.Current.Snap),
-			"attitudeJerk": float32(c.physics.Current.AttitudeJerk),
+			"attitudeJerk": float32(c.physics.Current.AttitudeJerk * 50),
 			"output":       float32(c.physics.Current.AudioOutValue),
 		}
 	}()

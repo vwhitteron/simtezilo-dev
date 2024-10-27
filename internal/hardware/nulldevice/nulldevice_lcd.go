@@ -6,7 +6,7 @@ type NullDisplay struct {
 	Orientation int
 }
 
-func NewNullDisplay() *NullDisplay {
+func NewNullDeviceDisplay() *NullDisplay {
 	return &NullDisplay{}
 }
 

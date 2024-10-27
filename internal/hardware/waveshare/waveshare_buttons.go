@@ -11,7 +11,7 @@ import (
 
 const volumeFontSize = 24
 
-func SetupWaveshareButtons(lcdDevice hardware.LCD, audioDevice *audio.OutputDevice, audioMixer audio.Mixer, log zerolog.Logger) func() {
+func SetupWaveshareButtons(lcdDevice hardware.LCD, audioDevice *audio.OutputDevice, audioMixer *audio.Mixer, log zerolog.Logger) func() {
 	return func() {
 		hardware.OnButtonUpPressed(func() {
 			audioMixer.MasterIncrease(1)
@@ -19,9 +19,9 @@ func SetupWaveshareButtons(lcdDevice hardware.LCD, audioDevice *audio.OutputDevi
 			canvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
 			lcdDevice.ShowTextCentered(canvas, fmt.Sprintf("%0.0f db", audioMixer.Master), volumeFontSize)
 
-			go func() {
-				audioDevice.Play("gearChange", audioMixer.Master)
-			}()
+			// go func() {
+			// 	audioDevice.Play("gearChange", audioMixer.Master)
+			// }()
 
 			log.Info().
 				Str("button", "Up").
@@ -36,9 +36,9 @@ func SetupWaveshareButtons(lcdDevice hardware.LCD, audioDevice *audio.OutputDevi
 			canvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
 			lcdDevice.ShowTextCentered(canvas, fmt.Sprintf("%0.0f dB", audioMixer.Master), volumeFontSize)
 
-			go func() {
-				audioDevice.Play("gearChange", audioMixer.Master)
-			}()
+			// go func() {
+			// 	audioDevice.Play("gearChange", audioMixer.Master)
+			// }()
 
 			log.Info().
 				Str("button", "Down").

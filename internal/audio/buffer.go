@@ -3,21 +3,26 @@ package audio
 import (
 	"math"
 	"sync"
+
+	"github.com/rs/zerolog"
 )
 
 type AudioBuffer struct {
-	SlotSize int
-	Slots    int
-	Buffer   []float64
-
-	mu sync.Mutex
+	buffer   []float64
+	log      zerolog.Logger
+	mixer    *Mixer
+	mu       sync.Mutex
+	slots    int
+	slotSize int
 }
 
-func NewAudioBuffer(slotSize int, slots int) AudioBuffer {
-	buffer := AudioBuffer{
-		SlotSize: slotSize,
-		Slots:    slots,
-		Buffer:   make([]float64, slotSize*slots),
+func NewAudioBuffer(slotSize int, slots int, mixer *Mixer, logger zerolog.Logger) *AudioBuffer {
+	buffer := &AudioBuffer{
+		buffer:   make([]float64, slotSize*slots),
+		log:      logger,
+		mixer:    mixer,
+		slots:    slots,
+		slotSize: slotSize,
 	}
 
 	buffer.ClearBuffer()
@@ -29,17 +34,28 @@ func (b *AudioBuffer) ClearBuffer() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	for i := 0; i < len(b.Buffer); i++ {
-		b.Buffer[i] = 0
+	for i := 0; i < len(b.buffer); i++ {
+		b.buffer[i] = 0
 	}
 }
 
 func (b *AudioBuffer) GetLength() int {
-	return len(b.Buffer)
+	return len(b.buffer)
 }
 
-func (b *AudioBuffer) Write(samples []float64) {
-	b.writeAGC(samples)
+func (b *AudioBuffer) Write(channel string, samples []float64) {
+	volume, err := b.mixer.GetChannelVolume(channel)
+	if err != nil {
+		b.log.Error().Err(err).Str("channel", channel).Msg("failed to get channel volume")
+
+		return
+	}
+
+	if channel == "gear" {
+		b.log.Info().Float64("volume", volume).Str("channel", channel).Msg("writing sample to channel")
+	}
+
+	b.writeAGC(samples, volume)
 	// b.writeSimple(samples)
 }
 
@@ -48,18 +64,19 @@ func (b *AudioBuffer) writeSimple(samples []float64) {
 	defer b.mu.Unlock()
 
 	for i := 0; i < len(samples); i++ {
-		b.Buffer[i] = (b.Buffer[i] + samples[i]) * 0.66
+		b.buffer[i] = (b.buffer[i] + samples[i]) * 0.66
 	}
 }
 
-func (b *AudioBuffer) writeAGC(samples []float64) {
+func (b *AudioBuffer) writeAGC(samples []float64, volume float64) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
 	peak := 0.0
 	mixedSamples := make([]float64, len(samples))
 	for i := 0; i < len(samples); i++ {
-		new := b.Buffer[i] + samples[i]
+		new := b.buffer[i] + (samples[i] * volume)
+		// new := b.buffer[i] + samples[i]
 
 		newAbs := math.Abs(new)
 
@@ -77,7 +94,7 @@ func (b *AudioBuffer) writeAGC(samples []float64) {
 	}
 
 	for i := 0; i < len(samples); i++ {
-		b.Buffer[i] = mixedSamples[i] * scale
+		b.buffer[i] = mixedSamples[i] * scale
 	}
 }
 
@@ -88,7 +105,7 @@ func (b *AudioBuffer) Read(length int) []float64 {
 	samples := make([]float64, length)
 
 	for i := 0; i < length; i++ {
-		samples[i] = b.Buffer[i]
+		samples[i] = b.buffer[i]
 	}
 
 	return samples
@@ -98,10 +115,10 @@ func (b *AudioBuffer) ShiftBuffer(samples int) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	bufferMax := len(b.Buffer) - samples
+	bufferMax := len(b.buffer) - samples
 
 	for i := 0; i < bufferMax; i++ {
-		b.Buffer[i] = b.Buffer[i+samples]
+		b.buffer[i] = b.buffer[i+samples]
 	}
 }
 
@@ -113,31 +130,31 @@ func (b *AudioBuffer) ShiftBufferSlots(slots int) {
 }
 
 func (b *AudioBuffer) shiftBuffer1(slots int) {
-	offset := slots * b.SlotSize
+	offset := slots * b.slotSize
 
 	for i := 0; i < offset-1; i++ {
-		b.Buffer[i+offset] = b.Buffer[i]
+		b.buffer[i+offset] = b.buffer[i]
 	}
 }
 
 func (b *AudioBuffer) shiftBuffer2(slots int) {
-	bufferMax := (b.SlotSize * b.Slots) - 1
-	offset := slots * b.SlotSize
+	bufferMax := (b.slotSize * b.slots) - 1
+	offset := slots * b.slotSize
 
 	for i := bufferMax - offset; i >= 0; i-- {
-		b.Buffer[i+offset] = b.Buffer[i]
+		b.buffer[i+offset] = b.buffer[i]
 	}
 }
 
 func (b *AudioBuffer) shiftBuffer3(slots int) {
-	bufferMax := (b.SlotSize * b.Slots) - 1
-	offset := slots * b.SlotSize
+	bufferMax := (b.slotSize * b.slots) - 1
+	offset := slots * b.slotSize
 
 	for i := 0; i <= bufferMax; i++ {
 		if i < bufferMax-offset {
-			b.Buffer[i] = b.Buffer[i+offset]
+			b.buffer[i] = b.buffer[i+offset]
 		} else {
-			b.Buffer[i] = 0
+			b.buffer[i] = 0
 		}
 	}
 }

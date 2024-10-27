@@ -120,7 +120,7 @@ async function initSciChart() {
 
         // Add an X and a Y Axis
         const xAxisGforce = new SciChart.NumericAxis(wasmContextGforce, { autoRange: SciChart.EAutoRange.Always });
-        const yAxisGforce = new SciChart.NumericAxis(wasmContextGforce, { autoRange: SciChart.EAutoRange.Always });
+        const yAxisGforce = new SciChart.NumericAxis(wasmContextGforce, { visibleRange: new SciChart.NumberRange(-1.1, 1.1) });
         sciChartSurfaceGforce.xAxes.add(xAxisGforce);
         sciChartSurfaceGforce.yAxes.add(yAxisGforce);
 
@@ -158,12 +158,23 @@ async function initSciChart() {
             isSorted: true,
             containsNaN: false
         });
+        const xyDataSeriesAttitudeJerk = new SciChart.XyDataSeries(wasmContextJerk, {
+            fifoCapacity: fifoCapacity,
+            isSorted: true,
+            containsNaN: false
+        });
+
 
         // Create a renderableSeries and assign the dataSeries
         sciChartSurfaceJerk.renderableSeries.add(new SciChart.FastLineRenderableSeries(wasmContextJerk, {
             dataSeries: xyDataSeriesJerk,
             strokeThickness: 3,
             stroke: "#50C7E0"
+        }));
+        sciChartSurfaceJerk.renderableSeries.add(new SciChart.FastLineRenderableSeries(wasmContextJerk, {
+            dataSeries: xyDataSeriesAttitudeJerk,
+            strokeThickness: 3,
+            stroke: "#C750E0"
         }));
         
         
@@ -219,6 +230,7 @@ async function initSciChart() {
             xyDataSeriesBrake.appendRange([i], [data.brake]);
             xyDataSeriesGforce.appendRange([i], [data.output]);
             xyDataSeriesJerk.appendRange([i], [data.jerk]);
+            xyDataSeriesAttitudeJerk.appendRange([i], [data.attitudeJerk]);
             xyDataSeriesSnap.appendRange([i], [data.snap]);
 
             if (sciChartSurfaceRPM.zoomState !== SciChart.EZoomState.UserZooming) {
