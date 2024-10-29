@@ -76,7 +76,6 @@ func (b *Buffer) writeAGC(samples []float64, volume float64) {
 	mixedSamples := make([]float64, len(samples))
 	for i := 0; i < len(samples); i++ {
 		new := b.buffer[i] + (samples[i] * volume)
-		// new := b.buffer[i] + samples[i]
 
 		newAbs := math.Abs(new)
 

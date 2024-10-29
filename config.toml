@@ -23,10 +23,10 @@ gearStreetVolume = 50
 # may also dictate the lowest sample rate that can be used.
 sampleRateHz = 8000
 
-# FIXME
+# FIXME: add description
 pulseExponent = 0.56
 
-# FIXME
+# FIXME: add description
 pulseScaleAdjustment = 0.01851852
 
 # Maximum output amplitude for haptics. Any value higher than 1 could result in clipping.

@@ -108,7 +108,7 @@ func (m *Mixer) SetFader(gain float64) {
 	m.output = volumeToGain(m.fader)
 }
 
-func (m *Mixer) FadeInHaptics2(period time.Duration) {
+func (m *Mixer) FadeIn(period time.Duration) {
 	if m.fader == m.Master || m.fadeInActive {
 		return
 	}
