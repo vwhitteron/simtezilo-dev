@@ -1,4 +1,4 @@
-package audio
+package synth
 
 import (
 	"github.com/gopxl/beep"
@@ -13,12 +13,12 @@ type OutputDevice struct {
 	log     zerolog.Logger
 }
 
-type AudioOutDeviceOpts struct {
+type SynthOutDeviceOpts struct {
 	AssetDir string
 	Logger   zerolog.Logger
 }
 
-func NewAudioOutputDevice(opts AudioOutDeviceOpts) (*OutputDevice, error) {
+func NewOutputDevice(opts SynthOutDeviceOpts) (*OutputDevice, error) {
 	buffers := map[string]*beep.Buffer{}
 
 	return &OutputDevice{
@@ -28,21 +28,21 @@ func NewAudioOutputDevice(opts AudioOutDeviceOpts) (*OutputDevice, error) {
 }
 
 type BumpStream struct {
-	audioBuffer *AudioBuffer
+	synthBuffer *Buffer
 	physics     *physics.PhysicsTracker
 	mixer       *Mixer
 }
 
-func NewBumpStream(buffer *AudioBuffer, physics *physics.PhysicsTracker, mixer *Mixer) BumpStream {
+func NewBumpStream(buffer *Buffer, physics *physics.PhysicsTracker, mixer *Mixer) BumpStream {
 	return BumpStream{
-		audioBuffer: buffer,
+		synthBuffer: buffer,
 		physics:     physics,
 		mixer:       mixer,
 	}
 }
 
 func (b BumpStream) Stream(samples [][2]float64) (n int, ok bool) {
-	buffer := b.audioBuffer.Read(len(samples))
+	buffer := b.synthBuffer.Read(len(samples))
 
 	for i := range samples {
 		sample := buffer[i] * b.mixer.output
@@ -50,7 +50,7 @@ func (b BumpStream) Stream(samples [][2]float64) (n int, ok bool) {
 		samples[i][1] = sample
 	}
 
-	b.audioBuffer.ShiftBuffer(len(samples))
+	b.synthBuffer.ShiftBuffer(len(samples))
 
 	return len(samples), true
 }

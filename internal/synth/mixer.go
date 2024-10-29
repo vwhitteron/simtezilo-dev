@@ -1,4 +1,4 @@
-package audio
+package synth
 
 import (
 	"fmt"
@@ -20,7 +20,7 @@ type Mixer struct {
 	logger zerolog.Logger
 }
 
-func NewAudioMixer(gain float64, logger zerolog.Logger) *Mixer {
+func NewMixer(gain float64, logger zerolog.Logger) *Mixer {
 	return &Mixer{
 		Master: gain,
 		output: gain,

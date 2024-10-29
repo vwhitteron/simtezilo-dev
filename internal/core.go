@@ -14,8 +14,6 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/rs/zerolog"
 	telemetry_client "github.com/vwhitteron/gt-telemetry"
-	"github.com/vwhitteron/simtezilo-dev/internal/audio"
-	"github.com/vwhitteron/simtezilo-dev/internal/audioeffects"
 	"github.com/vwhitteron/simtezilo-dev/internal/config"
 	"github.com/vwhitteron/simtezilo-dev/internal/hardware"
 	"github.com/vwhitteron/simtezilo-dev/internal/hardware/nulldevice"
@@ -24,6 +22,7 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/internal/physics"
 	"github.com/vwhitteron/simtezilo-dev/internal/physics/vector"
 	"github.com/vwhitteron/simtezilo-dev/internal/signal"
+	"github.com/vwhitteron/simtezilo-dev/internal/synth"
 )
 
 type displayContent struct {
@@ -32,10 +31,7 @@ type displayContent struct {
 
 type Core struct {
 	assetDir         string
-	audioBuffer      *audio.AudioBuffer
-	audioDevice      *audio.OutputDevice
-	audioEffects     *audioeffects.Samples
-	audioMixer       *audio.Mixer
+	audioEffects     *synth.EffectsSampleBank
 	buttonsFn        func()
 	chartDataChannel chan map[string]float32
 	config           *config.Config
@@ -48,6 +44,9 @@ type Core struct {
 	log              zerolog.Logger
 	replayMode       bool
 	seq              uint32
+	synthBuffer      *synth.Buffer
+	synthDevice      *synth.OutputDevice
+	synthMixer       *synth.Mixer
 	timeOfDay        time.Duration
 	lastActive       time.Time
 	vehicleID        uint32
@@ -96,24 +95,23 @@ func NewCore(opts CoreOptions) (*Core, error) {
 	}
 
 	audioEffects := audioeffects.NewAudioEffects(config.Audio.SampleRateHz)
+	audioEffects := synth.NewEffectsSampleBank(config.Synthesizer.SampleRateHz)
 
-	audioMixer := audio.NewAudioMixer(config.Audio.MasterGain, log)
-	audioMixer.AddChannel("gear", float64(config.Audio.GearStreetVolume/100))
-	audioMixer.AddChannel("chassis", float64(config.Audio.ChassisVolume/100))
-	// audioMixer.SetGearChangeVolume(config.Audio.GearStreetVolume)
-	// audioMixer.SetChassisVolume(config.Audio.ChassisVolume)
+	synthMixer := synth.NewMixer(config.Synthesizer.MasterGain, log)
+	synthMixer.AddChannel("gear", float64(config.Synthesizer.GearStreetVolume/100))
+	synthMixer.AddChannel("chassis", float64(config.Synthesizer.ChassisVolume/100))
 
-	bufferSize := config.Audio.SampleRateHz / 60
-	audioBuffer := audio.NewAudioBuffer(bufferSize, 20, audioMixer, log)
+	bufferSize := config.Synthesizer.SampleRateHz / 60
+	audioBuffer := synth.NewBuffer(bufferSize, 20, synthMixer, log)
 
-	audioDevice, err := audio.NewAudioOutputDevice(audio.AudioOutDeviceOpts{
+	synthDevice, err := synth.NewOutputDevice(synth.SynthOutDeviceOpts{
 		AssetDir: opts.AssetDir,
-		Logger:   log.With().Str("component", "audio").Logger(),
+		Logger:   log.With().Str("component", "synth").Logger(),
 	})
 	if err != nil {
 		log.Error().
 			Err(err).
-			Str("component", "audio output device").
+			Str("component", "synth output device").
 			Str("result", "failure").
 			Msg("init")
 
@@ -148,8 +146,8 @@ func NewCore(opts CoreOptions) (*Core, error) {
 
 		buttonsFn = pirateaudio.SetupPirateAudioButtons(
 			lcdDevice,
-			audioDevice,
-			audioMixer,
+			synthDevice,
+			synthMixer,
 			log,
 		)
 	case "waveshare":
@@ -172,7 +170,7 @@ func NewCore(opts CoreOptions) (*Core, error) {
 			Str("result", "success").
 			Msg("init")
 
-		buttonsFn = waveshare.SetupWaveshareButtons(lcdDevice, audioDevice, audioMixer, log)
+		buttonsFn = waveshare.SetupWaveshareButtons(lcdDevice, synthDevice, synthMixer, log)
 	default:
 		lcdDevice = nulldevice.NewNullDeviceDisplay()
 		log.Debug().
@@ -180,7 +178,7 @@ func NewCore(opts CoreOptions) (*Core, error) {
 			Str("result", "success").
 			Msg("init")
 
-		buttonsFn = nulldevice.SetupNullDeviceButtons(audioMixer, opts.Done, log)
+		buttonsFn = nulldevice.SetupNullDeviceButtons(synthMixer, opts.Done, log)
 	}
 
 	log.Debug().
@@ -216,10 +214,7 @@ func NewCore(opts CoreOptions) (*Core, error) {
 
 	return &Core{
 		assetDir:         opts.AssetDir,
-		audioBuffer:      audioBuffer,
-		audioDevice:      audioDevice,
 		audioEffects:     audioEffects,
-		audioMixer:       audioMixer,
 		buttonsFn:        buttonsFn,
 		chartDataChannel: make(chan map[string]float32, 600),
 		config:           config,
@@ -231,6 +226,10 @@ func NewCore(opts CoreOptions) (*Core, error) {
 		physics:          physics,
 		replayMode:       opts.ReplayMode,
 		seq:              uint32(0),
+		synth:            synthesizer,
+		synthBuffer:      audioBuffer,
+		synthDevice:      synthDevice,
+		synthMixer:       synthMixer,
 		lastActive:       time.Time{},
 		vehicleID:        0,
 		webEnabled:       opts.WebEnabled,
@@ -246,14 +245,14 @@ func (c *Core) Run() {
 
 	go StartWebChartServer(c)
 
-	chassisStreamer := audio.NewBumpStream(
-		c.audioBuffer,
+	chassisStreamer := synth.NewBumpStream(
+		c.synthBuffer,
 		&c.physics,
-		c.audioMixer,
+		c.synthMixer,
 	)
 	speaker.Init(
-		beep.SampleRate(c.config.Audio.SampleRateHz),
-		c.config.Audio.SampleRateHz/15,
+		beep.SampleRate(c.config.Synthesizer.SampleRateHz),
+		c.config.Synthesizer.SampleRateHz/15,
 	)
 	go speaker.Play(chassisStreamer)
 
@@ -360,7 +359,7 @@ func (c *Core) physicsEvents() {
 
 	c.physics.Current.SequenceID = seq
 
-	c.audioMixer.FadeInHaptics2(3 * time.Second)
+	c.synthMixer.FadeInHaptics2(3 * time.Second)
 
 	c.processHaptics(seqDelta)
 
@@ -393,7 +392,7 @@ func (c *Core) processHaptics(seqDelta uint32) {
 }
 
 func (c *Core) generateBump() {
-	bufferLen := c.audioBuffer.GetLength()
+	bufferLen := c.synthBuffer.GetLength()
 
 	startTime := time.Now()
 
@@ -432,14 +431,14 @@ func (c *Core) generateBump() {
 
 	// no haptics if vehicle speed velocity lower than 30cm per second
 	if vector.Magnitude(c.physics.Current.VelocityVector) >= 0.28 {
-		c.audioBuffer.Write("chassis", pulseBuffer)
+		c.synthBuffer.Write("chassis", pulseBuffer)
 	}
 
 	if c.physics.Current.TransmissionGear != NullGear {
 
 		if c.physics.Current.TransmissionGear != c.physics.Last.TransmissionGear {
 			gearChangeSample := c.audioEffects.GetSample("gearchange")
-			c.audioBuffer.Write("gear", gearChangeSample)
+			c.synthBuffer.Write("gear", gearChangeSample)
 
 			c.log.Info().
 				Int("sequence_id", int(c.seq)).
@@ -453,10 +452,10 @@ func (c *Core) generateBump() {
 			Msg("no gear")
 	}
 
-	c.physics.Last.AudioOutValue = c.physics.Current.AudioOutValue
+	c.physics.Last.SynthOutValue = c.physics.Current.SynthOutValue
 	// FIXME: temporarily report output frequency in telemetry dashboard
 	// c.physics.Current.AudioOutValue = pulseWidthToFrequency(pulseWidth)
-	c.physics.Current.AudioOutValue = pulseAmplitude
+	c.physics.Current.SynthOutValue = pulseAmplitude
 
 	if pulseAmplitude > 1.0 {
 		c.log.Debug().
@@ -491,19 +490,19 @@ func (c *Core) resetState(seq uint32, currentGear int) {
 	c.seq = seq
 	c.lastGear = currentGear
 
-	c.audioMixer.SetFader(-30)
+	c.synthMixer.SetFader(-30)
 
 	c.physics = physics.NewPhysicsTracker()
 
-	c.audioBuffer.ClearBuffer()
+	c.synthBuffer.ClearBuffer()
 
 	return
 }
 
 func (c *Core) silenceHaptics() {
-	c.audioBuffer.ClearBuffer()
+	c.synthBuffer.ClearBuffer()
 
-	c.audioMixer.SetFader(-30)
+	c.synthMixer.SetFader(-30)
 
 	return
 }
@@ -551,14 +550,14 @@ func (c *Core) updateVehicle(currentVehicleID uint32, currentGear int) {
 	var volume float64
 	switch vehicleType {
 	case "race":
-		volume = float64(c.config.Audio.GearRaceVolume) / 100
+		volume = float64(c.config.Synthesizer.GearRaceVolume) / 100
 	// case "street":
 	// 	volume = c.config.Audio.GearStreetVolume
 	default:
-		volume = float64(c.config.Audio.GearStreetVolume) / 100
+		volume = float64(c.config.Synthesizer.GearStreetVolume) / 100
 	}
 
-	err := c.audioMixer.SetChannelVolume("gear", volume)
+	err := c.synthMixer.SetChannelVolume("gear", volume)
 	if err != nil {
 		c.log.Error().Err(err).Str("channel", "gear").Msg("failed to set volume")
 	}
@@ -641,7 +640,7 @@ func (c *Core) sendWebTelemetry() {
 			"jerk":         float32(c.physics.Current.Jerk),
 			"snap":         float32(c.physics.Current.Snap),
 			"attitudeJerk": float32(c.physics.Current.AttitudeJerk * 50),
-			"output":       float32(c.physics.Current.AudioOutValue),
+			"output":       float32(c.physics.Current.SynthOutValue),
 		}
 	}()
 }

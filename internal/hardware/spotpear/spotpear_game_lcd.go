@@ -14,7 +14,7 @@ import (
 	"github.com/golang/freetype/truetype"
 	"github.com/rubiojr/go-pirateaudio/st7789"
 	"github.com/rubiojr/go-pirateaudio/textview"
-	"github.com/vwhitteron/simtezilo-dev/internal/display/sprites"
+	"github.com/vwhitteron/simtezilo-dev/internal/gui"
 	"golang.org/x/image/font"
 	"golang.org/x/image/math/fixed"
 	"periph.io/x/conn/v3/driver/driverreg"
@@ -30,7 +30,7 @@ type SpotpearGameDisplay struct {
 
 	font        *truetype.Font
 	orientation int
-	sprites     *sprites.SpriteSet
+	sprites     *gui.SpriteSet
 }
 
 type SpotpearGameDisplayOpts struct {
@@ -78,7 +78,7 @@ func NewSpotpearGameDisplay(opts SpotpearGameDisplayOpts) (*SpotpearGameDisplay,
 		lcdDevice.SetRotation(st7789.ROTATION_NONE)
 	}
 
-	sprites, err := sprites.NewSpriteSet(sprites.SpriteSetOpts{AssetDir: opts.AssetDir})
+	sprites, err := gui.NewSpriteSet(gui.SpriteSetOpts{AssetDir: opts.AssetDir})
 	if err != nil {
 		return nil, fmt.Errorf("loading sprite set: %w", err)
 	}

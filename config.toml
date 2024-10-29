@@ -12,7 +12,7 @@ source = "udp://127.0.0.1:33739"
 # Display telemetry for replays (true) or only when racing live (false)
 replayHaptics = false
 
-[audio]
+[synthesizer]
 # Gain level to be applied to audio output.
 masterGain = -14.5
 chassisVolume = 100

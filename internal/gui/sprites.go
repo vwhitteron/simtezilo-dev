@@ -1,4 +1,4 @@
-package sprites
+package gui
 
 import (
 	"fmt"

@@ -12,7 +12,7 @@ type App struct {
 	LogLevel string
 }
 
-type Audio struct {
+type Synthesizer struct {
 	SampleRateHz         int
 	PulseExponent        float64
 	PulseScaleAdjustment float64
@@ -37,10 +37,10 @@ type Display struct {
 }
 
 type Config struct {
-	App      App
-	Audio    Audio
-	Display  Display
-	Hardware Hardware
+	App         App
+	Synthesizer Synthesizer
+	Display     Display
+	Hardware    Hardware
 }
 
 func NewConfig(filename string) *Config {
@@ -49,7 +49,7 @@ func NewConfig(filename string) *Config {
 			AssetDir: "assets",
 			LogLevel: "info",
 		},
-		Audio: Audio{
+		Synthesizer: Synthesizer{
 			SampleRateHz:         8000,
 			PulseExponent:        0.56,
 			PulseScaleAdjustment: 1 / 54,
@@ -77,14 +77,14 @@ func NewConfig(filename string) *Config {
 	viper.SetEnvKeyReplacer(strings.NewReplacer(`.`, `_`))
 	viper.AutomaticEnv()
 
-	// viper.SetDefault("audio.sampleratehz", 8000)
-	// viper.SetDefault("Audio.PulseExponent", 0.56)
-	// viper.SetDefault("Audio.pulseScaleAdjustment", 1/54)
-	// viper.SetDefault("Audio.pulseMaxAmplitude", 1)
-	// viper.SetDefault("Audio.pulseMaxFrequencyHz", 40)
-	// viper.SetDefault("Audio.pulseMinFrequencyHz", 23)
-	// viper.SetDefault("Audio.pulseWidthMax", 0.5)
-	// viper.SetDefault("Audio.pulseWidthMin", 0.1)
+	// viper.SetDefault("Synthesizer.sampleratehz", 8000)
+	// viper.SetDefault("Synthesizer.PulseExponent", 0.56)
+	// viper.SetDefault("Synthesizer.pulseScaleAdjustment", 1/54)
+	// viper.SetDefault("Synthesizer.pulseMaxAmplitude", 1)
+	// viper.SetDefault("Synthesizer.pulseMaxFrequencyHz", 40)
+	// viper.SetDefault("Synthesizer.pulseMinFrequencyHz", 23)
+	// viper.SetDefault("Synthesizer.pulseWidthMax", 0.5)
+	// viper.SetDefault("Synthesizer.pulseWidthMin", 0.1)
 	// viper.SetDefault("Display.gearFontSize", 16)
 	// viper.SetDefault("Display.volumeFontSize", 16)
 
@@ -105,8 +105,8 @@ func NewConfig(filename string) *Config {
 
 	fmt.Printf("Config: %+v\n", c)
 
-	c.Audio.PulseWidthMin = float64(c.Audio.SampleRateHz) / (2 * c.Audio.PulseMinFrequencyHz)
-	c.Audio.PulseWidthMax = float64(c.Audio.SampleRateHz) / (2 * c.Audio.PulseMaxFrequencyHz)
+	c.Synthesizer.PulseWidthMin = float64(c.Synthesizer.SampleRateHz) / (2 * c.Synthesizer.PulseMinFrequencyHz)
+	c.Synthesizer.PulseWidthMax = float64(c.Synthesizer.SampleRateHz) / (2 * c.Synthesizer.PulseMaxFrequencyHz)
 
 	return c
 }

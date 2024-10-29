@@ -12,7 +12,7 @@ import (
 	"github.com/golang/freetype/truetype"
 	"github.com/rubiojr/go-pirateaudio/display"
 	"github.com/rubiojr/go-pirateaudio/textview"
-	"github.com/vwhitteron/simtezilo-dev/internal/display/sprites"
+	"github.com/vwhitteron/simtezilo-dev/internal/gui"
 	"golang.org/x/image/font"
 	"golang.org/x/image/math/fixed"
 )
@@ -21,7 +21,7 @@ type PirateAudioLCD struct {
 	font        *truetype.Font
 	device      *display.Display
 	orientation int
-	sprites     *sprites.SpriteSet
+	sprites     *gui.SpriteSet
 }
 
 type PirateAudioLCDOpts struct {
@@ -46,7 +46,7 @@ func NewPirateAudioLCD(opts PirateAudioLCDOpts) (*PirateAudioLCD, error) {
 		lcdDevice.Rotate(display.NO_ROTATION)
 	}
 
-	sprites, err := sprites.NewSpriteSet(sprites.SpriteSetOpts{AssetDir: opts.AssetDir})
+	sprites, err := gui.NewSpriteSet(gui.SpriteSetOpts{AssetDir: opts.AssetDir})
 	if err != nil {
 		return nil, fmt.Errorf("loading sprite set: %w", err)
 	}

@@ -6,47 +6,39 @@ import (
 
 	"github.com/rs/zerolog"
 	"github.com/rubiojr/go-pirateaudio/buttons"
-	"github.com/vwhitteron/simtezilo-dev/internal/audio"
 	"github.com/vwhitteron/simtezilo-dev/internal/hardware"
+	"github.com/vwhitteron/simtezilo-dev/internal/synth"
 )
 
 const volumeFontSize = 24
 
-func SetupPirateAudioButtons(lcdDevice hardware.LCD, audioDevice *audio.OutputDevice, audioMixer *audio.Mixer, log zerolog.Logger) func() {
+func SetupPirateAudioButtons(lcdDevice hardware.LCD, synthDevice *synth.OutputDevice, synthMixer *synth.Mixer, log zerolog.Logger) func() {
 	return func() {
 		buttons.OnButtonAPressed(func() {
-			audioMixer.MasterIncrease(0.5)
+			synthMixer.MasterIncrease(0.5)
 
 			canvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
 			lcdDevice.PowerOn()
-			lcdDevice.ShowTextCentered(canvas, fmt.Sprintf("%0.1f dB", audioMixer.Master), volumeFontSize)
-
-			// go func() {
-			// 	audioDevice.Play("gearChange", audioMixer.Master)
-			// }()
+			lcdDevice.ShowTextCentered(canvas, fmt.Sprintf("%0.1f dB", synthMixer.Master), volumeFontSize)
 
 			log.Info().
 				Str("button", "A").
 				Str("action", "increase master gain").
-				Float64("master_gain", audioMixer.Master).
+				Float64("master_gain", synthMixer.Master).
 				Msg("button press")
 		})
 
 		buttons.OnButtonBPressed(func() {
-			audioMixer.MasterDecrease(0.5)
+			synthMixer.MasterDecrease(0.5)
 
 			canvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
 			lcdDevice.PowerOn()
-			lcdDevice.ShowTextCentered(canvas, fmt.Sprintf("%0.1f dB", audioMixer.Master), volumeFontSize)
-
-			// go func() {
-			// 	audioDevice.Play("gearChange", audioMixer.Master)
-			// }()
+			lcdDevice.ShowTextCentered(canvas, fmt.Sprintf("%0.1f dB", synthMixer.Master), volumeFontSize)
 
 			log.Info().
 				Str("button", "B").
 				Str("action", "decrease master gain").
-				Float64("master_gain", audioMixer.Master).
+				Float64("master_gain", synthMixer.Master).
 				Msg("button press")
 		})
 

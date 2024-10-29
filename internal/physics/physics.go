@@ -24,7 +24,7 @@ type Physics struct {
 
 	TransmissionGear int
 
-	AudioOutValue float64
+	SynthOutValue float64
 }
 
 type PhysicsTracker struct {
@@ -53,7 +53,7 @@ func newPhysics() Physics {
 		VelocityDelta:        telemetry_client.Vector{},
 		VelocityVector:       telemetry_client.Vector{},
 		TransmissionGear:     -100,
-		AudioOutValue:        0,
+		SynthOutValue:        0,
 	}
 }
 

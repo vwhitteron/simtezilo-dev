@@ -14,7 +14,7 @@ import (
 	"github.com/golang/freetype"
 	"github.com/golang/freetype/truetype"
 	"github.com/rubiojr/go-pirateaudio/textview"
-	"github.com/vwhitteron/simtezilo-dev/internal/display/sprites"
+	"github.com/vwhitteron/simtezilo-dev/internal/gui"
 	"github.com/vwhitteron/simtezilo-dev/internal/hardware/lcd/st7789"
 	"golang.org/x/image/font"
 	"golang.org/x/image/math/fixed"
@@ -30,7 +30,7 @@ type Waveshare14972LCD struct {
 	dev  *st7789.Device
 
 	font    *truetype.Font
-	sprites *sprites.SpriteSet
+	sprites *gui.SpriteSet
 
 	Orientation int
 }
@@ -97,7 +97,7 @@ func NewWaveshare14972Display(opts Waveshare14972LCDOpts) (*Waveshare14972LCD, e
 		lcdDevice.SetRotation(st7789.ROTATION_NONE)
 	}
 
-	sprites, err := sprites.NewSpriteSet(sprites.SpriteSetOpts{AssetDir: opts.AssetDir})
+	sprites, err := gui.NewSpriteSet(gui.SpriteSetOpts{AssetDir: opts.AssetDir})
 	if err != nil {
 		return nil, fmt.Errorf("loading sprite set: %w", err)
 	}

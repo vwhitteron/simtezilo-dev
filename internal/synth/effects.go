@@ -1,22 +1,22 @@
-package audioeffects
+package synth
 
 import (
 	"math"
 )
 
-type Samples struct {
+type EffectsSampleBank struct {
 	sample map[string][]float64
 }
 
-func NewAudioEffects(sampleRateHz int) *Samples {
-	return &Samples{
+func NewEffectsSampleBank(sampleRateHz int) *EffectsSampleBank {
+	return &EffectsSampleBank{
 		sample: map[string][]float64{
 			"gearchange": generateGearChangeSample(sampleRateHz),
 		},
 	}
 }
 
-func (s *Samples) GetSample(name string) []float64 {
+func (s *EffectsSampleBank) GetSample(name string) []float64 {
 	if _, ok := s.sample[name]; !ok {
 		return []float64{}
 	}
