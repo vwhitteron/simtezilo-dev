@@ -7,13 +7,15 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	_ "image/png"
 
 	"github.com/vwhitteron/simtezilo-dev/internal"
 )
 
-var build string
+var Version = "DEV"
+var BuildTime string
 
 func main() {
 	sigs := make(chan os.Signal, 1)
@@ -47,7 +49,10 @@ func main() {
 	flag.BoolVar(&webEnabled, "w", false, "Enable web server. Default is false")
 	flag.Parse()
 
-	log.Printf("Simtezilo version %s\n", build)
+	if BuildTime == "" {
+		BuildTime = time.Now().Format("2006-01-02_15:04:05")
+	}
+	log.Printf("Simtezilo version %s (built %s)\n", Version, BuildTime)
 
 	profiler, err := internal.NewPyroscopeProfiler(
 		"http://10.255.1.128:4040",
