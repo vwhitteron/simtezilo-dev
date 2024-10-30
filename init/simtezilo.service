@@ -1,0 +1,17 @@
+[Unit]
+Description=Sim racing telemetry signal processing client
+After=network.target
+Wants=network.target
+
+[Service]
+ExecStartPre=/bin/sh -c 'until ping -q -c1 10.255.1.1; do sleep 1; done;'
+ExecStart=/opt/simtezilo/simtezilo
+Type=simple
+Restart=always
+
+[Install]
+WantedBy=network.target
+
+[Socket]
+ListenDatagram=0.0.0.0:33740
+ListenStream=0.0.0.0:8080
