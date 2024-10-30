@@ -28,7 +28,7 @@ build/darwin/silicon:
 build/rpi:
 	@docker build \
 	--build-arg GOOS=linux --build-arg GOARCH=arm \
-	--build-arg BUILDTIME=$(buildtime) --build-arg BUILTVERSION=$(buildversion) \
+	--build-arg BUILDTIME=$(buildtime) --build-arg BUILDVERSION=$(buildversion) \
 	--output=out --target=binaries-armhf --progress=plain \
 	-f build/docker/Dockerfile .
 
@@ -37,7 +37,7 @@ build/rpi:
 build/rpi/v6:
 	@docker build \
 	--build-arg GOOS=linux --build-arg GOARCH=arm --build-arg GOARM=6 \
-	--build-arg BUILDTIME=$(buildtime) --build-arg BUILTVERSION=$(buildversion) \
+	--build-arg BUILDTIME=$(buildtime) --build-arg BUILDVERSION=$(buildversion) \
 	--output=out --target=binaries-armel --progress=plain \
 	-f build/docker/Dockerfile .
 
@@ -46,7 +46,7 @@ build/rpi/v6:
 build/rpi/v7:
 	@docker build \
 	--build-arg GOOS=linux --build-arg GOARM=7 \
-	--build-arg BUILDTIME=$(buildtime) --build-arg BUILTVERSION=$(buildversion) \
+	--build-arg BUILDTIME=$(buildtime) --build-arg BUILDVERSION=$(buildversion) \
 	--output=out --target=binaries-armel --progress=plain \
 	-f build/docker/Dockerfile .
 
@@ -55,7 +55,7 @@ build/rpi/v7:
 build/rpi/v8/32:
 	@docker build \
 	--build-arg GOOS=linux \
-	--build-arg BUILDTIME=$(buildtime) --build-arg BUILTVERSION=$(buildversion) \
+	--build-arg BUILDTIME=$(buildtime) --build-arg BUILDVERSION=$(buildversion) \
 	--output=out --target=binaries-armel-8 --progress=plain \
 	-f build/docker/Dockerfile .
 
@@ -64,7 +64,7 @@ build/rpi/v8/32:
 build/rpi/v8/64:
 	@docker build \
 	--build-arg GOOS=linux --build-arg GOARCH=arm64 \
-	--build-arg BUILDTIME=$(buildtime) --build-arg BUILTVERSION=$(buildversion) \
+	--build-arg BUILDTIME=$(buildtime) --build-arg BUILDVERSION=$(buildversion) \
 	--output=out --target=binaries-arm64-8 --progress=plain \
 	-f build/docker/Dockerfile .
 
