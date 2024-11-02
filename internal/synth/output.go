@@ -14,8 +14,7 @@ type OutputDevice struct {
 }
 
 type SynthOutDeviceOpts struct {
-	AssetDir string
-	Logger   zerolog.Logger
+	Logger zerolog.Logger
 }
 
 func NewOutputDevice(opts SynthOutDeviceOpts) (*OutputDevice, error) {

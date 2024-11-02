@@ -72,15 +72,15 @@ func main() {
 	}
 
 	core, err := internal.NewCore(internal.CoreOptions{
-		Done:        done,
-		AssetDir:    assetDir,
-		Gain:        gain,
-		LogLevel:    logLevel,
-		Orientation: orientation,
-		Hardware:    hardware,
-		ReplayMode:  replayMode,
-		Source:      source,
-		WebEnabled:  webEnabled,
+		Done:       done,
+		Gain:       gain,
+		WebEnabled: webEnabled,
+		// AssetDir:    assetDir,
+		// LogLevel:    logLevel,
+		// Orientation: orientation,
+		// Hardware:    hardware,
+		// ReplayMode:  replayMode,
+		// Source:      source,
 	})
 	if err != nil {
 		log.Fatal("Error creating core: ", err)

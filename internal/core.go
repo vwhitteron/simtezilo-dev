@@ -52,15 +52,15 @@ type Core struct {
 }
 
 type CoreOptions struct {
-	AssetDir    string
-	Done        chan bool
-	Gain        float64
-	LogLevel    string
-	Orientation int
-	Hardware    string
-	ReplayMode  bool
-	Source      string
-	WebEnabled  bool
+	Done       chan bool
+	Gain       float64
+	WebEnabled bool
+	// AssetDir    string
+	// LogLevel    string
+	// Orientation int
+	// Hardware    string
+	// ReplayMode  bool
+	// Source      string
 }
 
 func NewCore(opts CoreOptions) (*Core, error) {
@@ -86,15 +86,15 @@ func NewCore(opts CoreOptions) (*Core, error) {
 	case "off":
 		zerolog.SetGlobalLevel(zerolog.Disabled)
 	default:
-		opts.LogLevel = "warn"
+		config.App.LogLevel = "warn"
 		zerolog.SetGlobalLevel(zerolog.WarnLevel)
-		log.Warn().Str("log_level", opts.LogLevel).Msg("unknown log level, setting level to warn")
+		log.Warn().Str("log_level", config.App.LogLevel).Msg("unknown log level, setting level to warn")
 	}
 
 	physics := physics.NewPhysicsTracker()
 
 	synthesizer, err := synth.NewSynth(synth.SynthOpts{
-		AssetDir: opts.AssetDir,
+		AssetDir: config.App.AssetDir,
 		Config:   config.Synthesizer,
 		Logger:   log.With().Str("component", "synth").Logger(),
 		Physics:  &physics,
@@ -112,12 +112,12 @@ func NewCore(opts CoreOptions) (*Core, error) {
 	var lcdDevice hardware.LCD
 	var buttonsFn func()
 
-	switch opts.Hardware {
+	switch config.Hardware.Model {
 	case "pirateaudio":
 		var err error
 		lcdDevice, err = pirateaudio.NewPirateAudioLCD(pirateaudio.PirateAudioLCDOpts{
-			Orientation: opts.Orientation,
-			AssetDir:    opts.AssetDir,
+			Orientation: config.Hardware.DisplayOrientation,
+			AssetDir:    config.App.AssetDir,
 		})
 		if err != nil {
 			log.Error().
@@ -128,17 +128,19 @@ func NewCore(opts CoreOptions) (*Core, error) {
 
 			return nil, err
 		}
-		log.Debug().
+		log.Info().
 			Str("component", "pirate audio display").
 			Str("result", "success").
 			Msg("init")
+
+		lcdDevice.ShowTextCentered(image.NewRGBA(image.Rect(0, 0, 240, 240)), "Loading...", 16)
 
 		buttonsFn = pirateaudio.SetupPirateAudioButtons(lcdDevice, synthesizer, log)
 	case "waveshare":
 		var err error
 		lcdDevice, err = waveshare.NewWaveshare14972Display(waveshare.Waveshare14972LCDOpts{
-			Orientation: opts.Orientation,
-			AssetDir:    opts.AssetDir,
+			Orientation: config.Hardware.DisplayOrientation,
+			AssetDir:    config.App.AssetDir,
 		})
 		if err != nil {
 			log.Error().
@@ -171,9 +173,9 @@ func NewCore(opts CoreOptions) (*Core, error) {
 		Msg("init")
 
 	gt, err := telemetry_client.NewGTClient(telemetry_client.GTClientOpts{
-		Source:   opts.Source,
+		Source:   config.Telemetry.Source,
 		Logger:   &log,
-		LogLevel: opts.LogLevel,
+		LogLevel: config.App.LogLevel,
 	})
 	if err != nil {
 		log.Error().
@@ -195,7 +197,7 @@ func NewCore(opts CoreOptions) (*Core, error) {
 	lcdDevice.Show("splash")
 
 	return &Core{
-		assetDir:         opts.AssetDir,
+		assetDir:         config.App.AssetDir,
 		buttonsFn:        buttonsFn,
 		chartDataChannel: make(chan map[string]float32, 600),
 		config:           config,
@@ -205,7 +207,7 @@ func NewCore(opts CoreOptions) (*Core, error) {
 		lcdDevice:        lcdDevice,
 		log:              log,
 		physics:          physics,
-		replayMode:       opts.ReplayMode,
+		replayMode:       config.App.ReplayMode,
 		seq:              uint32(0),
 		synth:            synthesizer,
 		lastActive:       time.Time{},
@@ -366,6 +368,17 @@ func (c *Core) processHaptics(seqDelta uint32) {
 func (c *Core) generateBump() {
 	startTime := time.Now()
 
+	pulseWidth := pulseWidthMax
+
+	snap := signal.LargestMagnitude(c.physics.Current.Snap, (c.physics.Current.AttitudeSnap * 100))
+
+	pulseWidthReduction := signal.Abs(signal.Scale(snap, 1/800.0))
+	pulseWidth -= pulseWidthReduction
+
+	if pulseWidth < pulseWidthMin {
+		pulseWidth = pulseWidthMin
+	}
+
 	// exponent 0.5, scale 1/47.5 (1/57.0) - small bumps slightly too loud
 	// exponent 0.4, scale 1/29.75 (1/36.0) - best balance of small, med and large bumps
 	// log10, scale 0.08 - small bumps too loud
@@ -380,15 +393,7 @@ func (c *Core) generateBump() {
 		c.log.Debug().Float64("pulse", p1).Msg("limiter")
 	}
 
-	snap := signal.LargestMagnitude(c.physics.Current.Snap, (c.physics.Current.AttitudeSnap * 100))
-
-	pulseReduction := signal.Abs(signal.Scale(snap, 1/800.0))
-	pulseWidth := pulseWidthMax
-	pulseWidth -= pulseReduction
-
-	if pulseWidth < pulseWidthMin {
-		pulseWidth = pulseWidthMin
-	}
+	pulseAmplitude = signal.Equalize(pulseAmplitude, pulseWidth)
 
 	waveOffset := pulseWidth / 2
 	waveSamplePeriod := math.Pi / pulseWidth
@@ -435,7 +440,7 @@ func (c *Core) generateBump() {
 			Msg("Bump inputs")
 		c.log.Debug().
 			Float64("amplitude", pulseAmplitude).
-			Float64("pulseReduce", pulseReduction).
+			Float64("pulseReduce", pulseWidthReduction).
 			Float64("samplePeriod", waveSamplePeriod).
 			Float64("pulseWidth", pulseWidth).
 			Msg("Bump outputs")

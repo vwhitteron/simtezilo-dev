@@ -5,9 +5,12 @@ assetDir = "/opt/simtezilo/assets"
 # Log level (trace, debug, info, warn, error, fatal, panic, off)
 logLevel = "warn"
 
+# Enable haptics during replays
+replayMode = false
+
 [telemetry]
 # Telemetry data source (udp://<ip>:<port>, file://<path>/<file>.<gtr|gtz>)
-source = "udp://127.0.0.1:33739"
+source = "udp://255.255.255.255:33739"
 
 # Display telemetry for replays (true) or only when racing live (false)
 replayHaptics = false
@@ -35,7 +38,8 @@ pulseMaxAmplitude = 0.98
 # Minimum output frequency for haptics.
 # Lower minimum values may be too muted to feel and higher values will result
 # in a harsher ride.
-pulseMinFrequencyHz = 24.5
+# pulseMinFrequencyHz = 24.5
+pulseMinFrequencyHz = 20
 
 # Maximum output frequency for haptics.
 # Lower maximum values may not be harsh enough for large impacts and higher

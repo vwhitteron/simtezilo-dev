@@ -8,8 +8,19 @@ import (
 )
 
 type App struct {
-	AssetDir string
-	LogLevel string
+	AssetDir   string
+	LogLevel   string
+	ReplayMode bool
+}
+
+type Display struct {
+	GearFontSize   int
+	VolumeFontSize int
+}
+
+type Hardware struct {
+	Model              string
+	DisplayOrientation int
 }
 
 type Synthesizer struct {
@@ -27,20 +38,16 @@ type Synthesizer struct {
 	GearStreetVolume     int
 }
 
-type Hardware struct {
-	Model              string
-	DisplayOrientation int
-}
-type Display struct {
-	GearFontSize   int
-	VolumeFontSize int
+type Telemetry struct {
+	Source string
 }
 
 type Config struct {
 	App         App
-	Synthesizer Synthesizer
 	Display     Display
 	Hardware    Hardware
+	Synthesizer Synthesizer
+	Telemetry   Telemetry
 }
 
 func NewConfig(filename string) *Config {

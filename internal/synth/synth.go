@@ -35,8 +35,7 @@ func NewSynth(opts SynthOpts) (*Synthesizer, error) {
 	buffer := NewBuffer(bufferSize, 20, mixer, opts.Logger.With().Str("component", "synth buffer").Logger())
 
 	outputDevice, err := NewOutputDevice(SynthOutDeviceOpts{
-		AssetDir: opts.AssetDir,
-		Logger:   opts.Logger.With().Str("component", "synth output device").Logger(),
+		Logger: opts.Logger.With().Str("component", "synth output device").Logger(),
 	})
 	if err != nil {
 		return nil, err
