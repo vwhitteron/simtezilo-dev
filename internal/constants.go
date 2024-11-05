@@ -29,19 +29,6 @@ var gearNames = map[int]string{
 	15:   "N",
 }
 
-// Synthesizer settings
-// const maxGain = 0
-const synthSampleRateHz = 8000
-
 // Display settings
 const gearFontSize = 48
 const volumeFontSize = 24
-
-// Haptics settings
-const pulseExponent = float64(0.56)
-const pulseScaleAdjustment = float64(1 / 54.0)
-const pulseMaxAmplitude = float64(1.0)
-const pulseMaxFrequencyHz = float64(40)
-const pulseMinFrequencyHz = float64(23)
-const pulseWidthMax = synthSampleRateHz / (2 * pulseMinFrequencyHz)
-const pulseWidthMin = synthSampleRateHz / (2 * pulseMaxFrequencyHz)

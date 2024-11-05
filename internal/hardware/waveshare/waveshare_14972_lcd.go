@@ -26,10 +26,13 @@ import (
 	"periph.io/x/host/v3"
 )
 
+const displayDPI float64 = 265
+
 type Waveshare14972LCD struct {
 	port spi.PortCloser
 	dev  *st7789.Device
 
+	dpi     float64
 	font    *truetype.Font
 	sprites *gui.SpriteSet
 
@@ -120,11 +123,14 @@ func NewWaveshare14972Display(opts Waveshare14972LCDOpts) (*Waveshare14972LCD, e
 	}
 
 	lcd := &Waveshare14972LCD{
-		port:        spiPort,
-		dev:         lcdDevice,
-		font:        freetypeFont,
+		port: spiPort,
+		dev:  lcdDevice,
+
+		dpi:     displayDPI,
+		font:    freetypeFont,
+		sprites: sprites,
+
 		Orientation: opts.Orientation,
-		sprites:     sprites,
 	}
 
 	lcd.Clear()
@@ -167,7 +173,7 @@ func (l *Waveshare14972LCD) ShowText(text string) {
 func (l *Waveshare14972LCD) ShowTextCentered(canvas *image.RGBA, text string, size int) {
 	fontFace := truetype.NewFace(l.font, &truetype.Options{
 		Size:    float64(size),
-		DPI:     265,
+		DPI:     l.dpi,
 		Hinting: font.HintingFull,
 	})
 

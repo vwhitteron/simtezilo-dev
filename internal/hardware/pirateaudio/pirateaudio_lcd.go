@@ -18,11 +18,14 @@ import (
 	"golang.org/x/image/math/fixed"
 )
 
+const displayDPI float64 = 265
+
 type PirateAudioLCD struct {
 	font        *truetype.Font
 	device      *display.Display
 	orientation int
 	sprites     *gui.SpriteSet
+	dpi         float64
 }
 
 type PirateAudioLCDOpts struct {
@@ -73,6 +76,7 @@ func NewPirateAudioLCD(opts PirateAudioLCDOpts) (*PirateAudioLCD, error) {
 		device:      lcdDevice,
 		orientation: opts.Orientation,
 		sprites:     sprites,
+		dpi:         displayDPI,
 	}
 
 	lcd.Clear()

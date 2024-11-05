@@ -1,10 +1,9 @@
 package config
 
 import (
-	"fmt"
 	"strings"
 
-	"github.com/rs/zerolog/log"
+	"github.com/rs/zerolog"
 	"github.com/spf13/viper"
 )
 
@@ -52,7 +51,7 @@ type Config struct {
 	Telemetry   Telemetry
 }
 
-func NewConfig(filename string) *Config {
+func NewConfig(filename string, log zerolog.Logger) *Config {
 	c := &Config{
 		App: App{
 			AssetDir: "assets",
@@ -108,11 +107,11 @@ func NewConfig(filename string) *Config {
 	viper.AddConfigPath(".")
 	err := viper.ReadInConfig()
 	if err != nil {
-		fmt.Printf("fatal error config file: %v\n", err)
+		log.Error().Err(err).Msg("read config file")
 	} else {
 		err = viper.Unmarshal(c)
 		if err != nil {
-			fmt.Printf("fatal error unmarshalling config: %v\n", err)
+			log.Error().Err(err).Msg("unmarshal config")
 		}
 	}
 

@@ -29,7 +29,13 @@ type displayContent struct {
 	gear int
 }
 
+type appInfo struct {
+	BuildTime string
+	Version   string
+}
+
 type Core struct {
+	appInfo          appInfo
 	assetDir         string
 	buttonsFn        func()
 	chartDataChannel chan map[string]float32
@@ -54,19 +60,15 @@ type Core struct {
 type CoreOptions struct {
 	Done       chan bool
 	Gain       float64
+	BuildTime  string
+	Version    string
 	WebEnabled bool
-	// AssetDir    string
-	// LogLevel    string
-	// Orientation int
-	// Hardware    string
-	// ReplayMode  bool
-	// Source      string
 }
 
 func NewCore(opts CoreOptions) (*Core, error) {
 	log := zerolog.New(os.Stderr).With().Timestamp().Logger()
 
-	config := config.NewConfig("config.toml")
+	config := config.NewConfig("simtezilo.conf", log)
 
 	switch config.App.LogLevel {
 	case "trace":
@@ -89,6 +91,11 @@ func NewCore(opts CoreOptions) (*Core, error) {
 		config.App.LogLevel = "warn"
 		zerolog.SetGlobalLevel(zerolog.WarnLevel)
 		log.Warn().Str("log_level", config.App.LogLevel).Msg("unknown log level, setting level to warn")
+	}
+
+	appInfo := appInfo{
+		BuildTime: opts.BuildTime,
+		Version:   opts.Version,
 	}
 
 	physics := physics.NewPhysicsTracker()
@@ -156,6 +163,8 @@ func NewCore(opts CoreOptions) (*Core, error) {
 			Str("result", "success").
 			Msg("init")
 
+		lcdDevice.Clear()
+
 		buttonsFn = waveshare.SetupWaveshareButtons(lcdDevice, synthesizer, log)
 	default:
 		lcdDevice = nulldevice.NewNullDeviceDisplay()
@@ -194,9 +203,10 @@ func NewCore(opts CoreOptions) (*Core, error) {
 		Str("result", "success").
 		Msg("init")
 
-	lcdDevice.Show("splash")
+	lcdDevice.ShowTextOverlay("splash", appInfo.Version, 7)
 
 	return &Core{
+		appInfo:          appInfo,
 		assetDir:         config.App.AssetDir,
 		buttonsFn:        buttonsFn,
 		chartDataChannel: make(chan map[string]float32, 600),
@@ -368,17 +378,16 @@ func (c *Core) processHaptics(seqDelta uint32) {
 func (c *Core) generateBump() {
 	startTime := time.Now()
 
-	pulseWidth := pulseWidthMax
+	pulseWidth := c.config.Synthesizer.PulseWidthMax
 
 	snap := signal.LargestMagnitude(c.physics.Current.Snap, (c.physics.Current.AttitudeSnap * 100))
 
 	pulseWidthReduction := signal.Abs(signal.Scale(snap, 1/800.0))
 	pulseWidth -= pulseWidthReduction
 
-	if pulseWidth < pulseWidthMin {
-		pulseWidth = pulseWidthMin
+	if pulseWidth < c.config.Synthesizer.PulseWidthMin {
+		pulseWidth = c.config.Synthesizer.PulseWidthMin
 	}
-
 	// exponent 0.5, scale 1/47.5 (1/57.0) - small bumps slightly too loud
 	// exponent 0.4, scale 1/29.75 (1/36.0) - best balance of small, med and large bumps
 	// log10, scale 0.08 - small bumps too loud
@@ -389,10 +398,10 @@ func (c *Core) generateBump() {
 	pulseAmplitude = signal.Equalize(pulseAmplitude, pulseWidth, c.config.Synthesizer)
 
 	p1 := pulseAmplitude
-	pulseAmplitude, wasLimited := signal.Limit(pulseAmplitude, pulseMaxAmplitude)
-
+	pulseAmplitude, wasLimited := signal.Limit(pulseAmplitude, c.config.Synthesizer.PulseMaxAmplitude)
 	if wasLimited {
-		c.log.Debug().Float64("pulse", p1).Msg("limiter")
+		freq := int(math.Round(float64(c.config.Synthesizer.SampleRateHz) / (2 * pulseWidth)))
+		c.log.Debug().Float64("pulse", p1).Int("frequency", freq).Msg("limiter")
 	}
 
 	pulseAmplitude = signal.Equalize(pulseAmplitude, pulseWidth)
@@ -433,7 +442,7 @@ func (c *Core) generateBump() {
 	// c.physics.Current.AudioOutValue = pulseWidthToFrequency(pulseWidth)
 	c.physics.Current.SynthOutValue = pulseAmplitude
 
-	if pulseAmplitude > 1.0 {
+	if pulseAmplitude > 1.0 || pulseAmplitude < -1.0 {
 		c.log.Debug().
 			Float64("jerk", c.physics.Current.Jerk).
 			Float64("snap", c.physics.Current.Snap).
@@ -442,7 +451,6 @@ func (c *Core) generateBump() {
 			Msg("Bump inputs")
 		c.log.Debug().
 			Float64("amplitude", pulseAmplitude).
-			Float64("pulseReduce", pulseWidthReduction).
 			Float64("samplePeriod", waveSamplePeriod).
 			Float64("pulseWidth", pulseWidth).
 			Msg("Bump outputs")
@@ -483,7 +491,7 @@ func (c *Core) silenceHaptics() {
 }
 
 func (c *Core) updateDisplay() {
-	currentGear := c.lastGear
+	currentGear := c.physics.Current.TransmissionGear
 
 	if c.displayContent.gear == currentGear || currentGear == NullGear {
 		return

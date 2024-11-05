@@ -26,6 +26,8 @@ func (d NullDisplay) ShowText(string) {}
 
 func (d NullDisplay) ShowTextCentered(*image.RGBA, string, int) {}
 
+func (d NullDisplay) ShowTextOverlay(string, string, int) {}
+
 func (d NullDisplay) GetOrientation() int {
 	return d.Orientation
 }
