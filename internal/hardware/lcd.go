@@ -7,7 +7,6 @@ import (
 type LCD interface {
 	Clear()
 	Close()
-	DrawImage(image.Image)
 	PowerOn()
 	PowerOff()
 	Show(string)

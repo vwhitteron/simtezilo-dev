@@ -194,7 +194,3 @@ func (l *PirateAudioLCD) ShowTextOverlay(background string, text string, size in
 
 	l.device.DrawRAW(canvas)
 }
-
-func (l *PirateAudioLCD) DrawImage(canvas image.Image) {
-	l.device.DrawRAW(canvas)
-}

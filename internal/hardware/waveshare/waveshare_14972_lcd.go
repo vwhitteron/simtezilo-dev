@@ -231,10 +231,6 @@ func (l *Waveshare14972LCD) ShowTextOverlay(background string, text string, size
 	l.dev.DrawRAW(canvas)
 }
 
-func (l *Waveshare14972LCD) DrawImage(canvas image.Image) {
-	l.dev.DrawRAW(canvas)
-}
-
 func (l *Waveshare14972LCD) GetOrientation() int {
 	return l.Orientation
 }
