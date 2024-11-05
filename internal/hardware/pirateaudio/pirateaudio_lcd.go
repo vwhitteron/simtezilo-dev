@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"image/draw"
 	"os"
 
 	_ "image/png"
@@ -17,11 +18,14 @@ import (
 	"golang.org/x/image/math/fixed"
 )
 
+const displayDPI float64 = 265
+
 type PirateAudioLCD struct {
 	font        *truetype.Font
 	device      *display.Display
 	orientation int
 	sprites     *gui.SpriteSet
+	dpi         float64
 }
 
 type PirateAudioLCDOpts struct {
@@ -72,6 +76,7 @@ func NewPirateAudioLCD(opts PirateAudioLCDOpts) (*PirateAudioLCD, error) {
 		device:      lcdDevice,
 		orientation: opts.Orientation,
 		sprites:     sprites,
+		dpi:         displayDPI,
 	}
 
 	lcd.Clear()
@@ -149,6 +154,37 @@ func (l *PirateAudioLCD) ShowTextCentered(canvas *image.RGBA, text string, size 
 	xPosition := (fixed.I(canvas.Rect.Max.X) - fontDrawer.MeasureString(text)) / 2
 	textHeight := textBounds.Max.Y - textBounds.Min.Y
 	yPosition := fixed.I((canvas.Rect.Max.Y)-textHeight.Ceil())/2 + fixed.I(textHeight.Ceil())
+	fontDrawer.Dot = fixed.Point26_6{
+		X: xPosition,
+		Y: yPosition,
+	}
+
+	fontDrawer.DrawString(text)
+
+	l.device.DrawRAW(canvas)
+}
+
+func (l *PirateAudioLCD) ShowTextOverlay(background string, text string, size int) {
+	img := l.sprites.GetSprite(background)
+	canvas := image.NewRGBA(img.Bounds())
+	draw.Draw(canvas, canvas.Bounds(), img, image.Point{0, 0}, draw.Src)
+
+	fontFace := truetype.NewFace(l.font, &truetype.Options{
+		Size:    float64(size),
+		DPI:     l.dpi,
+		Hinting: font.HintingFull,
+	})
+
+	fontDrawer := &font.Drawer{
+		Dst:  canvas,
+		Src:  image.NewUniform(color.RGBA{6, 6, 6, 1}),
+		Face: fontFace,
+	}
+
+	xPosition := (fixed.I(canvas.Rect.Max.X) - fontDrawer.MeasureString(text)) / 2
+	textBounds, _ := fontDrawer.BoundString(text)
+	textHeight := textBounds.Max.Y - textBounds.Min.Y
+	yPosition := fixed.I((canvas.Rect.Max.Y) - (textHeight.Ceil() / 2))
 	fontDrawer.Dot = fixed.Point26_6{
 		X: xPosition,
 		Y: yPosition,

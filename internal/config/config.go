@@ -1,15 +1,26 @@
 package config
 
 import (
-	"fmt"
 	"strings"
 
+	"github.com/rs/zerolog"
 	"github.com/spf13/viper"
 )
 
 type App struct {
-	AssetDir string
-	LogLevel string
+	AssetDir   string
+	LogLevel   string
+	ReplayMode bool
+}
+
+type Display struct {
+	GearFontSize   int
+	VolumeFontSize int
+}
+
+type Hardware struct {
+	Model              string
+	DisplayOrientation int
 }
 
 type Synthesizer struct {
@@ -27,41 +38,23 @@ type Synthesizer struct {
 	GearStreetVolume     int
 }
 
-type Hardware struct {
-	Model              string
-	DisplayOrientation int
+type Telemetry struct {
+	Source string
 }
-type Display struct {
-	GearFontSize   int
-	VolumeFontSize int
-}
-
 type Config struct {
 	App         App
-	Synthesizer Synthesizer
 	Display     Display
 	Hardware    Hardware
+	Synthesizer Synthesizer
+	Telemetry   Telemetry
 }
 
-func NewConfig(filename string) *Config {
+func NewConfig(filename string, log zerolog.Logger) *Config {
 	c := &Config{
 		App: App{
-			AssetDir: "assets",
-			LogLevel: "info",
-		},
-		Synthesizer: Synthesizer{
-			SampleRateHz:         8000,
-			PulseExponent:        0.56,
-			PulseScaleAdjustment: 1 / 54,
-			PulseMaxAmplitude:    1,
-			PulseMaxFrequencyHz:  40,
-			PulseMinFrequencyHz:  23,
-			PulseWidthMax:        0.5,
-			PulseWidthMin:        0.1,
-			MasterGain:           -15,
-			ChassisVolume:        100,
-			GearRaceVolume:       100,
-			GearStreetVolume:     80,
+			AssetDir:   "assets",
+			LogLevel:   "info",
+			ReplayMode: false,
 		},
 		Display: Display{
 			GearFontSize:   48,
@@ -70,6 +63,21 @@ func NewConfig(filename string) *Config {
 		Hardware: Hardware{
 			Model:              "none",
 			DisplayOrientation: 0,
+		},
+		Synthesizer: Synthesizer{
+			SampleRateHz:         8000,
+			PulseExponent:        0.56,
+			PulseScaleAdjustment: 1 / 54,
+			PulseMaxAmplitude:    1,
+			PulseMaxFrequencyHz:  40,
+			PulseMinFrequencyHz:  23,
+			MasterGain:           -15,
+			ChassisVolume:        100,
+			GearRaceVolume:       100,
+			GearStreetVolume:     80,
+		},
+		Telemetry: Telemetry{
+			Source: "udp://255.255.255.255:33739",
 		},
 	}
 
@@ -95,15 +103,15 @@ func NewConfig(filename string) *Config {
 	viper.AddConfigPath(".")
 	err := viper.ReadInConfig()
 	if err != nil {
-		fmt.Printf("fatal error config file: %v\n", err)
+		log.Error().Err(err).Msg("read config file")
 	} else {
 		err = viper.Unmarshal(c)
 		if err != nil {
-			fmt.Printf("fatal error unmarshalling config: %v\n", err)
+			log.Error().Err(err).Msg("unmarshal config")
 		}
 	}
 
-	fmt.Printf("Config: %+v\n", c)
+	log.Debug().Interface("config", c).Msg("config loaded")
 
 	c.Synthesizer.PulseWidthMin = float64(c.Synthesizer.SampleRateHz) / (2 * c.Synthesizer.PulseMinFrequencyHz)
 	c.Synthesizer.PulseWidthMax = float64(c.Synthesizer.SampleRateHz) / (2 * c.Synthesizer.PulseMaxFrequencyHz)
