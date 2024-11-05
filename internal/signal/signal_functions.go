@@ -2,6 +2,8 @@ package signal
 
 import (
 	"math"
+
+	"github.com/vwhitteron/simtezilo-dev/internal/config"
 )
 
 func Abs(value float64) float64 {
@@ -12,46 +14,15 @@ func Abs(value float64) float64 {
 	return value
 }
 
-func Equalize(value float64, pulseWidth float64) float64 {
-	eq := map[int]float64{
-		10: 1.4,
-		11: 1.4,
-		12: 1.4,
-		13: 1.4,
-		14: 1.4,
-		15: 1.4,
-		16: 1.4,
-		17: 1.4,
-		18: 1.4,
-		19: 1.35,
-		20: 1.5,
-		21: 1.4,
-		22: 1.3,
-		23: 1.2,
-		24: 1.1,
-		25: 1,
-		26: 1,
-		27: 1,
-		28: 1,
-		29: 1,
-		30: 1,
-		31: 1,
-		32: 1,
-		33: 1,
-		34: 1,
-		35: 1,
-		36: 1,
-		37: 1,
-		38: 1,
-		39: 1,
-		40: 1,
+func Equalize(value float64, pulseWidth float64, synth *config.Synthesizer) float64 {
+
+	freq := int(math.Round(float64(synth.SampleRateHz) / (2 * pulseWidth)))
+
+	if freq < 10 || freq > 49 {
+		return value
 	}
 
-	freq := int(math.Round(8000 / (2 * pulseWidth)))
-
-	if _, ok := eq[freq]; ok {
-		value = value * eq[freq]
-	}
+	value = value * synth.Eq[freq-10]
 
 	return value
 }

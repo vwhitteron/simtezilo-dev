@@ -388,23 +388,18 @@ func (c *Core) generateBump() {
 	if pulseWidth < c.config.Synthesizer.PulseWidthMin {
 		pulseWidth = c.config.Synthesizer.PulseWidthMin
 	}
-	// exponent 0.5, scale 1/47.5 (1/57.0) - small bumps slightly too loud
-	// exponent 0.4, scale 1/29.75 (1/36.0) - best balance of small, med and large bumps
-	// log10, scale 0.08 - small bumps too loud
-	// log2, scale 0.025 - small bumps too loud
+
 	sig := signal.LargestMagnitude(c.physics.Current.Jerk, (c.physics.Current.AttitudeJerk * 50))
 	pulseAmplitude := signal.Exponent(sig, c.config.Synthesizer.PulseExponent)
 	pulseAmplitude = signal.Scale(pulseAmplitude, c.config.Synthesizer.PulseScaleAdjustment)
-	pulseAmplitude = signal.Equalize(pulseAmplitude, pulseWidth, c.config.Synthesizer)
+	pulseAmplitude = signal.Equalize(pulseAmplitude, pulseWidth, &c.config.Synthesizer)
 
 	p1 := pulseAmplitude
 	pulseAmplitude, wasLimited := signal.Limit(pulseAmplitude, c.config.Synthesizer.PulseMaxAmplitude)
 	if wasLimited {
 		freq := int(math.Round(float64(c.config.Synthesizer.SampleRateHz) / (2 * pulseWidth)))
-		c.log.Debug().Float64("pulse", p1).Int("frequency", freq).Msg("limiter")
+		c.log.Debug().Float64("pulse", p1).Int("frequency", freq).Float64("reduce", pulseWidthReduction).Msg("limiter")
 	}
-
-	pulseAmplitude = signal.Equalize(pulseAmplitude, pulseWidth)
 
 	waveOffset := pulseWidth / 2
 	waveSamplePeriod := math.Pi / pulseWidth
