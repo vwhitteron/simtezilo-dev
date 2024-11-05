@@ -1,6 +1,8 @@
 package signal
 
-import "math"
+import (
+	"math"
+)
 
 func Abs(value float64) float64 {
 	if value < 0 {

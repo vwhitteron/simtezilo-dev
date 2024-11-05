@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
 )
 
@@ -36,6 +37,7 @@ type Synthesizer struct {
 	ChassisVolume        int
 	GearRaceVolume       int
 	GearStreetVolume     int
+	Eq                   []float64
 }
 
 type Telemetry struct {
@@ -56,6 +58,15 @@ func NewConfig(filename string) *Config {
 			AssetDir: "assets",
 			LogLevel: "info",
 		},
+		Display: Display{
+			GearFontSize:   48,
+			VolumeFontSize: 20,
+		},
+		Hardware: Hardware{
+			Model:              "none",
+			DisplayOrientation: 0,
+			Eq:                 []float64{},
+		},
 		Synthesizer: Synthesizer{
 			SampleRateHz:         8000,
 			PulseExponent:        0.56,
@@ -70,13 +81,8 @@ func NewConfig(filename string) *Config {
 			GearRaceVolume:       100,
 			GearStreetVolume:     80,
 		},
-		Display: Display{
-			GearFontSize:   48,
-			VolumeFontSize: 20,
-		},
-		Hardware: Hardware{
-			Model:              "none",
-			DisplayOrientation: 0,
+		Telemetry: Telemetry{
+			Source: "udp://255.255.255.255:33739",
 		},
 	}
 
@@ -110,7 +116,16 @@ func NewConfig(filename string) *Config {
 		}
 	}
 
-	fmt.Printf("Config: %+v\n", c)
+	if len(c.Synthesizer.Eq) != 40 {
+		log.Warn().Int("length", len(c.Synthesizer.Eq)).Msg("invalid synthesizer EQ length")
+
+		c.Synthesizer.Eq = make([]float64, 40)
+		for i := 0; i < 40; i++ {
+			c.Synthesizer.Eq[i] = 1
+		}
+	}
+
+	log.Debug().Interface("config", c).Msg("config loaded")
 
 	c.Synthesizer.PulseWidthMin = float64(c.Synthesizer.SampleRateHz) / (2 * c.Synthesizer.PulseMinFrequencyHz)
 	c.Synthesizer.PulseWidthMax = float64(c.Synthesizer.SampleRateHz) / (2 * c.Synthesizer.PulseMaxFrequencyHz)

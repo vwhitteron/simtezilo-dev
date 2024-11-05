@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"image/draw"
 	"log"
 	"os"
 	"sync"
@@ -190,6 +191,41 @@ func (l *Waveshare14972LCD) ShowTextCentered(canvas *image.RGBA, text string, si
 
 	fontDrawer.DrawString(text)
 
+	l.dev.DrawRAW(canvas)
+}
+
+func (l *Waveshare14972LCD) ShowTextOverlay(background string, text string, size int) {
+	img := l.sprites.GetSprite(background)
+	canvas := image.NewRGBA(img.Bounds())
+	draw.Draw(canvas, canvas.Bounds(), img, image.Point{0, 0}, draw.Src)
+
+	fontFace := truetype.NewFace(l.font, &truetype.Options{
+		Size:    float64(size),
+		DPI:     l.dpi,
+		Hinting: font.HintingFull,
+	})
+
+	fontDrawer := &font.Drawer{
+		Dst:  canvas,
+		Src:  image.NewUniform(color.RGBA{6, 6, 6, 1}),
+		Face: fontFace,
+	}
+
+	xPosition := (fixed.I(canvas.Rect.Max.X) - fontDrawer.MeasureString(text)) / 2
+	textBounds, _ := fontDrawer.BoundString(text)
+	textHeight := textBounds.Max.Y - textBounds.Min.Y
+	yPosition := fixed.I((canvas.Rect.Max.Y) - (textHeight.Ceil() / 2))
+	fontDrawer.Dot = fixed.Point26_6{
+		X: xPosition,
+		Y: yPosition,
+	}
+
+	fontDrawer.DrawString(text)
+
+	l.dev.DrawRAW(canvas)
+}
+
+func (l *Waveshare14972LCD) DrawImage(canvas image.Image) {
 	l.dev.DrawRAW(canvas)
 }
 

@@ -384,8 +384,10 @@ func (c *Core) generateBump() {
 	// log10, scale 0.08 - small bumps too loud
 	// log2, scale 0.025 - small bumps too loud
 	sig := signal.LargestMagnitude(c.physics.Current.Jerk, (c.physics.Current.AttitudeJerk * 50))
-	pulseAmplitude := signal.Exponent(sig, pulseExponent)
-	pulseAmplitude = signal.Scale(pulseAmplitude, pulseScaleAdjustment)
+	pulseAmplitude := signal.Exponent(sig, c.config.Synthesizer.PulseExponent)
+	pulseAmplitude = signal.Scale(pulseAmplitude, c.config.Synthesizer.PulseScaleAdjustment)
+	pulseAmplitude = signal.Equalize(pulseAmplitude, pulseWidth, c.config.Synthesizer)
+
 	p1 := pulseAmplitude
 	pulseAmplitude, wasLimited := signal.Limit(pulseAmplitude, pulseMaxAmplitude)
 

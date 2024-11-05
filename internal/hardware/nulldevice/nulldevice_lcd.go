@@ -14,6 +14,8 @@ func (d NullDisplay) Clear() {}
 
 func (d NullDisplay) Close() {}
 
+func (d NullDisplay) DrawImage(image.Image) {}
+
 func (d NullDisplay) PowerOn() {}
 
 func (d NullDisplay) PowerOff() {}
