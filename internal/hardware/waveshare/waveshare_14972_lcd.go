@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"image/draw"
 	"log"
 	"os"
 	"sync"
@@ -25,10 +26,13 @@ import (
 	"periph.io/x/host/v3"
 )
 
+const displayDPI float64 = 265
+
 type Waveshare14972LCD struct {
 	port spi.PortCloser
 	dev  *st7789.Device
 
+	dpi     float64
 	font    *truetype.Font
 	sprites *gui.SpriteSet
 
@@ -119,11 +123,14 @@ func NewWaveshare14972Display(opts Waveshare14972LCDOpts) (*Waveshare14972LCD, e
 	}
 
 	lcd := &Waveshare14972LCD{
-		port:        spiPort,
-		dev:         lcdDevice,
-		font:        freetypeFont,
+		port: spiPort,
+		dev:  lcdDevice,
+
+		dpi:     displayDPI,
+		font:    freetypeFont,
+		sprites: sprites,
+
 		Orientation: opts.Orientation,
-		sprites:     sprites,
 	}
 
 	lcd.Clear()
@@ -166,7 +173,7 @@ func (l *Waveshare14972LCD) ShowText(text string) {
 func (l *Waveshare14972LCD) ShowTextCentered(canvas *image.RGBA, text string, size int) {
 	fontFace := truetype.NewFace(l.font, &truetype.Options{
 		Size:    float64(size),
-		DPI:     265,
+		DPI:     l.dpi,
 		Hinting: font.HintingFull,
 	})
 
@@ -183,6 +190,37 @@ func (l *Waveshare14972LCD) ShowTextCentered(canvas *image.RGBA, text string, si
 	xPosition := (fixed.I(canvas.Rect.Max.X) - fontDrawer.MeasureString(text)) / 2
 	textHeight := textBounds.Max.Y - textBounds.Min.Y
 	yPosition := fixed.I((canvas.Rect.Max.Y)-textHeight.Ceil())/2 + fixed.I(textHeight.Ceil())
+	fontDrawer.Dot = fixed.Point26_6{
+		X: xPosition,
+		Y: yPosition,
+	}
+
+	fontDrawer.DrawString(text)
+
+	l.dev.DrawRAW(canvas)
+}
+
+func (l *Waveshare14972LCD) ShowTextOverlay(background string, text string, size int) {
+	img := l.sprites.GetSprite(background)
+	canvas := image.NewRGBA(img.Bounds())
+	draw.Draw(canvas, canvas.Bounds(), img, image.Point{0, 0}, draw.Src)
+
+	fontFace := truetype.NewFace(l.font, &truetype.Options{
+		Size:    float64(size),
+		DPI:     l.dpi,
+		Hinting: font.HintingFull,
+	})
+
+	fontDrawer := &font.Drawer{
+		Dst:  canvas,
+		Src:  image.NewUniform(color.RGBA{6, 6, 6, 1}),
+		Face: fontFace,
+	}
+
+	xPosition := (fixed.I(canvas.Rect.Max.X) - fontDrawer.MeasureString(text)) / 2
+	textBounds, _ := fontDrawer.BoundString(text)
+	textHeight := textBounds.Max.Y - textBounds.Min.Y
+	yPosition := fixed.I((canvas.Rect.Max.Y) - (textHeight.Ceil() / 2))
 	fontDrawer.Dot = fixed.Point26_6{
 		X: xPosition,
 		Y: yPosition,

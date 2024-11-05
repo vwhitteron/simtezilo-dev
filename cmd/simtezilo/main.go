@@ -56,7 +56,11 @@ func main() {
 
 	profiler, err := internal.NewPyroscopeProfiler(
 		"http://10.255.1.128:4040",
-		map[string]string{"hostname": os.Getenv("HOSTNAME")},
+		map[string]string{
+			"app":      "simtezilo",
+			"version":  Version,
+			"hostname": os.Getenv("HOSTNAME"),
+		},
 	)
 	if err != nil {
 		log.Fatal("Error creating Pyroscope profiler: ", err)
@@ -72,15 +76,11 @@ func main() {
 	}
 
 	core, err := internal.NewCore(internal.CoreOptions{
-		Done:        done,
-		AssetDir:    assetDir,
-		Gain:        gain,
-		LogLevel:    logLevel,
-		Orientation: orientation,
-		Hardware:    hardware,
-		ReplayMode:  replayMode,
-		Source:      source,
-		WebEnabled:  webEnabled,
+		Done:       done,
+		Gain:       gain,
+		BuildTime:  BuildTime,
+		Version:    Version,
+		WebEnabled: webEnabled,
 	})
 	if err != nil {
 		log.Fatal("Error creating core: ", err)

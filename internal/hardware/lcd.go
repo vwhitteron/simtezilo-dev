@@ -12,6 +12,7 @@ type LCD interface {
 	Show(string)
 	ShowText(string)
 	ShowTextCentered(*image.RGBA, string, int)
+	ShowTextOverlay(string, string, int)
 	GetOrientation() int
 	SetOrientation(int)
 }
