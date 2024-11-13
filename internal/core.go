@@ -378,7 +378,7 @@ func (c *Core) generateBump() {
 
 	pulseWidth := c.config.Synthesizer.PulseWidthMax
 
-	snap := signal.LargestMagnitude(c.physics.Current.Snap, (c.physics.Current.AttitudeSnap * 100))
+	snap := signal.LargestMagnitude(c.physics.Current.Velocity.Snap, (c.physics.Current.Attitude.Snap * 100))
 
 	pulseWidthReduction := signal.Abs(signal.Scale(snap, 1/800.0))
 	pulseWidth -= pulseWidthReduction
@@ -390,7 +390,7 @@ func (c *Core) generateBump() {
 	// exponent 0.4, scale 1/29.75 (1/36.0) - best balance of small, med and large bumps
 	// log10, scale 0.08 - small bumps too loud
 	// log2, scale 0.025 - small bumps too loud
-	sig := signal.LargestMagnitude(c.physics.Current.Jerk, (c.physics.Current.AttitudeJerk * 50))
+	sig := signal.LargestMagnitude(c.physics.Current.Velocity.Jerk, (c.physics.Current.Attitude.Jerk * 50))
 	pulseAmplitude := signal.Exponent(sig, c.config.Synthesizer.PulseExponent)
 	pulseAmplitude = signal.Scale(pulseAmplitude, c.config.Synthesizer.PulseScaleAdjustment)
 
@@ -412,7 +412,7 @@ func (c *Core) generateBump() {
 	}
 
 	// no haptics if vehicle speed velocity lower than 30cm per second
-	if vector.Magnitude(c.physics.Current.VelocityVector) >= 0.28 {
+	if vector.Magnitude(c.physics.Current.Velocity.Vector) >= 0.28 {
 		c.synth.WriteBuffer("chassis", pulseBuffer)
 	}
 
@@ -439,8 +439,8 @@ func (c *Core) generateBump() {
 
 	if pulseAmplitude > 1.0 || pulseAmplitude < -1.0 {
 		c.log.Debug().
-			Float64("jerk", c.physics.Current.Jerk).
-			Float64("snap", c.physics.Current.Snap).
+			Float64("jerk", c.physics.Current.Velocity.Jerk).
+			Float64("snap", c.physics.Current.Velocity.Snap).
 			Str("process_time", time.Since(startTime).String()).
 			Uint32("sequence_id", c.physics.Current.SequenceID).
 			Msg("Bump inputs")
@@ -609,13 +609,13 @@ func (c *Core) sendWebTelemetry() {
 			"brake":        c.gt.Telemetry.BrakePercent(),
 			"rpm":          c.gt.Telemetry.EngineRPM(),
 			"speed":        c.gt.Telemetry.GroundSpeedKPH(),
-			"velocityX":    c.physics.Current.VelocityVector.X,
-			"velocityY":    c.physics.Current.VelocityVector.Y,
-			"velocityZ":    c.physics.Current.VelocityVector.Z,
-			"gforce":       float32(c.physics.Current.Acceleration) / gravityConstant,
-			"jerk":         float32(c.physics.Current.Jerk),
-			"snap":         float32(c.physics.Current.Snap),
-			"attitudeJerk": float32(c.physics.Current.AttitudeJerk * 50),
+			"velocityX":    c.physics.Current.Velocity.Vector.X,
+			"velocityY":    c.physics.Current.Velocity.Vector.Y,
+			"velocityZ":    c.physics.Current.Velocity.Vector.Z,
+			"gforce":       float32(c.physics.Current.Velocity.Acceleration) / gravityConstant,
+			"jerk":         float32(c.physics.Current.Velocity.Jerk),
+			"snap":         float32(c.physics.Current.Velocity.Snap),
+			"attitudeJerk": float32(c.physics.Current.Attitude.Jerk * 50),
 			"output":       float32(c.physics.Current.SynthOutValue),
 		}
 	}()
