@@ -380,7 +380,7 @@ func (c *Core) generateBump() {
 
 	pulseWidth := c.config.Synthesizer.PulseWidthMax
 
-	snap := signal.LargestMagnitude(c.physics.Current.Snap, (c.physics.Current.AttitudeSnap * 100))
+	snap := signal.LargestMagnitude(c.physics.Current.Velocity.Snap, (c.physics.Current.Attitude.Snap * 100))
 
 	pulseWidthReduction := signal.Abs(signal.Scale(snap, 1/800.0))
 	pulseWidth -= pulseWidthReduction
@@ -388,17 +388,16 @@ func (c *Core) generateBump() {
 	if pulseWidth < c.config.Synthesizer.PulseWidthMin {
 		pulseWidth = c.config.Synthesizer.PulseWidthMin
 	}
-
-	sig := signal.LargestMagnitude(c.physics.Current.Jerk, (c.physics.Current.AttitudeJerk * 50))
+	sig := signal.LargestMagnitude(c.physics.Current.Velocity.Jerk, (c.physics.Current.Attitude.Jerk * 50))
 	pulseAmplitude := signal.Exponent(sig, c.config.Synthesizer.PulseExponent)
 	pulseAmplitude = signal.Scale(pulseAmplitude, c.config.Synthesizer.PulseScaleAdjustment)
-	pulseAmplitude = signal.Equalize(pulseAmplitude, pulseWidth, &c.config.Synthesizer)
+
+	pulseFrequency := int(math.Round(float64(c.config.Synthesizer.SampleRateHz) / (2 * pulseWidth)))
 
 	p1 := pulseAmplitude
 	pulseAmplitude, wasLimited := signal.Limit(pulseAmplitude, c.config.Synthesizer.PulseMaxAmplitude)
 	if wasLimited {
-		freq := int(math.Round(float64(c.config.Synthesizer.SampleRateHz) / (2 * pulseWidth)))
-		c.log.Debug().Float64("pulse", p1).Int("frequency", freq).Float64("reduce", pulseWidthReduction).Msg("limiter")
+		c.log.Info().Float64("pulse", p1).Int("frequency", pulseFrequency).Msg("limiter")
 	}
 
 	waveOffset := pulseWidth / 2
@@ -412,7 +411,7 @@ func (c *Core) generateBump() {
 	}
 
 	// no haptics if vehicle speed velocity lower than 30cm per second
-	if vector.Magnitude(c.physics.Current.VelocityVector) >= 0.28 {
+	if vector.Magnitude(c.physics.Current.Velocity.Vector) >= 0.28 {
 		c.synth.WriteBuffer("chassis", pulseBuffer)
 	}
 
@@ -432,15 +431,16 @@ func (c *Core) generateBump() {
 			Msg("no gear")
 	}
 
-	c.physics.Last.SynthOutValue = c.physics.Current.SynthOutValue
-	// FIXME: temporarily report output frequency in telemetry dashboard
-	// c.physics.Current.AudioOutValue = pulseWidthToFrequency(pulseWidth)
-	c.physics.Current.SynthOutValue = pulseAmplitude
+	c.physics.Last.SynthOutputAmplitude = c.physics.Current.SynthOutputAmplitude
+	c.physics.Current.SynthOutputAmplitude = pulseAmplitude
+
+	c.physics.Last.SynthOutputFrequency = c.physics.Current.SynthOutputFrequency
+	c.physics.Current.SynthOutputFrequency = pulseFrequency
 
 	if pulseAmplitude > 1.0 || pulseAmplitude < -1.0 {
 		c.log.Debug().
-			Float64("jerk", c.physics.Current.Jerk).
-			Float64("snap", c.physics.Current.Snap).
+			Float64("jerk", c.physics.Current.Velocity.Jerk).
+			Float64("snap", c.physics.Current.Velocity.Snap).
 			Str("process_time", time.Since(startTime).String()).
 			Uint32("sequence_id", c.physics.Current.SequenceID).
 			Msg("Bump inputs")
@@ -604,19 +604,20 @@ func (c *Core) sendWebTelemetry() {
 
 	go func() {
 		c.chartDataChannel <- map[string]float32{
-			"timeOfDay":    float32(c.gt.Telemetry.TimeOfDay().Milliseconds()),
-			"throttle":     c.gt.Telemetry.ThrottlePercent(),
-			"brake":        c.gt.Telemetry.BrakePercent(),
-			"rpm":          c.gt.Telemetry.EngineRPM(),
-			"speed":        c.gt.Telemetry.GroundSpeedKPH(),
-			"velocityX":    c.physics.Current.VelocityVector.X,
-			"velocityY":    c.physics.Current.VelocityVector.Y,
-			"velocityZ":    c.physics.Current.VelocityVector.Z,
-			"gforce":       float32(c.physics.Current.Acceleration) / gravityConstant,
-			"jerk":         float32(c.physics.Current.Jerk),
-			"snap":         float32(c.physics.Current.Snap),
-			"attitudeJerk": float32(c.physics.Current.AttitudeJerk * 50),
-			"output":       float32(c.physics.Current.SynthOutValue),
+			"timeOfDay":            float32(c.gt.Telemetry.TimeOfDay().Milliseconds()),
+			"throttle":             c.gt.Telemetry.ThrottlePercent(),
+			"brake":                c.gt.Telemetry.BrakePercent(),
+			"rpm":                  c.gt.Telemetry.EngineRPM(),
+			"speed":                c.gt.Telemetry.GroundSpeedKPH(),
+			"velocityX":            c.physics.Current.Velocity.Vector.X,
+			"velocityY":            c.physics.Current.Velocity.Vector.Y,
+			"velocityZ":            c.physics.Current.Velocity.Vector.Z,
+			"gforce":               float32(c.physics.Current.Velocity.Acceleration) / gravityConstant,
+			"jerk":                 float32(c.physics.Current.Velocity.Jerk),
+			"snap":                 float32(c.physics.Current.Velocity.Snap),
+			"attitudeJerk":         float32(c.physics.Current.Attitude.Jerk * 50),
+			"synthOutputAmplitude": float32(c.physics.Current.SynthOutputAmplitude),
+			"synthOutputFrequency": float32(c.physics.Current.SynthOutputFrequency),
 		}
 	}()
 }
