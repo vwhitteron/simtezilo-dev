@@ -32,7 +32,8 @@ type Physics struct {
 
 	TransmissionGear int
 
-	SynthOutValue float64
+	SynthOutputAmplitude float64
+	SynthOutputFrequency int
 }
 
 type PhysicsTracker struct {
@@ -65,8 +66,9 @@ func newPhysics() Physics {
 			Snap:         0,
 			Crackle:      0,
 		},
-		TransmissionGear: -100,
-		SynthOutValue:    0,
+		TransmissionGear:     -100,
+		SynthOutputAmplitude: 0,
+		SynthOutputFrequency: 0,
 	}
 }
 
