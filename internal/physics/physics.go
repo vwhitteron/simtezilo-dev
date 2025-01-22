@@ -1,6 +1,8 @@
 package physics
 
 import (
+	"time"
+
 	telemetry_client "github.com/vwhitteron/gt-telemetry"
 	"github.com/vwhitteron/simtezilo-dev/internal/physics/symmetryaxis"
 	"github.com/vwhitteron/simtezilo-dev/internal/physics/vector"
@@ -25,7 +27,8 @@ type AttitudeDerivatives struct {
 }
 
 type Physics struct {
-	SequenceID uint32
+	SequenceID  uint32
+	ComputeTime time.Duration
 
 	Attitude AttitudeDerivatives
 	Velocity VelocityDerivatives
@@ -58,6 +61,7 @@ func newPhysics() Physics {
 			Snap:         0,
 			Crackle:      0,
 		},
+		ComputeTime: 0,
 		Velocity: VelocityDerivatives{
 			Delta:        telemetry_client.Vector{},
 			Vector:       telemetry_client.Vector{},
@@ -74,6 +78,11 @@ func newPhysics() Physics {
 
 // FIXME: ideally this should not be given the gt client
 func (t *PhysicsTracker) Update(windowMilliseconds float64, gtclient *telemetry_client.GTClient) {
+	t.Last = t.Current
+
+	// t.Last.SequenceID = t.Current.SequenceID
+
+	t.Current.SequenceID = gtclient.Telemetry.SequenceID()
 	t.Current.Velocity.Vector = gtclient.Telemetry.VelocityVector()
 	t.Current.Attitude.Vector = gtclient.Telemetry.RotationVector()
 
@@ -85,7 +94,7 @@ func (t *PhysicsTracker) Update(windowMilliseconds float64, gtclient *telemetry_
 
 	t.Current.Attitude.Acceleration = symmetryaxis.Magnitude(biasedAttitudeDelta) / windowMilliseconds
 
-	t.Last.Attitude.Jerk = t.Current.Attitude.Jerk
+	// t.Last.Attitude.Jerk = t.Current.Attitude.Jerk
 	t.Current.Attitude.Jerk = (t.Current.Attitude.Acceleration - t.Last.Attitude.Acceleration) / windowMilliseconds
 	if t.Current.Attitude.Jerk > 10 {
 		t.Current.Attitude.Jerk = 10
@@ -93,24 +102,23 @@ func (t *PhysicsTracker) Update(windowMilliseconds float64, gtclient *telemetry_
 		t.Current.Attitude.Jerk = -10
 	}
 
-	t.Last.Attitude.Snap = t.Current.Attitude.Snap
+	// t.Last.Attitude.Snap = t.Current.Attitude.Snap
 	t.Current.Attitude.Snap = (t.Current.Attitude.Jerk - t.Last.Attitude.Jerk) / windowMilliseconds
 
 	// chassis position
 	t.Current.Velocity.Delta = vector.Delta(t.Current.Velocity.Vector, t.Last.Velocity.Vector)
 	t.Current.Velocity.Acceleration = vector.Magnitude(t.Current.Velocity.Delta) / windowMilliseconds
 
-	t.Last.Velocity.Jerk = t.Current.Velocity.Jerk
+	// t.Last.Velocity.Jerk = t.Current.Velocity.Jerk
 	t.Current.Velocity.Jerk = (t.Current.Velocity.Acceleration - t.Last.Velocity.Acceleration) / windowMilliseconds
 
-	t.Last.Velocity.Snap = t.Current.Velocity.Snap
+	// t.Last.Velocity.Snap = t.Current.Velocity.Snap
 	t.Current.Velocity.Snap = (t.Current.Velocity.Jerk - t.Last.Velocity.Jerk) / windowMilliseconds
 
-	t.Last.Velocity.Crackle = t.Current.Velocity.Crackle
+	// t.Last.Velocity.Crackle = t.Current.Velocity.Crackle
 	t.Current.Velocity.Crackle = (t.Current.Velocity.Snap - t.Last.Velocity.Snap) / windowMilliseconds
 
-	t.Last.TransmissionGear = t.Current.TransmissionGear
+	// t.Last.TransmissionGear = t.Current.TransmissionGear
 	t.Current.TransmissionGear = gtclient.Telemetry.CurrentGear()
 
-	t.Last.SequenceID = t.Current.SequenceID
 }

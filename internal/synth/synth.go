@@ -27,7 +27,7 @@ type SynthOpts struct {
 }
 
 func NewSynth(opts SynthOpts) (*Synthesizer, error) {
-	mixer := NewMixer(opts.Config.MasterGain, opts.Logger.With().Str("component", "synth mixer").Logger())
+	mixer := NewMixer(opts.Config.MasterGain, opts.Config.GainIncrement, opts.Logger.With().Str("component", "synth mixer").Logger())
 	mixer.AddChannel("gearchange", float64(opts.Config.GearStreetVolume/100))
 	mixer.AddChannel("chassis", float64(opts.Config.ChassisVolume/100))
 
@@ -80,12 +80,16 @@ func (s *Synthesizer) ClearBuffer() {
 }
 
 // Mixer accessor methods
-func (s *Synthesizer) DecreaseMasterGain(increment float64) {
-	s.mixer.MasterDecrease(increment)
+func (s *Synthesizer) DecreaseMasterGain() float64 {
+	s.mixer.MasterDecrease()
+
+	return s.mixer.Master
 }
 
-func (s *Synthesizer) IncreaseMasterGain(increment float64) {
-	s.mixer.MasterIncrease(increment)
+func (s *Synthesizer) IncreaseMasterGain() float64 {
+	s.mixer.MasterIncrease()
+
+	return s.mixer.Master
 }
 
 func (s *Synthesizer) GetMasterGain() float64 {

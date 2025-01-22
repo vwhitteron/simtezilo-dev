@@ -15,7 +15,7 @@ func SetupWaveshareButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, log
 	return func() {
 		hardware.OnButtonUpPressed(func() {
 			// synthMixer.MasterIncrease(1)
-			synth.IncreaseMasterGain(0.5)
+			synth.IncreaseMasterGain()
 
 			canvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
 			masterGain := synth.GetMasterGain()
@@ -29,7 +29,7 @@ func SetupWaveshareButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, log
 		})
 
 		hardware.OnButtonDownPressed(func() {
-			synth.DecreaseMasterGain(0.5)
+			synth.DecreaseMasterGain()
 
 			canvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
 			masterGain := synth.GetMasterGain()

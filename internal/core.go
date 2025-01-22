@@ -55,6 +55,7 @@ type Core struct {
 	vehicleID        uint32
 	webEnabled       bool
 	webSocketClients int
+	webSequenceId    uint32
 }
 
 type CoreOptions struct {
@@ -142,7 +143,7 @@ func NewCore(opts CoreOptions) (*Core, error) {
 
 		lcdDevice.ShowTextCentered(image.NewRGBA(image.Rect(0, 0, 240, 240)), "Loading...", 16)
 
-		buttonsFn = pirateaudio.SetupPirateAudioButtons(lcdDevice, synthesizer, log)
+		buttonsFn = pirateaudio.SetupPirateAudioButtons(lcdDevice, synthesizer, config, log)
 	case "waveshare":
 		var err error
 		lcdDevice, err = waveshare.NewWaveshare14972Display(waveshare.Waveshare14972LCDOpts{
@@ -173,7 +174,7 @@ func NewCore(opts CoreOptions) (*Core, error) {
 			Str("result", "success").
 			Msg("init")
 
-		buttonsFn = nulldevice.SetupNullDeviceButtons(synthesizer, opts.Done, log)
+		buttonsFn = nulldevice.SetupNullDeviceButtons(synthesizer, config, opts.Done, log)
 	}
 
 	log.Debug().
@@ -242,7 +243,8 @@ func (c *Core) Run() {
 	)
 	go speaker.Play(chassisStreamer)
 
-	ticker60fps := time.NewTicker((1000 / 120) * time.Millisecond)
+	ticker120fps := time.NewTicker((1000 / 120) * time.Millisecond)
+	ticker60fps := time.NewTicker((1000 / 60) * time.Millisecond)
 	ticker15fps := time.NewTicker((1000 / 15) * time.Millisecond)
 
 	c.log.Info().Str("component", "core").Str("result", "success").Msg("main loop started")
@@ -251,10 +253,11 @@ func (c *Core) Run() {
 		select {
 		case <-c.done:
 			return
-		case <-ticker60fps.C:
-			go c.sendWebTelemetry()
+		case <-ticker120fps.C:
 			c.physicsEvents()
+		case <-ticker60fps.C:
 			c.checkSessionComplete()
+			c.sendWebTelemetry()
 		case <-ticker15fps.C:
 			c.updateDisplay()
 		}
@@ -266,6 +269,8 @@ func (c *Core) Close() {
 }
 
 func (c *Core) physicsEvents() {
+	startTime := time.Now()
+
 	seq := c.gt.Telemetry.SequenceID()
 
 	// Do nothing until the sequence ID advances
@@ -350,18 +355,24 @@ func (c *Core) physicsEvents() {
 	c.processHaptics(seqDelta)
 
 	c.seq = seq
+	c.physics.Current.ComputeTime = time.Since(startTime)
 	c.physics.Last = c.physics.Current
+
+	if c.physics.Current.ComputeTime.Microseconds() > 16000 {
+		c.log.Warn().Float64("ms", float64(c.physics.Current.ComputeTime.Milliseconds())).Msg("slow copmute")
+	}
+
 }
 
 func (c *Core) processHaptics(seqDelta uint32) {
-	windowMilliseconds := (float64(seqDelta) / frameRate)
-
-	c.physics.Update(windowMilliseconds, c.gt)
-
 	// no haptics if sequence ID has not advanced
 	if seqDelta < 1 {
 		return
 	}
+
+	windowMilliseconds := (float64(seqDelta) / frameRate)
+
+	c.physics.Update(windowMilliseconds, c.gt)
 
 	// no haptics if telemetry packets dropped/missed
 	if seqDelta > 1 {
@@ -378,26 +389,54 @@ func (c *Core) processHaptics(seqDelta uint32) {
 func (c *Core) generateBump() {
 	startTime := time.Now()
 
-	pulseWidth := c.config.Synthesizer.PulseWidthMax
+	// pulseWidth := c.config.Synthesizer.PulseWidthMax
 
 	snap := signal.LargestMagnitude(c.physics.Current.Velocity.Snap, (c.physics.Current.Attitude.Snap * 100))
 
-	pulseWidthReduction := signal.Abs(signal.Scale(snap, 1/800.0))
-	pulseWidth -= pulseWidthReduction
+	pulseFrequencyScaler := signal.Abs(signal.Exponent(snap, c.config.GetSnapExponent()))
+	pulseFrequencyScaler = signal.Scale(pulseFrequencyScaler, c.config.GetSnapScale())
+	pulseFrequencyHz := (c.config.Synthesizer.PulseMaxFrequencyHz - c.config.Synthesizer.PulseMinFrequencyHz) * pulseFrequencyScaler
 
-	if pulseWidth < c.config.Synthesizer.PulseWidthMin {
-		pulseWidth = c.config.Synthesizer.PulseWidthMin
+	if pulseFrequencyHz < c.config.Synthesizer.PulseMinFrequencyHz {
+		c.log.Debug().
+			Float64("frequency", pulseFrequencyHz).
+			Msg("floor")
+		pulseFrequencyHz = c.config.Synthesizer.PulseMinFrequencyHz
+	} else if pulseFrequencyHz > c.config.Synthesizer.PulseMaxFrequencyHz {
+		c.log.Debug().
+			Float64("frequency", pulseFrequencyHz).
+			Msg("ceiling")
+		pulseFrequencyHz = c.config.Synthesizer.PulseMaxFrequencyHz
 	}
-	sig := signal.LargestMagnitude(c.physics.Current.Velocity.Jerk, (c.physics.Current.Attitude.Jerk * 50))
-	pulseAmplitude := signal.Exponent(sig, c.config.Synthesizer.PulseExponent)
-	pulseAmplitude = signal.Scale(pulseAmplitude, c.config.Synthesizer.PulseScaleAdjustment)
 
-	pulseFrequency := int(math.Round(float64(c.config.Synthesizer.SampleRateHz) / (2 * pulseWidth)))
+	pulseWidth := math.Round(float64(c.config.Synthesizer.SampleRateHz) / (2 * pulseFrequencyHz))
+
+	// pulseWidthRange := c.config.Synthesizer.PulseWidthMax - c.config.Synthesizer.PulseWidthMin
+	// pulseWidthExp := signal.Abs(signal.Exponent(snap, c.config.GetSnapExponent()))
+	// pulseWidthScaled := signal.Scale(pulseWidthExp, c.config.GetSnapScale())
+	// pulseWidth := c.config.Synthesizer.PulseWidthMax - (pulseWidthRange * pulseWidthScaled)
+
+	// if pulseWidth < c.config.Synthesizer.PulseWidthMin {
+	// 	c.log.Debug().
+	// 		Float64("pulseWidth", pulseWidth).
+	// 		Msg("floor")
+	// 	pulseWidth = c.config.Synthesizer.PulseWidthMin
+	// }
+	// pulseFrequencyHz := int(math.Round(float64(c.config.Synthesizer.SampleRateHz) / (2 * pulseWidth)))
+
+	sig := signal.LargestMagnitude(c.physics.Current.Velocity.Jerk, (c.physics.Current.Attitude.Jerk * 60))
+	pulseAmplitude := signal.Exponent(sig, c.config.GetJerkExponent())
+	pulseAmplitude = signal.Scale(pulseAmplitude, c.config.GetJerkScale())
 
 	p1 := pulseAmplitude
 	pulseAmplitude, wasLimited := signal.Limit(pulseAmplitude, c.config.Synthesizer.PulseMaxAmplitude)
 	if wasLimited {
-		c.log.Info().Float64("pulse", p1).Int("frequency", pulseFrequency).Msg("limiter")
+		// 	pulseFrequency := int(math.Round(float64(c.config.Synthesizer.SampleRateHz) / (2 * pulseWidth)))
+		// 	c.log.Info().Float64("pulse", p1).Int("frequency", pulseFrequency).Msg("limiter")
+
+		// 	pulseWidth = 100 // FIXME: get value from config
+		// c.log.Debug().Float64("pulse", p1).Int("frequency", 40).Msg("limiter")
+		c.log.Debug().Float64("pulse", p1).Msg("limiter")
 	}
 
 	waveOffset := pulseWidth / 2
@@ -435,7 +474,7 @@ func (c *Core) generateBump() {
 	c.physics.Current.SynthOutputAmplitude = pulseAmplitude
 
 	c.physics.Last.SynthOutputFrequency = c.physics.Current.SynthOutputFrequency
-	c.physics.Current.SynthOutputFrequency = pulseFrequency
+	c.physics.Current.SynthOutputFrequency = int(pulseFrequencyHz)
 
 	if pulseAmplitude > 1.0 || pulseAmplitude < -1.0 {
 		c.log.Debug().
@@ -556,7 +595,7 @@ func (c *Core) checkSessionComplete() {
 func (c *Core) handleWebSocketConnection(w http.ResponseWriter, r *http.Request) {
 	ws, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		c.log.Error().Msgf("Error upgrading to WebSocket: %s", err)
+		c.log.Error().Str("component", "websocket").Msgf("error upgrading connection: %s", err)
 		return
 	}
 	defer ws.Close()
@@ -564,13 +603,25 @@ func (c *Core) handleWebSocketConnection(w http.ResponseWriter, r *http.Request)
 	c.webSocketClients++
 	defer func() {
 		c.webSocketClients--
-		c.log.Info().Int("clients", c.webSocketClients).Msg("websocket connection closed")
+		c.log.Info().Str("component", "websocket").Int("clients", c.webSocketClients).Msg("connection closed")
 	}()
-	c.log.Info().Int("clients", c.webSocketClients).Msg("websocket connection established")
+	c.log.Info().Str("component", "websocket").Int("clients", c.webSocketClients).Msg("connection established")
 
+	sid := 0
 	for {
 		select {
 		case data := <-c.chartDataChannel:
+			if sid != 0 {
+				diff := int(data["seq"]) - sid
+				if diff == 0 {
+					continue
+				} else if diff > 1 {
+					c.log.Debug().Str("component", "websocket").Int("dropped", diff-1).Msg("webchart missed packets")
+				}
+			}
+
+			sid = int(data["seq"])
+
 			encodedData, err := json.Marshal(data)
 			if err != nil {
 				c.log.Error().Err(err).Msg("failed to encode data")
@@ -578,7 +629,7 @@ func (c *Core) handleWebSocketConnection(w http.ResponseWriter, r *http.Request)
 			}
 			err = ws.WriteMessage(websocket.TextMessage, encodedData)
 			if err != nil {
-				c.log.Error().Err(err).Msg("failed to send data over WebSocket")
+				c.log.Error().Err(err).Str("component", "websocket").Msg("failed to send data")
 				continue
 			}
 		}
@@ -602,8 +653,16 @@ func (c *Core) sendWebTelemetry() {
 		return
 	}
 
+	if c.physics.Current.SequenceID == c.webSequenceId {
+		c.log.Debug().Str("component", "websocket").Msg("no new data")
+		return
+	}
+
+	c.webSequenceId = c.physics.Current.SequenceID
+
 	go func() {
 		c.chartDataChannel <- map[string]float32{
+			"seq":                  float32(c.seq),
 			"timeOfDay":            float32(c.gt.Telemetry.TimeOfDay().Milliseconds()),
 			"throttle":             c.gt.Telemetry.ThrottlePercent(),
 			"brake":                c.gt.Telemetry.BrakePercent(),
@@ -618,6 +677,7 @@ func (c *Core) sendWebTelemetry() {
 			"attitudeJerk":         float32(c.physics.Current.Attitude.Jerk * 50),
 			"synthOutputAmplitude": float32(c.physics.Current.SynthOutputAmplitude),
 			"synthOutputFrequency": float32(c.physics.Current.SynthOutputFrequency),
+			"computeTime":          float32(c.physics.Last.ComputeTime.Microseconds()),
 		}
 	}()
 }
