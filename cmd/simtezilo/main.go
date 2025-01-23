@@ -24,35 +24,23 @@ func main() {
 
 	go func() {
 		sig := <-sigs
-		fmt.Printf("Received %v signal, shutting down\n", sig)
+		log.Printf("Received %v signal, shutting down\n", sig)
 		done <- true
 	}()
 
-	var assetDir string
-	var gain float64
 	var logLevel string
-	var orientation int
-	var hardware string
-	var profilingEnabled bool
-	var replayMode bool
-	var source string
+	// var profilingEnabled bool
 	var webEnabled bool
 
-	flag.StringVar(&assetDir, "a", "./assets", "Path to the assets directory. Default is './assets'")
-	flag.Float64Var(&gain, "g", -14.5, "Gain in decibels. Default is -14.5")
-	flag.StringVar(&logLevel, "l", "warn", "Log level. Default is 'warn'")
-	flag.IntVar(&orientation, "o", 0, "Display orientation. [*0, 90, 180, 270] degrees")
-	flag.StringVar(&hardware, "h", "none", "Enable RPi hardware HAT. [pirateaudio, waveshare, *none]")
-	flag.BoolVar(&profilingEnabled, "profiling", false, "Enable profiling. Default is false")
-	flag.BoolVar(&replayMode, "r", false, "Output haptics for replays as well as live sessions. Default is false")
-	flag.StringVar(&source, "s", "udp://255.255.255.255:33739", "Telemetry data source. Default is udp://255.255.255.255:33739")
+	flag.StringVar(&logLevel, "l", "", "Log level. Default is 'warn'")
+	// flag.BoolVar(&profilingEnabled, "profiling", false, "Enable profiling. Default is false")
 	flag.BoolVar(&webEnabled, "w", false, "Enable web server. Default is false")
 	flag.Parse()
 
 	if BuildTime == "" {
 		BuildTime = time.Now().Format("2006-01-02_15:04:05")
 	}
-	log.Printf("Simtezilo version %s (built %s)\n", Version, BuildTime)
+	fmt.Printf("Simtezilo version %s (built %s)\n", Version, BuildTime)
 
 	profiler, err := internal.NewPyroscopeProfiler(
 		"http://10.255.1.128:4040",
@@ -66,19 +54,19 @@ func main() {
 		log.Fatal("Error creating Pyroscope profiler: ", err)
 	}
 
-	if profilingEnabled {
-		err = profiler.Start()
-		if err != nil {
-			log.Fatal("Error starting Pyroscope profiler: ", err)
-		}
+	// if profilingEnabled {
+	// 	err = profiler.Start()
+	// 	if err != nil {
+	// 		log.Fatal("Error starting Pyroscope profiler: ", err)
+	// 	}
 
-		log.Println("Pyroscope profiler started with UI at " + profiler.Endpoint())
-	}
+	// 	log.Println("Pyroscope profiler started with UI at " + profiler.Endpoint())
+	// }
 
 	core, err := internal.NewCore(internal.CoreOptions{
-		Done:       done,
-		Gain:       gain,
 		BuildTime:  BuildTime,
+		Done:       done,
+		LogLevel:   logLevel,
 		Version:    Version,
 		WebEnabled: webEnabled,
 	})

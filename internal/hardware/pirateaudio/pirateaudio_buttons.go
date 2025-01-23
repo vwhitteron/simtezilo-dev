@@ -23,7 +23,7 @@ func SetupPirateAudioButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, c
 		// 	masterGain := synth.GetMasterGain()
 		// 	lcdDevice.ShowTextCentered(canvas, fmt.Sprintf("%0.2f dB", masterGain), volumeFontSize)
 
-		// 	log.Info().
+		// 	log.Debug().
 		// 		Str("button", "A").
 		// 		Str("action", "increase master gain").
 		// 		Float64("master_gain", masterGain).
@@ -38,7 +38,7 @@ func SetupPirateAudioButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, c
 		// 	masterGain := synth.GetMasterGain()
 		// 	lcdDevice.ShowTextCentered(canvas, fmt.Sprintf("%0.2f dB", masterGain), volumeFontSize)
 
-		// 	log.Info().
+		// 	log.Debug().
 		// 		Str("button", "B").
 		// 		Str("action", "decrease master gain").
 		// 		Float64("master_gain", masterGain).
@@ -52,7 +52,7 @@ func SetupPirateAudioButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, c
 			lcdDevice.PowerOn()
 			lcdDevice.ShowTextCentered(canvas, fmt.Sprintf("Jerk %d", profile), volumeFontSize)
 
-			log.Info().
+			log.Debug().
 				Str("button", "A").
 				Str("action", "next profile").
 				Str("type", "jerk").
@@ -67,7 +67,7 @@ func SetupPirateAudioButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, c
 			lcdDevice.PowerOn()
 			lcdDevice.ShowTextCentered(canvas, fmt.Sprintf("Jerk %d", profile), volumeFontSize)
 
-			log.Info().
+			log.Debug().
 				Str("button", "B").
 				Str("action", "previous profile").
 				Str("type", "jerk").
@@ -82,7 +82,7 @@ func SetupPirateAudioButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, c
 			lcdDevice.PowerOn()
 			lcdDevice.ShowTextCentered(canvas, fmt.Sprintf("Snap %d", profile), volumeFontSize)
 
-			log.Info().
+			log.Debug().
 				Str("button", "X").
 				Str("action", "next profile").
 				Str("type", "snap").
@@ -97,7 +97,7 @@ func SetupPirateAudioButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, c
 			lcdDevice.PowerOn()
 			lcdDevice.ShowTextCentered(canvas, fmt.Sprintf("Snap %d", profile), volumeFontSize)
 
-			log.Info().
+			log.Debug().
 				Str("button", "Y").
 				Str("action", "previous profile").
 				Str("type", "snap").
@@ -119,7 +119,7 @@ func SetupPirateAudioButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, c
 
 		// 	lcdDevice.Show(sprites[index])
 
-		// 	log.Info().
+		// 	log.Debug().
 		// 		Str("button", "X").
 		// 		Str("action", "show next sprite").
 		// 		Str("sprite", sprites[index]).
@@ -139,13 +139,13 @@ func SetupPirateAudioButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, c
 
 		// 	lcdDevice.Show(sprites[index])
 
-		// 	log.Info().
+		// 	log.Debug().
 		// 		Str("button", "X").
 		// 		Str("action", "show previous sprite").
 		// 		Str("sprite", sprites[index]).
 		// 		Msg("button press")
 		// })
 
-		log.Info().Str("component", "pirate audio buttons").Str("result", "success").Msg("button setup complete")
+		log.Debug().Str("component", "pirate audio buttons").Str("result", "success").Msg("button setup complete")
 	}
 }

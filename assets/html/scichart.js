@@ -120,7 +120,6 @@ async function initSciChart() {
 
         // Add an X and a Y Axis
         const xAxisGforce = new SciChart.NumericAxis(wasmContextGforce, { autoRange: SciChart.EAutoRange.Always });
-        // const yAxisGforce = new SciChart.NumericAxis(wasmContextGforce, { visibleRange: new SciChart.NumberRange(-1.1, 1.1) });
         const yAxisGforce = new SciChart.NumericAxis(wasmContextGforce, { autoRange: SciChart.EAutoRange.Always });
         sciChartSurfaceGforce.xAxes.add(xAxisGforce);
         sciChartSurfaceGforce.yAxes.add(yAxisGforce);
@@ -190,7 +189,6 @@ async function initSciChart() {
         // Add an X and a Y Axis
         const xAxisSnap = new SciChart.NumericAxis(wasmContextSnap, { autoRange: SciChart.EAutoRange.Always });
         const yAxisSnap = new SciChart.NumericAxis(wasmContextSnap, { autoRange: SciChart.EAutoRange.Always });
-        // const yAxisSnap = new SciChart.NumericAxis(wasmContextSnap, { visibleRange: new SciChart.NumberRange(0, 100) });
         sciChartSurfaceSnap.xAxes.add(xAxisSnap);
         sciChartSurfaceSnap.yAxes.add(yAxisSnap);
 
@@ -240,13 +238,11 @@ async function initSciChart() {
             xyDataSeriesSpeed.appendRange([i], [data.speed]);
             xyDataSeriesThrottle.appendRange([i], [data.throttle]);
             xyDataSeriesBrake.appendRange([i], [data.brake]);
-            // xyDataSeriesGforce.appendRange([i], [data.synthOutputAmplitude]);
-            xyDataSeriesGforce.appendRange([i], [data.synthOutputFrequency]);
+            xyDataSeriesGforce.appendRange([i], [data.synthOutputAmplitude]);
             xyDataSeriesJerk.appendRange([i], [data.jerk]);
             xyDataSeriesAttitudeJerk.appendRange([i], [data.attitudeJerk]);
             xyDataSeriesSnap.appendRange([i], [data.snap]);
             xyDataSeriesAttitudeSnap.appendRange([i], [data.attitudeSnap]);
-            // xyDataSeriesSnap.appendRange([i], [data.computeTime]);
 
             if (sciChartSurfaceRPM.zoomState !== SciChart.EZoomState.UserZooming) {
                 xAxisRPM.visibleRange = new SciChart.NumberRange(i - fifoCapacity, i);

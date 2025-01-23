@@ -34,8 +34,8 @@ type SynthProfile struct {
 type Synthesizer struct {
 	SampleRateHz         int
 	Profiles             []SynthProfile
-	JerkProfile          int
-	SnapProfile          int
+	ForceProfile         int
+	GrainProfile         int
 	PulseExponent        float64
 	PulseScaleAdjustment float64
 	PulseMaxAmplitude    float64
@@ -81,20 +81,24 @@ func NewConfig(filename string, log zerolog.Logger) *Config {
 		Synthesizer: Synthesizer{
 			SampleRateHz: 8000,
 			Profiles: []SynthProfile{
-				{
-					JerkExponent: 0.5,
-					JerkScale:    1,
-					SnapExponent: 0.5,
-					SnapScale:    1,
-				},
+				{JerkExponent: 0.475, JerkScale: 0.01748, SnapExponent: 0.475, SnapScale: 0.00455},
+				{JerkExponent: 0.450, JerkScale: 0.02168, SnapExponent: 0.450, SnapScale: 0.00618},
+				{JerkExponent: 0.425, JerkScale: 0.02681, SnapExponent: 0.425, SnapScale: 0.00838},
+				{JerkExponent: 0.400, JerkScale: 0.03312, SnapExponent: 0.400, SnapScale: 0.01137},
+				{JerkExponent: 0.375, JerkScale: 0.04098, SnapExponent: 0.375, SnapScale: 0.01543},
+				{JerkExponent: 0.350, JerkScale: 0.05077, SnapExponent: 0.350, SnapScale: 0.02093},
+				{JerkExponent: 0.325, JerkScale: 0.06280, SnapExponent: 0.325, SnapScale: 0.02840},
+				{JerkExponent: 0.300, JerkScale: 0.07768, SnapExponent: 0.300, SnapScale: 0.03853},
+				{JerkExponent: 0.275, JerkScale: 0.09614, SnapExponent: 0.275, SnapScale: 0.05228},
+				{JerkExponent: 0.250, JerkScale: 0.11895, SnapExponent: 0.250, SnapScale: 0.07094},
 			},
-			JerkProfile:          5,
-			SnapProfile:          5,
+			ForceProfile:         5,
+			GrainProfile:         5,
 			PulseExponent:        0.56,
 			PulseScaleAdjustment: 1 / 54,
 			PulseMaxAmplitude:    1,
-			PulseMaxFrequencyHz:  40,
-			PulseMinFrequencyHz:  23,
+			PulseMaxFrequencyHz:  60,
+			PulseMinFrequencyHz:  16,
 			PulseWidthMax:        0.5,
 			PulseWidthMin:        0.1,
 			MasterGain:           -15,
@@ -102,7 +106,12 @@ func NewConfig(filename string, log zerolog.Logger) *Config {
 			ChassisVolume:        100,
 			GearRaceVolume:       100,
 			GearStreetVolume:     50,
-			Eq:                   []float64{},
+			Eq: []float64{
+				1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, // 10-19Hz
+				1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, // 20-29Hz
+				1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, // 30-39Hz
+				1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, // 40-49Hz
+			},
 		},
 		Telemetry: Telemetry{
 			Source: "udp://255.255.255.255:33739",
@@ -149,7 +158,7 @@ func NewConfig(filename string, log zerolog.Logger) *Config {
 		}
 	}
 
-	log.Debug().Interface("config", c).Msg("config loaded")
+	// log.Debug().Interface("config", c).Msg("config loaded")
 
 	c.Synthesizer.PulseWidthMin = float64(c.Synthesizer.SampleRateHz) / (2 * c.Synthesizer.PulseMaxFrequencyHz)
 	c.Synthesizer.PulseWidthMax = float64(c.Synthesizer.SampleRateHz) / (2 * c.Synthesizer.PulseMinFrequencyHz)
@@ -185,14 +194,14 @@ func (c *Config) GetJerkProfile() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	return c.Synthesizer.JerkProfile
+	return c.Synthesizer.ForceProfile
 }
 
 func (c *Config) GetSnapProfile() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	return c.Synthesizer.SnapProfile
+	return c.Synthesizer.GrainProfile
 }
 
 // func (c *Config) SetProfile(profile int) bool {
@@ -212,42 +221,42 @@ func (c *Config) PreviousJerkProfile() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if c.Synthesizer.JerkProfile > 1 {
-		c.Synthesizer.JerkProfile--
+	if c.Synthesizer.ForceProfile > 1 {
+		c.Synthesizer.ForceProfile--
 	}
 
-	return c.Synthesizer.JerkProfile
+	return c.Synthesizer.ForceProfile
 }
 
 func (c *Config) NextJerkProfile() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if c.Synthesizer.JerkProfile < len(c.Synthesizer.Profiles) {
-		c.Synthesizer.JerkProfile++
+	if c.Synthesizer.ForceProfile < len(c.Synthesizer.Profiles) {
+		c.Synthesizer.ForceProfile++
 	}
 
-	return c.Synthesizer.JerkProfile
+	return c.Synthesizer.ForceProfile
 }
 
 func (c *Config) PreviousSnapProfile() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if c.Synthesizer.SnapProfile > 1 {
-		c.Synthesizer.SnapProfile--
+	if c.Synthesizer.GrainProfile > 1 {
+		c.Synthesizer.GrainProfile--
 	}
 
-	return c.Synthesizer.SnapProfile
+	return c.Synthesizer.GrainProfile
 }
 
 func (c *Config) NextSnapProfile() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if c.Synthesizer.SnapProfile < len(c.Synthesizer.Profiles) {
-		c.Synthesizer.SnapProfile++
+	if c.Synthesizer.GrainProfile < len(c.Synthesizer.Profiles) {
+		c.Synthesizer.GrainProfile++
 	}
 
-	return c.Synthesizer.SnapProfile
+	return c.Synthesizer.GrainProfile
 }

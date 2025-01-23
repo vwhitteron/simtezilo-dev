@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -15,7 +16,7 @@ var upgrader = websocket.Upgrader{
 
 func StartWebChartServer(core *Core) {
 	if !core.webEnabled {
-		core.log.Info().Str("component", "webchart").Msg("server disabled")
+		core.log.Debug().Str("component", "webchart").Msg("server disabled")
 
 		return
 	}
@@ -24,7 +25,8 @@ func StartWebChartServer(core *Core) {
 	http.HandleFunc("/js/scichart.js", createSciChartJSFunc(core.assetDir))
 	http.HandleFunc("/ws", core.handleWebSocketConnection)
 
-	core.log.Info().Str("component", "webchart").Msg("starting server on port 8080")
+	core.log.Debug().Str("component", "webchart").Msg("starting server on port 8080")
+	fmt.Printf("WebChart server started on port 8080\r\n")
 
 	err := http.ListenAndServe(":8080", nil)
 	if err != nil {

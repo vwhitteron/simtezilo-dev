@@ -21,7 +21,7 @@ func SetupWaveshareButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, log
 			masterGain := synth.GetMasterGain()
 			lcdDevice.ShowTextCentered(canvas, fmt.Sprintf("%0.0f db", masterGain), volumeFontSize)
 
-			log.Info().
+			log.Debug().
 				Str("button", "Up").
 				Str("action", "increase master gain").
 				Float64("master_gain", masterGain).
@@ -35,7 +35,7 @@ func SetupWaveshareButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, log
 			masterGain := synth.GetMasterGain()
 			lcdDevice.ShowTextCentered(canvas, fmt.Sprintf("%0.0f db", masterGain), volumeFontSize)
 
-			log.Info().
+			log.Debug().
 				Str("button", "Down").
 				Str("action", "decrease master gain").
 				Float64("master_gain", masterGain).
@@ -52,7 +52,7 @@ func SetupWaveshareButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, log
 
 			if index == 0 {
 				lcdDevice.PowerOn()
-				log.Info().
+				log.Debug().
 					Str("button", "Left").
 					Str("action", "backlight on").
 					Str("sprite", sprites[index]).
@@ -63,7 +63,7 @@ func SetupWaveshareButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, log
 
 			lcdDevice.Show(sprites[index])
 
-			log.Info().
+			log.Debug().
 				Str("button", "Left").
 				Str("action", "show next sprite").
 				Str("sprite", sprites[index]).
@@ -78,7 +78,7 @@ func SetupWaveshareButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, log
 
 			if index == -1 {
 				lcdDevice.PowerOff()
-				log.Info().
+				log.Debug().
 					Str("button", "Right").
 					Str("action", "backlight off").
 					Msg("button press")
@@ -88,7 +88,7 @@ func SetupWaveshareButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, log
 
 			lcdDevice.Show(sprites[index])
 
-			log.Info().
+			log.Debug().
 				Str("button", "Right").
 				Str("action", "show previous sprite").
 				Str("sprite", sprites[index]).
@@ -96,14 +96,14 @@ func SetupWaveshareButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, log
 		})
 
 		hardware.OnButtonCenterPressed(func() {
-			log.Info().
+			log.Debug().
 				Str("button", "Center").
 				Str("action", "None").
 				Msg("button press")
 		})
 
 		hardware.OnButtonOnePressed(func() {
-			log.Info().
+			log.Debug().
 				Str("button", "One").
 				Str("action", "None").
 				Msg("button press")
@@ -116,7 +116,7 @@ func SetupWaveshareButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, log
 			}
 
 			lcdDevice.SetOrientation(orientation)
-			log.Info().
+			log.Debug().
 				Str("button", "Two").
 				Str("action", "Rotate screen").
 				Str("orientation", fmt.Sprintf("%d", orientation)).
@@ -126,7 +126,7 @@ func SetupWaveshareButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, log
 		hardware.OnButtonThreePressed(func() {
 			lcdDevice.PowerOff()
 
-			log.Info().
+			log.Debug().
 				Str("button", "Three").
 				Str("action", "Exit").
 				Msg("button press")
@@ -134,6 +134,6 @@ func SetupWaveshareButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, log
 			// c.done <- true
 		})
 
-		log.Info().Str("component", "waveshare 14972 buttons").Str("result", "success").Msg("button setup complete")
+		log.Debug().Str("component", "waveshare 14972 buttons").Str("result", "success").Msg("button setup complete")
 	}
 }

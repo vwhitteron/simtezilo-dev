@@ -59,40 +59,71 @@ type Core struct {
 }
 
 type CoreOptions struct {
-	Done       chan bool
-	Gain       float64
 	BuildTime  string
+	Done       chan bool
+	LogLevel   string
 	Version    string
 	WebEnabled bool
 }
 
 func NewCore(opts CoreOptions) (*Core, error) {
-	log := zerolog.New(os.Stderr).With().Timestamp().Logger()
+	var logLevel zerolog.Level
+
+	switch opts.LogLevel {
+	case "trace":
+		logLevel = zerolog.TraceLevel
+	case "debug":
+		logLevel = zerolog.DebugLevel
+	case "info":
+		logLevel = zerolog.InfoLevel
+	case "warn":
+		logLevel = zerolog.WarnLevel
+	case "error":
+		logLevel = zerolog.ErrorLevel
+	case "fatal":
+		logLevel = zerolog.FatalLevel
+	case "panic":
+		logLevel = zerolog.PanicLevel
+	case "off":
+		logLevel = zerolog.Disabled
+	case "":
+		logLevel = zerolog.WarnLevel
+	default:
+		logLevel = zerolog.WarnLevel
+		fmt.Printf("invalid log level parameter %q, setting level to warn", opts.LogLevel)
+	}
+
+	log := zerolog.New(os.Stderr).With().Timestamp().Logger().Level(logLevel)
 
 	config := config.NewConfig("simtezilo.conf", log)
 
-	switch config.App.LogLevel {
-	case "trace":
-		zerolog.SetGlobalLevel(zerolog.TraceLevel)
-	case "debug":
-		zerolog.SetGlobalLevel(zerolog.DebugLevel)
-	case "info":
-		zerolog.SetGlobalLevel(zerolog.InfoLevel)
-	case "warn":
-		zerolog.SetGlobalLevel(zerolog.WarnLevel)
-	case "error":
-		zerolog.SetGlobalLevel(zerolog.ErrorLevel)
-	case "fatal":
-		zerolog.SetGlobalLevel(zerolog.FatalLevel)
-	case "panic":
-		zerolog.SetGlobalLevel(zerolog.PanicLevel)
-	case "off":
-		zerolog.SetGlobalLevel(zerolog.Disabled)
-	default:
-		config.App.LogLevel = "warn"
-		zerolog.SetGlobalLevel(zerolog.WarnLevel)
-		log.Warn().Str("log_level", config.App.LogLevel).Msg("unknown log level, setting level to warn")
+	if opts.LogLevel == "" {
+		switch config.App.LogLevel {
+		case "trace":
+			logLevel = zerolog.TraceLevel
+		case "debug":
+			logLevel = zerolog.DebugLevel
+		case "info":
+			logLevel = zerolog.InfoLevel
+		case "warn":
+			logLevel = zerolog.WarnLevel
+		case "error":
+			logLevel = zerolog.ErrorLevel
+		case "fatal":
+			logLevel = zerolog.FatalLevel
+		case "panic":
+			logLevel = zerolog.PanicLevel
+		case "off":
+			logLevel = zerolog.Disabled
+		default:
+			logLevel = zerolog.WarnLevel
+			log.Error().Str("configured", config.App.LogLevel).Str("fallback", "warn").Msg("invalid log level")
+		}
 	}
+
+	log = log.Level(logLevel)
+
+	log.Info().Str("Level", logLevel.String()).Msg("log level")
 
 	appInfo := appInfo{
 		BuildTime: opts.BuildTime,
@@ -136,7 +167,7 @@ func NewCore(opts CoreOptions) (*Core, error) {
 
 			return nil, err
 		}
-		log.Info().
+		log.Debug().
 			Str("component", "pirate audio display").
 			Str("result", "success").
 			Msg("init")
@@ -199,7 +230,7 @@ func NewCore(opts CoreOptions) (*Core, error) {
 		return nil, err
 	}
 
-	log.Info().
+	log.Debug().
 		Str("component", "core").
 		Str("result", "success").
 		Msg("init")
@@ -247,7 +278,7 @@ func (c *Core) Run() {
 	ticker60fps := time.NewTicker((1000 / 60) * time.Millisecond)
 	ticker15fps := time.NewTicker((1000 / 15) * time.Millisecond)
 
-	c.log.Info().Str("component", "core").Str("result", "success").Msg("main loop started")
+	c.log.Debug().Str("component", "core").Str("result", "success").Msg("main loop started")
 
 	for {
 		select {
@@ -331,7 +362,7 @@ func (c *Core) physicsEvents() {
 		c.resetState(seq, currentGear)
 		c.silenceHaptics()
 
-		c.log.Info().
+		c.log.Debug().
 			Uint32("sequence_id", seq).
 			Str("time_of_day_delta", fmt.Sprintf("%s", timeOfDayDelta)).
 			Msg("time of day reset")
@@ -359,7 +390,7 @@ func (c *Core) physicsEvents() {
 	c.physics.Last = c.physics.Current
 
 	if c.physics.Current.ComputeTime.Microseconds() > 16000 {
-		c.log.Warn().Float64("ms", float64(c.physics.Current.ComputeTime.Milliseconds())).Msg("slow copmute")
+		c.log.Warn().Float64("ms", float64(c.physics.Current.ComputeTime.Milliseconds())).Msg("slow compute")
 	}
 
 }
@@ -432,7 +463,7 @@ func (c *Core) generateBump() {
 	pulseAmplitude, wasLimited := signal.Limit(pulseAmplitude, c.config.Synthesizer.PulseMaxAmplitude)
 	if wasLimited {
 		// 	pulseFrequency := int(math.Round(float64(c.config.Synthesizer.SampleRateHz) / (2 * pulseWidth)))
-		// 	c.log.Info().Float64("pulse", p1).Int("frequency", pulseFrequency).Msg("limiter")
+		// 	c.log.Debug().Float64("pulse", p1).Int("frequency", pulseFrequency).Msg("limiter")
 
 		// 	pulseWidth = 100 // FIXME: get value from config
 		// c.log.Debug().Float64("pulse", p1).Int("frequency", 40).Msg("limiter")
@@ -458,14 +489,14 @@ func (c *Core) generateBump() {
 
 		if c.physics.Current.TransmissionGear != c.physics.Last.TransmissionGear {
 			c.synth.PlayEffect("gearchange")
-			c.log.Info().
+			c.log.Debug().
 				Int("sequence_id", int(c.seq)).
 				Int("gear", c.physics.Current.TransmissionGear).
 				Msg("gear change")
 		}
 
 	} else {
-		c.log.Info().
+		c.log.Debug().
 			Int("sequence_id", int(c.seq)).
 			Msg("no gear")
 	}
@@ -493,7 +524,7 @@ func (c *Core) generateBump() {
 
 func (c *Core) sessionHasReset(seq uint32) bool {
 	if c.gt.Telemetry.Flags().Loading == true {
-		c.log.Info().
+		c.log.Debug().
 			Uint32("sequence_id", seq).
 			Msg("loading flag detected")
 
@@ -557,12 +588,19 @@ func (c *Core) updateVehicle(currentVehicleID uint32, currentGear int) {
 	vehicleType := c.gt.Telemetry.VehicleType()
 	c.vehicleID = currentVehicleID
 
-	c.log.Info().
+	c.log.Debug().
 		Uint32("ID", currentVehicleID).
 		Str("manufacturer", c.gt.Telemetry.VehicleManufacturer()).
 		Str("model", c.gt.Telemetry.VehicleModel()).
 		Str("type", vehicleType).
 		Msg("vehicle updated")
+
+	fmt.Printf("Vehicle: %s %s [Type: %s ID: %-4d]\r\n",
+		c.gt.Telemetry.VehicleManufacturer(),
+		c.gt.Telemetry.VehicleModel(),
+		vehicleType,
+		currentVehicleID,
+	)
 
 	var volume int
 	switch vehicleType {
@@ -576,7 +614,7 @@ func (c *Core) updateVehicle(currentVehicleID uint32, currentGear int) {
 	if err != nil {
 		c.log.Error().Err(err).Str("channel", "gear").Msg("failed to set volume")
 	}
-	c.log.Info().
+	c.log.Debug().
 		Str("channel", "gear").
 		Int("volume", volume).
 		Msg("volume set")
@@ -587,7 +625,7 @@ func (c *Core) updateVehicle(currentVehicleID uint32, currentGear int) {
 func (c *Core) checkSessionComplete() {
 	if c.gt.Finished {
 		c.resetState(0, NullGear)
-		c.log.Info().Msg("session finished")
+		c.log.Debug().Msg("session finished")
 		c.done <- true
 	}
 }
@@ -603,9 +641,9 @@ func (c *Core) handleWebSocketConnection(w http.ResponseWriter, r *http.Request)
 	c.webSocketClients++
 	defer func() {
 		c.webSocketClients--
-		c.log.Info().Str("component", "websocket").Int("clients", c.webSocketClients).Msg("connection closed")
+		c.log.Debug().Str("component", "websocket").Int("clients", c.webSocketClients).Msg("connection closed")
 	}()
-	c.log.Info().Str("component", "websocket").Int("clients", c.webSocketClients).Msg("connection established")
+	c.log.Debug().Str("component", "websocket").Int("clients", c.webSocketClients).Msg("connection established")
 
 	sid := 0
 	for {
