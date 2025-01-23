@@ -52,7 +52,7 @@ func (b *Buffer) Write(channel string, samples []float64) {
 	}
 
 	if channel == "gear" {
-		b.log.Info().Float64("volume", volume).Str("channel", channel).Msg("writing sample to channel")
+		b.log.Debug().Float64("volume", volume).Str("channel", channel).Msg("writing sample to channel")
 	}
 
 	b.writeAGC(samples, volume)

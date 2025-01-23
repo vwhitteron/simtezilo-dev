@@ -9,7 +9,8 @@ import (
 )
 
 type Mixer struct {
-	Master float64
+	Master        float64
+	gainIncrement float64
 
 	channels map[string]float64
 
@@ -20,10 +21,11 @@ type Mixer struct {
 	logger zerolog.Logger
 }
 
-func NewMixer(gain float64, logger zerolog.Logger) *Mixer {
+func NewMixer(gain float64, gainIncrement float64, logger zerolog.Logger) *Mixer {
 	return &Mixer{
-		Master: gain,
-		output: gain,
+		Master:        gain,
+		gainIncrement: gainIncrement,
+		output:        gain,
 
 		fader: -30,
 
@@ -74,8 +76,8 @@ func (m *Mixer) GetChannelVolume(name string) (float64, error) {
 	return m.channels[name], nil
 }
 
-func (m *Mixer) MasterDecrease(increment float64) {
-	m.Master -= increment
+func (m *Mixer) MasterDecrease() {
+	m.Master -= m.gainIncrement
 
 	// don't adjust the fader or streamer if currently silenced or fading in
 	if m.fadeInActive {
@@ -88,8 +90,8 @@ func (m *Mixer) MasterDecrease(increment float64) {
 	m.logger.Debug().Float64("master", m.Master).Float64("streamer", m.output).Str("state", "decrease").Msg("master volume")
 }
 
-func (m *Mixer) MasterIncrease(increment float64) {
-	m.Master += increment
+func (m *Mixer) MasterIncrease() {
+	m.Master += m.gainIncrement
 
 	m.logger.Debug().Float64("master", m.Master).Float64("streamer", m.output).Str("state", "increase").Msg("master volume")
 

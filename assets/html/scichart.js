@@ -1,6 +1,6 @@
 async function initSciChart() {
     const socket = new WebSocket('ws://' + location.host + '/ws');
-    const fifoCapacity = 400;
+    const fifoCapacity = 200;
 
     SciChart.SciChartSurface.UseCommunityLicense()
 
@@ -16,7 +16,7 @@ async function initSciChart() {
         const {
             sciChartSurface: sciChartSurfaceRPM,
             wasmContext: wasmContextRPM
-        } = await SciChart.SciChartSurface.create("scichart-root-1");
+        } = await SciChart.SciChartSurface.create("scichart-root-1", {title: "RPM", titleStyle: {fontSize: "16"}});
 
         sciChartSurfaceRPM.chartModifiers.add(new SciChart.ZoomExtentsModifier({isAnimated: false}));
         sciChartSurfaceRPM.chartModifiers.add(new SciChart.RubberBandXyZoomModifier());
@@ -48,7 +48,7 @@ async function initSciChart() {
         const {
             sciChartSurface: sciChartSurfaceSpeed,
             wasmContext: wasmContextSpeed
-        } = await SciChart.SciChartSurface.create("scichart-root-2");
+        } = await SciChart.SciChartSurface.create("scichart-root-2", {title: "Speed", titleStyle: {fontSize: "16"}});
 
         //   Add Speed X and Y axis
         const xAxisSpeed = new SciChart.NumericAxis(wasmContextSpeed, { autoRange: SciChart.EAutoRange.Always });
@@ -77,7 +77,7 @@ async function initSciChart() {
         const {
             sciChartSurface: sciChartSurfaceThrottleBrake,
             wasmContext: wasmContextThrottleBrake
-        } = await SciChart.SciChartSurface.create("scichart-root-3");
+        } = await SciChart.SciChartSurface.create("scichart-root-3", {title: "Throttle / Brake", titleStyle: {fontSize: "16"}});
 
 
         // Add an X and a Y Axis
@@ -115,12 +115,12 @@ async function initSciChart() {
         const {
             sciChartSurface: sciChartSurfaceGforce,
             wasmContext: wasmContextGforce
-        } = await SciChart.SciChartSurface.create("scichart-root-4");
-
+        } = await SciChart.SciChartSurface.create("scichart-root-4", {title: "G-Force", titleStyle: {fontSize: "16"}});
+ 6
 
         // Add an X and a Y Axis
         const xAxisGforce = new SciChart.NumericAxis(wasmContextGforce, { autoRange: SciChart.EAutoRange.Always });
-        const yAxisGforce = new SciChart.NumericAxis(wasmContextGforce, { visibleRange: new SciChart.NumberRange(-1.1, 1.1) });
+        const yAxisGforce = new SciChart.NumericAxis(wasmContextGforce, { autoRange: SciChart.EAutoRange.Always });
         sciChartSurfaceGforce.xAxes.add(xAxisGforce);
         sciChartSurfaceGforce.yAxes.add(yAxisGforce);
 
@@ -143,7 +143,7 @@ async function initSciChart() {
         const {
             sciChartSurface: sciChartSurfaceJerk,
             wasmContext: wasmContextJerk
-        } = await SciChart.SciChartSurface.create("scichart-root-5");
+        } = await SciChart.SciChartSurface.create("scichart-root-5", {title: "Jerk", titleStyle: {fontSize: "16"}});
 
 
         // Add an X and a Y Axis
@@ -183,7 +183,7 @@ async function initSciChart() {
         const {
             sciChartSurface: sciChartSurfaceSnap,
             wasmContext: wasmContextSnap
-        } = await SciChart.SciChartSurface.create("scichart-root-6");
+        } = await SciChart.SciChartSurface.create("scichart-root-6", {title: "Snap", titleStyle: {fontSize: "16"}});
 
 
         // Add an X and a Y Axis
@@ -198,12 +198,22 @@ async function initSciChart() {
             isSorted: true,
             containsNaN: false
         });
+        const xyDataSeriesAttitudeSnap = new SciChart.XyDataSeries(wasmContextSnap, {
+            fifoCapacity: fifoCapacity,
+            isSorted: true,
+            containsNaN: false
+        });
 
         // Create a renderableSeries and assign the dataSeries
         sciChartSurfaceSnap.renderableSeries.add(new SciChart.FastLineRenderableSeries(wasmContextSnap, {
             dataSeries: xyDataSeriesSnap,
             strokeThickness: 3,
             stroke: "#50C7E0"
+        }));
+        sciChartSurfaceSnap.renderableSeries.add(new SciChart.FastLineRenderableSeries(wasmContextSnap, {
+            dataSeries: xyDataSeriesAttitudeSnap,
+            strokeThickness: 3,
+            stroke: "#C750E0"
         }));
 
 
@@ -228,10 +238,11 @@ async function initSciChart() {
             xyDataSeriesSpeed.appendRange([i], [data.speed]);
             xyDataSeriesThrottle.appendRange([i], [data.throttle]);
             xyDataSeriesBrake.appendRange([i], [data.brake]);
-            xyDataSeriesGforce.appendRange([i], [data.output]);
+            xyDataSeriesGforce.appendRange([i], [data.synthOutputAmplitude]);
             xyDataSeriesJerk.appendRange([i], [data.jerk]);
             xyDataSeriesAttitudeJerk.appendRange([i], [data.attitudeJerk]);
             xyDataSeriesSnap.appendRange([i], [data.snap]);
+            xyDataSeriesAttitudeSnap.appendRange([i], [data.attitudeSnap]);
 
             if (sciChartSurfaceRPM.zoomState !== SciChart.EZoomState.UserZooming) {
                 xAxisRPM.visibleRange = new SciChart.NumberRange(i - fifoCapacity, i);

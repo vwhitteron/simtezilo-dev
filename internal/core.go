@@ -55,43 +55,75 @@ type Core struct {
 	vehicleID        uint32
 	webEnabled       bool
 	webSocketClients int
+	webSequenceId    uint32
 }
 
 type CoreOptions struct {
-	Done       chan bool
-	Gain       float64
 	BuildTime  string
+	Done       chan bool
+	LogLevel   string
 	Version    string
 	WebEnabled bool
 }
 
 func NewCore(opts CoreOptions) (*Core, error) {
-	log := zerolog.New(os.Stderr).With().Timestamp().Logger()
+	var logLevel zerolog.Level
+
+	switch opts.LogLevel {
+	case "trace":
+		logLevel = zerolog.TraceLevel
+	case "debug":
+		logLevel = zerolog.DebugLevel
+	case "info":
+		logLevel = zerolog.InfoLevel
+	case "warn":
+		logLevel = zerolog.WarnLevel
+	case "error":
+		logLevel = zerolog.ErrorLevel
+	case "fatal":
+		logLevel = zerolog.FatalLevel
+	case "panic":
+		logLevel = zerolog.PanicLevel
+	case "off":
+		logLevel = zerolog.Disabled
+	case "":
+		logLevel = zerolog.WarnLevel
+	default:
+		logLevel = zerolog.WarnLevel
+		fmt.Printf("invalid log level parameter %q, setting level to warn", opts.LogLevel)
+	}
+
+	log := zerolog.New(os.Stderr).With().Timestamp().Logger().Level(logLevel)
 
 	config := config.NewConfig("simtezilo.conf", log)
 
-	switch config.App.LogLevel {
-	case "trace":
-		zerolog.SetGlobalLevel(zerolog.TraceLevel)
-	case "debug":
-		zerolog.SetGlobalLevel(zerolog.DebugLevel)
-	case "info":
-		zerolog.SetGlobalLevel(zerolog.InfoLevel)
-	case "warn":
-		zerolog.SetGlobalLevel(zerolog.WarnLevel)
-	case "error":
-		zerolog.SetGlobalLevel(zerolog.ErrorLevel)
-	case "fatal":
-		zerolog.SetGlobalLevel(zerolog.FatalLevel)
-	case "panic":
-		zerolog.SetGlobalLevel(zerolog.PanicLevel)
-	case "off":
-		zerolog.SetGlobalLevel(zerolog.Disabled)
-	default:
-		config.App.LogLevel = "warn"
-		zerolog.SetGlobalLevel(zerolog.WarnLevel)
-		log.Warn().Str("log_level", config.App.LogLevel).Msg("unknown log level, setting level to warn")
+	if opts.LogLevel == "" {
+		switch config.App.LogLevel {
+		case "trace":
+			logLevel = zerolog.TraceLevel
+		case "debug":
+			logLevel = zerolog.DebugLevel
+		case "info":
+			logLevel = zerolog.InfoLevel
+		case "warn":
+			logLevel = zerolog.WarnLevel
+		case "error":
+			logLevel = zerolog.ErrorLevel
+		case "fatal":
+			logLevel = zerolog.FatalLevel
+		case "panic":
+			logLevel = zerolog.PanicLevel
+		case "off":
+			logLevel = zerolog.Disabled
+		default:
+			logLevel = zerolog.WarnLevel
+			log.Error().Str("configured", config.App.LogLevel).Str("fallback", "warn").Msg("invalid log level")
+		}
 	}
+
+	log = log.Level(logLevel)
+
+	log.Info().Str("Level", logLevel.String()).Msg("log level")
 
 	appInfo := appInfo{
 		BuildTime: opts.BuildTime,
@@ -140,7 +172,9 @@ func NewCore(opts CoreOptions) (*Core, error) {
 			Str("result", "success").
 			Msg("init")
 
-		buttonsFn = pirateaudio.SetupPirateAudioButtons(lcdDevice, synthesizer, log)
+		lcdDevice.ShowTextCentered(image.NewRGBA(image.Rect(0, 0, 240, 240)), "Loading...", 16)
+
+		buttonsFn = pirateaudio.SetupPirateAudioButtons(lcdDevice, synthesizer, config, log)
 	case "waveshare":
 		var err error
 		lcdDevice, err = waveshare.NewWaveshare14972Display(waveshare.Waveshare14972LCDOpts{
@@ -171,7 +205,7 @@ func NewCore(opts CoreOptions) (*Core, error) {
 			Str("result", "success").
 			Msg("init")
 
-		buttonsFn = nulldevice.SetupNullDeviceButtons(synthesizer, opts.Done, log)
+		buttonsFn = nulldevice.SetupNullDeviceButtons(synthesizer, config, opts.Done, log)
 	}
 
 	log.Debug().
@@ -196,7 +230,7 @@ func NewCore(opts CoreOptions) (*Core, error) {
 		return nil, err
 	}
 
-	log.Info().
+	log.Debug().
 		Str("component", "core").
 		Str("result", "success").
 		Msg("init")
@@ -240,19 +274,21 @@ func (c *Core) Run() {
 	)
 	go speaker.Play(chassisStreamer)
 
-	ticker60fps := time.NewTicker((1000 / 120) * time.Millisecond)
+	ticker120fps := time.NewTicker((1000 / 120) * time.Millisecond)
+	ticker60fps := time.NewTicker((1000 / 60) * time.Millisecond)
 	ticker15fps := time.NewTicker((1000 / 15) * time.Millisecond)
 
-	c.log.Info().Str("component", "core").Str("result", "success").Msg("main loop started")
+	c.log.Debug().Str("component", "core").Str("result", "success").Msg("main loop started")
 
 	for {
 		select {
 		case <-c.done:
 			return
-		case <-ticker60fps.C:
-			go c.sendWebTelemetry()
+		case <-ticker120fps.C:
 			c.physicsEvents()
+		case <-ticker60fps.C:
 			c.checkSessionComplete()
+			c.sendWebTelemetry()
 		case <-ticker15fps.C:
 			c.updateDisplay()
 		}
@@ -264,6 +300,8 @@ func (c *Core) Close() {
 }
 
 func (c *Core) physicsEvents() {
+	startTime := time.Now()
+
 	seq := c.gt.Telemetry.SequenceID()
 
 	// Do nothing until the sequence ID advances
@@ -324,7 +362,7 @@ func (c *Core) physicsEvents() {
 		c.resetState(seq, currentGear)
 		c.silenceHaptics()
 
-		c.log.Info().
+		c.log.Debug().
 			Uint32("sequence_id", seq).
 			Str("time_of_day_delta", fmt.Sprintf("%s", timeOfDayDelta)).
 			Msg("time of day reset")
@@ -348,18 +386,24 @@ func (c *Core) physicsEvents() {
 	c.processHaptics(seqDelta)
 
 	c.seq = seq
+	c.physics.Current.ComputeTime = time.Since(startTime)
 	c.physics.Last = c.physics.Current
+
+	if c.physics.Current.ComputeTime.Microseconds() > 16000 {
+		c.log.Warn().Float64("ms", float64(c.physics.Current.ComputeTime.Milliseconds())).Msg("slow compute")
+	}
+
 }
 
 func (c *Core) processHaptics(seqDelta uint32) {
-	windowMilliseconds := (float64(seqDelta) / frameRate)
-
-	c.physics.Update(windowMilliseconds, c.gt)
-
 	// no haptics if sequence ID has not advanced
 	if seqDelta < 1 {
 		return
 	}
+
+	windowMilliseconds := (float64(seqDelta) / frameRate)
+
+	c.physics.Update(windowMilliseconds, c.gt)
 
 	// no haptics if telemetry packets dropped/missed
 	if seqDelta > 1 {
@@ -376,30 +420,54 @@ func (c *Core) processHaptics(seqDelta uint32) {
 func (c *Core) generateBump() {
 	startTime := time.Now()
 
-	pulseWidth := c.config.Synthesizer.PulseWidthMax
+	// pulseWidth := c.config.Synthesizer.PulseWidthMax
 
 	snap := signal.LargestMagnitude(c.physics.Current.Velocity.Snap, (c.physics.Current.Attitude.Snap * 100))
 
-	pulseWidthReduction := signal.Abs(signal.Scale(snap, 1/800.0))
-	pulseWidth -= pulseWidthReduction
+	pulseFrequencyScaler := signal.Abs(signal.Exponent(snap, c.config.GetSnapExponent()))
+	pulseFrequencyScaler = signal.Scale(pulseFrequencyScaler, c.config.GetSnapScale())
+	pulseFrequencyHz := (c.config.Synthesizer.PulseMaxFrequencyHz - c.config.Synthesizer.PulseMinFrequencyHz) * pulseFrequencyScaler
 
-	if pulseWidth < c.config.Synthesizer.PulseWidthMin {
-		pulseWidth = c.config.Synthesizer.PulseWidthMin
+	if pulseFrequencyHz < c.config.Synthesizer.PulseMinFrequencyHz {
+		c.log.Debug().
+			Float64("frequency", pulseFrequencyHz).
+			Msg("floor")
+		pulseFrequencyHz = c.config.Synthesizer.PulseMinFrequencyHz
+	} else if pulseFrequencyHz > c.config.Synthesizer.PulseMaxFrequencyHz {
+		c.log.Debug().
+			Float64("frequency", pulseFrequencyHz).
+			Msg("ceiling")
+		pulseFrequencyHz = c.config.Synthesizer.PulseMaxFrequencyHz
 	}
-	// exponent 0.5, scale 1/47.5 (1/57.0) - small bumps slightly too loud
-	// exponent 0.4, scale 1/29.75 (1/36.0) - best balance of small, med and large bumps
-	// log10, scale 0.08 - small bumps too loud
-	// log2, scale 0.025 - small bumps too loud
-	sig := signal.LargestMagnitude(c.physics.Current.Velocity.Jerk, (c.physics.Current.Attitude.Jerk * 50))
-	pulseAmplitude := signal.Exponent(sig, c.config.Synthesizer.PulseExponent)
-	pulseAmplitude = signal.Scale(pulseAmplitude, c.config.Synthesizer.PulseScaleAdjustment)
 
-	pulseFrequency := int(math.Round(float64(c.config.Synthesizer.SampleRateHz) / (2 * pulseWidth)))
+	pulseWidth := math.Round(float64(c.config.Synthesizer.SampleRateHz) / (2 * pulseFrequencyHz))
+
+	// pulseWidthRange := c.config.Synthesizer.PulseWidthMax - c.config.Synthesizer.PulseWidthMin
+	// pulseWidthExp := signal.Abs(signal.Exponent(snap, c.config.GetSnapExponent()))
+	// pulseWidthScaled := signal.Scale(pulseWidthExp, c.config.GetSnapScale())
+	// pulseWidth := c.config.Synthesizer.PulseWidthMax - (pulseWidthRange * pulseWidthScaled)
+
+	// if pulseWidth < c.config.Synthesizer.PulseWidthMin {
+	// 	c.log.Debug().
+	// 		Float64("pulseWidth", pulseWidth).
+	// 		Msg("floor")
+	// 	pulseWidth = c.config.Synthesizer.PulseWidthMin
+	// }
+	// pulseFrequencyHz := int(math.Round(float64(c.config.Synthesizer.SampleRateHz) / (2 * pulseWidth)))
+
+	sig := signal.LargestMagnitude(c.physics.Current.Velocity.Jerk, (c.physics.Current.Attitude.Jerk * 60))
+	pulseAmplitude := signal.Exponent(sig, c.config.GetJerkExponent())
+	pulseAmplitude = signal.Scale(pulseAmplitude, c.config.GetJerkScale())
 
 	p1 := pulseAmplitude
 	pulseAmplitude, wasLimited := signal.Limit(pulseAmplitude, c.config.Synthesizer.PulseMaxAmplitude)
 	if wasLimited {
-		c.log.Info().Float64("pulse", p1).Int("frequency", pulseFrequency).Msg("limiter")
+		// 	pulseFrequency := int(math.Round(float64(c.config.Synthesizer.SampleRateHz) / (2 * pulseWidth)))
+		// 	c.log.Debug().Float64("pulse", p1).Int("frequency", pulseFrequency).Msg("limiter")
+
+		// 	pulseWidth = 100 // FIXME: get value from config
+		// c.log.Debug().Float64("pulse", p1).Int("frequency", 40).Msg("limiter")
+		c.log.Debug().Float64("pulse", p1).Msg("limiter")
 	}
 
 	waveOffset := pulseWidth / 2
@@ -421,14 +489,14 @@ func (c *Core) generateBump() {
 
 		if c.physics.Current.TransmissionGear != c.physics.Last.TransmissionGear {
 			c.synth.PlayEffect("gearchange")
-			c.log.Info().
+			c.log.Debug().
 				Int("sequence_id", int(c.seq)).
 				Int("gear", c.physics.Current.TransmissionGear).
 				Msg("gear change")
 		}
 
 	} else {
-		c.log.Info().
+		c.log.Debug().
 			Int("sequence_id", int(c.seq)).
 			Msg("no gear")
 	}
@@ -437,7 +505,7 @@ func (c *Core) generateBump() {
 	c.physics.Current.SynthOutputAmplitude = pulseAmplitude
 
 	c.physics.Last.SynthOutputFrequency = c.physics.Current.SynthOutputFrequency
-	c.physics.Current.SynthOutputFrequency = pulseFrequency
+	c.physics.Current.SynthOutputFrequency = int(pulseFrequencyHz)
 
 	if pulseAmplitude > 1.0 || pulseAmplitude < -1.0 {
 		c.log.Debug().
@@ -456,7 +524,7 @@ func (c *Core) generateBump() {
 
 func (c *Core) sessionHasReset(seq uint32) bool {
 	if c.gt.Telemetry.Flags().Loading == true {
-		c.log.Info().
+		c.log.Debug().
 			Uint32("sequence_id", seq).
 			Msg("loading flag detected")
 
@@ -520,12 +588,19 @@ func (c *Core) updateVehicle(currentVehicleID uint32, currentGear int) {
 	vehicleType := c.gt.Telemetry.VehicleType()
 	c.vehicleID = currentVehicleID
 
-	c.log.Info().
+	c.log.Debug().
 		Uint32("ID", currentVehicleID).
 		Str("manufacturer", c.gt.Telemetry.VehicleManufacturer()).
 		Str("model", c.gt.Telemetry.VehicleModel()).
 		Str("type", vehicleType).
 		Msg("vehicle updated")
+
+	fmt.Printf("Vehicle: %s %s [Type: %s ID: %-4d]\r\n",
+		c.gt.Telemetry.VehicleManufacturer(),
+		c.gt.Telemetry.VehicleModel(),
+		vehicleType,
+		currentVehicleID,
+	)
 
 	var volume int
 	switch vehicleType {
@@ -539,7 +614,7 @@ func (c *Core) updateVehicle(currentVehicleID uint32, currentGear int) {
 	if err != nil {
 		c.log.Error().Err(err).Str("channel", "gear").Msg("failed to set volume")
 	}
-	c.log.Info().
+	c.log.Debug().
 		Str("channel", "gear").
 		Int("volume", volume).
 		Msg("volume set")
@@ -550,7 +625,7 @@ func (c *Core) updateVehicle(currentVehicleID uint32, currentGear int) {
 func (c *Core) checkSessionComplete() {
 	if c.gt.Finished {
 		c.resetState(0, NullGear)
-		c.log.Info().Msg("session finished")
+		c.log.Debug().Msg("session finished")
 		c.done <- true
 	}
 }
@@ -558,7 +633,7 @@ func (c *Core) checkSessionComplete() {
 func (c *Core) handleWebSocketConnection(w http.ResponseWriter, r *http.Request) {
 	ws, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		c.log.Error().Msgf("Error upgrading to WebSocket: %s", err)
+		c.log.Error().Str("component", "websocket").Msgf("error upgrading connection: %s", err)
 		return
 	}
 	defer ws.Close()
@@ -566,13 +641,25 @@ func (c *Core) handleWebSocketConnection(w http.ResponseWriter, r *http.Request)
 	c.webSocketClients++
 	defer func() {
 		c.webSocketClients--
-		c.log.Info().Int("clients", c.webSocketClients).Msg("websocket connection closed")
+		c.log.Debug().Str("component", "websocket").Int("clients", c.webSocketClients).Msg("connection closed")
 	}()
-	c.log.Info().Int("clients", c.webSocketClients).Msg("websocket connection established")
+	c.log.Debug().Str("component", "websocket").Int("clients", c.webSocketClients).Msg("connection established")
 
+	sid := 0
 	for {
 		select {
 		case data := <-c.chartDataChannel:
+			if sid != 0 {
+				diff := int(data["seq"]) - sid
+				if diff == 0 {
+					continue
+				} else if diff > 1 {
+					c.log.Debug().Str("component", "websocket").Int("dropped", diff-1).Msg("webchart missed packets")
+				}
+			}
+
+			sid = int(data["seq"])
+
 			encodedData, err := json.Marshal(data)
 			if err != nil {
 				c.log.Error().Err(err).Msg("failed to encode data")
@@ -580,7 +667,7 @@ func (c *Core) handleWebSocketConnection(w http.ResponseWriter, r *http.Request)
 			}
 			err = ws.WriteMessage(websocket.TextMessage, encodedData)
 			if err != nil {
-				c.log.Error().Err(err).Msg("failed to send data over WebSocket")
+				c.log.Error().Err(err).Str("component", "websocket").Msg("failed to send data")
 				continue
 			}
 		}
@@ -604,8 +691,16 @@ func (c *Core) sendWebTelemetry() {
 		return
 	}
 
+	if c.physics.Current.SequenceID == c.webSequenceId {
+		c.log.Debug().Str("component", "websocket").Msg("no new data")
+		return
+	}
+
+	c.webSequenceId = c.physics.Current.SequenceID
+
 	go func() {
 		c.chartDataChannel <- map[string]float32{
+			"seq":                  float32(c.seq),
 			"timeOfDay":            float32(c.gt.Telemetry.TimeOfDay().Milliseconds()),
 			"throttle":             c.gt.Telemetry.ThrottlePercent(),
 			"brake":                c.gt.Telemetry.BrakePercent(),
@@ -620,6 +715,7 @@ func (c *Core) sendWebTelemetry() {
 			"attitudeJerk":         float32(c.physics.Current.Attitude.Jerk * 50),
 			"synthOutputAmplitude": float32(c.physics.Current.SynthOutputAmplitude),
 			"synthOutputFrequency": float32(c.physics.Current.SynthOutputFrequency),
+			"computeTime":          float32(c.physics.Last.ComputeTime.Microseconds()),
 		}
 	}()
 }

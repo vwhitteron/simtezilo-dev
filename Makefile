@@ -19,9 +19,16 @@ buildtime := $(shell date -u '+%Y-%m-%d_%H:%M:%S')
 ## build/darwin/silicon: build the application for Apple Silicon
 .PHONY: build/darwin/silicon
 build/darwin/silicon:
-	@GOOS=darwin GOARCH=arm64 docker build \
-	--output=out --target=binaries --progress=plain 
-	-f build/docker/Dockerfile .
+	GOOS=darwin GOARCH=arm64 \
+	go build -ldflags "-X 'main.Version=$(buildversion)' -X 'main.BuildTime=$(buildtime)'" \
+	-o ./out/simtezilo-macos ./cmd/simtezilo/main.go
+
+## build/darwin/silicon: build the application for Apple Silicon
+.PHONY: build/windows/64
+build/windows/64:
+	GOOS=windows GOARCH=amd64 \
+	go build -ldflags "-X 'main.Version=${buildversion}' -X 'main.BuildTime=${buildtime}'" \
+	-o ./out/simtezilo.exe ./cmd/simtezilo/main.go
 
 ## build/rpi: build the application for Raspberry Pi using ARMHF (any version)
 .PHONY: build/rpi

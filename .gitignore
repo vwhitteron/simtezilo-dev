@@ -4,6 +4,9 @@
 # Build files
 out/
 
+# Distribution files
+dist/
+
 # Coverage reports
 *.out
 
