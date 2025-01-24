@@ -442,19 +442,6 @@ func (c *Core) generateBump() {
 
 	pulseWidth := math.Round(float64(c.config.Synthesizer.SampleRateHz) / (2 * pulseFrequencyHz))
 
-	// pulseWidthRange := c.config.Synthesizer.PulseWidthMax - c.config.Synthesizer.PulseWidthMin
-	// pulseWidthExp := signal.Abs(signal.Exponent(snap, c.config.GetSnapExponent()))
-	// pulseWidthScaled := signal.Scale(pulseWidthExp, c.config.GetSnapScale())
-	// pulseWidth := c.config.Synthesizer.PulseWidthMax - (pulseWidthRange * pulseWidthScaled)
-
-	// if pulseWidth < c.config.Synthesizer.PulseWidthMin {
-	// 	c.log.Debug().
-	// 		Float64("pulseWidth", pulseWidth).
-	// 		Msg("floor")
-	// 	pulseWidth = c.config.Synthesizer.PulseWidthMin
-	// }
-	// pulseFrequencyHz := int(math.Round(float64(c.config.Synthesizer.SampleRateHz) / (2 * pulseWidth)))
-
 	sig := signal.LargestMagnitude(c.physics.Current.Velocity.Jerk, (c.physics.Current.Attitude.Jerk * 60))
 	pulseAmplitude := signal.Exponent(sig, c.config.GetJerkExponent())
 	pulseAmplitude = signal.Scale(pulseAmplitude, c.config.GetJerkScale())
@@ -462,11 +449,6 @@ func (c *Core) generateBump() {
 	p1 := pulseAmplitude
 	pulseAmplitude, wasLimited := signal.Limit(pulseAmplitude, c.config.Synthesizer.PulseMaxAmplitude)
 	if wasLimited {
-		// 	pulseFrequency := int(math.Round(float64(c.config.Synthesizer.SampleRateHz) / (2 * pulseWidth)))
-		// 	c.log.Debug().Float64("pulse", p1).Int("frequency", pulseFrequency).Msg("limiter")
-
-		// 	pulseWidth = 100 // FIXME: get value from config
-		// c.log.Debug().Float64("pulse", p1).Int("frequency", 40).Msg("limiter")
 		c.log.Debug().Float64("pulse", p1).Msg("limiter")
 	}
 
@@ -486,7 +468,6 @@ func (c *Core) generateBump() {
 	}
 
 	if c.physics.Current.TransmissionGear != NullGear {
-
 		if c.physics.Current.TransmissionGear != c.physics.Last.TransmissionGear {
 			c.synth.PlayEffect("gearchange")
 			c.log.Debug().
@@ -494,7 +475,6 @@ func (c *Core) generateBump() {
 				Int("gear", c.physics.Current.TransmissionGear).
 				Msg("gear change")
 		}
-
 	} else {
 		c.log.Debug().
 			Int("sequence_id", int(c.seq)).
