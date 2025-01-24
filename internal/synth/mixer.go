@@ -58,6 +58,38 @@ func (m *Mixer) GetChannelNames() []string {
 	return names
 }
 
+func (m *Mixer) IncreaseChannelVolume(name string) (float64, error) {
+	if _, ok := m.channels[name]; !ok {
+		return 0, fmt.Errorf("channel %q does not exist", name)
+	}
+
+	volume := m.channels[name]
+
+	if volume < 1 {
+		volume += 0.01
+	}
+
+	m.channels[name] = volume
+
+	return volume, nil
+}
+
+func (m *Mixer) DecreaseChannelVolume(name string) (float64, error) {
+	if _, ok := m.channels[name]; !ok {
+		return 0, fmt.Errorf("channel %q does not exist", name)
+	}
+
+	volume := m.channels[name]
+
+	if volume > 0 {
+		volume -= 0.01
+	}
+
+	m.channels[name] = volume
+
+	return volume, nil
+}
+
 func (m *Mixer) SetChannelVolume(name string, volume float64) error {
 	if _, ok := m.channels[name]; !ok {
 		return fmt.Errorf("channel %q does not exist", name)

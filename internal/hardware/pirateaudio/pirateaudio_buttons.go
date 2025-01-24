@@ -13,96 +13,203 @@ import (
 
 const volumeFontSize = 20
 
+var modes = []string{
+	"volume",
+	"jerk",
+	"snap",
+	"chassis",
+	"gear",
+}
+var mode = 0
+
 func SetupPirateAudioButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, config *config.Config, log zerolog.Logger) func() {
 	return func() {
-		// buttons.OnButtonAPressed(func() {
-		// 	synth.IncreaseMasterGain()
-
-		// 	canvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
-		// 	lcdDevice.PowerOn()
-		// 	masterGain := synth.GetMasterGain()
-		// 	lcdDevice.ShowTextCentered(canvas, fmt.Sprintf("%0.2f dB", masterGain), volumeFontSize)
-
-		// 	log.Debug().
-		// 		Str("button", "A").
-		// 		Str("action", "increase master gain").
-		// 		Float64("master_gain", masterGain).
-		// 		Msg("button press")
-		// })
-
-		// buttons.OnButtonBPressed(func() {
-		// 	synth.DecreaseMasterGain()
-
-		// 	canvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
-		// 	lcdDevice.PowerOn()
-		// 	masterGain := synth.GetMasterGain()
-		// 	lcdDevice.ShowTextCentered(canvas, fmt.Sprintf("%0.2f dB", masterGain), volumeFontSize)
-
-		// 	log.Debug().
-		// 		Str("button", "B").
-		// 		Str("action", "decrease master gain").
-		// 		Float64("master_gain", masterGain).
-		// 		Msg("button press")
-		// })
-
 		buttons.OnButtonAPressed(func() {
-			profile := config.NextJerkProfile()
+			displayString := ""
 
-			canvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
+			switch modes[mode] {
+			case "volume":
+				synth.IncreaseMasterGain()
+
+				masterGain := synth.GetMasterGain()
+				displayString = fmt.Sprintf("%0.2f dB", masterGain)
+
+				log.Debug().
+					Str("button", "A").
+					Str("action", "increase master gain").
+					Float64("master_gain", masterGain).
+					Msg("button press")
+			case "jerk":
+				profile := config.NextJerkProfile()
+
+				displayString = fmt.Sprintf("Jerk %d", profile)
+
+				log.Debug().
+					Str("button", "A").
+					Str("action", "next profile").
+					Str("type", "jerk").
+					Str("profile", fmt.Sprintf("%d", profile)).
+					Msg("button press")
+			case "snap":
+				profile := config.NextSnapProfile()
+
+				displayString = fmt.Sprintf("Snap %d", profile)
+
+				log.Debug().
+					Str("button", "A").
+					Str("action", "next profile").
+					Str("type", "snap").
+					Str("profile", fmt.Sprintf("%d", profile)).
+					Msg("button press")
+			case "chassis":
+				volume, _ := synth.IncreaseChannelVolume("chassis")
+
+				displayString = fmt.Sprintf("Chassis %d", volume)
+
+				log.Debug().
+					Str("button", "A").
+					Str("action", "increase chassis haptics volume").
+					Str("profile", fmt.Sprintf("%d", volume)).
+					Msg("button press")
+			case "gear":
+				volume, _ := synth.IncreaseChannelVolume("gearchange")
+
+				displayString = fmt.Sprintf("Gear %d", volume)
+
+				log.Debug().
+					Str("button", "A").
+					Str("action", "increase race gear volume").
+					Str("profile", fmt.Sprintf("%d", volume)).
+					Msg("button press")
+			default:
+				log.Debug().
+					Str("button", "A").
+					Str("action", "none").
+					Str("mode", modes[mode]).
+					Msg("button press")
+
+				return
+			}
+
 			lcdDevice.PowerOn()
-			lcdDevice.ShowTextCentered(canvas, fmt.Sprintf("Jerk %d", profile), volumeFontSize)
-
-			log.Debug().
-				Str("button", "A").
-				Str("action", "next profile").
-				Str("type", "jerk").
-				Str("profile", fmt.Sprintf("%d", profile)).
-				Msg("button press")
+			canvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
+			lcdDevice.ShowTextCentered(canvas, displayString, volumeFontSize)
 		})
 
 		buttons.OnButtonBPressed(func() {
-			profile := config.PreviousJerkProfile()
+			displayString := ""
 
-			canvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
+			switch modes[mode] {
+			case "volume":
+				synth.DecreaseMasterGain()
+
+				masterGain := synth.GetMasterGain()
+				displayString = fmt.Sprintf("%0.2f dB", masterGain)
+
+				log.Debug().
+					Str("button", "B").
+					Str("action", "decrease master gain").
+					Float64("master_gain", masterGain).
+					Msg("button press")
+			case "jerk":
+				profile := config.PreviousJerkProfile()
+
+				displayString = fmt.Sprintf("Jerk %d", profile)
+
+				log.Debug().
+					Str("button", "B").
+					Str("action", "previous profile").
+					Str("type", "jerk").
+					Str("profile", fmt.Sprintf("%d", profile)).
+					Msg("button press")
+			case "snap":
+				profile := config.PreviousSnapProfile()
+
+				displayString = fmt.Sprintf("Snap %d", profile)
+
+				log.Debug().
+					Str("button", "B").
+					Str("action", "previous profile").
+					Str("type", "snap").
+					Str("profile", fmt.Sprintf("%d", profile)).
+					Msg("button press")
+			case "chassis":
+				volume, _ := synth.DecreaseChannelVolume("chassis")
+
+				displayString = fmt.Sprintf("Chassis %d", volume)
+
+				log.Debug().
+					Str("button", "B").
+					Str("action", "decrease chassis haptics volume").
+					Str("profile", fmt.Sprintf("%d", volume)).
+					Msg("button press")
+			case "gear":
+				volume, _ := synth.DecreaseChannelVolume("gearchange")
+
+				displayString = fmt.Sprintf("Gear %d", volume)
+
+				log.Debug().
+					Str("button", "B").
+					Str("action", "decrease race gear volume").
+					Str("profile", fmt.Sprintf("%d", volume)).
+					Msg("button press")
+			default:
+				log.Debug().
+					Str("button", "B").
+					Str("action", "none").
+					Str("mode", modes[mode]).
+					Msg("button press")
+
+				return
+			}
+
 			lcdDevice.PowerOn()
-			lcdDevice.ShowTextCentered(canvas, fmt.Sprintf("Jerk %d", profile), volumeFontSize)
+			canvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
+			lcdDevice.ShowTextCentered(canvas, displayString, volumeFontSize)
 
-			log.Debug().
-				Str("button", "B").
-				Str("action", "previous profile").
-				Str("type", "jerk").
-				Str("profile", fmt.Sprintf("%d", profile)).
-				Msg("button press")
 		})
 
 		buttons.OnButtonXPressed(func() {
-			profile := config.NextSnapProfile()
+			if mode >= len(modes)-1 {
+				mode = 0
+			} else {
+				mode++
+			}
 
-			canvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
-			lcdDevice.PowerOn()
-			lcdDevice.ShowTextCentered(canvas, fmt.Sprintf("Snap %d", profile), volumeFontSize)
+			displayString := ""
+
+			switch modes[mode] {
+			case "volume":
+				displayString = fmt.Sprintf("%0.2f dB", synth.GetMasterGain())
+			case "jerk":
+				displayString = fmt.Sprintf("Jerk %d", config.GetJerkProfile())
+			case "snap":
+				displayString = fmt.Sprintf("Snap %d", config.GetSnapProfile())
+			case "chassis":
+				volume, _ := synth.GetChannelVolume("chassis")
+				displayString = fmt.Sprintf("Chassis %d", volume)
+			case "gear":
+				volume, _ := synth.GetChannelVolume("gearchange")
+				displayString = fmt.Sprintf("Gear %d", volume)
+			}
 
 			log.Debug().
 				Str("button", "X").
-				Str("action", "next profile").
-				Str("type", "snap").
-				Str("profile", fmt.Sprintf("%d", profile)).
+				Str("action", "next mode").
+				Str("mode", modes[mode]).
 				Msg("button press")
+
+			lcdDevice.PowerOn()
+			canvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
+			lcdDevice.ShowTextCentered(canvas, displayString, volumeFontSize)
 		})
 
 		buttons.OnButtonYPressed(func() {
-			profile := config.PreviousSnapProfile()
-
-			canvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
-			lcdDevice.PowerOn()
-			lcdDevice.ShowTextCentered(canvas, fmt.Sprintf("Snap %d", profile), volumeFontSize)
-
 			log.Debug().
 				Str("button", "Y").
-				Str("action", "previous profile").
-				Str("type", "snap").
-				Str("profile", fmt.Sprintf("%d", profile)).
+				Str("action", "none").
 				Msg("button press")
+
 		})
 
 		// sprites := []string{"splash", "error"}

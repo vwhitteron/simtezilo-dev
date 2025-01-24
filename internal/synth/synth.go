@@ -102,6 +102,24 @@ func (s *Synthesizer) SetChannelVolume(name string, volume int) error {
 	return err
 }
 
+func (s *Synthesizer) IncreaseChannelVolume(name string) (int, error) {
+	volume, err := s.mixer.IncreaseChannelVolume(name)
+
+	return int(volume * 100), err
+}
+
+func (s *Synthesizer) DecreaseChannelVolume(name string) (int, error) {
+	volume, err := s.mixer.DecreaseChannelVolume(name)
+
+	return int(volume * 100), err
+}
+
+func (s *Synthesizer) GetChannelVolume(name string) (int, error) {
+	volume, err := s.mixer.GetChannelVolume(name)
+
+	return int(volume * 100), err
+}
+
 func (s *Synthesizer) FadeIn(period time.Duration) {
 	s.mixer.FadeIn(period)
 }
