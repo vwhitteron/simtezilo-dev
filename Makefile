@@ -86,7 +86,13 @@ clean:
 	@rm -rf out
 	@go clean -cache
 
+## dist: create a distribution archive
+.PHONY: dist
+dist: build/rpi/v6 build/rpi/v8/64 build/windows/64 build/darwin/silicon
+	@./build/scripts/gen_dist.sh
+
 ## clean: clean up project and return to a pristine state
 .PHONY: distclean
 distclean: clean
+	@rm -rf dist
 	@docker builder prune -af
