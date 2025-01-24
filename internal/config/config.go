@@ -32,23 +32,21 @@ type SynthProfile struct {
 }
 
 type Synthesizer struct {
-	SampleRateHz         int
-	Profiles             []SynthProfile
-	ForceProfile         int
-	GrainProfile         int
-	PulseExponent        float64
-	PulseScaleAdjustment float64
-	PulseMaxAmplitude    float64
-	PulseMaxFrequencyHz  float64
-	PulseMinFrequencyHz  float64
-	PulseWidthMax        float64
-	PulseWidthMin        float64
-	MasterGain           float64
-	GainIncrement        float64
-	ChassisVolume        int
-	GearRaceVolume       int
-	GearStreetVolume     int
-	Eq                   []float64
+	SampleRateHz        int
+	Profiles            []SynthProfile
+	ForceProfile        int
+	GrainProfile        int
+	PulseMaxAmplitude   float64
+	PulseMaxFrequencyHz float64
+	PulseMinFrequencyHz float64
+	PulseWidthMax       float64
+	PulseWidthMin       float64
+	MasterGain          float64
+	GainIncrement       float64
+	ChassisVolume       int
+	GearRaceVolume      int
+	GearStreetVolume    int
+	Eq                  []float64
 }
 
 type Telemetry struct {
@@ -92,20 +90,18 @@ func NewConfig(filename string, log zerolog.Logger) *Config {
 				{JerkExponent: 0.275, JerkScale: 0.09614, SnapExponent: 0.275, SnapScale: 0.05228},
 				{JerkExponent: 0.250, JerkScale: 0.11895, SnapExponent: 0.250, SnapScale: 0.07094},
 			},
-			ForceProfile:         5,
-			GrainProfile:         5,
-			PulseExponent:        0.56,
-			PulseScaleAdjustment: 1 / 54,
-			PulseMaxAmplitude:    1,
-			PulseMaxFrequencyHz:  60,
-			PulseMinFrequencyHz:  16,
-			PulseWidthMax:        0.5,
-			PulseWidthMin:        0.1,
-			MasterGain:           -15,
-			GainIncrement:        0.25,
-			ChassisVolume:        100,
-			GearRaceVolume:       100,
-			GearStreetVolume:     50,
+			ForceProfile:        5,
+			GrainProfile:        5,
+			PulseMaxAmplitude:   1,
+			PulseMaxFrequencyHz: 60,
+			PulseMinFrequencyHz: 16,
+			PulseWidthMax:       0.5,
+			PulseWidthMin:       0.1,
+			MasterGain:          -15,
+			GainIncrement:       0.25,
+			ChassisVolume:       100,
+			GearRaceVolume:      100,
+			GearStreetVolume:    50,
 			Eq: []float64{
 				1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, // 10-19Hz
 				1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, // 20-29Hz
@@ -124,8 +120,6 @@ func NewConfig(filename string, log zerolog.Logger) *Config {
 
 	// viper.SetDefault("Synthesizer.sampleratehz", 8000)
 	// viper.SetDefault("Synthesizer.profiles", []SynthProfile{})
-	// viper.SetDefault("Synthesizer.PulseExponent", 0.56)
-	// viper.SetDefault("Synthesizer.pulseScaleAdjustment", 1/54)
 	// viper.SetDefault("Synthesizer.pulseMaxAmplitude", 1)
 	// viper.SetDefault("Synthesizer.pulseMaxFrequencyHz", 40)
 	// viper.SetDefault("Synthesizer.pulseMinFrequencyHz", 23)
