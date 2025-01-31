@@ -59,6 +59,23 @@ func (b *Buffer) Write(channel string, samples []float64) {
 	// b.writeSimple(samples)
 }
 
+func (b *Buffer) WriteWithVolumePercent(channel string, percent int, samples []float64) {
+	volume, err := b.mixer.GetChannelVolume(channel)
+	if err != nil {
+		b.log.Error().Err(err).Str("channel", channel).Msg("failed to get channel volume")
+
+		return
+	}
+
+	volume = float64(percent) / 100.0 * volume
+
+	// if channel == "gearchange" {
+	// 	b.log.Debug().Float64("volume", volume).Str("channel", channel).Msg("writing sample to channel")
+	// }
+
+	b.writeAGC(samples, volume)
+}
+
 func (b *Buffer) writeSimple(samples []float64) {
 	b.mu.Lock()
 	defer b.mu.Unlock()

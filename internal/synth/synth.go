@@ -142,3 +142,9 @@ func (s *Synthesizer) PlayEffect(name string) {
 	sample := s.effects.GetSample(name)
 	s.buffer.Write(name, sample)
 }
+
+func (s *Synthesizer) PlayEffectWithVolume(name string, percent int) {
+	// FIXME: handle invalid effect name
+	sample := s.effects.GetSample(name)
+	s.buffer.WriteWithVolumePercent(name, percent, sample)
+}

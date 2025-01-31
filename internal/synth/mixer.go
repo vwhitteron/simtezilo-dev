@@ -137,7 +137,7 @@ func (m *Mixer) MasterIncrease() {
 }
 
 func (m *Mixer) SetFader(gain float64) {
-	m.logger.Debug().Float64("gain", gain).Msg("set fader volume")
+	// m.logger.Debug().Float64("gain", gain).Msg("set fader volume")
 	m.fader = gain
 	m.output = volumeToGain(m.fader)
 }

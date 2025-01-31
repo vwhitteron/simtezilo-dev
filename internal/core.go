@@ -237,6 +237,10 @@ func NewCore(opts CoreOptions) (*Core, error) {
 
 	lcdDevice.ShowTextOverlay("splash", appInfo.Version, 7)
 
+	// if !isSetupComplete(log) {
+	// 	runSetupWizard(lcdDevice)
+	// }
+
 	return &Core{
 		appInfo:          appInfo,
 		assetDir:         config.App.AssetDir,
@@ -327,7 +331,7 @@ func (c *Core) physicsEvents() {
 		c.resetState(seq, currentGear)
 		c.silenceHaptics()
 
-		c.log.Debug().Msg("game paused")
+		// c.log.Debug().Msg("game paused")
 
 		return
 	}
@@ -469,9 +473,20 @@ func (c *Core) generateBump() {
 
 	if c.physics.Current.TransmissionGear != NullGear {
 		if c.physics.Current.TransmissionGear != c.physics.Last.TransmissionGear {
-			c.synth.PlayEffect("gearchange")
+			volume_scale := float64(40)
+			acceleration := signal.Abs(float64(c.physics.Current.Acceleration))
+			if acceleration > 0 {
+				volume_scale = signal.Abs((30 * acceleration / 4.905)) + 70
+				volume_scale, _ = signal.Limit(volume_scale, 100)
+			}
+
+			volume_pc := int(volume_scale)
+
+			c.synth.PlayEffectWithVolume("gearchange", volume_pc)
 			c.log.Debug().
 				Int("sequence_id", int(c.seq)).
+				Int("volume_pc", volume_pc).
+				Float32("accel", c.physics.Last.Acceleration).
 				Int("gear", c.physics.Current.TransmissionGear).
 				Msg("gear change")
 		}

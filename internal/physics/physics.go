@@ -35,6 +35,9 @@ type Physics struct {
 
 	TransmissionGear int
 
+	GroundSpeed  float32
+	Acceleration float32
+
 	SynthOutputAmplitude float64
 	SynthOutputFrequency int
 }
@@ -71,6 +74,8 @@ func newPhysics() Physics {
 			Crackle:      0,
 		},
 		TransmissionGear:     -100,
+		GroundSpeed:          0,
+		Acceleration:         0,
 		SynthOutputAmplitude: 0,
 		SynthOutputFrequency: 0,
 	}
@@ -86,6 +91,10 @@ func (t *PhysicsTracker) Update(windowMilliseconds float64, gtclient *telemetry_
 	t.Current.Velocity.Vector = gtclient.Telemetry.VelocityVector()
 	t.Current.Attitude.Vector = gtclient.Telemetry.RotationVector()
 
+	// chassis longitudinal velocity
+	t.Current.GroundSpeed = gtclient.Telemetry.GroundSpeedMetersPerSecond()
+	t.Current.Acceleration = (t.Current.GroundSpeed - t.Last.GroundSpeed) / float32(windowMilliseconds)
+
 	// chassis attitude
 	t.Current.Attitude.Delta = symmetryaxis.Delta(t.Current.Attitude.Vector, t.Last.Attitude.Vector)
 
@@ -94,7 +103,6 @@ func (t *PhysicsTracker) Update(windowMilliseconds float64, gtclient *telemetry_
 
 	t.Current.Attitude.Acceleration = symmetryaxis.Magnitude(biasedAttitudeDelta) / windowMilliseconds
 
-	// t.Last.Attitude.Jerk = t.Current.Attitude.Jerk
 	t.Current.Attitude.Jerk = (t.Current.Attitude.Acceleration - t.Last.Attitude.Acceleration) / windowMilliseconds
 	if t.Current.Attitude.Jerk > 10 {
 		t.Current.Attitude.Jerk = 10
@@ -102,23 +110,15 @@ func (t *PhysicsTracker) Update(windowMilliseconds float64, gtclient *telemetry_
 		t.Current.Attitude.Jerk = -10
 	}
 
-	// t.Last.Attitude.Snap = t.Current.Attitude.Snap
 	t.Current.Attitude.Snap = (t.Current.Attitude.Jerk - t.Last.Attitude.Jerk) / windowMilliseconds
 
-	// chassis position
+	// chassis 3D velocity
 	t.Current.Velocity.Delta = vector.Delta(t.Current.Velocity.Vector, t.Last.Velocity.Vector)
 	t.Current.Velocity.Acceleration = vector.Magnitude(t.Current.Velocity.Delta) / windowMilliseconds
-
-	// t.Last.Velocity.Jerk = t.Current.Velocity.Jerk
 	t.Current.Velocity.Jerk = (t.Current.Velocity.Acceleration - t.Last.Velocity.Acceleration) / windowMilliseconds
-
-	// t.Last.Velocity.Snap = t.Current.Velocity.Snap
 	t.Current.Velocity.Snap = (t.Current.Velocity.Jerk - t.Last.Velocity.Jerk) / windowMilliseconds
-
-	// t.Last.Velocity.Crackle = t.Current.Velocity.Crackle
 	t.Current.Velocity.Crackle = (t.Current.Velocity.Snap - t.Last.Velocity.Snap) / windowMilliseconds
 
-	// t.Last.TransmissionGear = t.Current.TransmissionGear
 	t.Current.TransmissionGear = gtclient.Telemetry.CurrentGear()
 
 }
