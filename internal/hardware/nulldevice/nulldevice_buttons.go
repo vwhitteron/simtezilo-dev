@@ -33,6 +33,13 @@ func SetupNullDeviceButtons(synth *synth.Synthesizer, config *config.Config, don
 						Str("action", "decrease master gain").
 						Float64("master_gain", gain).
 						Msg("button press")
+				} else if key.String() == "m" {
+					algo := synth.Mixer.NextAlgorithm()
+					log.Debug().
+						Str("button", "m").
+						Str("action", "change algorithm").
+						Str("algorithm", algo).
+						Msg("button press")
 				} else if key.String() == "q" {
 					log.Debug().
 						Str("button", "q").

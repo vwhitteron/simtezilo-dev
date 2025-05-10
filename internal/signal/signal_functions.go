@@ -127,3 +127,11 @@ func Scale(value float64, scale float64) float64 {
 
 	return value * scale
 }
+
+func Polarity(value float64) float64 {
+	if value < 0 {
+		return -1.0
+	}
+
+	return 1.0
+}

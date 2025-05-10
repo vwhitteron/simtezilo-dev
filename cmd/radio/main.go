@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/bwmarrin/discordgo"
-	telemetry_client "github.com/vwhitteron/gt-telemetry"
+	telemetry_client "github.com/zetetos/gt-telemetry"
 )
 
 const durationMax = int32(math.MaxInt32)
@@ -97,7 +97,7 @@ func main() {
 			cmd := exec.Command("/usr/bin/say", "-v", "Daniel", "-r", "190", announce)
 			err := cmd.Run()
 			if err != nil {
-				fmt.Printf(err.Error())
+				fmt.Println(err.Error())
 			}
 
 			lastLapNotified = lastLap

@@ -29,11 +29,11 @@ func main() {
 	}()
 
 	var logLevel string
-	// var profilingEnabled bool
+	var profilingEnabled bool
 	var webEnabled bool
 
 	flag.StringVar(&logLevel, "l", "", "Log level. Default is 'warn'")
-	// flag.BoolVar(&profilingEnabled, "profiling", false, "Enable profiling. Default is false")
+	flag.BoolVar(&profilingEnabled, "profiling", false, "Enable profiling. Default is false")
 	flag.BoolVar(&webEnabled, "w", false, "Enable web server. Default is false")
 	flag.Parse()
 
@@ -54,14 +54,14 @@ func main() {
 		log.Fatal("Error creating Pyroscope profiler: ", err)
 	}
 
-	// if profilingEnabled {
-	// 	err = profiler.Start()
-	// 	if err != nil {
-	// 		log.Fatal("Error starting Pyroscope profiler: ", err)
-	// 	}
+	if profilingEnabled {
+		err = profiler.Start()
+		if err != nil {
+			log.Fatal("Error starting Pyroscope profiler: ", err)
+		}
 
-	// 	log.Println("Pyroscope profiler started with UI at " + profiler.Endpoint())
-	// }
+		log.Println("Pyroscope profiler started with UI at " + profiler.Endpoint())
+	}
 
 	core, err := internal.NewCore(internal.CoreOptions{
 		BuildTime:  BuildTime,

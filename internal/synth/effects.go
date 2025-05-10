@@ -26,7 +26,7 @@ func (s *EffectsSampleBank) GetSample(name string) []float64 {
 
 func generateGearChangeSample(sampleRateHz int) []float64 {
 	sampleLengthSeconds := 0.1
-	pulseAmplitude := 1.8
+	pulseAmplitude := 2.0
 	pulseHz := 30
 	decayRate := 0.005
 

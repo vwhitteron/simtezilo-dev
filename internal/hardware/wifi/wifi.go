@@ -12,22 +12,14 @@ import (
 //
 // List all wifi networks machine readable
 // nmcli -t -f SSID,SIGNAL dev wifi list
-// KoalaArt:74
-// DaikinAP10879:67
-// Firetooth:65
-// yarn:65
-// DaikinAP57931:65
-// yarn:61
-// Firetooth:39
-// ctc-jvdx0n:17
-// ctc-2g-jvdx0n:14
+// net-jvdx0n:17
+// net5-jvdx0n:14
 //
 // New wifi entry
-// sudo nmcli dev wifi connect SSID password PASSWORD ifname wlan0
+// sudo nmcli dev wifi connect <SSID> password <PASSWORD> ifname wlan0
 //
 // Existing wifi entry
-// sudo nmcli dev wifi connect yarn
-// sudo nmcli dev wifi connect KoalaArt
+// sudo nmcli dev wifi connect <SSID>
 
 type WifiNetwork struct {
 	SSID   string

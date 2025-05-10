@@ -16,6 +16,16 @@ help:
 buildversion := $(shell git describe --tags --always --dirty)
 buildtime := $(shell date -u '+%Y-%m-%d_%H:%M:%S')
 
+## lint: run linter against project
+.PHONY: lint
+lint:
+	@golangci-lint run
+
+## lint/fix: run linter against the project and fix issues where possible
+.PHONY: lint/fix
+lint/fix:
+	@golangci-lint run --fix
+
 ## build/darwin/silicon: build the application for Apple Silicon
 .PHONY: build/darwin/silicon
 build/darwin/silicon:
@@ -57,7 +67,7 @@ build/rpi/v7:
 	--output=out --target=binaries-armel --progress=plain \
 	-f build/docker/Dockerfile .
 
-## build/rpi/v8/32: build the application for Raspberry Pi ARMv8 32bit (2B[+1.2], 3*, 4*, Zero 2W)
+## build/rpi/v8/32: build the application for Raspberry Pi ARMv8 32bit (2B[+1.2], 3*, 4*, 5*, Zero 2W)
 .PHONY: build/rpi/v8/32
 build/rpi/v8/32:
 	@docker build \
@@ -66,7 +76,7 @@ build/rpi/v8/32:
 	--output=out --target=binaries-armel-8 --progress=plain \
 	-f build/docker/Dockerfile .
 
-## build/rpi/v8/64: build the application for Raspberry Pi ARMv8 64bit (3*, 4*, Zero 2W)
+## build/rpi/v8/64: build the application for Raspberry Pi ARMv8 64bit (3*, 4*, 5*, Zero 2W)
 .PHONY: build/rpi/v8/64
 build/rpi/v8/64:
 	@docker build \
@@ -78,7 +88,7 @@ build/rpi/v8/64:
 ## run/live: run the application with reloading on file changes
 .PHONY: run/live
 run/live:
-	@go run cmd/simtezilo/main.go -r -l debug -p=false -w=true
+	@go run cmd/simtezilo/main.go -l debug -w=true
 
 ## clean: clean up build output files
 .PHONY: clean

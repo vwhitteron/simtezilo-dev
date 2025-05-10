@@ -6,33 +6,38 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
+	"github.com/vwhitteron/simtezilo-dev/internal/signal"
 )
+
+var algorithms = []string{
+	"sum",
+	"rss",
+}
 
 type Mixer struct {
 	Master        float64
 	gainIncrement float64
 
-	channels map[string]float64
-
-	fader        float64
+	channels     map[string]float64
+	algorithm    int
+	logger       zerolog.Logger
+	outputGain   float64
+	faderGain    float64 // controls fade-in after pause or session reset
 	fadeInActive bool
-	output       float64
-
-	logger zerolog.Logger
 }
 
+// TODO: set gain and gainIncrement to defaults and add setters instead
 func NewMixer(gain float64, gainIncrement float64, logger zerolog.Logger) *Mixer {
 	return &Mixer{
 		Master:        gain,
 		gainIncrement: gainIncrement,
-		output:        gain,
+		outputGain:    gain,
 
-		fader: -30,
-
+		channels:     map[string]float64{},
+		algorithm:    0,
+		logger:       logger,
+		faderGain:    -30,
 		fadeInActive: false,
-
-		channels: map[string]float64{},
-		logger:   logger,
 	}
 }
 
@@ -56,6 +61,42 @@ func (m *Mixer) GetChannelNames() []string {
 	}
 
 	return names
+}
+
+func (m *Mixer) SetAlgorithm(algorithmName string) error {
+	for i, name := range algorithms {
+		if name == algorithmName {
+			m.algorithm = i
+
+			return nil
+		}
+	}
+
+	return fmt.Errorf("algorithm %q not found", algorithmName)
+}
+
+func (m *Mixer) GetAlgorithm() string {
+	return algorithms[m.algorithm]
+}
+
+func (m *Mixer) NextAlgorithm() string {
+	m.algorithm++
+
+	if m.algorithm >= len(algorithms) {
+		m.algorithm = 0
+	}
+
+	return algorithms[m.algorithm]
+}
+
+func (m *Mixer) PreviousAlgorithm() string {
+	m.algorithm--
+
+	if m.algorithm < 0 {
+		m.algorithm = len(algorithms) - 1
+	}
+
+	return algorithms[m.algorithm]
 }
 
 func (m *Mixer) IncreaseChannelVolume(name string) (float64, error) {
@@ -116,34 +157,33 @@ func (m *Mixer) MasterDecrease() {
 		return
 	}
 
-	m.fader = m.Master
-	m.output = volumeToGain(m.Master)
+	m.faderGain = m.Master
+	m.outputGain = volumeToGain(m.Master)
 
-	m.logger.Debug().Float64("master", m.Master).Float64("streamer", m.output).Str("state", "decrease").Msg("master volume")
+	m.logger.Debug().Float64("master", m.Master).Float64("streamer", m.outputGain).Str("state", "decrease").Msg("master volume")
 }
 
 func (m *Mixer) MasterIncrease() {
 	m.Master += m.gainIncrement
 
-	m.logger.Debug().Float64("master", m.Master).Float64("streamer", m.output).Str("state", "increase").Msg("master volume")
+	m.logger.Debug().Float64("master", m.Master).Float64("streamer", m.outputGain).Str("state", "increase").Msg("master volume")
 
 	if m.fadeInActive {
 		return
 	}
 
-	m.fader = m.Master
-	m.output = volumeToGain(m.Master)
+	m.faderGain = m.Master
+	m.outputGain = volumeToGain(m.Master)
 
 }
 
 func (m *Mixer) SetFader(gain float64) {
-	// m.logger.Debug().Float64("gain", gain).Msg("set fader volume")
-	m.fader = gain
-	m.output = volumeToGain(m.fader)
+	m.faderGain = gain
+	m.outputGain = volumeToGain(m.faderGain)
 }
 
 func (m *Mixer) FadeIn(period time.Duration) {
-	if m.fader == m.Master || m.fadeInActive {
+	if m.faderGain == m.Master || m.fadeInActive {
 		return
 	}
 
@@ -151,26 +191,26 @@ func (m *Mixer) FadeIn(period time.Duration) {
 		m.fadeInActive = true
 
 		fadeInInterval := 50 * time.Millisecond
-		fadeInIncrement := (m.Master - m.fader) / (float64(period.Milliseconds() / fadeInInterval.Milliseconds()))
+		fadeInIncrement := (m.Master - m.faderGain) / (float64(period.Milliseconds() / fadeInInterval.Milliseconds()))
 
-		m.logger.Debug().Float64("current", m.fader).Float64("target", m.Master).Str("state", "begin").Msg("fade in")
+		m.logger.Debug().Float64("current", m.faderGain).Float64("target", m.Master).Str("state", "begin").Msg("fade in")
 
 		for {
-			m.fader += fadeInIncrement
+			m.faderGain += fadeInIncrement
 
-			if m.fader >= m.Master {
-				m.fader = m.Master
-				m.output = volumeToGain(m.Master)
+			if m.faderGain >= m.Master {
+				m.faderGain = m.Master
+				m.outputGain = volumeToGain(m.Master)
 
 				break
 			}
 
-			m.output = volumeToGain(m.fader)
+			m.outputGain = volumeToGain(m.faderGain)
 
 			time.Sleep(fadeInInterval)
 		}
 
-		m.logger.Debug().Float64("current", m.fader).Float64("target", m.Master).Str("state", "complete").Msg("fade in")
+		m.logger.Debug().Float64("current", m.faderGain).Float64("target", m.Master).Str("state", "complete").Msg("fade in")
 
 		m.fadeInActive = false
 	}()
@@ -178,4 +218,64 @@ func (m *Mixer) FadeIn(period time.Duration) {
 
 func volumeToGain(volume float64) float64 {
 	return math.Pow(10, (volume / 10))
+}
+
+func (m *Mixer) MixSample(sample1 float64, sample2 float64, peak *float64) float64 {
+	switch m.algorithm {
+	case 0:
+		return mixSampleAGC(sample1, sample2, peak)
+	case 1:
+		return mixSamplesRSS(sample1, sample2, peak)
+	default:
+		return 0.0
+	}
+}
+
+// Mixes two samples using an Automatic Gain Control (AGC) algorithm.
+// Returns the mixed sample and the peak value which is later used to scale a slice of samples.
+func mixSampleAGC(sample1 float64, sample2 float64, peak *float64) float64 {
+	sum := sample1 + sample2
+
+	sumAbs := math.Abs(sum)
+
+	if sumAbs > *peak {
+		*peak = sumAbs
+	}
+
+	return sum
+}
+
+// Mixes two samples using a Root Square Sum algorithm.
+// If peak is less than 0, it applies a limiter to the output sample to prevent clipping.
+// Otherwise, the RSS mixed sample and the peak value are returned.
+func mixSamplesRSS(sample1 float64, sample2 float64, peak *float64) float64 {
+	sampleOut := 0.0
+
+	squareSample1 := signal.Polarity(sample1) * sample1 * sample1
+	squareSample2 := signal.Polarity(sample2) * sample2 * sample2
+	sum := math.Abs(squareSample1 + squareSample2)
+	sampleOut = math.Sqrt(sum)
+
+	if sampleOut > *peak {
+		*peak = sampleOut
+	}
+
+	// Restore the signal to its original polarity since RSS always results in a
+	// positive value
+	sampleOut = sampleOut * signal.Polarity(sample1+sample2)
+
+	return sampleOut
+}
+
+// Adjusts the gain on a slice of samples using the peak value.
+func scaleSamplesPeak(samples *[]float64, peak float64) {
+	if peak < 1.0 {
+		return
+	}
+
+	scale := 1.0 / peak
+
+	for i := range *samples {
+		(*samples)[i] = (*samples)[i] * scale
+	}
 }

@@ -3,7 +3,7 @@ package vector
 import (
 	"math"
 
-	telemetry_client "github.com/vwhitteron/gt-telemetry"
+	telemetry_client "github.com/zetetos/gt-telemetry"
 )
 
 func Delta(vector1 telemetry_client.Vector, vector2 telemetry_client.Vector) telemetry_client.Vector {

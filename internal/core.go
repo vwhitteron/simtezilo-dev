@@ -13,7 +13,6 @@ import (
 	"github.com/gopxl/beep/speaker"
 	"github.com/gorilla/websocket"
 	"github.com/rs/zerolog"
-	telemetry_client "github.com/vwhitteron/gt-telemetry"
 	"github.com/vwhitteron/simtezilo-dev/internal/config"
 	"github.com/vwhitteron/simtezilo-dev/internal/hardware"
 	"github.com/vwhitteron/simtezilo-dev/internal/hardware/nulldevice"
@@ -23,6 +22,7 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/internal/physics/vector"
 	"github.com/vwhitteron/simtezilo-dev/internal/signal"
 	"github.com/vwhitteron/simtezilo-dev/internal/synth"
+	telemetry_client "github.com/zetetos/gt-telemetry"
 )
 
 type displayContent struct {
@@ -197,7 +197,7 @@ func NewCore(opts CoreOptions) (*Core, error) {
 
 		lcdDevice.Clear()
 
-		buttonsFn = waveshare.SetupWaveshareButtons(lcdDevice, synthesizer, log)
+		buttonsFn = waveshare.SetupWaveshareButtons(lcdDevice, synthesizer, config, log)
 	default:
 		lcdDevice = nulldevice.NewNullDeviceDisplay()
 		log.Debug().
@@ -300,6 +300,14 @@ func (c *Core) Run() {
 }
 
 func (c *Core) Close() {
+	err := c.synth.Close()
+	if err != nil {
+		c.log.Error().
+			Err(err).
+			Str("component", "audio output device").
+			Str("result", "failure").
+			Msg("close")
+	}
 	c.lcdDevice.Close()
 }
 
@@ -327,11 +335,9 @@ func (c *Core) physicsEvents() {
 		return
 	}
 
-	if c.gt.Telemetry.Flags().GamePaused == true {
+	if c.gt.Telemetry.Flags().GamePaused {
 		c.resetState(seq, currentGear)
 		c.silenceHaptics()
-
-		// c.log.Debug().Msg("game paused")
 
 		return
 	}
@@ -368,13 +374,13 @@ func (c *Core) physicsEvents() {
 
 		c.log.Debug().
 			Uint32("sequence_id", seq).
-			Str("time_of_day_delta", fmt.Sprintf("%s", timeOfDayDelta)).
+			Str("time_of_day_delta", timeOfDayDelta.String()).
 			Msg("time of day reset")
 
 		return
 	}
 
-	if c.gt.Telemetry.Flags().Live == false && c.replayMode == false {
+	if !c.gt.Telemetry.Flags().Live && !c.replayMode {
 		c.resetState(seq, currentGear)
 		c.silenceHaptics()
 
@@ -385,6 +391,7 @@ func (c *Core) physicsEvents() {
 
 	c.physics.Current.SequenceID = seq
 
+	// speaker.Resume()
 	c.synth.FadeIn(3 * time.Second)
 
 	c.processHaptics(seqDelta)
@@ -411,11 +418,7 @@ func (c *Core) processHaptics(seqDelta uint32) {
 
 	// no haptics if telemetry packets dropped/missed
 	if seqDelta > 1 {
-		// FIXME: no longer ignore missed packets?
-		// c.log.Debug().Uint32("delta", seqDelta).Msg("missed packets, skipping haptics")
 		c.log.Debug().Uint32("delta", seqDelta).Msg("missed packets")
-
-		// return
 	}
 
 	c.generateBump()
@@ -424,8 +427,6 @@ func (c *Core) processHaptics(seqDelta uint32) {
 func (c *Core) generateBump() {
 	startTime := time.Now()
 
-	// pulseWidth := c.config.Synthesizer.PulseWidthMax
-
 	snap := signal.LargestMagnitude(c.physics.Current.Velocity.Snap, (c.physics.Current.Attitude.Snap * 100))
 
 	pulseFrequencyScaler := signal.Abs(signal.Exponent(snap, c.config.GetSnapExponent()))
@@ -433,20 +434,14 @@ func (c *Core) generateBump() {
 	pulseFrequencyHz := (c.config.Synthesizer.PulseMaxFrequencyHz - c.config.Synthesizer.PulseMinFrequencyHz) * pulseFrequencyScaler
 
 	if pulseFrequencyHz < c.config.Synthesizer.PulseMinFrequencyHz {
-		c.log.Debug().
-			Float64("frequency", pulseFrequencyHz).
-			Msg("floor")
 		pulseFrequencyHz = c.config.Synthesizer.PulseMinFrequencyHz
 	} else if pulseFrequencyHz > c.config.Synthesizer.PulseMaxFrequencyHz {
-		c.log.Debug().
-			Float64("frequency", pulseFrequencyHz).
-			Msg("ceiling")
 		pulseFrequencyHz = c.config.Synthesizer.PulseMaxFrequencyHz
 	}
 
 	pulseWidth := math.Round(float64(c.config.Synthesizer.SampleRateHz) / (2 * pulseFrequencyHz))
 
-	sig := signal.LargestMagnitude(c.physics.Current.Velocity.Jerk, (c.physics.Current.Attitude.Jerk * 60))
+	sig := signal.LargestMagnitude(c.physics.Current.Velocity.Jerk, (c.physics.Current.Attitude.Jerk * 100))
 	pulseAmplitude := signal.Exponent(sig, c.config.GetJerkExponent())
 	pulseAmplitude = signal.Scale(pulseAmplitude, c.config.GetJerkScale())
 
@@ -466,8 +461,12 @@ func (c *Core) generateBump() {
 		pulseBuffer[i] = ((pulseAmplitude * math.Sin(phase)) + pulseAmplitude) / 2
 	}
 
-	// no haptics if vehicle speed velocity lower than 30cm per second
-	if vector.Magnitude(c.physics.Current.Velocity.Vector) >= 0.28 {
+	// no haptics when vehicle comes to a controlled stop
+	// TODO: check angular velocity, etc to enable for uncontrolled stops
+	// if vector.Magnitude(c.physics.Current.Velocity.Vector) >= 0.28 {
+	lastMag := vector.Magnitude(c.physics.Last.Velocity.Vector)
+	currentMag := vector.Magnitude(c.physics.Current.Velocity.Vector)
+	if signal.LargestMagnitude(lastMag, currentMag) >= 0.28 {
 		c.synth.WriteBuffer("chassis", pulseBuffer)
 	}
 
@@ -476,7 +475,7 @@ func (c *Core) generateBump() {
 			volume_scale := float64(40)
 			acceleration := signal.Abs(float64(c.physics.Current.Acceleration))
 			if acceleration > 0 {
-				volume_scale = signal.Abs((30 * acceleration / 4.905)) + 70
+				volume_scale = 6*acceleration + 75
 				volume_scale, _ = signal.Limit(volume_scale, 100)
 			}
 
@@ -518,7 +517,7 @@ func (c *Core) generateBump() {
 }
 
 func (c *Core) sessionHasReset(seq uint32) bool {
-	if c.gt.Telemetry.Flags().Loading == true {
+	if c.gt.Telemetry.Flags().Loading {
 		c.log.Debug().
 			Uint32("sequence_id", seq).
 			Msg("loading flag detected")
@@ -539,15 +538,12 @@ func (c *Core) resetState(seq uint32, currentGear int) {
 	c.physics = physics.NewPhysicsTracker()
 
 	c.synth.ClearBuffer()
-
-	return
 }
 
 func (c *Core) silenceHaptics() {
+	// speaker.Suspend()
 	c.synth.Silence()
 	c.synth.ClearBuffer()
-
-	return
 }
 
 func (c *Core) updateDisplay() {
@@ -557,18 +553,18 @@ func (c *Core) updateDisplay() {
 		return
 	}
 
-	// if (c.gt.Telemetry.Flags().Live == false && c.replayMode == false) || c.gt.Telemetry.Flags().GamePaused == true {
-	// 	if time.Since(c.lastActive) > 10*time.Second {
-	// 		c.lcdDevice.PowerOff()
+	if (c.gt.Telemetry.Flags().Live == false && c.replayMode == false) || c.gt.Telemetry.Flags().GamePaused == true {
+		if time.Since(c.lastActive) > 10*time.Second {
+			c.lcdDevice.PowerOff()
 
-	// 		return
-	// 	}
+			return
+		}
 
-	// 	canvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
-	// 	c.lcdDevice.ShowTextCentered(canvas, "Waiting...", 16)
+		canvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
+		c.lcdDevice.ShowTextCentered(canvas, "Waiting...", 16)
 
-	// 	return
-	// }
+		return
+	}
 
 	c.lcdDevice.PowerOn()
 	c.lastActive = time.Now()
@@ -641,7 +637,7 @@ func (c *Core) handleWebSocketConnection(w http.ResponseWriter, r *http.Request)
 	c.log.Debug().Str("component", "websocket").Int("clients", c.webSocketClients).Msg("connection established")
 
 	sid := 0
-	for {
+	for { // TODO: find alternative solution to satisfy staticcheck
 		select {
 		case data := <-c.chartDataChannel:
 			if sid != 0 {

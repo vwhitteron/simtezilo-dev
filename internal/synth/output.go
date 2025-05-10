@@ -3,10 +3,7 @@ package synth
 import (
 	"github.com/gopxl/beep"
 	"github.com/rs/zerolog"
-	"github.com/vwhitteron/simtezilo-dev/internal/physics"
 )
-
-const maxGain = 0
 
 type OutputDevice struct {
 	samples map[string]*beep.Buffer
@@ -14,7 +11,8 @@ type OutputDevice struct {
 }
 
 type SynthOutDeviceOpts struct {
-	Logger zerolog.Logger
+	OutputFile string
+	Logger     zerolog.Logger
 }
 
 func NewOutputDevice(opts SynthOutDeviceOpts) (*OutputDevice, error) {
@@ -27,10 +25,7 @@ func NewOutputDevice(opts SynthOutDeviceOpts) (*OutputDevice, error) {
 }
 
 type BumpStream struct {
-	synth       *Synthesizer
-	synthBuffer *Buffer
-	physics     *physics.PhysicsTracker
-	mixer       *Mixer
+	synth *Synthesizer
 }
 
 func NewBumpStream(synth *Synthesizer) BumpStream {
@@ -43,9 +38,8 @@ func (b BumpStream) Stream(samples [][2]float64) (n int, ok bool) {
 	buffer := b.synth.ReadBuffer(len(samples))
 
 	for i := range samples {
-		sample := b.synth.MixOutput(buffer[i])
-		samples[i][0] = sample
-		samples[i][1] = sample
+		samples[i][0] = b.synth.MixOutput(buffer[i])
+		samples[i][1] = b.synth.MixOutput(buffer[i])
 	}
 
 	b.synth.ShiftBuffer(len(samples))

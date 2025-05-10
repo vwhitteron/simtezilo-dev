@@ -1,6 +1,18 @@
 {
+    "go.formatTool": "goimports",
     "go.lintTool": "golangci-lint",
     "go.lintFlags": [
         "--fast"
-    ]
+    ],
+    "go.useLanguageServer": true,
+    "go.languageServerFlags": [
+        "-rpc.trace"
+    ],
+    "[go]": {
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+            "source.organizeImports": "explicit",
+            "source.fixAll": "explicit"
+        }
+    }
 }

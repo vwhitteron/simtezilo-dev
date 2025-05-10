@@ -37,6 +37,8 @@ type Waveshare14972LCD struct {
 	sprites *gui.SpriteSet
 
 	Orientation int
+	poweredOn   bool
+	canvas      *image.RGBA
 }
 
 type Waveshare14972LCDOpts struct {
@@ -106,7 +108,7 @@ func NewWaveshare14972Display(opts Waveshare14972LCDOpts) (*Waveshare14972LCD, e
 		return nil, fmt.Errorf("loading sprite set: %w", err)
 	}
 
-	fontData, err := os.Open(opts.AssetDir + "/font/LeagueGothic-Regular.ttf")
+	fontData, err := os.Open(opts.AssetDir + "/font/LeagueGothic-Regular.ttf") // TODO: use go:embed
 	if err != nil {
 		return nil, fmt.Errorf("open font file: %w", err)
 	}
@@ -131,6 +133,7 @@ func NewWaveshare14972Display(opts Waveshare14972LCDOpts) (*Waveshare14972LCD, e
 		sprites: sprites,
 
 		Orientation: opts.Orientation,
+		poweredOn:   true,
 	}
 
 	lcd.Clear()
@@ -150,15 +153,37 @@ func (l *Waveshare14972LCD) Close() {
 
 func (l *Waveshare14972LCD) PowerOn() {
 	l.dev.PowerOn()
+	l.poweredOn = true
 }
 
 func (l *Waveshare14972LCD) PowerOff() {
 	l.dev.PowerOff()
+	l.poweredOn = false
+}
+
+func (l *Waveshare14972LCD) PowerToggle() bool {
+	if l.poweredOn {
+		l.PowerOff()
+		return false
+	}
+
+	l.PowerOn()
+	return true
+}
+
+func (l *Waveshare14972LCD) IsPoweredOn() bool {
+	return l.poweredOn
 }
 
 func (l *Waveshare14972LCD) Show(sprite string) {
 	img := l.sprites.GetSprite(sprite)
-	l.dev.DrawRAW(img)
+
+	canvas := image.NewRGBA(img.Bounds())
+	draw.Draw(canvas, canvas.Bounds(), img, image.Point{0, 0}, draw.Src)
+
+	l.canvas = canvas
+
+	l.dev.DrawRAW(canvas)
 }
 
 func (l *Waveshare14972LCD) ShowText(text string) {
@@ -181,9 +206,6 @@ func (l *Waveshare14972LCD) ShowTextCentered(canvas *image.RGBA, text string, si
 		Dst:  canvas,
 		Src:  image.NewUniform(color.RGBA{255, 255, 255, 1}),
 		Face: fontFace,
-		// Face: basicfont.Face7x13,
-		// Face: inconsolata.Bold8x16,
-		// Face: bitmapfont.Gothic12r,
 	}
 
 	textBounds, _ := fontDrawer.BoundString(text)
@@ -196,6 +218,8 @@ func (l *Waveshare14972LCD) ShowTextCentered(canvas *image.RGBA, text string, si
 	}
 
 	fontDrawer.DrawString(text)
+
+	l.canvas = canvas
 
 	l.dev.DrawRAW(canvas)
 }
@@ -228,6 +252,8 @@ func (l *Waveshare14972LCD) ShowTextOverlay(background string, text string, size
 
 	fontDrawer.DrawString(text)
 
+	l.canvas = canvas
+
 	l.dev.DrawRAW(canvas)
 }
 
@@ -250,6 +276,8 @@ func (l *Waveshare14972LCD) SetOrientation(rotation int) {
 		l.dev.SetRotation(st7789.ROTATION_NONE)
 		l.Orientation = 0
 	}
+
+	l.dev.DrawRAW(l.canvas)
 }
 
 func waveshareDisplayInit(d *st7789.Device) {

@@ -16,7 +16,7 @@ type SpriteSetOpts struct {
 }
 
 func NewSpriteSet(opts SpriteSetOpts) (*SpriteSet, error) {
-	path := opts.AssetDir + "/image/sprites.png"
+	path := opts.AssetDir + "/image/sprites.png" // TODO: use go:embed
 	data, err := os.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("loading image %q: %e", path, err)

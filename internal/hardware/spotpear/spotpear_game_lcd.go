@@ -83,7 +83,7 @@ func NewSpotpearGameDisplay(opts SpotpearGameDisplayOpts) (*SpotpearGameDisplay,
 		return nil, fmt.Errorf("loading sprite set: %w", err)
 	}
 
-	fontData, err := os.Open(opts.AssetDir + "/font/LeagueGothic-Regular.ttf")
+	fontData, err := os.Open(opts.AssetDir + "/font/LeagueGothic-Regular.ttf") // TODO: use go:embed
 	if err != nil {
 		return nil, fmt.Errorf("open font file: %w", err)
 	}
@@ -155,9 +155,6 @@ func (d *SpotpearGameDisplay) ShowTextCentered(canvas *image.RGBA, text string, 
 		Dst:  canvas,
 		Src:  image.NewUniform(color.RGBA{255, 255, 255, 1}),
 		Face: fontFace,
-		// Face: basicfont.Face7x13,
-		// Face: inconsolata.Bold8x16,
-		// Face: bitmapfont.Gothic12r,
 	}
 
 	textBounds, _ := fontDrawer.BoundString(text)

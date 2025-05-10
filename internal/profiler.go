@@ -8,7 +8,6 @@ import (
 )
 
 type PyroscopeProfiler struct {
-	running  bool
 	endpoint string
 	tags     map[string]string
 	profiler *pyroscope.Profiler
@@ -38,8 +37,7 @@ func (p *PyroscopeProfiler) Start() error {
 		ApplicationName: "simtezilo",
 		ServerAddress:   p.endpoint,
 		Logger:          pyroscope.StandardLogger,
-		// Logger: nil, FIXME
-		Tags: p.tags,
+		Tags:            p.tags,
 		ProfileTypes: []pyroscope.ProfileType{
 			pyroscope.ProfileCPU,
 			pyroscope.ProfileAllocObjects,

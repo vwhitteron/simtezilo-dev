@@ -3,6 +3,7 @@ package hardware
 import (
 	"fmt"
 	"log"
+	"time"
 
 	"periph.io/x/conn/v3/gpio"
 	"periph.io/x/conn/v3/gpio/gpioreg"
@@ -50,12 +51,14 @@ func OnButtonThreePressed(fn func()) {
 func onButtonPressed(n int, fn func()) {
 	go func() {
 		p := gpioreg.ByName(fmt.Sprintf("GPIO%d", n))
-		if err := p.In(gpio.PullUp, gpio.FallingEdge); err != nil {
+
+		if err := p.In(gpio.PullUp, gpio.RisingEdge); err != nil {
 			log.Fatal(err)
 		}
 		for {
 			p.WaitForEdge(-1)
 			fn()
+			time.Sleep(100 * time.Millisecond)
 		}
 	}()
 }

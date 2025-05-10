@@ -1,28 +1,30 @@
 package synth
 
 import (
-	"math"
 	"sync"
 
 	"github.com/rs/zerolog"
 )
 
 type Buffer struct {
-	buffer   []float64
-	log      zerolog.Logger
-	mixer    *Mixer
-	mu       sync.Mutex
-	slots    int
-	slotSize int
+	buffer     []float64
+	bufferSize int
+	log        zerolog.Logger
+	mixer      *Mixer
+	mu         sync.Mutex
+	slots      int
+	slotSize   int
 }
 
 func NewBuffer(slotSize int, slots int, mixer *Mixer, logger zerolog.Logger) *Buffer {
+	bufferSize := slotSize * slots * 2
 	buffer := &Buffer{
-		buffer:   make([]float64, slotSize*slots),
-		log:      logger,
-		mixer:    mixer,
-		slots:    slots,
-		slotSize: slotSize,
+		buffer:     make([]float64, bufferSize),
+		bufferSize: bufferSize,
+		log:        logger,
+		mixer:      mixer,
+		slots:      slots,
+		slotSize:   slotSize,
 	}
 
 	buffer.ClearBuffer()
@@ -34,13 +36,13 @@ func (b *Buffer) ClearBuffer() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	for i := 0; i < len(b.buffer); i++ {
+	for i := range b.bufferSize {
 		b.buffer[i] = 0
 	}
 }
 
 func (b *Buffer) GetLength() int {
-	return len(b.buffer)
+	return b.bufferSize
 }
 
 func (b *Buffer) Write(channel string, samples []float64) {
@@ -55,8 +57,10 @@ func (b *Buffer) Write(channel string, samples []float64) {
 		b.log.Debug().Float64("volume", volume).Str("channel", channel).Msg("writing sample to channel")
 	}
 
-	b.writeAGC(samples, volume)
-	// b.writeSimple(samples)
+	outSamples := b.mixSamples(samples, volume)
+	for i := range outSamples { //nolint: staticcheck // buffer larger than write samples
+		b.buffer[i] = outSamples[i]
+	}
 }
 
 func (b *Buffer) WriteWithVolumePercent(channel string, percent int, samples []float64) {
@@ -69,49 +73,32 @@ func (b *Buffer) WriteWithVolumePercent(channel string, percent int, samples []f
 
 	volume = float64(percent) / 100.0 * volume
 
-	// if channel == "gearchange" {
-	// 	b.log.Debug().Float64("volume", volume).Str("channel", channel).Msg("writing sample to channel")
-	// }
-
-	b.writeAGC(samples, volume)
-}
-
-func (b *Buffer) writeSimple(samples []float64) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	for i := 0; i < len(samples); i++ {
-		b.buffer[i] = (b.buffer[i] + samples[i]) * 0.66
+	outSamples := b.mixSamples(samples, volume)
+	for i := range outSamples { //nolint: staticcheck // buffer larger than write samples
+		b.buffer[i] = outSamples[i]
 	}
 }
 
-func (b *Buffer) writeAGC(samples []float64, volume float64) {
+func (b *Buffer) mixSamples(inSamples []float64, volume float64) []float64 {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
 	peak := 0.0
-	mixedSamples := make([]float64, len(samples))
-	for i := 0; i < len(samples); i++ {
-		new := b.buffer[i] + (samples[i] * volume)
+	outSamples := make([]float64, len(inSamples))
 
-		newAbs := math.Abs(new)
+	for i := range inSamples {
+		inputSample := inSamples[i] * volume
+		bufferSample := b.buffer[i]
 
-		if newAbs > peak {
-			peak = newAbs
-		}
-
-		mixedSamples[i] = new
+		outSamples[i] = b.mixer.MixSample(inputSample, bufferSample, &peak)
 	}
-
-	scale := 1.0
 
 	if peak > 1.0 {
-		scale = 1.0 / peak
+		scaleSamplesPeak(&outSamples, peak)
+		b.log.Debug().Float64("peak", peak).Msg("AGC applied")
 	}
 
-	for i := 0; i < len(samples); i++ {
-		b.buffer[i] = mixedSamples[i] * scale
-	}
+	return outSamples
 }
 
 func (b *Buffer) Read(length int) []float64 {
@@ -120,7 +107,7 @@ func (b *Buffer) Read(length int) []float64 {
 
 	samples := make([]float64, length)
 
-	for i := 0; i < length; i++ {
+	for i := range length {
 		samples[i] = b.buffer[i]
 	}
 
@@ -131,46 +118,9 @@ func (b *Buffer) ShiftBuffer(samples int) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	bufferMax := len(b.buffer) - samples
+	bufferMax := b.bufferSize - samples
 
-	for i := 0; i < bufferMax; i++ {
+	for i := range bufferMax {
 		b.buffer[i] = b.buffer[i+samples]
-	}
-}
-
-func (b *Buffer) ShiftBufferSlots(slots int) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	b.shiftBuffer2(slots)
-}
-
-func (b *Buffer) shiftBuffer1(slots int) {
-	offset := slots * b.slotSize
-
-	for i := 0; i < offset-1; i++ {
-		b.buffer[i+offset] = b.buffer[i]
-	}
-}
-
-func (b *Buffer) shiftBuffer2(slots int) {
-	bufferMax := (b.slotSize * b.slots) - 1
-	offset := slots * b.slotSize
-
-	for i := bufferMax - offset; i >= 0; i-- {
-		b.buffer[i+offset] = b.buffer[i]
-	}
-}
-
-func (b *Buffer) shiftBuffer3(slots int) {
-	bufferMax := (b.slotSize * b.slots) - 1
-	offset := slots * b.slotSize
-
-	for i := 0; i <= bufferMax; i++ {
-		if i < bufferMax-offset {
-			b.buffer[i] = b.buffer[i+offset]
-		} else {
-			b.buffer[i] = 0
-		}
 	}
 }

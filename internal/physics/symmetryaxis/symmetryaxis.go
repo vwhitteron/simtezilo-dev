@@ -3,7 +3,7 @@ package symmetryaxis
 import (
 	"math"
 
-	telemetry_client "github.com/vwhitteron/gt-telemetry"
+	telemetry_client "github.com/zetetos/gt-telemetry"
 )
 
 func Delta(axis1 telemetry_client.SymmetryAxes, axis2 telemetry_client.SymmetryAxes) telemetry_client.SymmetryAxes {

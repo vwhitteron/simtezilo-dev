@@ -1,6 +1,7 @@
 package config
 
 import (
+	"math"
 	"strings"
 	"sync"
 
@@ -33,14 +34,20 @@ type SynthProfile struct {
 
 type Synthesizer struct {
 	SampleRateHz        int
+	OutputFile          string
 	Profiles            []SynthProfile
 	ForceProfile        int
+	ForceMax            int
+	ForceScale          float64
 	GrainProfile        int
+	GrainMax            int
+	GrainScale          float64
 	PulseMaxAmplitude   float64
 	PulseMaxFrequencyHz float64
 	PulseMinFrequencyHz float64
 	PulseWidthMax       float64
 	PulseWidthMin       float64
+	Algorithm           string
 	MasterGain          float64
 	GainIncrement       float64
 	ChassisVolume       int
@@ -59,7 +66,7 @@ type Config struct {
 	Hardware    Hardware
 	Synthesizer Synthesizer
 	Telemetry   Telemetry
-	mu          sync.Mutex
+	mu          sync.RWMutex
 }
 
 func NewConfig(filename string, log zerolog.Logger) *Config {
@@ -78,6 +85,7 @@ func NewConfig(filename string, log zerolog.Logger) *Config {
 		},
 		Synthesizer: Synthesizer{
 			SampleRateHz: 8000,
+			OutputFile:   "default",
 			Profiles: []SynthProfile{
 				{JerkExponent: 0.475, JerkScale: 0.01748, SnapExponent: 0.475, SnapScale: 0.00455},
 				{JerkExponent: 0.450, JerkScale: 0.02168, SnapExponent: 0.450, SnapScale: 0.00618},
@@ -91,12 +99,15 @@ func NewConfig(filename string, log zerolog.Logger) *Config {
 				{JerkExponent: 0.250, JerkScale: 0.11895, SnapExponent: 0.250, SnapScale: 0.07094},
 			},
 			ForceProfile:        5,
+			ForceMax:            50,
 			GrainProfile:        5,
+			GrainMax:            52,
 			PulseMaxAmplitude:   1,
 			PulseMaxFrequencyHz: 60,
 			PulseMinFrequencyHz: 16,
 			PulseWidthMax:       0.5,
 			PulseWidthMin:       0.1,
+			Algorithm:           "sum",
 			MasterGain:          -15,
 			GainIncrement:       0.25,
 			ChassisVolume:       100,
@@ -117,17 +128,6 @@ func NewConfig(filename string, log zerolog.Logger) *Config {
 	viper.SetEnvPrefix("SIMTEZILO")
 	viper.SetEnvKeyReplacer(strings.NewReplacer(`.`, `_`))
 	viper.AutomaticEnv()
-
-	// viper.SetDefault("Synthesizer.sampleratehz", 8000)
-	// viper.SetDefault("Synthesizer.profiles", []SynthProfile{})
-	// viper.SetDefault("Synthesizer.pulseMaxAmplitude", 1)
-	// viper.SetDefault("Synthesizer.pulseMaxFrequencyHz", 40)
-	// viper.SetDefault("Synthesizer.pulseMinFrequencyHz", 23)
-	// viper.SetDefault("Synthesizer.pulseWidthMax", 0.5)
-	// viper.SetDefault("Synthesizer.pulseWidthMin", 0.1)
-	// viper.SetDefault("Display.gearFontSize", 16)
-	// viper.SetDefault("Display.volumeFontSize", 16)
-
 	viper.SetConfigName(filename)
 	viper.SetConfigType("toml")
 	viper.AddConfigPath("/boot/simtezilo/")
@@ -152,10 +152,11 @@ func NewConfig(filename string, log zerolog.Logger) *Config {
 		}
 	}
 
-	// log.Debug().Interface("config", c).Msg("config loaded")
-
 	c.Synthesizer.PulseWidthMin = float64(c.Synthesizer.SampleRateHz) / (2 * c.Synthesizer.PulseMaxFrequencyHz)
 	c.Synthesizer.PulseWidthMax = float64(c.Synthesizer.SampleRateHz) / (2 * c.Synthesizer.PulseMinFrequencyHz)
+
+	c.UpdateJerkScale()
+	c.UpdateSnapScale()
 
 	return c
 }
@@ -163,94 +164,191 @@ func NewConfig(filename string, log zerolog.Logger) *Config {
 func (c *Config) GetJerkExponent() float64 {
 	profile := c.GetJerkProfile()
 
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
 	return c.Synthesizer.Profiles[profile-1].JerkExponent
 }
 
 func (c *Config) GetJerkScale() float64 {
-	profile := c.GetJerkProfile()
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 
-	return c.Synthesizer.Profiles[profile-1].JerkScale
+	return c.Synthesizer.ForceScale
 }
 
 func (c *Config) GetSnapExponent() float64 {
 	profile := c.GetSnapProfile()
 
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
 	return c.Synthesizer.Profiles[profile-1].SnapExponent
 }
 
 func (c *Config) GetSnapScale() float64 {
-	profile := c.GetSnapProfile()
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 
-	return c.Synthesizer.Profiles[profile-1].SnapScale
+	return c.Synthesizer.GrainScale
 }
 
 func (c *Config) GetJerkProfile() int {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 
 	return c.Synthesizer.ForceProfile
 }
 
+func (c *Config) GetJerkMax() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.Synthesizer.ForceMax
+}
+
 func (c *Config) GetSnapProfile() int {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 
 	return c.Synthesizer.GrainProfile
 }
 
-// func (c *Config) SetProfile(profile int) bool {
-// 	c.mu.Lock()
-// 	defer c.mu.Unlock()
+func (c *Config) GetSnapMax() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 
-// 	if profile < 1 || profile > 10 {
-// 		return false
-// 	}
-
-// 	c.Synthesizer.Profile = profile
-
-// 	return true
-// }
+	return c.Synthesizer.GrainMax
+}
 
 func (c *Config) PreviousJerkProfile() int {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 
 	if c.Synthesizer.ForceProfile > 1 {
 		c.Synthesizer.ForceProfile--
 	}
+
+	c.mu.Unlock()
+
+	c.UpdateJerkScale()
 
 	return c.Synthesizer.ForceProfile
 }
 
 func (c *Config) NextJerkProfile() int {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 
 	if c.Synthesizer.ForceProfile < len(c.Synthesizer.Profiles) {
 		c.Synthesizer.ForceProfile++
 	}
 
+	c.mu.Unlock()
+
+	c.UpdateJerkScale()
+
 	return c.Synthesizer.ForceProfile
+}
+
+func (c *Config) DecreaseJerkMax() int {
+	c.mu.Lock()
+
+	if c.Synthesizer.ForceMax > 1 {
+		c.Synthesizer.ForceMax--
+	}
+
+	c.mu.Unlock()
+
+	c.UpdateJerkScale()
+
+	return c.Synthesizer.ForceMax
+}
+
+func (c *Config) IncreaseJerkMax() int {
+	c.mu.Lock()
+
+	if c.Synthesizer.ForceMax < 100 {
+		c.Synthesizer.ForceMax++
+	}
+
+	c.mu.Unlock()
+
+	c.UpdateJerkScale()
+
+	return c.Synthesizer.ForceMax
+}
+
+func (c *Config) UpdateJerkScale() {
+	exponent := c.GetJerkExponent()
+	forceMax := 100 * float64(c.Synthesizer.ForceMax)
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.Synthesizer.ForceScale = 1 / math.Pow(forceMax, exponent)
 }
 
 func (c *Config) PreviousSnapProfile() int {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 
 	if c.Synthesizer.GrainProfile > 1 {
 		c.Synthesizer.GrainProfile--
 	}
+
+	c.mu.Unlock()
+
+	c.UpdateSnapScale()
 
 	return c.Synthesizer.GrainProfile
 }
 
 func (c *Config) NextSnapProfile() int {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 
 	if c.Synthesizer.GrainProfile < len(c.Synthesizer.Profiles) {
 		c.Synthesizer.GrainProfile++
 	}
 
+	c.mu.Unlock()
+
+	c.UpdateSnapScale()
+
 	return c.Synthesizer.GrainProfile
+}
+
+func (c *Config) DecreaseSnapMax() int {
+	c.mu.Lock()
+
+	if c.Synthesizer.GrainMax > 1 {
+		c.Synthesizer.GrainMax--
+	}
+
+	c.mu.Unlock()
+
+	c.UpdateSnapScale()
+
+	return c.Synthesizer.GrainMax
+}
+
+func (c *Config) IncreaseSnapMax() int {
+	c.mu.Lock()
+
+	if c.Synthesizer.GrainMax < 100 {
+		c.Synthesizer.GrainMax++
+	}
+
+	c.mu.Unlock()
+
+	c.UpdateSnapScale()
+
+	return c.Synthesizer.GrainMax
+}
+
+func (c *Config) UpdateSnapScale() {
+	exponent := c.GetSnapExponent()
+	grainMax := 1000 * float64(c.Synthesizer.GrainMax)
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.Synthesizer.GrainScale = 1 / math.Pow(grainMax, exponent)
 }

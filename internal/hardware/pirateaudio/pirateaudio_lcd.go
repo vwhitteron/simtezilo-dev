@@ -26,6 +26,7 @@ type PirateAudioLCD struct {
 	orientation int
 	sprites     *gui.SpriteSet
 	dpi         float64
+	poweredOn   bool
 }
 
 type PirateAudioLCDOpts struct {
@@ -55,7 +56,7 @@ func NewPirateAudioLCD(opts PirateAudioLCDOpts) (*PirateAudioLCD, error) {
 		return nil, fmt.Errorf("loading sprite set: %w", err)
 	}
 
-	fontData, err := os.Open(opts.AssetDir + "/font/LeagueGothic-Regular.ttf")
+	fontData, err := os.Open(opts.AssetDir + "/font/LeagueGothic-Regular.ttf") // TODO: use go:embed
 	if err != nil {
 		return nil, fmt.Errorf("open font file: %w", err)
 	}
@@ -77,6 +78,7 @@ func NewPirateAudioLCD(opts PirateAudioLCDOpts) (*PirateAudioLCD, error) {
 		orientation: opts.Orientation,
 		sprites:     sprites,
 		dpi:         displayDPI,
+		poweredOn:   true,
 	}
 
 	lcd.Clear()
@@ -114,10 +116,26 @@ func (l *PirateAudioLCD) SetOrientation(orientation int) {
 
 func (l *PirateAudioLCD) PowerOn() {
 	l.device.PowerOn()
+	l.poweredOn = true
 }
 
 func (l *PirateAudioLCD) PowerOff() {
 	l.device.PowerOff()
+	l.poweredOn = false
+}
+
+func (l *PirateAudioLCD) PowerToggle() bool {
+	if l.poweredOn {
+		l.PowerOff()
+		return false
+	}
+
+	l.PowerOn()
+	return true
+}
+
+func (l *PirateAudioLCD) IsPoweredOn() bool {
+	return l.poweredOn
 }
 
 func (l *PirateAudioLCD) Show(sprite string) {
@@ -145,9 +163,6 @@ func (l *PirateAudioLCD) ShowTextCentered(canvas *image.RGBA, text string, size 
 		Dst:  canvas,
 		Src:  image.NewUniform(color.RGBA{255, 255, 255, 1}),
 		Face: fontFace,
-		// Face: basicfont.Face7x13,
-		// Face: inconsolata.Bold8x16,
-		// Face: bitmapfont.Gothic12r,
 	}
 
 	textBounds, _ := fontDrawer.BoundString(text)

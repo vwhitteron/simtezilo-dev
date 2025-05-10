@@ -18,6 +18,14 @@ func (d NullDisplay) PowerOn() {}
 
 func (d NullDisplay) PowerOff() {}
 
+func (d NullDisplay) PowerToggle() bool {
+	return false
+}
+
+func (d NullDisplay) IsPoweredOn() bool {
+	return false
+}
+
 func (d NullDisplay) Show(string) {}
 
 func (d NullDisplay) ShowText(string) {}
@@ -31,15 +39,5 @@ func (d NullDisplay) GetOrientation() int {
 }
 
 func (d NullDisplay) SetOrientation(o int) {
-	switch o {
-	case 90:
-		d.Orientation = 90
-	case 180:
-		d.Orientation = 180
-	case 270:
-		d.Orientation = 270
-	default:
-		d.Orientation = 0
-	}
-
+	d.Orientation = o
 }

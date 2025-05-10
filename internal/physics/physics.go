@@ -3,9 +3,9 @@ package physics
 import (
 	"time"
 
-	telemetry_client "github.com/vwhitteron/gt-telemetry"
 	"github.com/vwhitteron/simtezilo-dev/internal/physics/symmetryaxis"
 	"github.com/vwhitteron/simtezilo-dev/internal/physics/vector"
+	telemetry_client "github.com/zetetos/gt-telemetry"
 )
 
 type VelocityDerivatives struct {
@@ -81,7 +81,7 @@ func newPhysics() Physics {
 	}
 }
 
-// FIXME: ideally this should not be given the gt client
+// TODO: ideally this should not be given the gt client
 func (t *PhysicsTracker) Update(windowMilliseconds float64, gtclient *telemetry_client.GTClient) {
 	t.Last = t.Current
 
@@ -98,7 +98,7 @@ func (t *PhysicsTracker) Update(windowMilliseconds float64, gtclient *telemetry_
 	// chassis attitude
 	t.Current.Attitude.Delta = symmetryaxis.Delta(t.Current.Attitude.Vector, t.Last.Attitude.Vector)
 
-	// ignore yaw jerk/snap as it causes vibration during heavy rotation (high G-force corners, spin out, etc)
+	// attenuate yaw jerk/snap as it causes vibration during heavy rotation (high G-force corners, spin out, etc)
 	biasedAttitudeDelta := symmetryaxis.Scale(t.Current.Attitude.Delta, 1.0, 0.25, 1.0)
 
 	t.Current.Attitude.Acceleration = symmetryaxis.Magnitude(biasedAttitudeDelta) / windowMilliseconds

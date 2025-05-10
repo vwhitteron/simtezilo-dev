@@ -3,12 +3,16 @@ package pirateaudio
 import (
 	"fmt"
 	"image"
+	"log"
+	"time"
 
 	"github.com/rs/zerolog"
-	"github.com/rubiojr/go-pirateaudio/buttons"
 	"github.com/vwhitteron/simtezilo-dev/internal/config"
 	"github.com/vwhitteron/simtezilo-dev/internal/hardware"
 	"github.com/vwhitteron/simtezilo-dev/internal/synth"
+	"periph.io/x/conn/v3/gpio"
+	"periph.io/x/conn/v3/gpio/gpioreg"
+	"periph.io/x/host/v3"
 )
 
 const volumeFontSize = 20
@@ -16,15 +20,18 @@ const volumeFontSize = 20
 var modes = []string{
 	"volume",
 	"jerk",
+	"jerkMax",
 	"snap",
+	"snapMax",
 	"chassis",
 	"gear",
+	"mixAlgo",
 }
 var mode = 0
 
 func SetupPirateAudioButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, config *config.Config, log zerolog.Logger) func() {
 	return func() {
-		buttons.OnButtonAPressed(func() {
+		OnButtonAPressed(func() {
 			displayString := ""
 
 			switch modes[mode] {
@@ -50,6 +57,17 @@ func SetupPirateAudioButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, c
 					Str("type", "jerk").
 					Str("profile", fmt.Sprintf("%d", profile)).
 					Msg("button press")
+			case "jerkMax":
+				jerkMax := config.IncreaseJerkMax()
+
+				displayString = fmt.Sprintf("JMax %d", jerkMax)
+
+				log.Debug().
+					Str("button", "A").
+					Str("action", "increase").
+					Str("type", "jerk max").
+					Str("value", fmt.Sprintf("%d", jerkMax)).
+					Msg("button press")
 			case "snap":
 				profile := config.NextSnapProfile()
 
@@ -60,6 +78,17 @@ func SetupPirateAudioButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, c
 					Str("action", "next profile").
 					Str("type", "snap").
 					Str("profile", fmt.Sprintf("%d", profile)).
+					Msg("button press")
+			case "snapMax":
+				snapMax := config.IncreaseSnapMax()
+
+				displayString = fmt.Sprintf("SMax %d", snapMax)
+
+				log.Debug().
+					Str("button", "A").
+					Str("action", "increase").
+					Str("type", "snap max").
+					Str("value", fmt.Sprintf("%d", snapMax)).
 					Msg("button press")
 			case "chassis":
 				volume, _ := synth.IncreaseChannelVolume("chassis")
@@ -81,6 +110,16 @@ func SetupPirateAudioButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, c
 					Str("action", "increase race gear volume").
 					Str("profile", fmt.Sprintf("%d", volume)).
 					Msg("button press")
+			case "mixAlgo":
+				algo := synth.Mixer.NextAlgorithm()
+
+				displayString = fmt.Sprintf("Mix %s", algo)
+
+				log.Debug().
+					Str("button", "A").
+					Str("action", "next mix algorithm").
+					Str("algorithm", algo).
+					Msg("button press")
 			default:
 				log.Debug().
 					Str("button", "A").
@@ -96,7 +135,7 @@ func SetupPirateAudioButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, c
 			lcdDevice.ShowTextCentered(canvas, displayString, volumeFontSize)
 		})
 
-		buttons.OnButtonBPressed(func() {
+		OnButtonBPressed(func() {
 			displayString := ""
 
 			switch modes[mode] {
@@ -122,6 +161,17 @@ func SetupPirateAudioButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, c
 					Str("type", "jerk").
 					Str("profile", fmt.Sprintf("%d", profile)).
 					Msg("button press")
+			case "jerkMax":
+				jerkMax := config.DecreaseJerkMax()
+
+				displayString = fmt.Sprintf("JMax %d", jerkMax)
+
+				log.Debug().
+					Str("button", "B").
+					Str("action", "decrease").
+					Str("type", "jerk max").
+					Str("value", fmt.Sprintf("%d", jerkMax)).
+					Msg("button press")
 			case "snap":
 				profile := config.PreviousSnapProfile()
 
@@ -132,6 +182,17 @@ func SetupPirateAudioButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, c
 					Str("action", "previous profile").
 					Str("type", "snap").
 					Str("profile", fmt.Sprintf("%d", profile)).
+					Msg("button press")
+			case "snapMax":
+				snapMax := config.DecreaseSnapMax()
+
+				displayString = fmt.Sprintf("SMax %d", snapMax)
+
+				log.Debug().
+					Str("button", "B").
+					Str("action", "decrease").
+					Str("type", "snap max").
+					Str("value", fmt.Sprintf("%d", snapMax)).
 					Msg("button press")
 			case "chassis":
 				volume, _ := synth.DecreaseChannelVolume("chassis")
@@ -153,6 +214,16 @@ func SetupPirateAudioButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, c
 					Str("action", "decrease race gear volume").
 					Str("profile", fmt.Sprintf("%d", volume)).
 					Msg("button press")
+			case "mixAlgo":
+				algo := synth.Mixer.PreviousAlgorithm()
+
+				displayString = fmt.Sprintf("Mix %s", algo)
+
+				log.Debug().
+					Str("button", "B").
+					Str("action", "previous mix algorithm").
+					Str("algorithm", algo).
+					Msg("button press")
 			default:
 				log.Debug().
 					Str("button", "B").
@@ -169,7 +240,7 @@ func SetupPirateAudioButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, c
 
 		})
 
-		buttons.OnButtonXPressed(func() {
+		OnButtonXPressed(func() {
 			if mode >= len(modes)-1 {
 				mode = 0
 			} else {
@@ -183,14 +254,20 @@ func SetupPirateAudioButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, c
 				displayString = fmt.Sprintf("%0.2f dB", synth.GetMasterGain())
 			case "jerk":
 				displayString = fmt.Sprintf("Jerk %d", config.GetJerkProfile())
+			case "jerkMax":
+				displayString = fmt.Sprintf("JMax %d", config.GetJerkMax())
 			case "snap":
 				displayString = fmt.Sprintf("Snap %d", config.GetSnapProfile())
+			case "snapMax":
+				displayString = fmt.Sprintf("SMax %d", config.GetSnapMax())
 			case "chassis":
 				volume, _ := synth.GetChannelVolume("chassis")
 				displayString = fmt.Sprintf("Chassis %d", volume)
 			case "gear":
 				volume, _ := synth.GetChannelVolume("gearchange")
 				displayString = fmt.Sprintf("Gear %d", volume)
+			case "mixAlgo":
+				displayString = fmt.Sprintf("Mix %s", synth.Mixer.GetAlgorithm())
 			}
 
 			log.Debug().
@@ -204,7 +281,7 @@ func SetupPirateAudioButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, c
 			lcdDevice.ShowTextCentered(canvas, displayString, volumeFontSize)
 		})
 
-		buttons.OnButtonYPressed(func() {
+		OnButtonYPressed(func() {
 			log.Debug().
 				Str("button", "Y").
 				Str("action", "none").
@@ -212,47 +289,43 @@ func SetupPirateAudioButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, c
 
 		})
 
-		// sprites := []string{"splash", "error"}
-		// index := 0
-		// buttons.OnButtonXPressed(func() {
-		// 	index += 1
-		// 	if index >= len(sprites) {
-		// 		index = len(sprites) - 1
-		// 	}
-
-		// 	if index == 0 {
-		// 		lcdDevice.PowerOn()
-		// 	}
-
-		// 	lcdDevice.Show(sprites[index])
-
-		// 	log.Debug().
-		// 		Str("button", "X").
-		// 		Str("action", "show next sprite").
-		// 		Str("sprite", sprites[index]).
-		// 		Msg("button press")
-		// })
-
-		// buttons.OnButtonYPressed(func() {
-		// 	index -= 1
-		// 	if index < -1 {
-		// 		index = -1
-		// 	}
-
-		// 	if index == -1 {
-		// 		lcdDevice.PowerOff()
-		// 		return
-		// 	}
-
-		// 	lcdDevice.Show(sprites[index])
-
-		// 	log.Debug().
-		// 		Str("button", "X").
-		// 		Str("action", "show previous sprite").
-		// 		Str("sprite", sprites[index]).
-		// 		Msg("button press")
-		// })
-
 		log.Debug().Str("component", "pirate audio buttons").Str("result", "success").Msg("button setup complete")
 	}
+}
+
+func init() {
+	if _, err := host.Init(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func OnButtonAPressed(fn func()) {
+	onButtonPressed(5, fn)
+}
+
+func OnButtonBPressed(fn func()) {
+	onButtonPressed(6, fn)
+}
+
+func OnButtonXPressed(fn func()) {
+	onButtonPressed(16, fn)
+}
+
+func OnButtonYPressed(fn func()) {
+	onButtonPressed(24, fn)
+}
+
+func onButtonPressed(n int, fn func()) {
+	go func() {
+		p := gpioreg.ByName(fmt.Sprintf("GPIO%d", n))
+		if err := p.In(gpio.PullUp, gpio.FallingEdge); err != nil {
+			log.Fatal(err)
+		}
+
+		for {
+			p.WaitForEdge(-1)
+			fn()
+			time.Sleep(200 * time.Millisecond)
+		}
+	}()
 }

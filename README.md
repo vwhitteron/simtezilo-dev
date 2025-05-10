@@ -9,6 +9,9 @@ Software for processing sim racing telemetry signals and outputting the data to 
 
 # Installation
 
+## Linux
+
+Install [Log2Ram](https://github.com/azlux/log2ram)
 
 ## Raspberry Pi
 

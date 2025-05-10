@@ -9,6 +9,8 @@ type LCD interface {
 	Close()
 	PowerOn()
 	PowerOff()
+	PowerToggle() bool
+	IsPoweredOn() bool
 	Show(string)
 	ShowText(string)
 	ShowTextCentered(*image.RGBA, string, int)
