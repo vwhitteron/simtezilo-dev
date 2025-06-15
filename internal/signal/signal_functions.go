@@ -77,13 +77,51 @@ func LargestMagnitude(valueA float64, valueB float64) float64 {
 	return maxVal
 }
 
-func Limit(value float64, max float64) (float64, bool) {
-	if value > max {
-		return max, true
+func LimitWindow(value float64, min float64, max float64) (float64, bool) {
+	cMin := false
+	cMax := false
+
+	value, cMin = LimitMin(value, min)
+	value, cMax = LimitMax(value, max)
+
+	if cMin || cMax {
+		return value, true
 	}
 
-	if value < -max {
-		return -max, true
+	return value, false
+}
+
+func LimitMin(value float64, min float64) (float64, bool) {
+	isNeg := false
+	if value < 0 {
+		isNeg = true
+		value = -value
+	}
+
+	if value < min {
+		value = min
+	}
+
+	if isNeg {
+		value = -value
+	}
+
+	return value, false
+}
+
+func LimitMax(value float64, max float64) (float64, bool) {
+	isNeg := false
+	if value < 0 {
+		isNeg = true
+		value = -value
+	}
+
+	if value > max {
+		value = max
+	}
+
+	if isNeg {
+		value = -value
 	}
 
 	return value, false

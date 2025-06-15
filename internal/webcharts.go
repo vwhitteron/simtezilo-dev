@@ -14,25 +14,25 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool { return true },
 }
 
-func StartWebChartServer(core *Core) {
-	if !core.webEnabled {
-		core.log.Debug().Str("component", "webchart").Msg("server disabled")
+func StartWebChartServer(app *App) {
+	if !app.webEnabled {
+		app.log.Debug().Str("component", "webchart").Msg("server disabled")
 
 		return
 	}
 
-	http.HandleFunc("/", rootHandlerFunc(core.assetDir))
-	http.HandleFunc("/chart", chartHandlerFunc(core.assetDir))
-	http.HandleFunc("/js/scichart.js", sciChartJSFunc(core.assetDir))
-	http.HandleFunc("/ws", core.handleWebSocketConnection)
+	http.HandleFunc("/", rootHandlerFunc(app.assetDir))
+	http.HandleFunc("/chart", chartHandlerFunc(app.assetDir))
+	http.HandleFunc("/js/scichart.js", sciChartJSFunc(app.assetDir))
+	http.HandleFunc("/ws", app.handleWebSocketConnection)
 
-	core.log.Debug().Str("component", "webchart").Msg("starting server on port 8080")
+	app.log.Debug().Str("component", "webchart").Msg("starting server on port 8080")
 	fmt.Printf("WebChart server started on port 8080\r\n")
 
 	err := http.ListenAndServe(":8080", nil)
 	if err != nil {
-		core.log.Error().Err(err).Str("component", "webchart").Msg("error starting web server")
-		core.webEnabled = false
+		app.log.Error().Err(err).Str("component", "webchart").Msg("error starting web server")
+		app.webEnabled = false
 	}
 }
 

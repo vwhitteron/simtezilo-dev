@@ -17,24 +17,28 @@ import (
 
 const volumeFontSize = 20
 
-var modes = []string{
+var screens = []string{
 	"volume",
-	"jerk",
+	// "jerkProfile",
+	"jerkExp",
 	"jerkMax",
-	"snap",
+	// "snapProfile",
+	"snapExp",
 	"snapMax",
+	"minHz",
+	"maxHz",
 	"chassis",
 	"gear",
 	"mixAlgo",
 }
-var mode = 0
+var currentScreen = 0
 
-func SetupPirateAudioButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, config *config.Config, log zerolog.Logger) func() {
+func SetupPirateAudioButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, config *config.Config, lastActive *time.Time, log zerolog.Logger) func() {
 	return func() {
 		OnButtonAPressed(func() {
 			displayString := ""
 
-			switch modes[mode] {
+			switch screens[currentScreen] {
 			case "volume":
 				synth.IncreaseMasterGain()
 
@@ -46,7 +50,7 @@ func SetupPirateAudioButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, c
 					Str("action", "increase master gain").
 					Float64("master_gain", masterGain).
 					Msg("button press")
-			case "jerk":
+			case "jerkProfile":
 				profile := config.NextJerkProfile()
 
 				displayString = fmt.Sprintf("Jerk %d", profile)
@@ -55,6 +59,17 @@ func SetupPirateAudioButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, c
 					Str("button", "A").
 					Str("action", "next profile").
 					Str("type", "jerk").
+					Str("profile", fmt.Sprintf("%d", profile)).
+					Msg("button press")
+			case "jerkExp":
+				profile := config.IncreaseJerkExponent()
+
+				displayString = fmt.Sprintf("Jerk %d", profile)
+
+				log.Debug().
+					Str("button", "A").
+					Str("action", "increase").
+					Str("type", "jerk exp").
 					Str("profile", fmt.Sprintf("%d", profile)).
 					Msg("button press")
 			case "jerkMax":
@@ -68,7 +83,7 @@ func SetupPirateAudioButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, c
 					Str("type", "jerk max").
 					Str("value", fmt.Sprintf("%d", jerkMax)).
 					Msg("button press")
-			case "snap":
+			case "snapProfile":
 				profile := config.NextSnapProfile()
 
 				displayString = fmt.Sprintf("Snap %d", profile)
@@ -77,6 +92,17 @@ func SetupPirateAudioButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, c
 					Str("button", "A").
 					Str("action", "next profile").
 					Str("type", "snap").
+					Str("profile", fmt.Sprintf("%d", profile)).
+					Msg("button press")
+			case "snapExp":
+				profile := config.IncreaseSnapExponent()
+
+				displayString = fmt.Sprintf("Snap %d", profile)
+
+				log.Debug().
+					Str("button", "A").
+					Str("action", "increase").
+					Str("type", "snap exp").
 					Str("profile", fmt.Sprintf("%d", profile)).
 					Msg("button press")
 			case "snapMax":
@@ -89,6 +115,28 @@ func SetupPirateAudioButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, c
 					Str("action", "increase").
 					Str("type", "snap max").
 					Str("value", fmt.Sprintf("%d", snapMax)).
+					Msg("button press")
+			case "minHz":
+				minHz := config.IncreaseMinHz()
+
+				displayString = fmt.Sprintf("FMin %d", minHz)
+
+				log.Debug().
+					Str("button", "A").
+					Str("action", "increase").
+					Str("type", "min frequency").
+					Str("value", fmt.Sprintf("%d", minHz)).
+					Msg("button press")
+			case "maxHz":
+				maxHz := config.IncreaseMaxHz()
+
+				displayString = fmt.Sprintf("FMax %d", maxHz)
+
+				log.Debug().
+					Str("button", "A").
+					Str("action", "increase").
+					Str("type", "max frequency").
+					Str("value", fmt.Sprintf("%d", maxHz)).
 					Msg("button press")
 			case "chassis":
 				volume, _ := synth.IncreaseChannelVolume("chassis")
@@ -124,12 +172,13 @@ func SetupPirateAudioButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, c
 				log.Debug().
 					Str("button", "A").
 					Str("action", "none").
-					Str("mode", modes[mode]).
+					Str("mode", screens[currentScreen]).
 					Msg("button press")
 
 				return
 			}
 
+			*lastActive = time.Now()
 			lcdDevice.PowerOn()
 			canvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
 			lcdDevice.ShowTextCentered(canvas, displayString, volumeFontSize)
@@ -138,7 +187,7 @@ func SetupPirateAudioButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, c
 		OnButtonBPressed(func() {
 			displayString := ""
 
-			switch modes[mode] {
+			switch screens[currentScreen] {
 			case "volume":
 				synth.DecreaseMasterGain()
 
@@ -150,7 +199,7 @@ func SetupPirateAudioButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, c
 					Str("action", "decrease master gain").
 					Float64("master_gain", masterGain).
 					Msg("button press")
-			case "jerk":
+			case "jerkProfile":
 				profile := config.PreviousJerkProfile()
 
 				displayString = fmt.Sprintf("Jerk %d", profile)
@@ -161,18 +210,29 @@ func SetupPirateAudioButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, c
 					Str("type", "jerk").
 					Str("profile", fmt.Sprintf("%d", profile)).
 					Msg("button press")
-			case "jerkMax":
-				jerkMax := config.DecreaseJerkMax()
+			case "jerkExp":
+				value := config.DecreaseJerkExponent()
 
-				displayString = fmt.Sprintf("JMax %d", jerkMax)
+				displayString = fmt.Sprintf("Jerk %d", value)
+
+				log.Debug().
+					Str("button", "B").
+					Str("action", "decrease").
+					Str("type", "jerk exp").
+					Str("value", fmt.Sprintf("%d", value)).
+					Msg("button press")
+			case "jerkMax":
+				value := config.DecreaseJerkMax()
+
+				displayString = fmt.Sprintf("JMax %d", value)
 
 				log.Debug().
 					Str("button", "B").
 					Str("action", "decrease").
 					Str("type", "jerk max").
-					Str("value", fmt.Sprintf("%d", jerkMax)).
+					Str("value", fmt.Sprintf("%d", value)).
 					Msg("button press")
-			case "snap":
+			case "snapProfile":
 				profile := config.PreviousSnapProfile()
 
 				displayString = fmt.Sprintf("Snap %d", profile)
@@ -182,6 +242,17 @@ func SetupPirateAudioButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, c
 					Str("action", "previous profile").
 					Str("type", "snap").
 					Str("profile", fmt.Sprintf("%d", profile)).
+					Msg("button press")
+			case "snapExp":
+				value := config.DecreaseSnapExponent()
+
+				displayString = fmt.Sprintf("Snap %d", value)
+
+				log.Debug().
+					Str("button", "B").
+					Str("action", "decrease").
+					Str("type", "snap exp").
+					Str("value", fmt.Sprintf("%d", value)).
 					Msg("button press")
 			case "snapMax":
 				snapMax := config.DecreaseSnapMax()
@@ -193,6 +264,28 @@ func SetupPirateAudioButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, c
 					Str("action", "decrease").
 					Str("type", "snap max").
 					Str("value", fmt.Sprintf("%d", snapMax)).
+					Msg("button press")
+			case "minHz":
+				minHz := config.DecreaseMinHz()
+
+				displayString = fmt.Sprintf("FMin %d", minHz)
+
+				log.Debug().
+					Str("button", "B").
+					Str("action", "decrease").
+					Str("type", "min frequency").
+					Str("value", fmt.Sprintf("%d", minHz)).
+					Msg("button press")
+			case "maxHz":
+				maxHz := config.DecreaseMaxHz()
+
+				displayString = fmt.Sprintf("FMax %d", maxHz)
+
+				log.Debug().
+					Str("button", "B").
+					Str("action", "decrease").
+					Str("type", "max frequency").
+					Str("value", fmt.Sprintf("%d", maxHz)).
 					Msg("button press")
 			case "chassis":
 				volume, _ := synth.DecreaseChannelVolume("chassis")
@@ -228,12 +321,13 @@ func SetupPirateAudioButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, c
 				log.Debug().
 					Str("button", "B").
 					Str("action", "none").
-					Str("mode", modes[mode]).
+					Str("mode", screens[currentScreen]).
 					Msg("button press")
 
 				return
 			}
 
+			*lastActive = time.Now()
 			lcdDevice.PowerOn()
 			canvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
 			lcdDevice.ShowTextCentered(canvas, displayString, volumeFontSize)
@@ -241,25 +335,33 @@ func SetupPirateAudioButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, c
 		})
 
 		OnButtonXPressed(func() {
-			if mode >= len(modes)-1 {
-				mode = 0
+			if currentScreen >= len(screens)-1 {
+				currentScreen = 0
 			} else {
-				mode++
+				currentScreen++
 			}
 
 			displayString := ""
 
-			switch modes[mode] {
+			switch screens[currentScreen] {
 			case "volume":
 				displayString = fmt.Sprintf("%0.2f dB", synth.GetMasterGain())
-			case "jerk":
+			case "jerkProfile":
 				displayString = fmt.Sprintf("Jerk %d", config.GetJerkProfile())
+			case "jerkExp":
+				displayString = fmt.Sprintf("Jerk %d", int(config.GetJerkExponent()*1000.0))
 			case "jerkMax":
 				displayString = fmt.Sprintf("JMax %d", config.GetJerkMax())
-			case "snap":
+			case "snapProfile":
 				displayString = fmt.Sprintf("Snap %d", config.GetSnapProfile())
+			case "snapExp":
+				displayString = fmt.Sprintf("Snap %d", int(config.GetSnapExponent()*1000.0))
 			case "snapMax":
 				displayString = fmt.Sprintf("SMax %d", config.GetSnapMax())
+			case "minHz":
+				displayString = fmt.Sprintf("FMin %d", int(config.GetMinHz()))
+			case "maxHz":
+				displayString = fmt.Sprintf("FMax %d", int(config.GetMaxHz()))
 			case "chassis":
 				volume, _ := synth.GetChannelVolume("chassis")
 				displayString = fmt.Sprintf("Chassis %d", volume)
@@ -273,9 +375,10 @@ func SetupPirateAudioButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, c
 			log.Debug().
 				Str("button", "X").
 				Str("action", "next mode").
-				Str("mode", modes[mode]).
+				Str("mode", screens[currentScreen]).
 				Msg("button press")
 
+			*lastActive = time.Now()
 			lcdDevice.PowerOn()
 			canvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
 			lcdDevice.ShowTextCentered(canvas, displayString, volumeFontSize)
@@ -325,7 +428,7 @@ func onButtonPressed(n int, fn func()) {
 		for {
 			p.WaitForEdge(-1)
 			fn()
-			time.Sleep(200 * time.Millisecond)
+			time.Sleep(250 * time.Millisecond)
 		}
 	}()
 }

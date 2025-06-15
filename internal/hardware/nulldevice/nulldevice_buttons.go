@@ -51,43 +51,77 @@ func SetupNullDeviceButtons(synth *synth.Synthesizer, config *config.Config, don
 					return true, nil
 				}
 			case keys.Up:
-				profile := config.NextJerkProfile()
+				value := config.IncreaseJerkExponent()
 				log.Debug().
 					Str("button", "up arrow").
-					Str("action", "next profile").
-					Str("type", "jerk").
-					Int("profile", profile).
+					Str("action", "increase").
+					Str("type", "jerk exp").
+					Int("value", value).
 					Msg("button press")
 			case keys.Down:
-				profile := config.PreviousJerkProfile()
+				value := config.DecreaseJerkExponent()
 				log.Debug().
 					Str("button", "down arrow").
-					Str("action", "previous profile").
-					Str("type", "jerk").
-					Int("profile", profile).
+					Str("action", "decrease").
+					Str("type", "jerk exp").
+					Int("value", value).
 					Msg("button press")
 			case keys.Left:
-				profile := config.PreviousSnapProfile()
+				value := config.DecreaseJerkMax()
 				log.Debug().
 					Str("button", "left arrow").
-					Str("action", "previous profile").
-					Str("type", "snap").
-					Int("profile", profile).
+					Str("action", "decrease").
+					Str("type", "jerk max").
+					Int("value", value).
 					Msg("button press")
 			case keys.Right:
-				profile := config.NextSnapProfile()
+				value := config.IncreaseJerkMax()
 				log.Debug().
 					Str("button", "right arrow").
-					Str("action", "next profile").
-					Str("type", "snap").
-					Int("profile", profile).
+					Str("action", "increase").
+					Str("type", "jerk max").
+					Int("value", value).
+					Msg("button press")
+			case keys.ShiftUp:
+				value := config.IncreaseSnapExponent()
+				log.Debug().
+					Str("button", "up arrow").
+					Str("action", "increase").
+					Str("type", "snap exp").
+					Int("value", value).
+					Msg("button press")
+			case keys.ShiftDown:
+				value := config.DecreaseSnapExponent()
+				log.Debug().
+					Str("button", "down arrow").
+					Str("action", "decrease").
+					Str("type", "snap exp").
+					Int("value", value).
+					Msg("button press")
+			case keys.ShiftLeft:
+				value := config.DecreaseSnapMax()
+				log.Debug().
+					Str("button", "left arrow").
+					Str("action", "decrease").
+					Str("type", "snap max").
+					Int("value", value).
+					Msg("button press")
+			case keys.ShiftRight:
+				value := config.IncreaseSnapMax()
+				log.Debug().
+					Str("button", "right arrow").
+					Str("action", "increase").
+					Str("type", "snap max").
+					Int("value", value).
 					Msg("button press")
 			}
 
-			fmt.Printf("Volume %0.2f dB    Profiles:   Force[%02d]    Grain[%02d]\r\n",
+			fmt.Printf("Volume %0.2f dB    Profiles:   Jerk[%0.3f, %02d]    Snap[%0.3f, %02d]\r\n",
 				synth.GetMasterGain(),
-				config.GetJerkProfile(),
-				config.GetSnapProfile(),
+				config.GetJerkExponent(),
+				config.GetJerkMax(),
+				config.GetSnapExponent(),
+				config.GetSnapMax(),
 			)
 
 			return false, nil // Return false to continue listening

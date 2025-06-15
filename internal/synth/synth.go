@@ -34,7 +34,7 @@ func NewSynth(opts SynthOpts) (*Synthesizer, error) {
 		opts.Config.GainIncrement,
 		opts.Logger.With().Str("component", "synth mixer").Logger(),
 	)
-	mixer.AddChannel("gearchange", float64(opts.Config.GearStreetVolume)/100.0)
+	mixer.AddChannel("gearchange", float64(opts.Config.GearVolume)/100.0)
 	mixer.AddChannel("chassis", float64(opts.Config.ChassisVolume)/100.0)
 	mixer.SetAlgorithm(opts.Config.Algorithm)
 

@@ -63,7 +63,7 @@ func main() {
 		log.Println("Pyroscope profiler started with UI at " + profiler.Endpoint())
 	}
 
-	core, err := internal.NewCore(internal.CoreOptions{
+	app, err := internal.NewApp(internal.AppOptions{
 		BuildTime:  BuildTime,
 		Done:       done,
 		LogLevel:   logLevel,
@@ -71,13 +71,13 @@ func main() {
 		WebEnabled: webEnabled,
 	})
 	if err != nil {
-		log.Fatal("Error creating core: ", err)
+		log.Fatal("Error creating app: ", err)
 	}
 
-	go core.Run()
+	go app.Run()
 
 	<-done
-	core.Close()
+	app.Close()
 	err = profiler.Shutdown()
 	if err != nil {
 		log.Fatal("Error shutting down Pyroscope profiler: ", err)

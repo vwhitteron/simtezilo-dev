@@ -9,21 +9,21 @@ import (
 )
 
 type VelocityDerivatives struct {
-	Delta        telemetry_client.Vector
-	Vector       telemetry_client.Vector
-	Acceleration float64
-	Jerk         float64
-	Snap         float64
-	Crackle      float64
+	Delta          telemetry_client.Vector
+	Vector         telemetry_client.Vector
+	Acceleration3D float64
+	Jerk           float64
+	Snap           float64
+	Crackle        float64
 }
 
 type AttitudeDerivatives struct {
-	Delta        telemetry_client.SymmetryAxes
-	Vector       telemetry_client.SymmetryAxes
-	Acceleration float64
-	Jerk         float64
-	Snap         float64
-	Crackle      float64
+	Delta          telemetry_client.SymmetryAxes
+	Vector         telemetry_client.SymmetryAxes
+	Acceleration3D float64
+	Jerk           float64
+	Snap           float64
+	Crackle        float64
 }
 
 type Physics struct {
@@ -35,8 +35,8 @@ type Physics struct {
 
 	TransmissionGear int
 
-	GroundSpeed  float32
-	Acceleration float32
+	GroundSpeed           float32
+	AccelerationLongitude float32
 
 	SynthOutputAmplitude float64
 	SynthOutputFrequency int
@@ -57,27 +57,27 @@ func NewPhysicsTracker() PhysicsTracker {
 func newPhysics() Physics {
 	return Physics{
 		Attitude: AttitudeDerivatives{
-			Delta:        telemetry_client.SymmetryAxes{},
-			Vector:       telemetry_client.SymmetryAxes{},
-			Acceleration: 0,
-			Jerk:         0,
-			Snap:         0,
-			Crackle:      0,
+			Delta:          telemetry_client.SymmetryAxes{},
+			Vector:         telemetry_client.SymmetryAxes{},
+			Acceleration3D: 0,
+			Jerk:           0,
+			Snap:           0,
+			Crackle:        0,
 		},
 		ComputeTime: 0,
 		Velocity: VelocityDerivatives{
-			Delta:        telemetry_client.Vector{},
-			Vector:       telemetry_client.Vector{},
-			Acceleration: 0,
-			Jerk:         0,
-			Snap:         0,
-			Crackle:      0,
+			Delta:          telemetry_client.Vector{},
+			Vector:         telemetry_client.Vector{},
+			Acceleration3D: 0,
+			Jerk:           0,
+			Snap:           0,
+			Crackle:        0,
 		},
-		TransmissionGear:     -100,
-		GroundSpeed:          0,
-		Acceleration:         0,
-		SynthOutputAmplitude: 0,
-		SynthOutputFrequency: 0,
+		TransmissionGear:      -100,
+		GroundSpeed:           0,
+		AccelerationLongitude: 0,
+		SynthOutputAmplitude:  0,
+		SynthOutputFrequency:  0,
 	}
 }
 
@@ -93,7 +93,7 @@ func (t *PhysicsTracker) Update(windowMilliseconds float64, gtclient *telemetry_
 
 	// chassis longitudinal velocity
 	t.Current.GroundSpeed = gtclient.Telemetry.GroundSpeedMetersPerSecond()
-	t.Current.Acceleration = (t.Current.GroundSpeed - t.Last.GroundSpeed) / float32(windowMilliseconds)
+	t.Current.AccelerationLongitude = (t.Current.GroundSpeed - t.Last.GroundSpeed) / float32(windowMilliseconds)
 
 	// chassis attitude
 	t.Current.Attitude.Delta = symmetryaxis.Delta(t.Current.Attitude.Vector, t.Last.Attitude.Vector)
@@ -101,9 +101,9 @@ func (t *PhysicsTracker) Update(windowMilliseconds float64, gtclient *telemetry_
 	// attenuate yaw jerk/snap as it causes vibration during heavy rotation (high G-force corners, spin out, etc)
 	biasedAttitudeDelta := symmetryaxis.Scale(t.Current.Attitude.Delta, 1.0, 0.25, 1.0)
 
-	t.Current.Attitude.Acceleration = symmetryaxis.Magnitude(biasedAttitudeDelta) / windowMilliseconds
+	t.Current.Attitude.Acceleration3D = symmetryaxis.Magnitude(biasedAttitudeDelta) / windowMilliseconds
 
-	t.Current.Attitude.Jerk = (t.Current.Attitude.Acceleration - t.Last.Attitude.Acceleration) / windowMilliseconds
+	t.Current.Attitude.Jerk = (t.Current.Attitude.Acceleration3D - t.Last.Attitude.Acceleration3D) / windowMilliseconds
 	if t.Current.Attitude.Jerk > 10 {
 		t.Current.Attitude.Jerk = 10
 	} else if t.Current.Attitude.Jerk < -10 {
@@ -114,8 +114,8 @@ func (t *PhysicsTracker) Update(windowMilliseconds float64, gtclient *telemetry_
 
 	// chassis 3D velocity
 	t.Current.Velocity.Delta = vector.Delta(t.Current.Velocity.Vector, t.Last.Velocity.Vector)
-	t.Current.Velocity.Acceleration = vector.Magnitude(t.Current.Velocity.Delta) / windowMilliseconds
-	t.Current.Velocity.Jerk = (t.Current.Velocity.Acceleration - t.Last.Velocity.Acceleration) / windowMilliseconds
+	t.Current.Velocity.Acceleration3D = vector.Magnitude(t.Current.Velocity.Delta) / windowMilliseconds
+	t.Current.Velocity.Jerk = (t.Current.Velocity.Acceleration3D - t.Last.Velocity.Acceleration3D) / windowMilliseconds
 	t.Current.Velocity.Snap = (t.Current.Velocity.Jerk - t.Last.Velocity.Jerk) / windowMilliseconds
 	t.Current.Velocity.Crackle = (t.Current.Velocity.Snap - t.Last.Velocity.Snap) / windowMilliseconds
 

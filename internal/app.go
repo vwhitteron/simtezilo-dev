@@ -34,7 +34,7 @@ type appInfo struct {
 	Version   string
 }
 
-type Core struct {
+type App struct {
 	appInfo          appInfo
 	assetDir         string
 	buttonsFn        func()
@@ -43,22 +43,23 @@ type Core struct {
 	lcdDevice        hardware.LCD
 	displayContent   displayContent
 	done             chan bool
+	gearVolumeMin    float64
 	gt               *telemetry_client.GTClient
-	physics          physics.PhysicsTracker
 	lastGear         int
 	log              zerolog.Logger
+	physics          physics.PhysicsTracker
 	replayMode       bool
 	seq              uint32
 	synth            *synth.Synthesizer
 	timeOfDay        time.Duration
-	lastActive       time.Time
+	lastActive       *time.Time
 	vehicleID        uint32
 	webEnabled       bool
 	webSocketClients int
 	webSequenceId    uint32
 }
 
-type CoreOptions struct {
+type AppOptions struct {
 	BuildTime  string
 	Done       chan bool
 	LogLevel   string
@@ -66,7 +67,7 @@ type CoreOptions struct {
 	WebEnabled bool
 }
 
-func NewCore(opts CoreOptions) (*Core, error) {
+func NewApp(opts AppOptions) (*App, error) {
 	var logLevel zerolog.Level
 
 	switch opts.LogLevel {
@@ -148,6 +149,8 @@ func NewCore(opts CoreOptions) (*Core, error) {
 		return nil, err
 	}
 
+	lastActive := time.Now()
+
 	var lcdDevice hardware.LCD
 	var buttonsFn func()
 
@@ -174,7 +177,8 @@ func NewCore(opts CoreOptions) (*Core, error) {
 
 		lcdDevice.ShowTextCentered(image.NewRGBA(image.Rect(0, 0, 240, 240)), "Loading...", 16)
 
-		buttonsFn = pirateaudio.SetupPirateAudioButtons(lcdDevice, synthesizer, config, log)
+		// TODO: fix fast button presses can result in a crash when updatting lastActive pointer
+		buttonsFn = pirateaudio.SetupPirateAudioButtons(lcdDevice, synthesizer, config, &lastActive, log)
 	case "waveshare":
 		var err error
 		lcdDevice, err = waveshare.NewWaveshare14972Display(waveshare.Waveshare14972LCDOpts{
@@ -231,7 +235,7 @@ func NewCore(opts CoreOptions) (*Core, error) {
 	}
 
 	log.Debug().
-		Str("component", "core").
+		Str("component", "app").
 		Str("result", "success").
 		Msg("init")
 
@@ -241,13 +245,14 @@ func NewCore(opts CoreOptions) (*Core, error) {
 	// 	runSetupWizard(lcdDevice)
 	// }
 
-	return &Core{
+	return &App{
 		appInfo:          appInfo,
 		assetDir:         config.App.AssetDir,
 		buttonsFn:        buttonsFn,
 		chartDataChannel: make(chan map[string]float32, 600),
 		config:           config,
 		done:             opts.Done,
+		gearVolumeMin:    0,
 		gt:               gt,
 		lastGear:         NullGear,
 		lcdDevice:        lcdDevice,
@@ -256,7 +261,7 @@ func NewCore(opts CoreOptions) (*Core, error) {
 		replayMode:       config.App.ReplayMode,
 		seq:              uint32(0),
 		synth:            synthesizer,
-		lastActive:       time.Time{},
+		lastActive:       &lastActive,
 		vehicleID:        0,
 		webEnabled:       opts.WebEnabled,
 		webSocketClients: 0,
@@ -264,7 +269,7 @@ func NewCore(opts CoreOptions) (*Core, error) {
 
 }
 
-func (c *Core) Run() {
+func (c *App) Run() {
 	go c.buttonsFn()
 
 	go c.gt.Run()
@@ -282,7 +287,7 @@ func (c *Core) Run() {
 	ticker60fps := time.NewTicker((1000 / 60) * time.Millisecond)
 	ticker15fps := time.NewTicker((1000 / 15) * time.Millisecond)
 
-	c.log.Debug().Str("component", "core").Str("result", "success").Msg("main loop started")
+	c.log.Debug().Str("component", "app").Str("result", "success").Msg("main loop started")
 
 	for {
 		select {
@@ -299,7 +304,7 @@ func (c *Core) Run() {
 	}
 }
 
-func (c *Core) Close() {
+func (c *App) Close() {
 	err := c.synth.Close()
 	if err != nil {
 		c.log.Error().
@@ -311,7 +316,7 @@ func (c *Core) Close() {
 	c.lcdDevice.Close()
 }
 
-func (c *Core) physicsEvents() {
+func (c *App) physicsEvents() {
 	startTime := time.Now()
 
 	seq := c.gt.Telemetry.SequenceID()
@@ -406,7 +411,7 @@ func (c *Core) physicsEvents() {
 
 }
 
-func (c *Core) processHaptics(seqDelta uint32) {
+func (c *App) processHaptics(seqDelta uint32) {
 	// no haptics if sequence ID has not advanced
 	if seqDelta < 1 {
 		return
@@ -424,19 +429,19 @@ func (c *Core) processHaptics(seqDelta uint32) {
 	c.generateBump()
 }
 
-func (c *Core) generateBump() {
+func (c *App) generateBump() {
 	startTime := time.Now()
 
 	snap := signal.LargestMagnitude(c.physics.Current.Velocity.Snap, (c.physics.Current.Attitude.Snap * 100))
 
 	pulseFrequencyScaler := signal.Abs(signal.Exponent(snap, c.config.GetSnapExponent()))
 	pulseFrequencyScaler = signal.Scale(pulseFrequencyScaler, c.config.GetSnapScale())
-	pulseFrequencyHz := (c.config.Synthesizer.PulseMaxFrequencyHz - c.config.Synthesizer.PulseMinFrequencyHz) * pulseFrequencyScaler
+	pulseFrequencyHz := c.config.GetFrequencyHzRange() * pulseFrequencyScaler
 
-	if pulseFrequencyHz < c.config.Synthesizer.PulseMinFrequencyHz {
-		pulseFrequencyHz = c.config.Synthesizer.PulseMinFrequencyHz
-	} else if pulseFrequencyHz > c.config.Synthesizer.PulseMaxFrequencyHz {
-		pulseFrequencyHz = c.config.Synthesizer.PulseMaxFrequencyHz
+	if pulseFrequencyHz < c.config.GetMinHz() {
+		pulseFrequencyHz = c.config.GetMinHz()
+	} else if pulseFrequencyHz > c.config.GetMaxHz() {
+		pulseFrequencyHz = c.config.GetMaxHz()
 	}
 
 	pulseWidth := math.Round(float64(c.config.Synthesizer.SampleRateHz) / (2 * pulseFrequencyHz))
@@ -446,7 +451,7 @@ func (c *Core) generateBump() {
 	pulseAmplitude = signal.Scale(pulseAmplitude, c.config.GetJerkScale())
 
 	p1 := pulseAmplitude
-	pulseAmplitude, wasLimited := signal.Limit(pulseAmplitude, c.config.Synthesizer.PulseMaxAmplitude)
+	pulseAmplitude, wasLimited := signal.LimitMax(pulseAmplitude, c.config.Synthesizer.PulseMaxAmplitude)
 	if wasLimited {
 		c.log.Debug().Float64("pulse", p1).Msg("limiter")
 	}
@@ -456,7 +461,7 @@ func (c *Core) generateBump() {
 
 	bufferLen := c.synth.GetBufferLength()
 	pulseBuffer := make([]float64, bufferLen)
-	for i := 0; i < int(pulseWidth*2); i++ {
+	for i := range int(pulseWidth * 2) {
 		phase := waveSamplePeriod * (float64(i) - waveOffset)
 		pulseBuffer[i] = ((pulseAmplitude * math.Sin(phase)) + pulseAmplitude) / 2
 	}
@@ -472,20 +477,28 @@ func (c *Core) generateBump() {
 
 	if c.physics.Current.TransmissionGear != NullGear {
 		if c.physics.Current.TransmissionGear != c.physics.Last.TransmissionGear {
-			volume_scale := float64(40)
-			acceleration := signal.Abs(float64(c.physics.Current.Acceleration))
-			if acceleration > 0 {
-				volume_scale = 6*acceleration + 75
-				volume_scale, _ = signal.Limit(volume_scale, 100)
+			volumeMaxPercent, _ := c.synth.GetChannelVolume("gearchange")
+			volumeMax := float64(volumeMaxPercent) / 100.0
+
+			gforceSaturation := 1.6 // TODO: create config option
+			volumeCurve := 0.26     // TODO: create config option
+
+			gForce := float64(0)
+			// Only increase gear change feedback if the vehicle is in motion
+			if c.gt.Telemetry.GroundSpeedKPH() > 0.5 {
+				gForce = signal.Abs(float64(c.physics.Current.AccelerationLongitude) / gravityConstant)
 			}
 
-			volume_pc := int(volume_scale)
+			gearChangeVolume := (math.Pow((gForce/gforceSaturation), volumeCurve) * volumeMax)
+			gearChangeVolume, _ = signal.LimitWindow(gearChangeVolume, c.gearVolumeMin, volumeMax)
 
-			c.synth.PlayEffectWithVolume("gearchange", volume_pc)
+			volumePercent := int(gearChangeVolume*100.0 + c.gearVolumeMin)
+
+			c.synth.PlayEffectWithVolume("gearchange", volumePercent)
 			c.log.Debug().
 				Int("sequence_id", int(c.seq)).
-				Int("volume_pc", volume_pc).
-				Float32("accel", c.physics.Last.Acceleration).
+				Int("volume_pc", volumePercent).
+				Float64("gforce", gForce).
 				Int("gear", c.physics.Current.TransmissionGear).
 				Msg("gear change")
 		}
@@ -516,7 +529,7 @@ func (c *Core) generateBump() {
 	}
 }
 
-func (c *Core) sessionHasReset(seq uint32) bool {
+func (c *App) sessionHasReset(seq uint32) bool {
 	if c.gt.Telemetry.Flags().Loading {
 		c.log.Debug().
 			Uint32("sequence_id", seq).
@@ -528,7 +541,7 @@ func (c *Core) sessionHasReset(seq uint32) bool {
 	return false
 }
 
-func (c *Core) resetState(seq uint32, currentGear int) {
+func (c *App) resetState(seq uint32, currentGear int) {
 	c.timeOfDay = c.gt.Telemetry.TimeOfDay()
 	c.seq = seq
 	c.lastGear = currentGear
@@ -540,34 +553,36 @@ func (c *Core) resetState(seq uint32, currentGear int) {
 	c.synth.ClearBuffer()
 }
 
-func (c *Core) silenceHaptics() {
+func (c *App) silenceHaptics() {
 	// speaker.Suspend()
 	c.synth.Silence()
 	c.synth.ClearBuffer()
 }
 
-func (c *Core) updateDisplay() {
+func (c *App) updateDisplay() {
+	if (c.gt.Telemetry.Flags().Live == false && c.replayMode == false) || c.gt.Telemetry.Flags().GamePaused == true {
+		if time.Since(*c.lastActive) > 20*time.Second {
+			c.lcdDevice.PowerOff()
+
+			return
+		}
+
+		if time.Since(*c.lastActive) > 5*time.Second {
+			canvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
+			c.lcdDevice.ShowTextCentered(canvas, "Waiting...", 16)
+		}
+
+		return
+	}
+
 	currentGear := c.physics.Current.TransmissionGear
 
 	if c.displayContent.gear == currentGear || currentGear == NullGear {
 		return
 	}
 
-	if (c.gt.Telemetry.Flags().Live == false && c.replayMode == false) || c.gt.Telemetry.Flags().GamePaused == true {
-		if time.Since(c.lastActive) > 10*time.Second {
-			c.lcdDevice.PowerOff()
-
-			return
-		}
-
-		canvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
-		c.lcdDevice.ShowTextCentered(canvas, "Waiting...", 16)
-
-		return
-	}
-
 	c.lcdDevice.PowerOn()
-	c.lastActive = time.Now()
+	*c.lastActive = time.Now()
 
 	canvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
 	c.lcdDevice.ShowTextCentered(canvas, gearName(currentGear), gearFontSize)
@@ -575,7 +590,7 @@ func (c *Core) updateDisplay() {
 	c.displayContent.gear = currentGear
 }
 
-func (c *Core) updateVehicle(currentVehicleID uint32, currentGear int) {
+func (c *App) updateVehicle(currentVehicleID uint32, currentGear int) {
 	vehicleType := c.gt.Telemetry.VehicleType()
 	c.vehicleID = currentVehicleID
 
@@ -593,27 +608,17 @@ func (c *Core) updateVehicle(currentVehicleID uint32, currentGear int) {
 		currentVehicleID,
 	)
 
-	var volume int
 	switch vehicleType {
 	case "race":
-		volume = c.config.Synthesizer.GearRaceVolume
+		c.gearVolumeMin = float64(c.config.Synthesizer.GearVolumeMinRace) / 100
 	default:
-		volume = c.config.Synthesizer.GearStreetVolume
+		c.gearVolumeMin = float64(c.config.Synthesizer.GearVolumeMinStreet) / 100
 	}
-
-	err := c.synth.SetChannelVolume("gearchange", volume)
-	if err != nil {
-		c.log.Error().Err(err).Str("channel", "gear").Msg("failed to set volume")
-	}
-	c.log.Debug().
-		Str("channel", "gear").
-		Int("volume", volume).
-		Msg("volume set")
 
 	c.lastGear = currentGear
 }
 
-func (c *Core) checkSessionComplete() {
+func (c *App) checkSessionComplete() {
 	if c.gt.Finished {
 		c.resetState(0, NullGear)
 		c.log.Debug().Msg("session finished")
@@ -621,7 +626,7 @@ func (c *Core) checkSessionComplete() {
 	}
 }
 
-func (c *Core) handleWebSocketConnection(w http.ResponseWriter, r *http.Request) {
+func (c *App) handleWebSocketConnection(w http.ResponseWriter, r *http.Request) {
 	ws, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		c.log.Error().Str("component", "websocket").Msgf("error upgrading connection: %s", err)
@@ -644,8 +649,6 @@ func (c *Core) handleWebSocketConnection(w http.ResponseWriter, r *http.Request)
 				diff := int(data["seq"]) - sid
 				if diff == 0 {
 					continue
-				} else if diff > 1 {
-					c.log.Debug().Str("component", "websocket").Int("dropped", diff-1).Msg("webchart missed packets")
 				}
 			}
 
@@ -665,7 +668,7 @@ func (c *Core) handleWebSocketConnection(w http.ResponseWriter, r *http.Request)
 	}
 }
 
-func (c *Core) sendWebTelemetry() {
+func (c *App) sendWebTelemetry() {
 	if !c.webEnabled {
 		return
 	}
@@ -683,7 +686,6 @@ func (c *Core) sendWebTelemetry() {
 	}
 
 	if c.physics.Current.SequenceID == c.webSequenceId {
-		c.log.Debug().Str("component", "websocket").Msg("no new data")
 		return
 	}
 
@@ -697,10 +699,13 @@ func (c *Core) sendWebTelemetry() {
 			"brake":                c.gt.Telemetry.BrakePercent(),
 			"rpm":                  c.gt.Telemetry.EngineRPM(),
 			"speed":                c.gt.Telemetry.GroundSpeedKPH(),
+			"gear":                 float32(c.physics.Current.TransmissionGear),
+			"acceleration":         float32(c.physics.Current.AccelerationLongitude),
 			"velocityX":            c.physics.Current.Velocity.Vector.X,
 			"velocityY":            c.physics.Current.Velocity.Vector.Y,
 			"velocityZ":            c.physics.Current.Velocity.Vector.Z,
-			"gforce":               float32(c.physics.Current.Velocity.Acceleration) / gravityConstant,
+			"gforce3D":             float32(c.physics.Current.Velocity.Acceleration3D) / gravityConstant,
+			"gforceLong":           float32(c.physics.Current.AccelerationLongitude) / gravityConstant,
 			"jerk":                 float32(c.physics.Current.Velocity.Jerk),
 			"snap":                 float32(c.physics.Current.Velocity.Snap),
 			"attitudeJerk":         float32(c.physics.Current.Attitude.Jerk * 50),
