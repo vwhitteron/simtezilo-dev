@@ -68,30 +68,10 @@ type AppOptions struct {
 }
 
 func NewApp(opts AppOptions) (*App, error) {
-	var logLevel zerolog.Level
-
-	switch opts.LogLevel {
-	case "trace":
-		logLevel = zerolog.TraceLevel
-	case "debug":
-		logLevel = zerolog.DebugLevel
-	case "info":
-		logLevel = zerolog.InfoLevel
-	case "warn":
-		logLevel = zerolog.WarnLevel
-	case "error":
-		logLevel = zerolog.ErrorLevel
-	case "fatal":
-		logLevel = zerolog.FatalLevel
-	case "panic":
-		logLevel = zerolog.PanicLevel
-	case "off":
-		logLevel = zerolog.Disabled
-	case "":
-		logLevel = zerolog.WarnLevel
-	default:
-		logLevel = zerolog.WarnLevel
+	logLevel, err := zerolog.ParseLevel(opts.LogLevel)
+	if err != nil {
 		fmt.Printf("invalid log level parameter %q, setting level to warn", opts.LogLevel)
+		logLevel = zerolog.WarnLevel
 	}
 
 	log := zerolog.New(os.Stderr).With().Timestamp().Logger().Level(logLevel)
@@ -99,25 +79,8 @@ func NewApp(opts AppOptions) (*App, error) {
 	config := config.NewConfig("simtezilo.conf", log)
 
 	if opts.LogLevel == "" {
-		switch config.App.LogLevel {
-		case "trace":
-			logLevel = zerolog.TraceLevel
-		case "debug":
-			logLevel = zerolog.DebugLevel
-		case "info":
-			logLevel = zerolog.InfoLevel
-		case "warn":
-			logLevel = zerolog.WarnLevel
-		case "error":
-			logLevel = zerolog.ErrorLevel
-		case "fatal":
-			logLevel = zerolog.FatalLevel
-		case "panic":
-			logLevel = zerolog.PanicLevel
-		case "off":
-			logLevel = zerolog.Disabled
-		default:
-			logLevel = zerolog.WarnLevel
+		logLevel, err = zerolog.ParseLevel(config.App.LogLevel)
+		if err != nil {
 			log.Error().Str("configured", config.App.LogLevel).Str("fallback", "warn").Msg("invalid log level")
 		}
 	}
