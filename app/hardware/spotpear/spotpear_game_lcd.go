@@ -14,7 +14,7 @@ import (
 	"github.com/golang/freetype/truetype"
 	"github.com/rubiojr/go-pirateaudio/st7789"
 	"github.com/rubiojr/go-pirateaudio/textview"
-	"github.com/vwhitteron/simtezilo-dev/internal/gui"
+	"github.com/vwhitteron/simtezilo-dev/app/gui"
 	"golang.org/x/image/font"
 	"golang.org/x/image/math/fixed"
 	"periph.io/x/conn/v3/driver/driverreg"

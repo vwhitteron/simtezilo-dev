@@ -44,6 +44,8 @@ type Synthesizer struct {
 	SnapMax             int
 	SnapProfile         int
 	SnapScale           float64
+	GearExp             int
+	GearMax             float64
 	PulseMaxAmplitude   float64
 	PulseMaxFrequencyHz float64
 	PulseMinFrequencyHz float64
@@ -107,6 +109,8 @@ func NewConfig(filename string, log zerolog.Logger) *Config {
 			SnapExponent:        420,
 			SnapMax:             52,
 			SnapProfile:         5,
+			GearExp:             150,
+			GearMax:             1.0,
 			PulseMaxAmplitude:   1,
 			PulseMaxFrequencyHz: 60,
 			PulseMinFrequencyHz: 16,
@@ -168,12 +172,9 @@ func NewConfig(filename string, log zerolog.Logger) *Config {
 }
 
 func (c *Config) GetJerkExponent() float64 {
-	// profile := c.GetJerkProfile()
-
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	// return flaot64(c.Synthesizer.Profiles[profile-1].JerkExponent) / 1000.0
 	return float64(c.Synthesizer.JerkExponent) / 1000.0
 }
 
@@ -185,14 +186,17 @@ func (c *Config) GetJerkScale() float64 {
 }
 
 func (c *Config) GetSnapExponent() float64 {
-	// profile := c.GetSnapProfile()
-
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	// return float64(c.Synthesizer.Profiles[profile-1].SnapExponent) / 1000.0
-
 	return float64(c.Synthesizer.SnapExponent) / 1000.0
+}
+
+func (c *Config) GetGearExp() float64 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return float64(c.Synthesizer.GearExp) / 1000
 }
 
 func (c *Config) GetSnapScale() float64 {
@@ -290,8 +294,9 @@ func (c *Config) DecreaseJerkMax() int {
 func (c *Config) IncreaseJerkExponent() int {
 	c.mu.Lock()
 
-	c.Synthesizer.JerkExponent += 5
-	if c.Synthesizer.JerkExponent > 955 {
+	if c.Synthesizer.JerkExponent <= 950 {
+		c.Synthesizer.JerkExponent += 5
+	} else {
 		c.Synthesizer.JerkExponent = 955
 	}
 
@@ -305,8 +310,10 @@ func (c *Config) IncreaseJerkExponent() int {
 func (c *Config) IncreaseJerkMax() int {
 	c.mu.Lock()
 
-	if c.Synthesizer.JerkMax < 100 {
+	if c.Synthesizer.JerkMax <= 99 {
 		c.Synthesizer.JerkMax++
+	} else {
+		c.Synthesizer.JerkMax = 100
 	}
 
 	c.mu.Unlock()
@@ -357,8 +364,9 @@ func (c *Config) NextSnapProfile() int {
 func (c *Config) DecreaseSnapExponent() int {
 	c.mu.Lock()
 
-	c.Synthesizer.SnapExponent -= 5
-	if c.Synthesizer.SnapExponent < 5 {
+	if c.Synthesizer.SnapExponent >= 10 {
+		c.Synthesizer.SnapExponent -= 5
+	} else {
 		c.Synthesizer.SnapExponent = 5
 	}
 
@@ -386,8 +394,9 @@ func (c *Config) DecreaseSnapMax() int {
 func (c *Config) IncreaseSnapExponent() int {
 	c.mu.Lock()
 
-	c.Synthesizer.SnapExponent += 5
-	if c.Synthesizer.SnapExponent > 955 {
+	if c.Synthesizer.SnapExponent <= 950 {
+		c.Synthesizer.SnapExponent += 5
+	} else {
 		c.Synthesizer.SnapExponent = 955
 	}
 	c.mu.Unlock()
@@ -400,8 +409,10 @@ func (c *Config) IncreaseSnapExponent() int {
 func (c *Config) IncreaseSnapMax() int {
 	c.mu.Lock()
 
-	if c.Synthesizer.SnapMax < 100 {
+	if c.Synthesizer.SnapMax <= 99 {
 		c.Synthesizer.SnapMax++
+	} else {
+		c.Synthesizer.SnapMax = 100
 	}
 
 	c.mu.Unlock()
@@ -431,8 +442,10 @@ func (c *Config) GetMinHz() float64 {
 func (c *Config) IncreaseMinHz() int {
 	c.mu.Lock()
 
-	if c.Synthesizer.PulseMinFrequencyHz < 25 {
+	if c.Synthesizer.PulseMinFrequencyHz <= 24 {
 		c.Synthesizer.PulseMinFrequencyHz += 1
+	} else {
+		c.Synthesizer.PulseMinFrequencyHz = 25
 	}
 
 	c.Synthesizer.PulseWidthMax = float64(c.Synthesizer.SampleRateHz) / (2 * c.Synthesizer.PulseMinFrequencyHz)
@@ -445,8 +458,10 @@ func (c *Config) IncreaseMinHz() int {
 func (c *Config) DecreaseMinHz() int {
 	c.mu.Lock()
 
-	if c.Synthesizer.PulseMinFrequencyHz > 1 {
+	if c.Synthesizer.PulseMinFrequencyHz >= 5 {
 		c.Synthesizer.PulseMinFrequencyHz -= 1
+	} else {
+		c.Synthesizer.PulseMinFrequencyHz = 5
 	}
 
 	c.Synthesizer.PulseWidthMax = float64(c.Synthesizer.SampleRateHz) / (2 * c.Synthesizer.PulseMinFrequencyHz)
@@ -466,8 +481,10 @@ func (c *Config) GetMaxHz() float64 {
 func (c *Config) IncreaseMaxHz() int {
 	c.mu.Lock()
 
-	if c.Synthesizer.PulseMaxFrequencyHz < 100 {
+	if c.Synthesizer.PulseMaxFrequencyHz <= 99 {
 		c.Synthesizer.PulseMaxFrequencyHz += 1
+	} else {
+		c.Synthesizer.PulseMaxFrequencyHz = 100
 	}
 
 	c.Synthesizer.PulseWidthMin = float64(c.Synthesizer.SampleRateHz) / (2 * c.Synthesizer.PulseMaxFrequencyHz)
@@ -480,8 +497,10 @@ func (c *Config) IncreaseMaxHz() int {
 func (c *Config) DecreaseMaxHz() int {
 	c.mu.Lock()
 
-	if c.Synthesizer.PulseMaxFrequencyHz > 25 {
+	if c.Synthesizer.PulseMaxFrequencyHz >= 26 {
 		c.Synthesizer.PulseMaxFrequencyHz -= 1
+	} else {
+		c.Synthesizer.PulseMaxFrequencyHz = 25
 	}
 
 	c.Synthesizer.PulseWidthMin = float64(c.Synthesizer.SampleRateHz) / (2 * c.Synthesizer.PulseMaxFrequencyHz)
@@ -489,6 +508,62 @@ func (c *Config) DecreaseMaxHz() int {
 	c.mu.Unlock()
 
 	return int(c.Synthesizer.PulseMaxFrequencyHz)
+}
+
+func (c *Config) IncreaseGearExp() int {
+	c.mu.Lock()
+
+	if c.Synthesizer.GearExp <= 950 {
+		c.Synthesizer.GearExp += 5
+	} else {
+		c.Synthesizer.GearExp = 955
+	}
+
+	c.mu.Unlock()
+
+	return c.Synthesizer.GearExp
+}
+
+func (c *Config) DecreaseGearExp() int {
+	c.mu.Lock()
+
+	if c.Synthesizer.GearExp >= 10 {
+		c.Synthesizer.GearExp -= 5
+	} else {
+		c.Synthesizer.GearExp = 5
+	}
+
+	c.mu.Unlock()
+
+	return c.Synthesizer.GearExp
+}
+
+func (c *Config) IncreaseGearMax() float64 {
+	c.mu.Lock()
+
+	if c.Synthesizer.GearMax <= 4.9 {
+		c.Synthesizer.GearMax += 0.1
+	} else {
+		c.Synthesizer.GearMax = 5.0
+	}
+
+	c.mu.Unlock()
+
+	return c.Synthesizer.GearMax
+}
+
+func (c *Config) DecreaseGearMax() float64 {
+	c.mu.Lock()
+
+	if c.Synthesizer.GearMax >= 0.2 {
+		c.Synthesizer.GearMax -= 0.1
+	} else {
+		c.Synthesizer.GearMax = 0.1
+	}
+
+	c.mu.Unlock()
+
+	return c.Synthesizer.GearMax
 }
 
 func (c *Config) GetFrequencyHzRange() float64 {

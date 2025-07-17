@@ -1,4 +1,4 @@
-package nulldevice
+package terminal
 
 import "image"
 

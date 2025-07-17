@@ -15,8 +15,8 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/vwhitteron/simtezilo-dev/app/config"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware"
-	"github.com/vwhitteron/simtezilo-dev/app/hardware/nulldevice"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/pirateaudio"
+	"github.com/vwhitteron/simtezilo-dev/app/hardware/terminal"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/waveshare"
 	"github.com/vwhitteron/simtezilo-dev/app/kinematics"
 	"github.com/vwhitteron/simtezilo-dev/app/kinematics/vector"
@@ -151,15 +151,15 @@ func NewApp(opts AppOptions) (*App, error) {
 
 		lcdDevice.Clear()
 
-		buttonsFn = waveshare.SetupWaveshareButtons(lcdDevice, synthesizer, config, log)
+		buttonsFn = waveshare.SetupWaveshareButtons(lcdDevice, synthesizer, config, &lastActive, log)
 	default:
-		lcdDevice = nulldevice.NewNullDeviceDisplay()
+		lcdDevice = terminal.NewNullDeviceDisplay()
 		log.Debug().
 			Str("component", "null display").
 			Str("result", "success").
 			Msg("init")
 
-		buttonsFn = nulldevice.SetupNullDeviceButtons(synthesizer, config, opts.Done, log)
+		buttonsFn = terminal.SetupNullDeviceButtons(synthesizer, config, opts.Done, log)
 	}
 
 	log.Debug().
