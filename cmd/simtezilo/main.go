@@ -14,9 +14,6 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app"
 )
 
-var Version = "DEV"
-var BuildTime string
-
 func main() {
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
@@ -37,17 +34,18 @@ func main() {
 	flag.BoolVar(&webEnabled, "w", false, "Enable web server. Default is false")
 	flag.Parse()
 
-	if BuildTime == "" {
-		BuildTime = time.Now().Format("2006-01-02_15:04:05")
+	if app.BuildTime == "" {
+		app.BuildTime = time.Now().Format("2006-01-02_15:04:05")
 	}
-	fmt.Printf("Simtezilo version %s (built %s)\n", Version, BuildTime)
+	fmt.Printf("Simtezilo version %s (built %s)\n", app.Version, app.BuildTime)
 
 	profiler, err := app.NewPyroscopeProfiler(
 		"http://10.255.1.128:4040",
 		map[string]string{
-			"app":      "simtezilo",
-			"version":  Version,
-			"hostname": os.Getenv("HOSTNAME"),
+			"app":       "simtezilo",
+			"version":   app.Version,
+			"buildTime": app.BuildTime,
+			"hostname":  os.Getenv("HOSTNAME"),
 		},
 	)
 	if err != nil {
@@ -64,10 +62,8 @@ func main() {
 	}
 
 	app, err := app.NewApp(app.AppOptions{
-		BuildTime:  BuildTime,
 		Done:       done,
 		LogLevel:   logLevel,
-		Version:    Version,
 		WebEnabled: webEnabled,
 	})
 	if err != nil {

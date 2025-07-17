@@ -29,13 +29,7 @@ type displayContent struct {
 	gear int
 }
 
-type appInfo struct {
-	BuildTime string
-	Version   string
-}
-
 type App struct {
-	appInfo          appInfo
 	assetDir         string
 	buttonsFn        func()
 	chartDataChannel chan map[string]float32
@@ -60,10 +54,8 @@ type App struct {
 }
 
 type AppOptions struct {
-	BuildTime  string
 	Done       chan bool
 	LogLevel   string
-	Version    string
 	WebEnabled bool
 }
 
@@ -88,11 +80,6 @@ func NewApp(opts AppOptions) (*App, error) {
 	log = log.Level(logLevel)
 
 	log.Info().Str("Level", logLevel.String()).Msg("log level")
-
-	appInfo := appInfo{
-		BuildTime: opts.BuildTime,
-		Version:   opts.Version,
-	}
 
 	kinematics := kinematics.NewKinematicsTracker()
 
@@ -202,14 +189,13 @@ func NewApp(opts AppOptions) (*App, error) {
 		Str("result", "success").
 		Msg("init")
 
-	lcdDevice.ShowTextOverlay("splash", appInfo.Version, 7)
+	lcdDevice.ShowTextOverlay("splash", Version, 7)
 
 	// if !isSetupComplete(log) {
 	// 	runSetupWizard(lcdDevice)
 	// }
 
 	return &App{
-		appInfo:          appInfo,
 		assetDir:         config.App.AssetDir,
 		buttonsFn:        buttonsFn,
 		chartDataChannel: make(chan map[string]float32, 600),
