@@ -40,7 +40,7 @@ func generateGearChangeSample(sampleRateHz int) []float64 {
 
 	for i := range audioSample {
 		angle := waveSamplePeriod * (float64(i) - waveOffset)
-		audioSample[i] = (pulseAmplitude * math.Sin(angle)) / 2
+		audioSample[i] = pulseAmplitude * math.Sin(angle)
 
 		pulseAmplitude = pulseAmplitude * (1 - decayRate)
 	}

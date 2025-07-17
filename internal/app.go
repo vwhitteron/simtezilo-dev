@@ -426,13 +426,17 @@ func (a *App) processHaptics(seqDelta uint32) {
 		a.log.Debug().Uint32("delta", seqDelta).Msg("missed packets")
 	}
 
+	if a.hasGearChanged() {
+		a.playGearChangeHaptic()
+	}
+
 	a.generateBump()
 }
 
 func (a *App) generateBump() {
 	startTime := time.Now()
 
-	snap := signal.LargestMagnitude(a.physics.Current.Velocity.Snap, (a.physics.Current.Attitude.Snap * 100))
+	snap := signal.LargestMagnitude(a.physics.Current.Velocity.Snap, (a.physics.Current.RotationalEnvelope.Snap * 100))
 
 	pulseFrequencyScaler := signal.Abs(signal.Exponent(snap, a.config.GetSnapExponent()))
 	pulseFrequencyScaler = signal.Scale(pulseFrequencyScaler, a.config.GetSnapScale())
@@ -446,7 +450,7 @@ func (a *App) generateBump() {
 
 	pulseWidth := math.Round(float64(a.config.Synthesizer.SampleRateHz) / (2 * pulseFrequencyHz))
 
-	sig := signal.LargestMagnitude(a.physics.Current.Velocity.Jerk, (a.physics.Current.Attitude.Jerk * 100))
+	sig := signal.LargestMagnitude(a.physics.Current.Velocity.Jerk, (a.physics.Current.RotationalEnvelope.Jerk * 100))
 	pulseAmplitude := signal.Exponent(sig, a.config.GetJerkExponent())
 	pulseAmplitude = signal.Scale(pulseAmplitude, a.config.GetJerkScale())
 
@@ -473,39 +477,6 @@ func (a *App) generateBump() {
 	currentMag := vector.Magnitude(a.physics.Current.Velocity.Vector)
 	if signal.LargestMagnitude(lastMag, currentMag) >= 0.28 {
 		a.synth.WriteBuffer("chassis", pulseBuffer)
-	}
-
-	if a.physics.Current.TransmissionGear != NullGear {
-		if a.physics.Current.TransmissionGear != a.physics.Last.TransmissionGear {
-			volumeMaxPercent, _ := a.synth.GetChannelVolume("gearchange")
-			volumeMax := float64(volumeMaxPercent) / 100.0
-
-			gforceSaturation := 1.6 // TODO: create config option
-			volumeCurve := 0.26     // TODO: create config option
-
-			gForce := float64(0)
-			// Only increase gear change feedback if the vehicle is in motion
-			if a.gt.Telemetry.GroundSpeedKPH() > 0.5 {
-				gForce = signal.Abs(float64(a.physics.Current.AccelerationLongitude) / gravityConstant)
-			}
-
-			gearChangeVolume := (math.Pow((gForce/gforceSaturation), volumeCurve) * volumeMax)
-			gearChangeVolume, _ = signal.LimitWindow(gearChangeVolume, a.gearVolumeMin, volumeMax)
-
-			volumePercent := int(gearChangeVolume*100.0 + a.gearVolumeMin)
-
-			a.synth.PlayEffectWithVolume("gearchange", volumePercent)
-			a.log.Debug().
-				Int("sequence_id", int(a.seq)).
-				Int("volume_pc", volumePercent).
-				Float64("gforce", gForce).
-				Int("gear", a.physics.Current.TransmissionGear).
-				Msg("gear change")
-		}
-	} else {
-		a.log.Debug().
-			Int("sequence_id", int(a.seq)).
-			Msg("no gear")
 	}
 
 	a.physics.Last.SynthOutputAmplitude = a.physics.Current.SynthOutputAmplitude
@@ -626,6 +597,54 @@ func (a *App) checkSessionComplete() {
 	}
 }
 
+func (a *App) hasGearChanged() bool {
+	// ignore gear change events from initial unset state
+	if a.physics.Current.TransmissionGear == NullGear ||
+		a.physics.Last.TransmissionGear == NullGear {
+		return false
+	}
+
+	if a.physics.Current.TransmissionGear == a.physics.Last.TransmissionGear {
+		return false
+	}
+
+	return true
+}
+
+func (a *App) playGearChangeHaptic() {
+	newFormat, _ := a.gt.Telemetry.RawTelemetry.HasSectionTilde()
+
+	volumeMaxPercent, _ := a.synth.GetChannelVolume("gearchange")
+	volumeMax := float64(volumeMaxPercent) / 100.0
+
+	gforceSaturation := 1.0 // TODO: create config option
+	volumeCurve := 0.15     // TODO: create config option
+
+	gForce := float64(0)
+	// Only increase gear change feedback if the vehicle is in motion
+	if a.gt.Telemetry.GroundSpeedKPH() > 0.5 {
+		if newFormat {
+			gForce = signal.Abs(float64(a.physics.Current.TranslationalEnvelope.Vector.Surge) / gravityConstant)
+		} else {
+			gForce = signal.Abs(float64(a.physics.Current.AccelerationLongitude) / gravityConstant)
+		}
+	}
+
+	gearChangeVolume := (math.Pow((gForce/gforceSaturation), volumeCurve) * volumeMax)
+	gearChangeVolume, _ = signal.LimitWindow(gearChangeVolume, a.gearVolumeMin, volumeMax)
+
+	volumePercent := int(gearChangeVolume * 100.0)
+
+	a.synth.PlayEffectWithVolume("gearchange", volumePercent)
+	a.log.Debug().
+		Int("sequence_id", int(a.seq)).
+		Int("volume_pc", volumePercent).
+		Float64("gforce", gForce).
+		Int("gear", a.physics.Current.TransmissionGear).
+		Bool("new_format", newFormat).
+		Msg("gear change")
+}
+
 func (a *App) handleWebSocketConnection(w http.ResponseWriter, r *http.Request) {
 	ws, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -708,7 +727,7 @@ func (a *App) sendWebTelemetry() {
 			"gforceLong":           float32(a.physics.Current.AccelerationLongitude) / gravityConstant,
 			"jerk":                 float32(a.physics.Current.Velocity.Jerk),
 			"snap":                 float32(a.physics.Current.Velocity.Snap),
-			"attitudeJerk":         float32(a.physics.Current.Attitude.Jerk * 50),
+			"attitudeJerk":         float32(a.physics.Current.RotationalEnvelope.Jerk * 50),
 			"synthOutputAmplitude": float32(a.physics.Current.SynthOutputAmplitude),
 			"synthOutputFrequency": float32(a.physics.Current.SynthOutputFrequency),
 			"computeTime":          float32(a.physics.Last.ComputeTime.Microseconds()),

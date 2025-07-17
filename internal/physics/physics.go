@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/vwhitteron/simtezilo-dev/internal/physics/symmetryaxis"
+	"github.com/vwhitteron/simtezilo-dev/internal/physics/translationalenvelope"
 	"github.com/vwhitteron/simtezilo-dev/internal/physics/vector"
 	telemetry_client "github.com/zetetos/gt-telemetry"
 )
@@ -17,7 +18,7 @@ type VelocityDerivatives struct {
 	Crackle        float64
 }
 
-type AttitudeDerivatives struct {
+type RotationalDerivatives struct {
 	Delta          telemetry_client.SymmetryAxes
 	Vector         telemetry_client.SymmetryAxes
 	Acceleration3D float64
@@ -26,12 +27,22 @@ type AttitudeDerivatives struct {
 	Crackle        float64
 }
 
+type TranslationalDerivatives struct {
+	Delta     telemetry_client.TranslationalEnvelope
+	Vector    telemetry_client.TranslationalEnvelope
+	Magnitude float64
+	Jerk      float64
+	Snap      float64
+	Crackle   float64
+}
+
 type Physics struct {
 	SequenceID  uint32
 	ComputeTime time.Duration
 
-	Attitude AttitudeDerivatives
-	Velocity VelocityDerivatives
+	TranslationalEnvelope TranslationalDerivatives
+	RotationalEnvelope    RotationalDerivatives
+	Velocity              VelocityDerivatives
 
 	TransmissionGear int
 
@@ -56,7 +67,8 @@ func NewPhysicsTracker() PhysicsTracker {
 
 func newPhysics() Physics {
 	return Physics{
-		Attitude: AttitudeDerivatives{
+		TranslationalEnvelope: TranslationalDerivatives{},
+		RotationalEnvelope: RotationalDerivatives{
 			Delta:          telemetry_client.SymmetryAxes{},
 			Vector:         telemetry_client.SymmetryAxes{},
 			Acceleration3D: 0,
@@ -82,43 +94,50 @@ func newPhysics() Physics {
 }
 
 // TODO: ideally this should not be given the gt client
-func (t *PhysicsTracker) Update(windowMilliseconds float64, gtclient *telemetry_client.GTClient) {
+func (t *PhysicsTracker) Update(windowSeconds float64, gtclient *telemetry_client.GTClient) {
 	t.Last = t.Current
 
 	// t.Last.SequenceID = t.Current.SequenceID
 
 	t.Current.SequenceID = gtclient.Telemetry.SequenceID()
 	t.Current.Velocity.Vector = gtclient.Telemetry.VelocityVector()
-	t.Current.Attitude.Vector = gtclient.Telemetry.RotationVector()
+	t.Current.RotationalEnvelope.Vector = gtclient.Telemetry.RotationVector()
 
 	// chassis longitudinal velocity
 	t.Current.GroundSpeed = gtclient.Telemetry.GroundSpeedMetersPerSecond()
-	t.Current.AccelerationLongitude = (t.Current.GroundSpeed - t.Last.GroundSpeed) / float32(windowMilliseconds)
+	t.Current.AccelerationLongitude = (t.Current.GroundSpeed - t.Last.GroundSpeed) / float32(windowSeconds)
 
-	// chassis attitude
-	t.Current.Attitude.Delta = symmetryaxis.Delta(t.Current.Attitude.Vector, t.Last.Attitude.Vector)
+	// chassis rotational envelope
+	t.Current.RotationalEnvelope.Delta = symmetryaxis.Delta(t.Current.RotationalEnvelope.Vector, t.Last.RotationalEnvelope.Vector)
 
 	// attenuate yaw jerk/snap as it causes vibration during heavy rotation (high G-force corners, spin out, etc)
-	biasedAttitudeDelta := symmetryaxis.Scale(t.Current.Attitude.Delta, 1.0, 0.25, 1.0)
+	biasedAttitudeDelta := symmetryaxis.Scale(t.Current.RotationalEnvelope.Delta, 1.0, 0.25, 1.0)
 
-	t.Current.Attitude.Acceleration3D = symmetryaxis.Magnitude(biasedAttitudeDelta) / windowMilliseconds
+	t.Current.RotationalEnvelope.Acceleration3D = symmetryaxis.Magnitude(biasedAttitudeDelta) / windowSeconds
 
-	t.Current.Attitude.Jerk = (t.Current.Attitude.Acceleration3D - t.Last.Attitude.Acceleration3D) / windowMilliseconds
-	if t.Current.Attitude.Jerk > 10 {
-		t.Current.Attitude.Jerk = 10
-	} else if t.Current.Attitude.Jerk < -10 {
-		t.Current.Attitude.Jerk = -10
+	t.Current.RotationalEnvelope.Jerk = (t.Current.RotationalEnvelope.Acceleration3D - t.Last.RotationalEnvelope.Acceleration3D) / windowSeconds
+	if t.Current.RotationalEnvelope.Jerk > 10 {
+		t.Current.RotationalEnvelope.Jerk = 10
+	} else if t.Current.RotationalEnvelope.Jerk < -10 {
+		t.Current.RotationalEnvelope.Jerk = -10
 	}
 
-	t.Current.Attitude.Snap = (t.Current.Attitude.Jerk - t.Last.Attitude.Jerk) / windowMilliseconds
+	t.Current.RotationalEnvelope.Snap = (t.Current.RotationalEnvelope.Jerk - t.Last.RotationalEnvelope.Jerk) / windowSeconds
 
 	// chassis 3D velocity
 	t.Current.Velocity.Delta = vector.Delta(t.Current.Velocity.Vector, t.Last.Velocity.Vector)
-	t.Current.Velocity.Acceleration3D = vector.Magnitude(t.Current.Velocity.Delta) / windowMilliseconds
-	t.Current.Velocity.Jerk = (t.Current.Velocity.Acceleration3D - t.Last.Velocity.Acceleration3D) / windowMilliseconds
-	t.Current.Velocity.Snap = (t.Current.Velocity.Jerk - t.Last.Velocity.Jerk) / windowMilliseconds
-	t.Current.Velocity.Crackle = (t.Current.Velocity.Snap - t.Last.Velocity.Snap) / windowMilliseconds
+	t.Current.Velocity.Acceleration3D = vector.Magnitude(t.Current.Velocity.Delta) / windowSeconds
+	t.Current.Velocity.Jerk = (t.Current.Velocity.Acceleration3D - t.Last.Velocity.Acceleration3D) / windowSeconds
+	t.Current.Velocity.Snap = (t.Current.Velocity.Jerk - t.Last.Velocity.Jerk) / windowSeconds
+	t.Current.Velocity.Crackle = (t.Current.Velocity.Snap - t.Last.Velocity.Snap) / windowSeconds
+
+	// 6DOF translational envelope
+	t.Current.TranslationalEnvelope.Vector = gtclient.Telemetry.TranslationEnvelope()
+	t.Current.TranslationalEnvelope.Delta = translationalenvelope.Delta(t.Current.TranslationalEnvelope.Vector, t.Last.TranslationalEnvelope.Vector)
+	t.Current.TranslationalEnvelope.Magnitude = translationalenvelope.Magnitude(t.Current.TranslationalEnvelope.Vector)
+	t.Current.TranslationalEnvelope.Jerk = (t.Current.TranslationalEnvelope.Magnitude - t.Last.TranslationalEnvelope.Magnitude) / windowSeconds
+	t.Current.TranslationalEnvelope.Snap = (t.Current.TranslationalEnvelope.Jerk - t.Last.TranslationalEnvelope.Jerk) / windowSeconds
+	t.Current.TranslationalEnvelope.Crackle = (t.Current.TranslationalEnvelope.Snap - t.Last.TranslationalEnvelope.Snap) / windowSeconds
 
 	t.Current.TransmissionGear = gtclient.Telemetry.CurrentGear()
-
 }
