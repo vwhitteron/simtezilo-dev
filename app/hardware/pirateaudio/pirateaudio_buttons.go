@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
-	"github.com/vwhitteron/simtezilo-dev/internal/config"
-	"github.com/vwhitteron/simtezilo-dev/internal/hardware"
-	"github.com/vwhitteron/simtezilo-dev/internal/synth"
+	"github.com/vwhitteron/simtezilo-dev/app/config"
+	"github.com/vwhitteron/simtezilo-dev/app/hardware"
+	"github.com/vwhitteron/simtezilo-dev/app/synth"
 	"periph.io/x/conn/v3/gpio"
 	"periph.io/x/conn/v3/gpio/gpioreg"
 	"periph.io/x/host/v3"

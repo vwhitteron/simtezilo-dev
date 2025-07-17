@@ -6,8 +6,8 @@ import (
 	"atomicgo.dev/keyboard"
 	"atomicgo.dev/keyboard/keys"
 	"github.com/rs/zerolog"
-	"github.com/vwhitteron/simtezilo-dev/internal/config"
-	"github.com/vwhitteron/simtezilo-dev/internal/synth"
+	"github.com/vwhitteron/simtezilo-dev/app/config"
+	"github.com/vwhitteron/simtezilo-dev/app/synth"
 )
 
 func SetupNullDeviceButtons(synth *synth.Synthesizer, config *config.Config, done chan bool, log zerolog.Logger) func() {

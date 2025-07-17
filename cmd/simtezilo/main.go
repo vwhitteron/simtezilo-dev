@@ -11,7 +11,7 @@ import (
 
 	_ "image/png"
 
-	"github.com/vwhitteron/simtezilo-dev/internal"
+	"github.com/vwhitteron/simtezilo-dev/app"
 )
 
 var Version = "DEV"
@@ -42,7 +42,7 @@ func main() {
 	}
 	fmt.Printf("Simtezilo version %s (built %s)\n", Version, BuildTime)
 
-	profiler, err := internal.NewPyroscopeProfiler(
+	profiler, err := app.NewPyroscopeProfiler(
 		"http://10.255.1.128:4040",
 		map[string]string{
 			"app":      "simtezilo",
@@ -63,7 +63,7 @@ func main() {
 		log.Println("Pyroscope profiler started with UI at " + profiler.Endpoint())
 	}
 
-	app, err := internal.NewApp(internal.AppOptions{
+	app, err := app.NewApp(app.AppOptions{
 		BuildTime:  BuildTime,
 		Done:       done,
 		LogLevel:   logLevel,

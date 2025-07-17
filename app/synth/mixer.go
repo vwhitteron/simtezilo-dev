@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
-	"github.com/vwhitteron/simtezilo-dev/internal/signal"
+	"github.com/vwhitteron/simtezilo-dev/app/signal"
 )
 
 var algorithms = []string{

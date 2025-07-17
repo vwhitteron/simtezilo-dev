@@ -3,9 +3,9 @@ package kinematics
 import (
 	"time"
 
-	"github.com/vwhitteron/simtezilo-dev/internal/kinematics/rotataionalenvelope"
-	"github.com/vwhitteron/simtezilo-dev/internal/kinematics/translationalenvelope"
-	"github.com/vwhitteron/simtezilo-dev/internal/kinematics/vector"
+	"github.com/vwhitteron/simtezilo-dev/app/kinematics/rotataionalenvelope"
+	"github.com/vwhitteron/simtezilo-dev/app/kinematics/translationalenvelope"
+	"github.com/vwhitteron/simtezilo-dev/app/kinematics/vector"
 	telemetry_client "github.com/zetetos/gt-telemetry"
 )
 

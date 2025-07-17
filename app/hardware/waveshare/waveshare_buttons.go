@@ -5,9 +5,9 @@ import (
 	"image"
 
 	"github.com/rs/zerolog"
-	"github.com/vwhitteron/simtezilo-dev/internal/config"
-	"github.com/vwhitteron/simtezilo-dev/internal/hardware"
-	"github.com/vwhitteron/simtezilo-dev/internal/synth"
+	"github.com/vwhitteron/simtezilo-dev/app/config"
+	"github.com/vwhitteron/simtezilo-dev/app/hardware"
+	"github.com/vwhitteron/simtezilo-dev/app/synth"
 )
 
 const volumeFontSize = 20

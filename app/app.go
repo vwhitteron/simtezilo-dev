@@ -1,4 +1,4 @@
-package internal
+package app
 
 import (
 	"fmt"
@@ -13,15 +13,15 @@ import (
 	"github.com/gopxl/beep/speaker"
 	"github.com/gorilla/websocket"
 	"github.com/rs/zerolog"
-	"github.com/vwhitteron/simtezilo-dev/internal/config"
-	"github.com/vwhitteron/simtezilo-dev/internal/hardware"
-	"github.com/vwhitteron/simtezilo-dev/internal/hardware/nulldevice"
-	"github.com/vwhitteron/simtezilo-dev/internal/hardware/pirateaudio"
-	"github.com/vwhitteron/simtezilo-dev/internal/hardware/waveshare"
-	"github.com/vwhitteron/simtezilo-dev/internal/kinematics"
-	"github.com/vwhitteron/simtezilo-dev/internal/kinematics/vector"
-	"github.com/vwhitteron/simtezilo-dev/internal/signal"
-	"github.com/vwhitteron/simtezilo-dev/internal/synth"
+	"github.com/vwhitteron/simtezilo-dev/app/config"
+	"github.com/vwhitteron/simtezilo-dev/app/hardware"
+	"github.com/vwhitteron/simtezilo-dev/app/hardware/nulldevice"
+	"github.com/vwhitteron/simtezilo-dev/app/hardware/pirateaudio"
+	"github.com/vwhitteron/simtezilo-dev/app/hardware/waveshare"
+	"github.com/vwhitteron/simtezilo-dev/app/kinematics"
+	"github.com/vwhitteron/simtezilo-dev/app/kinematics/vector"
+	"github.com/vwhitteron/simtezilo-dev/app/signal"
+	"github.com/vwhitteron/simtezilo-dev/app/synth"
 	telemetry_client "github.com/zetetos/gt-telemetry"
 )
 

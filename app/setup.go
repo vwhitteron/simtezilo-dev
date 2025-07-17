@@ -1,4 +1,4 @@
-package internal
+package app
 
 import (
 	"fmt"
@@ -7,8 +7,8 @@ import (
 	"os/exec"
 
 	"github.com/rs/zerolog"
-	"github.com/vwhitteron/simtezilo-dev/internal/hardware"
-	"github.com/vwhitteron/simtezilo-dev/internal/hardware/wifi"
+	"github.com/vwhitteron/simtezilo-dev/app/hardware"
+	"github.com/vwhitteron/simtezilo-dev/app/hardware/wifi"
 )
 
 const readyFile = "/opt/simtezilo/.ready"

@@ -1,4 +1,4 @@
-package internal
+package app
 
 const frameRate = 60
 const gravityConstant = 9.81

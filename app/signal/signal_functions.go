@@ -3,7 +3,7 @@ package signal
 import (
 	"math"
 
-	"github.com/vwhitteron/simtezilo-dev/internal/config"
+	"github.com/vwhitteron/simtezilo-dev/app/config"
 )
 
 func Abs(value float64) float64 {
