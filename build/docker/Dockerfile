@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-ARG GO_VERSION=1.23
+ARG GO_VERSION=1.24.4
 
 FROM golang:${GO_VERSION}-bullseye AS base
 WORKDIR /src
@@ -24,7 +24,7 @@ RUN apt-get update && apt-get install -y libasound2-dev:arm64 gcc:arm64
 
 
 
-FROM base-armhf as build-app-armhf
+FROM base-armhf AS build-app-armhf
 WORKDIR /src
 ARG CGO_ENABLED=1
 ARG CC=arm-linux-gnueabihf-gcc
@@ -38,7 +38,7 @@ RUN --mount=type=cache,target=/go/pkg/mod/ \
     GOOS=${GOOS} GOARCH=arm \
     go build -ldflags "-X 'main.Version=${BUILDVERSION}' -X 'main.BuildTime=${BUILDTIME}'" -o /out/simtezilo-${GOOS}-armhf ./cmd/simtezilo/main.go
 
-FROM base-armel as build-app-armel
+FROM base-armel AS build-app-armel
 WORKDIR /src
 ARG CGO_ENABLED=1
 ARG CC=arm-linux-gnueabi-gcc
@@ -53,7 +53,7 @@ RUN --mount=type=cache,target=/go/pkg/mod/ \
     GOOS=${GOOS} GOARCH=arm GOARM=${GOARM} \
     go build -ldflags "-X 'main.Version=${BUILDVERSION}' -X 'main.BuildTime=${BUILDTIME}'" -o /out/simtezilo-${GOOS}-armel-${GOARM} ./cmd/simtezilo/main.go
 
-FROM base-armel as build-app-armel-8
+FROM base-armel AS build-app-armel-8
 WORKDIR /src
 ARG CGO_ENABLED=1
 ARG CC=arm-linux-gnueabi-gcc
@@ -67,7 +67,7 @@ RUN --mount=type=cache,target=/go/pkg/mod/ \
     GOOS=${GOOS} GOARCH=arm \
     go build -ldflags "-X 'main.Version=${BUILDVERSION}' -X 'main.BuildTime=${BUILDTIME}'" -o /out/simtezilo-${GOOS}-armel-8 ./cmd/simtezilo/main.go
 
-FROM base-arm64 as build-app-arm64-8
+FROM base-arm64 AS build-app-arm64-8
 WORKDIR /src
 ARG CGO_ENABLED=1
 ARG GOOS
