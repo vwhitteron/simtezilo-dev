@@ -18,8 +18,8 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/internal/hardware/nulldevice"
 	"github.com/vwhitteron/simtezilo-dev/internal/hardware/pirateaudio"
 	"github.com/vwhitteron/simtezilo-dev/internal/hardware/waveshare"
-	"github.com/vwhitteron/simtezilo-dev/internal/physics"
-	"github.com/vwhitteron/simtezilo-dev/internal/physics/vector"
+	"github.com/vwhitteron/simtezilo-dev/internal/kinematics"
+	"github.com/vwhitteron/simtezilo-dev/internal/kinematics/vector"
 	"github.com/vwhitteron/simtezilo-dev/internal/signal"
 	"github.com/vwhitteron/simtezilo-dev/internal/synth"
 	telemetry_client "github.com/zetetos/gt-telemetry"
@@ -47,7 +47,7 @@ type App struct {
 	gt               *telemetry_client.GTClient
 	lastGear         int
 	log              zerolog.Logger
-	physics          physics.PhysicsTracker
+	kineamtics       kinematics.KinaticsTracker
 	replayMode       bool
 	seq              uint32
 	synth            *synth.Synthesizer
@@ -94,13 +94,13 @@ func NewApp(opts AppOptions) (*App, error) {
 		Version:   opts.Version,
 	}
 
-	physics := physics.NewPhysicsTracker()
+	kinematics := kinematics.NewKinematicsTracker()
 
 	synthesizer, err := synth.NewSynth(synth.SynthOpts{
-		AssetDir: config.App.AssetDir,
-		Config:   config.Synthesizer,
-		Logger:   log.With().Str("component", "synth").Logger(),
-		Physics:  &physics,
+		AssetDir:   config.App.AssetDir,
+		Config:     config.Synthesizer,
+		Logger:     log.With().Str("component", "synth").Logger(),
+		Kinematics: &kinematics,
 	})
 	if err != nil {
 		log.Error().
@@ -220,7 +220,7 @@ func NewApp(opts AppOptions) (*App, error) {
 		lastGear:         NullGear,
 		lcdDevice:        lcdDevice,
 		log:              log,
-		physics:          physics,
+		kineamtics:       kinematics,
 		replayMode:       config.App.ReplayMode,
 		seq:              uint32(0),
 		synth:            synthesizer,
@@ -257,7 +257,7 @@ func (a *App) Run() {
 		case <-a.done:
 			return
 		case <-ticker120fps.C:
-			a.physicsEvents()
+			a.hapticEvents()
 		case <-ticker60fps.C:
 			a.checkSessionComplete()
 			a.sendWebTelemetry()
@@ -279,7 +279,7 @@ func (a *App) Close() {
 	a.lcdDevice.Close()
 }
 
-func (a *App) physicsEvents() {
+func (a *App) hapticEvents() {
 	startTime := time.Now()
 
 	seq := a.gt.Telemetry.SequenceID()
@@ -357,7 +357,7 @@ func (a *App) physicsEvents() {
 		return
 	}
 
-	a.physics.Current.SequenceID = seq
+	a.kineamtics.Current.SequenceID = seq
 
 	// speaker.Resume()
 	a.synth.FadeIn(3 * time.Second)
@@ -365,11 +365,11 @@ func (a *App) physicsEvents() {
 	a.processHaptics(seqDelta)
 
 	a.seq = seq
-	a.physics.Current.ComputeTime = time.Since(startTime)
-	a.physics.Last = a.physics.Current
+	a.kineamtics.Current.ComputeTime = time.Since(startTime)
+	a.kineamtics.Last = a.kineamtics.Current
 
-	if a.physics.Current.ComputeTime.Microseconds() > 16000 {
-		a.log.Warn().Float64("ms", float64(a.physics.Current.ComputeTime.Milliseconds())).Msg("slow compute")
+	if a.kineamtics.Current.ComputeTime.Microseconds() > 16000 {
+		a.log.Warn().Float64("ms", float64(a.kineamtics.Current.ComputeTime.Milliseconds())).Msg("slow compute")
 	}
 
 }
@@ -382,7 +382,7 @@ func (a *App) processHaptics(seqDelta uint32) {
 
 	windowMilliseconds := (float64(seqDelta) / frameRate)
 
-	a.physics.Update(windowMilliseconds, a.gt)
+	a.kineamtics.Update(windowMilliseconds, a.gt)
 
 	// no haptics if telemetry packets dropped/missed
 	if seqDelta > 1 {
@@ -399,7 +399,7 @@ func (a *App) processHaptics(seqDelta uint32) {
 func (a *App) generateBump() {
 	startTime := time.Now()
 
-	snap := signal.LargestMagnitude(a.physics.Current.Velocity.Snap, (a.physics.Current.RotationalEnvelope.Snap * 100))
+	snap := signal.LargestMagnitude(a.kineamtics.Current.Velocity.Snap, (a.kineamtics.Current.RotationalEnvelope.Snap * 100))
 
 	pulseFrequencyScaler := signal.Abs(signal.Exponent(snap, a.config.GetSnapExponent()))
 	pulseFrequencyScaler = signal.Scale(pulseFrequencyScaler, a.config.GetSnapScale())
@@ -413,7 +413,7 @@ func (a *App) generateBump() {
 
 	pulseWidth := math.Round(float64(a.config.Synthesizer.SampleRateHz) / (2 * pulseFrequencyHz))
 
-	sig := signal.LargestMagnitude(a.physics.Current.Velocity.Jerk, (a.physics.Current.RotationalEnvelope.Jerk * 100))
+	sig := signal.LargestMagnitude(a.kineamtics.Current.Velocity.Jerk, (a.kineamtics.Current.RotationalEnvelope.Jerk * 100))
 	pulseAmplitude := signal.Exponent(sig, a.config.GetJerkExponent())
 	pulseAmplitude = signal.Scale(pulseAmplitude, a.config.GetJerkScale())
 
@@ -435,25 +435,25 @@ func (a *App) generateBump() {
 
 	// no haptics when vehicle comes to a controlled stop
 	// TODO: check angular velocity, etc to enable for uncontrolled stops
-	// if vector.Magnitude(c.physics.Current.Velocity.Vector) >= 0.28 {
-	lastMag := vector.Magnitude(a.physics.Last.Velocity.Vector)
-	currentMag := vector.Magnitude(a.physics.Current.Velocity.Vector)
+	// if vector.Magnitude(c.kinematics.Current.Velocity.Vector) >= 0.28 {
+	lastMag := vector.Magnitude(a.kineamtics.Last.Velocity.Vector)
+	currentMag := vector.Magnitude(a.kineamtics.Current.Velocity.Vector)
 	if signal.LargestMagnitude(lastMag, currentMag) >= 0.28 {
 		a.synth.WriteBuffer("chassis", pulseBuffer)
 	}
 
-	a.physics.Last.SynthOutputAmplitude = a.physics.Current.SynthOutputAmplitude
-	a.physics.Current.SynthOutputAmplitude = pulseAmplitude
+	a.kineamtics.Last.SynthOutputAmplitude = a.kineamtics.Current.SynthOutputAmplitude
+	a.kineamtics.Current.SynthOutputAmplitude = pulseAmplitude
 
-	a.physics.Last.SynthOutputFrequency = a.physics.Current.SynthOutputFrequency
-	a.physics.Current.SynthOutputFrequency = int(pulseFrequencyHz)
+	a.kineamtics.Last.SynthOutputFrequency = a.kineamtics.Current.SynthOutputFrequency
+	a.kineamtics.Current.SynthOutputFrequency = int(pulseFrequencyHz)
 
 	if pulseAmplitude > 1.0 || pulseAmplitude < -1.0 {
 		a.log.Debug().
-			Float64("jerk", a.physics.Current.Velocity.Jerk).
-			Float64("snap", a.physics.Current.Velocity.Snap).
+			Float64("jerk", a.kineamtics.Current.Velocity.Jerk).
+			Float64("snap", a.kineamtics.Current.Velocity.Snap).
 			Str("process_time", time.Since(startTime).String()).
-			Uint32("sequence_id", a.physics.Current.SequenceID).
+			Uint32("sequence_id", a.kineamtics.Current.SequenceID).
 			Msg("Bump inputs")
 		a.log.Debug().
 			Float64("amplitude", pulseAmplitude).
@@ -482,7 +482,7 @@ func (a *App) resetState(seq uint32, currentGear int) {
 
 	a.synth.Silence()
 
-	a.physics = physics.NewPhysicsTracker()
+	a.kineamtics = kinematics.NewKinematicsTracker()
 
 	a.synth.ClearBuffer()
 }
@@ -509,7 +509,7 @@ func (a *App) updateDisplay() {
 		return
 	}
 
-	currentGear := a.physics.Current.TransmissionGear
+	currentGear := a.kineamtics.Current.TransmissionGear
 
 	if a.displayContent.gear == currentGear || currentGear == NullGear {
 		return
@@ -562,12 +562,12 @@ func (a *App) checkSessionComplete() {
 
 func (a *App) hasGearChanged() bool {
 	// ignore gear change events from initial unset state
-	if a.physics.Current.TransmissionGear == NullGear ||
-		a.physics.Last.TransmissionGear == NullGear {
+	if a.kineamtics.Current.TransmissionGear == NullGear ||
+		a.kineamtics.Last.TransmissionGear == NullGear {
 		return false
 	}
 
-	if a.physics.Current.TransmissionGear == a.physics.Last.TransmissionGear {
+	if a.kineamtics.Current.TransmissionGear == a.kineamtics.Last.TransmissionGear {
 		return false
 	}
 
@@ -587,9 +587,9 @@ func (a *App) playGearChangeHaptic() {
 	// Only increase gear change feedback if the vehicle is in motion
 	if a.gt.Telemetry.GroundSpeedKPH() > 0.5 {
 		if newFormat {
-			gForce = signal.Abs(float64(a.physics.Current.TranslationalEnvelope.Vector.Surge) / gravityConstant)
+			gForce = signal.Abs(float64(a.kineamtics.Current.TranslationalEnvelope.Vector.Surge) / gravityConstant)
 		} else {
-			gForce = signal.Abs(float64(a.physics.Current.AccelerationLongitude) / gravityConstant)
+			gForce = signal.Abs(float64(a.kineamtics.Current.AccelerationLongitude) / gravityConstant)
 		}
 	}
 
@@ -603,7 +603,7 @@ func (a *App) playGearChangeHaptic() {
 		Int("sequence_id", int(a.seq)).
 		Int("volume_pc", volumePercent).
 		Float64("gforce", gForce).
-		Int("gear", a.physics.Current.TransmissionGear).
+		Int("gear", a.kineamtics.Current.TransmissionGear).
 		Bool("new_format", newFormat).
 		Msg("gear change")
 }
@@ -667,11 +667,11 @@ func (a *App) sendWebTelemetry() {
 		return
 	}
 
-	if a.physics.Current.SequenceID == a.webSequenceId {
+	if a.kineamtics.Current.SequenceID == a.webSequenceId {
 		return
 	}
 
-	a.webSequenceId = a.physics.Current.SequenceID
+	a.webSequenceId = a.kineamtics.Current.SequenceID
 
 	go func() {
 		a.chartDataChannel <- map[string]float32{
@@ -681,19 +681,19 @@ func (a *App) sendWebTelemetry() {
 			"brake":                a.gt.Telemetry.BrakePercent(),
 			"rpm":                  a.gt.Telemetry.EngineRPM(),
 			"speed":                a.gt.Telemetry.GroundSpeedKPH(),
-			"gear":                 float32(a.physics.Current.TransmissionGear),
-			"acceleration":         float32(a.physics.Current.AccelerationLongitude),
-			"velocityX":            a.physics.Current.Velocity.Vector.X,
-			"velocityY":            a.physics.Current.Velocity.Vector.Y,
-			"velocityZ":            a.physics.Current.Velocity.Vector.Z,
-			"gforce3D":             float32(a.physics.Current.Velocity.Acceleration3D) / gravityConstant,
-			"gforceLong":           float32(a.physics.Current.AccelerationLongitude) / gravityConstant,
-			"jerk":                 float32(a.physics.Current.Velocity.Jerk),
-			"snap":                 float32(a.physics.Current.Velocity.Snap),
-			"attitudeJerk":         float32(a.physics.Current.RotationalEnvelope.Jerk * 50),
-			"synthOutputAmplitude": float32(a.physics.Current.SynthOutputAmplitude),
-			"synthOutputFrequency": float32(a.physics.Current.SynthOutputFrequency),
-			"computeTime":          float32(a.physics.Last.ComputeTime.Microseconds()),
+			"gear":                 float32(a.kineamtics.Current.TransmissionGear),
+			"acceleration":         float32(a.kineamtics.Current.AccelerationLongitude),
+			"velocityX":            a.kineamtics.Current.Velocity.Vector.X,
+			"velocityY":            a.kineamtics.Current.Velocity.Vector.Y,
+			"velocityZ":            a.kineamtics.Current.Velocity.Vector.Z,
+			"gforce3D":             float32(a.kineamtics.Current.Velocity.Acceleration3D) / gravityConstant,
+			"gforceLong":           float32(a.kineamtics.Current.AccelerationLongitude) / gravityConstant,
+			"jerk":                 float32(a.kineamtics.Current.Velocity.Jerk),
+			"snap":                 float32(a.kineamtics.Current.Velocity.Snap),
+			"attitudeJerk":         float32(a.kineamtics.Current.RotationalEnvelope.Jerk * 50),
+			"synthOutputAmplitude": float32(a.kineamtics.Current.SynthOutputAmplitude),
+			"synthOutputFrequency": float32(a.kineamtics.Current.SynthOutputFrequency),
+			"computeTime":          float32(a.kineamtics.Last.ComputeTime.Microseconds()),
 		}
 	}()
 }

@@ -7,7 +7,7 @@ import (
 
 	"github.com/rs/zerolog"
 	"github.com/vwhitteron/simtezilo-dev/internal/config"
-	"github.com/vwhitteron/simtezilo-dev/internal/physics"
+	"github.com/vwhitteron/simtezilo-dev/internal/kinematics"
 )
 
 type Synthesizer struct {
@@ -16,16 +16,16 @@ type Synthesizer struct {
 	log          zerolog.Logger
 	Mixer        *Mixer
 	outputDevice *OutputDevice
-	physics      *physics.PhysicsTracker
+	kinematics   *kinematics.KinaticsTracker
 	sampleRate   int
 	outFile      *os.File
 }
 
 type SynthOpts struct {
-	AssetDir string
-	Config   config.Synthesizer
-	Logger   zerolog.Logger
-	Physics  *physics.PhysicsTracker
+	AssetDir   string
+	Config     config.Synthesizer
+	Logger     zerolog.Logger
+	Kinematics *kinematics.KinaticsTracker
 }
 
 func NewSynth(opts SynthOpts) (*Synthesizer, error) {
@@ -66,7 +66,7 @@ func NewSynth(opts SynthOpts) (*Synthesizer, error) {
 		log:          opts.Logger.With().Str("component", "synth").Logger(),
 		Mixer:        mixer,
 		outputDevice: outputDevice,
-		physics:      opts.Physics,
+		kinematics:   opts.Kinematics,
 		sampleRate:   opts.Config.SampleRateHz,
 		outFile:      outFile,
 	}, nil

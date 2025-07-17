@@ -1,4 +1,4 @@
-package symmetryaxis
+package rotataionalenvelope
 
 import (
 	"math"

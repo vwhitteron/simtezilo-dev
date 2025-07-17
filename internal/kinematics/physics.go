@@ -1,11 +1,11 @@
-package physics
+package kinematics
 
 import (
 	"time"
 
-	"github.com/vwhitteron/simtezilo-dev/internal/physics/symmetryaxis"
-	"github.com/vwhitteron/simtezilo-dev/internal/physics/translationalenvelope"
-	"github.com/vwhitteron/simtezilo-dev/internal/physics/vector"
+	"github.com/vwhitteron/simtezilo-dev/internal/kinematics/rotataionalenvelope"
+	"github.com/vwhitteron/simtezilo-dev/internal/kinematics/translationalenvelope"
+	"github.com/vwhitteron/simtezilo-dev/internal/kinematics/vector"
 	telemetry_client "github.com/zetetos/gt-telemetry"
 )
 
@@ -36,7 +36,7 @@ type TranslationalDerivatives struct {
 	Crackle   float64
 }
 
-type Physics struct {
+type Kinematics struct {
 	SequenceID  uint32
 	ComputeTime time.Duration
 
@@ -53,20 +53,20 @@ type Physics struct {
 	SynthOutputFrequency int
 }
 
-type PhysicsTracker struct {
-	Last    Physics
-	Current Physics
+type KinaticsTracker struct {
+	Last    Kinematics
+	Current Kinematics
 }
 
-func NewPhysicsTracker() PhysicsTracker {
-	return PhysicsTracker{
-		Last:    newPhysics(),
-		Current: newPhysics(),
+func NewKinematicsTracker() KinaticsTracker {
+	return KinaticsTracker{
+		Last:    newKinematics(),
+		Current: newKinematics(),
 	}
 }
 
-func newPhysics() Physics {
-	return Physics{
+func newKinematics() Kinematics {
+	return Kinematics{
 		TranslationalEnvelope: TranslationalDerivatives{},
 		RotationalEnvelope: RotationalDerivatives{
 			Delta:          telemetry_client.SymmetryAxes{},
@@ -94,7 +94,7 @@ func newPhysics() Physics {
 }
 
 // TODO: ideally this should not be given the gt client
-func (t *PhysicsTracker) Update(windowSeconds float64, gtclient *telemetry_client.GTClient) {
+func (t *KinaticsTracker) Update(windowSeconds float64, gtclient *telemetry_client.GTClient) {
 	t.Last = t.Current
 
 	// t.Last.SequenceID = t.Current.SequenceID
@@ -108,12 +108,12 @@ func (t *PhysicsTracker) Update(windowSeconds float64, gtclient *telemetry_clien
 	t.Current.AccelerationLongitude = (t.Current.GroundSpeed - t.Last.GroundSpeed) / float32(windowSeconds)
 
 	// chassis rotational envelope
-	t.Current.RotationalEnvelope.Delta = symmetryaxis.Delta(t.Current.RotationalEnvelope.Vector, t.Last.RotationalEnvelope.Vector)
+	t.Current.RotationalEnvelope.Delta = rotataionalenvelope.Delta(t.Current.RotationalEnvelope.Vector, t.Last.RotationalEnvelope.Vector)
 
 	// attenuate yaw jerk/snap as it causes vibration during heavy rotation (high G-force corners, spin out, etc)
-	biasedAttitudeDelta := symmetryaxis.Scale(t.Current.RotationalEnvelope.Delta, 1.0, 0.25, 1.0)
+	biasedAttitudeDelta := rotataionalenvelope.Scale(t.Current.RotationalEnvelope.Delta, 1.0, 0.25, 1.0)
 
-	t.Current.RotationalEnvelope.Acceleration3D = symmetryaxis.Magnitude(biasedAttitudeDelta) / windowSeconds
+	t.Current.RotationalEnvelope.Acceleration3D = rotataionalenvelope.Magnitude(biasedAttitudeDelta) / windowSeconds
 
 	t.Current.RotationalEnvelope.Jerk = (t.Current.RotationalEnvelope.Acceleration3D - t.Last.RotationalEnvelope.Acceleration3D) / windowSeconds
 	if t.Current.RotationalEnvelope.Jerk > 10 {
