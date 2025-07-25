@@ -23,10 +23,13 @@ Add the following to `/boot/config.txt`.
 
 ```
 dtoverlay=hifiberry-dac
-gpio=25=op,dh 
+gpio=25=op,dh
+dtparam=spi=on
 ```
 
-Recommended gain setting is -15dB
+Recommended master gain setting:
+Pirate Audio Line-Out:      -17.75 dB
+Pirate Audio Headphone Amp: - 7.50 dB (low gain)
 
 ### Buttkicker USB
 
@@ -38,7 +41,7 @@ Recommended gain setting is 0dB.
 # Notes
 
 ## Disable/fix USB audio device ordering
-`/lib/modprove.d/aliases.conf`
+`/lib/modprobe.d/aliases.conf`
 Comment out the following
 #options snd-usb-audio index=-2
 
