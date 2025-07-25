@@ -197,6 +197,13 @@ func (c *Config) GetGearExp() float64 {
 	return float64(c.Synthesizer.GearExp) / 1000
 }
 
+func (c *Config) GetGearMax() float64 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.Synthesizer.GearMax
+}
+
 func (c *Config) GetSnapScale() float64 {
 	c.mu.RLock()
 	defer c.mu.RUnlock()

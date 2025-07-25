@@ -557,13 +557,27 @@ func (a *App) hasGearChanged() bool {
 }
 
 func (a *App) playGearChangeHaptic() {
-	newFormat, _ := a.gt.Telemetry.RawTelemetry.HasSectionTilde()
+	volumePercent := a.determineGearChangeVolume()
 
+	a.synth.PlayEffectWithVolume("gearchange", volumePercent)
+	a.log.Debug().
+		Int("sequence_id", int(a.seq)).
+		Int("volume_pc", volumePercent).
+		// Float64("gforce", gForce).
+		Int("gear", a.kinematics.Current.TransmissionGear).
+		// Bool("new_format", newFormat).
+		Msg("gear change")
+}
+
+func (a *App) determineGearChangeVolume() int {
 	volumeMaxPercent, _ := a.synth.GetChannelVolume("gearchange")
 	volumeMax := float64(volumeMaxPercent) / 100.0
 
-	gforceSaturation := 1.0 // TODO: create config option
-	volumeCurve := 0.15     // TODO: create config option
+	if volumeMax >= 100 {
+		return 100
+	}
+
+	newFormat, _ := a.gt.Telemetry.RawTelemetry.HasSectionTilde()
 
 	gForce := float64(0)
 	// Only increase gear change feedback if the vehicle is in motion
@@ -575,19 +589,13 @@ func (a *App) playGearChangeHaptic() {
 		}
 	}
 
+	gforceSaturation := a.config.GetGearMax()
+	volumeCurve := a.config.GetGearExp()
+
 	gearChangeVolume := (math.Pow((gForce/gforceSaturation), volumeCurve) * volumeMax)
 	gearChangeVolume, _ = signal.LimitWindow(gearChangeVolume, a.gearVolumeMin, volumeMax)
 
-	volumePercent := int(gearChangeVolume * 100.0)
-
-	a.synth.PlayEffectWithVolume("gearchange", volumePercent)
-	a.log.Debug().
-		Int("sequence_id", int(a.seq)).
-		Int("volume_pc", volumePercent).
-		Float64("gforce", gForce).
-		Int("gear", a.kinematics.Current.TransmissionGear).
-		Bool("new_format", newFormat).
-		Msg("gear change")
+	return int(gearChangeVolume * 100.0)
 }
 
 func (a *App) sendTelemetryChartData() {
