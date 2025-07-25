@@ -15,7 +15,11 @@ Install [Log2Ram](https://github.com/azlux/log2ram)
 
 ## Raspberry Pi
 
-Disable on-board audio by adding `dtparam=audio=off` to `/boot/config.txt`.
+1. Disable on-board audio by adding `dtparam=audio=off` to `/boot/config.txt`.
+2. Edit `/etc/fstab` and add the following line
+   ```
+   tmpfs /var/log tmpfs defaults,size=20M 0 0
+   ```
 
 ### Pimoroni PirateAudio Line Out
 
@@ -28,8 +32,11 @@ dtparam=spi=on
 ```
 
 Recommended master gain setting:
-Pirate Audio Line-Out:      -17.75 dB
-Pirate Audio Headphone Amp: - 7.50 dB (low gain)
+
+|          HAT type          |     Gain setting     |
+|----------------------------|----------------------|
+| Pirate Audio Line-Out      | -17.75 dB            |
+| Pirate Audio Headphone Amp | - 7.50 dB (low gain) |
 
 ### Buttkicker USB
 
