@@ -13,6 +13,7 @@ help:
 # DEVELOPMENT
 # ==================================================================================== #
 
+buildmodule := $(shell awk '/module/ {print $$NF}' go.mod)
 buildversion := $(shell git describe --tags --always --dirty)
 buildtime := $(shell date -u '+%Y-%m-%d_%H:%M:%S')
 
@@ -30,14 +31,14 @@ lint/fix:
 .PHONY: build/darwin/silicon
 build/darwin/silicon:
 	GOOS=darwin GOARCH=arm64 \
-	go build -ldflags "-X 'main.Version=$(buildversion)' -X 'main.BuildTime=$(buildtime)'" \
+	go build -ldflags "-X '$(buildmodule)/app.Version=$(buildversion)' -X '$(buildmodule)/app.BuildTime=$(buildtime)'" \
 	-o ./out/simtezilo-macos ./cmd/simtezilo/main.go
 
 ## build/darwin/silicon: build the application for Apple Silicon
 .PHONY: build/windows/64
 build/windows/64:
 	GOOS=windows GOARCH=amd64 \
-	go build -ldflags "-X 'main.Version=${buildversion}' -X 'main.BuildTime=${buildtime}'" \
+	go build -ldflags "-X '$(buildmodule)/app.Version=$(buildversion)' -X '$(buildmodule)/app.BuildTime=$(buildtime)'" \
 	-o ./out/simtezilo.exe ./cmd/simtezilo/main.go
 
 ## build/rpi: build the application for Raspberry Pi using ARMHF (any version)
@@ -45,7 +46,9 @@ build/windows/64:
 build/rpi:
 	@docker build \
 	--build-arg GOOS=linux --build-arg GOARCH=arm \
-	--build-arg BUILDTIME=$(buildtime) --build-arg BUILDVERSION=$(buildversion) \
+	--build-arg BUILDMODULE=$(buildmodule) \
+	--build-arg BUILDTIME=$(buildtime) \
+	--build-arg BUILDVERSION=$(buildversion) \
 	--output=out --target=binaries-armhf --progress=plain \
 	-f build/docker/Dockerfile .
 
@@ -54,7 +57,9 @@ build/rpi:
 build/rpi/v6:
 	@docker build \
 	--build-arg GOOS=linux --build-arg GOARCH=arm --build-arg GOARM=6 \
-	--build-arg BUILDTIME=$(buildtime) --build-arg BUILDVERSION=$(buildversion) \
+	--build-arg BUILDMODULE=$(buildmodule) \
+	--build-arg BUILDTIME=$(buildtime) \
+	--build-arg BUILDVERSION=$(buildversion) \
 	--output=out --target=binaries-armel --progress=plain \
 	-f build/docker/Dockerfile .
 
@@ -63,7 +68,9 @@ build/rpi/v6:
 build/rpi/v7:
 	@docker build \
 	--build-arg GOOS=linux --build-arg GOARM=7 \
-	--build-arg BUILDTIME=$(buildtime) --build-arg BUILDVERSION=$(buildversion) \
+	--build-arg BUILDMODULE=$(buildmodule) \
+	--build-arg BUILDTIME=$(buildtime) \
+	--build-arg BUILDVERSION=$(buildversion) \
 	--output=out --target=binaries-armel --progress=plain \
 	-f build/docker/Dockerfile .
 
@@ -72,7 +79,9 @@ build/rpi/v7:
 build/rpi/v8/32:
 	@docker build \
 	--build-arg GOOS=linux \
-	--build-arg BUILDTIME=$(buildtime) --build-arg BUILDVERSION=$(buildversion) \
+	--build-arg BUILDMODULE=$(buildmodule) \
+	--build-arg BUILDTIME=$(buildtime) \
+	--build-arg BUILDVERSION=$(buildversion) \
 	--output=out --target=binaries-armel-8 --progress=plain \
 	-f build/docker/Dockerfile .
 
@@ -81,7 +90,9 @@ build/rpi/v8/32:
 build/rpi/v8/64:
 	@docker build \
 	--build-arg GOOS=linux --build-arg GOARCH=arm64 \
-	--build-arg BUILDTIME=$(buildtime) --build-arg BUILDVERSION=$(buildversion) \
+	--build-arg BUILDMODULE=$(buildmodule) \
+	--build-arg BUILDTIME=$(buildtime) \
+	--build-arg BUILDVERSION=$(buildversion) \
 	--output=out --target=binaries-arm64-8 --progress=plain \
 	-f build/docker/Dockerfile .
 
