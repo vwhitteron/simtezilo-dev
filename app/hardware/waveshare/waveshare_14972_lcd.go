@@ -6,17 +6,15 @@ import (
 	"image/color"
 	"image/draw"
 	"log"
-	"os"
 	"sync"
 	"time"
 
 	_ "image/png"
 
-	"github.com/golang/freetype"
 	"github.com/golang/freetype/truetype"
 	"github.com/rubiojr/go-pirateaudio/textview"
-	"github.com/vwhitteron/simtezilo-dev/app/gui"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/lcd/st7789"
+	"github.com/vwhitteron/simtezilo-dev/app/ui"
 	"golang.org/x/image/font"
 	"golang.org/x/image/math/fixed"
 	"periph.io/x/conn/v3/driver/driverreg"
@@ -34,7 +32,7 @@ type Waveshare14972LCD struct {
 
 	dpi     float64
 	font    *truetype.Font
-	sprites *gui.SpriteSet
+	sprites *ui.SpriteSet
 
 	Orientation int
 	poweredOn   bool
@@ -43,7 +41,6 @@ type Waveshare14972LCD struct {
 
 type Waveshare14972LCDOpts struct {
 	Orientation int
-	AssetDir    string
 }
 
 var once sync.Once
@@ -103,23 +100,12 @@ func NewWaveshare14972Display(opts Waveshare14972LCDOpts) (*Waveshare14972LCD, e
 		lcdDevice.SetRotation(st7789.ROTATION_NONE)
 	}
 
-	sprites, err := gui.NewSpriteSet(gui.SpriteSetOpts{AssetDir: opts.AssetDir})
+	sprites, err := ui.NewSpriteSet()
 	if err != nil {
 		return nil, fmt.Errorf("loading sprite set: %w", err)
 	}
 
-	fontData, err := os.Open(opts.AssetDir + "/font/LeagueGothic-Regular.ttf") // TODO: use go:embed
-	if err != nil {
-		return nil, fmt.Errorf("open font file: %w", err)
-	}
-
-	fontBytes := make([]byte, 1024*100)
-	_, err = fontData.Read(fontBytes)
-	if err != nil {
-		return nil, fmt.Errorf("reading font data: %w", err)
-	}
-
-	freetypeFont, err := freetype.ParseFont(fontBytes)
+	freetypeFont, err := ui.GetRegularFont()
 	if err != nil {
 		return nil, fmt.Errorf("parsing font: %w", err)
 	}

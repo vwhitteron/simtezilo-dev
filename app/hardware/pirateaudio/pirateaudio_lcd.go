@@ -5,15 +5,13 @@ import (
 	"image"
 	"image/color"
 	"image/draw"
-	"os"
 
 	_ "image/png"
 
-	"github.com/golang/freetype"
 	"github.com/golang/freetype/truetype"
 	"github.com/rubiojr/go-pirateaudio/display"
 	"github.com/rubiojr/go-pirateaudio/textview"
-	"github.com/vwhitteron/simtezilo-dev/app/gui"
+	"github.com/vwhitteron/simtezilo-dev/app/ui"
 	"golang.org/x/image/font"
 	"golang.org/x/image/math/fixed"
 )
@@ -24,14 +22,13 @@ type PirateAudioLCD struct {
 	font        *truetype.Font
 	device      *display.Display
 	orientation int
-	sprites     *gui.SpriteSet
+	sprites     *ui.SpriteSet
 	dpi         float64
 	poweredOn   bool
 }
 
 type PirateAudioLCDOpts struct {
 	Orientation int
-	AssetDir    string
 }
 
 func NewPirateAudioLCD(opts PirateAudioLCDOpts) (*PirateAudioLCD, error) {
@@ -51,23 +48,12 @@ func NewPirateAudioLCD(opts PirateAudioLCDOpts) (*PirateAudioLCD, error) {
 		lcdDevice.Rotate(display.NO_ROTATION)
 	}
 
-	sprites, err := gui.NewSpriteSet(gui.SpriteSetOpts{AssetDir: opts.AssetDir})
+	sprites, err := ui.NewSpriteSet()
 	if err != nil {
 		return nil, fmt.Errorf("loading sprite set: %w", err)
 	}
 
-	fontData, err := os.Open(opts.AssetDir + "/font/LeagueGothic-Regular.ttf") // TODO: use go:embed
-	if err != nil {
-		return nil, fmt.Errorf("open font file: %w", err)
-	}
-
-	fontBytes := make([]byte, 1024*100)
-	_, err = fontData.Read(fontBytes)
-	if err != nil {
-		return nil, fmt.Errorf("reading font data: %w", err)
-	}
-
-	freetypeFont, err := freetype.ParseFont(fontBytes)
+	freetypeFont, err := ui.GetRegularFont()
 	if err != nil {
 		return nil, fmt.Errorf("parsing font: %w", err)
 	}

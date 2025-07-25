@@ -1,9 +1,10 @@
-package gui
+package ui
 
 import (
+	"bytes"
+	_ "embed"
 	"fmt"
 	"image"
-	"os"
 )
 
 type SpriteSet struct {
@@ -11,22 +12,16 @@ type SpriteSet struct {
 	sprite map[string]image.Rectangle
 }
 
-type SpriteSetOpts struct {
-	AssetDir string
-}
+//go:embed images/sprites.png
+var spritesImage []byte
 
-func NewSpriteSet(opts SpriteSetOpts) (*SpriteSet, error) {
-	path := opts.AssetDir + "/image/sprites.png" // TODO: use go:embed
-	data, err := os.Open(path)
-	if err != nil {
-		return nil, fmt.Errorf("loading image %q: %e", path, err)
-	}
+func NewSpriteSet() (*SpriteSet, error) {
+	data := bytes.NewReader(spritesImage)
 
 	img, _, err := image.Decode(data)
 	if err != nil {
-		return nil, fmt.Errorf("decoding image %q: %e", path, err)
+		return nil, fmt.Errorf("decoding image: %e", err)
 	}
-	data.Close()
 
 	collection := map[string]image.Rectangle{
 		"splash": image.Rect(0*240, 0*240, 1*240, 1*240),

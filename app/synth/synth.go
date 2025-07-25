@@ -22,7 +22,6 @@ type Synthesizer struct {
 }
 
 type SynthOpts struct {
-	AssetDir   string
 	Config     config.Synthesizer
 	Logger     zerolog.Logger
 	Kinematics *kinematics.KinaticsTracker
