@@ -77,7 +77,7 @@ func SetupPirateAudioButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, c
 			case "jerkMax":
 				jerkMax := config.IncreaseJerkMax()
 
-				displayString = fmt.Sprintf("JMax %d", jerkMax)
+				displayString = fmt.Sprintf("jMax %d", jerkMax)
 
 				log.Debug().
 					Str("button", "A").
@@ -110,7 +110,7 @@ func SetupPirateAudioButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, c
 			case "snapMax":
 				snapMax := config.IncreaseSnapMax()
 
-				displayString = fmt.Sprintf("SMax %d", snapMax)
+				displayString = fmt.Sprintf("sMax %d", snapMax)
 
 				log.Debug().
 					Str("button", "A").
@@ -248,7 +248,7 @@ func SetupPirateAudioButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, c
 			case "jerkMax":
 				value := config.DecreaseJerkMax()
 
-				displayString = fmt.Sprintf("JMax %d", value)
+				displayString = fmt.Sprintf("jMax %d", value)
 
 				log.Debug().
 					Str("button", "B").
@@ -281,7 +281,7 @@ func SetupPirateAudioButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, c
 			case "snapMax":
 				snapMax := config.DecreaseSnapMax()
 
-				displayString = fmt.Sprintf("SMax %d", snapMax)
+				displayString = fmt.Sprintf("sMax %d", snapMax)
 
 				log.Debug().
 					Str("button", "B").
@@ -292,7 +292,7 @@ func SetupPirateAudioButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, c
 			case "snapMinHz":
 				minHz := config.DecreaseMinHz()
 
-				displayString = fmt.Sprintf("FMin %d", minHz)
+				displayString = fmt.Sprintf("fMin %d", minHz)
 
 				log.Debug().
 					Str("button", "B").
@@ -303,7 +303,7 @@ func SetupPirateAudioButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, c
 			case "snapMaxHz":
 				maxHz := config.DecreaseMaxHz()
 
-				displayString = fmt.Sprintf("FMax %d", maxHz)
+				displayString = fmt.Sprintf("fMax %d", maxHz)
 
 				log.Debug().
 					Str("button", "B").
@@ -397,17 +397,17 @@ func SetupPirateAudioButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, c
 			case "jerkExp":
 				displayString = fmt.Sprintf("Jerk %d", int(config.GetJerkExponent()*1000.0))
 			case "jerkMax":
-				displayString = fmt.Sprintf("JMax %d", config.GetJerkMax())
+				displayString = fmt.Sprintf("jMax %d", config.GetJerkMax())
 			case "snapProfile":
 				displayString = fmt.Sprintf("Snap %d", config.GetSnapProfile())
 			case "snapExp":
 				displayString = fmt.Sprintf("Snap %d", int(config.GetSnapExponent()*1000.0))
 			case "snapMax":
-				displayString = fmt.Sprintf("SMax %d", config.GetSnapMax())
+				displayString = fmt.Sprintf("sMax %d", config.GetSnapMax())
 			case "minHz":
-				displayString = fmt.Sprintf("FMin %d", int(config.GetMinHz()))
+				displayString = fmt.Sprintf("fMin %d", int(config.GetMinHz()))
 			case "maxHz":
-				displayString = fmt.Sprintf("FMax %d", int(config.GetMaxHz()))
+				displayString = fmt.Sprintf("fMax %d", int(config.GetMaxHz()))
 			case "chassis":
 				volume, _ := synth.GetChannelVolume("chassis")
 				displayString = fmt.Sprintf("Chassis %d", volume)
