@@ -36,7 +36,7 @@ Recommended master gain setting:
 |          HAT type          |     Gain setting     |
 |----------------------------|----------------------|
 | Pirate Audio Line-Out      | -17.75 dB            |
-| Pirate Audio Headphone Amp | - 7.50 dB (low gain) |
+| Pirate Audio Headphone Amp | - 7.00 dB (low gain) |
 
 ### Buttkicker USB
 
