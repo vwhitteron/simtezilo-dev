@@ -1,0 +1,159 @@
+package kinematics
+
+import (
+	"time"
+
+	"github.com/vwhitteron/simtezilo-dev/app/kinematics/rotataionalenvelope"
+	"github.com/vwhitteron/simtezilo-dev/app/kinematics/translationalenvelope"
+	"github.com/vwhitteron/simtezilo-dev/app/kinematics/vector"
+	"github.com/vwhitteron/simtezilo-dev/app/signal"
+	telemetry_client "github.com/zetetos/gt-telemetry"
+)
+
+type PositionalDerivatives struct {
+	Acceleration float64
+	Jerk         float64
+	Snap         float64
+	Crackle      float64
+}
+
+type CalculatedTranslationalDerivatives struct {
+	PositionalDerivatives
+	Delta    telemetry_client.Vector
+	Velocity telemetry_client.Vector
+}
+
+type RotationalDerivatives struct {
+	PositionalDerivatives
+	Delta    telemetry_client.SymmetryAxes
+	Velocity telemetry_client.SymmetryAxes
+}
+
+type TranslationalDerivatives struct {
+	PositionalDerivatives
+	Delta    telemetry_client.TranslationalEnvelope
+	Velocity telemetry_client.TranslationalEnvelope
+}
+
+type Kinematics struct {
+	SequenceID  uint32
+	ComputeTime time.Duration
+	Format      string
+
+	SixDOFTranslationCalc CalculatedTranslationalDerivatives
+	SixDOFTranslation     TranslationalDerivatives
+	SixDOFRotation        RotationalDerivatives
+
+	TransmissionGear int
+
+	GroundSpeed     float64
+	CalculatedSurge float64
+
+	SynthOutputAmplitude float64
+	SynthOutputFrequency int
+}
+
+type KinaticsTracker struct {
+	Last    Kinematics
+	Current Kinematics
+}
+
+func NewKinematicsTracker() KinaticsTracker {
+	return KinaticsTracker{
+		Last:    newKinematics(),
+		Current: newKinematics(),
+	}
+}
+
+func newKinematics() Kinematics {
+	return Kinematics{
+		SixDOFTranslationCalc: CalculatedTranslationalDerivatives{},
+		SixDOFTranslation:     TranslationalDerivatives{},
+		SixDOFRotation:        RotationalDerivatives{},
+		ComputeTime:           0,
+		TransmissionGear:      -100,
+		GroundSpeed:           0,
+		CalculatedSurge:       0,
+		SynthOutputAmplitude:  0,
+		SynthOutputFrequency:  0,
+		Format:                "A",
+	}
+}
+
+// TODO: ideally this should not be given the gt client
+func (k *KinaticsTracker) Update(windowSeconds float64, gtclient *telemetry_client.GTClient) {
+	k.Last = k.Current
+
+	k.Current.Format = getTelemetryFormat(gtclient)
+
+	k.Current.SequenceID = gtclient.Telemetry.SequenceID()
+	k.Current.SixDOFTranslationCalc.Velocity = gtclient.Telemetry.VelocityVector()
+	k.Current.SixDOFRotation.Velocity = gtclient.Telemetry.RotationVector()
+
+	// chassis longitudinal velocity
+	k.Current.GroundSpeed = float64(gtclient.Telemetry.GroundSpeedMetersPerSecond())
+
+	// chassis rotational envelope
+	k.Current.SixDOFRotation.Delta = rotataionalenvelope.Delta(k.Current.SixDOFRotation.Velocity, k.Last.SixDOFRotation.Velocity)
+
+	// attenuate yaw jerk and snap as it causes vibration during heavy rotation (high G-force corners, spin out, etc)
+	biasedAttitudeDelta := rotataionalenvelope.Scale(k.Current.SixDOFRotation.Delta, 1.0, 0.25, 1.0)
+
+	k.Current.SixDOFRotation.Acceleration = rotataionalenvelope.Magnitude(biasedAttitudeDelta) / windowSeconds
+
+	k.Current.SixDOFRotation.Jerk = (k.Current.SixDOFRotation.Acceleration - k.Last.SixDOFRotation.Acceleration) / windowSeconds
+
+	// filter out excessive spikes in jerk
+	if k.Current.SixDOFRotation.Jerk > 10 {
+		k.Current.SixDOFRotation.Jerk = 10
+	} else if k.Current.SixDOFRotation.Jerk < -10 {
+		k.Current.SixDOFRotation.Jerk = -10
+	}
+
+	k.Current.SixDOFRotation.Snap = (k.Current.SixDOFRotation.Jerk - k.Last.SixDOFRotation.Jerk) / windowSeconds
+
+	// chassis 3D velocity
+	k.Current.SixDOFTranslationCalc.Delta = vector.Delta(k.Current.SixDOFTranslationCalc.Velocity, k.Last.SixDOFTranslationCalc.Velocity)
+	k.Current.SixDOFTranslationCalc.Acceleration = vector.Magnitude(k.Current.SixDOFTranslationCalc.Delta) / windowSeconds
+	k.Current.SixDOFTranslationCalc.Jerk = (k.Current.SixDOFTranslationCalc.Acceleration - k.Last.SixDOFTranslationCalc.Acceleration) / windowSeconds
+	k.Current.SixDOFTranslationCalc.Snap = (k.Current.SixDOFTranslationCalc.Jerk - k.Last.SixDOFTranslationCalc.Jerk) / windowSeconds
+	k.Current.SixDOFTranslationCalc.Crackle = (k.Current.SixDOFTranslationCalc.Snap - k.Last.SixDOFTranslationCalc.Snap) / windowSeconds
+
+	// 6DOF translational envelope
+	k.Current.SixDOFTranslation.Velocity = gtclient.Telemetry.TranslationEnvelope()
+	k.Current.SixDOFTranslation.Delta = translationalenvelope.Delta(k.Current.SixDOFTranslation.Velocity, k.Last.SixDOFTranslation.Velocity)
+	k.Current.SixDOFTranslation.Acceleration = translationalenvelope.Magnitude(k.Current.SixDOFTranslation.Velocity)
+	k.Current.SixDOFTranslation.Jerk = (k.Current.SixDOFTranslation.Acceleration - k.Last.SixDOFTranslation.Acceleration) / windowSeconds
+	k.Current.SixDOFTranslation.Snap = (k.Current.SixDOFTranslation.Jerk - k.Last.SixDOFTranslation.Jerk) / windowSeconds
+	k.Current.SixDOFTranslation.Crackle = (k.Current.SixDOFTranslation.Snap - k.Last.SixDOFTranslation.Snap) / windowSeconds
+
+	k.Current.CalculatedSurge = signal.Abs(float64(k.Current.SixDOFTranslationCalc.Delta.X) / windowSeconds)
+
+	k.Current.TransmissionGear = gtclient.Telemetry.CurrentGear()
+}
+
+func (k *KinaticsTracker) GetSurgeGforce() float64 {
+	surge := float64(0)
+	if k.Current.Format == "~" || k.Current.Format == "B" {
+		surge = float64(k.Current.SixDOFTranslation.Velocity.Surge)
+	} else {
+		surge = float64(k.Current.CalculatedSurge)
+	}
+
+	gForce := signal.Abs(surge / GravityConstant)
+
+	return gForce
+}
+
+func getTelemetryFormat(gt *telemetry_client.GTClient) string {
+	format, _ := gt.Telemetry.RawTelemetry.HasSectionTilde()
+	if format {
+		return "~"
+	}
+	format, _ = gt.Telemetry.RawTelemetry.HasSectionB()
+	if format {
+		return "B"
+	}
+
+	return "A"
+}

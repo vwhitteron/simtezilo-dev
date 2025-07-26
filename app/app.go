@@ -381,7 +381,7 @@ func (a *App) processHaptics(seqDelta uint32) {
 func (a *App) generateBump() {
 	startTime := time.Now()
 
-	snap := signal.LargestMagnitude(a.kinematics.Current.Velocity.Snap, (a.kinematics.Current.RotationalEnvelope.Snap * 100))
+	snap := signal.LargestMagnitude(a.kinematics.Current.SixDOFTranslationCalc.Snap, (a.kinematics.Current.SixDOFRotation.Snap * 100))
 
 	pulseFrequencyScaler := signal.Abs(signal.Exponent(snap, a.config.GetSnapCurve()))
 	pulseFrequencyScaler = signal.Scale(pulseFrequencyScaler, a.config.GetSnapScale())
@@ -395,7 +395,7 @@ func (a *App) generateBump() {
 
 	pulseWidth := math.Round(float64(a.config.Synthesizer.SampleRateHz) / (2 * pulseFrequencyHz))
 
-	sig := signal.LargestMagnitude(a.kinematics.Current.Velocity.Jerk, (a.kinematics.Current.RotationalEnvelope.Jerk * 100))
+	sig := signal.LargestMagnitude(a.kinematics.Current.SixDOFTranslationCalc.Jerk, (a.kinematics.Current.SixDOFRotation.Jerk * 100))
 	pulseAmplitude := signal.Exponent(sig, a.config.GetJerkCurve())
 	pulseAmplitude = signal.Scale(pulseAmplitude, a.config.GetJerkScale())
 
@@ -418,8 +418,8 @@ func (a *App) generateBump() {
 	// no haptics when vehicle comes to a controlled stop
 	// TODO: check angular velocity, etc to enable for uncontrolled stops
 	// if vector.Magnitude(c.kinematics.Current.Velocity.Vector) >= 0.28 {
-	lastMag := vector.Magnitude(a.kinematics.Last.Velocity.Vector)
-	currentMag := vector.Magnitude(a.kinematics.Current.Velocity.Vector)
+	lastMag := vector.Magnitude(a.kinematics.Last.SixDOFTranslationCalc.Velocity)
+	currentMag := vector.Magnitude(a.kinematics.Current.SixDOFTranslationCalc.Velocity)
 	if signal.LargestMagnitude(lastMag, currentMag) >= 0.28 {
 		a.synth.WriteBuffer("chassis", pulseBuffer)
 	}
@@ -432,8 +432,8 @@ func (a *App) generateBump() {
 
 	if pulseAmplitude > 1.0 || pulseAmplitude < -1.0 {
 		a.log.Debug().
-			Float64("jerk", a.kinematics.Current.Velocity.Jerk).
-			Float64("snap", a.kinematics.Current.Velocity.Snap).
+			Float64("jerk", a.kinematics.Current.SixDOFTranslationCalc.Jerk).
+			Float64("snap", a.kinematics.Current.SixDOFTranslationCalc.Snap).
 			Str("process_time", time.Since(startTime).String()).
 			Uint32("sequence_id", a.kinematics.Current.SequenceID).
 			Msg("Bump inputs")
@@ -610,25 +610,26 @@ func (a *App) sendTelemetryChartData() {
 
 	go func() {
 		a.telemetryChartFeed <- map[string]float32{
-			"seq":                  float32(a.seq),
-			"timeOfDay":            float32(a.gt.Telemetry.TimeOfDay().Milliseconds()),
-			"throttle":             a.gt.Telemetry.ThrottlePercent(),
-			"brake":                a.gt.Telemetry.BrakePercent(),
-			"rpm":                  a.gt.Telemetry.EngineRPM(),
-			"speed":                a.gt.Telemetry.GroundSpeedKPH(),
-			"gear":                 float32(a.kinematics.Current.TransmissionGear),
-			"acceleration":         float32(a.kinematics.Current.AccelerationLongitude),
-			"velocityX":            a.kinematics.Current.Velocity.Vector.X,
-			"velocityY":            a.kinematics.Current.Velocity.Vector.Y,
-			"velocityZ":            a.kinematics.Current.Velocity.Vector.Z,
-			"gforce3D":             float32(a.kinematics.Current.Velocity.Acceleration3D) / gravityConstant,
-			"gforceLong":           float32(a.kinematics.Current.AccelerationLongitude) / gravityConstant,
-			"jerk":                 float32(a.kinematics.Current.Velocity.Jerk),
-			"snap":                 float32(a.kinematics.Current.Velocity.Snap),
-			"attitudeJerk":         float32(a.kinematics.Current.RotationalEnvelope.Jerk * 50),
-			"synthOutputAmplitude": float32(a.kinematics.Current.SynthOutputAmplitude),
-			"synthOutputFrequency": float32(a.kinematics.Current.SynthOutputFrequency),
-			"computeTime":          float32(a.kinematics.Last.ComputeTime.Microseconds()),
+			"computeTime":                 float32(a.kinematics.Last.ComputeTime.Microseconds()),
+			"seq":                         float32(a.seq),
+			"timeOfDay":                   float32(a.gt.Telemetry.TimeOfDay().Milliseconds()),
+			"throttleInput":               a.gt.Telemetry.ThrottleInputPercent(),
+			"throttleOutput":              a.gt.Telemetry.ThrottleOutputPercent(),
+			"brakeInput":                  a.gt.Telemetry.BrakeInputPercent(),
+			"brakeOutput":                 a.gt.Telemetry.BrakeOutputPercent(),
+			"rpm":                         a.gt.Telemetry.EngineRPM(),
+			"speed":                       a.gt.Telemetry.GroundSpeedKPH(),
+			"gear":                        float32(a.kinematics.Current.TransmissionGear),
+			"surgeGforce":                 float32(a.kinematics.Current.SixDOFTranslation.Acceleration) / kinematics.GravityConstant,
+			"surgeCalcGforce":             float32(a.kinematics.Current.CalculatedSurge) / kinematics.GravityConstant,
+			"SixDOFTranslationalJerk":     float32(a.kinematics.Current.SixDOFTranslation.Jerk),
+			"SixDOFTranslationalSnap":     float32(a.kinematics.Current.SixDOFTranslation.Snap),
+			"SixDOFTranslationalCalcJerk": float32(a.kinematics.Current.SixDOFTranslationCalc.Jerk),
+			"SixDOFTranslationalCalcSnap": float32(a.kinematics.Current.SixDOFTranslationCalc.Snap),
+			"SixDOFRotationalJerk":        float32(a.kinematics.Current.SixDOFRotation.Jerk * 50),
+			"SixDOFRotationalSnap":        float32(a.kinematics.Current.SixDOFRotation.Snap),
+			"synthOutputAmplitude":        float32(a.kinematics.Current.SynthOutputAmplitude),
+			"synthOutputFrequency":        float32(a.kinematics.Current.SynthOutputFrequency),
 		}
 	}()
 }

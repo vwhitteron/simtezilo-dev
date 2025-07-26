@@ -87,12 +87,22 @@ async function initSciChart() {
         sciChartSurfaceThrottleBrake.yAxes.add(yAxisThrottleBrake);
 
         // Create a DataSeries
-        const xyDataSeriesThrottle = new SciChart.XyDataSeries(wasmContextThrottleBrake, {
+        const xyDataSeriesThrottleInput = new SciChart.XyDataSeries(wasmContextThrottleBrake, {
             fifoCapacity: fifoCapacity,
             isSorted: true,
             containsNaN: false
         });
-        const xyDataSeriesBrake = new SciChart.XyDataSeries(wasmContextThrottleBrake, {
+        const xyDataSeriesThrottleOutput = new SciChart.XyDataSeries(wasmContextThrottleBrake, {
+            fifoCapacity: fifoCapacity,
+            isSorted: true,
+            containsNaN: false
+        });
+        const xyDataSeriesBrakeInput = new SciChart.XyDataSeries(wasmContextThrottleBrake, {
+            fifoCapacity: fifoCapacity,
+            isSorted: true,
+            containsNaN: false
+        });
+        const xyDataSeriesBrakeOutput = new SciChart.XyDataSeries(wasmContextThrottleBrake, {
             fifoCapacity: fifoCapacity,
             isSorted: true,
             containsNaN: false
@@ -100,14 +110,24 @@ async function initSciChart() {
 
         // Create a renderableSeries and assign the dataSeries
         sciChartSurfaceThrottleBrake.renderableSeries.add(new SciChart.FastLineRenderableSeries(wasmContextThrottleBrake, {
-            dataSeries: xyDataSeriesThrottle,
+            dataSeries: xyDataSeriesThrottleInput,
             strokeThickness: 3,
             stroke: "#00F000"
         }));
         sciChartSurfaceThrottleBrake.renderableSeries.add(new SciChart.FastLineRenderableSeries(wasmContextThrottleBrake, {
-            dataSeries: xyDataSeriesBrake,
+            dataSeries: xyDataSeriesThrottleOutput,
+            strokeThickness: 2,
+            stroke: "#6EADFF"
+        }));
+        sciChartSurfaceThrottleBrake.renderableSeries.add(new SciChart.FastLineRenderableSeries(wasmContextThrottleBrake, {
+            dataSeries: xyDataSeriesBrakeInput,
             strokeThickness: 3,
             stroke: "#F00000"
+        }));
+        sciChartSurfaceThrottleBrake.renderableSeries.add(new SciChart.FastLineRenderableSeries(wasmContextThrottleBrake, {
+            dataSeries: xyDataSeriesBrakeOutput,
+            strokeThickness: 2,
+            stroke: "#FF8A7D",
         }));
 
         // Transmission gear
@@ -170,7 +190,7 @@ async function initSciChart() {
         const {
             sciChartSurface: sciChartSurfaceGforce,
             wasmContext: wasmContextGforce
-        } = await SciChart.SciChartSurface.create("scichart-root-6", { title: "Longitudinal G-Force", titleStyle: { fontSize: "16" } });
+        } = await SciChart.SciChartSurface.create("scichart-root-6", { title: "Surge G-Force", titleStyle: { fontSize: "16" } });
         6
 
         // Add an X and a Y Axis
@@ -180,7 +200,12 @@ async function initSciChart() {
         sciChartSurfaceGforce.yAxes.add(yAxisGforce);
 
         // Create a DataSeries
-        const xyDataSeriesGforce = new SciChart.XyDataSeries(wasmContextGforce, {
+        const xyDataSeriesSurgeGforce = new SciChart.XyDataSeries(wasmContextGforce, {
+            fifoCapacity: fifoCapacity,
+            isSorted: true,
+            containsNaN: false
+        });
+        const xyDataSeriesSurgeCalcGforce = new SciChart.XyDataSeries(wasmContextGforce, {
             fifoCapacity: fifoCapacity,
             isSorted: true,
             containsNaN: false
@@ -188,9 +213,14 @@ async function initSciChart() {
 
         // Create a renderableSeries and assign the dataSeries
         sciChartSurfaceGforce.renderableSeries.add(new SciChart.FastLineRenderableSeries(wasmContextGforce, {
-            dataSeries: xyDataSeriesGforce,
-            strokeThickness: 3,
+            dataSeries: xyDataSeriesSurgeGforce,
+            strokeThickness: 2,
             stroke: "#50C7E0"
+        }));
+        sciChartSurfaceGforce.renderableSeries.add(new SciChart.FastLineRenderableSeries(wasmContextGforce, {
+            dataSeries: xyDataSeriesSurgeCalcGforce,
+            strokeThickness: 2,
+            stroke: "#C750E0"
         }));
 
 
@@ -198,7 +228,7 @@ async function initSciChart() {
         const {
             sciChartSurface: sciChartSurfaceJerk,
             wasmContext: wasmContextJerk
-        } = await SciChart.SciChartSurface.create("scichart-root-7", { title: "Jerk", titleStyle: { fontSize: "16" } });
+        } = await SciChart.SciChartSurface.create("scichart-root-7", { title: "6DOF Translatioanl Jerk", titleStyle: { fontSize: "16" } });
 
 
         // Add an X and a Y Axis
@@ -208,12 +238,12 @@ async function initSciChart() {
         sciChartSurfaceJerk.yAxes.add(yAxisJerk);
 
         // Create a DataSeries
-        const xyDataSeriesJerk = new SciChart.XyDataSeries(wasmContextJerk, {
+        const xyDataSeries6DOFTranslationalCalcJerk = new SciChart.XyDataSeries(wasmContextJerk, {
             fifoCapacity: fifoCapacity,
             isSorted: true,
             containsNaN: false
         });
-        const xyDataSeriesAttitudeJerk = new SciChart.XyDataSeries(wasmContextJerk, {
+        const xyDataSeries6DOFTranslationalJerk = new SciChart.XyDataSeries(wasmContextJerk, {
             fifoCapacity: fifoCapacity,
             isSorted: true,
             containsNaN: false
@@ -222,13 +252,13 @@ async function initSciChart() {
 
         // Create a renderableSeries and assign the dataSeries
         sciChartSurfaceJerk.renderableSeries.add(new SciChart.FastLineRenderableSeries(wasmContextJerk, {
-            dataSeries: xyDataSeriesJerk,
-            strokeThickness: 3,
+            dataSeries: xyDataSeries6DOFTranslationalCalcJerk,
+            strokeThickness: 1,
             stroke: "#50C7E0"
         }));
         sciChartSurfaceJerk.renderableSeries.add(new SciChart.FastLineRenderableSeries(wasmContextJerk, {
-            dataSeries: xyDataSeriesAttitudeJerk,
-            strokeThickness: 3,
+            dataSeries: xyDataSeries6DOFTranslationalJerk,
+            strokeThickness: 1,
             stroke: "#C750E0"
         }));
 
@@ -238,7 +268,7 @@ async function initSciChart() {
         const {
             sciChartSurface: sciChartSurfaceSnap,
             wasmContext: wasmContextSnap
-        } = await SciChart.SciChartSurface.create("scichart-root-8", { title: "Snap", titleStyle: { fontSize: "16" } });
+        } = await SciChart.SciChartSurface.create("scichart-root-8", { title: "6DOF Translational Snap", titleStyle: { fontSize: "16" } });
 
 
         // Add an X and a Y Axis
@@ -248,12 +278,12 @@ async function initSciChart() {
         sciChartSurfaceSnap.yAxes.add(yAxisSnap);
 
         // Create a DataSeries
-        const xyDataSeriesSnap = new SciChart.XyDataSeries(wasmContextSnap, {
+        const xyDataSeries6DOFTranslationalCalcSnap = new SciChart.XyDataSeries(wasmContextSnap, {
             fifoCapacity: fifoCapacity,
             isSorted: true,
             containsNaN: false
         });
-        const xyDataSeriesAttitudeSnap = new SciChart.XyDataSeries(wasmContextSnap, {
+        const xyDataSeries6DOFTranslationalSnap = new SciChart.XyDataSeries(wasmContextSnap, {
             fifoCapacity: fifoCapacity,
             isSorted: true,
             containsNaN: false
@@ -261,57 +291,65 @@ async function initSciChart() {
 
         // Create a renderableSeries and assign the dataSeries
         sciChartSurfaceSnap.renderableSeries.add(new SciChart.FastLineRenderableSeries(wasmContextSnap, {
-            dataSeries: xyDataSeriesSnap,
-            strokeThickness: 3,
+            dataSeries: xyDataSeries6DOFTranslationalCalcSnap,
+            strokeThickness: 1,
             stroke: "#50C7E0"
         }));
         sciChartSurfaceSnap.renderableSeries.add(new SciChart.FastLineRenderableSeries(wasmContextSnap, {
-            dataSeries: xyDataSeriesAttitudeSnap,
-            strokeThickness: 3,
+            dataSeries: xyDataSeries6DOFTranslationalSnap,
+            strokeThickness: 1,
             stroke: "#C750E0"
         }));
 
 
 
         lastTimeOfDay = 0;
-        // i = 1;
+        lastSeq = 0;
         socket.addEventListener('message', (event) => {
             const data = JSON.parse(event.data);
 
-            if (data.timeOfDay < lastTimeOfDay) {
+            // if (data.timeOfDay < lastTimeOfDay) {
+            if (data.seq < lastSeq) {
                 xyDataSeriesRPM.clear();
                 xyDataSeriesSpeed.clear();
-                xyDataSeriesThrottle.clear();
-                xyDataSeriesBrake.clear();
+                xyDataSeriesThrottleInput.clear();
+                xyDataSeriesThrottleOutput.clear();
+                xyDataSeriesBrakeInput.clear();
+                xyDataSeriesBrakeOutput.clear();
                 xyDataSeriesGear.clear();
                 xyDataSeriesComputeTime.clear();
-                xyDataSeriesGforce.clear();
-                xyDataSeriesJerk.clear();
-                xyDataSeriesAttitudeJerk.clear();
-                xyDataSeriesSnap.clear();
-                xyDataSeriesAttitudeSnap.clear();
+                xyDataSeriesSurgeGforce.clear();
+                xyDataSeriesSurgeCalcGforce.clear();
+                xyDataSeries6DOFTranslationalCalcJerk.clear();
+                xyDataSeries6DOFTranslationalJerk.clear();
+                xyDataSeries6DOFTranslationalCalcSnap.clear();
+                xyDataSeries6DOFTranslationalSnap.clear();
             }
 
-            i = data.timeOfDay;
+            // i = data.timeOfDay;
+            i = data.seq;
             xyDataSeriesRPM.appendRange([i], [data.rpm]);
             xyDataSeriesSpeed.appendRange([i], [data.speed]);
-            xyDataSeriesThrottle.appendRange([i], [data.throttle]);
-            xyDataSeriesBrake.appendRange([i], [data.brake]);
+            xyDataSeriesThrottleInput.appendRange([i], [data.throttleInput]);
+            xyDataSeriesThrottleOutput.appendRange([i], [data.throttleOutput]);
+            xyDataSeriesBrakeInput.appendRange([i], [data.brakeInput]);
+            xyDataSeriesBrakeOutput.appendRange([i], [data.brakeOutput]);
             xyDataSeriesGear.appendRange([i], [data.gear]);
             xyDataSeriesComputeTime.appendRange([i], [data.computeTime]);
-            xyDataSeriesGforce.appendRange([i], [data.gforceLong]);
-            xyDataSeriesJerk.appendRange([i], [data.jerk]);
-            xyDataSeriesAttitudeJerk.appendRange([i], [data.attitudeJerk]);
-            xyDataSeriesSnap.appendRange([i], [data.snap]);
-            xyDataSeriesAttitudeSnap.appendRange([i], [data.attitudeSnap]);
+            xyDataSeriesSurgeGforce.appendRange([i], [data.surgeGforce]);
+            xyDataSeriesSurgeCalcGforce.appendRange([i], [data.surgeCalcGforce]);
+            xyDataSeries6DOFTranslationalJerk.appendRange([i], [data.SixDOFTranslationalJerk]);
+            xyDataSeries6DOFTranslationalSnap.appendRange([i], [data.SixDOFTranslationalSnap]);
+            xyDataSeries6DOFTranslationalCalcJerk.appendRange([i], [data.SixDOFTranslationalCalcJerk]);
+            xyDataSeries6DOFTranslationalCalcSnap.appendRange([i], [data.SixDOFTranslationalCalcSnap]);
 
             if (sciChartSurfaceRPM.zoomState !== SciChart.EZoomState.UserZooming) {
                 xAxisRPM.visibleRange = new SciChart.NumberRange(i - fifoCapacity, i);
             }
 
             lastTimeOfDay = data.timeOfDay;
+            lastSeq = data.seq;
 
-            // i++;
         });
     }
 

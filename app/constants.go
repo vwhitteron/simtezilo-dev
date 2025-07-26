@@ -1,7 +1,6 @@
 package app
 
 const frameRate = 60
-const gravityConstant = 9.81
 
 // Gear settings
 const (
