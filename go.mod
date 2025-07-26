@@ -5,7 +5,6 @@ go 1.24.4
 require (
 	atomicgo.dev/keyboard v0.2.9
 	github.com/bwmarrin/discordgo v0.29.0
-	github.com/goccy/go-json v0.10.5
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0
 	github.com/gopxl/beep v1.4.1
 	github.com/gorilla/websocket v1.5.3
@@ -14,7 +13,7 @@ require (
 	github.com/rubiojr/go-pirateaudio v0.0.0-20240620105206-e7f0a1f5f0d9
 	github.com/spf13/viper v1.20.1
 	github.com/theojulienne/go-wireless v1.2.0
-	github.com/zetetos/gt-telemetry v1.8.1
+	github.com/zetetos/gt-telemetry v1.9.0
 	golang.org/x/image v0.27.0
 	periph.io/x/conn/v3 v3.7.2
 	periph.io/x/host/v3 v3.8.2
