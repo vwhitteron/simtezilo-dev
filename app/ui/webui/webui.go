@@ -1,7 +1,7 @@
 package webui
 
 import (
-	_ "embed"
+	"embed"
 	"encoding/json"
 	"net/http"
 
@@ -31,8 +31,9 @@ func (w *WebUI) Start() {
 	w.log.Info().Msg("Web UI started on port 8080\r\n")
 
 	http.HandleFunc("/", w.rootHandlerFunc())
+	http.HandleFunc("/images/", w.imagesHandlerFunc())
+	http.HandleFunc("/js/", w.sciChartJSHandlerFunc())
 	http.HandleFunc("/telemetry", w.telemetryHandlerFunc())
-	http.HandleFunc("/js/scichart.js", w.sciChartJSHandlerFunc())
 	http.HandleFunc("/ws", w.handleWebSocketConnection)
 
 	err := http.ListenAndServe(":8080", nil)
@@ -59,12 +60,35 @@ func (w *WebUI) telemetryHandlerFunc() func(w http.ResponseWriter, r *http.Reque
 	}
 }
 
-//go:embed js/scichart.js
-var scichartJS []byte
+//go:embed static/*
+var staticFiles embed.FS
+
+func (w *WebUI) imagesHandlerFunc() func(w http.ResponseWriter, r *http.Request) {
+	return func(response http.ResponseWriter, request *http.Request) {
+		filename := request.URL.Path
+
+		content, err := staticFiles.ReadFile("static" + filename)
+		if err != nil {
+			response.WriteHeader(http.StatusNotFound)
+			w.log.Error().Err(err).Msg("Invalid image file")
+		}
+
+		response.Write(content)
+	}
+}
 
 func (w *WebUI) sciChartJSHandlerFunc() func(w http.ResponseWriter, r *http.Request) {
-	return func(response http.ResponseWriter, _ *http.Request) {
-		response.Write(scichartJS)
+	return func(response http.ResponseWriter, request *http.Request) {
+		filename := request.URL.Path
+
+		content, err := staticFiles.ReadFile("static" + filename)
+		if err != nil {
+			response.WriteHeader(http.StatusNotFound)
+			w.log.Error().Err(err).Msg("Invalid javascript file")
+		}
+
+		response.Header().Add("Content-Type", "application/javascript")
+		response.Write(content)
 	}
 }
 
