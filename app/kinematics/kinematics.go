@@ -47,7 +47,7 @@ type Kinematics struct {
 	TransmissionGear int
 
 	GroundSpeed     float64
-	CalculatedSurge float64
+	SurgeCalculated float64
 
 	SynthOutputAmplitude float64
 	SynthOutputFrequency int
@@ -73,7 +73,7 @@ func newKinematics() Kinematics {
 		ComputeTime:           0,
 		TransmissionGear:      -100,
 		GroundSpeed:           0,
-		CalculatedSurge:       0,
+		SurgeCalculated:       0,
 		SynthOutputAmplitude:  0,
 		SynthOutputFrequency:  0,
 		Format:                "A",
@@ -89,6 +89,7 @@ func (k *KinaticsTracker) Update(windowSeconds float64, gtclient *telemetry_clie
 	k.Current.SequenceID = gtclient.Telemetry.SequenceID()
 
 	// chassis 3D velocity
+	k.Current.SixDOFTranslationCalc.Velocity = gtclient.Telemetry.VelocityVector()
 	k.Current.SixDOFTranslationCalc.Delta = vector.Delta(k.Current.SixDOFTranslationCalc.Velocity, k.Last.SixDOFTranslationCalc.Velocity)
 	k.Current.SixDOFTranslationCalc.Acceleration = vector.Magnitude(k.Current.SixDOFTranslationCalc.Delta) / windowSeconds
 	k.Current.SixDOFTranslationCalc.Jerk = (k.Current.SixDOFTranslationCalc.Acceleration - k.Last.SixDOFTranslationCalc.Acceleration) / windowSeconds
@@ -103,10 +104,8 @@ func (k *KinaticsTracker) Update(windowSeconds float64, gtclient *telemetry_clie
 	k.Current.SixDOFTranslation.Snap = (k.Current.SixDOFTranslation.Jerk - k.Last.SixDOFTranslation.Jerk) / windowSeconds
 	k.Current.SixDOFTranslation.Crackle = (k.Current.SixDOFTranslation.Snap - k.Last.SixDOFTranslation.Snap) / windowSeconds
 
-	k.Current.SixDOFTranslationCalc.Velocity = gtclient.Telemetry.VelocityVector()
+	// 6DOF rotational envelope
 	k.Current.SixDOFRotation.Velocity = gtclient.Telemetry.RotationEnvelope()
-
-	// chassis rotational envelope
 	k.Current.SixDOFRotation.Delta = rotataionalenvelope.Delta(k.Current.SixDOFRotation.Velocity, k.Last.SixDOFRotation.Velocity)
 
 	// attenuate yaw jerk and snap as it causes vibration during heavy rotation (high G-force corners, spin out, etc)
@@ -116,15 +115,15 @@ func (k *KinaticsTracker) Update(windowSeconds float64, gtclient *telemetry_clie
 	k.Current.SixDOFRotation.Jerk = (k.Current.SixDOFRotation.Acceleration - k.Last.SixDOFRotation.Acceleration) / windowSeconds
 
 	// filter out excessive spikes in jerk
-	if k.Current.SixDOFRotation.Jerk > 10 {
-		k.Current.SixDOFRotation.Jerk = 10
-	} else if k.Current.SixDOFRotation.Jerk < -10 {
-		k.Current.SixDOFRotation.Jerk = -10
+	if k.Current.SixDOFRotation.Jerk > 20 {
+		k.Current.SixDOFRotation.Jerk = 20
+	} else if k.Current.SixDOFRotation.Jerk < -20 {
+		k.Current.SixDOFRotation.Jerk = -20
 	}
 
 	k.Current.SixDOFRotation.Snap = (k.Current.SixDOFRotation.Jerk - k.Last.SixDOFRotation.Jerk) / windowSeconds
 
-	k.Current.CalculatedSurge = signal.Abs(float64(k.Current.SixDOFTranslationCalc.Delta.X) / windowSeconds)
+	k.Current.SurgeCalculated = signal.Abs(float64(k.Current.SixDOFTranslationCalc.Delta.X) / windowSeconds)
 	k.Current.GroundSpeed = float64(gtclient.Telemetry.GroundSpeedMetersPerSecond())
 	k.Current.TransmissionGear = gtclient.Telemetry.CurrentGear()
 }
@@ -134,7 +133,7 @@ func (k *KinaticsTracker) GetSurgeGforce() float64 {
 	if k.Current.Format == "~" || k.Current.Format == "B" {
 		surge = float64(k.Current.SixDOFTranslation.Velocity.Surge)
 	} else {
-		surge = float64(k.Current.CalculatedSurge)
+		surge = float64(k.Current.SurgeCalculated)
 	}
 
 	gForce := signal.Abs(surge / GravityConstant)

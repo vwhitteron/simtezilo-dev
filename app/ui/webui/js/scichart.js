@@ -319,11 +319,13 @@ async function initSciChart() {
                 xyDataSeriesGear.clear();
                 xyDataSeriesComputeTime.clear();
                 xyDataSeriesSurgeGforce.clear();
-                xyDataSeriesSurgeCalcGforce.clear();
-                xyDataSeries6DOFTranslationalCalcJerk.clear();
+                xyDataSeriesSurgeGforceCalc.clear();
+                xyDataSeries6DOFTranslationalJerkCalc.clear();
                 xyDataSeries6DOFTranslationalJerk.clear();
-                xyDataSeries6DOFTranslationalCalcSnap.clear();
+                xyDataSeries6DOFTranslationalSnapCalc.clear();
                 xyDataSeries6DOFTranslationalSnap.clear();
+                xyDataSeries6DOFRotationalJerk.Clear();
+                xyDataSeries6DOFRotationalSnap.Clear()
             }
 
             // i = data.timeOfDay;
@@ -337,11 +339,13 @@ async function initSciChart() {
             xyDataSeriesGear.appendRange([i], [data.gear]);
             xyDataSeriesComputeTime.appendRange([i], [data.computeTime]);
             xyDataSeriesSurgeGforce.appendRange([i], [data.surgeGforce]);
-            xyDataSeriesSurgeCalcGforce.appendRange([i], [data.surgeCalcGforce]);
+            xyDataSeriesSurgeGforceCalc.appendRange([i], [data.surgeGforceCalc]);
             xyDataSeries6DOFTranslationalJerk.appendRange([i], [data.SixDOFTranslationalJerk]);
             xyDataSeries6DOFTranslationalSnap.appendRange([i], [data.SixDOFTranslationalSnap]);
-            xyDataSeries6DOFTranslationalCalcJerk.appendRange([i], [data.SixDOFTranslationalCalcJerk]);
-            xyDataSeries6DOFTranslationalCalcSnap.appendRange([i], [data.SixDOFTranslationalCalcSnap]);
+            xyDataSeries6DOFTranslationalJerkCalc.appendRange([i], [data.SixDOFTranslationalJerkCalc]);
+            xyDataSeries6DOFTranslationalSnapCalc.appendRange([i], [data.SixDOFTranslationalSnapCalc]);
+            xyDataSeries6DOFRotationalJerk.appendRange([i], [data.SixDOFRotationalJerk]);
+            xyDataSeries6DOFRotationalSnap.appendRange([i], [data.SixDOFRotationalSnap]);
 
             if (sciChartSurfaceRPM.zoomState !== SciChart.EZoomState.UserZooming) {
                 xAxisRPM.visibleRange = new SciChart.NumberRange(i - fifoCapacity, i);
