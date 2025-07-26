@@ -25,64 +25,72 @@ async function initSciChart() {
 
 
     const createCharts = async () => {
-        // RPM
+        // RPM and speed
         const {
-            sciChartSurface: sciChartSurfaceRPM,
-            wasmContext: wasmContextRPM
-        } = await SciChart.SciChartSurface.create("scichart-root-1", { title: "RPM", titleStyle: { fontSize: "16" } });
+            sciChartSurface: sciChartSurfaceRPMSpeed,
+            wasmContext: wasmContextRPMSpeed
+        } = await SciChart.SciChartSurface.create("scichart-root-1", { title: "RPM / Speed", titleStyle: { fontSize: "16" } });
 
-        sciChartSurfaceRPM.chartModifiers.add(new SciChart.ZoomExtentsModifier({ isAnimated: false }));
-        sciChartSurfaceRPM.chartModifiers.add(new SciChart.RubberBandXyZoomModifier());
+        sciChartSurfaceRPMSpeed.chartModifiers.add(new SciChart.ZoomExtentsModifier({ isAnimated: false }));
+        sciChartSurfaceRPMSpeed.chartModifiers.add(new SciChart.RubberBandXyZoomModifier());
 
         // Add RPM X and Y axis
-        const xAxisRPM = new SciChart.NumericAxis(wasmContextRPM, { autoRange: SciChart.EAutoRange.Always });
-        const yAxisRPM = new SciChart.NumericAxis(wasmContextRPM, { visibleRange: new SciChart.NumberRange(0, 10000) });
-        sciChartSurfaceRPM.xAxes.add(xAxisRPM);
-        sciChartSurfaceRPM.yAxes.add(yAxisRPM);
+        const xAxisRPMSpeed = new SciChart.NumericAxis(wasmContextRPMSpeed, { autoRange: SciChart.EAutoRange.Always });
+        const yAxisRPM = new SciChart.NumericAxis(
+            wasmContextRPMSpeed,
+            {
+                id: "ID_Y_AXIS_1",
+                axisAlignment: SciChart.EAxisAlignment.Left,
+                visibleRange: new SciChart.NumberRange(0, 10000),
+                labelPrecision: 0,
+                labelStyle: {
+                    color: "#50C7E0"
+                }
+            }
+        );
+        const yAxisSpeed = new SciChart.NumericAxis(
+            wasmContextRPMSpeed,
+            {
+                id: "ID_Y_AXIS_2",
+                axisAlignment: SciChart.EAxisAlignment.Right,
+                visibleRange: new SciChart.NumberRange(0, 350),
+                labelPrecision: 0,
+                labelStyle: {
+                    color: "#C750E0"
+                }
+            }
+        );
+        sciChartSurfaceRPMSpeed.xAxes.add(xAxisRPMSpeed);
+        sciChartSurfaceRPMSpeed.yAxes.add(yAxisRPM);
+        sciChartSurfaceRPMSpeed.yAxes.add(yAxisSpeed);
 
         // Create DataSeries for RPM
-        const xyDataSeriesRPM = new SciChart.XyDataSeries(wasmContextRPM, {
+        const xyDataSeriesRPM = new SciChart.XyDataSeries(wasmContextRPMSpeed, {
+            fifoCapacity: fifoCapacity,
+            isSorted: true,
+            containsNaN: false
+        });
+        const xyDataSeriesSpeed = new SciChart.XyDataSeries(wasmContextRPMSpeed, {
             fifoCapacity: fifoCapacity,
             isSorted: true,
             containsNaN: false
         });
 
         // Create a renderableSeries for RPM and assign the dataSeries
-        sciChartSurfaceRPM.renderableSeries.add(
-            new SciChart.FastLineRenderableSeries(wasmContextRPM, {
+        sciChartSurfaceRPMSpeed.renderableSeries.add(
+            new SciChart.FastLineRenderableSeries(wasmContextRPMSpeed, {
                 dataSeries: xyDataSeriesRPM,
+                yAxisId: "ID_Y_AXIS_1",
                 strokeThickness: 3,
                 stroke: "#50C7E0"
             })
         );
-
-
-
-        // Speed
-        const {
-            sciChartSurface: sciChartSurfaceSpeed,
-            wasmContext: wasmContextSpeed
-        } = await SciChart.SciChartSurface.create("scichart-root-2", { title: "Speed", titleStyle: { fontSize: "16" } });
-
-        //   Add Speed X and Y axis
-        const xAxisSpeed = new SciChart.NumericAxis(wasmContextSpeed, { autoRange: SciChart.EAutoRange.Always });
-        const yAxisSpeed = new SciChart.NumericAxis(wasmContextSpeed, { visibleRange: new SciChart.NumberRange(0, 350) });
-        sciChartSurfaceSpeed.xAxes.add(xAxisSpeed);
-        sciChartSurfaceSpeed.yAxes.add(yAxisSpeed);
-
-        // Create DataSeries for Speed
-        const xyDataSeriesSpeed = new SciChart.XyDataSeries(wasmContextSpeed, {
-            fifoCapacity: fifoCapacity,
-            isSorted: true,
-            containsNaN: false
-        });
-
-        // Create a renderableSeries for Speed and assign the dataSeries
-        sciChartSurfaceSpeed.renderableSeries.add(
-            new SciChart.FastLineRenderableSeries(wasmContextSpeed, {
+        sciChartSurfaceRPMSpeed.renderableSeries.add(
+            new SciChart.FastLineRenderableSeries(wasmContextRPMSpeed, {
                 dataSeries: xyDataSeriesSpeed,
+                yAxisId: "ID_Y_AXIS_2",
                 strokeThickness: 3,
-                stroke: "#50C7E0"
+                stroke: "#C750E0"
             })
         );
 
@@ -92,7 +100,7 @@ async function initSciChart() {
         const {
             sciChartSurface: sciChartSurfaceThrottleBrake,
             wasmContext: wasmContextThrottleBrake
-        } = await SciChart.SciChartSurface.create("scichart-root-3", { title: "Throttle / Brake", titleStyle: { fontSize: "16" } });
+        } = await SciChart.SciChartSurface.create("scichart-root-2", { title: "Throttle / Brake", titleStyle: { fontSize: "16" } });
 
         // Add an X and a Y Axis
         const xAxisThrottleBrake = new SciChart.NumericAxis(wasmContextThrottleBrake, { autoRange: SciChart.EAutoRange.Always });
@@ -150,7 +158,7 @@ async function initSciChart() {
         const {
             sciChartSurface: sciChartSurfaceGear,
             wasmContext: wasmContextGear
-        } = await SciChart.SciChartSurface.create("scichart-root-4", { title: "Transmission Gear", titleStyle: { fontSize: "16" } });
+        } = await SciChart.SciChartSurface.create("scichart-root-3", { title: "Transmission Gear", titleStyle: { fontSize: "16" } });
 
         // Add an X and a Y Axis
         const xAxisGear = new SciChart.NumericAxis(wasmContextGear, { autoRange: SciChart.EAutoRange.Always });
@@ -174,39 +182,11 @@ async function initSciChart() {
 
 
 
-        // Compute time microseconds
-        const {
-            sciChartSurface: sciChartSurfaceComputeTime,
-            wasmContext: wasmContextComputeTime
-        } = await SciChart.SciChartSurface.create("scichart-root-5", { title: "Compute Time (µs)", titleStyle: { fontSize: "16" } });
-
-        // Add an X and a Y Axis
-        const xAxisComputeTime = new SciChart.NumericAxis(wasmContextComputeTime, { autoRange: SciChart.EAutoRange.Always });
-        const yAxisComputeTime = new SciChart.NumericAxis(wasmContextComputeTime, { autoRange: SciChart.EAutoRange.Always });
-        sciChartSurfaceComputeTime.xAxes.add(xAxisComputeTime);
-        sciChartSurfaceComputeTime.yAxes.add(yAxisComputeTime);
-
-        // Create a DataSeries
-        const xyDataSeriesComputeTime = new SciChart.XyDataSeries(wasmContextComputeTime, {
-            fifoCapacity: fifoCapacity,
-            isSorted: true,
-            containsNaN: false
-        });
-
-        // Create a renderableSeries and assign the dataSeries
-        sciChartSurfaceComputeTime.renderableSeries.add(new SciChart.FastLineRenderableSeries(wasmContextComputeTime, {
-            dataSeries: xyDataSeriesComputeTime,
-            strokeThickness: 3,
-            stroke: "#50C7E0"
-        }));
-
-
-
         // 6DOF Translational envelope surge gforce
         const {
             sciChartSurface: sciChartSurfaceGforce,
             wasmContext: wasmContextGforce
-        } = await SciChart.SciChartSurface.create("scichart-root-6", { title: "Surge G-Force", titleStyle: { fontSize: "16" } });
+        } = await SciChart.SciChartSurface.create("scichart-root-4", { title: "Surge G-Force", titleStyle: { fontSize: "16" } });
 
         // Add an X and a Y Axis
         const xAxisGforce = new SciChart.NumericAxis(wasmContextGforce, { autoRange: SciChart.EAutoRange.Always });
@@ -244,7 +224,7 @@ async function initSciChart() {
         const {
             sciChartSurface: sciChartSurfaceTranslationalJerk,
             wasmContext: wasmContextTranslationalJerk
-        } = await SciChart.SciChartSurface.create("scichart-root-7", { title: "6DOF Translational Jerk", titleStyle: { fontSize: "16" } });
+        } = await SciChart.SciChartSurface.create("scichart-root-5", { title: "6DOF Translational Jerk", titleStyle: { fontSize: "16" } });
 
         // Add an X and a Y Axis
         const xAxisTranslationalJerk = new SciChart.NumericAxis(wasmContextTranslationalJerk, { autoRange: SciChart.EAutoRange.Always });
@@ -282,7 +262,7 @@ async function initSciChart() {
         const {
             sciChartSurface: sciChartSurfaceRotationalJerk,
             wasmContext: wasmContextRotationalJerk
-        } = await SciChart.SciChartSurface.create("scichart-root-8", { title: "6DOF Rotational Jerk", titleStyle: { fontSize: "16" } });
+        } = await SciChart.SciChartSurface.create("scichart-root-6", { title: "6DOF Rotational Jerk", titleStyle: { fontSize: "16" } });
 
         // Add an X and a Y Axis
         const xAxisRotationalJerk = new SciChart.NumericAxis(wasmContextRotationalJerk, { autoRange: SciChart.EAutoRange.Always });
@@ -310,7 +290,7 @@ async function initSciChart() {
         const {
             sciChartSurface: sciChartSurfaceTranslationalSnap,
             wasmContext: wasmContextTranslationalSnap
-        } = await SciChart.SciChartSurface.create("scichart-root-9", { title: "6DOF Translational Snap", titleStyle: { fontSize: "16" } });
+        } = await SciChart.SciChartSurface.create("scichart-root-7", { title: "6DOF Translational Snap", titleStyle: { fontSize: "16" } });
 
         // Add an X and a Y Axis
         const xAxisTranslationalSnap = new SciChart.NumericAxis(wasmContextTranslationalSnap, { autoRange: SciChart.EAutoRange.Always });
@@ -348,7 +328,7 @@ async function initSciChart() {
         const {
             sciChartSurface: sciChartSurfaceRotationalSnap,
             wasmContext: wasmContextRotationalSnap
-        } = await SciChart.SciChartSurface.create("scichart-root-10", { title: "6DOF Rotational Snap", titleStyle: { fontSize: "16" } });
+        } = await SciChart.SciChartSurface.create("scichart-root-8", { title: "6DOF Rotational Snap", titleStyle: { fontSize: "16" } });
 
         // Add an X and a Y Axis
         const xAxisRotationalSnap = new SciChart.NumericAxis(wasmContextRotationalSnap, { autoRange: SciChart.EAutoRange.Always });
@@ -368,6 +348,98 @@ async function initSciChart() {
             dataSeries: xyDataSeries6DOFRotationalSnap,
             strokeThickness: 2,
             stroke: "#C750E0"
+        }));
+
+
+
+        // Synthesizer output ampliture and frequency
+        const {
+            sciChartSurface: sciChartSurfaceSynthOutput,
+            wasmContext: wasmContextSynthOutput
+        } = await SciChart.SciChartSurface.create("scichart-root-9", { title: "Synthesizer Outputs", titleStyle: { fontSize: "16" } });
+
+        // Add an X and a Y Axis
+        const xAxisSynthOutput = new SciChart.NumericAxis(wasmContextSynthOutput, { autoRange: SciChart.EAutoRange.Always });
+        const yAxisSynthOutputAmplitude = new SciChart.NumericAxis(
+            wasmContextSynthOutput,
+            {
+                id: "ID_Y_AXIS_1",
+                axisAlignment: SciChart.EAxisAlignment.Left,
+                visibleRange: new SciChart.NumberRange(0, 1),
+                labelPrecision: 3,
+                labelStyle: {
+                    color: "#50C7E0"
+                }
+            }
+        );
+        const yAxisSynthOutputFrequency = new SciChart.NumericAxis(
+            wasmContextSynthOutput,
+            {
+                id: "ID_Y_AXIS_2",
+                axisAlignment: SciChart.EAxisAlignment.Right,
+                visibleRange: new SciChart.NumberRange(0, 60),
+                labelPrecision: 0,
+                labelStyle: {
+                    color: "#C750E0"
+                }
+            }
+        );
+        sciChartSurfaceSynthOutput.xAxes.add(xAxisSynthOutput);
+        sciChartSurfaceSynthOutput.yAxes.add(yAxisSynthOutputAmplitude);
+        sciChartSurfaceSynthOutput.yAxes.add(yAxisSynthOutputFrequency);
+
+        // Create a DataSeries
+        const xyDataSeriesSynthOutputAmplitude = new SciChart.XyDataSeries(wasmContextSynthOutput, {
+            fifoCapacity: fifoCapacity,
+            isSorted: true,
+            containsNaN: false
+        });
+        const xyDataSeriesSynthOutputFrequency = new SciChart.XyDataSeries(wasmContextSynthOutput, {
+            fifoCapacity: fifoCapacity,
+            isSorted: true,
+            containsNaN: false
+        });
+
+        // Create a renderableSeries and assign the dataSeries
+        sciChartSurfaceSynthOutput.renderableSeries.add(new SciChart.FastLineRenderableSeries(wasmContextSynthOutput, {
+            dataSeries: xyDataSeriesSynthOutputAmplitude,
+            yAxisId: "ID_Y_AXIS_1",
+            strokeThickness: 3,
+            stroke: "#50C7E0"
+        }));
+        sciChartSurfaceSynthOutput.renderableSeries.add(new SciChart.FastLineRenderableSeries(wasmContextSynthOutput, {
+            dataSeries: xyDataSeriesSynthOutputFrequency,
+            yAxisId: "ID_Y_AXIS_2",
+            strokeThickness: 3,
+            stroke: "#C750E0"
+        }));
+
+
+
+        // Compute time microseconds
+        const {
+            sciChartSurface: sciChartSurfaceComputeTime,
+            wasmContext: wasmContextComputeTime
+        } = await SciChart.SciChartSurface.create("scichart-root-10", { title: "Compute Time (µs)", titleStyle: { fontSize: "16" } });
+
+        // Add an X and a Y Axis
+        const xAxisComputeTime = new SciChart.NumericAxis(wasmContextComputeTime, { autoRange: SciChart.EAutoRange.Always });
+        const yAxisComputeTime = new SciChart.NumericAxis(wasmContextComputeTime, { autoRange: SciChart.EAutoRange.Always });
+        sciChartSurfaceComputeTime.xAxes.add(xAxisComputeTime);
+        sciChartSurfaceComputeTime.yAxes.add(yAxisComputeTime);
+
+        // Create a DataSeries
+        const xyDataSeriesComputeTime = new SciChart.XyDataSeries(wasmContextComputeTime, {
+            fifoCapacity: fifoCapacity,
+            isSorted: true,
+            containsNaN: false
+        });
+
+        // Create a renderableSeries and assign the dataSeries
+        sciChartSurfaceComputeTime.renderableSeries.add(new SciChart.FastLineRenderableSeries(wasmContextComputeTime, {
+            dataSeries: xyDataSeriesComputeTime,
+            strokeThickness: 3,
+            stroke: "#50C7E0"
         }));
 
 
@@ -394,7 +466,9 @@ async function initSciChart() {
                 xyDataSeries6DOFTranslationalSnapCalc.clear();
                 xyDataSeries6DOFTranslationalSnap.clear();
                 xyDataSeries6DOFRotationalJerk.Clear();
-                xyDataSeries6DOFRotationalSnap.Clear()
+                xyDataSeries6DOFRotationalSnap.Clear();
+                xyDataSeriesSynthOutputAmplitude.Clear();
+                xyDataSeriesSynthOutputFrequency.Clear();
             }
 
             // i = data.timeOfDay;
@@ -415,9 +489,12 @@ async function initSciChart() {
             xyDataSeries6DOFTranslationalSnapCalc.appendRange([i], [data.SixDOFTranslationalSnapCalc]);
             xyDataSeries6DOFRotationalJerk.appendRange([i], [data.SixDOFRotationalJerk]);
             xyDataSeries6DOFRotationalSnap.appendRange([i], [data.SixDOFRotationalSnap]);
+            xyDataSeriesSynthOutputAmplitude.appendRange([i], [data.synthOutputAmplitude]);
+            xyDataSeriesSynthOutputFrequency.appendRange([i], [data.synthOutputFrequency]);
 
-            if (sciChartSurfaceRPM.zoomState !== SciChart.EZoomState.UserZooming) {
-                xAxisRPM.visibleRange = new SciChart.NumberRange(i - fifoCapacity, i);
+
+            if (sciChartSurfaceRPMSpeed.zoomState !== SciChart.EZoomState.UserZooming) {
+                xAxisRPMSpeed.visibleRange = new SciChart.NumberRange(i - fifoCapacity, i);
             }
 
             lastTimeOfDay = data.timeOfDay;

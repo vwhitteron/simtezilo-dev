@@ -153,11 +153,14 @@ func (w *WebUI) handleWebSocketConnection(response http.ResponseWriter, request 
 			w.log.Error().Err(err).Msg("failed to encode JSON data")
 			continue
 		}
+
 		err = ws.WriteMessage(websocket.TextMessage, encodedData)
 		if err != nil {
 			failCount++
 			w.log.Debug().Err(err).Msg("failed to send data to websocket")
 			continue
 		}
+
+		failCount = 0
 	}
 }
