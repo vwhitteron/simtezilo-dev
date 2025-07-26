@@ -112,7 +112,14 @@ func (w *WebUI) handleWebSocketConnection(response http.ResponseWriter, request 
 	w.log.Debug().Int("clients", w.webSocketClients).Msg("websocket connection established")
 
 	sid := 0
+	failCount := 0
+	maxFailures := 60 * 5
 	for data := range w.telemetryChartFeed {
+		if failCount >= maxFailures {
+			w.log.Error().Err(err).Str("reason", "too many failures").Msg("dropping websocket connection")
+			break
+		}
+
 		if sid != 0 {
 			diff := int(data["seq"]) - sid
 			if diff == 0 {
@@ -129,7 +136,8 @@ func (w *WebUI) handleWebSocketConnection(response http.ResponseWriter, request 
 		}
 		err = ws.WriteMessage(websocket.TextMessage, encodedData)
 		if err != nil {
-			w.log.Error().Err(err).Msg("failed to send data")
+			failCount++
+			w.log.Debug().Err(err).Msg("failed to send data to websocket")
 			continue
 		}
 	}
