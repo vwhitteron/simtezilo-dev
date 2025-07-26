@@ -25,39 +25,40 @@ type Hardware struct {
 }
 
 type SynthProfile struct {
-	JerkExponent int
-	JerkMax      int
-	SnapExponent int
-	SnapMax      int
+	JerkCurve int
+	JerkMax   int
+	SnapCurve int
+	SnapMax   int
 }
 
 type Synthesizer struct {
-	SampleRateHz        int
-	OutputFile          string
-	Profiles            []SynthProfile
-	JerkExponent        int
-	JerkMax             int
-	JerkProfile         int
-	JerkScale           float64
-	SnapExponent        int
-	SnapMax             int
-	SnapProfile         int
-	SnapScale           float64
-	GearExp             int
-	GearMax             float64
-	PulseMaxAmplitude   float64
-	PulseMaxFrequencyHz float64
-	PulseMinFrequencyHz float64
-	PulseWidthMax       float64
-	PulseWidthMin       float64
-	Algorithm           string
-	MasterGain          float64
-	GainIncrement       float64
-	ChassisVolume       int
-	GearVolume          int
-	GearVolumeMinRace   int
-	GearVolumeMinStreet int
-	Eq                  []float64
+	DynamicGearShiftFeedback  bool
+	DynamicGearShiftCurve     int
+	DynamicGearShiftGforceMax float64
+	SampleRateHz              int
+	OutputFile                string
+	Profiles                  []SynthProfile
+	JerkCurve                 int
+	JerkMax                   int
+	JerkProfile               int
+	JerkScale                 float64
+	SnapCurve                 int
+	SnapMax                   int
+	SnapProfile               int
+	SnapScale                 float64
+	PulseMaxAmplitude         float64
+	PulseMaxFrequencyHz       float64
+	PulseMinFrequencyHz       float64
+	PulseWidthMax             float64
+	PulseWidthMin             float64
+	Algorithm                 string
+	MasterGain                float64
+	GainIncrement             float64
+	ChassisVolume             int
+	GearShiftVolume           int
+	GearShiftVolumeMinRace    int
+	GearShiftVolumeMinStreet  int
+	Eq                        []float64
 }
 
 type Telemetry struct {
@@ -90,37 +91,38 @@ func NewConfig(filename string, log zerolog.Logger) *Config {
 			SampleRateHz: 8000,
 			OutputFile:   "default",
 			Profiles: []SynthProfile{
-				{JerkExponent: 475, JerkMax: 80, SnapExponent: 600, SnapMax: 48},
-				{JerkExponent: 450, JerkMax: 80, SnapExponent: 555, SnapMax: 48},
-				{JerkExponent: 425, JerkMax: 80, SnapExponent: 510, SnapMax: 48},
-				{JerkExponent: 400, JerkMax: 80, SnapExponent: 470, SnapMax: 48},
-				{JerkExponent: 375, JerkMax: 80, SnapExponent: 420, SnapMax: 48},
-				{JerkExponent: 350, JerkMax: 80, SnapExponent: 380, SnapMax: 48},
-				{JerkExponent: 325, JerkMax: 80, SnapExponent: 335, SnapMax: 48},
-				{JerkExponent: 300, JerkMax: 80, SnapExponent: 390, SnapMax: 48},
-				{JerkExponent: 275, JerkMax: 80, SnapExponent: 345, SnapMax: 48},
-				{JerkExponent: 250, JerkMax: 80, SnapExponent: 200, SnapMax: 48},
+				{JerkCurve: 475, JerkMax: 80, SnapCurve: 600, SnapMax: 48},
+				{JerkCurve: 450, JerkMax: 80, SnapCurve: 555, SnapMax: 48},
+				{JerkCurve: 425, JerkMax: 80, SnapCurve: 510, SnapMax: 48},
+				{JerkCurve: 400, JerkMax: 80, SnapCurve: 470, SnapMax: 48},
+				{JerkCurve: 375, JerkMax: 80, SnapCurve: 420, SnapMax: 48},
+				{JerkCurve: 350, JerkMax: 80, SnapCurve: 380, SnapMax: 48},
+				{JerkCurve: 325, JerkMax: 80, SnapCurve: 335, SnapMax: 48},
+				{JerkCurve: 300, JerkMax: 80, SnapCurve: 390, SnapMax: 48},
+				{JerkCurve: 275, JerkMax: 80, SnapCurve: 345, SnapMax: 48},
+				{JerkCurve: 250, JerkMax: 80, SnapCurve: 200, SnapMax: 48},
 			},
-			JerkExponent:        375,
-			JerkMax:             50,
-			JerkProfile:         5,
-			SnapExponent:        420,
-			SnapMax:             52,
-			SnapProfile:         5,
-			GearExp:             150,
-			GearMax:             1.0,
-			PulseMaxAmplitude:   1,
-			PulseMaxFrequencyHz: 60,
-			PulseMinFrequencyHz: 16,
-			PulseWidthMax:       0.5,
-			PulseWidthMin:       0.1,
-			Algorithm:           "sum",
-			MasterGain:          -15,
-			GainIncrement:       0.25,
-			ChassisVolume:       100,
-			GearVolume:          100,
-			GearVolumeMinRace:   40,
-			GearVolumeMinStreet: 30,
+			DynamicGearShiftFeedback:  true,
+			DynamicGearShiftCurve:     150,
+			DynamicGearShiftGforceMax: 1.0,
+			JerkCurve:                 375,
+			JerkMax:                   50,
+			JerkProfile:               5,
+			SnapCurve:                 420,
+			SnapMax:                   52,
+			SnapProfile:               5,
+			PulseMaxAmplitude:         1,
+			PulseMaxFrequencyHz:       60,
+			PulseMinFrequencyHz:       16,
+			PulseWidthMax:             0.5,
+			PulseWidthMin:             0.1,
+			Algorithm:                 "sum",
+			MasterGain:                -15,
+			GainIncrement:             0.25,
+			ChassisVolume:             100,
+			GearShiftVolume:           100,
+			GearShiftVolumeMinRace:    40,
+			GearShiftVolumeMinStreet:  30,
 			Eq: []float64{
 				1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, // 10-19Hz
 				1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, // 20-29Hz
@@ -169,11 +171,18 @@ func NewConfig(filename string, log zerolog.Logger) *Config {
 	return c
 }
 
-func (c *Config) GetJerkExponent() float64 {
+func (c *Config) DynamicGearShiftFeedbackEnabled() bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	return float64(c.Synthesizer.JerkExponent) / 1000.0
+	return c.Synthesizer.DynamicGearShiftFeedback
+}
+
+func (c *Config) GetJerkCurve() float64 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return float64(c.Synthesizer.JerkCurve) / 1000.0
 }
 
 func (c *Config) GetJerkScale() float64 {
@@ -183,25 +192,25 @@ func (c *Config) GetJerkScale() float64 {
 	return c.Synthesizer.JerkScale
 }
 
-func (c *Config) GetSnapExponent() float64 {
+func (c *Config) GetSnapCurve() float64 {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	return float64(c.Synthesizer.SnapExponent) / 1000.0
+	return float64(c.Synthesizer.SnapCurve) / 1000.0
 }
 
-func (c *Config) GetGearExp() float64 {
+func (c *Config) GetGearShiftCurve() float64 {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	return float64(c.Synthesizer.GearExp) / 1000
+	return float64(c.Synthesizer.DynamicGearShiftCurve) / 1000
 }
 
-func (c *Config) GetGearMax() float64 {
+func (c *Config) GetGearShiftGforceMax() float64 {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	return c.Synthesizer.GearMax
+	return c.Synthesizer.DynamicGearShiftGforceMax
 }
 
 func (c *Config) GetSnapScale() float64 {
@@ -267,19 +276,19 @@ func (c *Config) NextJerkProfile() int {
 	return c.Synthesizer.JerkProfile
 }
 
-func (c *Config) DecreaseJerkExponent() int {
+func (c *Config) DecreaseJerkCurve() int {
 	c.mu.Lock()
 
-	c.Synthesizer.JerkExponent -= 5
-	if c.Synthesizer.JerkExponent < 5 {
-		c.Synthesizer.JerkExponent = 5
+	c.Synthesizer.JerkCurve -= 5
+	if c.Synthesizer.JerkCurve < 5 {
+		c.Synthesizer.JerkCurve = 5
 	}
 
 	c.mu.Unlock()
 
 	c.UpdateJerkScale()
 
-	return c.Synthesizer.JerkExponent
+	return c.Synthesizer.JerkCurve
 }
 
 func (c *Config) DecreaseJerkMax() int {
@@ -296,20 +305,20 @@ func (c *Config) DecreaseJerkMax() int {
 	return c.Synthesizer.JerkMax
 }
 
-func (c *Config) IncreaseJerkExponent() int {
+func (c *Config) IncreaseJerkCurve() int {
 	c.mu.Lock()
 
-	if c.Synthesizer.JerkExponent <= 950 {
-		c.Synthesizer.JerkExponent += 5
+	if c.Synthesizer.JerkCurve <= 950 {
+		c.Synthesizer.JerkCurve += 5
 	} else {
-		c.Synthesizer.JerkExponent = 955
+		c.Synthesizer.JerkCurve = 955
 	}
 
 	c.mu.Unlock()
 
 	c.UpdateJerkScale()
 
-	return c.Synthesizer.JerkExponent
+	return c.Synthesizer.JerkCurve
 }
 
 func (c *Config) IncreaseJerkMax() int {
@@ -329,7 +338,7 @@ func (c *Config) IncreaseJerkMax() int {
 }
 
 func (c *Config) UpdateJerkScale() {
-	exponent := c.GetJerkExponent()
+	exponent := c.GetJerkCurve()
 	jerkMax := 100 * float64(c.Synthesizer.JerkMax)
 
 	c.mu.Lock()
@@ -366,20 +375,20 @@ func (c *Config) NextSnapProfile() int {
 	return c.Synthesizer.SnapProfile
 }
 
-func (c *Config) DecreaseSnapExponent() int {
+func (c *Config) DecreaseSnapCurve() int {
 	c.mu.Lock()
 
-	if c.Synthesizer.SnapExponent >= 10 {
-		c.Synthesizer.SnapExponent -= 5
+	if c.Synthesizer.SnapCurve >= 10 {
+		c.Synthesizer.SnapCurve -= 5
 	} else {
-		c.Synthesizer.SnapExponent = 5
+		c.Synthesizer.SnapCurve = 5
 	}
 
 	c.mu.Unlock()
 
 	c.UpdateSnapScale()
 
-	return c.Synthesizer.SnapExponent
+	return c.Synthesizer.SnapCurve
 }
 
 func (c *Config) DecreaseSnapMax() int {
@@ -396,19 +405,19 @@ func (c *Config) DecreaseSnapMax() int {
 	return c.Synthesizer.SnapMax
 }
 
-func (c *Config) IncreaseSnapExponent() int {
+func (c *Config) IncreaseSnapCurve() int {
 	c.mu.Lock()
 
-	if c.Synthesizer.SnapExponent <= 950 {
-		c.Synthesizer.SnapExponent += 5
+	if c.Synthesizer.SnapCurve <= 950 {
+		c.Synthesizer.SnapCurve += 5
 	} else {
-		c.Synthesizer.SnapExponent = 955
+		c.Synthesizer.SnapCurve = 955
 	}
 	c.mu.Unlock()
 
 	c.UpdateSnapScale()
 
-	return c.Synthesizer.SnapExponent
+	return c.Synthesizer.SnapCurve
 }
 
 func (c *Config) IncreaseSnapMax() int {
@@ -428,7 +437,7 @@ func (c *Config) IncreaseSnapMax() int {
 }
 
 func (c *Config) UpdateSnapScale() {
-	exponent := c.GetSnapExponent()
+	exponent := c.GetSnapCurve()
 	snapMax := 1000 * float64(c.Synthesizer.SnapMax)
 
 	c.mu.Lock()
@@ -515,60 +524,60 @@ func (c *Config) DecreaseMaxHz() int {
 	return int(c.Synthesizer.PulseMaxFrequencyHz)
 }
 
-func (c *Config) IncreaseGearExp() int {
+func (c *Config) IncreaseDynamicGearShiftCurve() int {
 	c.mu.Lock()
 
-	if c.Synthesizer.GearExp <= 950 {
-		c.Synthesizer.GearExp += 5
+	if c.Synthesizer.DynamicGearShiftCurve <= 950 {
+		c.Synthesizer.DynamicGearShiftCurve += 5
 	} else {
-		c.Synthesizer.GearExp = 955
+		c.Synthesizer.DynamicGearShiftCurve = 955
 	}
 
 	c.mu.Unlock()
 
-	return c.Synthesizer.GearExp
+	return c.Synthesizer.DynamicGearShiftCurve
 }
 
-func (c *Config) DecreaseGearExp() int {
+func (c *Config) DecreaseGearShiftCurve() int {
 	c.mu.Lock()
 
-	if c.Synthesizer.GearExp >= 10 {
-		c.Synthesizer.GearExp -= 5
+	if c.Synthesizer.DynamicGearShiftCurve >= 10 {
+		c.Synthesizer.DynamicGearShiftCurve -= 5
 	} else {
-		c.Synthesizer.GearExp = 5
+		c.Synthesizer.DynamicGearShiftCurve = 5
 	}
 
 	c.mu.Unlock()
 
-	return c.Synthesizer.GearExp
+	return c.Synthesizer.DynamicGearShiftCurve
 }
 
-func (c *Config) IncreaseGearMax() float64 {
+func (c *Config) IncreaseGearShiftGforceMax() float64 {
 	c.mu.Lock()
 
-	if c.Synthesizer.GearMax <= 4.9 {
-		c.Synthesizer.GearMax += 0.1
+	if c.Synthesizer.DynamicGearShiftGforceMax <= 4.9 {
+		c.Synthesizer.DynamicGearShiftGforceMax += 0.1
 	} else {
-		c.Synthesizer.GearMax = 5.0
+		c.Synthesizer.DynamicGearShiftGforceMax = 5.0
 	}
 
 	c.mu.Unlock()
 
-	return c.Synthesizer.GearMax
+	return c.Synthesizer.DynamicGearShiftGforceMax
 }
 
-func (c *Config) DecreaseGearMax() float64 {
+func (c *Config) DecreaseGearShiftGforceMax() float64 {
 	c.mu.Lock()
 
-	if c.Synthesizer.GearMax >= 0.2 {
-		c.Synthesizer.GearMax -= 0.1
+	if c.Synthesizer.DynamicGearShiftGforceMax >= 0.2 {
+		c.Synthesizer.DynamicGearShiftGforceMax -= 0.1
 	} else {
-		c.Synthesizer.GearMax = 0.1
+		c.Synthesizer.DynamicGearShiftGforceMax = 0.1
 	}
 
 	c.mu.Unlock()
 
-	return c.Synthesizer.GearMax
+	return c.Synthesizer.DynamicGearShiftGforceMax
 }
 
 func (c *Config) GetFrequencyHzRange() float64 {

@@ -16,17 +16,17 @@ const volumeFontSize = 20
 var pages = []string{
 	"volume",
 	// "jerkProfile",
-	"jerkExp",
+	"jerkCurve",
 	"jerkMax",
 	// "snapProfile",
-	"snapExp",
+	"snapCurve",
 	"snapMax",
 	"snapMinHz",
 	"snapMaxHz",
-	"gearExp",
-	"gearMax",
-	"chassis",
-	"gear",
+	"gearShiftCurve",
+	"gearShiftGforceMax",
+	"chassisVolume",
+	"gearShiftVolume",
 	"mixAlgo",
 }
 var currentPage = 0
@@ -51,7 +51,7 @@ func SetupWaveshareButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, con
 			case "jerkProfile":
 				profile := config.NextJerkProfile()
 
-				displayString = fmt.Sprintf("Jerk %d", profile)
+				displayString = fmt.Sprintf("jProfile %d", profile)
 
 				log.Debug().
 					Str("button", "A").
@@ -59,15 +59,15 @@ func SetupWaveshareButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, con
 					Str("type", "jerk").
 					Str("profile", fmt.Sprintf("%d", profile)).
 					Msg("button press")
-			case "jerkExp":
-				profile := config.IncreaseJerkExponent()
+			case "jerkCurve":
+				profile := config.IncreaseJerkCurve()
 
-				displayString = fmt.Sprintf("Jerk %d", profile)
+				displayString = fmt.Sprintf("jCurve %d", profile)
 
 				log.Debug().
 					Str("button", "A").
 					Str("action", "increase").
-					Str("type", "jerk exp").
+					Str("type", "jerk curve").
 					Str("profile", fmt.Sprintf("%d", profile)).
 					Msg("button press")
 			case "jerkMax":
@@ -84,7 +84,7 @@ func SetupWaveshareButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, con
 			case "snapProfile":
 				profile := config.NextSnapProfile()
 
-				displayString = fmt.Sprintf("Snap %d", profile)
+				displayString = fmt.Sprintf("sProfile %d", profile)
 
 				log.Debug().
 					Str("button", "A").
@@ -92,15 +92,15 @@ func SetupWaveshareButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, con
 					Str("type", "snap").
 					Str("profile", fmt.Sprintf("%d", profile)).
 					Msg("button press")
-			case "snapExp":
-				profile := config.IncreaseSnapExponent()
+			case "snapCurve":
+				profile := config.IncreaseSnapCurve()
 
-				displayString = fmt.Sprintf("Snap %d", profile)
+				displayString = fmt.Sprintf("sCurve %d", profile)
 
 				log.Debug().
 					Str("button", "A").
 					Str("action", "increase").
-					Str("type", "snap exp").
+					Str("type", "snap curve").
 					Str("profile", fmt.Sprintf("%d", profile)).
 					Msg("button press")
 			case "snapMax":
@@ -136,46 +136,46 @@ func SetupWaveshareButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, con
 					Str("type", "max frequency").
 					Str("value", fmt.Sprintf("%d", maxHz)).
 					Msg("button press")
-			case "gearExp":
-				value := config.IncreaseGearExp()
+			case "gearShitCurve":
+				value := config.IncreaseDynamicGearShiftCurve()
 
-				displayString = fmt.Sprintf("gExp %d", value)
+				displayString = fmt.Sprintf("gCurve %d", value)
 
 				log.Debug().
 					Str("button", "A").
 					Str("action", "increase").
-					Str("type", "gear exp").
+					Str("type", "gear shift curve").
 					Str("value", fmt.Sprintf("%d", value)).
 					Msg("button press")
-			case "gearMax":
-				value := config.IncreaseGearMax()
+			case "gearShiftGforceMax":
+				value := config.IncreaseGearShiftGforceMax()
 
 				displayString = fmt.Sprintf("gMax %0.1f", value)
 
 				log.Debug().
 					Str("button", "A").
 					Str("action", "increase").
-					Str("type", "gear max").
+					Str("type", "gear shift gforce max").
 					Str("value", fmt.Sprintf("%d", value)).
 					Msg("button press")
-			case "chassis":
+			case "chassisVolume":
 				volume, _ := synth.IncreaseChannelVolume("chassis")
 
-				displayString = fmt.Sprintf("Chassis %d", volume)
+				displayString = fmt.Sprintf("cVol %d", volume)
 
 				log.Debug().
 					Str("button", "A").
 					Str("action", "increase chassis haptics volume").
 					Str("profile", fmt.Sprintf("%d", volume)).
 					Msg("button press")
-			case "gear":
+			case "gearShiftVolume":
 				volume, _ := synth.IncreaseChannelVolume("gearchange")
 
-				displayString = fmt.Sprintf("Gear %d", volume)
+				displayString = fmt.Sprintf("gVol %d", volume)
 
 				log.Debug().
 					Str("button", "A").
-					Str("action", "increase race gear volume").
+					Str("action", "increase gear volume").
 					Str("profile", fmt.Sprintf("%d", volume)).
 					Msg("button press")
 			case "mixAlgo":
@@ -222,7 +222,7 @@ func SetupWaveshareButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, con
 			case "jerkProfile":
 				profile := config.PreviousJerkProfile()
 
-				displayString = fmt.Sprintf("Jerk %d", profile)
+				displayString = fmt.Sprintf("jProfile %d", profile)
 
 				log.Debug().
 					Str("button", "B").
@@ -230,15 +230,15 @@ func SetupWaveshareButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, con
 					Str("type", "jerk").
 					Str("profile", fmt.Sprintf("%d", profile)).
 					Msg("button press")
-			case "jerkExp":
-				value := config.DecreaseJerkExponent()
+			case "jerkCurve":
+				value := config.DecreaseJerkCurve()
 
-				displayString = fmt.Sprintf("Jerk %d", value)
+				displayString = fmt.Sprintf("jCurve %d", value)
 
 				log.Debug().
 					Str("button", "B").
 					Str("action", "decrease").
-					Str("type", "jerk exp").
+					Str("type", "jerk curve").
 					Str("value", fmt.Sprintf("%d", value)).
 					Msg("button press")
 			case "jerkMax":
@@ -255,7 +255,7 @@ func SetupWaveshareButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, con
 			case "snapProfile":
 				profile := config.PreviousSnapProfile()
 
-				displayString = fmt.Sprintf("Snap %d", profile)
+				displayString = fmt.Sprintf("sProfile %d", profile)
 
 				log.Debug().
 					Str("button", "B").
@@ -263,15 +263,15 @@ func SetupWaveshareButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, con
 					Str("type", "snap").
 					Str("profile", fmt.Sprintf("%d", profile)).
 					Msg("button press")
-			case "snapExp":
-				value := config.DecreaseSnapExponent()
+			case "snapCurve":
+				value := config.DecreaseSnapCurve()
 
-				displayString = fmt.Sprintf("Snap %d", value)
+				displayString = fmt.Sprintf("sCurve %d", value)
 
 				log.Debug().
 					Str("button", "B").
 					Str("action", "decrease").
-					Str("type", "snap exp").
+					Str("type", "snap curve").
 					Str("value", fmt.Sprintf("%d", value)).
 					Msg("button press")
 			case "snapMax":
@@ -288,7 +288,7 @@ func SetupWaveshareButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, con
 			case "snapMinHz":
 				minHz := config.DecreaseMinHz()
 
-				displayString = fmt.Sprintf("FMin %d", minHz)
+				displayString = fmt.Sprintf("fMin %d", minHz)
 
 				log.Debug().
 					Str("button", "B").
@@ -307,19 +307,19 @@ func SetupWaveshareButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, con
 					Str("type", "max frequency").
 					Str("value", fmt.Sprintf("%d", maxHz)).
 					Msg("button press")
-			case "gearExp":
-				value := config.DecreaseGearExp()
+			case "gearShiftCurve":
+				value := config.DecreaseGearShiftCurve()
 
-				displayString = fmt.Sprintf("gExp %d", value)
+				displayString = fmt.Sprintf("gCurve %d", value)
 
 				log.Debug().
 					Str("button", "A").
 					Str("action", "decrease").
-					Str("type", "gear exp").
+					Str("type", "gear curve").
 					Str("value", fmt.Sprintf("%d", value)).
 					Msg("button press")
-			case "gearMax":
-				value := config.DecreaseGearMax()
+			case "gearShiftGforceMax":
+				value := config.DecreaseGearShiftGforceMax()
 
 				displayString = fmt.Sprintf("gMax %0.1f", value)
 
@@ -329,24 +329,24 @@ func SetupWaveshareButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, con
 					Str("type", "gear max").
 					Str("value", fmt.Sprintf("%d", value)).
 					Msg("button press")
-			case "chassis":
+			case "chassisVolume":
 				volume, _ := synth.DecreaseChannelVolume("chassis")
 
-				displayString = fmt.Sprintf("Chassis %d", volume)
+				displayString = fmt.Sprintf("cVol %d", volume)
 
 				log.Debug().
 					Str("button", "B").
 					Str("action", "decrease chassis haptics volume").
 					Str("profile", fmt.Sprintf("%d", volume)).
 					Msg("button press")
-			case "gear":
+			case "gearShiftVolume":
 				volume, _ := synth.DecreaseChannelVolume("gearchange")
 
-				displayString = fmt.Sprintf("Gear %d", volume)
+				displayString = fmt.Sprintf("gVol %d", volume)
 
 				log.Debug().
 					Str("button", "B").
-					Str("action", "decrease race gear volume").
+					Str("action", "decrease gear shift volume").
 					Str("profile", fmt.Sprintf("%d", volume)).
 					Msg("button press")
 			case "mixAlgo":
@@ -388,27 +388,31 @@ func SetupWaveshareButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, con
 			case "volume":
 				displayString = fmt.Sprintf("%0.2f dB", synth.GetMasterGain())
 			case "jerkProfile":
-				displayString = fmt.Sprintf("Jerk %d", config.GetJerkProfile())
-			case "jerkExp":
-				displayString = fmt.Sprintf("Jerk %d", int(config.GetJerkExponent()*1000.0))
+				displayString = fmt.Sprintf("jProfile %d", config.GetJerkProfile())
+			case "jerkCurve":
+				displayString = fmt.Sprintf("jCurve %d", int(config.GetJerkCurve()*1000))
 			case "jerkMax":
 				displayString = fmt.Sprintf("jMax %d", config.GetJerkMax())
 			case "snapProfile":
-				displayString = fmt.Sprintf("Snap %d", config.GetSnapProfile())
-			case "snapExp":
-				displayString = fmt.Sprintf("Snap %d", int(config.GetSnapExponent()*1000.0))
+				displayString = fmt.Sprintf("sProfile %d", config.GetSnapProfile())
+			case "snapCurve":
+				displayString = fmt.Sprintf("sCurve %d", int(config.GetSnapCurve()*1000))
 			case "snapMax":
 				displayString = fmt.Sprintf("sMax %d", config.GetSnapMax())
-			case "minHz":
+			case "snapMinHz":
 				displayString = fmt.Sprintf("fMin %d", int(config.GetMinHz()))
-			case "maxHz":
+			case "snapMaxHz":
 				displayString = fmt.Sprintf("fMax %d", int(config.GetMaxHz()))
-			case "chassis":
+			case "gearShiftCurve":
+				displayString = fmt.Sprintf("gCurve %d", int(config.GetGearShiftCurve()*1000))
+			case "gearShiftGforceMax":
+				displayString = fmt.Sprintf("gMax %d", int(config.GetGearShiftGforceMax()))
+			case "chassisVolume":
 				volume, _ := synth.GetChannelVolume("chassis")
-				displayString = fmt.Sprintf("Chassis %d", volume)
-			case "gear":
+				displayString = fmt.Sprintf("cVol %d", volume)
+			case "gearShiftVolume":
 				volume, _ := synth.GetChannelVolume("gearchange")
-				displayString = fmt.Sprintf("Gear %d", volume)
+				displayString = fmt.Sprintf("gVol %d", volume)
 			case "mixAlgo":
 				displayString = fmt.Sprintf("Mix %s", synth.Mixer.GetAlgorithm())
 			}
@@ -438,27 +442,31 @@ func SetupWaveshareButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, con
 			case "volume":
 				displayString = fmt.Sprintf("%0.2f dB", synth.GetMasterGain())
 			case "jerkProfile":
-				displayString = fmt.Sprintf("Jerk %d", config.GetJerkProfile())
-			case "jerkExp":
-				displayString = fmt.Sprintf("Jerk %d", int(config.GetJerkExponent()*1000.0))
+				displayString = fmt.Sprintf("jProfile %d", config.GetJerkProfile())
+			case "jerkCurve":
+				displayString = fmt.Sprintf("jCurve %d", int(config.GetJerkCurve()*1000))
 			case "jerkMax":
 				displayString = fmt.Sprintf("jMax %d", config.GetJerkMax())
 			case "snapProfile":
-				displayString = fmt.Sprintf("Snap %d", config.GetSnapProfile())
-			case "snapExp":
-				displayString = fmt.Sprintf("Snap %d", int(config.GetSnapExponent()*1000.0))
+				displayString = fmt.Sprintf("sProfile %d", config.GetSnapProfile())
+			case "snapCurve":
+				displayString = fmt.Sprintf("sCurve %d", int(config.GetSnapCurve()*1000))
 			case "snapMax":
 				displayString = fmt.Sprintf("sMax %d", config.GetSnapMax())
-			case "minHz":
+			case "snapMinHz":
 				displayString = fmt.Sprintf("fMin %d", int(config.GetMinHz()))
-			case "maxHz":
+			case "snapMaxHz":
 				displayString = fmt.Sprintf("fMax %d", int(config.GetMaxHz()))
-			case "chassis":
+			case "gearShiftCurve":
+				displayString = fmt.Sprintf("gCurve %d", int(config.GetGearShiftCurve()*1000))
+			case "gearShiftGforceMax":
+				displayString = fmt.Sprintf("gMax %d", int(config.GetGearShiftGforceMax()))
+			case "chassisVolume":
 				volume, _ := synth.GetChannelVolume("chassis")
-				displayString = fmt.Sprintf("Chassis %d", volume)
-			case "gear":
+				displayString = fmt.Sprintf("cVol %d", volume)
+			case "gearShiftVolume":
 				volume, _ := synth.GetChannelVolume("gearchange")
-				displayString = fmt.Sprintf("Gear %d", volume)
+				displayString = fmt.Sprintf("gVol %d", volume)
 			case "mixAlgo":
 				displayString = fmt.Sprintf("Mix %s", synth.Mixer.GetAlgorithm())
 			}

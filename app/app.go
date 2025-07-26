@@ -383,7 +383,7 @@ func (a *App) generateBump() {
 
 	snap := signal.LargestMagnitude(a.kinematics.Current.Velocity.Snap, (a.kinematics.Current.RotationalEnvelope.Snap * 100))
 
-	pulseFrequencyScaler := signal.Abs(signal.Exponent(snap, a.config.GetSnapExponent()))
+	pulseFrequencyScaler := signal.Abs(signal.Exponent(snap, a.config.GetSnapCurve()))
 	pulseFrequencyScaler = signal.Scale(pulseFrequencyScaler, a.config.GetSnapScale())
 	pulseFrequencyHz := a.config.GetFrequencyHzRange() * pulseFrequencyScaler
 
@@ -396,7 +396,7 @@ func (a *App) generateBump() {
 	pulseWidth := math.Round(float64(a.config.Synthesizer.SampleRateHz) / (2 * pulseFrequencyHz))
 
 	sig := signal.LargestMagnitude(a.kinematics.Current.Velocity.Jerk, (a.kinematics.Current.RotationalEnvelope.Jerk * 100))
-	pulseAmplitude := signal.Exponent(sig, a.config.GetJerkExponent())
+	pulseAmplitude := signal.Exponent(sig, a.config.GetJerkCurve())
 	pulseAmplitude = signal.Scale(pulseAmplitude, a.config.GetJerkScale())
 
 	p1 := pulseAmplitude
@@ -526,9 +526,9 @@ func (a *App) updateVehicle(currentVehicleID uint32, currentGear int) {
 
 	switch vehicleType {
 	case "race":
-		a.gearVolumeMin = float64(a.config.Synthesizer.GearVolumeMinRace) / 100
+		a.gearVolumeMin = float64(a.config.Synthesizer.GearShiftVolumeMinRace) / 100
 	default:
-		a.gearVolumeMin = float64(a.config.Synthesizer.GearVolumeMinStreet) / 100
+		a.gearVolumeMin = float64(a.config.Synthesizer.GearShiftVolumeMinStreet) / 100
 	}
 
 	a.lastGear = currentGear
@@ -563,36 +563,23 @@ func (a *App) playGearChangeHaptic() {
 	a.log.Debug().
 		Int("sequence_id", int(a.seq)).
 		Int("volume_pc", volumePercent).
-		// Float64("gforce", gForce).
 		Int("gear", a.kinematics.Current.TransmissionGear).
-		// Bool("new_format", newFormat).
 		Msg("gear change")
 }
 
 func (a *App) determineGearChangeVolume() int {
 	volumeMaxPercent, _ := a.synth.GetChannelVolume("gearchange")
-	volumeMax := float64(volumeMaxPercent) / 100.0
 
-	if volumeMax >= 100 {
+	if volumeMaxPercent >= 100 || a.config.DynamicGearShiftFeedbackEnabled() {
 		return 100
 	}
 
-	newFormat, _ := a.gt.Telemetry.RawTelemetry.HasSectionTilde()
+	gForce := a.kinematics.GetSurgeGforce()
+	gforceMax := a.config.GetGearShiftGforceMax()
+	volumeCurve := a.config.GetGearShiftCurve()
 
-	gForce := float64(0)
-	// Only increase gear change feedback if the vehicle is in motion
-	if a.gt.Telemetry.GroundSpeedKPH() > 0.5 {
-		if newFormat {
-			gForce = signal.Abs(float64(a.kinematics.Current.TranslationalEnvelope.Vector.Surge) / gravityConstant)
-		} else {
-			gForce = signal.Abs(float64(a.kinematics.Current.AccelerationLongitude) / gravityConstant)
-		}
-	}
-
-	gforceSaturation := a.config.GetGearMax()
-	volumeCurve := a.config.GetGearExp()
-
-	gearChangeVolume := (math.Pow((gForce/gforceSaturation), volumeCurve) * volumeMax)
+	volumeMax := float64(volumeMaxPercent) / 100.0
+	gearChangeVolume := (math.Pow((gForce/gforceMax), volumeCurve) * volumeMax)
 	gearChangeVolume, _ = signal.LimitWindow(gearChangeVolume, a.gearVolumeMin, volumeMax)
 
 	return int(gearChangeVolume * 100.0)

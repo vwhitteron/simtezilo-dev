@@ -51,7 +51,7 @@ func SetupNullDeviceButtons(synth *synth.Synthesizer, config *config.Config, don
 					return true, nil
 				}
 			case keys.Up:
-				value := config.IncreaseJerkExponent()
+				value := config.IncreaseJerkCurve()
 				log.Debug().
 					Str("button", "up arrow").
 					Str("action", "increase").
@@ -59,7 +59,7 @@ func SetupNullDeviceButtons(synth *synth.Synthesizer, config *config.Config, don
 					Int("value", value).
 					Msg("button press")
 			case keys.Down:
-				value := config.DecreaseJerkExponent()
+				value := config.DecreaseJerkCurve()
 				log.Debug().
 					Str("button", "down arrow").
 					Str("action", "decrease").
@@ -83,7 +83,7 @@ func SetupNullDeviceButtons(synth *synth.Synthesizer, config *config.Config, don
 					Int("value", value).
 					Msg("button press")
 			case keys.ShiftUp:
-				value := config.IncreaseSnapExponent()
+				value := config.IncreaseSnapCurve()
 				log.Debug().
 					Str("button", "up arrow").
 					Str("action", "increase").
@@ -91,7 +91,7 @@ func SetupNullDeviceButtons(synth *synth.Synthesizer, config *config.Config, don
 					Int("value", value).
 					Msg("button press")
 			case keys.ShiftDown:
-				value := config.DecreaseSnapExponent()
+				value := config.DecreaseSnapCurve()
 				log.Debug().
 					Str("button", "down arrow").
 					Str("action", "decrease").
@@ -118,9 +118,9 @@ func SetupNullDeviceButtons(synth *synth.Synthesizer, config *config.Config, don
 
 			fmt.Printf("Volume %0.2f dB    Profiles:   Jerk[%0.3f, %02d]    Snap[%0.3f, %02d]\r\n",
 				synth.GetMasterGain(),
-				config.GetJerkExponent(),
+				config.GetJerkCurve(),
 				config.GetJerkMax(),
-				config.GetSnapExponent(),
+				config.GetSnapCurve(),
 				config.GetSnapMax(),
 			)
 
