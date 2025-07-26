@@ -26,8 +26,8 @@ func Scale(
 	swayScale float32,
 	heaveScale float32,
 	surgeScale float32,
-) telemetry_client.SymmetryAxes {
-	return telemetry_client.SymmetryAxes{
+) telemetry_client.RotationalEnvelope {
+	return telemetry_client.RotationalEnvelope{
 		Pitch: e.Sway * swayScale,
 		Yaw:   e.Heave * heaveScale,
 		Roll:  e.Surge * surgeScale,

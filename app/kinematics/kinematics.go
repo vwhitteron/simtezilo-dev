@@ -25,8 +25,8 @@ type CalculatedTranslationalDerivatives struct {
 
 type RotationalDerivatives struct {
 	PositionalDerivatives
-	Delta    telemetry_client.SymmetryAxes
-	Velocity telemetry_client.SymmetryAxes
+	Delta    telemetry_client.RotationalEnvelope
+	Velocity telemetry_client.RotationalEnvelope
 }
 
 type TranslationalDerivatives struct {
@@ -87,30 +87,6 @@ func (k *KinaticsTracker) Update(windowSeconds float64, gtclient *telemetry_clie
 	k.Current.Format = getTelemetryFormat(gtclient)
 
 	k.Current.SequenceID = gtclient.Telemetry.SequenceID()
-	k.Current.SixDOFTranslationCalc.Velocity = gtclient.Telemetry.VelocityVector()
-	k.Current.SixDOFRotation.Velocity = gtclient.Telemetry.RotationVector()
-
-	// chassis longitudinal velocity
-	k.Current.GroundSpeed = float64(gtclient.Telemetry.GroundSpeedMetersPerSecond())
-
-	// chassis rotational envelope
-	k.Current.SixDOFRotation.Delta = rotataionalenvelope.Delta(k.Current.SixDOFRotation.Velocity, k.Last.SixDOFRotation.Velocity)
-
-	// attenuate yaw jerk and snap as it causes vibration during heavy rotation (high G-force corners, spin out, etc)
-	biasedAttitudeDelta := rotataionalenvelope.Scale(k.Current.SixDOFRotation.Delta, 1.0, 0.25, 1.0)
-
-	k.Current.SixDOFRotation.Acceleration = rotataionalenvelope.Magnitude(biasedAttitudeDelta) / windowSeconds
-
-	k.Current.SixDOFRotation.Jerk = (k.Current.SixDOFRotation.Acceleration - k.Last.SixDOFRotation.Acceleration) / windowSeconds
-
-	// filter out excessive spikes in jerk
-	if k.Current.SixDOFRotation.Jerk > 10 {
-		k.Current.SixDOFRotation.Jerk = 10
-	} else if k.Current.SixDOFRotation.Jerk < -10 {
-		k.Current.SixDOFRotation.Jerk = -10
-	}
-
-	k.Current.SixDOFRotation.Snap = (k.Current.SixDOFRotation.Jerk - k.Last.SixDOFRotation.Jerk) / windowSeconds
 
 	// chassis 3D velocity
 	k.Current.SixDOFTranslationCalc.Delta = vector.Delta(k.Current.SixDOFTranslationCalc.Velocity, k.Last.SixDOFTranslationCalc.Velocity)
@@ -127,8 +103,29 @@ func (k *KinaticsTracker) Update(windowSeconds float64, gtclient *telemetry_clie
 	k.Current.SixDOFTranslation.Snap = (k.Current.SixDOFTranslation.Jerk - k.Last.SixDOFTranslation.Jerk) / windowSeconds
 	k.Current.SixDOFTranslation.Crackle = (k.Current.SixDOFTranslation.Snap - k.Last.SixDOFTranslation.Snap) / windowSeconds
 
-	k.Current.CalculatedSurge = signal.Abs(float64(k.Current.SixDOFTranslationCalc.Delta.X) / windowSeconds)
+	k.Current.SixDOFTranslationCalc.Velocity = gtclient.Telemetry.VelocityVector()
+	k.Current.SixDOFRotation.Velocity = gtclient.Telemetry.RotationEnvelope()
 
+	// chassis rotational envelope
+	k.Current.SixDOFRotation.Delta = rotataionalenvelope.Delta(k.Current.SixDOFRotation.Velocity, k.Last.SixDOFRotation.Velocity)
+
+	// attenuate yaw jerk and snap as it causes vibration during heavy rotation (high G-force corners, spin out, etc)
+	biasedAttitudeDelta := rotataionalenvelope.Scale(k.Current.SixDOFRotation.Delta, 1.0, 0.25, 1.0)
+
+	k.Current.SixDOFRotation.Acceleration = rotataionalenvelope.Magnitude(biasedAttitudeDelta) / windowSeconds
+	k.Current.SixDOFRotation.Jerk = (k.Current.SixDOFRotation.Acceleration - k.Last.SixDOFRotation.Acceleration) / windowSeconds
+
+	// filter out excessive spikes in jerk
+	if k.Current.SixDOFRotation.Jerk > 10 {
+		k.Current.SixDOFRotation.Jerk = 10
+	} else if k.Current.SixDOFRotation.Jerk < -10 {
+		k.Current.SixDOFRotation.Jerk = -10
+	}
+
+	k.Current.SixDOFRotation.Snap = (k.Current.SixDOFRotation.Jerk - k.Last.SixDOFRotation.Jerk) / windowSeconds
+
+	k.Current.CalculatedSurge = signal.Abs(float64(k.Current.SixDOFTranslationCalc.Delta.X) / windowSeconds)
+	k.Current.GroundSpeed = float64(gtclient.Telemetry.GroundSpeedMetersPerSecond())
 	k.Current.TransmissionGear = gtclient.Telemetry.CurrentGear()
 }
 
