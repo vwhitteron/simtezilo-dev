@@ -4,6 +4,7 @@ import (
 	"embed"
 	"encoding/json"
 	"net/http"
+	"path/filepath"
 
 	"github.com/gorilla/websocket"
 	"github.com/rs/zerolog"
@@ -65,30 +66,48 @@ var staticFiles embed.FS
 
 func (w *WebUI) imagesHandlerFunc() func(w http.ResponseWriter, r *http.Request) {
 	return func(response http.ResponseWriter, request *http.Request) {
-		filename := request.URL.Path
+		filename := "static" + request.URL.Path
 
-		content, err := staticFiles.ReadFile("static" + filename)
+		content, err := staticFiles.ReadFile(filename)
 		if err != nil {
 			response.WriteHeader(http.StatusNotFound)
 			w.log.Error().Err(err).Msg("Invalid image file")
 		}
 
+		var contentType string
+		suffix := filepath.Ext(filename)
+		switch suffix {
+		case ".png":
+			contentType = "image/png"
+		case ".svg":
+			contentType = "image/svg+xml"
+		default:
+			contentType = "image/jpeg"
+		}
+
+		response.Header().Add("Content-Type", contentType)
 		response.Write(content)
+
+		w.log.Debug().Str("file", filename).Str("mime-type", contentType).Str("suffix", suffix).Msg("returned file")
 	}
 }
 
 func (w *WebUI) sciChartJSHandlerFunc() func(w http.ResponseWriter, r *http.Request) {
 	return func(response http.ResponseWriter, request *http.Request) {
-		filename := request.URL.Path
+		filename := "static" + request.URL.Path
 
-		content, err := staticFiles.ReadFile("static" + filename)
+		content, err := staticFiles.ReadFile(filename)
 		if err != nil {
 			response.WriteHeader(http.StatusNotFound)
 			w.log.Error().Err(err).Msg("Invalid javascript file")
 		}
 
-		response.Header().Add("Content-Type", "application/javascript")
+		contentType := "application/javascript"
+
+		response.Header().Add("Content-Type", contentType)
 		response.Write(content)
+
+		w.log.Debug().Str("file", filename).Str("mime-type", contentType).Msg("returned file")
 	}
 }
 
