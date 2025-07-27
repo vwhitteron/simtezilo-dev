@@ -79,8 +79,6 @@ func NewApp(opts AppOptions) (*App, error) {
 
 	a.log = log.Level(logLevel)
 
-	a.log.Info().Str("Level", logLevel.String()).Msg("log level")
-
 	a.kinematics = kinematics.NewKinematicsTracker()
 
 	a.synth, err = synth.NewSynth(synth.SynthOpts{
