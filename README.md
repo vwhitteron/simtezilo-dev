@@ -20,6 +20,11 @@ Install [Log2Ram](https://github.com/azlux/log2ram)
    ```
    tmpfs /var/log tmpfs defaults,size=20M 0 0
    ```
+3. Update journald config in `/etc/systemd/journald.conf`
+   ```
+   SystemMaxUse=50M
+   ForwardToSyslog=no
+   ```
 
 ### Pimoroni PirateAudio Line Out
 
