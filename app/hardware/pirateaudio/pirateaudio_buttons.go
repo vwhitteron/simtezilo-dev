@@ -15,7 +15,11 @@ import (
 	"periph.io/x/host/v3"
 )
 
-const volumeFontSize = 20
+const (
+	backlightOn    = true
+	backlightOff   = false
+	volumeFontSize = 20
+)
 
 var pages = []string{
 	"volume",
@@ -35,7 +39,7 @@ var pages = []string{
 }
 var currentPage = 0
 
-func SetupPirateAudioButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, config *config.Config, buttonEventCallback func(), log zerolog.Logger) func() {
+func SetupPirateAudioButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, config *config.Config, buttonEventCallback func(bool), log zerolog.Logger) func() {
 	return func() {
 		OnButtonAPressed(func() {
 			displayString := ""
@@ -202,7 +206,7 @@ func SetupPirateAudioButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, c
 				return
 			}
 
-			buttonEventCallback()
+			buttonEventCallback(backlightOn)
 			lcdDevice.PowerOn()
 			canvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
 			lcdDevice.ShowTextCentered(canvas, displayString, volumeFontSize)
@@ -373,7 +377,7 @@ func SetupPirateAudioButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, c
 				return
 			}
 
-			buttonEventCallback()
+			buttonEventCallback(backlightOn)
 			lcdDevice.PowerOn()
 			canvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
 			lcdDevice.ShowTextCentered(canvas, displayString, volumeFontSize)
@@ -428,22 +432,21 @@ func SetupPirateAudioButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, c
 				Str("mode", pages[currentPage]).
 				Msg("button press")
 
-			buttonEventCallback()
+			buttonEventCallback(backlightOn)
 			lcdDevice.PowerOn()
 			canvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
 			lcdDevice.ShowTextCentered(canvas, displayString, volumeFontSize)
 		})
 
 		OnButtonYPressed(func() {
-			buttonEventCallback()
-			powerState := lcdDevice.PowerToggle()
+			backlightState := lcdDevice.PowerToggle()
+			buttonEventCallback(backlightState)
 
 			log.Debug().
 				Str("button", "Y").
-				Bool("powered on", powerState).
-				Str("action", "toggle display power").
+				Bool("backlight on", backlightState).
+				Str("action", "toggle display backlight").
 				Msg("button press")
-
 		})
 
 		log.Debug().Str("component", "pirate audio buttons").Str("result", "success").Msg("button setup complete")

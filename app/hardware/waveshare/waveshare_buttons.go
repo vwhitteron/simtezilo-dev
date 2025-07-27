@@ -10,7 +10,11 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/synth"
 )
 
-const volumeFontSize = 20
+const (
+	backlightOn    = true
+	backlightOff   = false
+	volumeFontSize = 20
+)
 
 var pages = []string{
 	"volume",
@@ -30,7 +34,7 @@ var pages = []string{
 }
 var currentPage = 0
 
-func SetupWaveshareButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, config *config.Config, buttonEventCallback func(), log zerolog.Logger) func() {
+func SetupWaveshareButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, config *config.Config, buttonEventCallback func(bool), log zerolog.Logger) func() {
 	return func() {
 		hardware.OnButtonUpPressed(func() {
 			displayString := ""
@@ -197,7 +201,7 @@ func SetupWaveshareButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, con
 				return
 			}
 
-			buttonEventCallback()
+			buttonEventCallback(backlightOn)
 			lcdDevice.PowerOn()
 			canvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
 			lcdDevice.ShowTextCentered(canvas, displayString, volumeFontSize)
@@ -368,7 +372,7 @@ func SetupWaveshareButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, con
 				return
 			}
 
-			buttonEventCallback()
+			buttonEventCallback(backlightOn)
 			lcdDevice.PowerOn()
 			canvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
 			lcdDevice.ShowTextCentered(canvas, displayString, volumeFontSize)
@@ -422,7 +426,7 @@ func SetupWaveshareButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, con
 				Str("mode", pages[currentPage]).
 				Msg("button press")
 
-			buttonEventCallback()
+			buttonEventCallback(backlightOn)
 			lcdDevice.PowerOn()
 			canvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
 			lcdDevice.ShowTextCentered(canvas, displayString, volumeFontSize)
@@ -476,7 +480,7 @@ func SetupWaveshareButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, con
 				Str("mode", pages[currentPage]).
 				Msg("button press")
 
-			buttonEventCallback()
+			buttonEventCallback(backlightOn)
 			lcdDevice.PowerOn()
 			canvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
 			lcdDevice.ShowTextCentered(canvas, displayString, volumeFontSize)
@@ -511,12 +515,13 @@ func SetupWaveshareButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, con
 		})
 
 		hardware.OnButtonThreePressed(func() {
-			isPoweredOn := lcdDevice.PowerToggle()
+			backlightState := lcdDevice.PowerToggle()
+			buttonEventCallback(backlightState)
 
 			log.Debug().
 				Str("button", "Three").
-				Str("action", "Display Power").
-				Str("state", fmt.Sprintf("%t", isPoweredOn)).
+				Str("action", "toggle display backlight").
+				Bool("backlight on", backlightState).
 				Msg("button press")
 		})
 

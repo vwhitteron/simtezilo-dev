@@ -24,10 +24,14 @@ type display struct {
 	gear      int
 }
 
-func (a *App) buttenEventCallback() func() {
-	return func() {
-		a.display.state = displayState(settings)
-		a.updateLastActive()
+func (a *App) buttenEventCallback() func(bool) {
+	return func(backlightIsOn bool) {
+		if backlightIsOn {
+			a.display.state = displayState(settings)
+			a.updateLastActive()
+		} else {
+			a.display.state = displayState(off)
+		}
 	}
 }
 
