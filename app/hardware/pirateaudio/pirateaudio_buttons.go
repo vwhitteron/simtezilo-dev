@@ -35,7 +35,7 @@ var pages = []string{
 }
 var currentPage = 0
 
-func SetupPirateAudioButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, config *config.Config, lastActive *time.Time, log zerolog.Logger) func() {
+func SetupPirateAudioButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, config *config.Config, buttonEventCallback func(), log zerolog.Logger) func() {
 	return func() {
 		OnButtonAPressed(func() {
 			displayString := ""
@@ -202,7 +202,7 @@ func SetupPirateAudioButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, c
 				return
 			}
 
-			*lastActive = time.Now()
+			buttonEventCallback()
 			lcdDevice.PowerOn()
 			canvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
 			lcdDevice.ShowTextCentered(canvas, displayString, volumeFontSize)
@@ -373,7 +373,7 @@ func SetupPirateAudioButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, c
 				return
 			}
 
-			*lastActive = time.Now()
+			buttonEventCallback()
 			lcdDevice.PowerOn()
 			canvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
 			lcdDevice.ShowTextCentered(canvas, displayString, volumeFontSize)
@@ -428,14 +428,14 @@ func SetupPirateAudioButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, c
 				Str("mode", pages[currentPage]).
 				Msg("button press")
 
-			*lastActive = time.Now()
+			buttonEventCallback()
 			lcdDevice.PowerOn()
 			canvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
 			lcdDevice.ShowTextCentered(canvas, displayString, volumeFontSize)
 		})
 
 		OnButtonYPressed(func() {
-			*lastActive = time.Now()
+			buttonEventCallback()
 			powerState := lcdDevice.PowerToggle()
 
 			log.Debug().

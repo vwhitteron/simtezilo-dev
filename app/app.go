@@ -11,7 +11,6 @@ import (
 	"github.com/gopxl/beep/speaker"
 	"github.com/rs/zerolog"
 	"github.com/vwhitteron/simtezilo-dev/app/config"
-	"github.com/vwhitteron/simtezilo-dev/app/hardware"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/pirateaudio"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/terminal"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/waveshare"
@@ -23,17 +22,11 @@ import (
 	telemetry_client "github.com/zetetos/gt-telemetry"
 )
 
-type displayContent struct {
-	gear  int
-	state string
-}
-
 type App struct {
 	buttonsFn          func()
 	telemetryChartFeed chan map[string]float32
 	config             *config.Config
-	lcdDevice          hardware.LCD
-	displayContent     displayContent
+	display            display
 	done               chan bool
 	gearVolumeMin      float64
 	gt                 *telemetry_client.GTClient
@@ -42,9 +35,10 @@ type App struct {
 	kinematics         kinematics.KinaticsTracker
 	replayMode         bool
 	seq                uint32
+	hapticsEnabled     bool
 	synth              *synth.Synthesizer
 	timeOfDay          time.Duration
-	lastActive         *time.Time
+	lastActive         time.Time
 	vehicleID          uint32
 	webEnabled         bool
 	webUI              *webui.WebUI
@@ -58,6 +52,13 @@ type AppOptions struct {
 }
 
 func NewApp(opts AppOptions) (*App, error) {
+	a := &App{
+		done:               opts.Done,
+		lastGear:           NullGear,
+		telemetryChartFeed: make(chan map[string]float32, 600),
+		webEnabled:         opts.WebEnabled,
+	}
+
 	logLevel, err := zerolog.ParseLevel(opts.LogLevel)
 	if err != nil {
 		fmt.Printf("invalid log level parameter %q, setting level to warn", opts.LogLevel)
@@ -66,25 +67,26 @@ func NewApp(opts AppOptions) (*App, error) {
 
 	log := zerolog.New(os.Stderr).With().Timestamp().Logger().Level(logLevel)
 
-	config := config.NewConfig("simtezilo.conf", log)
+	a.config = config.NewConfig("simtezilo.conf", log)
+	a.replayMode = a.config.App.ReplayMode
 
 	if opts.LogLevel == "" {
-		logLevel, err = zerolog.ParseLevel(config.App.LogLevel)
+		logLevel, err = zerolog.ParseLevel(a.config.App.LogLevel)
 		if err != nil {
-			log.Error().Str("configured", config.App.LogLevel).Str("fallback", "warn").Msg("invalid log level")
+			log.Error().Str("configured", a.config.App.LogLevel).Str("fallback", "warn").Msg("invalid log level")
 		}
 	}
 
-	log = log.Level(logLevel)
+	a.log = log.Level(logLevel)
 
-	log.Info().Str("Level", logLevel.String()).Msg("log level")
+	a.log.Info().Str("Level", logLevel.String()).Msg("log level")
 
-	kinematics := kinematics.NewKinematicsTracker()
+	a.kinematics = kinematics.NewKinematicsTracker()
 
-	synthesizer, err := synth.NewSynth(synth.SynthOpts{
-		Config:     config.Synthesizer,
+	a.synth, err = synth.NewSynth(synth.SynthOpts{
+		Config:     a.config.Synthesizer,
 		Logger:     log.With().Str("component", "synth").Logger(),
-		Kinematics: &kinematics,
+		Kinematics: &a.kinematics,
 	})
 	if err != nil {
 		log.Error().
@@ -96,16 +98,13 @@ func NewApp(opts AppOptions) (*App, error) {
 		return nil, err
 	}
 
-	lastActive := time.Now()
+	// Needs to be set before display draw events
+	a.lastActive = time.Now()
 
-	var lcdDevice hardware.LCD
-	var buttonsFn func()
-
-	switch config.Hardware.Model {
+	switch a.config.Hardware.Model {
 	case "pirateaudio":
-		var err error
-		lcdDevice, err = pirateaudio.NewPirateAudioLCD(pirateaudio.PirateAudioLCDOpts{
-			Orientation: config.Hardware.DisplayOrientation,
+		a.display.lcdDevice, err = pirateaudio.NewPirateAudioLCD(pirateaudio.PirateAudioLCDOpts{
+			Orientation: a.config.Hardware.DisplayOrientation,
 		})
 		if err != nil {
 			log.Error().
@@ -116,22 +115,22 @@ func NewApp(opts AppOptions) (*App, error) {
 
 			return nil, err
 		}
-		log.Debug().
+		a.log.Debug().
 			Str("component", "pirate audio display").
 			Str("result", "success").
 			Msg("init")
 
-		lcdDevice.ShowTextCentered(image.NewRGBA(image.Rect(0, 0, 240, 240)), "Loading...", 16)
+		a.display.lcdDevice.ShowTextCentered(image.NewRGBA(image.Rect(0, 0, 240, 240)), "Loading...", 16)
 
 		// TODO: fix fast button presses can result in a crash when updatting lastActive pointer
-		buttonsFn = pirateaudio.SetupPirateAudioButtons(lcdDevice, synthesizer, config, &lastActive, log)
+		// buttonsFn = pirateaudio.SetupPirateAudioButtons(display.lcdDevice, synthesizer, config, &lastActive, log)
+		a.buttonsFn = pirateaudio.SetupPirateAudioButtons(a.display.lcdDevice, a.synth, a.config, a.buttenEventCallback(), a.log)
 	case "waveshare":
-		var err error
-		lcdDevice, err = waveshare.NewWaveshare14972Display(waveshare.Waveshare14972LCDOpts{
-			Orientation: config.Hardware.DisplayOrientation,
+		a.display.lcdDevice, err = waveshare.NewWaveshare14972Display(waveshare.Waveshare14972LCDOpts{
+			Orientation: a.config.Hardware.DisplayOrientation,
 		})
 		if err != nil {
-			log.Error().
+			a.log.Error().
 				Err(err).
 				Str("component", "waveshare 14972 display").
 				Str("result", "failure").
@@ -139,22 +138,22 @@ func NewApp(opts AppOptions) (*App, error) {
 
 			return nil, err
 		}
-		log.Debug().
+		a.log.Debug().
 			Str("component", "waveshare 14972 display").
 			Str("result", "success").
 			Msg("init")
 
-		lcdDevice.Clear()
+		a.display.lcdDevice.Clear()
 
-		buttonsFn = waveshare.SetupWaveshareButtons(lcdDevice, synthesizer, config, &lastActive, log)
+		a.buttonsFn = waveshare.SetupWaveshareButtons(a.display.lcdDevice, a.synth, a.config, a.buttenEventCallback(), a.log)
 	default:
-		lcdDevice = terminal.NewNullDeviceDisplay()
-		log.Debug().
+		a.display.lcdDevice = terminal.NewNullDeviceDisplay()
+		a.log.Debug().
 			Str("component", "null display").
 			Str("result", "success").
 			Msg("init")
 
-		buttonsFn = terminal.SetupNullDeviceButtons(synthesizer, config, opts.Done, log)
+		a.buttonsFn = terminal.SetupNullDeviceButtons(a.synth, a.config, opts.Done, a.log)
 	}
 
 	log.Debug().
@@ -162,24 +161,24 @@ func NewApp(opts AppOptions) (*App, error) {
 		Str("result", "success").
 		Msg("init")
 
-	gt, err := telemetry_client.NewGTClient(telemetry_client.GTClientOpts{
-		Source:   config.Telemetry.Source,
-		Logger:   &log,
-		LogLevel: config.App.LogLevel,
+	a.gt, err = telemetry_client.NewGTClient(telemetry_client.GTClientOpts{
+		Source:   a.config.Telemetry.Source,
+		Logger:   &a.log,
+		LogLevel: a.config.App.LogLevel,
 	})
 	if err != nil {
-		log.Error().
+		a.log.Error().
 			Err(err).
 			Str("component", "gt client").
 			Str("result", "failure").
 			Msg("init")
 
-		lcdDevice.Show("error")
+		a.display.lcdDevice.Show("error")
 
 		return nil, err
 	}
 
-	log.Debug().
+	a.log.Debug().
 		Str("component", "app").
 		Str("result", "success").
 		Msg("init")
@@ -188,27 +187,7 @@ func NewApp(opts AppOptions) (*App, error) {
 	// 	runSetupWizard(lcdDevice)
 	// }
 
-	a := &App{
-		buttonsFn:          buttonsFn,
-		config:             config,
-		done:               opts.Done,
-		gearVolumeMin:      0,
-		gt:                 gt,
-		kinematics:         kinematics,
-		lastGear:           NullGear,
-		lcdDevice:          lcdDevice,
-		log:                log,
-		replayMode:         config.App.ReplayMode,
-		seq:                uint32(0),
-		synth:              synthesizer,
-		lastActive:         &lastActive,
-		telemetryChartFeed: make(chan map[string]float32, 600),
-		vehicleID:          0,
-		webEnabled:         opts.WebEnabled,
-		webUI:              nil,
-	}
-
-	a.drawSplashDisplay(Version)
+	a.drawStartupDisplay(Version)
 
 	return a, nil
 }
@@ -260,7 +239,9 @@ func (a *App) Close() {
 			Str("result", "failure").
 			Msg("close")
 	}
-	a.lcdDevice.Close()
+	a.drawStartupDisplay("Goodbye")
+	time.Sleep(1 * time.Second)
+	a.display.lcdDevice.Close()
 }
 
 func (a *App) hapticEvents() {
@@ -279,7 +260,7 @@ func (a *App) hapticEvents() {
 
 	if a.vehicleID != currentVehicleID {
 		a.resetState(seq, currentGear)
-		a.silenceHaptics()
+		a.disableHaptics("vehicle changed")
 
 		go a.updateVehicle(currentVehicleID, currentGear)
 		a.log.Debug().Uint32("ID", currentVehicleID).Msg("vehicle ID changed")
@@ -287,9 +268,11 @@ func (a *App) hapticEvents() {
 		return
 	}
 
-	if a.gt.Telemetry.Flags().GamePaused {
-		a.resetState(seq, currentGear)
-		a.silenceHaptics()
+	if !a.shouldGenerateHaptics() {
+		if a.hapticsEnabled {
+			a.resetState(seq, currentGear)
+			a.disableHaptics("not live")
+		}
 
 		return
 	}
@@ -297,7 +280,7 @@ func (a *App) hapticEvents() {
 	// The loading flag typically means the session has restarted
 	if a.sessionHasReset(seq) {
 		a.resetState(seq, currentGear)
-		a.silenceHaptics()
+		a.disableHaptics("session reset")
 
 		return
 	}
@@ -308,9 +291,7 @@ func (a *App) hapticEvents() {
 		a.lastGear = currentGear
 
 		a.resetState(seq, currentGear)
-		a.silenceHaptics()
-
-		a.log.Debug().Msg("initialising gear")
+		a.disableHaptics("initialising gear")
 
 		return
 	}
@@ -322,7 +303,7 @@ func (a *App) hapticEvents() {
 		a.seq = seq
 
 		a.resetState(seq, currentGear)
-		a.silenceHaptics()
+		a.disableHaptics("time of day reset")
 
 		a.log.Debug().
 			Uint32("sequence_id", seq).
@@ -332,19 +313,11 @@ func (a *App) hapticEvents() {
 		return
 	}
 
-	if !a.gt.Telemetry.Flags().Live && !a.replayMode {
-		a.resetState(seq, currentGear)
-		a.silenceHaptics()
-
-		a.log.Debug().Msg("not live")
-
-		return
+	if !a.hapticsEnabled {
+		a.enableHaptics()
 	}
 
 	a.kinematics.Current.SequenceID = seq
-
-	// speaker.Resume()
-	a.synth.FadeIn(3 * time.Second)
 
 	a.processHaptics(seqDelta)
 
@@ -471,23 +444,24 @@ func (a *App) resetState(seq uint32, currentGear int) {
 	a.synth.ClearBuffer()
 }
 
-func (a *App) silenceHaptics() {
+func (a *App) disableHaptics(reason string) {
 	// speaker.Suspend()
 	a.synth.Silence()
 	a.synth.ClearBuffer()
+	a.hapticsEnabled = false
+
+	a.log.Debug().Bool("haptics enabled", a.hapticsEnabled).Str("reason", reason).Msg("haptics state change")
 }
 
-func (a *App) updateDisplay() {
-	if a.simTelemetryIsActive() {
-		a.drawActiveDisplay()
-	} else if a.displayPowerOffTimeoutReached() {
-		a.powerOffDisplay()
-	} else if a.displayInactiveTimeoutReached() {
-		a.drawInactiveDisplay()
-	}
+func (a *App) enableHaptics() {
+	// speaker.Resume()
+	a.synth.FadeIn(3 * time.Second)
+	a.hapticsEnabled = true
+
+	a.log.Debug().Bool("haptics enabled", a.hapticsEnabled).Msg("haptics state change")
 }
 
-func (a *App) simTelemetryIsActive() bool {
+func (a *App) shouldGenerateHaptics() bool {
 	if a.gt.Telemetry.Flags().GamePaused {
 		return false
 	}
@@ -497,72 +471,6 @@ func (a *App) simTelemetryIsActive() bool {
 	}
 
 	return true
-}
-
-func (a *App) displayPowerOffTimeoutReached() bool {
-	return time.Since(*a.lastActive) > 20*time.Second
-}
-
-func (a *App) displayInactiveTimeoutReached() bool {
-	return time.Since(*a.lastActive) > 5*time.Second
-}
-
-func (a *App) powerOffDisplay() {
-	if a.displayContent.state == "off" {
-		return
-	}
-
-	a.lcdDevice.PowerOff()
-
-	a.displayContent = displayContent{
-		gear:  NullGear,
-		state: "off",
-	}
-
-	a.log.Debug().Str("screen", "power off").Msg("display update")
-
-}
-
-func (a *App) drawSplashDisplay(text string) {
-	a.lcdDevice.ShowTextOverlay("splash", text, 7)
-
-	a.displayContent = displayContent{
-		gear:  NullGear,
-		state: "splash",
-	}
-
-	a.log.Debug().Str("screen", "splash").Msg("display update")
-}
-
-func (a *App) drawInactiveDisplay() {
-	if a.displayContent.state == "inactive" {
-		return
-	}
-
-	a.drawSplashDisplay("waiting")
-
-	a.log.Debug().Str("screen", "waiting").Msg("display update")
-}
-
-func (a *App) drawActiveDisplay() {
-	currentGear := a.kinematics.Current.TransmissionGear
-
-	if a.displayContent.gear == currentGear || currentGear == NullGear {
-		return
-	}
-
-	a.lcdDevice.PowerOn()
-	*a.lastActive = time.Now()
-
-	canvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
-	a.lcdDevice.ShowTextCentered(canvas, gearName(currentGear), gearFontSize)
-
-	a.log.Debug().Str("screen", "gear").Msg("display update")
-
-	a.displayContent = displayContent{
-		gear:  currentGear,
-		state: "gear",
-	}
 }
 
 func (a *App) updateVehicle(currentVehicleID uint32, currentGear int) {

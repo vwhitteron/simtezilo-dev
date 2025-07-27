@@ -3,7 +3,6 @@ package waveshare
 import (
 	"fmt"
 	"image"
-	"time"
 
 	"github.com/rs/zerolog"
 	"github.com/vwhitteron/simtezilo-dev/app/config"
@@ -31,7 +30,7 @@ var pages = []string{
 }
 var currentPage = 0
 
-func SetupWaveshareButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, config *config.Config, lastActive *time.Time, log zerolog.Logger) func() {
+func SetupWaveshareButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, config *config.Config, buttonEventCallback func(), log zerolog.Logger) func() {
 	return func() {
 		hardware.OnButtonUpPressed(func() {
 			displayString := ""
@@ -198,7 +197,7 @@ func SetupWaveshareButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, con
 				return
 			}
 
-			*lastActive = time.Now()
+			buttonEventCallback()
 			lcdDevice.PowerOn()
 			canvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
 			lcdDevice.ShowTextCentered(canvas, displayString, volumeFontSize)
@@ -369,7 +368,7 @@ func SetupWaveshareButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, con
 				return
 			}
 
-			*lastActive = time.Now()
+			buttonEventCallback()
 			lcdDevice.PowerOn()
 			canvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
 			lcdDevice.ShowTextCentered(canvas, displayString, volumeFontSize)
@@ -423,7 +422,7 @@ func SetupWaveshareButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, con
 				Str("mode", pages[currentPage]).
 				Msg("button press")
 
-			*lastActive = time.Now()
+			buttonEventCallback()
 			lcdDevice.PowerOn()
 			canvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
 			lcdDevice.ShowTextCentered(canvas, displayString, volumeFontSize)
@@ -477,7 +476,7 @@ func SetupWaveshareButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, con
 				Str("mode", pages[currentPage]).
 				Msg("button press")
 
-			*lastActive = time.Now()
+			buttonEventCallback()
 			lcdDevice.PowerOn()
 			canvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
 			lcdDevice.ShowTextCentered(canvas, displayString, volumeFontSize)
