@@ -24,7 +24,8 @@ import (
 )
 
 type displayContent struct {
-	gear int
+	gear  int
+	state string
 }
 
 type App struct {
@@ -183,13 +184,11 @@ func NewApp(opts AppOptions) (*App, error) {
 		Str("result", "success").
 		Msg("init")
 
-	lcdDevice.ShowTextOverlay("splash", Version, 7)
-
 	// if !isSetupComplete(log) {
 	// 	runSetupWizard(lcdDevice)
 	// }
 
-	return &App{
+	a := &App{
 		buttonsFn:          buttonsFn,
 		config:             config,
 		done:               opts.Done,
@@ -207,8 +206,11 @@ func NewApp(opts AppOptions) (*App, error) {
 		vehicleID:          0,
 		webEnabled:         opts.WebEnabled,
 		webUI:              nil,
-	}, nil
+	}
 
+	a.drawSplashDisplay(Version)
+
+	return a, nil
 }
 
 func (a *App) Run() {
@@ -476,21 +478,73 @@ func (a *App) silenceHaptics() {
 }
 
 func (a *App) updateDisplay() {
-	if (a.gt.Telemetry.Flags().Live == false && a.replayMode == false) || a.gt.Telemetry.Flags().GamePaused == true {
-		if time.Since(*a.lastActive) > 20*time.Second {
-			a.lcdDevice.PowerOff()
+	if a.simTelemetryIsActive() {
+		a.drawActiveDisplay()
+	} else if a.displayPowerOffTimeoutReached() {
+		a.powerOffDisplay()
+	} else if a.displayInactiveTimeoutReached() {
+		a.drawInactiveDisplay()
+	}
+}
 
-			return
-		}
+func (a *App) simTelemetryIsActive() bool {
+	if a.gt.Telemetry.Flags().GamePaused {
+		return false
+	}
 
-		if time.Since(*a.lastActive) > 5*time.Second {
-			canvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
-			a.lcdDevice.ShowTextCentered(canvas, "Waiting...", 16)
-		}
+	if !a.gt.Telemetry.Flags().Live && !a.replayMode {
+		return false
+	}
 
+	return true
+}
+
+func (a *App) displayPowerOffTimeoutReached() bool {
+	return time.Since(*a.lastActive) > 20*time.Second
+}
+
+func (a *App) displayInactiveTimeoutReached() bool {
+	return time.Since(*a.lastActive) > 5*time.Second
+}
+
+func (a *App) powerOffDisplay() {
+	if a.displayContent.state == "off" {
 		return
 	}
 
+	a.lcdDevice.PowerOff()
+
+	a.displayContent = displayContent{
+		gear:  NullGear,
+		state: "off",
+	}
+
+	a.log.Debug().Str("screen", "power off").Msg("display update")
+
+}
+
+func (a *App) drawSplashDisplay(text string) {
+	a.lcdDevice.ShowTextOverlay("splash", text, 7)
+
+	a.displayContent = displayContent{
+		gear:  NullGear,
+		state: "splash",
+	}
+
+	a.log.Debug().Str("screen", "splash").Msg("display update")
+}
+
+func (a *App) drawInactiveDisplay() {
+	if a.displayContent.state == "inactive" {
+		return
+	}
+
+	a.drawSplashDisplay("waiting")
+
+	a.log.Debug().Str("screen", "waiting").Msg("display update")
+}
+
+func (a *App) drawActiveDisplay() {
 	currentGear := a.kinematics.Current.TransmissionGear
 
 	if a.displayContent.gear == currentGear || currentGear == NullGear {
@@ -503,7 +557,12 @@ func (a *App) updateDisplay() {
 	canvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
 	a.lcdDevice.ShowTextCentered(canvas, gearName(currentGear), gearFontSize)
 
-	a.displayContent.gear = currentGear
+	a.log.Debug().Str("screen", "gear").Msg("display update")
+
+	a.displayContent = displayContent{
+		gear:  currentGear,
+		state: "gear",
+	}
 }
 
 func (a *App) updateVehicle(currentVehicleID uint32, currentGear int) {

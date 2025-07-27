@@ -178,7 +178,7 @@ func (l *PirateAudioLCD) ShowTextOverlay(background string, text string, size in
 
 	fontDrawer := &font.Drawer{
 		Dst:  canvas,
-		Src:  image.NewUniform(color.RGBA{6, 6, 6, 1}),
+		Src:  image.NewUniform(color.RGBA{128, 128, 128, 1}),
 		Face: fontFace,
 	}
 

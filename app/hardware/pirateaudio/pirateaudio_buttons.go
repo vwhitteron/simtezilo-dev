@@ -435,9 +435,13 @@ func SetupPirateAudioButtons(lcdDevice hardware.LCD, synth *synth.Synthesizer, c
 		})
 
 		OnButtonYPressed(func() {
+			*lastActive = time.Now()
+			powerState := lcdDevice.PowerToggle()
+
 			log.Debug().
 				Str("button", "Y").
-				Str("action", "none").
+				Bool("powered on", powerState).
+				Str("action", "toggle display power").
 				Msg("button press")
 
 		})
