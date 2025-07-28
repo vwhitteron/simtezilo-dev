@@ -58,9 +58,7 @@ func (b *Buffer) Write(channel string, samples []float64) {
 	}
 
 	outSamples := b.mixSamples(samples, volume)
-	for i := range outSamples { //nolint: staticcheck // buffer larger than write samples
-		b.buffer[i] = outSamples[i]
-	}
+	copy(b.buffer, outSamples)
 }
 
 func (b *Buffer) WriteWithVolumePercent(channel string, percent int, samples []float64) {
@@ -74,9 +72,7 @@ func (b *Buffer) WriteWithVolumePercent(channel string, percent int, samples []f
 	volume = float64(percent) / 100.0 * volume
 
 	outSamples := b.mixSamples(samples, volume)
-	for i := range outSamples { //nolint: staticcheck // buffer larger than write samples
-		b.buffer[i] = outSamples[i]
-	}
+	copy(b.buffer, outSamples)
 }
 
 func (b *Buffer) mixSamples(inSamples []float64, volume float64) []float64 {

@@ -24,17 +24,6 @@ type display struct {
 	gear      int
 }
 
-func (a *App) buttenEventCallback() func(bool) {
-	return func(backlightIsOn bool) {
-		if backlightIsOn {
-			a.display.state = displayState(settings)
-			a.updateLastActive()
-		} else {
-			a.display.state = displayState(off)
-		}
-	}
-}
-
 func (a *App) updateLastActive() {
 	a.state.lastActive = time.Now()
 }
@@ -57,8 +46,7 @@ func (a *App) powerOffDisplay() {
 	a.display.gear = NullGear
 	a.display.state = displayState(off)
 
-	duration := time.Since(a.state.lastActive)
-	a.log.Debug().Str("screen", "power off").Str("duration", duration.String()).Msg("display update")
+	a.log.Debug().Str("screen", "power off").Msg("display update")
 }
 
 func (a *App) drawStartupDisplay(text string) {
@@ -68,8 +56,7 @@ func (a *App) drawStartupDisplay(text string) {
 	a.display.gear = NullGear
 	a.display.state = displayState(startup)
 
-	duration := time.Since(a.state.lastActive)
-	a.log.Debug().Str("screen", "startup").Str("duration", duration.String()).Msg("display update")
+	a.log.Debug().Str("screen", "startup").Msg("display update")
 }
 
 func (a *App) drawWaitDisplay() {
@@ -84,8 +71,7 @@ func (a *App) drawWaitDisplay() {
 	a.display.gear = NullGear
 	a.display.state = displayState(wait)
 
-	duration := time.Since(a.state.lastActive)
-	a.log.Debug().Str("screen", "wait").Str("duration", duration.String()).Msg("display update")
+	a.log.Debug().Str("screen", "wait").Msg("display update")
 }
 
 func (a *App) drawLiveDisplay() {
@@ -96,15 +82,35 @@ func (a *App) drawLiveDisplay() {
 	}
 
 	a.display.lcdDevice.PowerOn()
-	a.state.lastActive = time.Now()
 
 	canvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
 	a.display.lcdDevice.ShowTextCentered(canvas, gearName(currentGear), gearFontSize)
 
-	a.log.Debug().Str("screen", "gear").Msg("display update")
-
 	a.display.gear = currentGear
 	a.display.state = displayState(live)
+	a.updateLastActive()
+
+	a.log.Debug().Str("screen", "gear").Msg("display update")
+}
+
+func (a *App) drawSettingsDisplay(displayContent string, backlightIsOn bool) {
+	if !backlightIsOn {
+		a.display.state = displayState(off)
+
+		return
+	}
+
+	a.display.lcdDevice.PowerOn()
+
+	if displayContent != "" {
+		canvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
+		a.display.lcdDevice.ShowTextCentered(canvas, displayContent, 20)
+	}
+
+	a.display.state = displayState(settings)
+	a.updateLastActive()
+
+	a.log.Debug().Str("screen", "settings").Msg("display update")
 }
 
 func (a *App) updateDisplay() {

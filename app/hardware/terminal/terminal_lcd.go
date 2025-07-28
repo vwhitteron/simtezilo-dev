@@ -4,26 +4,36 @@ import "image"
 
 type NullDisplay struct {
 	Orientation int
+	backlightOn bool
 }
 
 func NewNullDeviceDisplay() *NullDisplay {
-	return &NullDisplay{}
+	return &NullDisplay{
+		Orientation: 0,
+		backlightOn: true,
+	}
 }
 
 func (d *NullDisplay) Clear() {}
 
 func (d *NullDisplay) Close() {}
 
-func (d *NullDisplay) PowerOn() {}
+func (d *NullDisplay) PowerOn() {
+	d.backlightOn = true
+}
 
-func (d *NullDisplay) PowerOff() {}
+func (d *NullDisplay) PowerOff() {
+	d.backlightOn = false
+}
 
 func (d *NullDisplay) PowerToggle() bool {
-	return false
+	d.backlightOn = !d.backlightOn
+
+	return d.backlightOn
 }
 
 func (d *NullDisplay) IsPoweredOn() bool {
-	return false
+	return d.backlightOn
 }
 
 func (d *NullDisplay) Show(string) {}

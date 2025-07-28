@@ -524,7 +524,7 @@ func (c *Config) DecreaseMaxHz() int {
 	return int(c.Synthesizer.PulseMaxFrequencyHz)
 }
 
-func (c *Config) IncreaseDynamicGearShiftCurve() int {
+func (c *Config) IncreaseGearShiftCurve() int {
 	c.mu.Lock()
 
 	if c.Synthesizer.DynamicGearShiftCurve <= 950 {

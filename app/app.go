@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/gopxl/beep"
@@ -18,6 +19,7 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/kinematics/vector"
 	"github.com/vwhitteron/simtezilo-dev/app/signal"
 	"github.com/vwhitteron/simtezilo-dev/app/synth"
+	"github.com/vwhitteron/simtezilo-dev/app/ui"
 	"github.com/vwhitteron/simtezilo-dev/app/ui/webui"
 	telemetry_client "github.com/zetetos/gt-telemetry"
 )
@@ -37,8 +39,9 @@ type App struct {
 	config *config.Config
 	done   chan bool
 
-	display   display
-	buttonsFn func()
+	display    display
+	hidEvents  chan ui.HIDInputEvent
+	menuSystem *ui.MenuSystem
 
 	gtClient   *telemetry_client.GTClient
 	kinematics kinematics.KinematicsTracker
@@ -67,6 +70,8 @@ func NewApp(opts AppOptions) (*App, error) {
 			lastActive: time.Now(),
 			lastGear:   NullGear,
 		},
+		hidEvents:          make(chan ui.HIDInputEvent, 10),
+		menuSystem:         ui.NewMenuSystem(),
 		kinematics:         kinematics.NewKinematicsTracker(),
 		telemetryChartFeed: make(chan map[string]float32, 600),
 		webEnabled:         opts.WebEnabled,
@@ -117,19 +122,22 @@ func NewApp(opts AppOptions) (*App, error) {
 		if err != nil {
 			log.Error().
 				Err(err).
-				Str("component", "pirate audio display").
+				Str("component", "pirate audio").
+				Str("sub", "lcd").
 				Str("result", "failure").
 				Msg("init")
 
 			return nil, err
 		}
 		a.log.Debug().
-			Str("component", "pirate audio display").
+			Str("component", "pirate audio").
+			Str("sub", "lcd").
 			Str("result", "success").
 			Msg("init")
+		a.display.lcdDevice.Clear()
 
-		// TODO: fix fast button presses can result in a crash when updatting lastActive pointer
-		a.buttonsFn = pirateaudio.SetupPirateAudioButtons(a.display.lcdDevice, a.synth, a.config, a.buttenEventCallback(), a.log)
+		pirateaudio.SetupPirateAudioHID(a.hidEvents)
+		log.Debug().Str("component", "pirate audio").Str("sub", "hid").Msg("init")
 	case "waveshare":
 		a.display.lcdDevice, err = waveshare.NewWaveshare14972Display(waveshare.Waveshare14972LCDOpts{
 			Orientation: a.config.Hardware.DisplayOrientation,
@@ -137,28 +145,38 @@ func NewApp(opts AppOptions) (*App, error) {
 		if err != nil {
 			a.log.Error().
 				Err(err).
-				Str("component", "waveshare 14972 display").
+				Str("component", "waveshare 14972").
+				Str("sub", "lcd").
 				Str("result", "failure").
 				Msg("init")
 
 			return nil, err
 		}
 		a.log.Debug().
-			Str("component", "waveshare 14972 display").
+			Str("component", "waveshare 14972").
+			Str("sub", "lcd").
 			Str("result", "success").
 			Msg("init")
-
 		a.display.lcdDevice.Clear()
 
-		a.buttonsFn = waveshare.SetupWaveshareButtons(a.display.lcdDevice, a.synth, a.config, a.buttenEventCallback(), a.log)
+		waveshare.SetupWaveshareHID(a.hidEvents)
+		log.Debug().
+			Str("component", "waveshare 14972").
+			Str("sub", "hid").
+			Msg("init")
 	default:
 		a.display.lcdDevice = terminal.NewNullDeviceDisplay()
 		a.log.Debug().
 			Str("component", "null display").
+			Str("sub", "lcd").
 			Str("result", "success").
 			Msg("init")
 
-		a.buttonsFn = terminal.SetupNullDeviceButtons(a.synth, a.config, opts.Done, a.log)
+		go terminal.SetupNullDeviceButtons(a.hidEvents)
+		log.Debug().
+			Str("component", "terminal").
+			Str("sub", "hid").
+			Msg("init")
 	}
 
 	// initialise GT telemetry client
@@ -190,7 +208,9 @@ func NewApp(opts AppOptions) (*App, error) {
 }
 
 func (a *App) Run() {
-	go a.buttonsFn()
+	// go a.hidSetupFn()
+
+	go a.hidEventHandler()
 
 	go a.gtClient.Run()
 
@@ -228,6 +248,8 @@ func (a *App) Run() {
 }
 
 func (a *App) Close() {
+	a.log.Info().Msg("shutting down app")
+
 	err := a.synth.Close()
 	if err != nil {
 		a.log.Error().
@@ -236,9 +258,250 @@ func (a *App) Close() {
 			Str("result", "failure").
 			Msg("close")
 	}
+
 	a.drawStartupDisplay("Goodbye")
 	time.Sleep(1 * time.Second)
 	a.display.lcdDevice.Close()
+}
+
+func (a *App) hidEventHandler() {
+	for key := range a.hidEvents {
+		menuPage := a.menuSystem.GetCurrentMenuPage()
+		value := ""
+
+		switch key {
+		case ui.HIDInputUp:
+			menuPage = a.menuSystem.GetCurrentMenuPage()
+			value = a.alterSetting(menuPage, "increase")
+
+			log.Debug().
+				Str("key", "up").
+				Str("action", "increase").
+				Str("type", menuPage).
+				Str("value", value).
+				Msg("HID event")
+		case ui.HIDInputDown:
+			menuPage = a.menuSystem.GetCurrentMenuPage()
+			value = a.alterSetting(menuPage, "decrease")
+
+			log.Debug().
+				Str("key", "down").
+				Str("action", "decrease").
+				Str("type", menuPage).
+				Str("value", value).
+				Msg("HID event")
+		case ui.HIDInputLeft:
+			if a.display.lcdDevice.IsPoweredOn() {
+				menuPage = a.menuSystem.PreviousMenuPage()
+			}
+			value = a.alterSetting(menuPage, "get")
+
+			log.Debug().
+				Str("key", "left").
+				Str("action", "previous").
+				Str("type", "menuPage").
+				Str("value", menuPage).
+				Msg("HID event")
+		case ui.HIDInputRight:
+			if a.display.lcdDevice.IsPoweredOn() {
+				menuPage = a.menuSystem.NextMenuPage()
+			}
+			value = a.alterSetting(menuPage, "get")
+
+			log.Debug().
+				Str("key", "left").
+				Str("action", "previous").
+				Str("type", "menuPage").
+				Str("value", menuPage).
+				Msg("HID event")
+		case ui.HIDInputEscape:
+			a.log.Debug().Str("key", "escape").Msg("HID event")
+			a.done <- true
+		case ui.HIDInputPower:
+			backlightState := a.display.lcdDevice.PowerToggle()
+			a.drawSettingsDisplay("", backlightState)
+
+			log.Debug().
+				Str("key", "power").
+				Str("action", "toggle").
+				Str("type", "backlight").
+				Bool("value", backlightState).
+				Msg("HID event")
+
+			continue
+		default:
+			a.log.Debug().Msgf("HID Input: Unknown (%d)", key)
+
+			continue
+		}
+
+		displayContent := value
+
+		if menuPage != "vol" {
+			displayContent = menuPage + " " + displayContent
+		}
+
+		a.drawSettingsDisplay(displayContent, true)
+	}
+}
+
+func (a *App) alterSetting(name string, action string) string {
+	switch name {
+	case "vol":
+		value := float64(0)
+
+		switch action {
+		case "increase":
+			value = a.synth.IncreaseMasterGain()
+		case "decrease":
+			value = a.synth.DecreaseMasterGain()
+		default:
+			value = a.synth.GetMasterGain()
+		}
+
+		return strconv.FormatFloat(value, 'f', 2, 64) + " dB"
+	case "vCurve":
+		value := 0
+
+		switch action {
+		case "increase":
+			value = a.config.IncreaseJerkCurve()
+		case "decrease":
+			value = a.config.DecreaseJerkCurve()
+		default:
+			value = int(a.config.GetJerkCurve() * 1000)
+		}
+
+		return strconv.Itoa(value)
+	case "vMax":
+		value := 0
+
+		switch action {
+		case "increase":
+			value = a.config.IncreaseJerkMax()
+		case "decrease":
+			value = a.config.DecreaseJerkMax()
+		default:
+			value = a.config.GetJerkMax()
+		}
+
+		return strconv.Itoa(value)
+	case "fCurve":
+		value := 0
+
+		switch action {
+		case "increase":
+			value = a.config.IncreaseSnapCurve()
+		case "decrease":
+			value = a.config.DecreaseSnapCurve()
+		default:
+			value = int(a.config.GetSnapCurve() * 1000)
+		}
+
+		return strconv.Itoa(value)
+	case "fMax":
+		value := 0
+
+		switch action {
+		case "increase":
+			value = a.config.IncreaseSnapMax()
+		case "decrease":
+			value = a.config.DecreaseSnapMax()
+		default:
+			value = a.config.GetSnapMax()
+		}
+
+		return strconv.Itoa(value)
+	case "maxHz":
+		value := 0
+
+		switch action {
+		case "increase":
+			value = a.config.IncreaseMaxHz()
+		case "decrease":
+			value = a.config.DecreaseMaxHz()
+		default:
+			value = int(a.config.GetMaxHz())
+		}
+
+		return strconv.Itoa(value)
+	case "minHz":
+		value := 0
+
+		switch action {
+		case "increase":
+			value = a.config.IncreaseMinHz()
+		case "decrease":
+			value = a.config.DecreaseMinHz()
+		default:
+			value = int(a.config.GetMinHz())
+		}
+
+		return strconv.Itoa(value)
+	case "gCurve":
+		value := 0
+
+		switch action {
+		case "increase":
+			value = a.config.IncreaseGearShiftCurve()
+		case "decrease":
+			value = a.config.DecreaseGearShiftCurve()
+		default:
+			value = int(a.config.GetGearShiftCurve() * 1000)
+		}
+
+		return strconv.Itoa(value)
+	case "gMax":
+		value := float64(0)
+
+		switch action {
+		case "increase":
+			value = a.config.IncreaseGearShiftGforceMax()
+		case "decrease":
+			value = a.config.DecreaseGearShiftGforceMax()
+		default:
+			value = a.config.GetGearShiftGforceMax()
+		}
+
+		return strconv.FormatFloat(value, 'f', 1, 64)
+	case "cVol":
+		value := 0
+
+		switch action {
+		case "increase":
+			value, _ = a.synth.IncreaseChannelVolume("chassis")
+		case "decrease":
+			value, _ = a.synth.DecreaseChannelVolume("chassis")
+		default:
+			value, _ = a.synth.GetChannelVolume("chassis")
+		}
+
+		return strconv.Itoa(value)
+	case "gVol":
+		value := 0
+
+		switch action {
+		case "increase":
+			value, _ = a.synth.IncreaseChannelVolume("gearchange")
+		case "decrease":
+			value, _ = a.synth.DecreaseChannelVolume("gearchange")
+		default:
+			value, _ = a.synth.GetChannelVolume("gearchange")
+		}
+
+		return strconv.Itoa(value)
+	case "mix":
+		switch action {
+		case "increase":
+			return a.synth.Mixer.NextAlgorithm()
+		case "decrease":
+			return a.synth.Mixer.PreviousAlgorithm()
+		default:
+			return a.synth.Mixer.GetAlgorithm()
+		}
+	default:
+		return "err"
+	}
 }
 
 func (a *App) hapticEvents() {
