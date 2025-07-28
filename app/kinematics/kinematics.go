@@ -53,13 +53,13 @@ type Kinematics struct {
 	SynthOutputFrequency int
 }
 
-type KinaticsTracker struct {
+type KinematicsTracker struct {
 	Last    Kinematics
 	Current Kinematics
 }
 
-func NewKinematicsTracker() KinaticsTracker {
-	return KinaticsTracker{
+func NewKinematicsTracker() KinematicsTracker {
+	return KinematicsTracker{
 		Last:    newKinematics(),
 		Current: newKinematics(),
 	}
@@ -81,7 +81,7 @@ func newKinematics() Kinematics {
 }
 
 // TODO: ideally this should not be given the gt client
-func (k *KinaticsTracker) Update(windowSeconds float64, gtclient *telemetry_client.GTClient) {
+func (k *KinematicsTracker) Update(windowSeconds float64, gtclient *telemetry_client.GTClient) {
 	k.Last = k.Current
 
 	k.Current.Format = getTelemetryFormat(gtclient)
@@ -128,7 +128,7 @@ func (k *KinaticsTracker) Update(windowSeconds float64, gtclient *telemetry_clie
 	k.Current.TransmissionGear = gtclient.Telemetry.CurrentGear()
 }
 
-func (k *KinaticsTracker) GetSurgeGforce() float64 {
+func (k *KinematicsTracker) GetSurgeGforce() float64 {
 	surge := float64(0)
 	if k.Current.Format == "~" || k.Current.Format == "B" {
 		surge = float64(k.Current.SixDOFTranslation.Velocity.Surge)

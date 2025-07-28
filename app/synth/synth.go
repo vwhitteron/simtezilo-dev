@@ -16,7 +16,7 @@ type Synthesizer struct {
 	log          zerolog.Logger
 	Mixer        *Mixer
 	outputDevice *OutputDevice
-	kinematics   *kinematics.KinaticsTracker
+	kinematics   *kinematics.KinematicsTracker
 	sampleRate   int
 	outFile      *os.File
 }
@@ -24,7 +24,7 @@ type Synthesizer struct {
 type SynthOpts struct {
 	Config     config.Synthesizer
 	Logger     zerolog.Logger
-	Kinematics *kinematics.KinaticsTracker
+	Kinematics *kinematics.KinematicsTracker
 }
 
 func NewSynth(opts SynthOpts) (*Synthesizer, error) {

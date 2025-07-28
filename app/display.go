@@ -36,15 +36,15 @@ func (a *App) buttenEventCallback() func(bool) {
 }
 
 func (a *App) updateLastActive() {
-	a.lastActive = time.Now()
+	a.state.lastActive = time.Now()
 }
 
 func (a *App) displayPowerOffTimeoutReached() bool {
-	return time.Since(a.lastActive) > 20*time.Second
+	return time.Since(a.state.lastActive) > 20*time.Second
 }
 
 func (a *App) displayInactiveTimeoutReached() bool {
-	return time.Since(a.lastActive) > 5*time.Second
+	return time.Since(a.state.lastActive) > 5*time.Second
 }
 
 func (a *App) powerOffDisplay() {
@@ -57,7 +57,7 @@ func (a *App) powerOffDisplay() {
 	a.display.gear = NullGear
 	a.display.state = displayState(off)
 
-	duration := time.Since(a.lastActive)
+	duration := time.Since(a.state.lastActive)
 	a.log.Debug().Str("screen", "power off").Str("duration", duration.String()).Msg("display update")
 }
 
@@ -68,7 +68,7 @@ func (a *App) drawStartupDisplay(text string) {
 	a.display.gear = NullGear
 	a.display.state = displayState(startup)
 
-	duration := time.Since(a.lastActive)
+	duration := time.Since(a.state.lastActive)
 	a.log.Debug().Str("screen", "startup").Str("duration", duration.String()).Msg("display update")
 }
 
@@ -84,7 +84,7 @@ func (a *App) drawWaitDisplay() {
 	a.display.gear = NullGear
 	a.display.state = displayState(wait)
 
-	duration := time.Since(a.lastActive)
+	duration := time.Since(a.state.lastActive)
 	a.log.Debug().Str("screen", "wait").Str("duration", duration.String()).Msg("display update")
 }
 
@@ -96,7 +96,7 @@ func (a *App) drawLiveDisplay() {
 	}
 
 	a.display.lcdDevice.PowerOn()
-	a.lastActive = time.Now()
+	a.state.lastActive = time.Now()
 
 	canvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
 	a.display.lcdDevice.ShowTextCentered(canvas, gearName(currentGear), gearFontSize)

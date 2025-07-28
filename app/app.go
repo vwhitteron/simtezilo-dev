@@ -2,7 +2,6 @@ package app
 
 import (
 	"fmt"
-	"image"
 	"math"
 	"os"
 	"time"
@@ -10,6 +9,7 @@ import (
 	"github.com/gopxl/beep"
 	"github.com/gopxl/beep/speaker"
 	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 	"github.com/vwhitteron/simtezilo-dev/app/config"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/pirateaudio"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/terminal"
@@ -22,24 +22,33 @@ import (
 	telemetry_client "github.com/zetetos/gt-telemetry"
 )
 
+type appState struct {
+	seq            uint32
+	timeOfDay      time.Duration
+	lastActive     time.Time
+	currentGear    int
+	lastGear       int
+	hapticsEnabled bool
+	vehicleID      uint32
+}
+
 type App struct {
-	buttonsFn          func()
+	log    zerolog.Logger
+	config *config.Config
+	done   chan bool
+
+	display   display
+	buttonsFn func()
+
+	gtClient   *telemetry_client.GTClient
+	kinematics kinematics.KinematicsTracker
+	synth      *synth.Synthesizer
+
+	gearVolumeMin float64
+
+	state appState
+
 	telemetryChartFeed chan map[string]float32
-	config             *config.Config
-	display            display
-	done               chan bool
-	gearVolumeMin      float64
-	gt                 *telemetry_client.GTClient
-	lastGear           int
-	log                zerolog.Logger
-	kinematics         kinematics.KinaticsTracker
-	replayMode         bool
-	seq                uint32
-	hapticsEnabled     bool
-	synth              *synth.Synthesizer
-	timeOfDay          time.Duration
-	lastActive         time.Time
-	vehicleID          uint32
 	webEnabled         bool
 	webUI              *webui.WebUI
 	webSequenceId      uint32
@@ -53,34 +62,37 @@ type AppOptions struct {
 
 func NewApp(opts AppOptions) (*App, error) {
 	a := &App{
-		done:               opts.Done,
-		lastGear:           NullGear,
+		done: opts.Done,
+		state: appState{
+			lastActive: time.Now(),
+			lastGear:   NullGear,
+		},
+		kinematics:         kinematics.NewKinematicsTracker(),
 		telemetryChartFeed: make(chan map[string]float32, 600),
 		webEnabled:         opts.WebEnabled,
 	}
 
+	// setup logger based on cli arg or default warn level
 	logLevel, err := zerolog.ParseLevel(opts.LogLevel)
 	if err != nil {
 		fmt.Printf("invalid log level parameter %q, setting level to warn", opts.LogLevel)
 		logLevel = zerolog.WarnLevel
 	}
+	a.log = zerolog.New(os.Stderr).With().Timestamp().Logger().Level(logLevel)
 
-	log := zerolog.New(os.Stderr).With().Timestamp().Logger().Level(logLevel)
+	// load config from file
+	a.config = config.NewConfig("simtezilo.conf", a.log)
 
-	a.config = config.NewConfig("simtezilo.conf", log)
-	a.replayMode = a.config.App.ReplayMode
-
+	// update logger log level if configured and not overridedn by cli arg
 	if opts.LogLevel == "" {
 		logLevel, err = zerolog.ParseLevel(a.config.App.LogLevel)
 		if err != nil {
-			log.Error().Str("configured", a.config.App.LogLevel).Str("fallback", "warn").Msg("invalid log level")
+			a.log.Error().Str("configured", a.config.App.LogLevel).Str("fallback", logLevel.String()).Msg("invalid log level")
 		}
 	}
+	a.log.Level(logLevel)
 
-	a.log = log.Level(logLevel)
-
-	a.kinematics = kinematics.NewKinematicsTracker()
-
+	// initialise synthesizer
 	a.synth, err = synth.NewSynth(synth.SynthOpts{
 		Config:     a.config.Synthesizer,
 		Logger:     log.With().Str("component", "synth").Logger(),
@@ -96,9 +108,7 @@ func NewApp(opts AppOptions) (*App, error) {
 		return nil, err
 	}
 
-	// Needs to be set before display draw events
-	a.lastActive = time.Now()
-
+	// initialise display and button hardware
 	switch a.config.Hardware.Model {
 	case "pirateaudio":
 		a.display.lcdDevice, err = pirateaudio.NewPirateAudioLCD(pirateaudio.PirateAudioLCDOpts{
@@ -118,10 +128,7 @@ func NewApp(opts AppOptions) (*App, error) {
 			Str("result", "success").
 			Msg("init")
 
-		a.display.lcdDevice.ShowTextCentered(image.NewRGBA(image.Rect(0, 0, 240, 240)), "Loading...", 16)
-
 		// TODO: fix fast button presses can result in a crash when updatting lastActive pointer
-		// buttonsFn = pirateaudio.SetupPirateAudioButtons(display.lcdDevice, synthesizer, config, &lastActive, log)
 		a.buttonsFn = pirateaudio.SetupPirateAudioButtons(a.display.lcdDevice, a.synth, a.config, a.buttenEventCallback(), a.log)
 	case "waveshare":
 		a.display.lcdDevice, err = waveshare.NewWaveshare14972Display(waveshare.Waveshare14972LCDOpts{
@@ -154,12 +161,8 @@ func NewApp(opts AppOptions) (*App, error) {
 		a.buttonsFn = terminal.SetupNullDeviceButtons(a.synth, a.config, opts.Done, a.log)
 	}
 
-	log.Debug().
-		Str("component", "audio output device").
-		Str("result", "success").
-		Msg("init")
-
-	a.gt, err = telemetry_client.NewGTClient(telemetry_client.GTClientOpts{
+	// initialise GT telemetry client
+	a.gtClient, err = telemetry_client.NewGTClient(telemetry_client.GTClientOpts{
 		Source:   a.config.Telemetry.Source,
 		Logger:   &a.log,
 		LogLevel: a.config.App.LogLevel,
@@ -176,16 +179,12 @@ func NewApp(opts AppOptions) (*App, error) {
 		return nil, err
 	}
 
+	a.drawStartupDisplay(Version)
+
 	a.log.Debug().
 		Str("component", "app").
 		Str("result", "success").
 		Msg("init")
-
-	// if !isSetupComplete(log) {
-	// 	runSetupWizard(lcdDevice)
-	// }
-
-	a.drawStartupDisplay(Version)
 
 	return a, nil
 }
@@ -193,7 +192,7 @@ func NewApp(opts AppOptions) (*App, error) {
 func (a *App) Run() {
 	go a.buttonsFn()
 
-	go a.gt.Run()
+	go a.gtClient.Run()
 
 	if a.webEnabled {
 		a.webUI = webui.NewWebUI(a.log, a.telemetryChartFeed)
@@ -245,18 +244,18 @@ func (a *App) Close() {
 func (a *App) hapticEvents() {
 	startTime := time.Now()
 
-	seq := a.gt.Telemetry.SequenceID()
+	seq := a.gtClient.Telemetry.SequenceID()
 
 	// Do nothing until the sequence ID advances
-	seqDelta := seq - a.seq
+	seqDelta := seq - a.state.seq
 	if seq == 0 || seqDelta == 0 {
 		return
 	}
 
-	currentGear := a.gt.Telemetry.CurrentGear()
-	currentVehicleID := a.gt.Telemetry.VehicleID()
+	currentGear := a.gtClient.Telemetry.CurrentGear()
+	currentVehicleID := a.gtClient.Telemetry.VehicleID()
 
-	if a.vehicleID != currentVehicleID {
+	if a.state.vehicleID != currentVehicleID {
 		a.resetState(seq, currentGear)
 		a.disableHaptics("vehicle changed")
 
@@ -267,7 +266,7 @@ func (a *App) hapticEvents() {
 	}
 
 	if !a.shouldGenerateHaptics() {
-		if a.hapticsEnabled {
+		if a.state.hapticsEnabled {
 			a.resetState(seq, currentGear)
 			a.disableHaptics("not live")
 		}
@@ -284,9 +283,9 @@ func (a *App) hapticEvents() {
 	}
 
 	// Initialise the gear if it hasn't been set yet
-	if a.lastGear == NullGear {
-		a.seq = seq
-		a.lastGear = currentGear
+	if a.state.lastGear == NullGear {
+		a.state.seq = seq
+		a.state.lastGear = currentGear
 
 		a.resetState(seq, currentGear)
 		a.disableHaptics("initialising gear")
@@ -294,11 +293,11 @@ func (a *App) hapticEvents() {
 		return
 	}
 
-	currentTimeOfDay := a.gt.Telemetry.TimeOfDay()
-	timeOfDayDelta := currentTimeOfDay - a.timeOfDay
-	a.timeOfDay = currentTimeOfDay
+	currentTimeOfDay := a.gtClient.Telemetry.TimeOfDay()
+	timeOfDayDelta := currentTimeOfDay - a.state.timeOfDay
+	a.state.timeOfDay = currentTimeOfDay
 	if timeOfDayDelta < 0 {
-		a.seq = seq
+		a.state.seq = seq
 
 		a.resetState(seq, currentGear)
 		a.disableHaptics("time of day reset")
@@ -311,7 +310,7 @@ func (a *App) hapticEvents() {
 		return
 	}
 
-	if !a.hapticsEnabled {
+	if !a.state.hapticsEnabled {
 		a.enableHaptics()
 	}
 
@@ -319,7 +318,7 @@ func (a *App) hapticEvents() {
 
 	a.processHaptics(seqDelta)
 
-	a.seq = seq
+	a.state.seq = seq
 	a.kinematics.Current.ComputeTime = time.Since(startTime)
 	a.kinematics.Last = a.kinematics.Current
 
@@ -337,7 +336,7 @@ func (a *App) processHaptics(seqDelta uint32) {
 
 	windowMilliseconds := (float64(seqDelta) / frameRate)
 
-	a.kinematics.Update(windowMilliseconds, a.gt)
+	a.kinematics.Update(windowMilliseconds, a.gtClient)
 
 	// no haptics if telemetry packets dropped/missed
 	if seqDelta > 1 {
@@ -419,7 +418,7 @@ func (a *App) generateBump() {
 }
 
 func (a *App) sessionHasReset(seq uint32) bool {
-	if a.gt.Telemetry.Flags().Loading {
+	if a.gtClient.Telemetry.Flags().Loading {
 		a.log.Debug().
 			Uint32("sequence_id", seq).
 			Msg("loading flag detected")
@@ -431,9 +430,9 @@ func (a *App) sessionHasReset(seq uint32) bool {
 }
 
 func (a *App) resetState(seq uint32, currentGear int) {
-	a.timeOfDay = a.gt.Telemetry.TimeOfDay()
-	a.seq = seq
-	a.lastGear = currentGear
+	a.state.timeOfDay = a.gtClient.Telemetry.TimeOfDay()
+	a.state.seq = seq
+	a.state.lastGear = currentGear
 
 	a.synth.Silence()
 
@@ -446,25 +445,25 @@ func (a *App) disableHaptics(reason string) {
 	// speaker.Suspend()
 	a.synth.Silence()
 	a.synth.ClearBuffer()
-	a.hapticsEnabled = false
+	a.state.hapticsEnabled = false
 
-	a.log.Debug().Bool("haptics enabled", a.hapticsEnabled).Str("reason", reason).Msg("haptics state change")
+	a.log.Debug().Bool("haptics enabled", a.state.hapticsEnabled).Str("reason", reason).Msg("haptics state change")
 }
 
 func (a *App) enableHaptics() {
 	// speaker.Resume()
 	a.synth.FadeIn(3 * time.Second)
-	a.hapticsEnabled = true
+	a.state.hapticsEnabled = true
 
-	a.log.Debug().Bool("haptics enabled", a.hapticsEnabled).Msg("haptics state change")
+	a.log.Debug().Bool("haptics enabled", a.state.hapticsEnabled).Msg("haptics state change")
 }
 
 func (a *App) shouldGenerateHaptics() bool {
-	if a.gt.Telemetry.Flags().GamePaused {
+	if a.gtClient.Telemetry.Flags().GamePaused {
 		return false
 	}
 
-	if !a.gt.Telemetry.Flags().Live && !a.replayMode {
+	if !a.gtClient.Telemetry.Flags().Live && !a.config.App.ReplayMode {
 		return false
 	}
 
@@ -472,19 +471,19 @@ func (a *App) shouldGenerateHaptics() bool {
 }
 
 func (a *App) updateVehicle(currentVehicleID uint32, currentGear int) {
-	vehicleType := a.gt.Telemetry.VehicleType()
-	a.vehicleID = currentVehicleID
+	vehicleType := a.gtClient.Telemetry.VehicleType()
+	a.state.vehicleID = currentVehicleID
 
 	a.log.Debug().
 		Uint32("ID", currentVehicleID).
-		Str("manufacturer", a.gt.Telemetry.VehicleManufacturer()).
-		Str("model", a.gt.Telemetry.VehicleModel()).
+		Str("manufacturer", a.gtClient.Telemetry.VehicleManufacturer()).
+		Str("model", a.gtClient.Telemetry.VehicleModel()).
 		Str("type", vehicleType).
 		Msg("vehicle updated")
 
 	fmt.Printf("Vehicle: %s %s [Type: %s ID: %-4d]\r\n",
-		a.gt.Telemetry.VehicleManufacturer(),
-		a.gt.Telemetry.VehicleModel(),
+		a.gtClient.Telemetry.VehicleManufacturer(),
+		a.gtClient.Telemetry.VehicleModel(),
 		vehicleType,
 		currentVehicleID,
 	)
@@ -496,11 +495,11 @@ func (a *App) updateVehicle(currentVehicleID uint32, currentGear int) {
 		a.gearVolumeMin = float64(a.config.Synthesizer.GearShiftVolumeMinStreet) / 100
 	}
 
-	a.lastGear = currentGear
+	a.state.lastGear = currentGear
 }
 
 func (a *App) checkSessionComplete() {
-	if a.gt.Finished {
+	if a.gtClient.Finished {
 		a.resetState(0, NullGear)
 		a.log.Debug().Msg("session finished")
 		a.done <- true
@@ -526,7 +525,7 @@ func (a *App) playGearChangeHaptic() {
 
 	a.synth.PlayEffectWithVolume("gearchange", volumePercent)
 	a.log.Debug().
-		Int("sequence_id", int(a.seq)).
+		Int("sequence_id", int(a.state.seq)).
 		Int("volume_pc", volumePercent).
 		Int("gear", a.kinematics.Current.TransmissionGear).
 		Msg("gear change")
@@ -559,11 +558,11 @@ func (a *App) sendTelemetryChartData() {
 		return
 	}
 
-	if a.gt.Telemetry.Flags().GamePaused {
+	if a.gtClient.Telemetry.Flags().GamePaused {
 		return
 	}
 
-	if a.gt.Finished {
+	if a.gtClient.Finished {
 		return
 	}
 
@@ -576,14 +575,14 @@ func (a *App) sendTelemetryChartData() {
 	go func() {
 		a.telemetryChartFeed <- map[string]float32{
 			"computeTime":                 float32(a.kinematics.Last.ComputeTime.Microseconds()),
-			"seq":                         float32(a.seq),
-			"timeOfDay":                   float32(a.gt.Telemetry.TimeOfDay().Milliseconds()),
-			"throttleInput":               a.gt.Telemetry.ThrottleInputPercent(),
-			"throttleOutput":              a.gt.Telemetry.ThrottleOutputPercent(),
-			"brakeInput":                  a.gt.Telemetry.BrakeInputPercent(),
-			"brakeOutput":                 a.gt.Telemetry.BrakeOutputPercent(),
-			"rpm":                         a.gt.Telemetry.EngineRPM(),
-			"speed":                       a.gt.Telemetry.GroundSpeedKPH(),
+			"seq":                         float32(a.state.seq),
+			"timeOfDay":                   float32(a.gtClient.Telemetry.TimeOfDay().Milliseconds()),
+			"throttleInput":               a.gtClient.Telemetry.ThrottleInputPercent(),
+			"throttleOutput":              a.gtClient.Telemetry.ThrottleOutputPercent(),
+			"brakeInput":                  a.gtClient.Telemetry.BrakeInputPercent(),
+			"brakeOutput":                 a.gtClient.Telemetry.BrakeOutputPercent(),
+			"rpm":                         a.gtClient.Telemetry.EngineRPM(),
+			"speed":                       a.gtClient.Telemetry.GroundSpeedKPH(),
 			"gear":                        float32(a.kinematics.Current.TransmissionGear),
 			"surgeGforce":                 float32(a.kinematics.Current.SixDOFTranslation.Acceleration) / kinematics.GravityConstant,
 			"surgeGforceCalc":             float32(a.kinematics.Current.SurgeCalculated) / kinematics.GravityConstant,
