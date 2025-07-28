@@ -5,6 +5,7 @@ import (
 	"image"
 	"image/color"
 	"image/draw"
+	"time"
 
 	_ "image/png"
 
@@ -78,6 +79,7 @@ func (l *PirateAudioLCD) Clear() {
 
 func (l *PirateAudioLCD) Close() {
 	l.Clear()
+	time.Sleep(1 * time.Second)
 	l.device.PowerOff()
 	l.device.Close()
 }

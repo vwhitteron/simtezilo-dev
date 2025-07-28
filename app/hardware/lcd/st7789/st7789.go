@@ -49,6 +49,7 @@ func NewSPI(port spi.Port, dataComm gpio.PinOut, opts *Opts) (*Device, error) {
 		return nil, err
 	}
 
+	// TODO: not sure if this is needed, have to check the datasheet
 	if err = opts.Backlight.Out(gpio.Low); err != nil {
 		panic(err)
 	}

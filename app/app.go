@@ -28,6 +28,7 @@ type appState struct {
 	seq            uint32
 	timeOfDay      time.Duration
 	lastActive     time.Time
+	startTime      time.Time
 	currentGear    int
 	lastGear       int
 	hapticsEnabled bool
@@ -69,6 +70,7 @@ func NewApp(opts AppOptions) (*App, error) {
 		state: appState{
 			lastActive: time.Now(),
 			lastGear:   NullGear,
+			startTime:  time.Now(),
 		},
 		hidEvents:          make(chan ui.HIDInputEvent, 10),
 		menuSystem:         ui.NewMenuSystem(),
@@ -78,24 +80,27 @@ func NewApp(opts AppOptions) (*App, error) {
 	}
 
 	// setup logger based on cli arg or default warn level
-	logLevel, err := zerolog.ParseLevel(opts.LogLevel)
+	argLogLevel, err := zerolog.ParseLevel(opts.LogLevel)
 	if err != nil {
-		fmt.Printf("invalid log level parameter %q, setting level to warn", opts.LogLevel)
-		logLevel = zerolog.WarnLevel
+		log.Printf("invalid log level parameter %q, setting level to warn", opts.LogLevel)
+		argLogLevel = zerolog.WarnLevel
 	}
-	a.log = zerolog.New(os.Stderr).With().Timestamp().Logger().Level(logLevel)
+	a.log = zerolog.New(os.Stderr).With().Timestamp().Logger().Level(argLogLevel)
+	a.log.Debug().Str("level", argLogLevel.String()).Str("source", "cli arg").Msg("log level update")
 
 	// load config from file
 	a.config = config.NewConfig("simtezilo.conf", a.log)
 
-	// update logger log level if configured and not overridedn by cli arg
+	// update logger log level if configured and not overridden by cli arg
 	if opts.LogLevel == "" {
-		logLevel, err = zerolog.ParseLevel(a.config.App.LogLevel)
+		configLogLevel, err := zerolog.ParseLevel(a.config.App.LogLevel)
 		if err != nil {
-			a.log.Error().Str("configured", a.config.App.LogLevel).Str("fallback", logLevel.String()).Msg("invalid log level")
+			a.log.Error().Str("configured", a.config.App.LogLevel).Str("fallback", argLogLevel.String()).Msg("invalid log level")
 		}
+
+		a.log.Debug().Str("level", configLogLevel.String()).Str("source", "config").Msg("log level update")
+		a.log.Level(configLogLevel)
 	}
-	a.log.Level(logLevel)
 
 	// initialise synthesizer
 	a.synth, err = synth.NewSynth(synth.SynthOpts{
@@ -104,7 +109,7 @@ func NewApp(opts AppOptions) (*App, error) {
 		Kinematics: &a.kinematics,
 	})
 	if err != nil {
-		log.Error().
+		a.log.Error().
 			Err(err).
 			Str("component", "synth").
 			Str("result", "failure").
@@ -134,10 +139,12 @@ func NewApp(opts AppOptions) (*App, error) {
 			Str("sub", "lcd").
 			Str("result", "success").
 			Msg("init")
-		a.display.lcdDevice.Clear()
 
 		pirateaudio.SetupPirateAudioHID(a.hidEvents)
-		log.Debug().Str("component", "pirate audio").Str("sub", "hid").Msg("init")
+		a.log.Debug().
+			Str("component", "pirate audio").
+			Str("sub", "hid").
+			Msg("init")
 	case "waveshare":
 		a.display.lcdDevice, err = waveshare.NewWaveshare14972Display(waveshare.Waveshare14972LCDOpts{
 			Orientation: a.config.Hardware.DisplayOrientation,
@@ -157,7 +164,6 @@ func NewApp(opts AppOptions) (*App, error) {
 			Str("sub", "lcd").
 			Str("result", "success").
 			Msg("init")
-		a.display.lcdDevice.Clear()
 
 		waveshare.SetupWaveshareHID(a.hidEvents)
 		log.Debug().
@@ -191,7 +197,7 @@ func NewApp(opts AppOptions) (*App, error) {
 			Str("component", "gt client").
 			Str("result", "failure").
 			Msg("init")
-
+		a.display.lcdDevice.PowerOn()
 		a.display.lcdDevice.Show("error")
 
 		return nil, err
@@ -208,8 +214,6 @@ func NewApp(opts AppOptions) (*App, error) {
 }
 
 func (a *App) Run() {
-	// go a.hidSetupFn()
-
 	go a.hidEventHandler()
 
 	go a.gtClient.Run()
@@ -265,7 +269,17 @@ func (a *App) Close() {
 }
 
 func (a *App) hidEventHandler() {
+	ready := false
 	for key := range a.hidEvents {
+		// discard hid events in the first 2 seconds after app start
+		if !ready {
+			if time.Since((a.state.startTime)) < 2*time.Second {
+				continue
+			}
+
+			ready = true
+		}
+
 		menuPage := a.menuSystem.GetCurrentMenuPage()
 		value := ""
 
