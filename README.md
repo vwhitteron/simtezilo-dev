@@ -28,12 +28,18 @@ Install [Log2Ram](https://github.com/azlux/log2ram)
 
 ### Pimoroni PirateAudio Line Out
 
+1. Enable SPI in order to use the LCD
+2. Turn the backlight off by driving GPIO 13 low when not in use
+3. Enable the hifiberry-dac driver
+4. Enable the audio amp by driving GPIO 25 high
+
 Add the following to `/boot/config.txt`.
 
 ```
+dtparam=spi=on
+gpio=13=op,dl
 dtoverlay=hifiberry-dac
 gpio=25=op,dh
-dtparam=spi=on
 ```
 
 Recommended master gain setting:
