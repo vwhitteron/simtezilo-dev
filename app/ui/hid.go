@@ -10,6 +10,8 @@ const (
 	HIDInputRight
 	HIDInputPageUp
 	HIDInputPageDown
+	HIDInputHome
+	HIDInputEnd
 	HIDInputEnter
 	HIDInputEscape
 	HIDInputPower

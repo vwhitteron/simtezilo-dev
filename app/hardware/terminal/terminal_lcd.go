@@ -38,8 +38,6 @@ func (d *NullDisplay) IsPoweredOn() bool {
 
 func (d *NullDisplay) Show(string) {}
 
-func (d *NullDisplay) ShowText(string) {}
-
 func (d *NullDisplay) ShowTextCentered(*image.RGBA, string, int) {}
 
 func (d *NullDisplay) ShowTextOverlay(string, string, int) {}

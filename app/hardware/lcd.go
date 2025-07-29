@@ -12,7 +12,6 @@ type LCD interface {
 	PowerToggle() bool
 	IsPoweredOn() bool
 	Show(string)
-	ShowText(string)
 	ShowTextCentered(*image.RGBA, string, int)
 	ShowTextOverlay(string, string, int)
 	GetOrientation() int

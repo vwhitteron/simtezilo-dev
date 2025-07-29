@@ -11,7 +11,6 @@ import (
 	_ "image/png"
 
 	"github.com/golang/freetype/truetype"
-	"github.com/rubiojr/go-pirateaudio/textview"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/lcd/st7789"
 	"github.com/vwhitteron/simtezilo-dev/app/ui"
 	"golang.org/x/image/font"
@@ -183,15 +182,6 @@ func (l *PirateAudioLCD) IsPoweredOn() bool {
 func (l *PirateAudioLCD) Show(sprite string) {
 	img := l.sprites.GetSprite(sprite)
 	l.device.DrawRAW(img)
-}
-
-func (l *PirateAudioLCD) ShowText(text string) {
-	l.Clear()
-	opts := textview.DefaultOpts
-	opts.FGColor = textview.GREEN
-	opts.FontSize = 64
-	tv := textview.NewWithOptions(opts)
-	tv.DrawChars(text)
 }
 
 func (l *PirateAudioLCD) ShowTextCentered(canvas *image.RGBA, text string, size int) {

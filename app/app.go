@@ -14,6 +14,7 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/config"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/pirateaudio"
+	"github.com/vwhitteron/simtezilo-dev/app/hardware/spotpear"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/terminal"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/waveshare"
 	"github.com/vwhitteron/simtezilo-dev/app/kinematics"
@@ -148,6 +149,33 @@ func NewApp(opts AppOptions) (*App, error) {
 		pirateaudio.SetupHID(a.hidEvents)
 		a.log.Debug().
 			Str("component", "pirate audio").
+			Str("sub", "hid").
+			Msg("init")
+	case "spotpear":
+		hardware.Init()
+
+		a.display.lcdDevice, err = spotpear.NewDisplay(spotpear.LCDOpts{
+			Orientation: a.config.Hardware.DisplayOrientation,
+		})
+		if err != nil {
+			a.log.Error().
+				Err(err).
+				Str("component", "spotpear game 1.3").
+				Str("sub", "lcd").
+				Str("result", "failure").
+				Msg("init")
+
+			return nil, err
+		}
+		a.log.Debug().
+			Str("component", "spotpear game 1.3").
+			Str("sub", "lcd").
+			Str("result", "success").
+			Msg("init")
+
+		spotpear.SetupHID(a.hidEvents)
+		log.Debug().
+			Str("component", "spotpear game 1.3").
 			Str("sub", "hid").
 			Msg("init")
 	case "waveshare":

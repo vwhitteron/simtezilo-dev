@@ -11,7 +11,6 @@ import (
 	_ "image/png"
 
 	"github.com/golang/freetype/truetype"
-	"github.com/rubiojr/go-pirateaudio/textview"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/lcd/st7789"
 	"github.com/vwhitteron/simtezilo-dev/app/ui"
 	"golang.org/x/image/font"
@@ -173,15 +172,6 @@ func (l *Waveshare14972LCD) Show(sprite string) {
 	l.canvas = canvas
 
 	l.device.DrawRAW(canvas)
-}
-
-func (l *Waveshare14972LCD) ShowText(text string) {
-	l.Clear()
-	opts := textview.DefaultOpts
-	opts.FGColor = textview.GREEN
-	opts.FontSize = 64
-	tv := textview.NewWithOptions(opts)
-	tv.DrawChars(text)
 }
 
 func (l *Waveshare14972LCD) ShowTextCentered(canvas *image.RGBA, text string, size int) {
