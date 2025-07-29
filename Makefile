@@ -96,10 +96,31 @@ build/rpi/v8/64:
 	--output=out --target=binaries-arm64-8 --progress=plain \
 	-f build/docker/Dockerfile .
 
-## run/live: run the application with reloading on file changes
+## run/live: run the application locally
 .PHONY: run/live
 run/live:
 	@go run cmd/simtezilo/main.go -l debug -w=true
+
+## run/profile: run the application with profiling enabled
+.PHONY: run/profile
+run/profile:
+	@go run cmd/simtezilo/main.go -l debug -p=http://localhost:4040 -w=true
+
+## start-pyroscope: start the Pyroscope profiler Docker container
+.PHONY: start-pyroscope
+start-pyroscope:
+	@docker run \
+	--name pyroscope \
+	--rm --detach \
+	-p 4040:4040 \
+	-v $(shell pwd)/data/persist/pyroscope:/data \
+	grafana/pyroscope:latest
+	@echo "Pyroscope started. Access it at http://localhost:4040"
+
+## start-pyroscope: start the Pyroscope profiler Docker container
+.PHONY: start-pyroscope
+stop-pyroscope:
+	@docker stop pyroscope
 
 ## clean: clean up build output files
 .PHONY: clean
@@ -116,4 +137,5 @@ dist: build/rpi/v6 build/rpi/v8/64 build/windows/64 build/darwin/silicon
 .PHONY: distclean
 distclean: clean
 	@rm -rf dist
+	@rm -rf data/persist/pyroscope
 	@docker builder prune -af

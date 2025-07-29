@@ -26,11 +26,11 @@ func main() {
 	}()
 
 	var logLevel string
-	var profilingEnabled bool
+	var profilerEndpoint string
 	var webEnabled bool
 
 	flag.StringVar(&logLevel, "l", "", "Log level. Default is 'warn'")
-	flag.BoolVar(&profilingEnabled, "profiling", false, "Enable profiling. Default is false")
+	flag.StringVar(&profilerEndpoint, "p", "", "Send profiles to this Pyroscope endpoint (http://host:port). Default is off")
 	flag.BoolVar(&webEnabled, "w", false, "Enable web server. Default is false")
 	flag.Parse()
 
@@ -39,26 +39,9 @@ func main() {
 	}
 	fmt.Printf("Simtezilo version %s (built %s)\n", app.Version, app.BuildTime)
 
-	profiler, err := app.NewPyroscopeProfiler(
-		"http://10.255.1.128:4040",
-		map[string]string{
-			"app":       "simtezilo",
-			"version":   app.Version,
-			"buildTime": app.BuildTime,
-			"hostname":  os.Getenv("HOSTNAME"),
-		},
-	)
+	profiler, err := startPyroscope(profilerEndpoint)
 	if err != nil {
-		log.Fatal("Error creating Pyroscope profiler: ", err)
-	}
-
-	if profilingEnabled {
-		err = profiler.Start()
-		if err != nil {
-			log.Fatal("Error starting Pyroscope profiler: ", err)
-		}
-
-		log.Println("Pyroscope profiler started with UI at " + profiler.Endpoint())
+		log.Fatalf("Failed to setup Pyroscope profiler: %s", err.Error())
 	}
 
 	app, err := app.NewApp(app.AppOptions{
@@ -74,8 +57,38 @@ func main() {
 
 	<-done
 	app.Close()
-	err = profiler.Shutdown()
-	if err != nil {
-		log.Fatal("Error shutting down Pyroscope profiler: ", err)
+	if profiler != nil {
+		err = profiler.Shutdown()
+		if err != nil {
+			log.Fatalf("Error shutting down Pyroscope profiler: ", err)
+		}
 	}
+}
+
+func startPyroscope(endpoint string) (*app.PyroscopeProfiler, error) {
+	if endpoint == "" {
+		return nil, nil
+	}
+
+	profiler, err := app.NewPyroscopeProfiler(
+		endpoint,
+		map[string]string{
+			"app":       "simtezilo",
+			"version":   app.Version,
+			"buildTime": app.BuildTime,
+			"hostname":  os.Getenv("HOSTNAME"),
+		},
+	)
+	if err != nil {
+		log.Fatal("create Pyroscope profiler: ", err)
+	}
+
+	err = profiler.Start()
+	if err != nil {
+		log.Fatal("start Pyroscope profiler: ", err)
+	}
+
+	log.Println("View profiling data inPyroscope at " + profiler.Endpoint())
+
+	return profiler, nil
 }
