@@ -148,9 +148,9 @@ const (
 	LCMCTRL_XBGR = 0x20 // XOR RGB setting in MADCTL
 	LCMCTRL_XREV = 0x10 // XOR inverse setting in INVON
 	LCMCTRL_XMH  = 0x08 // Reverse source output order and only support RGB interface without RAM mode
-	LMCTRL_XMV   = 0x04 // XOR MV setting in MADCTL
-	LMCTRL_XMX   = 0x02 // XOR MX setting in MADCTL
-	LMCTRL_XGS   = 0x01 // XOR GS setting in GATECTRL
+	LCMCTRL_XMV  = 0x04 // XOR MV setting in MADCTL
+	LCMCTRL_XMX  = 0x02 // XOR MX setting in MADCTL
+	LCMCTRL_XGS  = 0x01 // XOR GS setting in GATECTRL
 
 	// MADCTL bits
 	MADCTL_MY_TB   = 0x00 // Page address order top to bottom
@@ -176,40 +176,99 @@ const (
 	SPI_CLOCK_HZ = 16000000
 )
 
-func defaultGateControl() uint8 {
-	// return 0x14 // VGH (V) = 12.54, VGL (V) = -9.6
-	return 0x35
+// DefaultCOLMOD returns the default color mode settings specified by the manufacturer.
+//
+// COLMOD: 18-bit color, non-RGB
+func DefaultCOLMOD() []byte {
+	return []byte{COLMOD_CTRL_262K}
 }
 
-func defaultNegativeGammaCtrl() []byte {
-	// return []byte{0xD0, 0x04, 0x0C, 0x11, 0x13, 0x2C, 0x3F, 0x44, 0x51, 0x2F, 0x1F, 0x1F, 0x20, 0x23}
-	return []byte{0x00, 0x18, 0x1E, 0x0A, 0x09, 0x25, 0x3F, 0x43, 0x52, 0x33, 0x03, 0x00, 0x3F, 0x3F}
+// DefaultFRCTL1 returns the default partial mode/idle colors frame rate settings specified by the manufacturer.
+//
+//	FRCTRL1: {
+//		FRSEN = disabled, DIV = 1,
+//		Idle Inversion(Dot = true, Column = false),
+//		Partial Mode Inversion(Dot = true, Column = false),
+//		RTNB = 60Hz, RTNC = 60Hz
+//	}
+func DefaultFRCTL1() []byte {
+	return []byte{0x00, 0x0F, 0x0F}
 }
 
-func defaultPorchControl() []byte {
+// DefaultFRCTRL2 returns the default normal frame rate setting specified by the manufacturer.
+//
+// FRCTRL2: 60Hz
+func DefaultFRCTRL2() []byte {
+	return []byte{FRAMERATE_60}
+}
+
+// DefaultGCTRL returns the default gate control settings specified by the manufacturer.
+//
+// GCTRL: High = 13.26v, Low = -10.43v
+func DefaultGCTRL() []byte {
+	return []byte{0x35}
+}
+
+// DefaultLCMCTRL returns the default LCM control settings specified by the manufacturer.
+//
+// LCMCTRL: XOR RGB/BGR, XOR Column Address Order, XOR Display Data Latch Order
+func DefaultLCMCTRL() []byte {
+	return []byte{0x2C}
+}
+
+// DefaultNVGAMCTRL returns the default negative voltage gamma control settings specified by the manufacturer.
+func DefaultNVGAMCTRL() []byte {
+	return []byte{0x70, 0x2C, 0x2E, 0x15, 0x10, 0x09, 0x48, 0x33, 0x53, 0x0B, 0x19, 0x18, 0x20, 0x25}
+}
+
+// DefaultPORCTRL returns the default porch control settings specified by the maufacturer.
+//
+// PORCTRL: Normal(Back Front), PSEN = disabled, Idle(Back, Front)
+func DefaultPORCTRL() []byte {
 	return []byte{0x0C, 0x0C, 0x00, 0x33, 0x33}
 }
 
-func defaultPositiveGammaCtrl() []byte {
-	// return []byte{0xD0, 0x04, 0x0D, 0x11, 0x13, 0x2B, 0x3F, 0x54, 0x4C, 0x18, 0x0D, 0x0B, 0x1F, 0x23}
-	return []byte{0x00, 0x19, 0x1E, 0x0A, 0x09, 0x15, 0x3D, 0x44, 0x51, 0x12, 0x03, 0x00, 0x3F, 0x3F}
+// DefaultPVGAMCTRL returns the default positive voltage gamma control settings specified by the manufacturer.
+func DefaultPVGAMCTRL() []byte {
+	return []byte{0x70, 0x2C, 0x2E, 0x15, 0x10, 0x09, 0x48, 0x33, 0x53, 0x0B, 0x19, 0x18, 0x20, 0x25}
 }
 
-func defaultPowerCtrl() []byte {
+// DefaultPWCTRL1 returns the default power control 1 settings specified by the manufacturer.
+//
+// PWCTRL1: AVDD = 6.8v, AVCL = -4.6v, VDS = 2.3v
+func DefaultPWCTRL1() []byte {
 	return []byte{0xA4, 0xA1}
 }
 
-func defaulVCOMSOffsetSet() uint8 {
-	// return 0x37 // VCOMS OFFSET(V) = 0.575
-	return 0x1A
+// DefaultVCOMS returns the default VCOM settings specified by the manufacturer.
+//
+// VCOMS: 0.9v
+func DefaulVCOMS() []byte {
+	return []byte{0x20}
 }
 
-func defaultVDVSet() uint8 {
-	return 0x20 // VDV (V) = 0
+// DefaultVDVVRHEN returns the default VDV and VRH setting specified by the manufacturer.
+//
+// VDVVRHEN: CMDEN = VDV and VRH register value comes from command write.
+func DefaultVDVVRHEN() []byte {
+	return []byte{VDVVRHEN_CMDEN_WRITE}
 }
 
-func defaultVRHSet() uint8 {
-	return 0x12 // VAP(GVDD) (V) = 4.45+(vcom+vcom offset+0.5vdv)
+// DefaultVDVS returns the default VDV setting specified by the manufacturer.
+//
+// VDV: 0v
+func DefaultVDVS() []byte {
+	return []byte{0x20}
+}
+
+// DefaultVRHS returns the default VAP(GVDD) and VAN(GVCL) settings specified by the manufacturer.
+//
+//	VRHS: {
+//		VAP(GVDD) =  4.1v + (vcom+vcom offset-vdv)
+//		VAN(GVCL) = -4.1v + (vcom+vcom offset-vdv)
+//	}
+func DefaultVRHS() []byte {
+	return []byte{0x0B}
 }
 
 func verticalScrollOffset(offset int) []byte {

@@ -4,13 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"image"
-	"image/color"
-	"image/draw"
 	_ "image/gif"
 	_ "image/jpeg"
 	_ "image/png"
-	"io"
-	"log"
 	"time"
 
 	"periph.io/x/conn/v3"
@@ -19,75 +15,137 @@ import (
 	"periph.io/x/conn/v3/spi"
 )
 
-// DefaultOpts is the recommended default options.
-var DefaultOpts = Opts{
-	Width:     240,
-	Height:    240,
-	Rotation:  ROTATION_NONE,
-	Backlight: gpio.INVALID,
+const (
+	defaultPixelColumns int16            = 320
+	defaultPixelRows    int16            = 240
+	defaultSPIFrequency physic.Frequency = 40 * physic.MegaHertz
+	defaultSPIBits      int              = 8
+)
+
+// SPIDeviceConfig holds the configuration for setting up SPI communication with an ST7789 device.
+type SPIDeviceConfig struct {
+	PixelColumns int16            // Number of pixels in the horizontal direction, defaults to 320.
+	PixelRows    int16            // Number of pixels in the vertical direction, defaults to 240.
+	Rotation     Rotation         // Display rotation, defaults to ROTATION_0.
+	DataCommPin  gpio.PinOut      // GPIO pin used for data/command selection, must be set to a valid GPIO pin.
+	ResetPin     gpio.PinIO       // GPIO pin used for resetting the display, defaults to gpio.INVALID.
+	BacklightPin gpio.PinIO       // GPIO pin used for controlling the backlight, defaults to gpio.INVALID.
+	SPIPort      spi.Port         // SPI port to use for communication, must be set to a valid SPI port.
+	SPIMode      spi.Mode         // SPI mode to use, defaults to spi.Mode0.
+	SPIFrequency physic.Frequency // SPI frequency to use, defaults to 40MHz.
+	SPIBits      int              // Number of bits per SPI transfer, defaults to 8 bits.
+
+	spiConn conn.Conn // Internal connection to the SPI device.
 }
 
-// Opts defines the options for the device.
-type Opts struct {
-	Width     int16
-	Height    int16
-	Rotation  Rotation
-	Reset     gpio.PinIO
-	Backlight gpio.PinIO
-}
-
-func NewSPI(port spi.Port, dataComm gpio.PinOut, opts *Opts) (*Device, error) {
-	if dataComm == gpio.INVALID {
-		return nil, errors.New("ssd1306: use nil for dc to use 3-wire mode, do not use gpio.INVALID")
-	}
-	bits := 8
-	if err := dataComm.Out(gpio.Low); err != nil {
-		return nil, err
-	}
-	conn, err := port.Connect(40*physic.MegaHertz, spi.Mode0, bits)
+// NewSPI creates a new SPI connected ST7789 device and returns a handle to it.
+func NewSPI(config *SPIDeviceConfig) (*Device, error) {
+	err := validateConfig(config)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("invalid config: %w", err)
 	}
 
-	// TODO: not sure if this is needed, have to check the datasheet
-	if err = opts.Backlight.Out(gpio.Low); err != nil {
-		panic(err)
-	}
-	time.Sleep(100 * time.Millisecond)
-	if err = opts.Backlight.Out(gpio.High); err != nil {
-		panic(err)
+	// ensure successful access to the data comm pin
+	if err := config.DataCommPin.Out(gpio.Low); err != nil {
+		return nil, fmt.Errorf("set data comm pin low: %w", err)
 	}
 
-	return newST7789Device(conn, opts, dataComm)
+	if config.BacklightPin != gpio.INVALID {
+		// ensure successful access to the backlight pin and default to an off state
+		if err := config.BacklightPin.Out(gpio.Low); err != nil {
+			return nil, fmt.Errorf("set backlight pin low: %w", err)
+		}
+	}
+
+	config.spiConn, err = config.SPIPort.Connect(config.SPIFrequency, config.SPIMode, config.SPIBits)
+	if err != nil {
+		return nil, fmt.Errorf("connect to SPI port: %w", err)
+	}
+
+	return newST7789Device(config)
 }
 
+// validateConfig checks the provided configuration for the ST7789 device and sets defaults where necessary.
+func validateConfig(config *SPIDeviceConfig) error {
+	if config.DataCommPin == gpio.INVALID || config.DataCommPin == nil {
+		return errors.New("DataComm must be set to a valid GPIO pin")
+	}
+
+	if config.ResetPin == nil {
+		config.ResetPin = gpio.INVALID
+	}
+
+	if config.BacklightPin == nil {
+		config.BacklightPin = gpio.INVALID
+	}
+
+	if config.PixelColumns == 0 {
+		config.PixelColumns = defaultPixelColumns
+	}
+
+	if config.PixelRows == 0 {
+		config.PixelRows = defaultPixelRows
+	}
+
+	if config.SPIFrequency <= 0 {
+		config.SPIFrequency = defaultSPIFrequency
+	}
+
+	if config.SPIBits <= 0 {
+		config.SPIBits = defaultSPIBits
+	}
+
+	return nil
+}
+
+// Device represents an ST7789 LCD device with associated methods for interacting with the display.
 type Device struct {
-	conn      conn.Conn
-	dataComm  gpio.PinOut
-	reset     gpio.PinIO
-	backlight gpio.PinIO
-	rect      image.Rectangle
+	conn      conn.Conn       // SPI connection to the device.
+	dataComm  gpio.PinOut     // GPIO pin for data/command selection.
+	reset     gpio.PinIO      // GPIO pin for resetting the display.
+	backlight gpio.PinIO      // GPIO pin for controlling the backlight.
+	rect      image.Rectangle // Rectangle defining the display area.
 
-	rotation                      Rotation
-	width                         int16
-	height                        int16
-	rowOffsetCfg, rowOffset       int16
-	columnOffset, columnOffsetCfg int16
-	isBGR                         bool
-	batchLength                   int32
+	rotation                      Rotation // Current rotation of the display.
+	pixelColumns                  int16    // Number of pixels in the horizontal direction.
+	pixelRows                     int16    // Number of pixels in the vertical direction.
+	rowOffsetCfg, rowOffset       int16    // Row offset for the display, used for rotation adjustments.
+	columnOffset, columnOffsetCfg int16    // Column offset for the display, used for rotation adjustments.
+	isBGR                         bool     // Indicates if the display uses BGR color format.
+	batchLength                   int32    // Length of the batch for pixel data transfers.
 }
 
+// newST7789Device initializes a new ST7789 device with the provided configuration.
+func newST7789Device(config *SPIDeviceConfig) (*Device, error) {
+	d := &Device{
+		conn:         config.spiConn,
+		dataComm:     config.DataCommPin,
+		rect:         image.Rect(0, 0, int(config.PixelColumns), int(config.PixelRows)),
+		rotation:     config.Rotation,
+		pixelColumns: config.PixelColumns,
+		pixelRows:    config.PixelRows,
+		batchLength:  int32(config.PixelColumns),
+		reset:        config.ResetPin,
+		backlight:    config.BacklightPin,
+	}
+	d.batchLength = d.batchLength & 1
+
+	return d, nil
+}
+
+// String returns a string representation of the ST7789 device.
+// It includes the connection type, data communication pin, and display dimensions.
 func (d *Device) String() string {
 	return fmt.Sprintf("st7789.Device{%s, %s, %s}", d.conn, d.dataComm, d.rect.Max)
 }
 
-// Bounds implements display.Drawer. Min is guaranteed to be {0, 0}.
-func (d *Device) Bounds() image.Rectangle {
-	return d.rect
-}
-
-// Reset the display
+// Reset triggers a software reset of the ST7789 display device.
+// When the reset pin is not provided, this method does nothing.
 func (d *Device) Reset() error {
+	if d.reset == gpio.INVALID {
+		return nil
+	}
+
 	err := d.reset.Out(gpio.High)
 	if err != nil {
 		return err
@@ -109,93 +167,71 @@ func (d *Device) Reset() error {
 	return nil
 }
 
-// PowerOff the display
+// PowerOff disables the backlight of the ST7789 display device.
+// When the backlight pin is not provided, this method does nothing.
 func (d *Device) PowerOff() error {
+	if d.backlight == gpio.INVALID {
+		return nil
+	}
+
 	return d.backlight.Out(gpio.Low)
 }
 
-// PowerOn the display
+// PowerOff enables the backlight of the ST7789 display device.
+// When the backlight pin is not provided, this method does nothing.
 func (d *Device) PowerOn() error {
+	if d.backlight == gpio.INVALID {
+		return nil
+	}
+
 	return d.backlight.Out(gpio.High)
 }
 
-// Invert the display (black on white vs white on black).
+// Invert performs a black/white inversion of the display contents.
 func (d *Device) Invert(blackOnWhite bool) {
 	b := byte(0xA6)
 	if blackOnWhite {
 		b = 0xA7
 	}
+
 	d.Command(b)
 }
 
-func newST7789Device(conn conn.Conn, opts *Opts, dataComm gpio.PinOut) (*Device, error) {
-	d := &Device{
-		conn:        conn,
-		dataComm:    dataComm,
-		rect:        image.Rect(0, 0, int(opts.Width), int(opts.Height)),
-		rotation:    opts.Rotation,
-		width:       opts.Width,
-		height:      opts.Height,
-		batchLength: int32(opts.Width),
-		reset:       opts.Reset,
-		backlight:   opts.Backlight,
+// SendData sends a block of data to the ST7789 display device.
+func (d *Device) SendData(c []byte) error {
+	if err := d.dataComm.Out(gpio.High); err != nil {
+		return err
 	}
-	d.batchLength = d.batchLength & 1
-
-	// d.Command(SWRESET)
-	// time.Sleep(150 * time.Millisecond)
-
-	// d.Command(MADCTL)
-	// d.Data(MADCTL_MX_RL | MADCTL_MV_REV | MADCTL_ML_BT)
-
-	// d.Command(PORCTRL)
-	// d.SendData(defaultPorchControl())
-
-	// d.Command(COLMOD)
-	// d.Data(COLMOD_CTRL_65K)
-
-	// d.Command(GCTRL)
-	// d.Data(defaultGateControl())
-
-	// d.Command(VCOMS)
-	// d.Data(defaulVCOMSOffsetSet())
-
-	// d.Command(LCMCTRL)
-	// d.Data(LCMCTRL_XBGR | LCMCTRL_XMH | LMCTRL_XMV)
-
-	// d.Command(VDVVRHEN)
-	// d.Data(VDVVRHEN_CMDEN_WRITE)
-
-	// d.Command(VRHS)
-	// d.Data(defaultVRHSet())
-
-	// d.Command(VDVS)
-	// d.Data(defaultVDVSet())
-
-	// d.Command(PWCTRL1)
-	// d.SendData(defaultPowerCtrl())
-
-	// d.Command(FRCTRL2)
-	// d.Data(FRAMERATE_60)
-
-	// d.Command(PVGAMCTRL)
-	// d.SendData(defaultPositiveGammaCtrl())
-
-	// d.Command(NVGAMCTRL)
-	// d.SendData(defaultNegativeGammaCtrl())
-
-	// d.Command(INVON)
-
-	// d.Command(SLPOUT)
-
-	// d.Command(DISPON)
-
-	return d, nil
+	return d.conn.Tx(c, nil)
 }
 
+// SendCommand sends a command to the ST7789 display device.
+func (d *Device) SendCommand(c []byte) error {
+	if err := d.dataComm.Out(gpio.Low); err != nil {
+		return err
+	}
+
+	return d.conn.Tx(c, nil)
+}
+
+// Size returns the current pixel row and column sizes of the display.
+func (d *Device) Size() (int16, int16) {
+	if d.rotation == ROTATION_NONE || d.rotation == ROTATION_180 {
+		return d.pixelColumns, d.pixelRows
+	}
+
+	return d.pixelRows, d.pixelColumns
+}
+
+// PixelCount returns the total pixels count of the display.
+func (d *Device) PixelCount() uint32 {
+	return uint32(d.pixelColumns) * uint32(d.pixelRows)
+}
+
+// SetWindow sets the current window dimensions for drawing on the display.
 func (d *Device) SetWindow() {
-	x1 := d.width - 1
-	y1 := d.height - 1
+	x1 := d.pixelColumns - 1
+	y1 := d.pixelRows - 1
 	y0 := 0
 	x0 := 0
 
@@ -215,132 +251,7 @@ func (d *Device) SetWindow() {
 	d.Data(0x89)
 }
 
-func (d *Device) SendData(c []byte) error {
-	if err := d.dataComm.Out(gpio.High); err != nil {
-		return err
-	}
-	return d.conn.Tx(c, nil)
-}
-
-func (d *Device) SendCommand(c []byte) error {
-	if err := d.dataComm.Out(gpio.Low); err != nil {
-		return err
-	}
-	return d.conn.Tx(c, nil)
-}
-
-// FillRectangle fills a rectangle at a given coordinates with a color
-func (d *Device) FillRectangle(x, y, width, height int16, c color.RGBA) error {
-	k, i := d.Size()
-	if x < 0 || y < 0 || width <= 0 || height <= 0 ||
-		x >= k || (x+width) > k || y >= i || (y+height) > i {
-		return errors.New("rectangle coordinates outside display area")
-	}
-	d.SetWindow()
-	c565 := RGBATo565(c)
-	c1 := uint8(c565)
-	c2 := uint8(c565 >> 8)
-
-	data := make([]uint8, d.PixelCount())
-	for i := int32(0); i < int32(d.width); i++ {
-		data[i*2] = c1
-		data[i*2+1] = c2
-	}
-	j := int32(width) * int32(height)
-	for j > 0 {
-		if j >= int32(d.height) {
-			d.SendData(data)
-		} else {
-			d.SendData(data[:j*2])
-		}
-		j -= int32(d.height)
-	}
-	return nil
-}
-
-// Size returns the current size of the display.
-func (d *Device) Size() (int16, int16) {
-	if d.rotation == ROTATION_NONE || d.rotation == ROTATION_180 {
-		return d.width, d.height
-	}
-	return d.height, d.width
-}
-
-// PixelCount returns the number of pixels in the display
-func (d *Device) PixelCount() uint32 {
-	return uint32(d.width) * uint32(d.height)
-}
-
-// RGBATo565 converts a color.RGBA to uint16 used in the display (bits r:5, g:6, b:5)
-func RGBATo565(c color.RGBA) uint16 {
-	r, g, b, _ := c.RGBA()
-	return uint16((r & 0xF800) +
-		((g & 0xFC00) >> 5) +
-		((b & 0xF800) >> 11))
-}
-
-// SetPixel sets a pixel in the screen
-func (d *Device) SetPixel(x int16, y int16, c color.RGBA) {
-	if x < 0 || y < 0 ||
-		(((d.rotation == ROTATION_NONE || d.rotation == ROTATION_180) && (x >= d.width || y >= d.height)) ||
-			((d.rotation == ROTATION_90 || d.rotation == ROTATION_270) && (x >= d.height || y >= d.width))) {
-		return
-	}
-	d.FillRectangle(x, y, 1, 1, c)
-}
-
-// FillScreen fills the screen with a given color
-func (d *Device) FillScreen(c color.RGBA) {
-	if d.rotation == ROTATION_NONE || d.rotation == ROTATION_180 {
-		d.FillRectangle(0, 0, d.width, d.height, c)
-	} else {
-		d.FillRectangle(0, 0, d.height, d.width, c)
-	}
-}
-
-// SetRotation changes the rotation of the device (clock-wise)
-func (d *Device) SetRotation(rotation Rotation) {
-	madctl := uint8(0)
-	vscsad := verticalScrollOffset(0)
-	switch rotation % 4 {
-	case ROTATION_NONE:
-		madctl = MADCTL_MX_RL | MADCTL_MY_TB | MADCTL_MV_REV
-		d.rowOffset = d.rowOffsetCfg
-		d.columnOffset = d.columnOffsetCfg
-	case ROTATION_90:
-		madctl = MADCTL_MX_RL | MADCTL_MY_BT | MADCTL_MV_NORM
-		vscsad = verticalScrollOffset(320 - int(d.width))
-		d.rowOffset = d.columnOffsetCfg
-		d.columnOffset = d.rowOffsetCfg
-	case ROTATION_180:
-		madctl = MADCTL_MX_LR | MADCTL_MY_BT | MADCTL_MV_REV
-		vscsad = verticalScrollOffset(320 - int(d.width))
-		d.rowOffset = 0
-		d.columnOffset = 0
-	case ROTATION_270:
-		madctl = MADCTL_MX_LR | MADCTL_MY_TB | MADCTL_MV_NORM
-		d.rowOffset = 0
-		d.columnOffset = 0
-	}
-	if d.isBGR {
-		madctl |= MADCTL_BGR
-	}
-
-	// Set the display orientation
-	d.Command(MADCTL)
-	d.Data(madctl)
-
-	// Set vertical scroll offset so that images are located correctly on 240x240 displays
-	d.Command(VSCSAD)
-	d.SendData(vscsad)
-}
-
-// IsBGR changes the color mode (RGB/BGR)
-func (d *Device) IsBGR(bgr bool) {
-	d.isBGR = bgr
-}
-
-// InverColors inverts the colors of the screen
+// InverColors sends and invert color command to the display device.
 func (d *Device) InvertColors(invert bool) {
 	if invert {
 		d.Command(INVON)
@@ -349,60 +260,52 @@ func (d *Device) InvertColors(invert bool) {
 	}
 }
 
-// Command sends a command to the device
+// Command sends a integer formatted command to the display device.
 func (d *Device) Command(cmd uint8) {
 	d.SendCommand([]byte{cmd})
 }
 
-// Data sends data to the device
+// Data sends and integer formated data block to the display device.
 func (d *Device) Data(data uint8) {
 	d.SendData([]byte{data})
 }
 
-// DrawFastVLine draws a vertical line faster than using SetPixel
-func (d *Device) DrawFastVLine(x, y0, y1 int16, c color.RGBA) {
-	if y0 > y1 {
-		y0, y1 = y1, y0
+// SetRotation sets the rotation of the content on the display device.
+// Rotation 0 is at 12 o'clock relative to the natural top of the display
+// with higher values rotating as degress in a clockwise direction.
+func (d *Device) SetRotation(rotation Rotation) {
+	madctlData := uint8(0)
+	vscsadData := verticalScrollOffset(0)
+
+	switch rotation % 4 {
+	case ROTATION_NONE:
+		madctlData = MADCTL_MX_RL | MADCTL_MY_TB | MADCTL_MV_REV
+		d.rowOffset = d.rowOffsetCfg
+		d.columnOffset = d.columnOffsetCfg
+	case ROTATION_90:
+		madctlData = MADCTL_MX_RL | MADCTL_MY_BT | MADCTL_MV_NORM
+		vscsadData = verticalScrollOffset(320 - int(d.pixelColumns))
+		d.rowOffset = d.columnOffsetCfg
+		d.columnOffset = d.rowOffsetCfg
+	case ROTATION_180:
+		madctlData = MADCTL_MX_LR | MADCTL_MY_BT | MADCTL_MV_REV
+		vscsadData = verticalScrollOffset(320 - int(d.pixelColumns))
+		d.rowOffset = 0
+		d.columnOffset = 0
+	case ROTATION_270:
+		madctlData = MADCTL_MX_LR | MADCTL_MY_TB | MADCTL_MV_NORM
+		d.rowOffset = 0
+		d.columnOffset = 0
 	}
-	d.FillRectangle(x, y0, 1, y1-y0+1, c)
-}
-
-// DrawFastHLine draws a horizontal line faster than using SetPixel
-func (d *Device) DrawFastHLine(x0, x1, y int16, c color.RGBA) {
-	if x0 > x1 {
-		x0, x1 = x1, x0
-	}
-	d.FillRectangle(x0, y, x1-x0+1, 1, c)
-}
-
-func (d *Device) DrawImage(reader io.Reader) {
-	d.SetWindow()
-	img, _, err := image.Decode(reader)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	d.DrawRAW(img)
-}
-
-func (d *Device) DrawRAW(img image.Image) {
-	d.SetWindow()
-	rect := img.Bounds()
-	rgbaimg := image.NewRGBA(rect)
-	draw.Draw(rgbaimg, rect, img, rect.Min, draw.Src)
-
-	np := []uint8{}
-	for i := 0; i < int(d.width); i++ {
-		for j := 0; j < int(d.height); j++ {
-			rgba := rgbaimg.At(rect.Min.X+int(d.width)-i, rect.Min.Y+j).(color.RGBA)
-			c565 := RGBATo565(rgba)
-			c1 := uint8(c565)
-			c2 := uint8(c565 >> 8)
-			np = append(np, c1, c2)
-		}
+	if d.isBGR {
+		madctlData |= MADCTL_BGR
 	}
 
-	for i := 0; i < len(np); i += 4096 {
-		d.SendData(np[i : i+4096])
-	}
+	// Set the display orientation
+	d.Command(MADCTL)
+	d.Data(madctlData)
+
+	// Set vertical scroll offset so that images are located correctly on 240 pixel row displays
+	d.Command(VSCSAD)
+	d.SendData(vscsadData)
 }

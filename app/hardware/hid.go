@@ -7,14 +7,7 @@ import (
 
 	"periph.io/x/conn/v3/gpio"
 	"periph.io/x/conn/v3/gpio/gpioreg"
-	"periph.io/x/host/v3"
 )
-
-func Init() {
-	if _, err := host.Init(); err != nil {
-		log.Fatal(err)
-	}
-}
 
 func OnGPIOButtonPressed(n int, fn func()) {
 	go func() {

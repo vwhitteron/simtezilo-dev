@@ -5,7 +5,7 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/ui"
 )
 
-func SetupPirateAudioHID(hidEvent chan ui.HIDInputEvent) {
+func SetupHID(hidEvent chan ui.HIDInputEvent) {
 	OnButtonAPressed(func() {
 		hidEvent <- ui.HIDInputUp
 	})

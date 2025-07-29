@@ -5,7 +5,7 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/ui"
 )
 
-func SetupWaveshareHID(hidEvent chan ui.HIDInputEvent) {
+func SetupHID(hidEvent chan ui.HIDInputEvent) {
 	OnButtonUpPressed(func() {
 		hidEvent <- ui.HIDInputUp
 	})
@@ -37,10 +37,6 @@ func SetupWaveshareHID(hidEvent chan ui.HIDInputEvent) {
 	OnButtonThreePressed(func() {
 		hidEvent <- ui.HIDInputPower
 	})
-}
-
-func init() {
-	hardware.Init()
 }
 
 func OnButtonUpPressed(fn func()) {

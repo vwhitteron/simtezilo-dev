@@ -60,7 +60,7 @@ func main() {
 	if profiler != nil {
 		err = profiler.Shutdown()
 		if err != nil {
-			log.Fatalf("Error shutting down Pyroscope profiler: ", err)
+			log.Fatalf("Error shutting down Pyroscope profiler: %s", err)
 		}
 	}
 }

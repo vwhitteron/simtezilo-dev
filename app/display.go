@@ -51,7 +51,7 @@ func (a *App) powerOffDisplay() {
 
 func (a *App) drawStartupDisplay(text string) {
 	a.display.lcdDevice.PowerOn()
-	a.display.lcdDevice.ShowTextOverlay("splash", text, 7)
+	a.display.lcdDevice.ShowTextOverlay("splash", text, 9)
 
 	a.display.gear = NullGear
 	a.display.state = displayState(startup)
@@ -66,7 +66,7 @@ func (a *App) drawWaitDisplay() {
 
 	a.log.Debug().Str("display", fmt.Sprintf("%+v", a.display)).Msg("drawing wait display")
 	a.display.lcdDevice.PowerOn()
-	a.display.lcdDevice.ShowTextOverlay("splash", "waiting", 7)
+	a.display.lcdDevice.ShowTextOverlay("splash", "Waiting", 9)
 
 	a.display.gear = NullGear
 	a.display.state = displayState(wait)

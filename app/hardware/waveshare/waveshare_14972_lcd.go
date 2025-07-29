@@ -5,7 +5,6 @@ import (
 	"image"
 	"image/color"
 	"image/draw"
-	"log"
 	"sync"
 	"time"
 
@@ -17,69 +16,70 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/ui"
 	"golang.org/x/image/font"
 	"golang.org/x/image/math/fixed"
-	"periph.io/x/conn/v3/driver/driverreg"
 	"periph.io/x/conn/v3/gpio/gpioreg"
+	"periph.io/x/conn/v3/physic"
 	"periph.io/x/conn/v3/spi"
 	"periph.io/x/conn/v3/spi/spireg"
-	"periph.io/x/host/v3"
 )
 
-const displayDPI float64 = 265
+const dataCommPin = "GPIO25"
+const resetPin = "GPIO27"
+const backlightPin = "GPIO24"
+const lcdPixelRows int16 = 240
+const lcdPixelColumns int16 = 240
+const lcdDPI float64 = 265
+const rotation = st7789.ROTATION_90
+const spiPort = "SPI0.0"
+const spiFrequency = 40 * physic.MegaHertz
+const spiMode = spi.Mode0
+const spiBits = 8
 
 type Waveshare14972LCD struct {
-	port spi.PortCloser
-	dev  *st7789.Device
+	port   spi.PortCloser
+	device *st7789.Device
 
 	dpi     float64
 	font    *truetype.Font
 	sprites *ui.SpriteSet
 
-	Orientation int
+	orientation int
 	poweredOn   bool
 	canvas      *image.RGBA
 }
 
-type Waveshare14972LCDOpts struct {
+type LCDOpts struct {
 	Orientation int
 }
 
 var once sync.Once
 
-func init() {
-	if _, err := host.Init(); err != nil {
-		log.Fatal(err)
-	}
-
-	if _, err := driverreg.Init(); err != nil {
-		log.Fatal(err)
-	}
-
-}
-
-func NewWaveshare14972Display(opts Waveshare14972LCDOpts) (*Waveshare14972LCD, error) {
+func NewDisplay(opts LCDOpts) (*Waveshare14972LCD, error) {
 	var err error
-	var spiPort spi.PortCloser
+	var spiPortCloser spi.PortCloser
 	var lcdDevice *st7789.Device
 	once.Do(func() {
-		spiPort, err = spireg.Open("SPI0.0")
+		spiPortCloser, err = spireg.Open(spiPort)
 		if err != nil {
 			return
 		}
 
-		dataComm := gpioreg.ByName("GPIO25")
-
-		st7789Opts := &st7789.Opts{
-			Width:     240,
-			Height:    240,
-			Rotation:  st7789.ROTATION_90,
-			Reset:     gpioreg.ByName("GPIO27"),
-			Backlight: gpioreg.ByName("GPIO24"),
+		st7789Config := &st7789.SPIDeviceConfig{
+			PixelColumns: lcdPixelColumns,
+			PixelRows:    lcdPixelRows,
+			Rotation:     rotation,
+			DataCommPin:  gpioreg.ByName(dataCommPin),
+			ResetPin:     gpioreg.ByName(resetPin),
+			BacklightPin: gpioreg.ByName(backlightPin),
+			SPIPort:      spiPortCloser.(spi.Port),
+			SPIMode:      spiMode,
+			SPIFrequency: spiFrequency,
+			SPIBits:      spiBits,
 		}
 
-		lcdDevice, err = st7789.NewSPI(spiPort.(spi.Port), dataComm, st7789Opts)
+		lcdDevice, err = st7789.NewSPI(st7789Config)
 	})
 	if err != nil {
-		return nil, fmt.Errorf("initializing display: %w", err)
+		return nil, fmt.Errorf("initializing lcd device: %w", err)
 	}
 
 	err = lcdDevice.Reset()
@@ -87,7 +87,7 @@ func NewWaveshare14972Display(opts Waveshare14972LCDOpts) (*Waveshare14972LCD, e
 		return nil, fmt.Errorf("resetting display: %w", err)
 	}
 
-	waveshareDisplayInit(lcdDevice)
+	setupDisplay(lcdDevice)
 
 	switch opts.Orientation {
 	case 90:
@@ -111,14 +111,14 @@ func NewWaveshare14972Display(opts Waveshare14972LCDOpts) (*Waveshare14972LCD, e
 	}
 
 	lcd := &Waveshare14972LCD{
-		port: spiPort,
-		dev:  lcdDevice,
+		port:   spiPortCloser,
+		device: lcdDevice,
 
-		dpi:     displayDPI,
+		dpi:     lcdDPI,
 		font:    freetypeFont,
 		sprites: sprites,
 
-		Orientation: opts.Orientation,
+		orientation: opts.Orientation,
 		poweredOn:   true,
 	}
 
@@ -128,32 +128,35 @@ func NewWaveshare14972Display(opts Waveshare14972LCDOpts) (*Waveshare14972LCD, e
 }
 
 func (l *Waveshare14972LCD) Clear() {
-	l.dev.FillScreen(color.RGBA{R: 0, G: 0, B: 0, A: 0})
+	l.device.FillScreen(color.RGBA{R: 0, G: 0, B: 0, A: 0})
 }
 
 func (l *Waveshare14972LCD) Close() {
 	l.Clear()
-	l.dev.PowerOff()
+	time.Sleep(1 * time.Second)
+	l.device.PowerOff()
 	l.port.Close()
 }
 
 func (l *Waveshare14972LCD) PowerOn() {
-	l.dev.PowerOn()
+	l.device.PowerOn()
 	l.poweredOn = true
 }
 
 func (l *Waveshare14972LCD) PowerOff() {
-	l.dev.PowerOff()
+	l.device.PowerOff()
 	l.poweredOn = false
 }
 
 func (l *Waveshare14972LCD) PowerToggle() bool {
 	if l.poweredOn {
 		l.PowerOff()
+
 		return false
 	}
 
 	l.PowerOn()
+
 	return true
 }
 
@@ -169,7 +172,7 @@ func (l *Waveshare14972LCD) Show(sprite string) {
 
 	l.canvas = canvas
 
-	l.dev.DrawRAW(canvas)
+	l.device.DrawRAW(canvas)
 }
 
 func (l *Waveshare14972LCD) ShowText(text string) {
@@ -207,7 +210,7 @@ func (l *Waveshare14972LCD) ShowTextCentered(canvas *image.RGBA, text string, si
 
 	l.canvas = canvas
 
-	l.dev.DrawRAW(canvas)
+	l.device.DrawRAW(canvas)
 }
 
 func (l *Waveshare14972LCD) ShowTextOverlay(background string, text string, size int) {
@@ -223,7 +226,7 @@ func (l *Waveshare14972LCD) ShowTextOverlay(background string, text string, size
 
 	fontDrawer := &font.Drawer{
 		Dst:  canvas,
-		Src:  image.NewUniform(color.RGBA{6, 6, 6, 1}),
+		Src:  image.NewUniform(color.RGBA{128, 128, 128, 1}),
 		Face: fontFace,
 	}
 
@@ -240,120 +243,114 @@ func (l *Waveshare14972LCD) ShowTextOverlay(background string, text string, size
 
 	l.canvas = canvas
 
-	l.dev.DrawRAW(canvas)
+	l.device.DrawRAW(canvas)
 }
 
 func (l *Waveshare14972LCD) GetOrientation() int {
-	return l.Orientation
+	return l.orientation
 }
 
 func (l *Waveshare14972LCD) SetOrientation(rotation int) {
 	switch rotation {
 	case 90:
-		l.dev.SetRotation(st7789.ROTATION_90)
-		l.Orientation = rotation
+		l.device.SetRotation(st7789.ROTATION_90)
+		l.orientation = rotation
 	case 180:
-		l.dev.SetRotation(st7789.ROTATION_180)
-		l.Orientation = rotation
+		l.device.SetRotation(st7789.ROTATION_180)
+		l.orientation = rotation
 	case 270:
-		l.dev.SetRotation(st7789.ROTATION_270)
-		l.Orientation = rotation
+		l.device.SetRotation(st7789.ROTATION_270)
+		l.orientation = rotation
 	default:
-		l.dev.SetRotation(st7789.ROTATION_NONE)
-		l.Orientation = 0
+		l.device.SetRotation(st7789.ROTATION_NONE)
+		l.orientation = 0
 	}
 
-	l.dev.DrawRAW(l.canvas)
+	l.device.DrawRAW(l.canvas)
 }
 
-func waveshareDisplayInit(d *st7789.Device) {
+// setupDisplay initializes the display with the necessary commands and settings.
+//
+// This function is based on the Waveshare 1.3 inch LCD HAT code and Python ST7789 driver.
+// https://files.waveshare.com/upload/b/bd/1.3inch_LCD_HAT_code.7z
+// lib/LCD/LCD_1in3.c and python/ST7789.py
+func setupDisplay(d *st7789.Device) {
 	d.Command(st7789.SWRESET)
 	time.Sleep(150 * time.Millisecond)
 
-	//01,0x11
-	// d.Command(st7789.SLPOUT)
-
-	// -2,120?
-
-	//-1,0x36,0x70
+	// Memory Data Access Control: X-Y Exchange, X-Mirror, Y-Mirror
 	d.Command(st7789.MADCTL)
 	d.Data(st7789.MADCTL_MX_RL | st7789.MADCTL_MV_REV | st7789.MADCTL_ML_BT)
 
-	// -1,0x3A,0x05
+	// Sleep Mode: off
+	d.Command(st7789.SLPOUT)
+
+	time.Sleep(120 * time.Millisecond)
+
+	// Memory Access Control: All defaults
+	d.Command(st7789.MADCTL)
+	d.Data(0x00)
+
+	// Interface pixel format: 16bit/pixel non-RGB
 	d.Command(st7789.COLMOD)
 	d.Data(st7789.COLMOD_CTRL_65K)
 
-	// -1,0xB2,0x0C,0x0C,0x00,0x33,0x33
+	// Porch Setting: Normal(Back Front), PSEN = disabled, Idle(Back, Front)
 	d.Command(st7789.PORCTRL)
-	d.SendData([]byte{0x0C, 0x0C, 0x00, 0x33, 0x33})
+	d.SendData(st7789.DefaultPORCTRL())
 
-	// -1,0xB7,0x35
+	// Gate Control: High = 12.2v, Low = -7.16v
 	d.Command(st7789.GCTRL)
-	d.Data(0x35)
+	d.Data(0x00)
 
-	// -1,0xBB,0x1A
-	// d.Command(st7789.VCOMS)
-	// d.Data(0x1A)
-
-	// -1,0xBB,0x19
+	// VCOM Setting = 1.675v
 	d.Command(st7789.VCOMS)
-	d.Data(0x19)
+	d.Data(0x3F)
 
-	// -1,0xC0,0x2C
+	// LCM Control: XOR RGB/BGR order, XOR Display Latch Order, XOR Page/Column order
 	d.Command(st7789.LCMCTRL)
-	d.Data(st7789.LCMCTRL_XBGR | st7789.LCMCTRL_XMH | st7789.LMCTRL_XMV)
+	d.Data(st7789.LCMCTRL_XBGR | st7789.LCMCTRL_XMH | st7789.LCMCTRL_XMV)
 
-	// -1,0xC2,0x01
+	// VDVVRHEN: CMDEN = VDV and VRH register value comes from command write.
 	d.Command(st7789.VDVVRHEN)
-	d.Data(st7789.VDVVRHEN_CMDEN_WRITE)
+	d.SendData(st7789.DefaultVDVVRHEN())
 
-	// -1,0xC3,0x0B
-	// d.Command(st7789.VRHS)
-	// d.Data(0x0B)
-
-	// -1,0xC3,0x12
+	// VHR Set: VAP(GVDD) =  4.2v + (vcom+vcom offset+vdv)
+	//          VAN(GVCL) = -4.2v + (vcom+vcom offset+vdv)
 	d.Command(st7789.VRHS)
-	d.Data(0x12)
+	d.Data(0x0D)
 
-	// -1,0xC4,0x20
-	d.Command(st7789.VDVS)
-	d.Data(0x20)
+	// VDV Set: 0v
+	// d.Command(st7789.VDVS)
+	// d.SendData(st7789.DefaultVDVS())
 
-	// -1,0xC6,0x0F
+	// Frame Rate Control (normal mode): 60Hz
 	d.Command(st7789.FRCTRL2)
-	d.Data(st7789.FRAMERATE_60)
+	d.SendData(st7789.DefaultFRCTRL2())
 
-	// -1,0xD0,0xA4,0xA1
+	// Power Control: strange behavior in Waveshare drivers
 	d.Command(st7789.PWCTRL1)
-	d.SendData([]byte{0xA4, 0xA1})
+	d.SendData([]byte{0xA7})
 
-	// -1,0x21
-	// d.Command(st7789.INVON)
+	// Power Control 1: AVDD = 6.8v, AVCL = -4.6v, VDS = 2.3v
+	d.Command(st7789.PWCTRL1)
+	d.SendData(st7789.DefaultPWCTRL1())
 
-	// -1,0xE0,0x00,0x19,0x1E,0x0A,0x09,0x15,0x3D,0x44,0x51,0x12,0x03,0x00,0x3F,0x3F
-	// d.Command(st7789.PVGAMCTRL)
-	// d.SendData([]byte{0x00, 0x19, 0x1E, 0x0A, 0x09, 0x15, 0x3D, 0x44, 0x51, 0x12, 0x03, 0x00, 0x3F, 0x3F})
+	// Undocumented command: strange behaviour in Waveshare drivers
+	d.Command(0xD6)
+	d.SendData([]byte{0xA1})
 
-	// -1,0xE0,0xD0,0x04,0x0D,0x11,0x13,0x2B,0x3F,0x54,0x4C,0x18,0x0D,0x0B,0x1F,0x23
+	// Positive Voltage Gamma Control
 	d.Command(st7789.PVGAMCTRL)
-	d.SendData([]byte{0xD0, 0x04, 0x0D, 0x11, 0x13, 0x2B, 0x3F, 0x54, 0x4C, 0x18, 0x0D, 0x0B, 0x1F, 0x23})
+	d.SendData([]byte{0xF0, 0x00, 0x02, 0x01, 0x00, 0x00, 0x27, 0x43, 0x3F, 0x33, 0x0E, 0x0E, 0x26, 0x2E})
 
-	// -1,0xE1,0x00,0x18,0x1E,0x0A,0x09,0x25,0x3F,0x43,0x52,0x33,0x03,0x00,0x3F,0x3F
-	// d.Command(st7789.NVGAMCTRL)
-	// d.SendData([]byte{0x00, 0x18, 0x1E, 0x0A, 0x09, 0x25, 0x3F, 0x43, 0x52, 0x33, 0x03, 0x00, 0x3F, 0x3F})
-
-	// -1,0xE1,0xD0,0x04,0x0C,0x11,0x13,0x2C,0x3F,0x44,0x51,0x2F,0x1F,0x1F,0x20,0x23
+	// Negative Voltage Gamma Control
 	d.Command(st7789.NVGAMCTRL)
-	d.SendData([]byte{0xD0, 0x04, 0x0C, 0x11, 0x13, 0x2C, 0x3F, 0x44, 0x51, 0x2F, 0x1F, 0x1F, 0x20, 0x23})
+	d.SendData([]byte{0xF0, 0x07, 0x0D, 0x0D, 0x0B, 0x16, 0x26, 0x43, 0x3E, 0x3F, 0x19, 0x19, 0x31, 0x3A})
 
-	// -1,0x21
+	// Display Inversion: on
 	d.Command(st7789.INVON)
 
-	//01,0x11
-	d.Command(st7789.SLPOUT)
-
-	// -1,0x29
+	// Display On Recovery: on
 	d.Command(st7789.DISPON)
-
-	// -3
 }

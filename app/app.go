@@ -12,6 +12,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/vwhitteron/simtezilo-dev/app/config"
+	"github.com/vwhitteron/simtezilo-dev/app/hardware"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/pirateaudio"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/terminal"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/waveshare"
@@ -121,9 +122,13 @@ func NewApp(opts AppOptions) (*App, error) {
 	// initialise display and button hardware
 	switch a.config.Hardware.Model {
 	case "pirateaudio":
-		a.display.lcdDevice, err = pirateaudio.NewPirateAudioLCD(pirateaudio.PirateAudioLCDOpts{
-			Orientation: a.config.Hardware.DisplayOrientation,
-		})
+		hardware.Init()
+
+		a.display.lcdDevice, err = pirateaudio.NewDisplay(
+			pirateaudio.PirateAudioLCDOpts{
+				Orientation: a.config.Hardware.DisplayOrientation,
+			},
+		)
 		if err != nil {
 			log.Error().
 				Err(err).
@@ -140,13 +145,15 @@ func NewApp(opts AppOptions) (*App, error) {
 			Str("result", "success").
 			Msg("init")
 
-		pirateaudio.SetupPirateAudioHID(a.hidEvents)
+		pirateaudio.SetupHID(a.hidEvents)
 		a.log.Debug().
 			Str("component", "pirate audio").
 			Str("sub", "hid").
 			Msg("init")
 	case "waveshare":
-		a.display.lcdDevice, err = waveshare.NewWaveshare14972Display(waveshare.Waveshare14972LCDOpts{
+		hardware.Init()
+
+		a.display.lcdDevice, err = waveshare.NewDisplay(waveshare.LCDOpts{
 			Orientation: a.config.Hardware.DisplayOrientation,
 		})
 		if err != nil {
@@ -165,7 +172,7 @@ func NewApp(opts AppOptions) (*App, error) {
 			Str("result", "success").
 			Msg("init")
 
-		waveshare.SetupWaveshareHID(a.hidEvents)
+		waveshare.SetupHID(a.hidEvents)
 		log.Debug().
 			Str("component", "waveshare 14972").
 			Str("sub", "hid").
