@@ -26,7 +26,15 @@ Install [Log2Ram](https://github.com/azlux/log2ram)
    ForwardToSyslog=no
    ```
 
-### Pimoroni PirateAudio Line Out
+### Pimoroni Pirate Audio Series
+
+[Product page](https://learn.pimoroni.com/article/getting-started-with-pirate-audio)
+
+Both the Pirate Audio Line Out and Pirate Audio Headphone Amp can be used. The Headphone Amp version will typically provide the 
+best results when set to low gain mode as the output voltage more closely matches the various input voltage of most haptic
+amplifiers (input levels of 50-200 millivolts). The Line Out version is better suited to amplifiers that accept around input
+levels of ~2.1 volts.
+
 
 1. Enable SPI in order to use the LCD
 2. Turn the backlight off by driving GPIO 13 low when not in use
@@ -44,6 +52,8 @@ gpio=25=op,dh
 
 ### Waveshare 1.3inch LCD HAT
 
+[Product page](https://www.waveshare.com/wiki/1.3inch_LCD_HAT)
+
 1. Enable SPI in order to use the LCD
 2. Turn the backlight off by driving GPIO 24 low when not in use
 
@@ -53,7 +63,9 @@ dtparam=spi=on
 gpio=24=op,dl
 ```
 
-### Spotpear Gaeme 1.3
+### Spotpear RPi-1.3inch-MINI-LCD
+
+[Product page](https://spotpear.com/shop/Raspberry-Pi-LCD-Display-Screen-1.3-inch-LCD-Game-RP2040-PiZero-WS.html)
 
 1. Download [audremap18.dtbo](https://cdn.static.spotpear.com/uploads/download/diver/gm154/audremap18.dtbo) to `/boot/overlays/`
 2. Enable SPI in order to use the LCD
@@ -65,12 +77,7 @@ dtparam=spi=on
 dtoverlay=audremap18,pins_18_19
 ```
 
-If no audio devices are found when executing `aplay -l` then the standard remap overlay can be used however the select button
-on GPIO 19 will no longer work as it will be set for PWM output instead:
-
-```
-dtoverlay=audremap,pins_18_19
-```
+_If no audio devices are found when executing `aplay -l` then the standard remap overlay can be used by setting `dtoverlay=audremap,pins_18_19`. Note that the select button on GPIO 19 will no longer work as it will be configured for PWM output._
 
 
 ### Buttkicker USB
