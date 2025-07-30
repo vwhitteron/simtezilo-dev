@@ -89,7 +89,7 @@ func NewConfig(filename string, log zerolog.Logger) *Config {
 		},
 		Synthesizer: Synthesizer{
 			SampleRateHz: 8000,
-			OutputFile:   "default",
+			OutputFile:   "",
 			Profiles: []SynthProfile{
 				{JerkCurve: 475, JerkMax: 80, SnapCurve: 600, SnapMax: 48},
 				{JerkCurve: 450, JerkMax: 80, SnapCurve: 555, SnapMax: 48},

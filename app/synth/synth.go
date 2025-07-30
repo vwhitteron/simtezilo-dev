@@ -2,10 +2,12 @@ package synth
 
 import (
 	"encoding/binary"
+	"fmt"
 	"os"
 	"time"
 
 	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 	"github.com/vwhitteron/simtezilo-dev/app/config"
 	"github.com/vwhitteron/simtezilo-dev/app/kinematics"
 )
@@ -49,12 +51,13 @@ func NewSynth(opts SynthOpts) (*Synthesizer, error) {
 	}
 
 	var outFile *os.File
-
 	if opts.Config.OutputFile != "" {
 		outFile, err = os.Create(opts.Config.OutputFile)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("create output wav file: %w", err)
 		}
+
+		log.Info().Str("file", opts.Config.OutputFile).Msg("Writing audio output")
 	}
 
 	effects := NewEffectsSampleBank(opts.Config.SampleRateHz)
@@ -79,7 +82,9 @@ func (s *Synthesizer) GetSampleRate() int {
 func (s *Synthesizer) ReadBuffer(length int) []float64 {
 	sample := s.buffer.Read(length)
 
-	binary.Write(s.outFile, binary.LittleEndian, sample)
+	if s.outFile != nil {
+		binary.Write(s.outFile, binary.LittleEndian, sample)
+	}
 
 	return sample
 }
