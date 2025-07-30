@@ -42,12 +42,36 @@ dtoverlay=hifiberry-dac
 gpio=25=op,dh
 ```
 
-Recommended master gain setting:
+### Waveshare 1.3inch LCD HAT
 
-|          HAT type          |     Gain setting     |
-|----------------------------|----------------------|
-| Pirate Audio Line-Out      | -17.75 dB            |
-| Pirate Audio Headphone Amp | - 7.00 dB (low gain) |
+1. Enable SPI in order to use the LCD
+2. Turn the backlight off by driving GPIO 24 low when not in use
+
+
+```
+dtparam=spi=on
+gpio=24=op,dl
+```
+
+### Spotpear Gaeme 1.3
+
+1. Download [audremap18.dtbo](https://cdn.static.spotpear.com/uploads/download/diver/gm154/audremap18.dtbo) to `/boot/overlays/`
+2. Enable SPI in order to use the LCD
+3. Enable PWM output on pin 18
+
+
+```
+dtparam=spi=on
+dtoverlay=audremap18,pins_18_19
+```
+
+If no audio devices are found when executing `aplay -l` then the standard remap overlay can be used however the select button
+on GPIO 19 will no longer work as it will be set for PWM output instead:
+
+```
+dtoverlay=audremap,pins_18_19
+```
+
 
 ### Buttkicker USB
 
@@ -55,15 +79,27 @@ With `dtparam=audio=off` set, Alsa should see the Butkicker USB device as the on
 
 Recommended gain setting is 0dB.
 
+## Simtezilo
 
-# Notes
+Recommended master gain setting:
 
-## Disable/fix USB audio device ordering
+|          HAT type          |     Gain setting     | Interface |
+|----------------------------|----------------------|-----------|
+| Pirate Audio Line-Out      | -17.75 dB            |   audio   |
+| Pirate Audio Headphone Amp | - 7.00 dB (low gain) |   audio   |
+| Spotpear Game 1.3          | -14.75 dB            |   audio   |
+| Waveshare 1.3inch LCD HAT  | - 0.00 dB            |    usb    |
+
+# Troubleshooting
+
+## Fix USB audio device ordering
+
 `/lib/modprobe.d/aliases.conf`
 Comment out the following
 #options snd-usb-audio index=-2
 
 ## Fix asound audio rerouting
+
 `~/.asound.rc`
 ```
 pcm.!default { 
