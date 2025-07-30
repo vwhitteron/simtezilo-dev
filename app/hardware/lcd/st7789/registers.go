@@ -243,7 +243,7 @@ func DefaultPWCTRL1() []byte {
 // DefaultVCOMS returns the default VCOM settings specified by the manufacturer.
 //
 // VCOMS: 0.9v
-func DefaulVCOMS() []byte {
+func DefaultVCOMS() []byte {
 	return []byte{0x20}
 }
 
