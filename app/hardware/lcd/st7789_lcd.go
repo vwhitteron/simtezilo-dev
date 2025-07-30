@@ -246,10 +246,10 @@ func (l *ST7789LCD) GetOrientation() int {
 	}
 }
 
-func (l *ST7789LCD) SetOrientation(orientation int) {
+func (l *ST7789LCD) SetOrientation(degrees int) {
 	var rotation st7789.Rotation
 
-	switch orientation {
+	switch degrees {
 	case 90:
 		rotation = st7789.ROTATION_90
 	case 180:
@@ -268,9 +268,6 @@ func (l *ST7789LCD) SetOrientation(orientation int) {
 
 func (l *ST7789LCD) RotateCW() int {
 	switch l.rotation {
-	case st7789.ROTATION_NONE:
-		l.SetOrientation(90)
-		return 90
 	case st7789.ROTATION_90:
 		l.SetOrientation(180)
 		return 180
@@ -281,15 +278,13 @@ func (l *ST7789LCD) RotateCW() int {
 		l.SetOrientation(0)
 		return 0
 	default:
-		return 0
+		l.SetOrientation(90)
+		return 90
 	}
 }
 
 func (l *ST7789LCD) RotateCCW() int {
 	switch l.rotation {
-	case st7789.ROTATION_NONE:
-		l.SetOrientation(270)
-		return 270
 	case st7789.ROTATION_90:
 		l.SetOrientation(0)
 		return 0
@@ -300,7 +295,8 @@ func (l *ST7789LCD) RotateCCW() int {
 		l.SetOrientation(180)
 		return 180
 	default:
-		return 0
+		l.SetOrientation(270)
+		return 270
 	}
 }
 

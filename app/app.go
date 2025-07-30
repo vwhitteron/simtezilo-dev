@@ -125,7 +125,7 @@ func NewApp(opts AppOptions) (*App, error) {
 	case "pirateaudio":
 		hardware.Init()
 
-		a.display.lcdDevice, err = pirateaudio.NewDisplay(&pirateaudio.LCDOptions{
+		a.display.lcdDevice, err = pirateaudio.NewDisplay(pirateaudio.LCDOptions{
 			Orientation: a.config.Hardware.DisplayOrientation,
 		})
 		if err != nil {
@@ -152,7 +152,7 @@ func NewApp(opts AppOptions) (*App, error) {
 	case "spotpear":
 		hardware.Init()
 
-		a.display.lcdDevice, err = spotpear.NewDisplay(&spotpear.LCDOptions{
+		a.display.lcdDevice, err = spotpear.NewDisplay(spotpear.LCDOptions{
 			Orientation: a.config.Hardware.DisplayOrientation,
 		})
 		if err != nil {
@@ -179,7 +179,7 @@ func NewApp(opts AppOptions) (*App, error) {
 	case "waveshare":
 		hardware.Init()
 
-		a.display.lcdDevice, err = waveshare.NewDisplay(&waveshare.LCDOptions{
+		a.display.lcdDevice, err = waveshare.NewDisplay(waveshare.LCDOptions{
 			Orientation: a.config.Hardware.DisplayOrientation,
 		})
 		if err != nil {

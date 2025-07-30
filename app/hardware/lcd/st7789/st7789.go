@@ -326,3 +326,17 @@ func DegreesToRotation(orientation int) Rotation {
 		return ROTATION_NONE
 	}
 }
+
+// RotationToDegrees converts a Rotation type to its corresponding degree value.
+func RotationToDegrees(rotation Rotation) int {
+	switch rotation {
+	case ROTATION_90:
+		return 90
+	case ROTATION_180:
+		return 180
+	case ROTATION_270:
+		return 270
+	default:
+		return 0
+	}
+}

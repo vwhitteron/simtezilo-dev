@@ -8,6 +8,7 @@ import (
 
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/lcd"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/lcd/st7789"
+	"github.com/vwhitteron/simtezilo-dev/app/utils"
 	"periph.io/x/conn/v3/gpio/gpioreg"
 	"periph.io/x/conn/v3/physic"
 	"periph.io/x/conn/v3/spi"
@@ -31,11 +32,9 @@ type LCDOptions struct {
 
 var once sync.Once
 
-func NewDisplay(opts *LCDOptions) (*lcd.ST7789LCD, error) {
-	rotation := lcdRotation
-	if opts != nil {
-		rotation = st7789.DegreesToRotation(opts.Orientation)
-	}
+func NewDisplay(opts LCDOptions) (*lcd.ST7789LCD, error) {
+	angle := st7789.RotationToDegrees(lcdRotation)
+	angle = utils.SumAngle90(angle, opts.Orientation)
 
 	return lcd.NewDisplay(&lcd.Config{
 		DataCommPin:      gpioreg.ByName(dataCommPin),
@@ -48,7 +47,7 @@ func NewDisplay(opts *LCDOptions) (*lcd.ST7789LCD, error) {
 		PixelRows:        lcdPixelRows,
 		PixelColumns:     lcdPixelColumns,
 		DPI:              lcdDPI,
-		Rotation:         rotation,
+		Rotation:         st7789.DegreesToRotation(angle),
 		SetupDisplayFunc: setupDisplayFunc(),
 	})
 }
