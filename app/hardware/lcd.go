@@ -16,4 +16,6 @@ type LCD interface {
 	ShowTextOverlay(string, string, int)
 	GetOrientation() int
 	SetOrientation(int)
+	RotateCW() int
+	RotateCCW() int
 }

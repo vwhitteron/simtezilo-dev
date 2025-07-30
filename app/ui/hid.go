@@ -13,6 +13,7 @@ const (
 	HIDInputHome
 	HIDInputEnd
 	HIDInputEnter
+	HIDInputTab
 	HIDInputEscape
 	HIDInputPower
 )

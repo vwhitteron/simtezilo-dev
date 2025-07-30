@@ -271,17 +271,13 @@ func (d *Device) Data(data uint8) {
 }
 
 // SetRotation sets the rotation of the content on the display device.
-// Rotation 0 is at 12 o'clock relative to the natural top of the display
+// ROTATION_NONE is at 12 o'clock relative to the natural top of the display
 // with higher values rotating as degress in a clockwise direction.
 func (d *Device) SetRotation(rotation Rotation) {
 	madctlData := uint8(0)
 	vscsadData := verticalScrollOffset(0)
 
 	switch rotation % 4 {
-	case ROTATION_NONE:
-		madctlData = MADCTL_MX_RL | MADCTL_MY_TB | MADCTL_MV_REV
-		d.rowOffset = d.rowOffsetCfg
-		d.columnOffset = d.columnOffsetCfg
 	case ROTATION_90:
 		madctlData = MADCTL_MX_RL | MADCTL_MY_BT | MADCTL_MV_NORM
 		vscsadData = verticalScrollOffset(320 - int(d.pixelColumns))
@@ -296,6 +292,10 @@ func (d *Device) SetRotation(rotation Rotation) {
 		madctlData = MADCTL_MX_LR | MADCTL_MY_TB | MADCTL_MV_NORM
 		d.rowOffset = 0
 		d.columnOffset = 0
+	default:
+		madctlData = MADCTL_MX_RL | MADCTL_MY_TB | MADCTL_MV_REV
+		d.rowOffset = d.rowOffsetCfg
+		d.columnOffset = d.columnOffsetCfg
 	}
 	if d.isBGR {
 		madctlData |= MADCTL_BGR
@@ -308,4 +308,21 @@ func (d *Device) SetRotation(rotation Rotation) {
 	// Set vertical scroll offset so that images are located correctly on 240 pixel row displays
 	d.Command(VSCSAD)
 	d.SendData(vscsadData)
+}
+
+// DegreesToRotation converts an integer representing degrees to a Rotation type.
+//
+// Degree values of 0, 90, 180, and 270 are mapped to their corresponding Rotation values.
+// If the input does not match these values ROTATION_NONE will be returned.
+func DegreesToRotation(orientation int) Rotation {
+	switch orientation {
+	case 90:
+		return ROTATION_90
+	case 180:
+		return ROTATION_180
+	case 270:
+		return ROTATION_270
+	default:
+		return ROTATION_NONE
+	}
 }

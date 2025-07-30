@@ -49,3 +49,19 @@ func (d *NullDisplay) GetOrientation() int {
 func (d *NullDisplay) SetOrientation(o int) {
 	d.Orientation = o
 }
+
+func (d *NullDisplay) RotateCW() int {
+	d.Orientation += 90
+	if d.Orientation >= 360 {
+		d.Orientation = 0
+	}
+	return d.Orientation
+}
+
+func (d *NullDisplay) RotateCCW() int {
+	d.Orientation -= 90
+	if d.Orientation < 0 {
+		d.Orientation = 270
+	}
+	return d.Orientation
+}

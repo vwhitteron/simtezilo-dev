@@ -43,7 +43,7 @@ func SetupHID(hidEvent chan ui.HIDInputEvent) {
 	})
 
 	OnButtonTriggerRightPressed(func() {
-		hidEvent <- ui.HIDInputNone
+		hidEvent <- ui.HIDInputTab
 	})
 
 	OnButtonStartPressed(func() {

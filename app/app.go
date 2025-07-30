@@ -125,11 +125,9 @@ func NewApp(opts AppOptions) (*App, error) {
 	case "pirateaudio":
 		hardware.Init()
 
-		a.display.lcdDevice, err = pirateaudio.NewDisplay(
-			pirateaudio.PirateAudioLCDOpts{
-				Orientation: a.config.Hardware.DisplayOrientation,
-			},
-		)
+		a.display.lcdDevice, err = pirateaudio.NewDisplay(&pirateaudio.LCDOptions{
+			Orientation: a.config.Hardware.DisplayOrientation,
+		})
 		if err != nil {
 			log.Error().
 				Err(err).
@@ -154,7 +152,7 @@ func NewApp(opts AppOptions) (*App, error) {
 	case "spotpear":
 		hardware.Init()
 
-		a.display.lcdDevice, err = spotpear.NewDisplay(spotpear.LCDOpts{
+		a.display.lcdDevice, err = spotpear.NewDisplay(&spotpear.LCDOptions{
 			Orientation: a.config.Hardware.DisplayOrientation,
 		})
 		if err != nil {
@@ -181,7 +179,7 @@ func NewApp(opts AppOptions) (*App, error) {
 	case "waveshare":
 		hardware.Init()
 
-		a.display.lcdDevice, err = waveshare.NewDisplay(waveshare.LCDOpts{
+		a.display.lcdDevice, err = waveshare.NewDisplay(&waveshare.LCDOptions{
 			Orientation: a.config.Hardware.DisplayOrientation,
 		})
 		if err != nil {
@@ -363,8 +361,22 @@ func (a *App) hidEventHandler() {
 				Str("type", "menuPage").
 				Str("value", menuPage).
 				Msg("HID event")
+		case ui.HIDInputTab:
+			orientation := a.display.lcdDevice.RotateCW()
+
+			a.log.Debug().
+				Str("key", "tab").
+				Str("action", "screen rotate").
+				Str("type", "hardware").
+				Str("value", strconv.Itoa(orientation)).
+				Msg("HID event")
+
 		case ui.HIDInputEscape:
-			a.log.Debug().Str("key", "escape").Msg("HID event")
+			a.log.Debug().
+				Str("key", "escape").
+				Str("action", "quit").
+				Str("type", "app").
+				Msg("HID event")
 			a.done <- true
 		case ui.HIDInputPower:
 			backlightState := a.display.lcdDevice.PowerToggle()
@@ -372,8 +384,8 @@ func (a *App) hidEventHandler() {
 
 			log.Debug().
 				Str("key", "power").
-				Str("action", "toggle").
-				Str("type", "backlight").
+				Str("action", "toggle backlight").
+				Str("type", "hardware").
 				Bool("value", backlightState).
 				Msg("HID event")
 
