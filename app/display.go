@@ -19,9 +19,9 @@ const (
 )
 
 type display struct {
-	lcdDevice hardware.LCD
-	state     displayState
-	gear      int
+	device hardware.Display
+	state  displayState
+	gear   int
 }
 
 func (a *App) updateLastActive() {
@@ -41,7 +41,7 @@ func (a *App) powerOffDisplay() {
 		return
 	}
 
-	a.display.lcdDevice.PowerOff()
+	a.display.device.PowerOff()
 
 	a.display.gear = NullGear
 	a.display.state = displayState(off)
@@ -50,8 +50,8 @@ func (a *App) powerOffDisplay() {
 }
 
 func (a *App) drawStartupDisplay(text string) {
-	a.display.lcdDevice.PowerOn()
-	a.display.lcdDevice.ShowTextOverlay("splash", text, 9)
+	a.display.device.PowerOn()
+	a.display.device.ShowTextOverlay("splash", text, 9)
 
 	a.display.gear = NullGear
 	a.display.state = displayState(startup)
@@ -65,8 +65,8 @@ func (a *App) drawWaitDisplay() {
 	}
 
 	a.log.Debug().Str("display", fmt.Sprintf("%+v", a.display)).Msg("drawing wait display")
-	a.display.lcdDevice.PowerOn()
-	a.display.lcdDevice.ShowTextOverlay("splash", "Waiting", 9)
+	a.display.device.PowerOn()
+	a.display.device.ShowTextOverlay("splash", "Waiting", 9)
 
 	a.display.gear = NullGear
 	a.display.state = displayState(wait)
@@ -81,10 +81,10 @@ func (a *App) drawLiveDisplay() {
 		return
 	}
 
-	a.display.lcdDevice.PowerOn()
+	a.display.device.PowerOn()
 
 	canvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
-	a.display.lcdDevice.ShowTextCentered(canvas, gearName(currentGear), gearFontSize)
+	a.display.device.ShowTextCentered(canvas, gearName(currentGear), gearFontSize)
 
 	a.display.gear = currentGear
 	a.display.state = displayState(live)
@@ -100,11 +100,11 @@ func (a *App) drawSettingsDisplay(displayContent string, backlightIsOn bool) {
 		return
 	}
 
-	a.display.lcdDevice.PowerOn()
+	a.display.device.PowerOn()
 
 	if displayContent != "" {
 		canvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
-		a.display.lcdDevice.ShowTextCentered(canvas, displayContent, 20)
+		a.display.device.ShowTextCentered(canvas, displayContent, 20)
 	}
 
 	a.display.state = displayState(settings)

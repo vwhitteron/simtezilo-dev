@@ -6,8 +6,8 @@ import (
 
 	_ "image/png"
 
-	"github.com/vwhitteron/simtezilo-dev/app/hardware/lcd"
-	"github.com/vwhitteron/simtezilo-dev/app/hardware/lcd/st7789"
+	"github.com/vwhitteron/simtezilo-dev/app/hardware/display"
+	"github.com/vwhitteron/simtezilo-dev/app/hardware/display/st7789"
 	"github.com/vwhitteron/simtezilo-dev/app/utils"
 	"periph.io/x/conn/v3/gpio/gpioreg"
 	"periph.io/x/conn/v3/physic"
@@ -26,17 +26,17 @@ const spiFrequency = 40 * physic.MegaHertz
 const spiMode = spi.Mode0
 const spiBits = 8
 
-type LCDOptions struct {
+type DisplayOptions struct {
 	Orientation int
 }
 
 var once sync.Once
 
-func NewDisplay(opts LCDOptions) (*lcd.ST7789LCD, error) {
+func NewDisplay(opts DisplayOptions) (*display.ST7789LCD, error) {
 	angle := st7789.RotationToDegrees(lcdRotation)
 	angle = utils.SumAngle90(angle, opts.Orientation)
 
-	return lcd.NewDisplay(&lcd.Config{
+	return display.NewDisplay(&display.Config{
 		DataCommPin:      gpioreg.ByName(dataCommPin),
 		ResetPin:         gpioreg.ByName(resetPin),
 		BacklightPin:     gpioreg.ByName(backlightPin),

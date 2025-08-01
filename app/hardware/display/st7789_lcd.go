@@ -1,4 +1,4 @@
-package lcd
+package display
 
 import (
 	"fmt"
@@ -11,7 +11,7 @@ import (
 	_ "image/png"
 
 	"github.com/golang/freetype/truetype"
-	"github.com/vwhitteron/simtezilo-dev/app/hardware/lcd/st7789"
+	"github.com/vwhitteron/simtezilo-dev/app/hardware/display/st7789"
 	"github.com/vwhitteron/simtezilo-dev/app/ui"
 	"golang.org/x/image/font"
 	"golang.org/x/image/math/fixed"

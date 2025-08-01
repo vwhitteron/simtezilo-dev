@@ -7,7 +7,7 @@ type NullDisplay struct {
 	backlightOn bool
 }
 
-func NewNullDeviceDisplay() *NullDisplay {
+func NewHeadlessDisplay() *NullDisplay {
 	return &NullDisplay{
 		Orientation: 0,
 		backlightOn: true,

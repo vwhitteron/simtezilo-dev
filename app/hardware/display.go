@@ -4,7 +4,7 @@ import (
 	"image"
 )
 
-type LCD interface {
+type Display interface {
 	Clear()
 	Close()
 	PowerOn()
