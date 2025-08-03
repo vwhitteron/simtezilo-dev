@@ -58,12 +58,13 @@ type App struct {
 
 type AppOptions struct {
 	Done       chan bool
-	LogLevel   string
+	Logger     *zerolog.Logger
 	WebEnabled bool
 }
 
 func NewApp(opts AppOptions) (*App, error) {
 	a := &App{
+		log:  opts.Logger.With().Str("component", "app").Logger(),
 		done: opts.Done,
 		state: appState{
 			lastActive: time.Now(),
@@ -77,27 +78,18 @@ func NewApp(opts AppOptions) (*App, error) {
 		webEnabled:         opts.WebEnabled,
 	}
 
-	// setup logger based on cli arg or default warn level
-	argLogLevel, err := zerolog.ParseLevel(opts.LogLevel)
-	if err != nil {
-		log.Printf("invalid log level parameter %q, setting level to warn", opts.LogLevel)
-		argLogLevel = zerolog.WarnLevel
-	}
-	a.log = zerolog.New(os.Stderr).With().Timestamp().Logger().Level(argLogLevel)
-	a.log.Debug().Str("level", argLogLevel.String()).Str("source", "cli arg").Msg("log level update")
-
 	// load config from file
 	a.config = config.NewConfig("simtezilo.conf", a.log)
 
-	// update logger log level if configured and not overridden by cli arg
-	if opts.LogLevel == "" {
-		configLogLevel, err := zerolog.ParseLevel(a.config.App.LogLevel)
-		if err != nil {
-			a.log.Error().Str("configured", a.config.App.LogLevel).Str("fallback", argLogLevel.String()).Msg("invalid log level")
-		}
+	// update to configured log level when greater than current
+	configLogLevel, err := zerolog.ParseLevel(a.config.App.LogLevel)
+	if err != nil {
+		a.log.Error().Str("config value", a.config.App.LogLevel).Msg("invalid log level")
+	}
+	if configLogLevel < a.log.GetLevel() {
+		zerolog.SetGlobalLevel(configLogLevel)
 
 		a.log.Debug().Str("level", configLogLevel.String()).Str("source", "config").Msg("log level update")
-		a.log.Level(configLogLevel)
 	}
 
 	// initialise synthesizer
@@ -136,7 +128,7 @@ func NewApp(opts AppOptions) (*App, error) {
 		}
 		a.log.Debug().
 			Str("component", "pirate audio").
-			Str("sub", "displa").
+			Str("sub", "display").
 			Str("result", "success").
 			Msg("init")
 
@@ -208,7 +200,7 @@ func NewApp(opts AppOptions) (*App, error) {
 			Msg("init")
 
 		go terminal.SetupNullDeviceButtons(a.hidEvents)
-		log.Debug().
+		a.log.Debug().
 			Str("component", "headless").
 			Str("sub", "hid").
 			Msg("init")

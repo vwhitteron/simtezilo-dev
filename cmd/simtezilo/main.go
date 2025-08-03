@@ -2,7 +2,6 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -11,6 +10,7 @@ import (
 
 	_ "image/png"
 
+	"github.com/rs/zerolog"
 	"github.com/vwhitteron/simtezilo-dev/app"
 )
 
@@ -25,32 +25,38 @@ func main() {
 		done <- true
 	}()
 
-	var logLevel string
+	var logLevelArg string
 	var profilerEndpoint string
 	var webEnabled bool
 
-	flag.StringVar(&logLevel, "l", "", "Log level. Default is 'warn'")
+	flag.StringVar(&logLevelArg, "l", "", "Log level. Default is 'warn'")
 	flag.StringVar(&profilerEndpoint, "p", "", "Send profiles to this Pyroscope endpoint (http://host:port). Default is off")
 	flag.BoolVar(&webEnabled, "w", false, "Enable web server. Default is false")
 	flag.Parse()
 
+	logLevel, err := zerolog.ParseLevel(logLevelArg)
+	if err != nil {
+		log.Fatalf("Invalid log level: %s", err)
+	}
+	logger := zerolog.New(os.Stderr).With().Timestamp().Logger().Level(logLevel)
+
 	if app.BuildTime == "" {
 		app.BuildTime = time.Now().Format("2006-01-02_15:04:05")
 	}
-	fmt.Printf("Simtezilo version %s (built %s)\n", app.Version, app.BuildTime)
+	logger.Info().Str("version", app.Version).Str("buildTime", app.BuildTime).Msg("Starting Simtezilo")
 
-	profiler, err := startPyroscope(profilerEndpoint)
+	profiler, err := startPyroscope(profilerEndpoint, &logger)
 	if err != nil {
-		log.Fatalf("Failed to setup Pyroscope profiler: %s", err.Error())
+		logger.Fatal().Err(err).Msg("Failed to setup Pyroscope profiler")
 	}
 
 	app, err := app.NewApp(app.AppOptions{
 		Done:       done,
-		LogLevel:   logLevel,
+		Logger:     &logger,
 		WebEnabled: webEnabled,
 	})
 	if err != nil {
-		log.Fatal("Error creating app: ", err)
+		logger.Fatal().Err(err).Msg("Error creating app")
 	}
 
 	go app.Run()
@@ -60,12 +66,12 @@ func main() {
 	if profiler != nil {
 		err = profiler.Shutdown()
 		if err != nil {
-			log.Fatalf("Error shutting down Pyroscope profiler: %s", err)
+			logger.Fatal().Err(err).Msg("Error shutting down Pyroscope profiler")
 		}
 	}
 }
 
-func startPyroscope(endpoint string) (*app.PyroscopeProfiler, error) {
+func startPyroscope(endpoint string, logger *zerolog.Logger) (*app.PyroscopeProfiler, error) {
 	if endpoint == "" {
 		return nil, nil
 	}
@@ -80,15 +86,15 @@ func startPyroscope(endpoint string) (*app.PyroscopeProfiler, error) {
 		},
 	)
 	if err != nil {
-		log.Fatal("create Pyroscope profiler: ", err)
+		logger.Fatal().Err(err).Str("Component", "pyroscope").Msg("create profiler")
 	}
 
 	err = profiler.Start()
 	if err != nil {
-		log.Fatal("start Pyroscope profiler: ", err)
+		logger.Fatal().Err(err).Str("Component", "pyroscope").Msg("start profiler")
 	}
 
-	log.Println("View profiling data inPyroscope at " + profiler.Endpoint())
+	logger.Info().Str("Component", "pyroscope").Str("endpoint", profiler.Endpoint()).Msg("profiler started")
 
 	return profiler, nil
 }
