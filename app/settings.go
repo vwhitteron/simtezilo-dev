@@ -30,7 +30,7 @@ func (a *App) alterSetting(name string, action string) string {
 		}
 
 		return strconv.Itoa(value)
-	case "vMax":
+	case "vSat":
 		value := 0
 
 		switch action {
@@ -56,7 +56,7 @@ func (a *App) alterSetting(name string, action string) string {
 		}
 
 		return strconv.Itoa(value)
-	case "fMax":
+	case "fSat":
 		value := 0
 
 		switch action {
@@ -69,20 +69,7 @@ func (a *App) alterSetting(name string, action string) string {
 		}
 
 		return strconv.Itoa(value)
-	case "maxHz":
-		value := 0
-
-		switch action {
-		case "increase":
-			value = a.config.IncreaseMaxHz()
-		case "decrease":
-			value = a.config.DecreaseMaxHz()
-		default:
-			value = int(a.config.GetMaxHz())
-		}
-
-		return strconv.Itoa(value)
-	case "minHz":
+	case "fMin":
 		value := 0
 
 		switch action {
@@ -92,6 +79,19 @@ func (a *App) alterSetting(name string, action string) string {
 			value = a.config.DecreaseMinHz()
 		default:
 			value = int(a.config.GetMinHz())
+		}
+
+		return strconv.Itoa(value)
+	case "fMax":
+		value := 0
+
+		switch action {
+		case "increase":
+			value = a.config.IncreaseMaxHz()
+		case "decrease":
+			value = a.config.DecreaseMaxHz()
+		default:
+			value = int(a.config.GetMaxHz())
 		}
 
 		return strconv.Itoa(value)
@@ -108,7 +108,7 @@ func (a *App) alterSetting(name string, action string) string {
 		}
 
 		return strconv.Itoa(value)
-	case "gMax":
+	case "gSat":
 		value := float64(0)
 
 		switch action {
@@ -156,7 +156,16 @@ func (a *App) alterSetting(name string, action string) string {
 		default:
 			return a.synth.Mixer.GetAlgorithm()
 		}
+	case "lang":
+		switch action {
+		case "increase":
+			return a.i18n.NextLanguage()
+		case "decrease":
+			return a.i18n.PreviousLanguage()
+		default:
+			return a.i18n.GetCurrentLanguage()
+		}
 	default:
-		return "err"
+		return "error"
 	}
 }

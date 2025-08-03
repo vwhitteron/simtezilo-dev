@@ -2,7 +2,6 @@ package app
 
 import (
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/gopxl/beep"
@@ -15,6 +14,7 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/spotpear"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/terminal"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/waveshare"
+	"github.com/vwhitteron/simtezilo-dev/app/i18n"
 	"github.com/vwhitteron/simtezilo-dev/app/kinematics"
 	"github.com/vwhitteron/simtezilo-dev/app/synth"
 	"github.com/vwhitteron/simtezilo-dev/app/ui"
@@ -38,6 +38,7 @@ type App struct {
 	config *config.Config
 	done   chan bool
 
+	i18n       *i18n.Language
 	display    display
 	hidEvents  chan ui.HIDInputEvent
 	menuSystem *ui.MenuSystem
@@ -92,6 +93,13 @@ func NewApp(opts AppOptions) (*App, error) {
 		a.log.Debug().Str("level", configLogLevel.String()).Str("source", "config").Msg("log level update")
 	}
 
+	// load language translations
+	a.i18n = i18n.NewLanguage(
+		a.config.App.Language,
+		log.With().Str("component", "i18n").Logger(),
+	)
+	a.log.Debug().Str("language", a.i18n.Code).Str("result", "success").Msg("init language")
+
 	// initialise synthesizer
 	a.synth, err = synth.NewSynth(synth.SynthOpts{
 		Config:     a.config.Synthesizer,
@@ -115,6 +123,7 @@ func NewApp(opts AppOptions) (*App, error) {
 
 		a.display.device, err = pirateaudio.NewDisplay(pirateaudio.DisplayOptions{
 			Orientation: a.config.Hardware.DisplayOrientation,
+			I18n:        a.i18n,
 		})
 		if err != nil {
 			log.Error().
@@ -142,6 +151,7 @@ func NewApp(opts AppOptions) (*App, error) {
 
 		a.display.device, err = spotpear.NewDisplay(spotpear.DisplayOptions{
 			Orientation: a.config.Hardware.DisplayOrientation,
+			I18n:        a.i18n,
 		})
 		if err != nil {
 			a.log.Error().
@@ -169,6 +179,7 @@ func NewApp(opts AppOptions) (*App, error) {
 
 		a.display.device, err = waveshare.NewDisplay(waveshare.DisplayOptions{
 			Orientation: a.config.Hardware.DisplayOrientation,
+			I18n:        a.i18n,
 		})
 		if err != nil {
 			a.log.Error().
@@ -284,7 +295,7 @@ func (a *App) Close() {
 			Msg("close")
 	}
 
-	a.drawStartupDisplay("Goodbye")
+	a.drawStartupDisplay(a.i18n.GetString("ui.quit"))
 	time.Sleep(1 * time.Second)
 	a.display.device.Close()
 }

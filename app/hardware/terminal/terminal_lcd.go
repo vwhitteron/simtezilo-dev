@@ -38,9 +38,11 @@ func (d *NullDisplay) IsPoweredOn() bool {
 
 func (d *NullDisplay) Show(string) {}
 
-func (d *NullDisplay) ShowTextCentered(*image.RGBA, string, int) {}
+func (d *NullDisplay) ShowTextCentered(*image.RGBA, string, float64) {}
 
-func (d *NullDisplay) ShowTextOverlay(string, string, int) {}
+func (d *NullDisplay) ShowTextOverlay(string, string, float64) {}
+
+func (d *NullDisplay) ShowTextSetting(*image.RGBA, string, float64, string, float64) {}
 
 func (d *NullDisplay) GetOrientation() int {
 	return d.Orientation

@@ -10,6 +10,7 @@ import (
 )
 
 type App struct {
+	Language   string
 	LogLevel   string
 	ReplayMode bool
 }
@@ -77,6 +78,7 @@ type Config struct {
 func NewConfig(filename string, log zerolog.Logger) *Config {
 	c := &Config{
 		App: App{
+			Language: "en",
 			LogLevel: "info",
 		},
 		Display: Display{

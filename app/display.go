@@ -51,7 +51,8 @@ func (a *App) powerOffDisplay() {
 
 func (a *App) drawStartupDisplay(text string) {
 	a.display.device.PowerOn()
-	a.display.device.ShowTextOverlay("splash", text, 9)
+	fontSize := a.i18n.FontRegular.Scale * 9
+	a.display.device.ShowTextOverlay("splash", text, fontSize)
 
 	a.display.gear = NullGear
 	a.display.state = displayState(startup)
@@ -66,7 +67,8 @@ func (a *App) drawWaitDisplay() {
 
 	a.log.Debug().Str("display", fmt.Sprintf("%+v", a.display)).Msg("drawing wait display")
 	a.display.device.PowerOn()
-	a.display.device.ShowTextOverlay("splash", "Waiting", 9)
+	fontSize := a.i18n.FontRegular.Scale * 9
+	a.display.device.ShowTextOverlay("splash", a.i18n.GetString("ui.waiting"), fontSize)
 
 	a.display.gear = NullGear
 	a.display.state = displayState(wait)
@@ -84,7 +86,8 @@ func (a *App) drawLiveDisplay() {
 	a.display.device.PowerOn()
 
 	canvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
-	a.display.device.ShowTextCentered(canvas, gearName(currentGear), gearFontSize)
+	fontSize := a.i18n.FontValue.Scale * gearFontSize
+	a.display.device.ShowTextCentered(canvas, gearName(currentGear), fontSize)
 
 	a.display.gear = currentGear
 	a.display.state = displayState(live)
@@ -93,7 +96,7 @@ func (a *App) drawLiveDisplay() {
 	a.log.Debug().Str("screen", "gear").Msg("display update")
 }
 
-func (a *App) drawSettingsDisplay(displayContent string, backlightIsOn bool) {
+func (a *App) drawSettingsDisplay(title string, value string, backlightIsOn bool) {
 	if !backlightIsOn {
 		a.display.state = displayState(off)
 
@@ -102,9 +105,11 @@ func (a *App) drawSettingsDisplay(displayContent string, backlightIsOn bool) {
 
 	a.display.device.PowerOn()
 
-	if displayContent != "" {
+	if value != "" {
 		canvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
-		a.display.device.ShowTextCentered(canvas, displayContent, 20)
+		titleFontSize := a.i18n.FontRegular.Scale * 11
+		valueFontSize := a.i18n.FontValue.Scale * 20
+		a.display.device.ShowTextSetting(canvas, title, titleFontSize, value, valueFontSize)
 	}
 
 	a.display.state = displayState(settings)

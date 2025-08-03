@@ -12,6 +12,7 @@ import (
 
 	"github.com/golang/freetype/truetype"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/display/st7789"
+	"github.com/vwhitteron/simtezilo-dev/app/i18n"
 	"github.com/vwhitteron/simtezilo-dev/app/ui"
 	"golang.org/x/image/font"
 	"golang.org/x/image/math/fixed"
@@ -25,8 +26,9 @@ type ST7789LCD struct {
 	port   spi.PortCloser
 	device *st7789.Device
 
-	dpi     float64
-	font    *truetype.Font
+	dpi float64
+	// font    *truetype.Font
+	i18n    *i18n.Language
 	sprites *ui.SpriteSet
 
 	rotation  st7789.Rotation
@@ -47,6 +49,7 @@ type Config struct {
 	DPI              float64
 	Rotation         st7789.Rotation
 	SetupDisplayFunc func(*st7789.Device)
+	I18n             *i18n.Language // TODO: move rendering outside of display package
 }
 
 var once sync.Once
@@ -104,9 +107,8 @@ func NewDisplay(config *Config) (*ST7789LCD, error) {
 		return nil, fmt.Errorf("loading sprite set: %w", err)
 	}
 
-	freetypeFont, err := ui.GetRegularFont()
-	if err != nil {
-		return nil, fmt.Errorf("parsing font: %w", err)
+	if config.I18n == nil {
+		return nil, fmt.Errorf("no font provided for display")
 	}
 
 	lcd := &ST7789LCD{
@@ -114,7 +116,7 @@ func NewDisplay(config *Config) (*ST7789LCD, error) {
 		device: lcdDevice,
 
 		dpi:     config.DPI,
-		font:    freetypeFont,
+		i18n:    config.I18n,
 		sprites: sprites,
 
 		rotation:  config.Rotation,
@@ -138,10 +140,12 @@ func (l *ST7789LCD) Close() {
 
 func (l *ST7789LCD) PowerOn() {
 	l.device.PowerOn()
+	l.poweredOn = true
 }
 
 func (l *ST7789LCD) PowerOff() {
 	l.device.PowerOff()
+	l.poweredOn = false
 }
 
 func (l *ST7789LCD) PowerToggle() bool {
@@ -171,9 +175,9 @@ func (l *ST7789LCD) Show(sprite string) {
 	l.device.DrawRAW(canvas)
 }
 
-func (l *ST7789LCD) ShowTextCentered(canvas *image.RGBA, text string, size int) {
-	fontFace := truetype.NewFace(l.font, &truetype.Options{
-		Size:    float64(size),
+func (l *ST7789LCD) ShowTextCentered(canvas *image.RGBA, text string, size float64) {
+	fontFace := truetype.NewFace(l.i18n.FontRegular.Font, &truetype.Options{
+		Size:    size,
 		DPI:     l.dpi,
 		Hinting: font.HintingFull,
 	})
@@ -200,13 +204,98 @@ func (l *ST7789LCD) ShowTextCentered(canvas *image.RGBA, text string, size int) 
 	l.device.DrawRAW(canvas)
 }
 
-func (l *ST7789LCD) ShowTextOverlay(background string, text string, size int) {
+func (l *ST7789LCD) ShowTextOverlay(background string, text string, size float64) {
 	img := l.sprites.GetSprite(background)
 	canvas := image.NewRGBA(img.Bounds())
 	draw.Draw(canvas, canvas.Bounds(), img, image.Point{0, 0}, draw.Src)
 
-	fontFace := truetype.NewFace(l.font, &truetype.Options{
-		Size:    float64(size),
+	fontFace := truetype.NewFace(l.i18n.FontRegular.Font, &truetype.Options{
+		Size:    size,
+		DPI:     l.dpi,
+		Hinting: font.HintingFull,
+	})
+
+	fontDrawer := &font.Drawer{
+		Dst:  canvas,
+		Src:  image.NewUniform(color.RGBA{128, 128, 128, 1}),
+		Face: fontFace,
+	}
+
+	xPosition := (fixed.I(canvas.Rect.Max.X) - fontDrawer.MeasureString(text)) / 2
+	textBounds, _ := fontDrawer.BoundString(text)
+	textHeight := textBounds.Max.Y - textBounds.Min.Y
+	yPosition := fixed.I((canvas.Rect.Max.Y) - (textHeight.Ceil() / 2))
+	fontDrawer.Dot = fixed.Point26_6{
+		X: xPosition,
+		Y: yPosition,
+	}
+
+	fontDrawer.DrawString(text)
+
+	l.canvas = canvas
+
+	l.device.DrawRAW(canvas)
+}
+
+func (l *ST7789LCD) ShowTextSetting(canvas *image.RGBA, title string, titleSize float64, value string, valueSize float64) {
+	// setting title
+	fontFace := truetype.NewFace(l.i18n.FontRegular.Font, &truetype.Options{
+		Size:    titleSize,
+		DPI:     l.dpi,
+		Hinting: font.HintingFull,
+	})
+
+	fontDrawer := &font.Drawer{
+		Dst:  canvas,
+		Src:  image.NewUniform(color.RGBA{255, 255, 255, 1}),
+		Face: fontFace,
+	}
+
+	xPosition := (fixed.I(canvas.Rect.Max.X) - fontDrawer.MeasureString(title)) / 2
+	titleBounds, _ := fontDrawer.BoundString(title)
+	textHeight := titleBounds.Max.Y - titleBounds.Min.Y
+	yPosition := fixed.I((canvas.Rect.Min.Y) + textHeight.Ceil())
+	fontDrawer.Dot = fixed.Point26_6{
+		X: xPosition,
+		Y: yPosition,
+	}
+	fontDrawer.DrawString(title)
+
+	// setting value
+	fontFace = truetype.NewFace(l.i18n.FontValue.Font, &truetype.Options{
+		Size:    valueSize,
+		DPI:     l.dpi,
+		Hinting: font.HintingFull,
+	})
+
+	fontDrawer = &font.Drawer{
+		Dst:  canvas,
+		Src:  image.NewUniform(color.RGBA{200, 200, 200, 1}),
+		Face: fontFace,
+	}
+
+	valueBounds, _ := fontDrawer.BoundString(value)
+	xPosition = (fixed.I(canvas.Rect.Max.X) - fontDrawer.MeasureString(value)) / 2
+	textHeight = valueBounds.Max.Y - valueBounds.Min.Y
+	yPosition = fixed.I((canvas.Rect.Max.Y)-textHeight.Ceil())/2 + fixed.I(textHeight.Ceil())
+	fontDrawer.Dot = fixed.Point26_6{
+		X: xPosition,
+		Y: yPosition,
+	}
+	fontDrawer.DrawString(value)
+
+	l.canvas = canvas
+
+	l.device.DrawRAW(canvas)
+}
+
+func (l *ST7789LCD) ShowText(background string, text string, size float64) {
+	img := l.sprites.GetSprite(background)
+	canvas := image.NewRGBA(img.Bounds())
+	draw.Draw(canvas, canvas.Bounds(), img, image.Point{0, 0}, draw.Src)
+
+	fontFace := truetype.NewFace(l.i18n.FontRegular.Font, &truetype.Options{
+		Size:    size,
 		DPI:     l.dpi,
 		Hinting: font.HintingFull,
 	})

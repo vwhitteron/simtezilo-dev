@@ -7,6 +7,7 @@ import (
 
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/display"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/display/st7789"
+	"github.com/vwhitteron/simtezilo-dev/app/i18n"
 	"github.com/vwhitteron/simtezilo-dev/app/utils"
 	"periph.io/x/conn/v3/gpio/gpioreg"
 	"periph.io/x/conn/v3/physic"
@@ -27,6 +28,7 @@ const spiBits = 8
 
 type DisplayOptions struct {
 	Orientation int
+	I18n        *i18n.Language
 }
 
 func NewDisplay(opts DisplayOptions) (*display.ST7789LCD, error) {
@@ -46,6 +48,7 @@ func NewDisplay(opts DisplayOptions) (*display.ST7789LCD, error) {
 		DPI:              lcdDPI,
 		Rotation:         st7789.DegreesToRotation(angle),
 		SetupDisplayFunc: setupDisplayFunc(),
+		I18n:             opts.I18n,
 	})
 }
 

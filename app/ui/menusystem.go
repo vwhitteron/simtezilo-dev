@@ -10,49 +10,38 @@ func NewMenuSystem() *MenuSystem {
 		currentPage: 0,
 		pages: []string{
 			"vol",
-			// "jerkProfile",
+			// "vProfile",
 			"vCurve",
-			"vMax",
-			// "snapProfile",
+			"vSat",
+			// "fProfile",
 			"fCurve",
+			"fSat",
+			"fMin",
 			"fMax",
-			"minHz",
-			"maxHz",
 			"gCurve",
-			"gMax",
+			"gSat",
 			"cVol",
 			"gVol",
 			"mix",
+			"lang",
 		},
 	}
 }
 
 func (m *MenuSystem) NextMenuPage() string {
-	m.currentPage++
-	if m.currentPage >= len(m.pages) {
-		m.currentPage = 0
-	}
+	m.currentPage = (m.currentPage + 1) % len(m.pages)
 
 	return m.pages[m.currentPage]
 }
 
 func (m *MenuSystem) PreviousMenuPage() string {
-	m.currentPage--
-	if m.currentPage < 0 {
-		m.currentPage = len(m.pages) - 1
-	}
+	m.currentPage = (m.currentPage - 1 + len(m.pages)) % len(m.pages)
 
 	return m.pages[m.currentPage]
 }
 
 func (m *MenuSystem) GetCurrentMenuPage() string {
-	if m.currentPage < 0 {
-		m.currentPage = 0
-	}
-
-	if m.currentPage >= len(m.pages) {
-		m.currentPage = len(m.pages) - 1
-	}
+	m.currentPage = m.currentPage % len(m.pages)
 
 	return m.pages[m.currentPage]
 }

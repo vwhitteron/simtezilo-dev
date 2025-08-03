@@ -80,21 +80,13 @@ func (m *Mixer) GetAlgorithm() string {
 }
 
 func (m *Mixer) NextAlgorithm() string {
-	m.algorithm++
-
-	if m.algorithm >= len(algorithms) {
-		m.algorithm = 0
-	}
+	m.algorithm = (m.algorithm + 1) % len(algorithms)
 
 	return algorithms[m.algorithm]
 }
 
 func (m *Mixer) PreviousAlgorithm() string {
-	m.algorithm--
-
-	if m.algorithm < 0 {
-		m.algorithm = len(algorithms) - 1
-	}
+	m.algorithm = (m.algorithm - 1 + len(algorithms)) % len(algorithms)
 
 	return algorithms[m.algorithm]
 }
