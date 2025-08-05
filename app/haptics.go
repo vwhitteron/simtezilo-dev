@@ -120,7 +120,7 @@ func (a *App) processHaptics(seqDelta uint32) {
 func (a *App) generateBump() {
 	startTime := time.Now()
 
-	snap := signal.LargestMagnitude(a.kinematics.Current.SixDOFTranslationCalc.Snap, (a.kinematics.Current.SixDOFRotation.Snap * 100))
+	snap := signal.LargestMagnitude(a.kinematics.Current.SixDOFTranslationCalc.Snap, (a.kinematics.Current.SixDOFRotation.Snap * 200))
 
 	pulseFrequencyScaler := signal.Abs(signal.Exponent(snap, a.config.GetSnapCurve()))
 	pulseFrequencyScaler = signal.Scale(pulseFrequencyScaler, a.config.GetSnapScale())
@@ -134,7 +134,7 @@ func (a *App) generateBump() {
 
 	pulseWidth := math.Round(float64(a.config.Synthesizer.SampleRateHz) / (2 * pulseFrequencyHz))
 
-	sig := signal.LargestMagnitude(a.kinematics.Current.SixDOFTranslationCalc.Jerk, (a.kinematics.Current.SixDOFRotation.Jerk * 100))
+	sig := signal.LargestMagnitude(a.kinematics.Current.SixDOFTranslationCalc.Jerk, (a.kinematics.Current.SixDOFRotation.Jerk * 200))
 	pulseAmplitude := signal.Exponent(sig, a.config.GetJerkCurve())
 	pulseAmplitude = signal.Scale(pulseAmplitude, a.config.GetJerkScale())
 
@@ -227,8 +227,8 @@ func (a *App) playGearChangeHaptic() {
 func (a *App) determineGearChangeVolume() int {
 	volumeMaxPercent, _ := a.synth.GetChannelVolume("gearchange")
 
-	if volumeMaxPercent >= 100 || a.config.DynamicGearShiftFeedbackEnabled() {
-		return 100
+	if !a.config.DynamicGearShiftFeedbackEnabled() {
+		return volumeMaxPercent
 	}
 
 	gForce := a.kinematics.GetSurgeGforce()
