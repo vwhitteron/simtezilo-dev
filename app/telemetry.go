@@ -9,14 +9,13 @@ func (a *App) updateState() {
 	a.state.last = a.state.current
 
 	a.state.current.seq = a.gtClient.Telemetry.SequenceID()
+	a.state.current.seqDelta = a.state.current.seq - a.state.last.seq
 	a.state.current.timeOfDay = a.gtClient.Telemetry.TimeOfDay()
 	a.state.current.vehicleID = a.gtClient.Telemetry.VehicleID()
 	a.state.current.gear = a.gtClient.Telemetry.CurrentGear()
 }
 
 func (a *App) sequenceHasAdvanced() bool {
-	a.state.current.seqDelta = a.state.current.seq - a.state.last.seq
-
 	if a.state.current.seq == 0 || a.state.current.seqDelta == 0 {
 		return false
 	}
