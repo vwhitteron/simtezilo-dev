@@ -5,9 +5,7 @@ import (
 	"math"
 	"os"
 	"os/exec"
-	"os/signal"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
@@ -106,13 +104,13 @@ func main() {
 	}
 
 	// Wait here until CTRL-C or other term signal is received.
-	fmt.Println("Bot is now running.  Press CTRL-C to exit.")
-	sc := make(chan os.Signal, 1)
-	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
-	<-sc
+	// fmt.Println("Bot is now running.  Press CTRL-C to exit.")
+	// sc := make(chan os.Signal, 1)
+	// signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
+	// <-sc
 
-	// Cleanly close down the Discord session.
-	dg.Close()
+	// // Cleanly close down the Discord session.
+	// dg.Close()
 
 }
 
