@@ -46,8 +46,8 @@ func (a *App) sendTelemetryChartData() {
 			"SixDOFTranslationalSnap":     float32(a.kinematics.Current.SixDOFTranslation.Snap),
 			"SixDOFTranslationalJerkCalc": float32(a.kinematics.Current.SixDOFTranslationCalc.Jerk),
 			"SixDOFTranslationalSnapCalc": float32(a.kinematics.Current.SixDOFTranslationCalc.Snap),
-			"SixDOFRotationalJerk":        float32(a.kinematics.Current.SixDOFRotation.Jerk * 200), // * 50),
-			"SixDOFRotationalSnap":        float32(a.kinematics.Current.SixDOFRotation.Snap * 200),
+			"SixDOFRotationalJerk":        float32(a.kinematics.Current.SixDOFRotation.Jerk * snapMultiplier),
+			"SixDOFRotationalSnap":        float32(a.kinematics.Current.SixDOFRotation.Snap * snapMultiplier),
 			"synthOutputAmplitude":        float32(signal.Abs(float64(a.kinematics.Current.SynthOutputAmplitude))),
 			"synthOutputFrequency":        float32(a.kinematics.Current.SynthOutputFrequency),
 		}
