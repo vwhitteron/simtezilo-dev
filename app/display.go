@@ -119,7 +119,7 @@ func (a *App) drawSettingsDisplay(title string, value string, backlightIsOn bool
 }
 
 func (a *App) updateDisplay() {
-	if a.shouldGenerateHaptics() {
+	if a.telemetryIsActive() {
 		a.drawLiveDisplay()
 	} else if a.displayPowerOffTimeoutReached() {
 		if a.display.state > displayState(off) {

@@ -22,15 +22,20 @@ import (
 	telemetry_client "github.com/zetetos/gt-telemetry"
 )
 
+type stateRecord struct {
+	seq       uint32
+	seqDelta  uint32
+	timeOfDay time.Duration
+	vehicleID uint32
+	gear      int
+}
+
 type appState struct {
-	seq            uint32
-	timeOfDay      time.Duration
 	lastActive     time.Time
 	startTime      time.Time
-	currentGear    int
-	lastGear       int
 	hapticsEnabled bool
-	vehicleID      uint32
+	current        stateRecord
+	last           stateRecord
 }
 
 type App struct {
@@ -68,9 +73,14 @@ func NewApp(opts AppOptions) (*App, error) {
 		log:  opts.Logger.With().Str("component", "app").Logger(),
 		done: opts.Done,
 		state: appState{
-			lastActive: time.Now(),
-			lastGear:   NullGear,
 			startTime:  time.Now(),
+			lastActive: time.Now(),
+			current: stateRecord{
+				gear: NullGear,
+			},
+			last: stateRecord{
+				gear: NullGear,
+			},
 		},
 		hidEvents:          make(chan ui.HIDInputEvent, 10),
 		menuSystem:         ui.NewMenuSystem(),
@@ -302,7 +312,8 @@ func (a *App) Close() {
 
 func (a *App) sessionIsComplete() bool {
 	if a.gtClient.Finished {
-		a.resetState(0, NullGear)
+		a.state.current.gear = NullGear
+		a.resetState()
 		a.log.Debug().Msg("session finished")
 		a.done <- true
 
@@ -312,10 +323,10 @@ func (a *App) sessionIsComplete() bool {
 	return false
 }
 
-func (a *App) sessionHasReset(seq uint32) bool {
+func (a *App) sessionHasReset() bool {
 	if a.gtClient.Telemetry.Flags().Loading {
 		a.log.Debug().
-			Uint32("sequence_id", seq).
+			Uint32("sequence_id", a.state.current.seq).
 			Msg("loading flag detected")
 
 		return true
@@ -324,10 +335,8 @@ func (a *App) sessionHasReset(seq uint32) bool {
 	return false
 }
 
-func (a *App) resetState(seq uint32, currentGear int) {
-	a.state.timeOfDay = a.gtClient.Telemetry.TimeOfDay()
-	a.state.seq = seq
-	a.state.lastGear = currentGear
+func (a *App) resetState() {
+	a.state.last = a.state.current
 
 	a.synth.Silence()
 
@@ -336,12 +345,13 @@ func (a *App) resetState(seq uint32, currentGear int) {
 	a.synth.ClearBuffer()
 }
 
-func (a *App) updateVehicle(currentVehicleID uint32, currentGear int) {
+func (a *App) updateVehicle() {
 	vehicleType := a.gtClient.Telemetry.VehicleType()
-	a.state.vehicleID = currentVehicleID
+
+	a.log.Debug().Uint32("ID", a.state.last.vehicleID).Msg("vehicle ID changed")
 
 	a.log.Debug().
-		Uint32("ID", currentVehicleID).
+		Uint32("ID", a.state.last.vehicleID).
 		Str("manufacturer", a.gtClient.Telemetry.VehicleManufacturer()).
 		Str("model", a.gtClient.Telemetry.VehicleModel()).
 		Str("type", vehicleType).
@@ -351,7 +361,7 @@ func (a *App) updateVehicle(currentVehicleID uint32, currentGear int) {
 		a.gtClient.Telemetry.VehicleManufacturer(),
 		a.gtClient.Telemetry.VehicleModel(),
 		vehicleType,
-		currentVehicleID,
+		a.state.last.vehicleID,
 	)
 
 	switch vehicleType {
@@ -361,10 +371,11 @@ func (a *App) updateVehicle(currentVehicleID uint32, currentGear int) {
 		a.gearVolumeMin = float64(a.config.Synthesizer.GearShiftVolumeMinStreet) / 100
 	}
 
-	a.state.lastGear = currentGear
+	a.state.last.vehicleID = a.state.current.vehicleID
+	a.state.last.gear = a.state.current.gear
 }
 
-func (a *App) hasGearChanged() bool {
+func (a *App) gearHasChanged() bool {
 	// ignore gear change events from initial unset state
 	if a.kinematics.Current.TransmissionGear == NullGear ||
 		a.kinematics.Last.TransmissionGear == NullGear {

@@ -31,7 +31,7 @@ func (a *App) sendTelemetryChartData() {
 	go func() {
 		a.telemetryChartFeed <- map[string]float32{
 			"computeTime":                 float32(a.kinematics.Last.ComputeTime.Microseconds()),
-			"seq":                         float32(a.state.seq),
+			"seq":                         float32(a.state.current.seq),
 			"timeOfDay":                   float32(a.gtClient.Telemetry.TimeOfDay().Milliseconds()),
 			"throttleInput":               a.gtClient.Telemetry.ThrottleInputPercent(),
 			"throttleOutput":              a.gtClient.Telemetry.ThrottleOutputPercent(),

@@ -36,7 +36,7 @@ type TranslationalDerivatives struct {
 }
 
 type Kinematics struct {
-	SequenceID  uint32
+	SequenceID  uint32 // TODO: probably should rely on a.state.current instead of tracking separately here
 	ComputeTime time.Duration
 	Format      string
 
@@ -44,7 +44,7 @@ type Kinematics struct {
 	SixDOFTranslation     TranslationalDerivatives
 	SixDOFRotation        RotationalDerivatives
 
-	TransmissionGear int
+	TransmissionGear int // TODO: probably should rely on a.state.current instead of tracking separately here
 
 	GroundSpeed     float64
 	SurgeCalculated float64

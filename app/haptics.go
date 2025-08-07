@@ -4,37 +4,31 @@ import (
 	"math"
 	"time"
 
-	"github.com/vwhitteron/simtezilo-dev/app/kinematics/vector"
 	"github.com/vwhitteron/simtezilo-dev/app/signal"
 )
 
 func (a *App) hapticEvents() {
 	startTime := time.Now()
 
-	seq := a.gtClient.Telemetry.SequenceID()
+	a.updateState()
 
-	// Do nothing until the sequence ID advances
-	seqDelta := seq - a.state.seq
-	if seq == 0 || seqDelta == 0 {
+	if !a.sequenceHasAdvanced() {
 		return
 	}
 
-	currentGear := a.gtClient.Telemetry.CurrentGear()
-	currentVehicleID := a.gtClient.Telemetry.VehicleID()
-
-	if a.state.vehicleID != currentVehicleID {
-		a.resetState(seq, currentGear)
+	if a.vehicleHasChanged() {
+		a.resetState()
 		a.disableHaptics("vehicle changed")
 
-		go a.updateVehicle(currentVehicleID, currentGear)
-		a.log.Debug().Uint32("ID", currentVehicleID).Msg("vehicle ID changed")
+		a.updateVehicle()
 
 		return
 	}
 
-	if !a.shouldGenerateHaptics() {
+	// Do nothing if telemetry is not indicating an active state
+	if !a.telemetryIsActive() {
 		if a.state.hapticsEnabled {
-			a.resetState(seq, currentGear)
+			a.resetState()
 			a.disableHaptics("not live")
 		}
 
@@ -42,36 +36,29 @@ func (a *App) hapticEvents() {
 	}
 
 	// The loading flag typically means the session has restarted
-	if a.sessionHasReset(seq) {
-		a.resetState(seq, currentGear)
+	if a.sessionHasReset() {
+		a.resetState()
 		a.disableHaptics("session reset")
 
 		return
 	}
 
 	// Initialise the gear if it hasn't been set yet
-	if a.state.lastGear == NullGear {
-		a.state.seq = seq
-		a.state.lastGear = currentGear
-
-		a.resetState(seq, currentGear)
+	if a.state.last.gear == NullGear {
+		a.resetState()
 		a.disableHaptics("initialising gear")
 
 		return
 	}
 
-	currentTimeOfDay := a.gtClient.Telemetry.TimeOfDay()
-	timeOfDayDelta := currentTimeOfDay - a.state.timeOfDay
-	a.state.timeOfDay = currentTimeOfDay
-	if timeOfDayDelta < 0 {
-		a.state.seq = seq
-
-		a.resetState(seq, currentGear)
+	if !a.timeOfDayHasAdvanced() {
+		a.resetState()
 		a.disableHaptics("time of day reset")
 
 		a.log.Debug().
-			Uint32("sequence_id", seq).
-			Str("time_of_day_delta", timeOfDayDelta.String()).
+			Uint32("sequence_id", a.state.current.seq).
+			Str("current_time_of_day", a.state.current.timeOfDay.String()).
+			Str("last_time_of_day", a.state.last.timeOfDay.String()).
 			Msg("time of day reset")
 
 		return
@@ -81,11 +68,24 @@ func (a *App) hapticEvents() {
 		a.enableHaptics()
 	}
 
-	a.kinematics.Current.SequenceID = seq
+	a.kinematics.Current.SequenceID = a.state.current.seq
 
-	a.processHaptics(seqDelta)
+	// no haptics if telemetry packets dropped/missed
+	// if a.telemetryPacketsDropped() > 1 {
+	// 	return
+	// }
 
-	a.state.seq = seq
+	windowSeconds := (float64(a.state.current.seqDelta) / frameRate)
+
+	a.kinematics.Update(windowSeconds, a.gtClient)
+
+	if a.gearHasChanged() {
+		a.playGearChangeHaptic()
+	}
+
+	a.generateChassisHaptic()
+
+	a.state.last = a.state.current
 	a.kinematics.Current.ComputeTime = time.Since(startTime)
 	a.kinematics.Last = a.kinematics.Current
 
@@ -95,80 +95,31 @@ func (a *App) hapticEvents() {
 
 }
 
-func (a *App) processHaptics(seqDelta uint32) {
-	// no haptics if sequence ID has not advanced
-	if seqDelta < 1 {
-		return
-	}
-
-	windowMilliseconds := (float64(seqDelta) / frameRate)
-
-	a.kinematics.Update(windowMilliseconds, a.gtClient)
-
-	// no haptics if telemetry packets dropped/missed
-	if seqDelta > 1 {
-		a.log.Debug().Uint32("delta", seqDelta).Msg("missed packets")
-	}
-
-	if a.hasGearChanged() {
-		a.playGearChangeHaptic()
-	}
-
-	a.generateBump()
-}
-
-func (a *App) generateBump() {
+func (a *App) generateChassisHaptic() {
 	startTime := time.Now()
 
-	snap := signal.LargestMagnitude(a.kinematics.Current.SixDOFTranslationCalc.Snap, (a.kinematics.Current.SixDOFRotation.Snap * 200))
-
-	pulseFrequencyScaler := signal.Abs(signal.Exponent(snap, a.config.GetSnapCurve()))
-	pulseFrequencyScaler = signal.Scale(pulseFrequencyScaler, a.config.GetSnapScale())
-	pulseFrequencyHz := a.config.GetFrequencyHzRange() * pulseFrequencyScaler
-
-	if pulseFrequencyHz < a.config.GetMinHz() {
-		pulseFrequencyHz = a.config.GetMinHz()
-	} else if pulseFrequencyHz > a.config.GetMaxHz() {
-		pulseFrequencyHz = a.config.GetMaxHz()
-	}
+	pulseFrequencyHz := a.calculateChassisHapticPulseFrequency()
 
 	pulseWidth := math.Round(float64(a.config.Synthesizer.SampleRateHz) / (2 * pulseFrequencyHz))
 
-	sig := signal.LargestMagnitude(a.kinematics.Current.SixDOFTranslationCalc.Jerk, (a.kinematics.Current.SixDOFRotation.Jerk * 200))
-	pulseAmplitude := signal.Exponent(sig, a.config.GetJerkCurve())
-	pulseAmplitude = signal.Scale(pulseAmplitude, a.config.GetJerkScale())
-
-	p1 := pulseAmplitude
-	pulseAmplitude, wasLimited := signal.LimitMax(pulseAmplitude, a.config.Synthesizer.PulseMaxAmplitude)
-	if wasLimited {
-		a.log.Debug().Float64("pulse", p1).Msg("limiter")
-	}
+	pulseAmplitude := a.calculateChassisHapticPulseAmplitude()
 
 	waveOffset := pulseWidth / 2
 	waveSamplePeriod := math.Pi / pulseWidth
 
-	bufferLen := a.synth.GetBufferLength()
-	pulseBuffer := make([]float64, bufferLen)
-	for i := range int(pulseWidth * 2) {
-		phase := waveSamplePeriod * (float64(i) - waveOffset)
-		pulseBuffer[i] = ((pulseAmplitude * math.Sin(phase)) + pulseAmplitude) / 2
-	}
+	if a.vehicleIsInMotion() {
+		bufferLen := a.synth.GetBufferLength()
+		pulseBuffer := make([]float64, bufferLen)
 
-	// no haptics when vehicle comes to a controlled stop
-	// TODO: check angular velocity, etc to enable for uncontrolled stops
-	// if vector.Magnitude(c.kinematics.Current.Velocity.Vector) >= 0.28 {
-	lastMag := vector.Magnitude(a.kinematics.Last.SixDOFTranslationCalc.Velocity)
-	currentMag := vector.Magnitude(a.kinematics.Current.SixDOFTranslationCalc.Velocity)
-	if signal.LargestMagnitude(lastMag, currentMag) >= 0.28 {
+		for i := range int(pulseWidth * 2) {
+			phase := waveSamplePeriod * (float64(i) - waveOffset)
+			pulseBuffer[i] = ((pulseAmplitude * math.Sin(phase)) + pulseAmplitude) / 2
+		}
+
 		a.synth.WriteBuffer("chassis", pulseBuffer)
 	}
 
-	a.kinematics.Last.SynthOutputAmplitude = a.kinematics.Current.SynthOutputAmplitude
-	a.kinematics.Current.SynthOutputAmplitude = pulseAmplitude
-
-	a.kinematics.Last.SynthOutputFrequency = a.kinematics.Current.SynthOutputFrequency
-	a.kinematics.Current.SynthOutputFrequency = int(pulseFrequencyHz)
-
+	// log large amplitude values
 	if pulseAmplitude > 1.0 || pulseAmplitude < -1.0 {
 		a.log.Debug().
 			Float64("jerk", a.kinematics.Current.SixDOFTranslationCalc.Jerk).
@@ -182,6 +133,42 @@ func (a *App) generateBump() {
 			Float64("pulseWidth", pulseWidth).
 			Msg("Bump outputs")
 	}
+}
+
+func (a *App) calculateChassisHapticPulseAmplitude() float64 {
+	sig := signal.LargestMagnitude(a.kinematics.Current.SixDOFTranslationCalc.Jerk, (a.kinematics.Current.SixDOFRotation.Jerk * 200))
+	pulseAmplitude := signal.Exponent(sig, a.config.GetJerkCurve())
+	pulseAmplitude = signal.Scale(pulseAmplitude, a.config.GetJerkScale())
+
+	p1 := pulseAmplitude
+	pulseAmplitude, wasLimited := signal.LimitMax(pulseAmplitude, a.config.Synthesizer.PulseMaxAmplitude)
+	if wasLimited {
+		a.log.Debug().Float64("pulse", p1).Msg("limiter")
+	}
+
+	a.kinematics.Last.SynthOutputAmplitude = a.kinematics.Current.SynthOutputAmplitude
+	a.kinematics.Current.SynthOutputAmplitude = pulseAmplitude
+
+	return pulseAmplitude
+}
+
+func (a *App) calculateChassisHapticPulseFrequency() float64 {
+	snap := signal.LargestMagnitude(a.kinematics.Current.SixDOFTranslationCalc.Snap, (a.kinematics.Current.SixDOFRotation.Snap * 200))
+
+	pulseFrequencyScaler := signal.Abs(signal.Exponent(snap, a.config.GetSnapCurve()))
+	pulseFrequencyScaler = signal.Scale(pulseFrequencyScaler, a.config.GetSnapScale())
+	pulseFrequencyHz := a.config.GetFrequencyHzRange() * pulseFrequencyScaler
+
+	if pulseFrequencyHz < a.config.GetMinHz() {
+		pulseFrequencyHz = a.config.GetMinHz()
+	} else if pulseFrequencyHz > a.config.GetMaxHz() {
+		pulseFrequencyHz = a.config.GetMaxHz()
+	}
+
+	a.kinematics.Last.SynthOutputFrequency = a.kinematics.Current.SynthOutputFrequency
+	a.kinematics.Current.SynthOutputFrequency = int(pulseFrequencyHz)
+
+	return pulseFrequencyHz
 }
 
 func (a *App) disableHaptics(reason string) {
@@ -201,24 +188,12 @@ func (a *App) enableHaptics() {
 	a.log.Debug().Bool("haptics enabled", a.state.hapticsEnabled).Msg("haptics state change")
 }
 
-func (a *App) shouldGenerateHaptics() bool {
-	if a.gtClient.Telemetry.Flags().GamePaused {
-		return false
-	}
-
-	if !a.gtClient.Telemetry.Flags().Live && !a.config.App.ReplayMode {
-		return false
-	}
-
-	return true
-}
-
 func (a *App) playGearChangeHaptic() {
 	volumePercent := a.determineGearChangeVolume()
 
 	a.synth.PlayEffectWithVolume("gearchange", volumePercent)
 	a.log.Debug().
-		Int("sequence_id", int(a.state.seq)).
+		Int("sequence_id", int(a.state.current.seq)).
 		Int("volume_pc", volumePercent).
 		Int("gear", a.kinematics.Current.TransmissionGear).
 		Msg("gear change")
