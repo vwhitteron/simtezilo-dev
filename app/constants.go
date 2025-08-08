@@ -28,5 +28,5 @@ var gearNames = map[int]string{
 // Display settings
 const gearFontSize = 48
 
-// Temporary stuff
-const snapMultiplier = 150
+// TODO: find a better place for this
+const snapMultiplier = 160
