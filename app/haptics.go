@@ -64,6 +64,10 @@ func (a *App) hapticEvents() {
 		return
 	}
 
+	// if !a.vehicleIsInMotion() {
+	// 	return
+	// }
+
 	if !a.state.hapticsEnabled {
 		a.enableHaptics()
 	}
@@ -107,17 +111,15 @@ func (a *App) generateChassisHaptic() {
 	waveOffset := pulseWidth / 2
 	waveSamplePeriod := math.Pi / pulseWidth
 
-	if a.vehicleIsInMotion() {
-		bufferLen := a.synth.GetBufferLength()
-		pulseBuffer := make([]float64, bufferLen)
+	bufferLen := a.synth.GetBufferLength()
+	pulseBuffer := make([]float64, bufferLen)
 
-		for i := range int(pulseWidth * 2) {
-			phase := waveSamplePeriod * (float64(i) - waveOffset)
-			pulseBuffer[i] = ((pulseAmplitude * math.Sin(phase)) + pulseAmplitude) / 2
-		}
-
-		a.synth.WriteBuffer("chassis", pulseBuffer)
+	for i := range int(pulseWidth * 2) {
+		phase := waveSamplePeriod * (float64(i) - waveOffset)
+		pulseBuffer[i] = ((pulseAmplitude * math.Sin(phase)) + pulseAmplitude) / 2
 	}
+
+	a.synth.WriteBuffer("chassis", pulseBuffer)
 
 	// log large amplitude values
 	if pulseAmplitude > 1.0 || pulseAmplitude < -1.0 {
