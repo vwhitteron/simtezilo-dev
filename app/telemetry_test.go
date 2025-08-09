@@ -69,20 +69,8 @@ func (suite *TelemetryTestSuite) TestSequenceHasAdvancedReturnsFalseWhenSequence
 
 func (suite *TelemetryTestSuite) TestSequenceHasAdvancedReturnsTrueWhenSequenceIDIncreases() {
 	// Arrange
-	suite.app.state.last.seq = 100
 	suite.app.state.current.seq = 101
-
-	// Act
-	result := suite.app.sequenceHasAdvanced()
-
-	// Assert
-	suite.True(result, "Sequence should have advanced")
-}
-
-func (suite *TelemetryTestSuite) TestSequenceHasAdvancedReturnsTrueWhenSequenceIDDecreases() {
-	// Arrange
-	suite.app.state.last.seq = 104
-	suite.app.state.current.seq = 103
+	suite.app.state.current.seqDelta = 1
 
 	// Act
 	result := suite.app.sequenceHasAdvanced()

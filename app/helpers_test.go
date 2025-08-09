@@ -17,7 +17,7 @@ func TestHelpersTestSuite(t *testing.T) {
 func (suite *HelpersTestSuite) TestGearNameReturnsCorrectNameForValidGear() {
 	gearNumbers := []int{-100, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15}
 
-	for gearNum := range gearNumbers {
+	for _, gearNum := range gearNumbers {
 		suite.Run("Gear "+strconv.Itoa(gearNum), func() {
 			// Arrange
 			wantName := gearNames[gearNum]
