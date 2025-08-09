@@ -18,6 +18,7 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/kinematics"
 	"github.com/vwhitteron/simtezilo-dev/app/synth"
 	"github.com/vwhitteron/simtezilo-dev/app/ui"
+	"github.com/vwhitteron/simtezilo-dev/app/ui/gui"
 	"github.com/vwhitteron/simtezilo-dev/app/ui/webui"
 	telemetry_client "github.com/zetetos/gt-telemetry"
 )
@@ -109,22 +110,6 @@ func NewApp(opts AppOptions) (*App, error) {
 		log.With().Str("component", "i18n").Logger(),
 	)
 	a.log.Debug().Str("language", a.i18n.Code).Str("result", "success").Msg("init language")
-
-	// initialise synthesizer
-	a.synth, err = synth.NewSynth(synth.SynthOpts{
-		Config:     a.config.Synthesizer,
-		Logger:     log.With().Str("component", "synth").Logger(),
-		Kinematics: &a.kinematics,
-	})
-	if err != nil {
-		a.log.Error().
-			Err(err).
-			Str("component", "synth").
-			Str("result", "failure").
-			Msg("init")
-
-		return nil, err
-	}
 
 	// initialise display and button hardware
 	switch a.config.Hardware.Model {
@@ -227,6 +212,38 @@ func NewApp(opts AppOptions) (*App, error) {
 			Msg("init")
 	}
 
+	a.display.screen, err = gui.NewScreen(&gui.Config{
+		DisplayDevice: a.display.device,
+		I18n:          a.i18n,
+	})
+	if err != nil {
+		a.log.Error().
+			Err(err).
+			Str("component", "gui").
+			Str("sub-component", "renderer").
+			Str("result", "failure").
+			Msg("init")
+	}
+
+	// initialise synthesizer
+	a.synth, err = synth.NewSynth(synth.SynthOpts{
+		Config:     a.config.Synthesizer,
+		Logger:     log.With().Str("component", "synth").Logger(),
+		Kinematics: &a.kinematics,
+	})
+	if err != nil {
+		a.log.Error().
+			Err(err).
+			Str("component", "synth").
+			Str("result", "failure").
+			Msg("init")
+
+		a.display.device.PowerOn()
+		a.display.screen.RenderErrorScreen("Synth init")
+
+		return nil, err
+	}
+
 	// initialise GT telemetry client
 	a.gtClient, err = telemetry_client.NewGTClient(telemetry_client.GTClientOpts{
 		Source:   a.config.Telemetry.Source,
@@ -239,13 +256,15 @@ func NewApp(opts AppOptions) (*App, error) {
 			Str("component", "gt client").
 			Str("result", "failure").
 			Msg("init")
+
 		a.display.device.PowerOn()
-		a.display.device.Show("error")
+		a.display.screen.RenderErrorScreen("GT client init")
 
 		return nil, err
 	}
 
-	a.drawStartupDisplay(Version)
+	a.display.screen.RenderSplashScreen(Version)
+	a.display.state = displayStartup // FIXME: move state tracking to screen
 
 	a.log.Debug().
 		Str("component", "app").

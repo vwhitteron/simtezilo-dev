@@ -11,10 +11,9 @@ type Display interface {
 	PowerOff()
 	PowerToggle() bool
 	IsPoweredOn() bool
-	Show(string)
-	ShowTextCentered(*image.RGBA, string, float64)
-	ShowTextOverlay(string, string, float64)
-	ShowTextSetting(*image.RGBA, string, float64, string, float64)
+	GetResolution() (uint16, uint16)
+	GetDPI() float64
+	Write(*image.RGBA) error
 	GetOrientation() int
 	SetOrientation(int)
 	RotateCW() int

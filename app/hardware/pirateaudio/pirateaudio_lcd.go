@@ -18,14 +18,14 @@ import (
 const dataCommPin = "GPIO9"
 const resetPin = ""
 const backlightPin = "GPIO13"
-const lcdPixelRows int16 = 240
-const lcdPixelColumns int16 = 240
+const lcdPixelRows uint16 = 240
+const lcdPixelColumns uint16 = 240
 const lcdDPI float64 = 265
 const lcdRotation = st7789.ROTATION_NONE
 const spiPort = "SPI0.1"
 const spiFrequency = 80 * physic.MegaHertz
 const spiMode = spi.Mode0
-const spiBits = 8
+const spiBits uint8 = 8
 
 type DisplayOptions struct {
 	Orientation int

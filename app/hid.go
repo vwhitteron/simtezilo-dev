@@ -87,7 +87,6 @@ func (a *App) hidEventHandler() {
 			a.done <- true
 		case ui.HIDInputPower:
 			backlightState := a.display.device.PowerToggle()
-			a.drawSettingsDisplay("", "", backlightState)
 
 			log.Debug().
 				Str("key", "power").
@@ -105,6 +104,6 @@ func (a *App) hidEventHandler() {
 
 		title := a.i18n.GetString("ui.menu." + menuPage)
 
-		a.drawSettingsDisplay(title, value, true)
+		a.display.screen.RenderSettingScreen(title, value)
 	}
 }

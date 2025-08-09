@@ -4,18 +4,14 @@ import (
 	"fmt"
 	"image"
 	"image/color"
-	"image/draw"
 	"sync"
 	"time"
 
 	_ "image/png"
 
-	"github.com/golang/freetype/truetype"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/display/st7789"
 	"github.com/vwhitteron/simtezilo-dev/app/i18n"
-	"github.com/vwhitteron/simtezilo-dev/app/ui"
-	"golang.org/x/image/font"
-	"golang.org/x/image/math/fixed"
+	"github.com/vwhitteron/simtezilo-dev/app/ui/sprites"
 	"periph.io/x/conn/v3/gpio"
 	"periph.io/x/conn/v3/physic"
 	"periph.io/x/conn/v3/spi"
@@ -26,14 +22,13 @@ type ST7789LCD struct {
 	port   spi.PortCloser
 	device *st7789.Device
 
-	dpi float64
-	// font    *truetype.Font
-	i18n    *i18n.Language
-	sprites *ui.SpriteSet
-
+	dpi       float64
 	rotation  st7789.Rotation
 	poweredOn bool
-	canvas    *image.RGBA
+
+	i18n    *i18n.Language
+	sprites *sprites.SpriteSet
+	canvas  *image.RGBA
 }
 
 type Config struct {
@@ -43,9 +38,9 @@ type Config struct {
 	SPIPort          string
 	SPIFrequency     physic.Frequency
 	SPIMode          spi.Mode
-	SPIBits          int
-	PixelRows        int16
-	PixelColumns     int16
+	SPIBits          uint8
+	PixelRows        uint16
+	PixelColumns     uint16
 	DPI              float64
 	Rotation         st7789.Rotation
 	SetupDisplayFunc func(*st7789.Device)
@@ -102,7 +97,7 @@ func NewDisplay(config *Config) (*ST7789LCD, error) {
 	// rotation must be set after the display is configured
 	lcdDevice.SetRotation(config.Rotation)
 
-	sprites, err := ui.NewSpriteSet()
+	sprites, err := sprites.NewSpriteSet()
 	if err != nil {
 		return nil, fmt.Errorf("loading sprite set: %w", err)
 	}
@@ -164,162 +159,25 @@ func (l *ST7789LCD) IsPoweredOn() bool {
 	return l.poweredOn
 }
 
-func (l *ST7789LCD) Show(sprite string) {
-	img := l.sprites.GetSprite(sprite)
-
-	canvas := image.NewRGBA(img.Bounds())
-	draw.Draw(canvas, canvas.Bounds(), img, image.Point{0, 0}, draw.Src)
-
-	l.canvas = canvas
-
-	l.device.DrawRAW(canvas)
+func (l *ST7789LCD) GetResolution() (uint16, uint16) {
+	return l.device.Size()
 }
 
-func (l *ST7789LCD) ShowTextCentered(canvas *image.RGBA, text string, size float64) {
-	fontFace := truetype.NewFace(l.i18n.FontRegular.Font, &truetype.Options{
-		Size:    size,
-		DPI:     l.dpi,
-		Hinting: font.HintingFull,
-	})
-
-	fontDrawer := &font.Drawer{
-		Dst:  canvas,
-		Src:  image.NewUniform(color.RGBA{255, 255, 255, 1}),
-		Face: fontFace,
-	}
-
-	textBounds, _ := fontDrawer.BoundString(text)
-	xPosition := (fixed.I(canvas.Rect.Max.X) - fontDrawer.MeasureString(text)) / 2
-	textHeight := textBounds.Max.Y - textBounds.Min.Y
-	yPosition := fixed.I((canvas.Rect.Max.Y)-textHeight.Ceil())/2 + fixed.I(textHeight.Ceil())
-	fontDrawer.Dot = fixed.Point26_6{
-		X: xPosition,
-		Y: yPosition,
-	}
-
-	fontDrawer.DrawString(text)
-
-	l.canvas = canvas
-
-	l.device.DrawRAW(canvas)
+func (l *ST7789LCD) GetDPI() float64 {
+	return l.dpi
 }
 
-func (l *ST7789LCD) ShowTextOverlay(background string, text string, size float64) {
-	img := l.sprites.GetSprite(background)
-	canvas := image.NewRGBA(img.Bounds())
-	draw.Draw(canvas, canvas.Bounds(), img, image.Point{0, 0}, draw.Src)
-
-	fontFace := truetype.NewFace(l.i18n.FontRegular.Font, &truetype.Options{
-		Size:    size,
-		DPI:     l.dpi,
-		Hinting: font.HintingFull,
-	})
-
-	fontDrawer := &font.Drawer{
-		Dst:  canvas,
-		Src:  image.NewUniform(color.RGBA{128, 128, 128, 1}),
-		Face: fontFace,
+func (l *ST7789LCD) Write(canvas *image.RGBA) error {
+	if canvas == nil {
+		return fmt.Errorf("canvas is nil")
 	}
 
-	xPosition := (fixed.I(canvas.Rect.Max.X) - fontDrawer.MeasureString(text)) / 2
-	textBounds, _ := fontDrawer.BoundString(text)
-	textHeight := textBounds.Max.Y - textBounds.Min.Y
-	yPosition := fixed.I((canvas.Rect.Max.Y) - (textHeight.Ceil() / 2))
-	fontDrawer.Dot = fixed.Point26_6{
-		X: xPosition,
-		Y: yPosition,
-	}
-
-	fontDrawer.DrawString(text)
-
-	l.canvas = canvas
+	l.device.PowerOn()
 
 	l.device.DrawRAW(canvas)
-}
-
-func (l *ST7789LCD) ShowTextSetting(canvas *image.RGBA, title string, titleSize float64, value string, valueSize float64) {
-	// setting title
-	fontFace := truetype.NewFace(l.i18n.FontRegular.Font, &truetype.Options{
-		Size:    titleSize,
-		DPI:     l.dpi,
-		Hinting: font.HintingFull,
-	})
-
-	fontDrawer := &font.Drawer{
-		Dst:  canvas,
-		Src:  image.NewUniform(color.RGBA{255, 255, 255, 1}),
-		Face: fontFace,
-	}
-
-	xPosition := (fixed.I(canvas.Rect.Max.X) - fontDrawer.MeasureString(title)) / 2
-	titleBounds, _ := fontDrawer.BoundString(title)
-	textHeight := titleBounds.Max.Y - titleBounds.Min.Y
-	yPosition := fixed.I((canvas.Rect.Min.Y) + textHeight.Ceil())
-	fontDrawer.Dot = fixed.Point26_6{
-		X: xPosition,
-		Y: yPosition,
-	}
-	fontDrawer.DrawString(title)
-
-	// setting value
-	fontFace = truetype.NewFace(l.i18n.FontValue.Font, &truetype.Options{
-		Size:    valueSize,
-		DPI:     l.dpi,
-		Hinting: font.HintingFull,
-	})
-
-	fontDrawer = &font.Drawer{
-		Dst:  canvas,
-		Src:  image.NewUniform(color.RGBA{200, 200, 200, 1}),
-		Face: fontFace,
-	}
-
-	valueBounds, _ := fontDrawer.BoundString(value)
-	xPosition = (fixed.I(canvas.Rect.Max.X) - fontDrawer.MeasureString(value)) / 2
-	textHeight = valueBounds.Max.Y - valueBounds.Min.Y
-	yPosition = fixed.I((canvas.Rect.Max.Y)-textHeight.Ceil())/2 + fixed.I(textHeight.Ceil())
-	fontDrawer.Dot = fixed.Point26_6{
-		X: xPosition,
-		Y: yPosition,
-	}
-	fontDrawer.DrawString(value)
-
 	l.canvas = canvas
 
-	l.device.DrawRAW(canvas)
-}
-
-func (l *ST7789LCD) ShowText(background string, text string, size float64) {
-	img := l.sprites.GetSprite(background)
-	canvas := image.NewRGBA(img.Bounds())
-	draw.Draw(canvas, canvas.Bounds(), img, image.Point{0, 0}, draw.Src)
-
-	fontFace := truetype.NewFace(l.i18n.FontRegular.Font, &truetype.Options{
-		Size:    size,
-		DPI:     l.dpi,
-		Hinting: font.HintingFull,
-	})
-
-	fontDrawer := &font.Drawer{
-		Dst:  canvas,
-		Src:  image.NewUniform(color.RGBA{128, 128, 128, 1}),
-		Face: fontFace,
-	}
-
-	xPosition := (fixed.I(canvas.Rect.Max.X) - fontDrawer.MeasureString(text)) / 2
-	textBounds, _ := fontDrawer.BoundString(text)
-	textHeight := textBounds.Max.Y - textBounds.Min.Y
-	yPosition := fixed.I((canvas.Rect.Max.Y) - (textHeight.Ceil() / 2))
-	fontDrawer.Dot = fixed.Point26_6{
-		X: xPosition,
-		Y: yPosition,
-	}
-
-	fontDrawer.DrawString(text)
-
-	l.canvas = canvas
-
-	l.device.DrawRAW(canvas)
+	return nil
 }
 
 func (l *ST7789LCD) GetOrientation() int {

@@ -16,16 +16,16 @@ import (
 )
 
 const (
-	defaultPixelColumns int16            = 320
-	defaultPixelRows    int16            = 240
+	defaultPixelColumns uint16           = 320
+	defaultPixelRows    uint16           = 240
 	defaultSPIFrequency physic.Frequency = 40 * physic.MegaHertz
-	defaultSPIBits      int              = 8
+	defaultSPIBits      uint8            = 8
 )
 
 // SPIDeviceConfig holds the configuration for setting up SPI communication with an ST7789 device.
 type SPIDeviceConfig struct {
-	PixelColumns int16            // Number of pixels in the horizontal direction, defaults to 320.
-	PixelRows    int16            // Number of pixels in the vertical direction, defaults to 240.
+	PixelColumns uint16           // Number of pixels in the horizontal direction, defaults to 320.
+	PixelRows    uint16           // Number of pixels in the vertical direction, defaults to 240.
 	Rotation     Rotation         // Display rotation, defaults to ROTATION_0.
 	DataCommPin  gpio.PinOut      // GPIO pin used for data/command selection, must be set to a valid GPIO pin.
 	ResetPin     gpio.PinIO       // GPIO pin used for resetting the display, defaults to gpio.INVALID.
@@ -33,7 +33,7 @@ type SPIDeviceConfig struct {
 	SPIPort      spi.Port         // SPI port to use for communication, must be set to a valid SPI port.
 	SPIMode      spi.Mode         // SPI mode to use, defaults to spi.Mode0.
 	SPIFrequency physic.Frequency // SPI frequency to use, defaults to 40MHz.
-	SPIBits      int              // Number of bits per SPI transfer, defaults to 8 bits.
+	SPIBits      uint8            // Number of bits per SPI transfer, defaults to 8 bits.
 
 	spiConn conn.Conn // Internal connection to the SPI device.
 }
@@ -57,7 +57,7 @@ func NewSPI(config *SPIDeviceConfig) (*Device, error) {
 		}
 	}
 
-	config.spiConn, err = config.SPIPort.Connect(config.SPIFrequency, config.SPIMode, config.SPIBits)
+	config.spiConn, err = config.SPIPort.Connect(config.SPIFrequency, config.SPIMode, int(config.SPIBits))
 	if err != nil {
 		return nil, fmt.Errorf("connect to SPI port: %w", err)
 	}
@@ -107,8 +107,8 @@ type Device struct {
 	rect      image.Rectangle // Rectangle defining the display area.
 
 	rotation                      Rotation // Current rotation of the display.
-	pixelColumns                  int16    // Number of pixels in the horizontal direction.
-	pixelRows                     int16    // Number of pixels in the vertical direction.
+	pixelColumns                  uint16   // Number of pixels in the horizontal direction.
+	pixelRows                     uint16   // Number of pixels in the vertical direction.
 	rowOffsetCfg, rowOffset       int16    // Row offset for the display, used for rotation adjustments.
 	columnOffset, columnOffsetCfg int16    // Column offset for the display, used for rotation adjustments.
 	isBGR                         bool     // Indicates if the display uses BGR color format.
@@ -215,7 +215,7 @@ func (d *Device) SendCommand(c []byte) error {
 }
 
 // Size returns the current pixel row and column sizes of the display.
-func (d *Device) Size() (int16, int16) {
+func (d *Device) Size() (uint16, uint16) {
 	if d.rotation == ROTATION_NONE || d.rotation == ROTATION_180 {
 		return d.pixelColumns, d.pixelRows
 	}

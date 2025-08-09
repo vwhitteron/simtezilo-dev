@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"image"
 	"math"
 	"os"
 	"os/signal"
@@ -13,7 +12,10 @@ import (
 	"atomicgo.dev/keyboard/keys"
 	"github.com/gopxl/beep"
 	"github.com/gopxl/beep/speaker"
+	"github.com/rs/zerolog"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/pirateaudio"
+	"github.com/vwhitteron/simtezilo-dev/app/i18n"
+	"github.com/vwhitteron/simtezilo-dev/app/ui/gui"
 )
 
 // SineWave represents a sine wave generator
@@ -122,6 +124,8 @@ func main() {
 	// Create a done channel to signal goroutines to stop
 	done := make(chan bool)
 
+	logger := zerolog.New(os.Stderr).With().Timestamp().Logger().Level(zerolog.InfoLevel)
+
 	hasDisplay := true
 
 	// Audio parameters
@@ -132,6 +136,24 @@ func main() {
 	if err != nil {
 		fmt.Printf("Failed to initialize display: %v\n", err)
 		hasDisplay = false
+	}
+
+	i18n := i18n.NewLanguage(
+		"en",
+		logger.With().Str("component", "i18n").Logger(),
+	)
+
+	renderer, err := gui.NewScreen(&gui.Config{
+		DisplayDevice: display,
+		I18n:          i18n,
+	})
+	if err != nil {
+		logger.Error().
+			Err(err).
+			Str("component", "gui").
+			Str("sub-component", "renderer").
+			Str("result", "failure").
+			Msg("init")
 	}
 
 	// Initialize the speaker
@@ -166,9 +188,8 @@ func main() {
 					fmt.Printf("%.0f Hz  %2.2f dB  %0.04f\n", sineWave.Freq, sineWave.Volume, volumeToGain(sineWave.Volume))
 
 					if hasDisplay {
-						canvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
-						message := fmt.Sprintf("%0.0f Hz\n%2.2f dB", sineWave.Freq, sineWave.Volume)
-						display.ShowTextCentered(canvas, message, 14)
+						value := fmt.Sprintf("%0.0f Hz\n%2.2f dB", sineWave.Freq, sineWave.Volume)
+						renderer.RenderLiveScreen(value)
 					}
 				}
 				lastFreq = int(sineWave.Freq)
@@ -180,10 +201,10 @@ func main() {
 
 	select {
 	case <-done:
-		fmt.Println("Received done signal, stopping...")
+		logger.Info().Str("signal", "done").Msg("stopping")
 		break
 	case <-sigChan:
-		fmt.Println("Received interrupt signal, stopping...")
+		logger.Info().Str("signal", "interrupt").Msg("stopping")
 		break
 	}
 
@@ -194,11 +215,12 @@ func main() {
 	speaker.Clear()
 	if hasDisplay {
 		// Show shutdown message clear and power off the display
-		display.ShowTextCentered(image.NewRGBA(image.Rect(0, 0, 240, 240)), "Goodbye!", 16)
+		renderer.RenderLiveScreen("Goodbye!")
 		time.Sleep(500 * time.Millisecond) // Brief pause to show message
 		display.Clear()
 		display.PowerOff()
 	}
-	fmt.Println("Goodbye!")
+
+	logger.Info().Msg("Goodbye!")
 	os.Exit(0)
 }

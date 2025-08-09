@@ -36,6 +36,18 @@ func (d *NullDisplay) IsPoweredOn() bool {
 	return d.backlightOn
 }
 
+func (d *NullDisplay) GetResolution() (uint16, uint16) {
+	return 0, 0
+}
+
+func (d *NullDisplay) GetDPI() float64 {
+	return 0
+}
+
+func (d *NullDisplay) Write(*image.RGBA) error {
+	return nil
+}
+
 func (d *NullDisplay) Show(string) {}
 
 func (d *NullDisplay) ShowTextCentered(*image.RGBA, string, float64) {}
