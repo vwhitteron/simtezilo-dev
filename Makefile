@@ -29,6 +29,14 @@ audit: test
 test:
 	go test -v -race -buildvcs ./...
 
+## test/watch: run all tests re-run when any files change
+.PHONY: test/watch
+test/watch:
+	go run github.com/mitranim/gow@latest \
+	-c \
+	-e=go,mod,html,js,svg,png \
+	test -v -race -buildvcs ./...
+
 ## test/cover: run all tests and display coverage
 .PHONY: test/cover
 test/cover:
@@ -58,6 +66,12 @@ lint:
 .PHONY: lint/fix
 lint/fix:
 	@golangci-lint run --fix
+
+## build: build the application for the current platform
+.PHONY: build
+build:
+	@go build -ldflags "-X '$(buildmodule)/app.Version=$(buildversion)' -X '$(buildmodule)/app.BuildTime=$(buildtime)'" \
+	-o ./out/simtezilo-local ./cmd/simtezilo/main.go
 
 ## build/darwin/silicon: build the application for Apple Silicon
 .PHONY: build/darwin/silicon
@@ -128,10 +142,21 @@ build/rpi/v8/64:
 	--output=out --target=binaries-arm64-8 --progress=plain \
 	-f build/docker/Dockerfile .
 
-## run/live: run the application locally
-.PHONY: run/live
-run/live:
+## run: run the application locally
+.PHONY: run
+run:
 	@go run cmd/simtezilo/main.go -l debug -w=true
+
+## run/watch: run the application locally and reload on file changes
+.PHONY: run/watch
+run/watch:
+	go run github.com/air-verse/air@latest \
+		--build.cmd "make build" --build.bin "out/simtezilo-local" --build.args_bin "-w" --build.delay "100" \
+		--build.include_dir "app, cmd" \
+		--build.include_ext "go, html, js, png, svg" \
+		--build.include_file "simtezilo.conf" \
+		--build.send_interrupt "true" \
+		--misc.clean_on_exit "true"
 
 ## run/profile: run the application with profiling enabled
 .PHONY: run/profile
