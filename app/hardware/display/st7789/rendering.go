@@ -16,7 +16,7 @@ func (d *Device) FillRectangle(x, y, width, height uint16, c color.RGBA) error {
 	}
 
 	d.SetWindow()
-	c565 := RGBATo565(c)
+	c565 := RGBAToRGB565(c)
 	c1 := uint8(c565)
 	c2 := uint8(c565 >> 8)
 
@@ -39,20 +39,19 @@ func (d *Device) FillRectangle(x, y, width, height uint16, c color.RGBA) error {
 	return nil
 }
 
-// RGBATo565 converts a color.RGBA to uint16 used in the display (bits r:5, g:6, b:5)
-func RGBATo565(c color.RGBA) uint16 {
-	r, g, b, _ := c.RGBA()
+// RGBAToRGB565 converts a 32 bit RGBA color to 16 bit RGB565 format.
+func RGBAToRGB565(c color.RGBA) uint16 {
+	r := uint16(c.R) >> 3
+	g := uint16(c.G) >> 2
+	b := uint16(c.B) >> 3
 
-	return uint16((r & 0xF800) +
-		((g & 0xFC00) >> 5) +
-		((b & 0xF800) >> 11))
+	return (r << 11) | (g << 5) | b
 }
 
 // SetPixel sets a pixel in the screen
 func (d *Device) SetPixel(x uint16, y uint16, c color.RGBA) {
-	if ((d.rotation == ROTATION_NONE || d.rotation == ROTATION_180) && (x >= d.pixelColumns || y >= d.pixelRows)) ||
-		((d.rotation == ROTATION_90 || d.rotation == ROTATION_270) && (x >= d.pixelRows || y >= d.pixelColumns)) {
-
+	resX, resY := d.getResolution()
+	if x >= resX || y >= resY {
 		return
 	}
 
@@ -61,16 +60,9 @@ func (d *Device) SetPixel(x uint16, y uint16, c color.RGBA) {
 
 // FillScreen fills the screen with a given color
 func (d *Device) FillScreen(c color.RGBA) {
-	if d.rotation == ROTATION_NONE || d.rotation == ROTATION_180 {
-		d.FillRectangle(0, 0, d.pixelColumns, d.pixelRows, c)
-	} else {
-		d.FillRectangle(0, 0, d.pixelRows, d.pixelColumns, c)
-	}
-}
+	x, y := d.getResolution()
 
-// IsBGR changes the color mode (RGB/BGR)
-func (d *Device) IsBGR(bgr bool) {
-	d.isBGR = bgr
+	d.FillRectangle(0, 0, x, y, c)
 }
 
 func (d *Device) DrawRAW(img image.Image) {
@@ -79,18 +71,27 @@ func (d *Device) DrawRAW(img image.Image) {
 	rgbaimg := image.NewRGBA(rect)
 	draw.Draw(rgbaimg, rect, img, rect.Min, draw.Src)
 
-	np := []uint8{}
-	for i := 0; i < int(d.pixelColumns); i++ {
-		for j := 0; j < int(d.pixelRows); j++ {
-			rgba := rgbaimg.At(rect.Min.X+int(d.pixelColumns)-i, rect.Min.Y+j).(color.RGBA)
-			c565 := RGBATo565(rgba)
-			c1 := uint8(c565)
-			c2 := uint8(c565 >> 8)
-			np = append(np, c1, c2)
+	data := []uint8{}
+	for column := 0; column < int(d.pixelColumns); column++ {
+		for row := 0; row < int(d.pixelRows); row++ {
+			x := rect.Min.X + int(d.pixelColumns) - column
+			y := rect.Min.Y + row
+			rgba := rgbaimg.At(x, y).(color.RGBA)
+			c565 := RGBAToRGB565(rgba)
+			data = append(data, uint8(c565), uint8(c565>>8))
 		}
 	}
 
-	for i := 0; i < len(np); i += 4096 {
-		d.SendData(np[i : i+4096])
+	chunkSize := 4096
+	for offset := 0; offset < len(data); offset += chunkSize {
+		end := min(offset+chunkSize, len(data))
+		err := d.SendData(data[offset:end])
+		if err != nil {
+			d.log.Error().
+				Err(err).
+				Str("result", "failure").
+				Int("offset", offset).
+				Msg("send data")
+		}
 	}
 }

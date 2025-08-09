@@ -79,28 +79,40 @@ func (suite *TelemetryTestSuite) TestSequenceHasAdvancedReturnsTrueWhenSequenceI
 	suite.True(result, "Sequence should have advanced")
 }
 
-func (suite *TelemetryTestSuite) TestTimeOfDayHasAdvancedReturnsFalseWhenTimeOfDayResets() {
+func (suite *TelemetryTestSuite) TestTimeOfDayHasResetReturnsTrueWhenTimeOfDayDeltaIsNegative() {
 	// Arrange
 	suite.app.state.last.timeOfDay = 900 * time.Second
 	suite.app.state.current.timeOfDay = 780 * time.Second
 
 	// Act
-	result := suite.app.timeOfDayHasAdvanced()
+	result := suite.app.timeOfDayHasReset()
 
 	// Assert
-	suite.False(result, "Time of day should not have advanced")
+	suite.True(result, "Should have detected a time of day reset")
 }
 
-func (suite *TelemetryTestSuite) TestTimeOfDayHasAdvancedReturnsTrueWhenTimeOfDayIncreases() {
+func (suite *TelemetryTestSuite) TestTimeOfDayHasResetReturnsFalseWhenTimeOfDayDeltaIsPositive() {
 	// Arrange
 	suite.app.state.last.timeOfDay = 300 * time.Millisecond
 	suite.app.state.current.timeOfDay = 316 * time.Millisecond
 
 	// Act
-	result := suite.app.timeOfDayHasAdvanced()
+	result := suite.app.timeOfDayHasReset()
 
 	// Assert
-	suite.True(result, "Time of day should have advanced")
+	suite.False(result, "Should not have detected a time of day reset")
+}
+
+func (suite *TelemetryTestSuite) TestTimeOfDayHasResetReturnsFalseWhenTimeOfDayDeltaIsZero() {
+	// Arrange
+	suite.app.state.last.timeOfDay = 300 * time.Millisecond
+	suite.app.state.current.timeOfDay = 316 * time.Millisecond
+
+	// Act
+	result := suite.app.timeOfDayHasReset()
+
+	// Assert
+	suite.False(result, "Should not have detected a time of day reset")
 }
 
 // TODO: figure out how to mock the GTClient for this test

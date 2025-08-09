@@ -201,10 +201,10 @@ func main() {
 
 	select {
 	case <-done:
-		logger.Info().Str("signal", "done").Msg("stopping")
+		logger.Debug().Str("signal", "done").Msg("stopping")
 		break
 	case <-sigChan:
-		logger.Info().Str("signal", "interrupt").Msg("stopping")
+		logger.Debug().Str("signal", "interrupt").Msg("stopping")
 		break
 	}
 
@@ -218,7 +218,7 @@ func main() {
 		renderer.RenderLiveScreen("Goodbye!")
 		time.Sleep(500 * time.Millisecond) // Brief pause to show message
 		display.Clear()
-		display.PowerOff()
+		display.Sleep()
 	}
 
 	logger.Info().Msg("Goodbye!")

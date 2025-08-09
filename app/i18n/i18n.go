@@ -35,10 +35,10 @@ type Language struct {
 
 func NewLanguage(langCode string, log zerolog.Logger) *Language {
 	language := GetLanguage(langCode)
-	language.log = log.With().Str("component", "i18n").Str("lang", langCode).Logger()
+	language.log = log.With().Str("component", "i18n").Logger()
 
 	if language.Code != langCode {
-		log.Warn().Str("requested", langCode).Str("default", language.Name).Msg("unsupported language")
+		log.Warn().Str("requested", langCode).Str("default", language.Code).Msg("unsupported language")
 	}
 
 	return language

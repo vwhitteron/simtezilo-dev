@@ -3,7 +3,8 @@ package ui
 type ScreenMode int
 
 const (
-	ScreenModeSleep ScreenMode = iota
+	ScreenModeOff ScreenMode = iota
+	ScreenModeSleep
 	ScreenModeWait
 	ScreenModeStartup
 	ScreenModeLive

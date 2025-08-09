@@ -59,6 +59,17 @@ func (r *Screen) RenderErrorScreen(value string) error {
 	return r.renderBackgroundScreen(sprites.ErrorSprite, value)
 }
 
+func (r *Screen) RenderBlankScreen() error {
+	canvas := r.newBlankCanvas()
+
+	err := r.displayDevice.Write(canvas)
+	if err != nil {
+		return fmt.Errorf("write blank canvas to display: %w", err)
+	}
+
+	return nil
+}
+
 func (r *Screen) renderBackgroundScreen(sprite sprites.SpriteName, value string) error {
 	fontFace := truetype.NewFace(r.i18n.FontRegular.Font, &truetype.Options{
 		Size:    r.i18n.FontRegular.Scale * 9,
@@ -92,6 +103,8 @@ func (r *Screen) renderBackgroundScreen(sprite sprites.SpriteName, value string)
 		return fmt.Errorf("write splash canvas to display: %w", err)
 	}
 
+	r.displayDevice.Wakeup()
+
 	return nil
 }
 
@@ -124,6 +137,8 @@ func (r *Screen) RenderLiveScreen(value string) error {
 	if err != nil {
 		return fmt.Errorf("write settings canvas to display: %w", err)
 	}
+
+	r.displayDevice.Wakeup()
 
 	return nil
 }
@@ -180,6 +195,8 @@ func (r *Screen) RenderSettingScreen(title string, value string) error {
 	if err != nil {
 		return fmt.Errorf("write settings canvas to display: %w", err)
 	}
+
+	r.displayDevice.Wakeup()
 
 	return nil
 }

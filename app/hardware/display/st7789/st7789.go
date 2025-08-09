@@ -9,6 +9,7 @@ import (
 	_ "image/png"
 	"time"
 
+	"github.com/rs/zerolog"
 	"periph.io/x/conn/v3"
 	"periph.io/x/conn/v3/gpio"
 	"periph.io/x/conn/v3/physic"
@@ -34,8 +35,11 @@ type SPIDeviceConfig struct {
 	SPIMode      spi.Mode         // SPI mode to use, defaults to spi.Mode0.
 	SPIFrequency physic.Frequency // SPI frequency to use, defaults to 40MHz.
 	SPIBits      uint8            // Number of bits per SPI transfer, defaults to 8 bits.
+	ColorBGR     bool             // If true, the display uses BGR color format, defaults to false (RGB).
 
 	spiConn conn.Conn // Internal connection to the SPI device.
+
+	log zerolog.Logger // Logger for logging messages and errors.
 }
 
 // NewSPI creates a new SPI connected ST7789 device and returns a handle to it.
@@ -113,6 +117,8 @@ type Device struct {
 	columnOffset, columnOffsetCfg int16    // Column offset for the display, used for rotation adjustments.
 	isBGR                         bool     // Indicates if the display uses BGR color format.
 	batchLength                   int32    // Length of the batch for pixel data transfers.
+
+	log zerolog.Logger // Logger for logging messages and errors.
 }
 
 // newST7789Device initializes a new ST7789 device with the provided configuration.
@@ -127,6 +133,8 @@ func newST7789Device(config *SPIDeviceConfig) (*Device, error) {
 		batchLength:  int32(config.PixelColumns),
 		reset:        config.ResetPin,
 		backlight:    config.BacklightPin,
+		isBGR:        config.ColorBGR,
+		log:          config.log.With().Str("component", "st7789").Logger(),
 	}
 	d.batchLength = d.batchLength & 1
 
@@ -297,6 +305,7 @@ func (d *Device) SetRotation(rotation Rotation) {
 		d.rowOffset = d.rowOffsetCfg
 		d.columnOffset = d.columnOffsetCfg
 	}
+
 	if d.isBGR {
 		madctlData |= MADCTL_BGR
 	}
@@ -339,4 +348,13 @@ func RotationToDegrees(rotation Rotation) int {
 	default:
 		return 0
 	}
+}
+
+// getResolution returns the X/Y pixel resolution of the display based on its current rotation.
+func (d *Device) getResolution() (uint16, uint16) {
+	if d.rotation%ROTATION_180 == 0 {
+		return d.pixelColumns, d.pixelRows
+	}
+
+	return d.pixelRows, d.pixelColumns
 }

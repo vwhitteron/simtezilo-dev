@@ -4,13 +4,13 @@ import "image"
 
 type NullDisplay struct {
 	Orientation int
-	backlightOn bool
+	sleeping    bool
 }
 
 func NewHeadlessDisplay() *NullDisplay {
 	return &NullDisplay{
 		Orientation: 0,
-		backlightOn: true,
+		sleeping:    false,
 	}
 }
 
@@ -18,22 +18,26 @@ func (d *NullDisplay) Clear() {}
 
 func (d *NullDisplay) Close() {}
 
-func (d *NullDisplay) PowerOn() {
-	d.backlightOn = true
+func (d *NullDisplay) Wakeup() {
+	d.sleeping = false
 }
 
-func (d *NullDisplay) PowerOff() {
-	d.backlightOn = false
+func (d *NullDisplay) Sleep() {
+	d.sleeping = true
 }
 
-func (d *NullDisplay) PowerToggle() bool {
-	d.backlightOn = !d.backlightOn
+func (d *NullDisplay) ToggleSleep() bool {
+	d.sleeping = !d.sleeping
 
-	return d.backlightOn
+	return d.sleeping
 }
 
-func (d *NullDisplay) IsPoweredOn() bool {
-	return d.backlightOn
+func (d *NullDisplay) IsSleeping() bool {
+	return d.sleeping
+}
+
+func (d *NullDisplay) IsAwake() bool {
+	return !d.sleeping
 }
 
 func (d *NullDisplay) GetResolution() (uint16, uint16) {

@@ -4,6 +4,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/vwhitteron/simtezilo-dev/app/kinematics"
 	"github.com/vwhitteron/simtezilo-dev/app/signal"
 )
 
@@ -27,13 +28,19 @@ func (a *App) hapticEvents() {
 
 	// Do nothing if telemetry is not indicating an active state
 	if !a.telemetryIsActive() {
+		a.state.telemetryActive = false
+
 		if a.state.hapticsEnabled {
 			a.resetState()
 			a.disableHaptics("not live")
 		}
 
+		// a.ui.SetLive(false)
+
 		return
 	}
+
+	a.state.telemetryActive = true
 
 	// The loading flag typically means the session has restarted
 	if a.sessionHasReset() {
@@ -44,14 +51,14 @@ func (a *App) hapticEvents() {
 	}
 
 	// Initialise the gear if it hasn't been set yet
-	if a.state.last.gear == NullGear {
+	if a.state.last.gear == kinematics.NullGear {
 		a.resetState()
 		a.disableHaptics("initialising gear")
 
 		return
 	}
 
-	if !a.timeOfDayHasAdvanced() {
+	if a.timeOfDayHasReset() {
 		a.resetState()
 		a.disableHaptics("time of day reset")
 
@@ -64,13 +71,15 @@ func (a *App) hapticEvents() {
 		return
 	}
 
-	// if !a.vehicleIsInMotion() {
+	// if !a.kinematics.VehicleIsInMotion() {
 	// 	return
 	// }
 
 	if !a.state.hapticsEnabled {
 		a.enableHaptics()
 	}
+
+	// a.ui.SetLive(true)
 
 	a.kinematics.Current.SequenceID = a.state.current.seq
 

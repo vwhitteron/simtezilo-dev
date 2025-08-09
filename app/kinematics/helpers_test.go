@@ -1,4 +1,4 @@
-package app
+package kinematics
 
 import (
 	"strconv"
@@ -20,10 +20,10 @@ func (suite *HelpersTestSuite) TestGearNameReturnsCorrectNameForValidGear() {
 	for _, gearNum := range gearNumbers {
 		suite.Run("Gear "+strconv.Itoa(gearNum), func() {
 			// Arrange
-			wantName := gearNames[gearNum]
+			wantName := GearNames[gearNum]
 
 			// Act
-			result := gearName(gearNum)
+			result := GearName(gearNum)
 
 			// Assert
 			suite.Equal(wantName, result, "Gear name should match expected value")

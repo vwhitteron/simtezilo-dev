@@ -1,7 +1,6 @@
 package app
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/gopxl/beep"
@@ -18,7 +17,6 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/kinematics"
 	"github.com/vwhitteron/simtezilo-dev/app/synth"
 	"github.com/vwhitteron/simtezilo-dev/app/ui"
-	"github.com/vwhitteron/simtezilo-dev/app/ui/gui"
 	"github.com/vwhitteron/simtezilo-dev/app/ui/webui"
 	telemetry_client "github.com/zetetos/gt-telemetry"
 )
@@ -32,11 +30,10 @@ type stateRecord struct {
 }
 
 type appState struct {
-	lastActive     time.Time
-	startTime      time.Time
-	hapticsEnabled bool
-	current        stateRecord
-	last           stateRecord
+	hapticsEnabled  bool // TODO: move state to haptics?
+	telemetryActive bool
+	current         stateRecord
+	last            stateRecord
 }
 
 type App struct {
@@ -44,10 +41,10 @@ type App struct {
 	config *config.Config
 	done   chan bool
 
-	i18n       *i18n.Language
-	display    display
-	hidEvents  chan ui.HIDInputEvent
-	menuSystem *ui.MenuSystem
+	ui *ui.UserInterface
+
+	i18n    *i18n.Language
+	display hardware.Display
 
 	gtClient   *telemetry_client.GTClient
 	kinematics kinematics.KinematicsTracker
@@ -74,17 +71,13 @@ func NewApp(opts AppOptions) (*App, error) {
 		log:  opts.Logger.With().Str("component", "app").Logger(),
 		done: opts.Done,
 		state: appState{
-			startTime:  time.Now(),
-			lastActive: time.Now(),
 			current: stateRecord{
-				gear: NullGear,
+				gear: kinematics.NullGear,
 			},
 			last: stateRecord{
-				gear: NullGear,
+				gear: kinematics.NullGear,
 			},
 		},
-		hidEvents:          make(chan ui.HIDInputEvent, 10),
-		menuSystem:         ui.NewMenuSystem(),
 		kinematics:         kinematics.NewKinematicsTracker(),
 		telemetryChartFeed: make(chan map[string]float32, 600),
 		webEnabled:         opts.WebEnabled,
@@ -107,16 +100,18 @@ func NewApp(opts AppOptions) (*App, error) {
 	// load language translations
 	a.i18n = i18n.NewLanguage(
 		a.config.App.Language,
-		log.With().Str("component", "i18n").Logger(),
+		a.log,
 	)
 	a.log.Debug().Str("language", a.i18n.Code).Str("result", "success").Msg("init language")
+
+	hidEvents := make(chan ui.HIDInputEvent, 10)
 
 	// initialise display and button hardware
 	switch a.config.Hardware.Model {
 	case "pirateaudio":
 		hardware.Init()
 
-		a.display.device, err = pirateaudio.NewDisplay(pirateaudio.DisplayOptions{
+		a.display, err = pirateaudio.NewDisplay(pirateaudio.DisplayOptions{
 			Orientation: a.config.Hardware.DisplayOrientation,
 			I18n:        a.i18n,
 		})
@@ -136,7 +131,7 @@ func NewApp(opts AppOptions) (*App, error) {
 			Str("result", "success").
 			Msg("init")
 
-		pirateaudio.SetupHID(a.hidEvents)
+		pirateaudio.SetupHID(hidEvents)
 		a.log.Debug().
 			Str("component", "pirate audio").
 			Str("sub", "hid").
@@ -144,7 +139,7 @@ func NewApp(opts AppOptions) (*App, error) {
 	case "spotpear":
 		hardware.Init()
 
-		a.display.device, err = spotpear.NewDisplay(spotpear.DisplayOptions{
+		a.display, err = spotpear.NewDisplay(spotpear.DisplayOptions{
 			Orientation: a.config.Hardware.DisplayOrientation,
 			I18n:        a.i18n,
 		})
@@ -164,7 +159,7 @@ func NewApp(opts AppOptions) (*App, error) {
 			Str("result", "success").
 			Msg("init")
 
-		spotpear.SetupHID(a.hidEvents)
+		spotpear.SetupHID(hidEvents)
 		log.Debug().
 			Str("component", "spotpear game 1.3").
 			Str("sub", "hid").
@@ -172,7 +167,7 @@ func NewApp(opts AppOptions) (*App, error) {
 	case "waveshare":
 		hardware.Init()
 
-		a.display.device, err = waveshare.NewDisplay(waveshare.DisplayOptions{
+		a.display, err = waveshare.NewDisplay(waveshare.DisplayOptions{
 			Orientation: a.config.Hardware.DisplayOrientation,
 			I18n:        a.i18n,
 		})
@@ -192,43 +187,40 @@ func NewApp(opts AppOptions) (*App, error) {
 			Str("result", "success").
 			Msg("init")
 
-		waveshare.SetupHID(a.hidEvents)
+		waveshare.SetupHID(hidEvents)
 		log.Debug().
 			Str("component", "waveshare 14972").
 			Str("sub", "hid").
 			Msg("init")
 	default:
-		a.display.device = terminal.NewHeadlessDisplay()
+		a.display = terminal.NewHeadlessDisplay()
 		a.log.Debug().
 			Str("component", "headless").
 			Str("sub", "display").
 			Str("result", "success").
 			Msg("init")
 
-		go terminal.SetupNullDeviceButtons(a.hidEvents)
+		go terminal.SetupNullDeviceButtons(hidEvents)
 		a.log.Debug().
 			Str("component", "headless").
 			Str("sub", "hid").
 			Msg("init")
 	}
 
-	a.display.screen, err = gui.NewScreen(&gui.Config{
-		DisplayDevice: a.display.device,
-		I18n:          a.i18n,
+	a.ui = ui.NewUserInterface(&ui.Config{
+		I18n:             a.i18n,
+		HIDEvents:        hidEvents,
+		Display:          a.display,
+		LiveData:         &ui.LiveData{Gear: kinematics.NullGear},
+		Log:              a.log.With().Str("component", "ui").Logger(),
+		SettingsCallback: a.alterSetting,
+		Done:             a.done,
 	})
-	if err != nil {
-		a.log.Error().
-			Err(err).
-			Str("component", "gui").
-			Str("sub-component", "renderer").
-			Str("result", "failure").
-			Msg("init")
-	}
 
 	// initialise synthesizer
 	a.synth, err = synth.NewSynth(synth.SynthOpts{
 		Config:     a.config.Synthesizer,
-		Logger:     log.With().Str("component", "synth").Logger(),
+		Logger:     a.log,
 		Kinematics: &a.kinematics,
 	})
 	if err != nil {
@@ -238,8 +230,7 @@ func NewApp(opts AppOptions) (*App, error) {
 			Str("result", "failure").
 			Msg("init")
 
-		a.display.device.PowerOn()
-		a.display.screen.RenderErrorScreen("Synth init")
+		a.ui.Screen.RenderErrorScreen("Synth init")
 
 		return nil, err
 	}
@@ -257,14 +248,12 @@ func NewApp(opts AppOptions) (*App, error) {
 			Str("result", "failure").
 			Msg("init")
 
-		a.display.device.PowerOn()
-		a.display.screen.RenderErrorScreen("GT client init")
+		a.ui.Screen.RenderErrorScreen("GT client init")
 
 		return nil, err
 	}
 
-	a.display.screen.RenderSplashScreen(Version)
-	a.display.state = displayStartup // FIXME: move state tracking to screen
+	a.ui.Screen.RenderSplashScreen(Version)
 
 	a.log.Debug().
 		Str("component", "app").
@@ -275,7 +264,7 @@ func NewApp(opts AppOptions) (*App, error) {
 }
 
 func (a *App) Run() {
-	go a.hidEventHandler()
+	go a.ui.HIDEventHandler()
 
 	go a.gtClient.Run()
 
@@ -307,13 +296,16 @@ func (a *App) Run() {
 			a.sessionIsComplete()
 			a.sendTelemetryChartData()
 		case <-ticker15fps.C:
-			a.updateDisplay()
+			a.ui.UpdateDisplay(ui.LiveData{
+				Gear:            a.kinematics.Current.TransmissionGear,
+				TelemetryActive: a.state.telemetryActive,
+			})
 		}
 	}
 }
 
 func (a *App) Close() {
-	a.log.Info().Msg("shutting down app")
+	a.log.Info().Msg("Shutting down app")
 
 	err := a.synth.Close()
 	if err != nil {
@@ -324,14 +316,14 @@ func (a *App) Close() {
 			Msg("close")
 	}
 
-	a.drawStartupDisplay(a.i18n.GetString("ui.quit"))
+	a.ui.Screen.RenderSplashScreen(a.i18n.GetString("ui.quit"))
 	time.Sleep(1 * time.Second)
-	a.display.device.Close()
+	a.display.Close()
 }
 
 func (a *App) sessionIsComplete() bool {
 	if a.gtClient.Finished {
-		a.state.current.gear = NullGear
+		a.state.current.gear = kinematics.NullGear
 		a.resetState()
 		a.log.Debug().Msg("session finished")
 		a.done <- true
@@ -369,19 +361,12 @@ func (a *App) updateVehicle() {
 
 	a.log.Debug().Uint32("ID", a.state.last.vehicleID).Msg("vehicle ID changed")
 
-	a.log.Debug().
+	a.log.Info().
 		Uint32("ID", a.state.last.vehicleID).
 		Str("manufacturer", a.gtClient.Telemetry.VehicleManufacturer()).
 		Str("model", a.gtClient.Telemetry.VehicleModel()).
 		Str("type", vehicleType).
-		Msg("vehicle updated")
-
-	fmt.Printf("Vehicle: %s %s [Type: %s ID: %-4d]\r\n",
-		a.gtClient.Telemetry.VehicleManufacturer(),
-		a.gtClient.Telemetry.VehicleModel(),
-		vehicleType,
-		a.state.last.vehicleID,
-	)
+		Msg("vehicle update")
 
 	switch vehicleType {
 	case "race":
@@ -396,8 +381,8 @@ func (a *App) updateVehicle() {
 
 func (a *App) gearHasChanged() bool {
 	// ignore gear change events from initial unset state
-	if a.kinematics.Current.TransmissionGear == NullGear ||
-		a.kinematics.Last.TransmissionGear == NullGear {
+	if a.kinematics.Current.TransmissionGear == kinematics.NullGear ||
+		a.kinematics.Last.TransmissionGear == kinematics.NullGear {
 		return false
 	}
 

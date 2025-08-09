@@ -29,7 +29,7 @@ func main() {
 	var profilerEndpoint string
 	var webEnabled bool
 
-	flag.StringVar(&logLevelArg, "l", "", "Log level. Default is 'warn'")
+	flag.StringVar(&logLevelArg, "l", "info", "Log level. Default is 'info'")
 	flag.StringVar(&profilerEndpoint, "p", "", "Send profiles to this Pyroscope endpoint (http://host:port). Default is off")
 	flag.BoolVar(&webEnabled, "w", false, "Enable web server. Default is false")
 	flag.Parse()
@@ -43,7 +43,7 @@ func main() {
 	if app.BuildTime == "" {
 		app.BuildTime = time.Now().Format("2006-01-02_15:04:05")
 	}
-	logger.Info().Str("version", app.Version).Str("buildTime", app.BuildTime).Msg("Starting Simtezilo")
+	logger.Info().Str("Version", app.Version).Str("BuildTime", app.BuildTime).Msg("Starting Simtezilo")
 
 	profiler, err := startPyroscope(profilerEndpoint, &logger)
 	if err != nil {

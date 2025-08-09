@@ -1,10 +1,5 @@
 package app
 
-import (
-	"github.com/vwhitteron/simtezilo-dev/app/kinematics/vector"
-	"github.com/vwhitteron/simtezilo-dev/app/signal"
-)
-
 func (a *App) updateState() {
 	a.state.last = a.state.current
 
@@ -15,6 +10,17 @@ func (a *App) updateState() {
 	a.state.current.gear = a.gtClient.Telemetry.CurrentGear()
 }
 
+// vehicleIsOnTrack checks if the vehicle is on track based on telemetry data.
+// When in the menu system the race laps will be set to uin16 max.
+// When at a  track screen before a session has started, the race laps will be set to 0.
+func (a *App) vehicleIsOnTrack() bool {
+	if a.gtClient.Telemetry.RaceLaps() > 65000 {
+		return false
+	}
+
+	return true
+}
+
 func (a *App) sequenceHasAdvanced() bool {
 	if a.state.current.seq == 0 || a.state.current.seqDelta == 0 {
 		return false
@@ -23,13 +29,13 @@ func (a *App) sequenceHasAdvanced() bool {
 	return true
 }
 
-func (a *App) timeOfDayHasAdvanced() bool {
+func (a *App) timeOfDayHasReset() bool {
 	timeOfDayDelta := a.state.current.timeOfDay - a.state.last.timeOfDay
-	if timeOfDayDelta < 0 {
-		return false
+	if timeOfDayDelta.Milliseconds() < 0 {
+		return true
 	}
 
-	return true
+	return false
 }
 
 func (a *App) telemetryIsActive() bool {
@@ -37,7 +43,16 @@ func (a *App) telemetryIsActive() bool {
 		return false
 	}
 
-	if a.gtClient.Telemetry.Flags().Live || a.config.App.ReplayMode {
+	if !a.vehicleIsOnTrack() {
+		return false
+	}
+
+	if a.gtClient.Telemetry.Flags().Live {
+		return true
+	}
+
+	// If in replay mode, telmetry is considered active if the time of day has advanced.
+	if a.config.App.ReplayMode {
 		return true
 	}
 
@@ -56,17 +71,4 @@ func (a *App) telemetryPacketsDropped() uint32 {
 
 func (a *App) vehicleHasChanged() bool {
 	return a.state.current.vehicleID != a.state.last.vehicleID
-}
-
-// no haptics when vehicle comes to a controlled stop
-// TODO: check angular velocity, etc to enable for uncontrolled stops
-// if vector.Magnitude(c.kinematics.Current.Velocity.Vector) >= 0.28 {
-func (a *App) vehicleIsInMotion() bool {
-	lastMag := vector.Magnitude(a.kinematics.Last.SixDOFTranslationCalc.Velocity)
-	currentMag := vector.Magnitude(a.kinematics.Current.SixDOFTranslationCalc.Velocity)
-	if signal.LargestMagnitude(lastMag, currentMag) >= 0.28 {
-		return true
-	}
-
-	return false
 }

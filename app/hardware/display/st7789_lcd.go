@@ -22,9 +22,9 @@ type ST7789LCD struct {
 	port   spi.PortCloser
 	device *st7789.Device
 
-	dpi       float64
-	rotation  st7789.Rotation
-	poweredOn bool
+	dpi      float64
+	rotation st7789.Rotation
+	sleeping bool
 
 	i18n    *i18n.Language
 	sprites *sprites.SpriteSet
@@ -114,8 +114,8 @@ func NewDisplay(config *Config) (*ST7789LCD, error) {
 		i18n:    config.I18n,
 		sprites: sprites,
 
-		rotation:  config.Rotation,
-		poweredOn: true,
+		rotation: config.Rotation,
+		sleeping: true,
 	}
 
 	lcd.Clear()
@@ -123,7 +123,7 @@ func NewDisplay(config *Config) (*ST7789LCD, error) {
 	return lcd, nil
 }
 func (l *ST7789LCD) Clear() {
-	l.device.FillScreen(color.RGBA{R: 0, G: 0, B: 0, A: 0})
+	l.device.FillScreen(color.RGBA{R: 255, G: 0, B: 0, A: 128})
 }
 
 func (l *ST7789LCD) Close() {
@@ -133,30 +133,38 @@ func (l *ST7789LCD) Close() {
 	l.port.Close()
 }
 
-func (l *ST7789LCD) PowerOn() {
+func (l *ST7789LCD) Wakeup() {
 	l.device.PowerOn()
-	l.poweredOn = true
+	l.sleeping = false
 }
 
-func (l *ST7789LCD) PowerOff() {
-	l.device.PowerOff()
-	l.poweredOn = false
-}
-
-func (l *ST7789LCD) PowerToggle() bool {
-	if l.poweredOn {
-		l.PowerOff()
-
-		return false
+func (l *ST7789LCD) Sleep() {
+	if l.sleeping {
+		return
 	}
 
-	l.PowerOn()
-
-	return true
+	l.device.PowerOff()
+	l.sleeping = true
 }
 
-func (l *ST7789LCD) IsPoweredOn() bool {
-	return l.poweredOn
+func (l *ST7789LCD) ToggleSleep() bool {
+	if l.sleeping {
+		l.Sleep()
+
+		return true
+	}
+
+	l.Wakeup()
+
+	return false
+}
+
+func (l *ST7789LCD) IsSleeping() bool {
+	return l.sleeping
+}
+
+func (l *ST7789LCD) IsAwake() bool {
+	return !l.sleeping
 }
 
 func (l *ST7789LCD) GetResolution() (uint16, uint16) {
@@ -171,8 +179,6 @@ func (l *ST7789LCD) Write(canvas *image.RGBA) error {
 	if canvas == nil {
 		return fmt.Errorf("canvas is nil")
 	}
-
-	l.device.PowerOn()
 
 	l.device.DrawRAW(canvas)
 	l.canvas = canvas
@@ -303,8 +309,8 @@ func setupDisplayDefault(d *st7789.Device) {
 	// Display Inversion: on
 	d.Command(st7789.INVON)
 
-	// Display On Recovery: on
-	d.Command(st7789.DISPON)
+	// Display On Recovery: off
+	d.Command(st7789.DISPOFF)
 
 	// Sleep Mode: off
 	d.Command(st7789.SLPOUT)
