@@ -98,8 +98,8 @@ func NewApp(opts AppOptions) (*App, error) {
 	if err != nil {
 		a.log.Error().Str("config value", a.config.App.LogLevel).Msg("invalid log level")
 	}
-	if configLogLevel < a.log.GetLevel() {
-		zerolog.SetGlobalLevel(configLogLevel)
+	if configLogLevel < a.log.GetLevel() || configLogLevel >= zerolog.NoLevel {
+		a.log = a.log.Level(configLogLevel).With().Logger()
 
 		a.log.Debug().Str("level", configLogLevel.String()).Str("source", "config").Msg("log level update")
 	}

@@ -155,6 +155,13 @@ func NewConfig(filename string, log zerolog.Logger) *Config {
 		}
 	}
 
+	configSource := viper.ConfigFileUsed()
+	if configSource == "" {
+		configSource = "internal default"
+	}
+
+	log.Info().Str("source", configSource).Msg("config loaded")
+
 	if len(c.Synthesizer.Eq) != 40 {
 		log.Warn().Int("length", len(c.Synthesizer.Eq)).Msg("invalid synthesizer EQ length")
 
