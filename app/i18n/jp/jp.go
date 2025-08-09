@@ -1,7 +1,7 @@
-package jajp
+package jp
 
 const (
-	Code             = "ja-jp"
+	Code             = "jp"
 	Name             = "日本語"
 	RegularFont      = "LINESeedJP_TTF_Bd.ttf"
 	RegularFontScale = 0.8

@@ -7,14 +7,14 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/vwhitteron/simtezilo-dev/app/i18n/en"
-	"github.com/vwhitteron/simtezilo-dev/app/i18n/jajp"
+	"github.com/vwhitteron/simtezilo-dev/app/i18n/jp"
 )
 
 const InvalidKey = "invalidkey"
 
 var languageCodes = []string{
 	"en",
-	"ja-jp",
+	"jp",
 }
 
 type Font struct {
@@ -33,55 +33,41 @@ type Language struct {
 	log      zerolog.Logger
 }
 
-func NewLanguage(lang string, log zerolog.Logger) *Language {
-	log = log.With().Str("component", "i18n").Str("lang", lang).Logger()
+func NewLanguage(langCode string, log zerolog.Logger) *Language {
+	language := GetLanguage(langCode)
+	language.log = log.With().Str("component", "i18n").Str("lang", langCode).Logger()
 
-	switch lang {
-	case "en":
-		lang := GetLanguage("en")
-		lang.log = log
-
-		return lang
-	case "ja-jp":
-		lang := GetLanguage("ja-jp")
-		lang.log = log
-
-		return lang
-	default: // fall back to English
-		log.Warn().Str("lang", lang).Msg("unsupported language, falling back to English")
-
-		lang := GetLanguage("en")
-		lang.log = log
-
-		return lang
+	if language.Code != langCode {
+		log.Warn().Str("requested", langCode).Str("default", language.Name).Msg("unsupported language")
 	}
 
+	return language
 }
 
 func GetLanguage(lang string) *Language {
 	switch strings.ToLower(lang) {
-	case "ja-jp":
-		fontRegular, err := GetFont(jajp.RegularFont)
+	case "jp":
+		fontRegular, err := GetFont(jp.RegularFont)
 		if err != nil {
 			log.Error().Err(err).Msg("failed to load regular font")
 			fontRegular = nil
 		}
-		fontValue, err := GetFont(jajp.ValueFont)
+		fontValue, err := GetFont(jp.ValueFont)
 		if err != nil {
 			log.Error().Err(err).Msg("failed to load regular font")
 			fontRegular = nil
 		}
 		return &Language{
-			Code:   jajp.Code,
-			Name:   jajp.Name,
-			String: jajp.Translations,
+			Code:   jp.Code,
+			Name:   jp.Name,
+			String: jp.Translations,
 			FontRegular: Font{
 				Font:  fontRegular,
-				Scale: jajp.RegularFontScale,
+				Scale: jp.RegularFontScale,
 			},
 			FontValue: Font{
 				Font:  fontValue,
-				Scale: jajp.ValueFontScale,
+				Scale: jp.ValueFontScale,
 			},
 			fallback: GetLanguage("en"),
 		}
