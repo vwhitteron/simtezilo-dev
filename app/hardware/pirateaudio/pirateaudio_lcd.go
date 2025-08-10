@@ -1,7 +1,6 @@
 package pirateaudio
 
 import (
-	"sync"
 	"time"
 
 	_ "image/png"
@@ -31,8 +30,6 @@ type DisplayOptions struct {
 	Orientation int
 	I18n        *i18n.Language
 }
-
-var once sync.Once
 
 func NewDisplay(opts DisplayOptions) (*display.ST7789LCD, error) {
 	angle := st7789.RotationToDegrees(lcdRotation)
@@ -66,7 +63,7 @@ func setupDisplayFunc() func(*st7789.Device) {
 
 		// Porch Setting: Normal(Back Front), PSEN = disabled, Idle(Back, Front)
 		d.Command(st7789.PORCTRL)
-		d.SendData(st7789.DefaultPORCTRL())
+		_ = d.SendData(st7789.DefaultPORCTRL())
 
 		// Interface pixel format: 16bit/pixel non-RGB
 		d.Command(st7789.COLMOD)
@@ -86,7 +83,7 @@ func setupDisplayFunc() func(*st7789.Device) {
 
 		// VDVVRHEN: CMDEN = VDV and VRH register value comes from command write.
 		d.Command(st7789.VDVVRHEN)
-		d.SendData(st7789.DefaultVDVVRHEN())
+		_ = d.SendData(st7789.DefaultVDVVRHEN())
 
 		// VAP(GVDD) (V) = 4.45+(vcom+vcom offset+vdv)
 		d.Command(st7789.VRHS)
@@ -94,23 +91,23 @@ func setupDisplayFunc() func(*st7789.Device) {
 
 		// VDV Set: 0v
 		d.Command(st7789.VDVS)
-		d.SendData(st7789.DefaultVDVS())
+		_ = d.SendData(st7789.DefaultVDVS())
 
 		// Power Control 1: AVDD = 6.8v, AVCL = -4.6v, VDS = 2.3v
 		d.Command(st7789.PWCTRL1)
-		d.SendData(st7789.DefaultPWCTRL1())
+		_ = d.SendData(st7789.DefaultPWCTRL1())
 
 		// Frame Rate Control (normal mode): 60Hz
 		d.Command(st7789.FRCTRL2)
-		d.SendData(st7789.DefaultFRCTRL2())
+		_ = d.SendData(st7789.DefaultFRCTRL2())
 
 		// Positive Voltage Gamma Control
 		d.Command(st7789.PVGAMCTRL)
-		d.SendData([]byte{0xD0, 0x04, 0x0D, 0x11, 0x13, 0x2B, 0x3F, 0x54, 0x4C, 0x18, 0x0D, 0x0B, 0x1F, 0x23})
+		_ = d.SendData([]byte{0xD0, 0x04, 0x0D, 0x11, 0x13, 0x2B, 0x3F, 0x54, 0x4C, 0x18, 0x0D, 0x0B, 0x1F, 0x23})
 
 		// Negative Voltage Gamma Control
 		d.Command(st7789.NVGAMCTRL)
-		d.SendData([]byte{0xD0, 0x04, 0x0C, 0x11, 0x13, 0x2C, 0x3F, 0x44, 0x51, 0x2F, 0x1F, 0x1F, 0x20, 0x23})
+		_ = d.SendData([]byte{0xD0, 0x04, 0x0C, 0x11, 0x13, 0x2C, 0x3F, 0x44, 0x51, 0x2F, 0x1F, 0x1F, 0x20, 0x23})
 
 		// Display Inversion: on
 		d.Command(st7789.INVON)

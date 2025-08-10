@@ -13,11 +13,8 @@ import (
 func (k *KinematicsTracker) VehicleIsInMotion() bool {
 	lastMag := vector.Magnitude(k.Last.SixDOFTranslationCalc.Velocity)
 	currentMag := vector.Magnitude(k.Current.SixDOFTranslationCalc.Velocity)
-	if signal.LargestMagnitude(lastMag, currentMag) >= 0.28 {
-		return true
-	}
 
-	return false
+	return signal.LargestMagnitude(lastMag, currentMag) >= 0.28
 }
 
 func GearName(gearNum int) string {

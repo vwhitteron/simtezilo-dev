@@ -81,7 +81,7 @@ func setupDisplayFunc() func(*st7789.Device) {
 
 		// Porch Setting: Normal(Back Front), PSEN = disabled, Idle(Back, Front)
 		d.Command(st7789.PORCTRL)
-		d.SendData(st7789.DefaultPORCTRL())
+		_ = d.SendData(st7789.DefaultPORCTRL())
 
 		// Gate Control: High = 12.2v, Low = -7.16v
 		d.Command(st7789.GCTRL)
@@ -97,7 +97,7 @@ func setupDisplayFunc() func(*st7789.Device) {
 
 		// VDVVRHEN: CMDEN = VDV and VRH register value comes from command write.
 		d.Command(st7789.VDVVRHEN)
-		d.SendData(st7789.DefaultVDVVRHEN())
+		_ = d.SendData(st7789.DefaultVDVVRHEN())
 
 		// VHR Set: VAP(GVDD) =  4.2v + (vcom+vcom offset+vdv)
 		//          VAN(GVCL) = -4.2v + (vcom+vcom offset+vdv)
@@ -106,27 +106,27 @@ func setupDisplayFunc() func(*st7789.Device) {
 
 		// Frame Rate Control (normal mode): 60Hz
 		d.Command(st7789.FRCTRL2)
-		d.SendData(st7789.DefaultFRCTRL2())
+		_ = d.SendData(st7789.DefaultFRCTRL2())
 
 		// Power Control: strange behavior in Waveshare drivers
 		d.Command(st7789.PWCTRL1)
-		d.SendData([]byte{0xA7})
+		_ = d.SendData([]byte{0xA7})
 
 		// Power Control 1: AVDD = 6.8v, AVCL = -4.6v, VDS = 2.3v
 		d.Command(st7789.PWCTRL1)
-		d.SendData(st7789.DefaultPWCTRL1())
+		_ = d.SendData(st7789.DefaultPWCTRL1())
 
 		// Undocumented command: strange behaviour in Waveshare drivers
 		d.Command(0xD6)
-		d.SendData([]byte{0xA1})
+		_ = d.SendData([]byte{0xA1})
 
 		// Positive Voltage Gamma Control
 		d.Command(st7789.PVGAMCTRL)
-		d.SendData([]byte{0xF0, 0x00, 0x02, 0x01, 0x00, 0x00, 0x27, 0x43, 0x3F, 0x33, 0x0E, 0x0E, 0x26, 0x2E})
+		_ = d.SendData([]byte{0xF0, 0x00, 0x02, 0x01, 0x00, 0x00, 0x27, 0x43, 0x3F, 0x33, 0x0E, 0x0E, 0x26, 0x2E})
 
 		// Negative Voltage Gamma Control
 		d.Command(st7789.NVGAMCTRL)
-		d.SendData([]byte{0xF0, 0x07, 0x0D, 0x0D, 0x0B, 0x16, 0x26, 0x43, 0x3E, 0x3F, 0x19, 0x19, 0x31, 0x3A})
+		_ = d.SendData([]byte{0xF0, 0x07, 0x0D, 0x0D, 0x0B, 0x16, 0x26, 0x43, 0x3E, 0x3F, 0x19, 0x19, 0x31, 0x3A})
 
 		// Display Inversion: on
 		d.Command(st7789.INVON)

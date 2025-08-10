@@ -2,18 +2,11 @@ package i18n
 
 import (
 	"embed"
-	_ "embed"
 	"fmt"
 
 	"github.com/golang/freetype"
 	"github.com/golang/freetype/truetype"
 )
-
-type font struct {
-	file  string
-	font  *truetype.Font
-	scale float64
-}
 
 //go:embed fonts/*
 var staticFiles embed.FS

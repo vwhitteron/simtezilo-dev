@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/gopxl/beep"
@@ -230,7 +231,7 @@ func NewApp(opts AppOptions) (*App, error) {
 			Str("result", "failure").
 			Msg("init")
 
-		a.ui.Screen.RenderErrorScreen("Synth init")
+		_ = a.ui.Screen.RenderErrorScreen("Synth init")
 
 		return nil, err
 	}
@@ -248,12 +249,22 @@ func NewApp(opts AppOptions) (*App, error) {
 			Str("result", "failure").
 			Msg("init")
 
-		a.ui.Screen.RenderErrorScreen("GT client init")
+		_ = a.ui.Screen.RenderErrorScreen("GT client init")
 
 		return nil, err
 	}
 
-	a.ui.Screen.RenderSplashScreen(Version)
+	err = a.ui.Screen.RenderSplashScreen(Version)
+	if err != nil {
+		a.log.Error().
+			Err(err).
+			Str("component", "ui").
+			Str("sub", "screen").
+			Str("result", "failure").
+			Msg("render splash screen")
+
+		return nil, fmt.Errorf("render splash screen: %w", err)
+	}
 
 	a.log.Debug().
 		Str("component", "app").
@@ -274,10 +285,21 @@ func (a *App) Run() {
 	}
 
 	chassisStreamer := synth.NewBumpStream(a.synth)
-	speaker.Init(
+	err := speaker.Init(
 		beep.SampleRate(a.synth.GetSampleRate()),
 		a.synth.GetSampleRate()/15,
 	)
+	if err != nil {
+		a.log.Error().
+			Err(err).
+			Str("component", "audio output device").
+			Str("result", "failure").
+			Msg("init")
+		_ = a.ui.Screen.RenderErrorScreen("Audio output init")
+
+		return
+	}
+
 	go speaker.Play(chassisStreamer)
 
 	ticker120fps := time.NewTicker((1000 / 120) * time.Millisecond)
@@ -316,7 +338,15 @@ func (a *App) Close() {
 			Msg("close")
 	}
 
-	a.ui.Screen.RenderSplashScreen(a.i18n.GetString("ui.quit"))
+	err = a.ui.Screen.RenderSplashScreen(a.i18n.GetString("ui.quit"))
+	if err != nil {
+		a.log.Error().
+			Err(err).
+			Str("component", "ui").
+			Str("sub", "screen").
+			Str("result", "failure").
+			Msg("render splash screen")
+	}
 	time.Sleep(1 * time.Second)
 	a.display.Close()
 }

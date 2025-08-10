@@ -48,7 +48,12 @@ var indexHTML []byte
 
 func (w *WebUI) rootHandlerFunc() func(w http.ResponseWriter, r *http.Request) {
 	return func(response http.ResponseWriter, request *http.Request) {
-		response.Write(indexHTML)
+		length, err := response.Write(indexHTML)
+		if err != nil {
+			w.log.Error().Err(err).Int("bytes_written", length).Msg("writing index HTML")
+
+			return
+		}
 	}
 }
 
@@ -57,7 +62,13 @@ var telemetryHTML []byte
 
 func (w *WebUI) telemetryHandlerFunc() func(w http.ResponseWriter, r *http.Request) {
 	return func(response http.ResponseWriter, request *http.Request) {
-		response.Write(telemetryHTML)
+		length, err := response.Write(telemetryHTML)
+		if err != nil {
+			w.log.Error().Err(err).Int("bytes_written", length).Msg("writing telemetry HTML")
+
+			return
+		}
+
 	}
 }
 
@@ -86,7 +97,12 @@ func (w *WebUI) imagesHandlerFunc() func(w http.ResponseWriter, r *http.Request)
 		}
 
 		response.Header().Add("Content-Type", contentType)
-		response.Write(content)
+		bytes, err := response.Write(content)
+		if err != nil {
+			w.log.Error().Err(err).Str("file", filename).Int("bytes_written", bytes).Msg("write image response")
+
+			return
+		}
 
 		w.log.Debug().Str("file", filename).Str("mime-type", contentType).Str("suffix", suffix).Msg("returned file")
 	}
@@ -99,13 +115,17 @@ func (w *WebUI) sciChartJSHandlerFunc() func(w http.ResponseWriter, r *http.Requ
 		content, err := staticFiles.ReadFile(filename)
 		if err != nil {
 			response.WriteHeader(http.StatusNotFound)
+
 			w.log.Error().Err(err).Msg("Invalid javascript file")
 		}
 
 		contentType := "application/javascript"
 
 		response.Header().Add("Content-Type", contentType)
-		response.Write(content)
+		length, err := response.Write(content)
+		if err != nil {
+			w.log.Error().Err(err).Int("bytes_written", length).Msg("writing javascript file")
+		}
 
 		w.log.Debug().Str("file", filename).Str("mime-type", contentType).Msg("returned file")
 	}
@@ -121,7 +141,12 @@ func (w *WebUI) handleWebSocketConnection(response http.ResponseWriter, request 
 		w.log.Error().Err(err).Msg("error upgrading connection")
 		return
 	}
-	defer ws.Close()
+	defer func() {
+		err := ws.Close()
+		if err != nil {
+			w.log.Error().Err(err).Msg("closing websocket connection")
+		}
+	}()
 
 	w.webSocketClients++
 	defer func() {

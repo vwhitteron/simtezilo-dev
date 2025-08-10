@@ -86,7 +86,7 @@ func (s *SineWave) SetVolume(vol float64) {
 }
 
 func (s *SineWave) KeyboardInput(done chan bool) {
-	keyboard.Listen(func(key keys.Key) (stop bool, err error) {
+	_ = keyboard.Listen(func(key keys.Key) (stop bool, err error) {
 		switch key.Code {
 		case keys.CtrlC, keys.Escape:
 			done <- true
@@ -189,7 +189,7 @@ func main() {
 
 					if hasDisplay {
 						value := fmt.Sprintf("%0.0f Hz\n%2.2f dB", sineWave.Freq, sineWave.Volume)
-						renderer.RenderLiveScreen(value)
+						_ = renderer.RenderLiveScreen(value)
 					}
 				}
 				lastFreq = int(sineWave.Freq)
@@ -215,7 +215,7 @@ func main() {
 	speaker.Clear()
 	if hasDisplay {
 		// Show shutdown message clear and power off the display
-		renderer.RenderLiveScreen("Goodbye!")
+		_ = renderer.RenderLiveScreen("Goodbye!")
 		time.Sleep(500 * time.Millisecond) // Brief pause to show message
 		display.Clear()
 		display.Sleep()

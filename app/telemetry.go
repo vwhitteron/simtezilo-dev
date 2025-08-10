@@ -14,11 +14,7 @@ func (a *App) updateState() {
 // When in the menu system the race laps will be set to uin16 max.
 // When at a  track screen before a session has started, the race laps will be set to 0.
 func (a *App) vehicleIsOnTrack() bool {
-	if a.gtClient.Telemetry.RaceLaps() > 65000 {
-		return false
-	}
-
-	return true
+	return a.gtClient.Telemetry.RaceLaps() < 65000
 }
 
 func (a *App) sequenceHasAdvanced() bool {
@@ -31,11 +27,7 @@ func (a *App) sequenceHasAdvanced() bool {
 
 func (a *App) timeOfDayHasReset() bool {
 	timeOfDayDelta := a.state.current.timeOfDay - a.state.last.timeOfDay
-	if timeOfDayDelta.Milliseconds() < 0 {
-		return true
-	}
-
-	return false
+	return timeOfDayDelta.Milliseconds() < 0
 }
 
 func (a *App) telemetryIsActive() bool {

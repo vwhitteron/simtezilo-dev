@@ -126,7 +126,7 @@ func (u *UserInterface) DrawWaitDisplay() {
 		return
 	}
 
-	u.Screen.RenderSplashScreen(u.i18n.GetString("ui.waiting"))
+	_ = u.Screen.RenderSplashScreen(u.i18n.GetString("ui.waiting"))
 
 	u.mode = ScreenModeWait
 
@@ -140,7 +140,7 @@ func (u *UserInterface) DrawLiveDisplay(data LiveData) {
 		}
 	}
 
-	u.Screen.RenderLiveScreen(kinematics.GearName(data.Gear))
+	_ = u.Screen.RenderLiveScreen(kinematics.GearName(data.Gear))
 
 	u.displayData = data
 	u.mode = ScreenModeLive

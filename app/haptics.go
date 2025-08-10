@@ -35,8 +35,6 @@ func (a *App) hapticEvents() {
 			a.disableHaptics("not live")
 		}
 
-		// a.ui.SetLive(false)
-
 		return
 	}
 

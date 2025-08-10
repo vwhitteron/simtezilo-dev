@@ -119,6 +119,6 @@ func (u *UserInterface) HIDEventHandler() {
 
 		title := u.i18n.GetString("ui.menu." + menuPage)
 
-		u.Screen.RenderSettingScreen(title, value)
+		_ = u.Screen.RenderSettingScreen(title, value)
 	}
 }

@@ -118,7 +118,7 @@ func (r *Screen) RenderLiveScreen(value string) error {
 	canvas := r.newBlankCanvas()
 	fontDrawer := &font.Drawer{
 		Dst:  canvas,
-		Src:  image.NewUniform(color.RGBA{255, 255, 255, 1}),
+		Src:  image.NewUniform(color.RGBA{223, 223, 223, 1}),
 		Face: fontFace,
 	}
 

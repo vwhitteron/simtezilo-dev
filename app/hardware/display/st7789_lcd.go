@@ -129,12 +129,12 @@ func (l *ST7789LCD) Clear() {
 func (l *ST7789LCD) Close() {
 	l.Clear()
 	time.Sleep(1 * time.Second)
-	l.device.PowerOff()
-	l.port.Close()
+	_ = l.device.PowerOff()
+	_ = l.port.Close()
 }
 
 func (l *ST7789LCD) Wakeup() {
-	l.device.PowerOn()
+	_ = l.device.PowerOn()
 	l.sleeping = false
 }
 
@@ -143,7 +143,7 @@ func (l *ST7789LCD) Sleep() {
 		return
 	}
 
-	l.device.PowerOff()
+	_ = l.device.PowerOff()
 	l.sleeping = true
 }
 
@@ -260,7 +260,7 @@ func setupDisplayDefault(d *st7789.Device) {
 
 	// Porch Setting: Normal(Back Front), PSEN = disabled, Idle(Back, Front)
 	d.Command(st7789.PORCTRL)
-	d.SendData(st7789.DefaultPORCTRL())
+	_ = d.SendData(st7789.DefaultPORCTRL())
 
 	// Interface pixel format: 16bit/pixel non-RGB
 	d.Command(st7789.COLMOD)
@@ -268,43 +268,43 @@ func setupDisplayDefault(d *st7789.Device) {
 
 	// Gate Control: High = 12.54v, Low = -9.6v
 	d.Command(st7789.GCTRL)
-	d.SendData(st7789.DefaultGCTRL())
+	_ = d.SendData(st7789.DefaultGCTRL())
 
 	// VCOM Setting: 0.575v
 	d.Command(st7789.VCOMS)
-	d.SendData(st7789.DefaultVCOMS())
+	_ = d.SendData(st7789.DefaultVCOMS())
 
 	// LCM Control: XOR RGB/BGR order, XOR Display Latch Order, XOR Page/Column order
 	d.Command(st7789.LCMCTRL)
-	d.SendData(st7789.DefaultLCMCTRL())
+	_ = d.SendData(st7789.DefaultLCMCTRL())
 
 	// VDVVRHEN: CMDEN = VDV and VRH register value comes from command write.
 	d.Command(st7789.VDVVRHEN)
-	d.SendData(st7789.DefaultVDVVRHEN())
+	_ = d.SendData(st7789.DefaultVDVVRHEN())
 
 	// VAP(GVDD) (V) = 4.45+(vcom+vcom offset+vdv)
 	d.Command(st7789.VRHS)
-	d.SendData(st7789.DefaultVRHS())
+	_ = d.SendData(st7789.DefaultVRHS())
 
 	// VDV Set: 0v
 	d.Command(st7789.VDVS)
-	d.SendData(st7789.DefaultVDVS())
+	_ = d.SendData(st7789.DefaultVDVS())
 
 	// Power Control 1: AVDD = 6.8v, AVCL = -4.6v, VDS = 2.3v
 	d.Command(st7789.PWCTRL1)
-	d.SendData(st7789.DefaultPWCTRL1())
+	_ = d.SendData(st7789.DefaultPWCTRL1())
 
 	// Frame Rate Control (normal mode): 60Hz
 	d.Command(st7789.FRCTRL2)
-	d.SendData(st7789.DefaultFRCTRL2())
+	_ = d.SendData(st7789.DefaultFRCTRL2())
 
 	// Positive Voltage Gamma Control
 	d.Command(st7789.PVGAMCTRL)
-	d.SendData(st7789.DefaultPVGAMCTRL())
+	_ = d.SendData(st7789.DefaultPVGAMCTRL())
 
 	// Negative Voltage Gamma Control
 	d.Command(st7789.NVGAMCTRL)
-	d.SendData(st7789.DefaultNVGAMCTRL())
+	_ = d.SendData(st7789.DefaultNVGAMCTRL())
 
 	// Display Inversion: on
 	d.Command(st7789.INVON)

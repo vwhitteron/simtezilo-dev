@@ -45,7 +45,7 @@ func main() {
 	for _, n := range net {
 		if n.ID != 0 {
 			fmt.Printf("Removing %s[%d]...\n", n.SSID, n.ID)
-			wc.RemoveNetwork(n.ID)
+			_ = wc.RemoveNetwork(n.ID)
 			didRemove = true
 		}
 		fmt.Printf("%s\n", n.SSID)
@@ -70,7 +70,7 @@ func main() {
 	}
 
 	fmt.Println("Enabling new network...")
-	wc.EnableNetwork(newNet.ID)
+	_ = wc.EnableNetwork(newNet.ID)
 
 	net, err = wc.Networks()
 	if err != nil {
@@ -81,8 +81,8 @@ func main() {
 	fmt.Println("Connecting to new network...")
 	newNet, err = wc.Connect(newNet)
 	if err != nil {
-		wc.DisableNetwork(newNet.ID)
-		wc.RemoveNetwork(newNet.ID)
+		_ = wc.DisableNetwork(newNet.ID)
+		_ = wc.RemoveNetwork(newNet.ID)
 		panic(err)
 	}
 	fmt.Printf("\nConnected to:\n%+v\n", newNet)

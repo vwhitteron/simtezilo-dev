@@ -270,12 +270,12 @@ func (d *Device) InvertColors(invert bool) {
 
 // Command sends a integer formatted command to the display device.
 func (d *Device) Command(cmd uint8) {
-	d.SendCommand([]byte{cmd})
+	_ = d.SendCommand([]byte{cmd})
 }
 
 // Data sends and integer formated data block to the display device.
 func (d *Device) Data(data uint8) {
-	d.SendData([]byte{data})
+	_ = d.SendData([]byte{data})
 }
 
 // SetRotation sets the rotation of the content on the display device.
@@ -316,7 +316,7 @@ func (d *Device) SetRotation(rotation Rotation) {
 
 	// Set vertical scroll offset so that images are located correctly on 240 pixel row displays
 	d.Command(VSCSAD)
-	d.SendData(vscsadData)
+	_ = d.SendData(vscsadData)
 }
 
 // DegreesToRotation converts an integer representing degrees to a Rotation type.

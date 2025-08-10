@@ -35,9 +35,9 @@ func NewSynth(opts SynthOpts) (*Synthesizer, error) {
 		opts.Config.GainIncrement,
 		opts.Logger.With().Str("component", "synth mixer").Logger(),
 	)
-	mixer.AddChannel("gearchange", float64(opts.Config.GearShiftVolume)/100.0)
-	mixer.AddChannel("chassis", float64(opts.Config.ChassisVolume)/100.0)
-	mixer.SetAlgorithm(opts.Config.Algorithm)
+	_ = mixer.AddChannel("gearchange", float64(opts.Config.GearShiftVolume)/100.0)
+	_ = mixer.AddChannel("chassis", float64(opts.Config.ChassisVolume)/100.0)
+	_ = mixer.SetAlgorithm(opts.Config.Algorithm)
 
 	bufferSlotSize := opts.Config.SampleRateHz / 60
 	bufferSlotCount := 20
@@ -83,7 +83,7 @@ func (s *Synthesizer) ReadBuffer(length int) []float64 {
 	sample := s.buffer.Read(length)
 
 	if s.outFile != nil {
-		binary.Write(s.outFile, binary.LittleEndian, sample)
+		_ = binary.Write(s.outFile, binary.LittleEndian, sample)
 	}
 
 	return sample

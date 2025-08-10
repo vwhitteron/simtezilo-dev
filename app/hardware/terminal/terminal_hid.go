@@ -7,7 +7,7 @@ import (
 )
 
 func SetupNullDeviceButtons(hidEvent chan ui.HIDInputEvent) {
-	keyboard.Listen(func(key keys.Key) (stop bool, err error) {
+	_ = keyboard.Listen(func(key keys.Key) (stop bool, err error) {
 		switch key.Code {
 		case keys.CtrlC, keys.Escape:
 			hidEvent <- ui.HIDInputEscape

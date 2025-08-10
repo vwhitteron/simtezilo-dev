@@ -28,7 +28,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to create file: %s", err.Error())
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			log.Printf("Failed to close file: %s", err.Error())
+		}
+	}()
 
 	buffer := bufio.NewWriter(file)
 

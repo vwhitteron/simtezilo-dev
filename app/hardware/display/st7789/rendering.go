@@ -29,9 +29,9 @@ func (d *Device) FillRectangle(x, y, width, height uint16, c color.RGBA) error {
 	j := int32(width) * int32(height)
 	for j > 0 {
 		if j >= int32(d.pixelRows) {
-			d.SendData(data)
+			_ = d.SendData(data)
 		} else {
-			d.SendData(data[:j*2])
+			_ = d.SendData(data[:j*2])
 		}
 		j -= int32(d.pixelRows)
 	}
@@ -55,14 +55,14 @@ func (d *Device) SetPixel(x uint16, y uint16, c color.RGBA) {
 		return
 	}
 
-	d.FillRectangle(x, y, 1, 1, c)
+	_ = d.FillRectangle(x, y, 1, 1, c)
 }
 
 // FillScreen fills the screen with a given color
 func (d *Device) FillScreen(c color.RGBA) {
 	x, y := d.getResolution()
 
-	d.FillRectangle(0, 0, x, y, c)
+	_ = d.FillRectangle(0, 0, x, y, c)
 }
 
 func (d *Device) DrawRAW(img image.Image) {
