@@ -7,6 +7,7 @@ import (
 
 	"github.com/golang/freetype/truetype"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware"
+	"github.com/vwhitteron/simtezilo-dev/app/hardware/display"
 	"github.com/vwhitteron/simtezilo-dev/app/i18n"
 	"github.com/vwhitteron/simtezilo-dev/app/ui/sprites"
 	"golang.org/x/image/font"
@@ -61,7 +62,7 @@ func (r *Screen) RenderErrorScreen(value string) error {
 func (r *Screen) RenderBlankScreen() error {
 	canvas := r.newBlankCanvas()
 
-	err := r.displayDevice.Write(canvas)
+	err := r.displayDevice.Write(&display.Content{Canvas: canvas})
 	if err != nil {
 		return fmt.Errorf("write blank canvas to display: %w", err)
 	}
@@ -98,7 +99,12 @@ func (r *Screen) renderBackgroundScreen(sprite sprites.SpriteName, value string)
 
 	fontDrawer.DrawString(value)
 
-	err := r.displayDevice.Write(canvas)
+	content := &display.Content{
+		Text:   "Splash: " + value,
+		Canvas: canvas,
+	}
+
+	err := r.displayDevice.Write(content)
 	if err != nil {
 		return fmt.Errorf("write splash canvas to display: %w", err)
 	}
@@ -134,7 +140,12 @@ func (r *Screen) RenderLiveScreen(value string) error {
 
 	fontDrawer.DrawString(value)
 
-	err := r.displayDevice.Write(canvas)
+	content := &display.Content{
+		Text:   "Live: " + value,
+		Canvas: canvas,
+	}
+
+	err := r.displayDevice.Write(content)
 	if err != nil {
 		return fmt.Errorf("write settings canvas to display: %w", err)
 	}
@@ -160,7 +171,7 @@ func (r *Screen) RenderSettingScreen(header string, value string) error {
 	}
 
 	xPosition := (fixed.I(canvas.Rect.Max.X) - fontDrawer.MeasureString(header)) / 2
-	titleBounds, _ := fontDrawer.BoundString(title)
+	titleBounds, _ := fontDrawer.BoundString(header)
 	textHeight := titleBounds.Max.Y - titleBounds.Min.Y
 	yPosition := fixed.I((canvas.Rect.Min.Y) + textHeight.Ceil())
 	fontDrawer.Dot = fixed.Point26_6{
@@ -192,7 +203,11 @@ func (r *Screen) RenderSettingScreen(header string, value string) error {
 	}
 	fontDrawer.DrawString(value)
 
-	err := r.displayDevice.Write(canvas)
+	content := &display.Content{
+		Text:   "Setting " + header + ": " + value,
+		Canvas: canvas,
+	}
+	err := r.displayDevice.Write(content)
 	if err != nil {
 		return fmt.Errorf("write settings canvas to display: %w", err)
 	}

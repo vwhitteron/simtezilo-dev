@@ -1,4 +1,4 @@
-package terminal
+package console
 
 import (
 	"atomicgo.dev/keyboard"
@@ -6,7 +6,7 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/ui"
 )
 
-func SetupNullDeviceButtons(hidEvent chan ui.HIDInputEvent) {
+func SetupHID(hidEvent chan ui.HIDInputEvent) {
 	_ = keyboard.Listen(func(key keys.Key) (stop bool, err error) {
 		switch key.Code {
 		case keys.CtrlC, keys.Escape:

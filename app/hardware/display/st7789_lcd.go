@@ -123,7 +123,7 @@ func NewDisplay(config *Config) (*ST7789LCD, error) {
 	return lcd, nil
 }
 func (l *ST7789LCD) Clear() {
-	l.device.FillScreen(color.RGBA{R: 255, G: 0, B: 0, A: 128})
+	l.device.FillScreen(color.RGBA{R: 0, G: 0, B: 0, A: 0})
 }
 
 func (l *ST7789LCD) Close() {
@@ -175,13 +175,13 @@ func (l *ST7789LCD) GetDPI() float64 {
 	return l.dpi
 }
 
-func (l *ST7789LCD) Write(canvas *image.RGBA) error {
-	if canvas == nil {
+func (l *ST7789LCD) Write(content *Content) error {
+	if content.Canvas == nil {
 		return fmt.Errorf("canvas is nil")
 	}
 
-	l.device.DrawRAW(canvas)
-	l.canvas = canvas
+	l.device.DrawRAW(content.Canvas)
+	l.canvas = content.Canvas
 
 	return nil
 }

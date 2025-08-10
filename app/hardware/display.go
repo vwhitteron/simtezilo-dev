@@ -1,7 +1,7 @@
 package hardware
 
 import (
-	"image"
+	"github.com/vwhitteron/simtezilo-dev/app/hardware/display"
 )
 
 type Display interface {
@@ -14,7 +14,7 @@ type Display interface {
 	IsSleeping() bool
 	GetResolution() (uint16, uint16)
 	GetDPI() float64
-	Write(*image.RGBA) error
+	Write(*display.Content) error
 	GetOrientation() int
 	SetOrientation(int)
 	RotateCW() int
