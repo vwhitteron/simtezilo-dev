@@ -3,7 +3,6 @@ package gui
 import (
 	"fmt"
 	"image"
-	"image/color"
 	"image/draw"
 
 	"github.com/golang/freetype/truetype"
@@ -71,8 +70,9 @@ func (r *Screen) RenderBlankScreen() error {
 }
 
 func (r *Screen) renderBackgroundScreen(sprite sprites.SpriteName, value string) error {
+	// footer
 	fontFace := truetype.NewFace(r.i18n.FontRegular.Font, &truetype.Options{
-		Size:    r.i18n.FontRegular.Scale * 9,
+		Size:    r.i18n.FontRegular.Scale * footerSize,
 		DPI:     r.dpi,
 		Hinting: font.HintingFull,
 	})
@@ -83,7 +83,7 @@ func (r *Screen) renderBackgroundScreen(sprite sprites.SpriteName, value string)
 
 	fontDrawer := &font.Drawer{
 		Dst:  canvas,
-		Src:  image.NewUniform(color.RGBA{128, 128, 128, 1}),
+		Src:  image.NewUniform(footerColor),
 		Face: fontFace,
 	}
 
@@ -109,8 +109,9 @@ func (r *Screen) renderBackgroundScreen(sprite sprites.SpriteName, value string)
 }
 
 func (r *Screen) RenderLiveScreen(value string) error {
+	// value
 	fontFace := truetype.NewFace(r.i18n.FontRegular.Font, &truetype.Options{
-		Size:    r.i18n.FontRegular.Scale * 48,
+		Size:    r.i18n.FontRegular.Scale * valueLargeSize,
 		DPI:     r.dpi,
 		Hinting: font.HintingFull,
 	})
@@ -118,7 +119,7 @@ func (r *Screen) RenderLiveScreen(value string) error {
 	canvas := r.newBlankCanvas()
 	fontDrawer := &font.Drawer{
 		Dst:  canvas,
-		Src:  image.NewUniform(color.RGBA{223, 223, 223, 1}),
+		Src:  image.NewUniform(valueColor),
 		Face: fontFace,
 	}
 
@@ -143,10 +144,10 @@ func (r *Screen) RenderLiveScreen(value string) error {
 	return nil
 }
 
-func (r *Screen) RenderSettingScreen(title string, value string) error {
-	// screen title
+func (r *Screen) RenderSettingScreen(header string, value string) error {
+	// header
 	fontFace := truetype.NewFace(r.i18n.FontRegular.Font, &truetype.Options{
-		Size:    r.i18n.FontRegular.Scale * 11,
+		Size:    r.i18n.FontRegular.Scale * headerSize,
 		DPI:     r.dpi,
 		Hinting: font.HintingFull,
 	})
@@ -154,11 +155,11 @@ func (r *Screen) RenderSettingScreen(title string, value string) error {
 	canvas := r.newBlankCanvas()
 	fontDrawer := &font.Drawer{
 		Dst:  canvas,
-		Src:  image.NewUniform(color.RGBA{255, 255, 255, 1}),
+		Src:  image.NewUniform(headerColor),
 		Face: fontFace,
 	}
 
-	xPosition := (fixed.I(canvas.Rect.Max.X) - fontDrawer.MeasureString(title)) / 2
+	xPosition := (fixed.I(canvas.Rect.Max.X) - fontDrawer.MeasureString(header)) / 2
 	titleBounds, _ := fontDrawer.BoundString(title)
 	textHeight := titleBounds.Max.Y - titleBounds.Min.Y
 	yPosition := fixed.I((canvas.Rect.Min.Y) + textHeight.Ceil())
@@ -166,18 +167,18 @@ func (r *Screen) RenderSettingScreen(title string, value string) error {
 		X: xPosition,
 		Y: yPosition,
 	}
-	fontDrawer.DrawString(title)
+	fontDrawer.DrawString(header)
 
-	// screen value
+	// value
 	fontFace = truetype.NewFace(r.i18n.FontValue.Font, &truetype.Options{
-		Size:    r.i18n.FontValue.Scale * 20,
+		Size:    r.i18n.FontValue.Scale * valueSmallSize,
 		DPI:     r.dpi,
 		Hinting: font.HintingFull,
 	})
 
 	fontDrawer = &font.Drawer{
 		Dst:  canvas,
-		Src:  image.NewUniform(color.RGBA{200, 200, 200, 1}),
+		Src:  image.NewUniform(valueColor),
 		Face: fontFace,
 	}
 

@@ -10,10 +10,8 @@ func NewMenuSystem() *MenuSystem {
 		currentPage: 0,
 		pages: []string{
 			"vol",
-			// "vProfile",
 			"vCurve",
 			"vSat",
-			// "fProfile",
 			"fCurve",
 			"fSat",
 			"fMin",

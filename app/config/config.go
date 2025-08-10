@@ -15,21 +15,9 @@ type App struct {
 	ReplayMode bool
 }
 
-type Display struct {
-	GearFontSize   int
-	VolumeFontSize int
-}
-
 type Hardware struct {
 	Model              string
 	DisplayOrientation int
-}
-
-type SynthProfile struct {
-	JerkCurve int
-	JerkMax   int
-	SnapCurve int
-	SnapMax   int
 }
 
 type Synthesizer struct {
@@ -38,14 +26,11 @@ type Synthesizer struct {
 	DynamicGearShiftGforceMax float64
 	SampleRateHz              int
 	OutputFile                string
-	Profiles                  []SynthProfile
 	JerkCurve                 int
 	JerkMax                   int
-	JerkProfile               int
 	JerkScale                 float64
 	SnapCurve                 int
 	SnapMax                   int
-	SnapProfile               int
 	SnapScale                 float64
 	PulseMaxAmplitude         float64
 	PulseMaxFrequencyHz       float64
@@ -68,7 +53,6 @@ type Telemetry struct {
 
 type Config struct {
 	App         App
-	Display     Display
 	Hardware    Hardware
 	Synthesizer Synthesizer
 	Telemetry   Telemetry
@@ -81,38 +65,20 @@ func NewConfig(filename string, log zerolog.Logger) *Config {
 			Language: "en",
 			LogLevel: "info",
 		},
-		Display: Display{
-			GearFontSize:   48,
-			VolumeFontSize: 20,
-		},
 		Hardware: Hardware{
 			Model:              "none",
 			DisplayOrientation: 0,
 		},
 		Synthesizer: Synthesizer{
-			SampleRateHz: 8000,
-			OutputFile:   "",
-			Profiles: []SynthProfile{
-				{JerkCurve: 475, JerkMax: 80, SnapCurve: 600, SnapMax: 48},
-				{JerkCurve: 450, JerkMax: 80, SnapCurve: 555, SnapMax: 48},
-				{JerkCurve: 425, JerkMax: 80, SnapCurve: 510, SnapMax: 48},
-				{JerkCurve: 400, JerkMax: 80, SnapCurve: 470, SnapMax: 48},
-				{JerkCurve: 375, JerkMax: 80, SnapCurve: 420, SnapMax: 48},
-				{JerkCurve: 350, JerkMax: 80, SnapCurve: 380, SnapMax: 48},
-				{JerkCurve: 325, JerkMax: 80, SnapCurve: 335, SnapMax: 48},
-				{JerkCurve: 300, JerkMax: 80, SnapCurve: 390, SnapMax: 48},
-				{JerkCurve: 275, JerkMax: 80, SnapCurve: 345, SnapMax: 48},
-				{JerkCurve: 250, JerkMax: 80, SnapCurve: 200, SnapMax: 48},
-			},
+			SampleRateHz:              8000,
+			OutputFile:                "",
 			DynamicGearShiftFeedback:  true,
 			DynamicGearShiftCurve:     150,
 			DynamicGearShiftGforceMax: 1.0,
 			JerkCurve:                 375,
 			JerkMax:                   50,
-			JerkProfile:               5,
 			SnapCurve:                 420,
 			SnapMax:                   52,
-			SnapProfile:               5,
 			PulseMaxAmplitude:         1,
 			PulseMaxFrequencyHz:       60,
 			PulseMinFrequencyHz:       16,
@@ -229,13 +195,6 @@ func (c *Config) GetSnapScale() float64 {
 	return c.Synthesizer.SnapScale
 }
 
-func (c *Config) GetJerkProfile() int {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.Synthesizer.JerkProfile
-}
-
 func (c *Config) GetJerkMax() int {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -243,46 +202,11 @@ func (c *Config) GetJerkMax() int {
 	return c.Synthesizer.JerkMax
 }
 
-func (c *Config) GetSnapProfile() int {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.Synthesizer.SnapProfile
-}
-
 func (c *Config) GetSnapMax() int {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
 	return c.Synthesizer.SnapMax
-}
-
-func (c *Config) PreviousJerkProfile() int {
-	c.mu.Lock()
-
-	if c.Synthesizer.JerkProfile > 1 {
-		c.Synthesizer.JerkProfile--
-	}
-
-	c.mu.Unlock()
-
-	c.UpdateJerkScale()
-
-	return c.Synthesizer.JerkProfile
-}
-
-func (c *Config) NextJerkProfile() int {
-	c.mu.Lock()
-
-	if c.Synthesizer.JerkProfile < len(c.Synthesizer.Profiles) {
-		c.Synthesizer.JerkProfile++
-	}
-
-	c.mu.Unlock()
-
-	c.UpdateJerkScale()
-
-	return c.Synthesizer.JerkProfile
 }
 
 func (c *Config) DecreaseJerkCurve() int {
@@ -354,34 +278,6 @@ func (c *Config) UpdateJerkScale() {
 	defer c.mu.Unlock()
 
 	c.Synthesizer.JerkScale = 1 / math.Pow(jerkMax, exponent)
-}
-
-func (c *Config) PreviousSnapProfile() int {
-	c.mu.Lock()
-
-	if c.Synthesizer.SnapProfile > 1 {
-		c.Synthesizer.SnapProfile--
-	}
-
-	c.mu.Unlock()
-
-	c.UpdateSnapScale()
-
-	return c.Synthesizer.SnapProfile
-}
-
-func (c *Config) NextSnapProfile() int {
-	c.mu.Lock()
-
-	if c.Synthesizer.SnapProfile < len(c.Synthesizer.Profiles) {
-		c.Synthesizer.SnapProfile++
-	}
-
-	c.mu.Unlock()
-
-	c.UpdateSnapScale()
-
-	return c.Synthesizer.SnapProfile
 }
 
 func (c *Config) DecreaseSnapCurve() int {

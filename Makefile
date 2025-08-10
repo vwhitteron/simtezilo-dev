@@ -145,7 +145,7 @@ build/rpi/v8/64:
 ## run: run the application locally
 .PHONY: run
 run:
-	@go run cmd/simtezilo/main.go -l debug -w=true
+	@go run cmd/simtezilo/main.go -l info -w=true
 
 ## run/watch: run the application locally and reload on file changes
 .PHONY: run/watch

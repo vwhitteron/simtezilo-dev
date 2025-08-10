@@ -10,9 +10,9 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/vwhitteron/simtezilo-dev/app/config"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware"
+	"github.com/vwhitteron/simtezilo-dev/app/hardware/console"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/pirateaudio"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/spotpear"
-	"github.com/vwhitteron/simtezilo-dev/app/hardware/terminal"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/waveshare"
 	"github.com/vwhitteron/simtezilo-dev/app/i18n"
 	"github.com/vwhitteron/simtezilo-dev/app/kinematics"
@@ -194,16 +194,16 @@ func NewApp(opts AppOptions) (*App, error) {
 			Str("sub", "hid").
 			Msg("init")
 	default:
-		a.display = terminal.NewHeadlessDisplay()
+		a.display = console.NewDisplay()
 		a.log.Debug().
-			Str("component", "headless").
+			Str("component", "console").
 			Str("sub", "display").
 			Str("result", "success").
 			Msg("init")
 
-		go terminal.SetupNullDeviceButtons(hidEvents)
+		go console.SetupHID(hidEvents)
 		a.log.Debug().
-			Str("component", "headless").
+			Str("component", "console").
 			Str("sub", "hid").
 			Msg("init")
 	}
