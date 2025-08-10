@@ -10,13 +10,6 @@ files remain contained within the Simtezilo directory.
 
 ### Application Section
 
-#### assetDir
-
-The filesystem location where application support files can be found.
-
-For Windows paths make sure to use double forward slashes for all directory delimeters, for example
-`assetDir = "c:\\Users\\MyUser\\Simtezilo\\assets"`
-
 #### logLevel
 
 The output log level. Defaults to `warn` and can be set to any of the following:
@@ -28,6 +21,8 @@ The output log level. Defaults to `warn` and can be set to any of the following:
 Enable output of haptics during replays or only live racing. Defaults to `false`
 
 ### Telemetry Section
+
+TODO: Complete sections for the missing configuration options
 
 #### source
 
@@ -51,7 +46,7 @@ An example replay file named `replay.gtz` is included in the Simtezilo directory
 The master gain or volume level for the output signal. This is set to a low value by default to reduce the
 risk of damage to your equipment.
 
-To find an appropriate value run the app and adjust the volume to using the [volume controls](#live-controls).
+To find an appropriate value run the app and adjust the volume setting using the [live controls](#live-controls).
 
 #### chassisVolume
 
@@ -73,31 +68,10 @@ and defailts to 60.
 #### sampleRateHz
 
 The sampe rate to use when generating the haptics signal. Lower sample rates require less computing power
-however most audio devices do not accept sample rates below 32kHz.
+however many audio devices do not accept sample rates below 32kHz.
 
 The haptics signal outputs frequencies between 16Hz and 60Hz so a sample rate as low as 8kHz is more than
 adequate if the audio device supports it.
-
-#### forceProfile
-
-There are 10 force feedback profiles that can be selected, with 1 being fairly weak and 10 being quite strong.
-
-All profiles will output a signal volume between 0 and 100% however profile 1 is spread more evenly across the
-range while 10 has a faster ramp rate from weak to strong forces so will feel a lot more aggresive.
-
-Play around with the profiles using the [live control](#live-controls) to find a value you prefer.
-
-#### grainProfile
-
-There are 10 feedback grain profiles that can be selected, with 1 being fairly weak and 10 being quite strong.
-
-All profiles adjust the pulse frequency of the haptics between the minimum (16Hz) and maximum (60Hz) frequencies
-Profile 1 is spread more evenly across the range of frequencies so will generally provide more subtle feedback
-except for very strong impacts. Profile 10 ramps up faster so will feel a lot more aggresive with less dynamic
-range between small and large impacts.
-
-Play around with the profiles using the [live control](#live-controls) to find a value you prefer.
-
 
 ## Running the App
 
@@ -150,39 +124,24 @@ section above.
 simtezilo -l debug
 ```
 
-### Web Charts
+### Web UI
 
-Web charts of some of the live telemetry can be viewed in a web browser at http://localhost:8080 when enabled.
+The web user interface provides live graphing of telemetry, open http://localhost:8080 to view the UI.
 
 ```
-simtezilo -w
+simtezilo -w=true
 ```
-
-Note that closure of the websockets are not porperly handled at this time. If you refresh the browser while
-the app is running you might find that it slows down. This can be fixed by restarting the app and avoiding
-refreshing the browser window.
 
 ## Live Controls
 
-When running the app there are a few controls for 
+When running the app controls are available to view and modify settings live.
 
-### Volume
+|     Key     |               Action               |
+|-------------|------------------------------------|
+| Left Arrow  | Switch to the previous setting     |
+| Right Arrow | Switch to the next setting         |
+| Up arrow    | Increase the current setting value | 
+| Down arrow  | Decrease the current setting value |
+| Q or Esc    | Quit the application               |
 
-Keys: +/-
-
-The [master gain](#mastergain) setting can be adjusted up and down using the equals (plus) and minus keys.
-
-### Force Feedback Strength
-
-Keys: up/down arrow
-
-The [force profile](#forceprofile) setting can be adjusted up or down with the up and down arrow keys.
-
-### Force Feedback Grain
-
-Keys: left/right arrow
-
-The [grain profile](#grainprofile) setting can be adjusted up or down with the left and right arrow keys.
-
-
-Once acceptable values have been found using the live controls that can be updated in the configuration file to make them the default.
+Once acceptable values have been found using the live controls the configuration file will need to be manually updated to make them the default at startup.
