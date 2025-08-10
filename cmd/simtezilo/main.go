@@ -12,6 +12,7 @@ import (
 
 	"github.com/rs/zerolog"
 	"github.com/vwhitteron/simtezilo-dev/app"
+	"github.com/vwhitteron/simtezilo-dev/app/profiler"
 )
 
 func main() {
@@ -71,12 +72,12 @@ func main() {
 	}
 }
 
-func startPyroscope(endpoint string, logger *zerolog.Logger) (*app.PyroscopeProfiler, error) {
+func startPyroscope(endpoint string, logger *zerolog.Logger) (*profiler.PyroscopeProfiler, error) {
 	if endpoint == "" {
 		return nil, nil
 	}
 
-	profiler, err := app.NewPyroscopeProfiler(
+	profiler, err := profiler.NewPyroscopeProfiler(
 		endpoint,
 		map[string]string{
 			"app":       "simtezilo",
