@@ -26,7 +26,6 @@ var Translations = map[string]string{
 	"ui.ready":    "ready",
 	"ui.settings": "settings",
 
-	// TODO: localise or remove these
 	"ui.menu.vol":    "Master Gain",
 	"ui.menu.vcurve": "FFB Curve",
 	"ui.menu.vsat":   "FFB Saturation",

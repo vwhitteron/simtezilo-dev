@@ -137,7 +137,6 @@ func (l *Language) GetCurrentLanguage() string {
 	return l.Code
 }
 
-// TODO: need to update a.display.device.Font to use the new font
 func (l *Language) NextLanguage() string {
 	for i, lang := range languageCodes {
 		if lang == l.Code {
@@ -158,7 +157,6 @@ func (l *Language) NextLanguage() string {
 	return l.Code
 }
 
-// TODO: need to update a.display.device.Font to use the new font
 func (l *Language) PreviousLanguage() string {
 	for i, lang := range languageCodes {
 		if lang == l.Code {

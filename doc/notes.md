@@ -65,7 +65,7 @@ Settings:
     What?: range 1-10 scale with ? increments between ? and ?
 
 scale   exp     expS    scaleS      gain    notes
-0.036   0.50    0.25    0.09487     -15.0   TODO
+0.036   0.50    0.25    0.09487     -15.0   
 0.036   0.60    0.30    0.06804     -15.0   very firm, seems to be a good mix with wheel feedback
 0.036   0.70    0.35    0.04880     -15.0   quite firm, starting to get good impact feedback as well
 0.036   0.80    0.40    0.03500     -15.0   starting to get firm, still limited feedback over ripple stips

@@ -26,7 +26,6 @@ var Translations = map[string]string{
 	"ui.ready":    "準備完了",
 	"ui.settings": "設定",
 
-	// TODO: localise or remove these
 	"ui.menu.vol":    "音量",
 	"ui.menu.vcurve": "FFB曲線",
 	"ui.menu.vsat":   "FFB飽和",
