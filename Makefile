@@ -161,7 +161,7 @@ run/watch:
 ## run/profile: run the application with profiling enabled
 .PHONY: run/profile
 run/profile:
-	@go run cmd/simtezilo/main.go -l debug -p=http://localhost:4040 -w=true
+	@go run cmd/simtezilo/main.go -l info -p=http://localhost:4040 -w=true
 
 ## start-pyroscope: start the Pyroscope profiler Docker container
 .PHONY: start-pyroscope
