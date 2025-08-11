@@ -51,7 +51,7 @@ type App struct {
 	kinematics kinematics.KinematicsTracker
 	synth      *synth.Synthesizer
 
-	gearVolumeMin float64
+	transmissionGainMin float64
 
 	state appState
 
@@ -86,6 +86,8 @@ func NewApp(opts AppOptions) (*App, error) {
 
 	// load config from file
 	a.config = config.NewConfig("simtezilo.conf", a.log)
+
+	zerolog.FloatingPointPrecision = 5
 
 	// update to configured log level when greater than current
 	configLogLevel, err := zerolog.ParseLevel(a.config.App.LogLevel)
@@ -400,9 +402,9 @@ func (a *App) updateVehicle() {
 
 	switch vehicleType {
 	case "race":
-		a.gearVolumeMin = float64(a.config.Synthesizer.GearShiftVolumeMinRace) / 100
+		a.transmissionGainMin = a.config.Synthesizer.TransmissionGain + a.config.Synthesizer.TransmissionGainMinRace
 	default:
-		a.gearVolumeMin = float64(a.config.Synthesizer.GearShiftVolumeMinStreet) / 100
+		a.transmissionGainMin = a.config.Synthesizer.TransmissionGain + a.config.Synthesizer.TransmissionGainMinStreet
 	}
 
 	a.state.last.vehicleID = a.state.current.vehicleID

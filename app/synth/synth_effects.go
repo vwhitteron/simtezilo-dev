@@ -11,7 +11,7 @@ type EffectsSampleBank struct {
 func NewEffectsSampleBank(sampleRateHz int) *EffectsSampleBank {
 	return &EffectsSampleBank{
 		sample: map[string][]float64{
-			"gearchange": generateGearChangeSample(sampleRateHz),
+			"transmission": generateGearShiftSample(sampleRateHz),
 		},
 	}
 }
@@ -24,7 +24,7 @@ func (s *EffectsSampleBank) GetSample(name string) []float64 {
 	return s.sample[name]
 }
 
-func generateGearChangeSample(sampleRateHz int) []float64 {
+func generateGearShiftSample(sampleRateHz int) []float64 {
 	sampleLengthSeconds := 0.1
 	pulseAmplitude := 2.0
 	pulseHz := 30

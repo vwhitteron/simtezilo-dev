@@ -46,36 +46,34 @@ func (b *Buffer) GetLength() int {
 }
 
 func (b *Buffer) Write(channel string, samples []float64) {
-	volume, err := b.mixer.GetChannelVolume(channel)
+	magnitude, err := b.mixer.GetChannelPowerRatio(channel)
 	if err != nil {
-		b.log.Error().Err(err).Str("channel", channel).Msg("failed to get channel volume")
+		b.log.Error().Err(err).Str("channel", channel).Msg("get channel power ratio")
 
 		return
 	}
 
 	if channel == "gear" {
-		b.log.Debug().Float64("volume", volume).Str("channel", channel).Msg("writing sample to channel")
+		b.log.Debug().Float64("magnitude", magnitude).Str("channel", channel).Msg("write sample to channel")
 	}
 
-	outSamples := b.mixSamples(samples, volume)
+	outSamples := b.mixSamples(samples, magnitude)
 	copy(b.buffer, outSamples)
 }
 
-func (b *Buffer) WriteWithVolumePercent(channel string, percent int, samples []float64) {
-	volume, err := b.mixer.GetChannelVolume(channel)
+func (b *Buffer) WriteWithMagnitude(channel string, magnitude float64, samples []float64) {
+	channelMagnitude, err := b.mixer.GetChannelPowerRatio(channel)
 	if err != nil {
-		b.log.Error().Err(err).Str("channel", channel).Msg("failed to get channel volume")
+		b.log.Error().Err(err).Str("channel", channel).Msg("get channel power ratio")
 
 		return
 	}
 
-	volume = float64(percent) / 100.0 * volume
-
-	outSamples := b.mixSamples(samples, volume)
+	outSamples := b.mixSamples(samples, magnitude*channelMagnitude)
 	copy(b.buffer, outSamples)
 }
 
-func (b *Buffer) mixSamples(inSamples []float64, volume float64) []float64 {
+func (b *Buffer) mixSamples(inSamples []float64, magnitude float64) []float64 {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -83,7 +81,7 @@ func (b *Buffer) mixSamples(inSamples []float64, volume float64) []float64 {
 	outSamples := make([]float64, len(inSamples))
 
 	for i := range inSamples {
-		inputSample := inSamples[i] * volume
+		inputSample := inSamples[i] * magnitude
 		bufferSample := b.buffer[i]
 
 		outSamples[i] = b.mixer.MixSample(inputSample, bufferSample, &peak)

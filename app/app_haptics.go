@@ -4,8 +4,10 @@ import (
 	"math"
 	"time"
 
+	"github.com/vwhitteron/simtezilo-dev/app/config"
 	"github.com/vwhitteron/simtezilo-dev/app/kinematics"
 	"github.com/vwhitteron/simtezilo-dev/app/signal"
+	"github.com/vwhitteron/simtezilo-dev/app/synth"
 )
 
 func (a *App) hapticEvents() {
@@ -191,37 +193,39 @@ func (a *App) disableHaptics(reason string) {
 
 func (a *App) enableHaptics() {
 	// speaker.Resume()
-	a.synth.FadeIn(3 * time.Second)
+	a.synth.FadeIn(config.FadeInDuration)
 	a.state.hapticsEnabled = true
 
 	a.log.Debug().Bool("haptics enabled", a.state.hapticsEnabled).Msg("haptics state change")
 }
 
 func (a *App) playGearChangeHaptic() {
-	volumePercent := a.determineGearChangeVolume()
+	magnitude := a.determineGearChangeMagnitude()
 
-	a.synth.PlayEffectWithVolume("gearchange", volumePercent)
+	a.synth.PlayEffectWithMagnitude("transmission", magnitude)
 	a.log.Debug().
 		Int("sequence_id", int(a.state.current.seq)).
-		Int("volume_pc", volumePercent).
+		Float64("magnitude", magnitude).
+		Float64("gforce", a.kinematics.GetSurgeGforce()).
 		Int("gear", a.kinematics.Current.TransmissionGear).
 		Msg("gear change")
 }
 
-func (a *App) determineGearChangeVolume() int {
-	volumeMaxPercent, _ := a.synth.GetChannelVolume("gearchange")
+func (a *App) determineGearChangeMagnitude() float64 {
+	magnitude, _ := a.synth.GetChannelMagnitude("transmission")
 
-	if !a.config.DynamicGearShiftFeedbackEnabled() {
-		return volumeMaxPercent
+	if !a.config.DynamicTransmissionFeedbackEnabled() {
+		return magnitude
 	}
 
 	gForce := a.kinematics.GetSurgeGforce()
-	gforceMax := a.config.GetGearShiftGforceMax()
-	volumeCurve := a.config.GetGearShiftCurve()
+	gforceMax := a.config.GetTransmissionGforceMax()
+	volumeCurve := a.config.GetTransmissionCurve()
 
-	volumeMax := float64(volumeMaxPercent) / 100.0
-	gearChangeVolume := (math.Pow((gForce/gforceMax), volumeCurve) * volumeMax)
-	gearChangeVolume, _ = signal.LimitWindow(gearChangeVolume, a.gearVolumeMin, volumeMax)
+	magnitudeMin := synth.GainToPowerRatio(a.transmissionGainMin)
 
-	return int(gearChangeVolume * 100.0)
+	gearChangeMagnitude := math.Pow((gForce/gforceMax), volumeCurve) * magnitude
+	gearChangeMagnitude, _ = signal.LimitWindow(gearChangeMagnitude, magnitudeMin, magnitude)
+
+	return gearChangeMagnitude
 }

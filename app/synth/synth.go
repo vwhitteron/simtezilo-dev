@@ -24,19 +24,23 @@ type Synthesizer struct {
 }
 
 type SynthOpts struct {
-	Config     config.Synthesizer
+	Config     *config.Synthesizer // FIXME: TODO: use base config pointer?
 	Logger     zerolog.Logger
 	Kinematics *kinematics.KinematicsTracker
 }
 
 func NewSynth(opts SynthOpts) (*Synthesizer, error) {
-	mixer := NewMixer(
-		opts.Config.MasterGain,
-		opts.Config.GainIncrement,
+	mixer, err := NewMixer(
+		&opts.Config.MasterGain,
+		&opts.Config.GainIncrement,
 		opts.Logger.With().Str("component", "synth mixer").Logger(),
 	)
-	_ = mixer.AddChannel("gearchange", float64(opts.Config.GearShiftVolume)/100.0)
-	_ = mixer.AddChannel("chassis", float64(opts.Config.ChassisVolume)/100.0)
+	if err != nil {
+		return nil, fmt.Errorf("create mixer: %w", err)
+	}
+
+	_ = mixer.AddChannel("transmission", &opts.Config.TransmissionGain)
+	_ = mixer.AddChannel("chassis", &opts.Config.ChassisGain)
 	_ = mixer.SetAlgorithm(opts.Config.Algorithm)
 
 	bufferSlotSize := opts.Config.SampleRateHz / 60
@@ -57,7 +61,7 @@ func NewSynth(opts SynthOpts) (*Synthesizer, error) {
 			return nil, fmt.Errorf("create output wav file: %w", err)
 		}
 
-		log.Info().Str("file", opts.Config.OutputFile).Msg("Writing audio output")
+		log.Info().Str("file", opts.Config.OutputFile).Msg("saving audio output")
 	}
 
 	effects := NewEffectsSampleBank(opts.Config.SampleRateHz)
@@ -105,45 +109,8 @@ func (s *Synthesizer) ClearBuffer() {
 	s.buffer.ClearBuffer()
 }
 
-// Mixer accessor methods
-func (s *Synthesizer) DecreaseMasterGain() float64 {
-	s.Mixer.MasterDecrease()
-
-	return s.Mixer.Master
-}
-
-func (s *Synthesizer) IncreaseMasterGain() float64 {
-	s.Mixer.MasterIncrease()
-
-	return s.Mixer.Master
-}
-
-func (s *Synthesizer) GetMasterGain() float64 {
-	return s.Mixer.Master
-}
-
-func (s *Synthesizer) SetChannelVolume(name string, volume int) error {
-	err := s.Mixer.SetChannelVolume(name, float64(volume)/100)
-
-	return err
-}
-
-func (s *Synthesizer) IncreaseChannelVolume(name string) (int, error) {
-	volume, err := s.Mixer.IncreaseChannelVolume(name)
-
-	return int(volume * 100), err
-}
-
-func (s *Synthesizer) DecreaseChannelVolume(name string) (int, error) {
-	volume, err := s.Mixer.DecreaseChannelVolume(name)
-
-	return int(volume * 100), err
-}
-
-func (s *Synthesizer) GetChannelVolume(name string) (int, error) {
-	volume, err := s.Mixer.GetChannelVolume(name)
-
-	return int(volume * 100), err
+func (s *Synthesizer) GetChannelMagnitude(name string) (float64, error) {
+	return s.Mixer.GetChannelPowerRatio(name)
 }
 
 func (s *Synthesizer) FadeIn(period time.Duration) {
@@ -151,11 +118,14 @@ func (s *Synthesizer) FadeIn(period time.Duration) {
 }
 
 func (s *Synthesizer) MixOutput(value float64) float64 {
-	return value * s.Mixer.outputGain
+	outputGain, _ := s.Mixer.GetChannelPowerRatio("master")
+
+	return value * outputGain
 }
 
 func (s *Synthesizer) Silence() {
-	s.Mixer.SetFader(-30) // TODO: dont' use fixed value
+	s.Mixer.SetFader(config.MinimumGain)
+	s.Mixer.silenced = true
 }
 
 // Effect accessor methods
@@ -169,12 +139,14 @@ func (s *Synthesizer) PlayEffect(name string) {
 	s.buffer.Write(name, sample)
 }
 
-func (s *Synthesizer) PlayEffectWithVolume(name string, percent int) {
+func (s *Synthesizer) PlayEffectWithMagnitude(name string, magnitude float64) {
 	// TODO: handle invalid effect name
 	sample := s.effects.GetSample(name)
-	s.buffer.WriteWithVolumePercent(name, percent, sample)
+	s.buffer.WriteWithMagnitude(name, magnitude, sample)
 }
 
 func (s *Synthesizer) Close() error {
+	s.Mixer.Close()
+
 	return s.outFile.Close()
 }

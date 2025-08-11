@@ -9,11 +9,11 @@ func (a *App) alterSetting(name string, action string) string {
 
 		switch action {
 		case "increase":
-			value = a.synth.IncreaseMasterGain()
+			value = a.config.IncreaseMasterGain()
 		case "decrease":
-			value = a.synth.DecreaseMasterGain()
+			value = a.config.DecreaseMasterGain()
 		default:
-			value = a.synth.GetMasterGain()
+			value = a.config.GetMasterGain()
 		}
 
 		return strconv.FormatFloat(value, 'f', 2, 64) + " dB"
@@ -95,68 +95,60 @@ func (a *App) alterSetting(name string, action string) string {
 		}
 
 		return strconv.Itoa(value)
-	case "gCurve":
+	case "tCurve":
 		value := 0
 
 		switch action {
 		case "increase":
-			value = a.config.IncreaseGearShiftCurve()
+			value = a.config.IncreaseTransmissionCurve()
 		case "decrease":
-			value = a.config.DecreaseGearShiftCurve()
+			value = a.config.DecreaseTransmissionCurve()
 		default:
-			value = int(a.config.GetGearShiftCurve() * 1000)
+			value = int(a.config.GetTransmissionCurve() * 1000)
 		}
 
 		return strconv.Itoa(value)
-	case "gSat":
+	case "tSat":
 		value := float64(0)
 
 		switch action {
 		case "increase":
-			value = a.config.IncreaseGearShiftGforceMax()
+			value = a.config.IncreaseTransmissionGforceMax()
 		case "decrease":
-			value = a.config.DecreaseGearShiftGforceMax()
+			value = a.config.DecreaseTransmissionGforceMax()
 		default:
-			value = a.config.GetGearShiftGforceMax()
+			value = a.config.GetTransmissionGforceMax()
 		}
 
 		return strconv.FormatFloat(value, 'f', 1, 64)
 	case "cVol":
-		value := 0
+		value := float64(0)
 
 		switch action {
 		case "increase":
-			value, _ = a.synth.IncreaseChannelVolume("chassis")
+			value = a.config.IncreaseChassisGain()
 		case "decrease":
-			value, _ = a.synth.DecreaseChannelVolume("chassis")
+			value = a.config.DecreaseChassisGain()
 		default:
-			value, _ = a.synth.GetChannelVolume("chassis")
+			value = a.config.GetChassisGain()
 		}
 
-		return strconv.Itoa(value)
-	case "gVol":
-		value := 0
+		return strconv.FormatFloat(value, 'f', 2, 64)
+	case "tVol":
+		value := float64(0)
 
 		switch action {
 		case "increase":
-			value, _ = a.synth.IncreaseChannelVolume("gearchange")
+			value = a.config.IncreaseTransmissionGain()
 		case "decrease":
-			value, _ = a.synth.DecreaseChannelVolume("gearchange")
+			value = a.config.DecreaseTransmissionGain()
 		default:
-			value, _ = a.synth.GetChannelVolume("gearchange")
+			value = a.config.GetTransmissionGain()
 		}
 
-		return strconv.Itoa(value)
-	case "mix":
-		switch action {
-		case "increase":
-			return a.synth.Mixer.NextAlgorithm()
-		case "decrease":
-			return a.synth.Mixer.PreviousAlgorithm()
-		default:
-			return a.synth.Mixer.GetAlgorithm()
-		}
+		return strconv.FormatFloat(value, 'f', 2, 64)
 	case "lang":
+		// FIXME: TODO: Should update config, not i18n?
 		switch action {
 		case "increase":
 			return a.i18n.NextLanguage()
