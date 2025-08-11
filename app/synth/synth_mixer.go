@@ -257,7 +257,7 @@ func (m *Mixer) watchForConfigChanges() {
 	m.log.Debug().Str("event", "start").Msg("config watch")
 
 	for {
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(200 * time.Millisecond)
 
 		if m.fadeInActive || m.silenced {
 			continue

@@ -92,7 +92,7 @@ func (l *Language) watchForConfigChanges() {
 	l.log.Debug().Str("event", "start").Msg("config watch")
 
 	for {
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(200 * time.Millisecond)
 
 		if *l.configLangCode == l.Code {
 			continue
