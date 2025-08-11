@@ -2,8 +2,8 @@ package app
 
 import "strconv"
 
-func (a *App) alterSetting(name string, action string) string {
-	switch name {
+func (a *App) settingAction(setting string, action string) string {
+	switch setting {
 	case "vol":
 		value := float64(0)
 
@@ -148,14 +148,13 @@ func (a *App) alterSetting(name string, action string) string {
 
 		return strconv.FormatFloat(value, 'f', 2, 64)
 	case "lang":
-		// FIXME: TODO: Should update config, not i18n?
 		switch action {
 		case "increase":
-			return a.i18n.NextLanguage()
+			return a.config.NextLanguage()
 		case "decrease":
-			return a.i18n.PreviousLanguage()
+			return a.config.PreviousLanguage()
 		default:
-			return a.i18n.GetCurrentLanguage()
+			return a.config.GetLanguage()
 		}
 	default:
 		return "error"

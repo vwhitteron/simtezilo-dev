@@ -102,7 +102,7 @@ func NewApp(opts AppOptions) (*App, error) {
 
 	// load language translations
 	a.i18n = i18n.NewLanguage(
-		a.config.App.Language,
+		&a.config.App.Language,
 		a.log,
 	)
 	a.log.Debug().Str("language", a.i18n.Code).Str("result", "success").Msg("init language")
@@ -216,7 +216,7 @@ func NewApp(opts AppOptions) (*App, error) {
 		Display:          a.display,
 		LiveData:         &ui.LiveData{Gear: kinematics.NullGear},
 		Log:              a.log.With().Str("component", "ui").Logger(),
-		SettingsCallback: a.alterSetting,
+		SettingsCallback: a.settingAction,
 		Done:             a.done,
 	})
 

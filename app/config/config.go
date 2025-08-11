@@ -7,6 +7,7 @@ import (
 
 	"github.com/rs/zerolog"
 	"github.com/spf13/viper"
+	"github.com/vwhitteron/simtezilo-dev/app/i18n"
 )
 
 type App struct {
@@ -588,6 +589,59 @@ func (c *Config) DecreaseTransmissionGforceMax() float64 {
 	c.mu.Unlock()
 
 	return c.Synthesizer.DynamicTransmissionGforceMax
+}
+
+func (c *Config) NextLanguage() string {
+	languageCodes := i18n.GetLanguageCodes()
+
+	language := languageCodes[0]
+	for i, lang := range languageCodes {
+		if lang == c.App.Language {
+			nextIndex := (i + 1) % len(languageCodes)
+			language = languageCodes[nextIndex]
+
+			break
+		}
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.App.Language = language
+
+	return c.App.Language
+}
+
+func (c *Config) PreviousLanguage() string {
+	languageCodes := i18n.GetLanguageCodes()
+
+	language := languageCodes[0]
+	for i, lang := range languageCodes {
+		if lang == c.App.Language {
+			prevIndex := (i - 1 + len(languageCodes)) % len(languageCodes)
+			language = languageCodes[prevIndex]
+
+			break
+		}
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.App.Language = language
+
+	return c.App.Language
+}
+
+func (c *Config) GetLanguage() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if c.App.Language == "" {
+		return "en"
+	}
+
+	return c.App.Language
 }
 
 func (c *Config) GetFrequencyHzRange() float64 {

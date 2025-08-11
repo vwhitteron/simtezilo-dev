@@ -41,7 +41,7 @@ func (u *UserInterface) HIDEventHandler() {
 		switch key {
 		case HIDInputUp:
 			menuPage = u.menuSystem.GetCurrentMenuPage()
-			value = u.AlterSetting(menuPage, "increase")
+			value = u.SettingAction(menuPage, "increase")
 
 			u.log.Debug().
 				Str("key", "up").
@@ -51,7 +51,7 @@ func (u *UserInterface) HIDEventHandler() {
 				Msg("HID event")
 		case HIDInputDown:
 			menuPage = u.menuSystem.GetCurrentMenuPage()
-			value = u.AlterSetting(menuPage, "decrease")
+			value = u.SettingAction(menuPage, "decrease")
 
 			u.log.Debug().
 				Str("key", "down").
@@ -63,7 +63,7 @@ func (u *UserInterface) HIDEventHandler() {
 			if u.display.IsAwake() {
 				menuPage = u.menuSystem.PreviousMenuPage()
 			}
-			value = u.AlterSetting(menuPage, "get")
+			value = u.SettingAction(menuPage, "get")
 
 			u.log.Debug().
 				Str("key", "left").
@@ -75,7 +75,7 @@ func (u *UserInterface) HIDEventHandler() {
 			if u.display.IsAwake() {
 				menuPage = u.menuSystem.NextMenuPage()
 			}
-			value = u.AlterSetting(menuPage, "get")
+			value = u.SettingAction(menuPage, "get")
 
 			u.log.Debug().
 				Str("key", "left").

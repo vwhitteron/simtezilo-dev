@@ -138,8 +138,9 @@ func main() {
 		hasDisplay = false
 	}
 
+	langCode := "en"
 	i18n := i18n.NewLanguage(
-		"en",
+		&langCode,
 		logger.With().Str("component", "i18n").Logger(),
 	)
 

@@ -15,7 +15,7 @@ type Config struct {
 	HIDEvents        chan HIDInputEvent
 	Display          hardware.Display
 	LiveData         *LiveData
-	SettingsCallback func(menuPage string, action string) string
+	SettingsCallback func(string, string) string
 	Done             chan bool
 	Log              zerolog.Logger
 }
@@ -35,8 +35,8 @@ type UserInterface struct {
 
 	log zerolog.Logger
 
-	alterSetting func(menuPage string, action string) string
-	done         chan bool
+	settingsCallback func(menuPage string, action string) string
+	done             chan bool
 
 	displayData  LiveData
 	mode         ScreenMode
@@ -46,17 +46,17 @@ type UserInterface struct {
 
 func NewUserInterface(config *Config) *UserInterface {
 	u := &UserInterface{
-		i18n:         config.I18n,
-		display:      config.Display,
-		hidEvents:    config.HIDEvents,
-		menuSystem:   NewMenuSystem(),
-		log:          config.Log,
-		displayData:  LiveData{Gear: kinematics.NullGear},
-		mode:         ScreenModeStartup,
-		startTime:    time.Now(),
-		lastActivity: time.Now(),
-		alterSetting: config.SettingsCallback,
-		done:         config.Done,
+		i18n:             config.I18n,
+		display:          config.Display,
+		hidEvents:        config.HIDEvents,
+		menuSystem:       NewMenuSystem(),
+		log:              config.Log,
+		displayData:      LiveData{Gear: kinematics.NullGear},
+		mode:             ScreenModeStartup,
+		startTime:        time.Now(),
+		lastActivity:     time.Now(),
+		settingsCallback: config.SettingsCallback,
+		done:             config.Done,
 	}
 
 	var err error
@@ -161,11 +161,11 @@ func (u *UserInterface) displaySplashTimeoutReached() bool {
 	return time.Since(u.lastActivity) > 2*time.Second
 }
 
-func (u *UserInterface) AlterSetting(menuPage string, action string) string {
+func (u *UserInterface) SettingAction(setting string, action string) string {
 	u.RegisterActivity()
 	u.mode = ScreenModeSettings
 
-	return u.alterSetting(menuPage, action)
+	return u.settingsCallback(setting, action)
 }
 
 // TODO: clean up this logic and make it easier to understand

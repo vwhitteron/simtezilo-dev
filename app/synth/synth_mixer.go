@@ -252,6 +252,7 @@ func (m *Mixer) MixSample(sample1 float64, sample2 float64, peak *float64) float
 	}
 }
 
+// TODO: is there a better way to integrate config changes?
 func (m *Mixer) watchForConfigChanges() {
 	m.log.Debug().Str("event", "start").Msg("config watch")
 
