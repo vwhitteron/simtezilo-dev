@@ -44,6 +44,9 @@ type Synthesizer struct {
 	TransmissionGain             float64
 	TransmissionGainMinRace      float64
 	TransmissionGainMinStreet    float64
+	EngineGain                   float64
+	EngineFrequencyMin           float64
+	EngineFrequencyMax           float64
 	GainIncrement                float64
 	Eq                           []float64
 }
@@ -92,6 +95,9 @@ func NewConfig(filename string, log zerolog.Logger) *Config {
 			TransmissionGain:             -2,
 			TransmissionGainMinRace:      -7,
 			TransmissionGainMinStreet:    -10,
+			EngineGain:                   -8,
+			EngineFrequencyMin:           15,
+			EngineFrequencyMax:           45,
 			Eq: []float64{
 				1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, // 10-19Hz
 				1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, // 20-29Hz
@@ -292,6 +298,55 @@ func (c *Config) GetTransmissionGforceMax() float64 {
 	defer c.mu.RUnlock()
 
 	return c.Synthesizer.DynamicTransmissionGforceMax
+}
+
+func (c *Config) GetEngineGain() float64 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.Synthesizer.EngineGain
+}
+
+func (c *Config) GetEngineFrequencyMin() float64 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.Synthesizer.EngineFrequencyMin
+}
+
+func (c *Config) GetEngineFrequencyMax() float64 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.Synthesizer.EngineFrequencyMax
+}
+
+func (c *Config) IncreaseEngineGain() float64 {
+	c.mu.Lock()
+
+	if c.Synthesizer.EngineGain < -c.Synthesizer.GainIncrement {
+		c.Synthesizer.EngineGain += c.Synthesizer.GainIncrement
+	} else {
+		c.Synthesizer.EngineGain = MaximumGain
+	}
+
+	c.mu.Unlock()
+
+	return c.Synthesizer.EngineGain
+}
+
+func (c *Config) DecreaseEngineGain() float64 {
+	c.mu.Lock()
+
+	if c.Synthesizer.EngineGain > MinimumGain+c.Synthesizer.GainIncrement {
+		c.Synthesizer.EngineGain -= c.Synthesizer.GainIncrement
+	} else {
+		c.Synthesizer.EngineGain = MinimumGain
+	}
+
+	c.mu.Unlock()
+
+	return c.Synthesizer.EngineGain
 }
 
 func (c *Config) GetSnapScale() float64 {

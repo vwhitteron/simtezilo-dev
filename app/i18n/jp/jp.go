@@ -29,6 +29,7 @@ var Translations = map[string]string{
 	"ui.menu.vol":    "音量",
 	"ui.menu.cvol":   "シャーシ音量",
 	"ui.menu.tvol":   "ギア音量",
+	"ui.menu.evol":   "エンジン音量",
 	"ui.menu.vcurve": "FFB曲線",
 	"ui.menu.vsat":   "FFB飽和",
 	"ui.menu.fcurve": "周波数曲線",

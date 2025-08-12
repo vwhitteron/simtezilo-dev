@@ -41,6 +41,7 @@ func NewSynth(opts SynthOpts) (*Synthesizer, error) {
 
 	_ = mixer.AddChannel("transmission", &opts.Config.TransmissionGain)
 	_ = mixer.AddChannel("chassis", &opts.Config.ChassisGain)
+	_ = mixer.AddChannel("engine", &opts.Config.EngineGain)
 	_ = mixer.SetAlgorithm(opts.Config.Algorithm)
 
 	bufferSlotSize := opts.Config.SampleRateHz / 60

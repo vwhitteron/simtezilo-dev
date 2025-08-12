@@ -12,6 +12,7 @@ func NewMenuSystem() *MenuSystem {
 			"vol",
 			"cVol",
 			"tVol",
+			"eVol",
 			"vCurve",
 			"vSat",
 			"fCurve",

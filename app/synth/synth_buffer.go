@@ -53,9 +53,10 @@ func (b *Buffer) Write(channel string, samples []float64) {
 		return
 	}
 
-	if channel == "gear" {
-		b.log.Debug().Float64("magnitude", magnitude).Str("channel", channel).Msg("write sample to channel")
-	}
+	// if channel == "engine" {
+	// 	gain, _ := b.mixer.GetChannelGain(channel)
+	// 	b.log.Info().Float64("gain", gain).Float64("magnitude", magnitude).Str("channel", channel).Msg("write sample to channel")
+	// }
 
 	outSamples := b.mixSamples(samples, magnitude)
 	copy(b.buffer, outSamples)
@@ -89,7 +90,7 @@ func (b *Buffer) mixSamples(inSamples []float64, magnitude float64) []float64 {
 
 	if peak > 1.0 {
 		scaleSamplesPeak(&outSamples, peak)
-		b.log.Debug().Float64("peak", peak).Msg("AGC applied")
+		b.log.Debug().Float64("peak", peak).Float64("magnitude", magnitude).Msg("AGC applied")
 	}
 
 	return outSamples

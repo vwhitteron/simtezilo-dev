@@ -29,6 +29,7 @@ var Translations = map[string]string{
 	"ui.menu.vol":    "Master Gain",
 	"ui.menu.cvol":   "Chassis Vol",
 	"ui.menu.tvol":   "Trans Vol",
+	"ui.menu.evol":   "Engine Vol",
 	"ui.menu.vcurve": "FFB Curve",
 	"ui.menu.vsat":   "FFB Saturation",
 	"ui.menu.fcurve": "Freq Curve",

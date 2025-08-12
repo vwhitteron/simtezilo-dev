@@ -139,7 +139,7 @@ func (m *Mixer) GetChannelGain(name string) (float64, error) {
 	}
 
 	m.mu.RLock()
-	defer m.mu.Unlock()
+	defer m.mu.RUnlock()
 
 	return channel.activeGain, nil
 }

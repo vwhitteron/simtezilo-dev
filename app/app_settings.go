@@ -147,6 +147,28 @@ func (a *App) settingAction(setting string, action string) string {
 		}
 
 		return strconv.FormatFloat(value, 'f', 2, 64)
+	case "eVol":
+		value := float64(0)
+
+		switch action {
+		case "increase":
+			value = a.config.IncreaseEngineGain()
+		case "decrease":
+			value = a.config.DecreaseEngineGain()
+		default:
+			value = a.config.GetEngineGain()
+		}
+
+		return strconv.FormatFloat(value, 'f', 2, 64)
+	case "mix":
+		switch action {
+		case "increase":
+			return a.synth.Mixer.NextAlgorithm()
+		case "decrease":
+			return a.synth.Mixer.PreviousAlgorithm()
+		default:
+			return a.synth.Mixer.GetAlgorithm()
+		}
 	case "lang":
 		switch action {
 		case "increase":
