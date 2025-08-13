@@ -10,6 +10,87 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/synth"
 )
 
+// Engine configuration helper functions
+func getEngineCylinderCount(engineLayout string) int {
+	switch engineLayout {
+	case "I3":
+		return 3
+	case "I4", "H4", "V4", "K4":
+		return 4
+	case "I5":
+		return 5
+	case "I6", "H6", "V6":
+		return 6
+	case "I8", "V8":
+		return 8
+	case "V10":
+		return 10
+	case "V12", "H12":
+		return 12
+	case "W16":
+		return 16
+	case "K2":
+		return 2 // Wankel rotors, treat as 2 cylinders equivalent
+	default:
+		return 4 // Default to 4-cylinder if unknown
+	}
+}
+
+func getEngineFiringFrequency(rpm float64, engineLayout string) float64 {
+	cylinders := getEngineCylinderCount(engineLayout)
+
+	// Wankel engines fire differently - each rotor fires 3 times per revolution
+	if engineLayout == "K2" || engineLayout == "K4" {
+		rotors := cylinders                         // K2 = 2 rotors, K4 = 4 rotors
+		return (rpm * float64(rotors) * 3.0) / 60.0 // 3 combustions per rotor per revolution
+	}
+
+	// Most engines fire once per cylinder every 2 revolutions (4-stroke)
+	// But for haptic purposes, we consider the power stroke frequency
+	firingEventsPerRevolution := float64(cylinders) / 2.0
+
+	return (rpm * firingEventsPerRevolution) / 60.0
+}
+
+func getEngineCharacteristics(engineLayout string) (smoothness float64, baseRoughness float64) {
+	switch engineLayout {
+	case "I3":
+		return 0.3, 0.15 // Very rough, unbalanced
+	case "I4":
+		return 0.6, 0.08 // Moderately smooth
+	case "I5":
+		return 0.7, 0.06 // Smoother than I4, unique firing pattern
+	case "I6":
+		return 0.9, 0.03 // Very smooth, naturally balanced
+	case "I8":
+		return 0.95, 0.02 // Extremely smooth
+	case "H4":
+		return 0.8, 0.05 // Boxer engine - smooth but distinctive
+	case "H6":
+		return 0.92, 0.025 // Very smooth boxer
+	case "H12":
+		return 0.98, 0.01 // Extremely smooth
+	case "V4":
+		return 0.5, 0.10 // Compact but can be rough
+	case "V6":
+		return 0.85, 0.04 // Good balance
+	case "V8":
+		return 0.95, 0.02 // Very smooth, even firing
+	case "V10":
+		return 0.88, 0.035 // Smooth but distinctive sound
+	case "V12":
+		return 0.98, 0.01 // Extremely smooth
+	case "W16":
+		return 0.99, 0.005 // Incredibly smooth
+	case "K2":
+		return 0.85, 0.04 // Wankel - smooth but distinctive
+	case "K4":
+		return 0.92, 0.02 // Multi-rotor Wankel - very smooth
+	default:
+		return 0.6, 0.08 // Default to I4 characteristics
+	}
+}
+
 func (a *App) hapticEvents() {
 	startTime := time.Now()
 
@@ -272,141 +353,133 @@ func (a *App) generateEngineHaptic() {
 		rpmMax = 8000.0
 	}
 
-	// Normalize RPM from 0 to max (instead of idle to max)
-	rpmNormalized := rpm / rpmMax
+	// Get engine layout (fallback to I4 if not available)
+	engineLayout := a.state.current.vehicle.engineLayout
+	if engineLayout == "" {
+		engineLayout = "I4" // Default to inline-4 if no data
+	}
 
-	// Clamp normalized RPM to 0-1 range
+	// Calculate realistic engine firing frequency based on engine configuration
+	engineFiringFrequency := getEngineFiringFrequency(rpm, engineLayout)
+
+	// Clamp firing frequency to reasonable haptic range (8-160 Hz)
+	if engineFiringFrequency < 8.0 {
+		engineFiringFrequency = 8.0
+	} else if engineFiringFrequency > 160.0 {
+		engineFiringFrequency = 160.0
+	}
+
+	// Get engine-specific characteristics
+	smoothness, baseRoughness := getEngineCharacteristics(engineLayout)
+
+	// Normalize RPM from 0 to max
+	rpmNormalized := rpm / rpmMax
 	if rpmNormalized < 0 {
 		rpmNormalized = 0
 	} else if rpmNormalized > 1 {
 		rpmNormalized = 1
 	}
 
-	// Calculate engine firing frequency mapped to 25-60 Hz range
-	// Map RPM from idle (~800) to max RPM linearly to 25-60 Hz frequency range
-	minFreq := 8.0   // Increased from 15.0 Hz to 25.0 Hz
-	maxFreq := 160.0 // Increased from 34.0 Hz to 60.0 Hz for higher pulse rate
+	// Generate amplitude that maintains consistent volume from idle to max RPM
+	baseAmplitude := 0.4 + (rpmNormalized * 0.4) // Range: 0.4 to 0.8
 
-	// Define typical idle RPM for scaling
-	idleRPM := 800.0
+	// Add engine-specific roughness variation
+	// Roughness decreases with RPM and smoothness characteristic
+	var engineRoughness float64
+	if rpm <= 2400.0 {
+		// Low RPM roughness varies by engine type
+		roughnessPhase := float64(a.state.current.seq) * 0.005
+		roughnessIntensity := baseRoughness * (1.0 - smoothness*0.5) // Less smooth engines are rougher
+		engineRoughness = math.Sin(roughnessPhase)*roughnessIntensity + math.Sin(roughnessPhase*1.7)*roughnessIntensity*0.5
 
-	// Calculate frequency range and RPM range
-	frequencyRange := maxFreq - minFreq // 35 Hz range
-	rpmRange := rpmMax - idleRPM
-
-	// Map current RPM to frequency range
-	var engineFrequency float64
-	if rpm <= idleRPM {
-		engineFrequency = minFreq // At or below idle = minimum frequency
+		// Reduce roughness as RPM increases (engines smooth out)
+		rpmSmoothingFactor := rpm / 2400.0
+		engineRoughness *= (1.0 - rpmSmoothingFactor*smoothness)
 	} else {
-		// Linear mapping from idle to max RPM -> min to max frequency
-		rpmAboveIdle := rpm - idleRPM
-		frequencyRatio := rpmAboveIdle / rpmRange
-		engineFrequency = minFreq + (frequencyRatio * frequencyRange)
-
-		// Clamp to the desired range
-		if engineFrequency < minFreq {
-			engineFrequency = minFreq
-		} else if engineFrequency > maxFreq {
-			engineFrequency = maxFreq
+		// High RPM: roughness based on engine smoothness characteristic
+		if smoothness < 0.9 {
+			roughnessPhase := float64(a.state.current.seq) * 0.002
+			highRpmRoughness := (1.0 - smoothness) * 0.02 // Less smooth engines retain some roughness
+			engineRoughness = math.Sin(roughnessPhase) * highRpmRoughness
+		} else {
+			engineRoughness = 0.0 // Very smooth engines have no roughness at high RPM
 		}
 	}
 
-	// Generate amplitude that maintains more consistent volume from idle to max RPM
-	// Use a curve that provides good feel across the RPM range with less dramatic changes
-	// Start from a reasonable base amplitude at idle for consistent engine haptic output
-	baseAmplitude := 0.4 + (rpmNormalized * 0.4) // Range: 0.4 to 0.8 for more consistent volume
+	amplitude := baseAmplitude + (engineRoughness * rpmNormalized * 0.1)
 
-	// Add engine roughness variation that's more "lumpy" feeling
-	// Use slower, irregular variations to simulate engine firing cycles
-	// Remove roughness above 2400 RPM for smoother high-RPM feel
-	var engineRoughness float64
-	if rpm <= 2400.0 {
-		roughnessPhase := float64(a.state.current.seq) * 0.005                              // Much slower variation
-		engineRoughness = math.Sin(roughnessPhase)*0.02 + math.Sin(roughnessPhase*1.7)*0.01 // Very subtle roughness
-	} else {
-		engineRoughness = 0.0 // No roughness above 2400 RPM
-	}
-
-	amplitude := baseAmplitude + (engineRoughness * rpmNormalized * 0.1) // Much reduced roughness impact
-
-	// Ensure amplitude stays within bounds with more consistent range
+	// Ensure amplitude stays within bounds
 	if amplitude < 0.2 {
-		amplitude = 0.2 // Minimum amplitude for consistent baseline
+		amplitude = 0.2
 	} else if amplitude > 0.9 {
-		amplitude = 0.9 // Reduced maximum amplitude for consistency
+		amplitude = 0.9
 	}
 
-	// Generate engine vibration waveform for 6 frames (6/60th second at 60 FPS)
-	// This reduces computational load while maintaining smooth haptic feedback
+	// Generate engine vibration waveform for 6 frames
 	sampleRate := float64(a.config.Synthesizer.SampleRateHz)
 	samplesPerBuffer := int(sampleRate / 10.0) // 60 FPS / 6 frames = 10 Hz update rate
 	engineBuffer := make([]float64, samplesPerBuffer)
 
 	for i := range engineBuffer {
-		// Calculate pulse timing based on RPM
-		// Higher RPM = more frequent pulses (shorter spacing)
-		// Use engine frequency to determine pulse rate
-		pulsesPerSecond := engineFrequency
+		// Use realistic firing frequency for pulse timing
+		pulsesPerSecond := engineFiringFrequency
 		samplesPerPulse := sampleRate / pulsesPerSecond
 
-		// Create short, sharp pulses instead of continuous sine waves
+		// Create pulses based on engine firing events
 		pulsePosition := float64(i) / samplesPerPulse
 		pulseFraction := pulsePosition - math.Floor(pulsePosition) // 0.0 to 1.0 within each pulse cycle
 
 		var pulseValue float64
 
-		// Generate a smooth pulse at the beginning of each cycle
-		// Allow overlapping pulses at higher RPM for more density
-		pulseWidth := 0.25 + (rpmNormalized * 0.85) // Pulse takes up 25%-110% of cycle based on RPM (allows overlap)
+		// Pulse width varies with RPM and engine characteristics
+		// Smoother engines have wider, more overlapping pulses at high RPM
+		basePulseWidth := 0.25 + (rpmNormalized * 0.85 * smoothness) // 25% to 110% based on smoothness
 
-		if pulseFraction < pulseWidth {
-			// Inside the pulse - create a very smooth attack and decay
-			pulsePhase := pulseFraction / pulseWidth // 0.0 to 1.0 within the pulse
+		if pulseFraction < basePulseWidth {
+			// Inside the pulse - create smooth attack and decay
+			pulsePhase := pulseFraction / basePulseWidth // 0.0 to 1.0 within the pulse
 
-			// Very smooth attack and decay using cosine curves for realistic engine "thump"
-			// Use bipolar pulses that swing positive and negative for stronger feel
+			// Engine-specific pulse shaping
 			if pulsePhase < 0.35 {
-				// Very smooth rise (35% of pulse width) using cosine curve
-				// Cosine curve provides much smoother transitions than linear
-				cosinePhase := (pulsePhase / 0.35) * math.Pi / 2 // 0 to π/2
-				smoothRise := math.Sin(cosinePhase)              // Smooth 0 to 1 curve
-				pulseValue = (smoothRise * 2.0) - 1.0            // Range: -1.0 to +1.0
+				// Attack phase - varies by engine type
+				cosinePhase := (pulsePhase / 0.35) * math.Pi / 2
+				smoothRise := math.Sin(cosinePhase)
+
+				// Less smooth engines have sharper attacks
+				attackSharpness := 1.0 + (1.0-smoothness)*0.5
+				pulseValue = math.Pow(smoothRise, attackSharpness)*2.0 - 1.0
 			} else {
-				// Smooth exponential decay (65% of pulse width) with cosine smoothing
+				// Decay phase
 				decayPhase := (pulsePhase - 0.35) / 0.65
-				decayValue := math.Exp(-decayPhase * 2.0) // Gentler decay from 1.0 to ~0
+				decayValue := math.Exp(-decayPhase * 2.0)
 
-				// Create smooth oscillating decay for bipolar effect using cosine
-				oscillationPhase := decayPhase * math.Pi * 2.5         // Fewer oscillations during decay
-				oscillation := math.Cos(oscillationPhase) * decayValue // Smooth bipolar oscillating decay
-				pulseValue = oscillation                               // Bipolar oscillating decay
+				// Engine-specific decay characteristics
+				oscillationRate := 2.5 + (1.0-smoothness)*1.0 // Rougher engines oscillate more
+				oscillationPhase := decayPhase * math.Pi * oscillationRate
+				oscillation := math.Cos(oscillationPhase) * decayValue
+				pulseValue = oscillation
 			}
 
-			// Add some smoothed randomness for engine roughness (only below 2400 RPM)
-			if rpm <= 2400.0 {
+			// Add per-pulse roughness variation based on engine characteristics
+			if rpm <= 2400.0 && baseRoughness > 0.02 {
 				roughnessPhase := float64(a.state.current.seq+uint32(i)) * 0.0005
-				roughness := 1.0 + (math.Sin(roughnessPhase) * 0.01) // Very subtle ±1% variation
-				pulseValue *= roughness
+				roughnessVariation := 1.0 + (math.Sin(roughnessPhase) * baseRoughness * 0.5)
+				pulseValue *= roughnessVariation
 			}
-			// No per-pulse roughness above 2400 RPM for completely smooth high-RPM feel
 
 		} else {
 			// Outside the pulse - silence between pulses
 			pulseValue = 0.0
 		}
 
-		// Use the pulse value directly without harmonics
-		finalValue := pulseValue
-
-		// Ensure the signal stays within standard ±1.0 bounds
-		if finalValue > 1.0 {
-			finalValue = 1.0
-		} else if finalValue < -1.0 {
-			finalValue = -1.0
+		// Ensure the signal stays within bounds
+		if pulseValue > 1.0 {
+			pulseValue = 1.0
+		} else if pulseValue < -1.0 {
+			pulseValue = -1.0
 		}
 
-		engineBuffer[i] = amplitude * finalValue
+		engineBuffer[i] = amplitude * pulseValue
 	}
 
 	a.synth.WriteBuffer("engine", engineBuffer)

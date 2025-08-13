@@ -22,12 +22,17 @@ import (
 	telemetry_client "github.com/zetetos/gt-telemetry"
 )
 
+type vehicleRecord struct {
+	vehicleID    uint32
+	engineLayout string
+}
+
 type stateRecord struct {
 	seq       uint32
 	seqDelta  uint32
 	timeOfDay time.Duration
-	vehicleID uint32
 	gear      int
+	vehicle   vehicleRecord
 }
 
 type appState struct {
@@ -393,13 +398,15 @@ func (a *App) resetState() {
 func (a *App) updateVehicle() {
 	vehicleType := a.gtClient.Telemetry.VehicleType()
 
-	a.log.Debug().Uint32("ID", a.state.last.vehicleID).Msg("vehicle ID changed")
+	a.log.Debug().Uint32("ID", a.state.last.vehicle.vehicleID).Msg("vehicle ID changed")
 
 	a.log.Info().
-		Uint32("ID", a.state.last.vehicleID).
+		Uint32("ID", a.state.last.vehicle.vehicleID).
 		Str("manufacturer", a.gtClient.Telemetry.VehicleManufacturer()).
 		Str("model", a.gtClient.Telemetry.VehicleModel()).
 		Str("type", vehicleType).
+		// TODO: Uncomment when gt-telemetry is updated
+		// Str("engine_layout", a.gtClient.Telemetry.EngineLayout()).
 		Msg("vehicle update")
 
 	switch vehicleType {
@@ -409,7 +416,8 @@ func (a *App) updateVehicle() {
 		a.transmissionGainMin = a.config.Synthesizer.TransmissionGain + a.config.Synthesizer.TransmissionGainMinStreet
 	}
 
-	a.state.last.vehicleID = a.state.current.vehicleID
+	a.state.last.vehicle.vehicleID = a.state.current.vehicle.vehicleID
+	a.state.last.vehicle.engineLayout = a.state.current.vehicle.engineLayout
 	a.state.last.gear = a.state.current.gear
 }
 
