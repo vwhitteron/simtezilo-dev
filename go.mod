@@ -13,7 +13,7 @@ require (
 	github.com/spf13/viper v1.20.1
 	github.com/stretchr/testify v1.10.0
 	github.com/theojulienne/go-wireless v1.2.0
-	github.com/zetetos/gt-telemetry v1.9.0
+	github.com/zetetos/gt-telemetry v1.9.1-0.20250813074203-704f4206e728
 	golang.org/x/image v0.27.0
 	periph.io/x/conn/v3 v3.7.2
 	periph.io/x/host/v3 v3.8.2
@@ -43,8 +43,8 @@ require (
 	github.com/spf13/pflag v1.0.6 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	golang.org/x/crypto v0.40.0 // indirect
-	golang.org/x/sys v0.34.0 // indirect
-	golang.org/x/text v0.27.0 // indirect
+	golang.org/x/crypto v0.41.0 // indirect
+	golang.org/x/sys v0.35.0 // indirect
+	golang.org/x/text v0.28.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
