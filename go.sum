@@ -133,6 +133,8 @@ github.com/xo/terminfo v0.0.0-20210125001918-ca9a967f8778 h1:QldyIu/L63oPpyvQmHg
 github.com/xo/terminfo v0.0.0-20210125001918-ca9a967f8778/go.mod h1:2MuV+tbUrU1zIOPMxZ5EncGwgmMJsa+9ucAQZXxsObs=
 github.com/zetetos/gt-telemetry v1.9.1-0.20250813074203-704f4206e728 h1:JNKAR3/cBiHbq7XF4hTpiDnH/7/8rAgvKYGEu6oxGqI=
 github.com/zetetos/gt-telemetry v1.9.1-0.20250813074203-704f4206e728/go.mod h1:iSfaR9eMSSn22iPo8/7Y0RdNjR6KYNptnj9kOEwgSCw=
+github.com/zetetos/gt-telemetry v1.9.1-0.20250813123602-ab4a0c1627bf h1:EnNdV+T7++RN2l557cUzeKzY3f2Wo8jNuWyb7NiBdCw=
+github.com/zetetos/gt-telemetry v1.9.1-0.20250813123602-ab4a0c1627bf/go.mod h1:iSfaR9eMSSn22iPo8/7Y0RdNjR6KYNptnj9kOEwgSCw=
 go.uber.org/multierr v1.11.0 h1:blXXJkSxSSfBVBlC76pxqeO+LN3aDfLQo+309xJstO0=
 go.uber.org/multierr v1.11.0/go.mod h1:20+QtiLqy0Nd6FdQB9TLXag12DsQkrbs3htMFfDN80Y=
 golang.org/x/crypto v0.0.0-20210421170649-83a5a9bb288b/go.mod h1:T9bdIzuCu7OtxOm1hfPfRQxPLYneinmdGuTeoZ9dtd4=

@@ -36,12 +36,13 @@ type stateRecord struct {
 }
 
 type appState struct {
-	hapticsEnabled  bool // TODO: move state to haptics?
-	telemetryActive bool
-	current         stateRecord
-	last            stateRecord
-	lastKnownRPM    float64   // Cache last known RPM for fallback
-	lastRPMTime     time.Time // Timestamp of last known RPM
+	hapticsEnabled      bool // TODO: move state to haptics?
+	telemetryActive     bool
+	current             stateRecord
+	last                stateRecord
+	lastKnownRPM        float64   // Cache last known RPM for fallback
+	lastRPMTime         time.Time // Timestamp of last known RPM
+	enginePulsePolarity bool      // Alternating polarity for engine pulses
 }
 
 type App struct {
@@ -406,7 +407,7 @@ func (a *App) updateVehicle() {
 		Str("model", a.gtClient.Telemetry.VehicleModel()).
 		Str("type", vehicleType).
 		// TODO: Uncomment when gt-telemetry is updated
-		// Str("engine_layout", a.gtClient.Telemetry.EngineLayout()).
+		Str("engine_layout", a.gtClient.Telemetry.VehicleEngineLayout()).
 		Msg("vehicle update")
 
 	switch vehicleType {

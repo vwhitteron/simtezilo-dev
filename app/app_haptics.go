@@ -85,7 +85,7 @@ func getEngineCharacteristics(engineLayout string) (smoothness float64, baseRoug
 	case "K2":
 		return 0.85, 0.04 // Wankel - smooth but distinctive
 	case "K4":
-		return 0.92, 0.02 // Multi-rotor Wankel - very smooth
+		return 0.75, 0.12 // Multi-rotor Wankel - much more lumpy at idle
 	default:
 		return 0.6, 0.08 // Default to I4 characteristics
 	}
@@ -362,11 +362,23 @@ func (a *App) generateEngineHaptic() {
 	// Calculate realistic engine firing frequency based on engine configuration
 	engineFiringFrequency := getEngineFiringFrequency(rpm, engineLayout)
 
-	// Clamp firing frequency to reasonable haptic range (8-160 Hz)
-	if engineFiringFrequency < 8.0 {
-		engineFiringFrequency = 8.0
-	} else if engineFiringFrequency > 160.0 {
-		engineFiringFrequency = 160.0
+	// For high-firing engines like Wankels, use a completely different approach
+	// Map RPM to a much lower frequency range for perceptible intervals
+	if engineLayout == "K2" || engineLayout == "K4" {
+		// Create a dramatic RPM-dependent frequency curve for Wankels
+		// Idle: ~8Hz (125ms intervals), High RPM: ~80Hz (12.5ms intervals)
+		rpmFactor := rpm / rpmMax
+		engineFiringFrequency = 8.0 + (rpmFactor * 72.0) // 8Hz to 80Hz range
+	} else {
+		// For regular engines, also reduce frequency range for better perception
+		engineFiringFrequency = engineFiringFrequency / 2.0 // Halve frequency for all engines
+	}
+
+	// Clamp firing frequency to wider range for more pulses at high RPM
+	if engineFiringFrequency < 6.0 {
+		engineFiringFrequency = 6.0 // 167ms intervals at minimum
+	} else if engineFiringFrequency > 100.0 {
+		engineFiringFrequency = 100.0 // 10ms intervals at maximum
 	}
 
 	// Get engine-specific characteristics
@@ -380,8 +392,21 @@ func (a *App) generateEngineHaptic() {
 		rpmNormalized = 1
 	}
 
-	// Generate amplitude that maintains consistent volume from idle to max RPM
+	// Generate amplitude with linear volume reduction from 800 RPM to max RPM
 	baseAmplitude := 0.4 + (rpmNormalized * 0.4) // Range: 0.4 to 0.8
+
+	// Apply 20% linear volume reduction from 800 RPM to max RPM
+	if rpm >= 800.0 {
+		// Calculate how far we are from 800 RPM to max RPM
+		rpmAbove800 := rpm - 800.0
+		rpmRange800ToMax := rpmMax - 800.0
+
+		if rpmRange800ToMax > 0 {
+			// Linear reduction factor: 1.0 at 800 RPM, 0.8 at max RPM (20% reduction)
+			volumeReductionFactor := 1.0 - (rpmAbove800/rpmRange800ToMax)*0.2
+			baseAmplitude *= volumeReductionFactor
+		}
+	}
 
 	// Add engine-specific roughness variation
 	// Roughness decreases with RPM and smoothness characteristic
@@ -431,44 +456,54 @@ func (a *App) generateEngineHaptic() {
 
 		var pulseValue float64
 
-		// Pulse width varies with RPM and engine characteristics
-		// Smoother engines have wider, more overlapping pulses at high RPM
-		basePulseWidth := 0.25 + (rpmNormalized * 0.85 * smoothness) // 25% to 110% based on smoothness
+		// Detect pulse trigger point (beginning of each cycle)
+		currentPulseIndex := int(math.Floor(pulsePosition))
+		lastPulseIndex := int(math.Floor((float64(i - 1)) / samplesPerPulse))
 
-		if pulseFraction < basePulseWidth {
-			// Inside the pulse - create smooth attack and decay
-			pulsePhase := pulseFraction / basePulseWidth // 0.0 to 1.0 within the pulse
+		// Check if we've crossed into a new pulse cycle
+		pulseTriggered := (i > 0) && (currentPulseIndex != lastPulseIndex)
 
-			// Engine-specific pulse shaping
-			if pulsePhase < 0.35 {
-				// Attack phase - varies by engine type
-				cosinePhase := (pulsePhase / 0.35) * math.Pi / 2
-				smoothRise := math.Sin(cosinePhase)
+		// Toggle polarity when a new pulse is triggered
+		if pulseTriggered {
+			a.state.enginePulsePolarity = !a.state.enginePulsePolarity
+		}
 
-				// Less smooth engines have sharper attacks
-				attackSharpness := 1.0 + (1.0-smoothness)*0.5
-				pulseValue = math.Pow(smoothRise, attackSharpness)*2.0 - 1.0
+		// Always generate pulse value based on position within current pulse cycle
+		pulsePhase := pulseFraction // 0.0 to 1.0 within the pulse cycle
+
+		// Create very short pulses with long gaps for dramatic interval differences
+		// Pulse width gets wider at higher RPM for more substantial pulses
+		rpmFactor := rpm / rpmMax
+		pulseWidth := 0.25 + (rpmFactor * 0.15) // 25% width at idle, 40% width at high RPM
+
+		if pulsePhase < pulseWidth {
+			// Inside the pulse - create a sharp, distinct pulse
+			pulsePhaseNormalized := pulsePhase / pulseWidth // 0.0 to 1.0 within pulse width
+
+			if pulsePhaseNormalized < 0.3 {
+				// Quick attack (30% of pulse width)
+				attackPhase := pulsePhaseNormalized / 0.3
+				pulseValue = math.Sin(attackPhase * math.Pi / 2)
 			} else {
-				// Decay phase
-				decayPhase := (pulsePhase - 0.35) / 0.65
-				decayValue := math.Exp(-decayPhase * 2.0)
+				// Quick decay (70% of pulse width)
+				decayPhase := (pulsePhaseNormalized - 0.3) / 0.7
+				decayRate := 4.0 + (1.0-smoothness)*2.0 // Sharp decay for distinctness
+				pulseValue = math.Exp(-decayPhase * decayRate)
+			}
 
-				// Engine-specific decay characteristics
-				oscillationRate := 2.5 + (1.0-smoothness)*1.0 // Rougher engines oscillate more
-				oscillationPhase := decayPhase * math.Pi * oscillationRate
-				oscillation := math.Cos(oscillationPhase) * decayValue
-				pulseValue = oscillation
+			// Apply polarity - alternating positive and negative pulses
+			if !a.state.enginePulsePolarity {
+				pulseValue = -pulseValue
 			}
 
 			// Add per-pulse roughness variation based on engine characteristics
 			if rpm <= 2400.0 && baseRoughness > 0.02 {
 				roughnessPhase := float64(a.state.current.seq+uint32(i)) * 0.0005
-				roughnessVariation := 1.0 + (math.Sin(roughnessPhase) * baseRoughness * 0.5)
+				roughnessVariation := 1.0 + (math.Sin(roughnessPhase) * baseRoughness * 0.3)
 				pulseValue *= roughnessVariation
 			}
-
 		} else {
-			// Outside the pulse - silence between pulses
+			// Outside the pulse - complete silence for clear gaps
 			pulseValue = 0.0
 		}
 

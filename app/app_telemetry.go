@@ -7,8 +7,7 @@ func (a *App) updateState() {
 	a.state.current.seqDelta = a.state.current.seq - a.state.last.seq
 	a.state.current.timeOfDay = a.gtClient.Telemetry.TimeOfDay()
 	a.state.current.vehicle.vehicleID = a.gtClient.Telemetry.VehicleID()
-	// TODO: Uncomment when gt-telemetry is updated
-	// a.state.current.vehicle.engineLayout = a.gtClient.Telemetry.EngineLayout()
+	a.state.current.vehicle.engineLayout = a.gtClient.Telemetry.VehicleEngineLayout()
 	a.state.current.gear = a.gtClient.Telemetry.CurrentGear()
 }
 
