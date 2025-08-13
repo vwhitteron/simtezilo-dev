@@ -35,6 +35,8 @@ type appState struct {
 	telemetryActive bool
 	current         stateRecord
 	last            stateRecord
+	lastKnownRPM    float64   // Cache last known RPM for fallback
+	lastRPMTime     time.Time // Timestamp of last known RPM
 }
 
 type App struct {

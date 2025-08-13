@@ -239,12 +239,28 @@ func (a *App) determineGearChangeMagnitude() float64 {
 func (a *App) generateEngineHaptic() {
 	rpm := float64(a.gtClient.Telemetry.EngineRPM())
 
+	// Cache last known RPM and timestamp for fallback when telemetry is unavailable
+	currentTime := time.Now()
+	if rpm > 0 {
+		// Update last known good RPM and timestamp
+		a.state.lastKnownRPM = rpm
+		a.state.lastRPMTime = currentTime
+	} else if a.state.lastKnownRPM > 0 && currentTime.Sub(a.state.lastRPMTime) < 1000*time.Millisecond {
+		// Use cached RPM if it's less than 500ms old
+		rpm = a.state.lastKnownRPM
+	}
+
+	// Generate haptics every 6 frames to reduce computational load
+	if a.state.current.seq%6 != 0 {
+		return
+	}
+
 	// Skip if engine is off (RPM is zero)
 	if rpm == 0 {
-		// Use frame-based buffer size for consistency
+		// Use 6 frames worth of buffer size for consistency
 		sampleRate := float64(a.config.Synthesizer.SampleRateHz)
-		samplesPerFrame := int(sampleRate / 60.0) // 60 FPS telemetry rate
-		a.synth.WriteBuffer("engine", make([]float64, samplesPerFrame))
+		samplesPerBuffer := int(sampleRate / 10.0) // 60 FPS / 6 frames = 10 Hz update rate
+		a.synth.WriteBuffer("engine", make([]float64, samplesPerBuffer))
 		return
 	}
 
@@ -266,16 +282,16 @@ func (a *App) generateEngineHaptic() {
 		rpmNormalized = 1
 	}
 
-	// Calculate engine firing frequency mapped to 15-60 Hz range
-	// Map RPM from idle (~800) to max RPM linearly to 15-60 Hz frequency range
-	minFreq := 15.0 // Increased from 8.0 Hz to 15.0 Hz
-	maxFreq := 60.0 // Reduced from 160.0 Hz to 60.0 Hz for better tactile feel
+	// Calculate engine firing frequency mapped to 25-60 Hz range
+	// Map RPM from idle (~800) to max RPM linearly to 25-60 Hz frequency range
+	minFreq := 8.0   // Increased from 15.0 Hz to 25.0 Hz
+	maxFreq := 160.0 // Increased from 34.0 Hz to 60.0 Hz for higher pulse rate
 
 	// Define typical idle RPM for scaling
 	idleRPM := 800.0
 
 	// Calculate frequency range and RPM range
-	frequencyRange := maxFreq - minFreq // 45 Hz range
+	frequencyRange := maxFreq - minFreq // 35 Hz range
 	rpmRange := rpmMax - idleRPM
 
 	// Map current RPM to frequency range
@@ -296,30 +312,36 @@ func (a *App) generateEngineHaptic() {
 		}
 	}
 
-	// Generate amplitude that scales from 0 at 0 RPM to 1.0 at max RPM
-	// Use a curve that gives good feel across the RPM range
-	// Start from zero amplitude at 0 RPM for no engine haptic output when engine is off
-	baseAmplitude := rpmNormalized * (0.8 + (rpmNormalized * 0.2)) // Range: 0.0 to 1.0
+	// Generate amplitude that maintains more consistent volume from idle to max RPM
+	// Use a curve that provides good feel across the RPM range with less dramatic changes
+	// Start from a reasonable base amplitude at idle for consistent engine haptic output
+	baseAmplitude := 0.4 + (rpmNormalized * 0.4) // Range: 0.4 to 0.8 for more consistent volume
 
 	// Add engine roughness variation that's more "lumpy" feeling
 	// Use slower, irregular variations to simulate engine firing cycles
-	roughnessPhase := float64(a.state.current.seq) * 0.05                               // Slower variation
-	engineRoughness := math.Sin(roughnessPhase)*0.2 + math.Sin(roughnessPhase*1.7)*0.15 // Strong roughness
-
-	amplitude := baseAmplitude + (engineRoughness * rpmNormalized) // Scale roughness by RPM
-
-	// Ensure amplitude stays within bounds
-	if amplitude < 0 {
-		amplitude = 0 // No negative amplitude
-	} else if amplitude > 1.0 {
-		amplitude = 1.0 // Standard maximum amplitude
+	// Remove roughness above 2400 RPM for smoother high-RPM feel
+	var engineRoughness float64
+	if rpm <= 2400.0 {
+		roughnessPhase := float64(a.state.current.seq) * 0.005                              // Much slower variation
+		engineRoughness = math.Sin(roughnessPhase)*0.02 + math.Sin(roughnessPhase*1.7)*0.01 // Very subtle roughness
+	} else {
+		engineRoughness = 0.0 // No roughness above 2400 RPM
 	}
 
-	// Generate engine vibration waveform for one frame only (1/60th second at 60 FPS)
-	// This prevents echo and overlapping from multiple telemetry frames
+	amplitude := baseAmplitude + (engineRoughness * rpmNormalized * 0.1) // Much reduced roughness impact
+
+	// Ensure amplitude stays within bounds with more consistent range
+	if amplitude < 0.2 {
+		amplitude = 0.2 // Minimum amplitude for consistent baseline
+	} else if amplitude > 0.9 {
+		amplitude = 0.9 // Reduced maximum amplitude for consistency
+	}
+
+	// Generate engine vibration waveform for 6 frames (6/60th second at 60 FPS)
+	// This reduces computational load while maintaining smooth haptic feedback
 	sampleRate := float64(a.config.Synthesizer.SampleRateHz)
-	samplesPerFrame := int(sampleRate / 60.0) // 60 FPS telemetry rate
-	engineBuffer := make([]float64, samplesPerFrame)
+	samplesPerBuffer := int(sampleRate / 10.0) // 60 FPS / 6 frames = 10 Hz update rate
+	engineBuffer := make([]float64, samplesPerBuffer)
 
 	for i := range engineBuffer {
 		// Calculate pulse timing based on RPM
@@ -334,93 +356,50 @@ func (a *App) generateEngineHaptic() {
 
 		var pulseValue float64
 
-		// Generate a short, sharp pulse at the beginning of each cycle
-		pulseWidth := 0.25 // Pulse takes up 25% of the cycle (wider for better feel)
+		// Generate a smooth pulse at the beginning of each cycle
+		// Allow overlapping pulses at higher RPM for more density
+		pulseWidth := 0.25 + (rpmNormalized * 0.85) // Pulse takes up 25%-110% of cycle based on RPM (allows overlap)
 
 		if pulseFraction < pulseWidth {
-			// Inside the pulse - create a sharp attack and quick decay
+			// Inside the pulse - create a very smooth attack and decay
 			pulsePhase := pulseFraction / pulseWidth // 0.0 to 1.0 within the pulse
 
-			// Sharp attack, exponential decay for realistic engine "thump"
+			// Very smooth attack and decay using cosine curves for realistic engine "thump"
 			// Use bipolar pulses that swing positive and negative for stronger feel
-			if pulsePhase < 0.05 {
-				// Very quick rise (5% of pulse width) for sharp impact
-				// Start negative, swing to positive for bipolar effect
-				pulseValue = (pulsePhase/0.05)*2.0 - 1.0 // Range: -1.0 to +1.0
+			if pulsePhase < 0.35 {
+				// Very smooth rise (35% of pulse width) using cosine curve
+				// Cosine curve provides much smoother transitions than linear
+				cosinePhase := (pulsePhase / 0.35) * math.Pi / 2 // 0 to π/2
+				smoothRise := math.Sin(cosinePhase)              // Smooth 0 to 1 curve
+				pulseValue = (smoothRise * 2.0) - 1.0            // Range: -1.0 to +1.0
 			} else {
-				// Exponential decay (95% of pulse width)
-				decayPhase := (pulsePhase - 0.05) / 0.95
-				decayValue := math.Exp(-decayPhase * 2.5) // Decay from 1.0 to ~0
+				// Smooth exponential decay (65% of pulse width) with cosine smoothing
+				decayPhase := (pulsePhase - 0.35) / 0.65
+				decayValue := math.Exp(-decayPhase * 2.0) // Gentler decay from 1.0 to ~0
 
-				// Create oscillating decay for bipolar effect
-				oscillation := math.Sin(decayPhase * math.Pi * 3) // 3 oscillations during decay
-				pulseValue = decayValue * oscillation             // Bipolar oscillating decay
+				// Create smooth oscillating decay for bipolar effect using cosine
+				oscillationPhase := decayPhase * math.Pi * 2.5         // Fewer oscillations during decay
+				oscillation := math.Cos(oscillationPhase) * decayValue // Smooth bipolar oscillating decay
+				pulseValue = oscillation                               // Bipolar oscillating decay
 			}
 
-			// Add some randomness for engine roughness
-			roughnessPhase := float64(a.state.current.seq+uint32(i)) * 0.001
-			roughness := 1.0 + (math.Sin(roughnessPhase) * 0.2) // ±20% variation
-			pulseValue *= roughness
+			// Add some smoothed randomness for engine roughness (only below 2400 RPM)
+			if rpm <= 2400.0 {
+				roughnessPhase := float64(a.state.current.seq+uint32(i)) * 0.0005
+				roughness := 1.0 + (math.Sin(roughnessPhase) * 0.01) // Very subtle ±1% variation
+				pulseValue *= roughness
+			}
+			// No per-pulse roughness above 2400 RPM for completely smooth high-RPM feel
 
 		} else {
 			// Outside the pulse - silence between pulses
 			pulseValue = 0.0
 		}
 
-		// Add harmonics to make high RPM vibrations more perceptible
-		// When engine frequency gets too high for effective haptics (>60 Hz),
-		// add lower frequency harmonics that stay within the 15-60 Hz range
-		harmonicValue := 0.0
-		if engineFrequency > 60.0 {
-			// Calculate harmonic frequencies that stay within the desired range
-			// Use subharmonics (1/2, 1/3, 1/4, etc.) until we find frequencies within 15-60 Hz
-			minFreq := 15.0 // Increased from 8.0 Hz to 15.0 Hz
-			maxFreq := 60.0 // Reduced from 160.0 Hz to 60.0 Hz
+		// Use the pulse value directly without harmonics
+		finalValue := pulseValue
 
-			var validHarmonics []float64
-
-			// Generate more subharmonics to handle up to 20,000 RPM scenarios
-			// At 20,000 RPM with 4-cylinder engine: (20000/60)*2 = 667 Hz
-			// Need harmonics up to divisor 44 to get 667/44 ≈ 15 Hz
-			for divisor := 2.0; divisor <= 50.0; divisor += 1.0 {
-				harmonicFreq := engineFrequency / divisor
-				if harmonicFreq >= minFreq && harmonicFreq <= maxFreq {
-					validHarmonics = append(validHarmonics, harmonicFreq)
-				}
-				// Stop if we have enough harmonics (max 12 for performance)
-				if len(validHarmonics) >= 12 {
-					break
-				}
-			}
-
-			// Generate harmonic pulses with different phases and amplitudes
-			timeSeconds := float64(i) / sampleRate
-
-			// Combine valid harmonics with decreasing amplitudes
-			for j, harmonicFreq := range validHarmonics {
-				// Decrease amplitude for higher order harmonics - boosted primary harmonic
-				var amplitude float64
-				if j == 0 {
-					// Primary harmonic gets extra boost for stronger presence
-					amplitude = 2.0 // Increased from 1.2 to 2.0 for primary harmonic
-				} else {
-					// Other harmonics remain at current levels
-					amplitude = 1.2 / (float64(j) + 1.0) // 0.6, 0.4, 0.3, etc.
-				}
-				harmonicComponent := math.Sin(2*math.Pi*harmonicFreq*timeSeconds) * amplitude
-				harmonicValue += harmonicComponent
-			}
-
-			// Scale harmonic contribution based on how high the main frequency is
-			// Much stronger harmonic strength for better high-RPM feel
-			harmonicStrength := math.Min((engineFrequency-60.0)/80.0, 1.0) // Max 100% harmonic (was 90%)
-			harmonicValue *= harmonicStrength
-		}
-
-		// Combine main pulse with harmonics
-		finalValue := pulseValue + harmonicValue
-
-		// Ensure the combined signal stays within standard ±1.0 bounds
+		// Ensure the signal stays within standard ±1.0 bounds
 		if finalValue > 1.0 {
 			finalValue = 1.0
 		} else if finalValue < -1.0 {
