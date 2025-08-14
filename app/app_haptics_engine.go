@@ -98,6 +98,10 @@ var EngineGeometryMap = map[string]string{
 }
 
 func getEngineCharacteristics(engineLayout string) (engineCharacteristics, error) {
+	if engineLayout == "" {
+		return engineCharacteristics{}, nil
+	}
+
 	geometryCode := engineLayout[:1]                // Get first character for geometry
 	chambers, err := strconv.Atoi(engineLayout[1:]) // Get remaining characters for chamber count
 	if err != nil {
