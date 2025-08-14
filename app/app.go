@@ -422,7 +422,6 @@ func (a *App) updateVehicle() {
 		Str("model", a.gtClient.Telemetry.VehicleModel()).
 		Str("type", vehicleType).
 		Str("engine_layout", engineLayout).
-		Str("engine", fmt.Sprintf("%+v", engine)).
 		Msg("vehicle update")
 
 	switch vehicleType {
