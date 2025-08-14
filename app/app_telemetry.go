@@ -6,8 +6,7 @@ func (a *App) updateState() {
 	a.state.current.seq = a.gtClient.Telemetry.SequenceID()
 	a.state.current.seqDelta = a.state.current.seq - a.state.last.seq
 	a.state.current.timeOfDay = a.gtClient.Telemetry.TimeOfDay()
-	a.state.current.vehicle.vehicleID = a.gtClient.Telemetry.VehicleID()
-	a.state.current.vehicle.engineLayout = a.gtClient.Telemetry.VehicleEngineLayout()
+	a.state.current.vehicleID = a.gtClient.Telemetry.VehicleID()
 	a.state.current.gear = a.gtClient.Telemetry.CurrentGear()
 }
 
@@ -63,5 +62,5 @@ func (a *App) telemetryPacketsDropped() uint32 {
 }
 
 func (a *App) vehicleHasChanged() bool {
-	return a.state.current.vehicle.vehicleID != a.state.last.vehicle.vehicleID
+	return a.state.current.vehicleID != a.state.last.vehicleID
 }

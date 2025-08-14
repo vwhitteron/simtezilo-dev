@@ -82,6 +82,7 @@ type engineHapticProfile struct {
 }
 
 type engineCharacteristics struct {
+	layout          string
 	geometry        string
 	chambers        int
 	firingFrequency float64
@@ -113,6 +114,7 @@ func getEngineCharacteristics(engineLayout string) (engineCharacteristics, error
 	}
 
 	return engineCharacteristics{
+		layout:          engineLayout,
 		geometry:        geometryCode,
 		chambers:        chambers,
 		firingFrequency: getEngineFiringFrequency(geometryCode, chambers),
@@ -131,6 +133,10 @@ func getEngineFiringFrequency(geometry string, chambers int) float64 {
 }
 
 func (a *App) generateEngineHaptic() {
+	if a.config.Synthesizer.EngineGain == -60 {
+		return
+	}
+
 	rpm := float64(a.gtClient.Telemetry.EngineRPM())
 
 	// Cache last known RPM and timestamp for fallback when telemetry is unavailable
@@ -167,35 +173,24 @@ func (a *App) generateEngineHaptic() {
 		revLimit = 8000.0
 	}
 
-	// Get engine layout (fallback to I4 if not available)
-	engineLayout := a.state.current.vehicle.engineLayout
-	if engineLayout == "" {
-		engineLayout = "I4" // Default to inline-4 if no data
-	}
-
-	// Get engine-specific characteristics
-	engine, err := getEngineCharacteristics(engineLayout)
-	if err != nil {
-		return
-	}
-
+	var firingFrequency float64
 	// For high-firing engines like Wankels, use a completely different approach
 	// Map RPM to a much lower frequency range for perceptible intervals
-	if engineLayout == "K2" || engineLayout == "K4" {
+	if a.vehicle.engine.geometry == "K" {
 		// Create a dramatic RPM-dependent frequency curve for Wankels
 		// Idle: ~8Hz (125ms intervals), High RPM: ~80Hz (12.5ms intervals)
 		rpmFactor := rpm / revLimit
-		engine.firingFrequency = 8.0 + (rpmFactor * 72.0) // 8Hz to 80Hz range
+		firingFrequency = 8.0 + (rpmFactor * 72.0) // 8Hz to 80Hz range
 	} else {
 		// For regular engines, also reduce frequency range for better perception
-		engine.firingFrequency = engine.firingFrequency / 2.0 // Halve frequency for all engines
+		firingFrequency = (rpm * a.vehicle.engine.firingFrequency) / 2.0 // Halve frequency for all engines
 	}
 
 	// Clamp firing frequency to wider range for more pulses at high RPM
-	if engine.firingFrequency < 6.0 {
-		engine.firingFrequency = 6.0 // 167ms intervals at minimum
-	} else if engine.firingFrequency > 150.0 {
-		engine.firingFrequency = 150.0 // 6.67ms intervals at maximum (increased from 100Hz)
+	if firingFrequency < 6.0 {
+		firingFrequency = 6.0 // 167ms intervals at minimum
+	} else if firingFrequency > 150.0 {
+		firingFrequency = 150.0 // 6.67ms intervals at maximum (increased from 100Hz)
 	}
 
 	// Normalize RPM from 0 to max
@@ -222,17 +217,17 @@ func (a *App) generateEngineHaptic() {
 	if rpm <= 2400.0 {
 		// Low RPM roughness varies by engine type
 		roughnessPhase := float64(a.state.current.seq) * 0.005
-		roughnessIntensity := engine.haptics.baseRoughness * (1.0 - engine.haptics.smoothness*0.5) // Less smooth engines are rougher
+		roughnessIntensity := a.vehicle.engine.haptics.baseRoughness * (1.0 - a.vehicle.engine.haptics.smoothness*0.5) // Less smooth engines are rougher
 		engineRoughness = math.Sin(roughnessPhase)*roughnessIntensity + math.Sin(roughnessPhase*1.7)*roughnessIntensity*0.5
 
 		// Reduce roughness as RPM increases (engines smooth out)
 		rpmSmoothingFactor := rpm / 2400.0
-		engineRoughness *= (1.0 - rpmSmoothingFactor*engine.haptics.smoothness)
+		engineRoughness *= (1.0 - rpmSmoothingFactor*a.vehicle.engine.haptics.smoothness)
 	} else {
 		// High RPM: roughness based on engine smoothness characteristic
-		if engine.haptics.smoothness < 0.9 {
+		if a.vehicle.engine.haptics.smoothness < 0.9 {
 			roughnessPhase := float64(a.state.current.seq) * 0.002
-			highRpmRoughness := (1.0 - engine.haptics.smoothness) * 0.02 // Less smooth engines retain some roughness
+			highRpmRoughness := (1.0 - a.vehicle.engine.haptics.smoothness) * 0.02 // Less smooth engines retain some roughness
 			engineRoughness = math.Sin(roughnessPhase) * highRpmRoughness
 		} else {
 			engineRoughness = 0.0 // Very smooth engines have no roughness at high RPM
@@ -256,7 +251,7 @@ func (a *App) generateEngineHaptic() {
 	// Normal engine pulse generation (rev limiter already checked above)
 	for i := range engineBuffer {
 		// Use realistic firing frequency for pulse timing
-		pulsesPerSecond := engine.firingFrequency
+		pulsesPerSecond := firingFrequency
 		samplesPerPulse := sampleRate / pulsesPerSecond
 
 		// Create pulses based on engine firing events
@@ -296,7 +291,7 @@ func (a *App) generateEngineHaptic() {
 			} else {
 				// Quick decay (70% of pulse width)
 				decayPhase := (pulsePhaseNormalized - 0.3) / 0.7
-				decayRate := 4.0 + (1.0-engine.haptics.smoothness)*2.0 // Sharp decay for distinctness
+				decayRate := 4.0 + (1.0-a.vehicle.engine.haptics.smoothness)*2.0 // Sharp decay for distinctness
 				pulseValue = math.Exp(-decayPhase * decayRate)
 			}
 
@@ -306,9 +301,9 @@ func (a *App) generateEngineHaptic() {
 			}
 
 			// Add per-pulse roughness variation based on engine characteristics
-			if rpm <= 2400.0 && engine.haptics.baseRoughness > 0.02 {
+			if rpm <= 2400.0 && a.vehicle.engine.haptics.baseRoughness > 0.02 {
 				roughnessPhase := float64(a.state.current.seq+uint32(i)) * 0.0005
-				roughnessVariation := 1.0 + (math.Sin(roughnessPhase) * engine.haptics.baseRoughness * 0.3)
+				roughnessVariation := 1.0 + (math.Sin(roughnessPhase) * a.vehicle.engine.haptics.baseRoughness * 0.3)
 				pulseValue *= roughnessVariation
 			}
 		} else {

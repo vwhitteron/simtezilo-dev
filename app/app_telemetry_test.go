@@ -168,8 +168,8 @@ func (suite *TelemetryTestSuite) TestTelemetryPacketsDroppedReturnsCorrectCountW
 
 func (suite *TelemetryTestSuite) TestVehicleHasChangedReturnsTrueWhenVehicleIDChanges() {
 	// Arrange
-	suite.app.state.last.vehicle.vehicleID = 1234
-	suite.app.state.current.vehicle.vehicleID = 1235
+	suite.app.state.last.vehicleID = 1234
+	suite.app.state.current.vehicleID = 1235
 
 	// Act
 	result := suite.app.vehicleHasChanged()
@@ -180,8 +180,8 @@ func (suite *TelemetryTestSuite) TestVehicleHasChangedReturnsTrueWhenVehicleIDCh
 
 func (suite *TelemetryTestSuite) TestVehicleHasChangedReturnsFalseWhenVehicleIDDoesNotChange() {
 	// Arrange
-	suite.app.state.last.vehicle.vehicleID = 0
-	suite.app.state.current.vehicle.vehicleID = 0
+	suite.app.state.last.vehicleID = 0
+	suite.app.state.current.vehicleID = 0
 
 	// Act
 	result := suite.app.vehicleHasChanged()
