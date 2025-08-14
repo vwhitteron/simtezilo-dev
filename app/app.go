@@ -23,8 +23,8 @@ import (
 )
 
 type vehicleRecord struct {
-	vehicleID    uint32
-	engineLayout string
+	vehicleID uint32
+	engine    engineCharacteristics
 }
 
 type stateRecord struct {
@@ -32,7 +32,7 @@ type stateRecord struct {
 	seqDelta  uint32
 	timeOfDay time.Duration
 	gear      int
-	vehicle   vehicleRecord
+	vehicleID uint32
 }
 
 type appState struct {
@@ -61,7 +61,8 @@ type App struct {
 
 	transmissionGainMin float64
 
-	state appState
+	state   appState
+	vehicle vehicleRecord
 
 	telemetryChartFeed chan map[string]float32
 	webEnabled         bool
@@ -398,16 +399,30 @@ func (a *App) resetState() {
 
 func (a *App) updateVehicle() {
 	vehicleType := a.gtClient.Telemetry.VehicleType()
+	engineLayout := a.gtClient.Telemetry.VehicleEngineLayout()
 
-	a.log.Debug().Uint32("ID", a.state.last.vehicle.vehicleID).Msg("vehicle ID changed")
+	engine, err := getEngineCharacteristics(engineLayout)
+	if err != nil {
+		a.log.Error().
+			Err(err).
+			Str("engine_layout", engineLayout).
+			Msg("failed to get engine characteristics")
+	}
+
+	a.vehicle = vehicleRecord{
+		vehicleID: a.gtClient.Telemetry.VehicleID(),
+		engine:    engine,
+	}
+
+	a.log.Debug().Uint32("ID", a.state.last.vehicleID).Msg("vehicle ID changed")
 
 	a.log.Info().
-		Uint32("ID", a.state.last.vehicle.vehicleID).
+		Uint32("ID", a.state.last.vehicleID).
 		Str("manufacturer", a.gtClient.Telemetry.VehicleManufacturer()).
 		Str("model", a.gtClient.Telemetry.VehicleModel()).
 		Str("type", vehicleType).
-		// TODO: Uncomment when gt-telemetry is updated
-		Str("engine_layout", a.gtClient.Telemetry.VehicleEngineLayout()).
+		Str("engine_layout", engineLayout).
+		Str("engine", fmt.Sprintf("%+v", engine)).
 		Msg("vehicle update")
 
 	switch vehicleType {
@@ -417,8 +432,7 @@ func (a *App) updateVehicle() {
 		a.transmissionGainMin = a.config.Synthesizer.TransmissionGain + a.config.Synthesizer.TransmissionGainMinStreet
 	}
 
-	a.state.last.vehicle.vehicleID = a.state.current.vehicle.vehicleID
-	a.state.last.vehicle.engineLayout = a.state.current.vehicle.engineLayout
+	a.state.last.vehicleID = a.state.current.vehicleID
 	a.state.last.gear = a.state.current.gear
 }
 

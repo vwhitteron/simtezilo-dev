@@ -19,15 +19,10 @@ func (a *App) generateChassisHaptic() {
 	waveOffset := pulseWidth / 2
 	waveSamplePeriod := math.Pi / pulseWidth
 
-	// Use frame-based buffer size for consistency (1/60th second at 60 FPS)
-	sampleRate := float64(a.config.Synthesizer.SampleRateHz)
-	samplesPerFrame := int(sampleRate / 60.0)
-	pulseBuffer := make([]float64, samplesPerFrame)
+	bufferLen := a.synth.GetBufferLength()
+	pulseBuffer := make([]float64, bufferLen)
 
-	// Only generate pulse samples up to the buffer size or pulse width, whichever is smaller
-	maxSamples := int(math.Min(float64(samplesPerFrame), pulseWidth*2))
-
-	for i := range maxSamples {
+	for i := range int(pulseWidth * 2) {
 		phase := waveSamplePeriod * (float64(i) - waveOffset)
 		pulseBuffer[i] = ((pulseAmplitude * math.Sin(phase)) + pulseAmplitude) / 2
 	}
