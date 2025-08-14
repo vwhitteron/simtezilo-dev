@@ -327,7 +327,7 @@ func (a *App) generateEngineHaptic() {
 		a.state.lastKnownRPM = rpm
 		a.state.lastRPMTime = currentTime
 	} else if a.state.lastKnownRPM > 0 && currentTime.Sub(a.state.lastRPMTime) < 1000*time.Millisecond {
-		// Use cached RPM if it's less than 500ms old
+		// Use cached RPM for up to 1 second if telemetry is unavailable
 		rpm = a.state.lastKnownRPM
 	}
 
@@ -377,8 +377,8 @@ func (a *App) generateEngineHaptic() {
 	// Clamp firing frequency to wider range for more pulses at high RPM
 	if engineFiringFrequency < 6.0 {
 		engineFiringFrequency = 6.0 // 167ms intervals at minimum
-	} else if engineFiringFrequency > 100.0 {
-		engineFiringFrequency = 100.0 // 10ms intervals at maximum
+	} else if engineFiringFrequency > 150.0 {
+		engineFiringFrequency = 150.0 // 6.67ms intervals at maximum (increased from 100Hz)
 	}
 
 	// Get engine-specific characteristics
@@ -392,21 +392,15 @@ func (a *App) generateEngineHaptic() {
 		rpmNormalized = 1
 	}
 
-	// Generate amplitude with linear volume reduction from 800 RPM to max RPM
-	baseAmplitude := 0.4 + (rpmNormalized * 0.4) // Range: 0.4 to 0.8
+	// Generate amplitude with louder idle feedback and linear 30% volume reduction at max RPM
+	// Start with higher base amplitude for idle/low RPM feedback
+	baseAmplitude := 0.7 + (rpmNormalized * 0.1) // Range: 0.7 to 0.8
 
-	// Apply 20% linear volume reduction from 800 RPM to max RPM
-	if rpm >= 800.0 {
-		// Calculate how far we are from 800 RPM to max RPM
-		rpmAbove800 := rpm - 800.0
-		rpmRange800ToMax := rpmMax - 800.0
-
-		if rpmRange800ToMax > 0 {
-			// Linear reduction factor: 1.0 at 800 RPM, 0.8 at max RPM (20% reduction)
-			volumeReductionFactor := 1.0 - (rpmAbove800/rpmRange800ToMax)*0.2
-			baseAmplitude *= volumeReductionFactor
-		}
-	}
+	// Apply 30% linear volume reduction from idle to max RPM
+	// At idle (0 RPM): 1.0 factor (full volume)
+	// At max RPM: 0.7 factor (30% reduction)
+	volumeReductionFactor := 1.0 - (rpmNormalized * 0.3)
+	baseAmplitude *= volumeReductionFactor
 
 	// Add engine-specific roughness variation
 	// Roughness decreases with RPM and smoothness characteristic
@@ -445,6 +439,7 @@ func (a *App) generateEngineHaptic() {
 	samplesPerBuffer := int(sampleRate / 10.0) // 60 FPS / 6 frames = 10 Hz update rate
 	engineBuffer := make([]float64, samplesPerBuffer)
 
+	// Normal engine pulse generation (rev limiter already checked above)
 	for i := range engineBuffer {
 		// Use realistic firing frequency for pulse timing
 		pulsesPerSecond := engineFiringFrequency
@@ -471,10 +466,10 @@ func (a *App) generateEngineHaptic() {
 		// Always generate pulse value based on position within current pulse cycle
 		pulsePhase := pulseFraction // 0.0 to 1.0 within the pulse cycle
 
-		// Create very short pulses with long gaps for dramatic interval differences
-		// Pulse width gets wider at higher RPM for more substantial pulses
+		// Create pulses with increasing width and overlap at higher RPM
+		// Pulse width gets much wider at higher RPM, allowing up to 25% overlap
 		rpmFactor := rpm / rpmMax
-		pulseWidth := 0.25 + (rpmFactor * 0.15) // 25% width at idle, 40% width at high RPM
+		pulseWidth := 0.25 + (rpmFactor * 0.50) // 25% width at idle, 75% width at high RPM (allows 25% overlap)
 
 		if pulsePhase < pulseWidth {
 			// Inside the pulse - create a sharp, distinct pulse
