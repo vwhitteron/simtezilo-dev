@@ -307,6 +307,7 @@ func (c *Config) GetEngineGain() float64 {
 	return c.Synthesizer.EngineGain
 }
 
+// TODO: unused, probably remove
 func (c *Config) GetEngineFrequencyMin() float64 {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -314,6 +315,7 @@ func (c *Config) GetEngineFrequencyMin() float64 {
 	return c.Synthesizer.EngineFrequencyMin
 }
 
+// TODO: unused, probably remove
 func (c *Config) GetEngineFrequencyMax() float64 {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
