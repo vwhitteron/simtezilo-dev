@@ -3,88 +3,100 @@ package app
 import (
 	"math"
 	"strconv"
-	"time"
 
 	"github.com/vwhitteron/simtezilo-dev/app/signal"
 )
 
+const updateFrames uint32 = 2
+const updateHz float64 = frameRate / float64(updateFrames)
+
 // Engine haptic profiles for different engine layouts
-// Smoothness: 0.0 (very rough) to 1.0 (very smooth)
-// Base roughness: 0.0 (no roughness) to 1.0 (very rough)
+// Primary Balance: 0.0 (poor primary balance) to 1.0 (perfect primary balance)
+// Secondary Balance: 0.0 (poor secondary balance) to 1.0 (perfect secondary balance)
+// V8 variants: V8C = cross-plane crank (~90°), V8F = flat-plane crank (~180°)
 var engineHapticProfiles = map[string]engineHapticProfile{
 	"I3": {
-		smoothness:    0.3,
-		baseRoughness: 0.15,
+		primaryBalance:   0.95,
+		secondaryBalance: 0.85,
 	},
 	"I4": {
-		smoothness:    0.6,
-		baseRoughness: 0.08,
+		primaryBalance:   0.6,
+		secondaryBalance: 0.8,
 	},
 	"I5": {
-		smoothness:    0.7,
-		baseRoughness: 0.06,
+		primaryBalance:   0.7,
+		secondaryBalance: 0.6,
 	},
 	"I6": {
-		smoothness:    0.9,
-		baseRoughness: 0.03,
+		primaryBalance:   0.9,
+		secondaryBalance: 0.95,
 	},
 	"I8": {
-		smoothness:    0.95,
-		baseRoughness: 0.02,
+		primaryBalance:   0.95,
+		secondaryBalance: 0.98,
 	},
 	"H4": {
-		smoothness:    0.8,
-		baseRoughness: 0.05,
+		primaryBalance:   0.8,
+		secondaryBalance: 0.95,
 	},
 	"H6": {
-		smoothness:    0.92,
-		baseRoughness: 0.025,
+		primaryBalance:   0.92,
+		secondaryBalance: 0.975,
 	},
 	"H12": {
-		smoothness:    0.98,
-		baseRoughness: 0.01,
+		primaryBalance:   0.98,
+		secondaryBalance: 0.99,
 	},
 	"V4": {
-		smoothness:    0.5,
-		baseRoughness: 0.10,
+		primaryBalance:   0.65,
+		secondaryBalance: 0.85,
 	},
 	"V6": {
-		smoothness:    0.85,
-		baseRoughness: 0.04,
+		primaryBalance:   0.85,
+		secondaryBalance: 0.96,
 	},
 	"V8": {
-		smoothness:    0.95,
-		baseRoughness: 0.02,
+		primaryBalance:   0.95,
+		secondaryBalance: 0.98,
+	},
+	"V8.c90": {
+		primaryBalance:   0.95,
+		secondaryBalance: 0.98,
+	},
+	"V8.c180": {
+		primaryBalance:   0.85,
+		secondaryBalance: 0.92,
 	},
 	"V10": {
-		smoothness:    0.88,
-		baseRoughness: 0.035,
+		primaryBalance:   0.88,
+		secondaryBalance: 0.965,
 	},
 	"V12": {
-		smoothness:    0.98,
-		baseRoughness: 0.01,
+		primaryBalance:   0.98,
+		secondaryBalance: 0.99,
 	},
 	"W16": {
-		smoothness:    0.99,
-		baseRoughness: 0.005,
+		primaryBalance:   0.99,
+		secondaryBalance: 0.995,
 	},
 	"K2": {
-		smoothness:    0.85,
-		baseRoughness: 0.04,
+		primaryBalance:   0.85,
+		secondaryBalance: 0.96,
 	},
 	"K4": {
-		smoothness:    0.75,
-		baseRoughness: 0.12,
+		primaryBalance:   0.75,
+		secondaryBalance: 0.88,
 	},
 }
 
 type engineHapticProfile struct {
-	smoothness    float64
-	baseRoughness float64
+	primaryBalance   float64
+	secondaryBalance float64
 }
 
 type engineCharacteristics struct {
 	layout          string
+	dbEntry         string
 	geometry        string
 	chambers        int
 	firingFrequency float64
@@ -99,7 +111,7 @@ var EngineGeometryMap = map[string]string{
 	"W": "W",
 }
 
-func getEngineCharacteristics(engineLayout string) (engineCharacteristics, error) {
+func getEngineCharacteristics(engineLayout string, cylinderAngle float32, crankPlaneAngle float32) (engineCharacteristics, error) {
 	if engineLayout == "" {
 		return engineCharacteristics{}, nil
 	}
@@ -110,17 +122,32 @@ func getEngineCharacteristics(engineLayout string) (engineCharacteristics, error
 		return engineCharacteristics{}, err // Return error if conversion fails
 	}
 
-	hapticProfile, ok := engineHapticProfiles[engineLayout]
-	if !ok {
-		// Default to I4 haptic profile
-		hapticProfile = engineHapticProfile{
-			smoothness:    0.6,
-			baseRoughness: 0.08,
+	// Default to I4 haptic profile
+	hapticProfile := engineHapticProfile{
+		primaryBalance:   0.6,
+		secondaryBalance: 0.8,
+	}
+
+	layoutVariations := []string{
+		engineLayout + ".v" + strconv.FormatFloat(float64(cylinderAngle), 'f', 0, 32) + ".c" + strconv.FormatFloat(float64(crankPlaneAngle), 'f', 0, 32),
+		engineLayout + ".c" + strconv.FormatFloat(float64(crankPlaneAngle), 'f', 0, 32),
+		engineLayout + ".v" + strconv.FormatFloat(float64(cylinderAngle), 'f', 0, 32),
+		engineLayout,
+	}
+
+	var dbEntry string
+	for _, variation := range layoutVariations {
+		if profile, ok := engineHapticProfiles[variation]; ok {
+			hapticProfile = profile
+			dbEntry = variation
+
+			break
 		}
 	}
 
 	return engineCharacteristics{
 		layout:          engineLayout,
+		dbEntry:         dbEntry,
 		geometry:        geometryCode,
 		chambers:        chambers,
 		firingFrequency: getEngineFiringFrequency(geometryCode, chambers),
@@ -143,6 +170,11 @@ func (a *App) generateEngineHaptic() {
 		return
 	}
 
+	// Generate haptics every 6 frames to reduce computational load
+	if a.state.current.seq%updateFrames != 0 {
+		return
+	}
+
 	rpm := float64(a.gtClient.Telemetry.EngineRPM())
 	throttleProportion := float64(a.gtClient.Telemetry.ThrottleOutputPercent())
 	if throttleProportion > 0 {
@@ -151,28 +183,20 @@ func (a *App) generateEngineHaptic() {
 		throttleProportion = 0.0
 	}
 
+	// TODO: This won't work until engine haptics are generated even when sequence ID does not advance
 	// Cache last known RPM and timestamp for fallback when telemetry is unavailable
-	currentTime := time.Now()
-	if rpm > 0 {
-		// Update last known good RPM and timestamp
-		a.state.lastKnownRPM = rpm
-		a.state.lastRPMTime = currentTime
-	} else if a.state.lastKnownRPM > 0 && currentTime.Sub(a.state.lastRPMTime) < 1000*time.Millisecond {
-		// Use cached RPM for up to 1 second if telemetry is unavailable
-		rpm = a.state.lastKnownRPM
-	}
-
-	var updateFrames uint32 = 2
-	var updateHz float64 = frameRate / float64(updateFrames)
-
-	// Generate haptics every 6 frames to reduce computational load
-	if a.state.current.seq%updateFrames != 0 {
-		return
-	}
+	// currentTime := time.Now()
+	// if rpm >= 0 {
+	// 	// Update last known good RPM and timestamp
+	// 	a.state.lastKnownRPM = rpm
+	// 	a.state.lastRPMTime = currentTime
+	// } else if a.state.lastKnownRPM >= 0 && currentTime.Sub(a.state.lastRPMTime) < 2000*time.Millisecond {
+	// 	// Use cached RPM for up to 2 seconds if telemetry is unavailable
+	// 	rpm = a.state.lastKnownRPM
+	// }
 
 	// No haptics when engine is not running
 	if rpm == 0 {
-		// Use 6 frames worth of buffer size for consistency
 		sampleRate := float64(a.synth.GetSampleRate())
 		samplesPerBuffer := int(sampleRate / updateHz) // 60 FPS / 6 frames = 10 Hz update rate
 		a.synth.WriteBuffer("engine", make([]float64, samplesPerBuffer))
@@ -224,25 +248,29 @@ func (a *App) generateEngineHaptic() {
 	// baseAmplitude *= volumeReductionFactor
 
 	// Add engine-specific roughness variation
-	// Roughness decreases with RPM and smoothness characteristic
+	// Roughness based on primary and secondary balance characteristics
 	var engineRoughness float64
 	if rpm <= 2400.0 {
 		// Low RPM roughness varies by engine type
 		roughnessPhase := float64(a.state.current.seq) * 0.005
-		roughnessIntensity := a.vehicle.engine.haptics.baseRoughness * (1.0 - a.vehicle.engine.haptics.smoothness*0.5) // Less smooth engines are rougher
+		// Poor primary balance creates more low-frequency roughness
+		primaryRoughness := (1.0 - a.vehicle.engine.haptics.primaryBalance) * 0.15
+		// Poor secondary balance creates more high-frequency roughness
+		secondaryRoughness := (1.0 - a.vehicle.engine.haptics.secondaryBalance) * 0.08
+		roughnessIntensity := primaryRoughness + secondaryRoughness*0.5
 		engineRoughness = math.Sin(roughnessPhase)*roughnessIntensity + math.Sin(roughnessPhase*1.7)*roughnessIntensity*0.5
 
 		// Reduce roughness as RPM increases (engines smooth out)
 		rpmSmoothingFactor := rpm / 2400.0
-		engineRoughness *= (1.0 - rpmSmoothingFactor*a.vehicle.engine.haptics.smoothness)
+		engineRoughness *= (1.0 - rpmSmoothingFactor*a.vehicle.engine.haptics.primaryBalance)
 	} else {
-		// High RPM: roughness based on engine smoothness characteristic
-		if a.vehicle.engine.haptics.smoothness < 0.9 {
+		// High RPM: roughness based on engine balance characteristics
+		if a.vehicle.engine.haptics.primaryBalance < 0.9 {
 			roughnessPhase := float64(a.state.current.seq) * 0.002
-			highRpmRoughness := (1.0 - a.vehicle.engine.haptics.smoothness) * 0.02 // Less smooth engines retain some roughness
+			highRpmRoughness := (1.0 - a.vehicle.engine.haptics.primaryBalance) * 0.02 // Poor primary balance creates roughness
 			engineRoughness = math.Sin(roughnessPhase) * highRpmRoughness
 		} else {
-			engineRoughness = 0.0 // Very smooth engines have no roughness at high RPM
+			engineRoughness = 0.0 // Well-balanced engines have no roughness at high RPM
 		}
 	}
 
@@ -293,7 +321,7 @@ func (a *App) generateEngineHaptic() {
 			} else {
 				// Quick decay (70% of pulse width)
 				decayPhase := (pulsePhaseNormalized - 0.3) / 0.7
-				decayRate := 4.0 + (1.0-a.vehicle.engine.haptics.smoothness)*2.0 // Sharp decay for distinctness
+				decayRate := 4.0 + (1.0-a.vehicle.engine.haptics.primaryBalance)*2.0 // Sharp decay for poorly balanced engines
 				pulseValue = math.Exp(-decayPhase * decayRate)
 			}
 
@@ -303,9 +331,10 @@ func (a *App) generateEngineHaptic() {
 			}
 
 			// Add per-pulse roughness variation based on engine characteristics
-			if rpm <= 2400.0 && a.vehicle.engine.haptics.baseRoughness > 0.02 {
+			secondaryImbalance := 1.0 - a.vehicle.engine.haptics.secondaryBalance
+			if rpm <= 2400.0 && secondaryImbalance > 0.02 {
 				roughnessPhase := float64(a.state.current.seq+uint32(i)) * 0.0005
-				roughnessVariation := 1.0 + (math.Sin(roughnessPhase) * a.vehicle.engine.haptics.baseRoughness * 0.3)
+				roughnessVariation := 1.0 + (math.Sin(roughnessPhase) * secondaryImbalance * 0.3)
 				pulseValue *= roughnessVariation
 			}
 		} else {

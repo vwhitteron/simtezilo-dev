@@ -50,7 +50,6 @@ func (a *App) sendTelemetryChartData() {
 			"SixDOFRotationalSnap":        float32(a.kinematics.Current.SixDOFRotation.Snap * snapMultiplier),
 			"synthOutputAmplitude":        float32(signal.Abs(float64(a.kinematics.Current.SynthOutputAmplitude))),
 			"synthOutputFrequency":        float32(a.kinematics.Current.SynthOutputFrequency),
-			"engineRPM":                   a.gtClient.Telemetry.EngineRPM(),
 			"engineVibrationEnabled": func() float32 {
 				if a.gtClient.Telemetry.EngineRPM() > 0 {
 					return 1
