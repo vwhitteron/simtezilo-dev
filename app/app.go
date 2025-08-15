@@ -23,8 +23,9 @@ import (
 )
 
 type vehicleRecord struct {
-	ID     uint32
-	engine engineCharacteristics
+	ID       uint32
+	engine   engineCharacteristics
+	revLimit uint16
 }
 
 type stateRecord struct {
@@ -412,8 +413,14 @@ func (a *App) updateVehicle() {
 	}
 
 	a.vehicle = vehicleRecord{
-		ID:     a.gtClient.Telemetry.VehicleID(),
-		engine: engine,
+		ID:       a.gtClient.Telemetry.VehicleID(),
+		engine:   engine,
+		revLimit: a.gtClient.Telemetry.EngineRPMLight().Max,
+	}
+
+	// Set default rev limit if not available
+	if a.vehicle.revLimit == 0 {
+		a.vehicle.revLimit = 8000
 	}
 
 	a.log.Debug().Uint32("ID", a.state.last.vehicleID).Msg("vehicle ID changed")
@@ -424,6 +431,7 @@ func (a *App) updateVehicle() {
 		Str("model", a.gtClient.Telemetry.VehicleModel()).
 		Str("type", vehicleType).
 		Str("engine_layout", engineLayout).
+		Uint16("rev_limit", a.vehicle.revLimit).
 		Msg("vehicle update")
 
 	switch vehicleType {

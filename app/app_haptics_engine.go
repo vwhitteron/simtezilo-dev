@@ -4,6 +4,8 @@ import (
 	"math"
 	"strconv"
 	"time"
+
+	"github.com/vwhitteron/simtezilo-dev/app/signal"
 )
 
 // Engine haptic profiles for different engine layouts
@@ -142,6 +144,12 @@ func (a *App) generateEngineHaptic() {
 	}
 
 	rpm := float64(a.gtClient.Telemetry.EngineRPM())
+	throttleProportion := float64(a.gtClient.Telemetry.ThrottleOutputPercent())
+	if throttleProportion > 0 {
+		throttleProportion /= 100.0
+	} else {
+		throttleProportion = 0.0
+	}
 
 	// Cache last known RPM and timestamp for fallback when telemetry is unavailable
 	currentTime := time.Now()
@@ -154,28 +162,26 @@ func (a *App) generateEngineHaptic() {
 		rpm = a.state.lastKnownRPM
 	}
 
+	var updateFrames uint32 = 2
+	var updateHz float64 = frameRate / float64(updateFrames)
+
 	// Generate haptics every 6 frames to reduce computational load
-	if a.state.current.seq%6 != 0 {
+	if a.state.current.seq%updateFrames != 0 {
 		return
 	}
 
 	// No haptics when engine is not running
 	if rpm == 0 {
 		// Use 6 frames worth of buffer size for consistency
-		// sampleRate := float64(a.config.Synthesizer.SampleRateHz)
-		// samplesPerBuffer := int(sampleRate / 10.0) // 60 FPS / 6 frames = 10 Hz update rate
-		// a.synth.WriteBuffer("engine", make([]float64, samplesPerBuffer))
+		sampleRate := float64(a.synth.GetSampleRate())
+		samplesPerBuffer := int(sampleRate / updateHz) // 60 FPS / 6 frames = 10 Hz update rate
+		a.synth.WriteBuffer("engine", make([]float64, samplesPerBuffer))
 
 		return
 	}
 
 	// Use the vehicle's actual rev limiter maximum RPM from telemetry
 	revLimit := float64(a.gtClient.Telemetry.EngineRPMLight().Max)
-
-	// If rev limiter data is not available, fall back to a reasonable default
-	if revLimit <= 0 {
-		revLimit = 8000.0
-	}
 
 	var firingFrequency float64
 	// For high-firing engines like Wankels, use a completely different approach
@@ -188,32 +194,34 @@ func (a *App) generateEngineHaptic() {
 	} else {
 		// For regular engines, also reduce frequency range for better perception
 		firingFrequency = (rpm * a.vehicle.engine.firingFrequency) / 2.0 // Halve frequency for all engines
+		freqMax := revLimit * a.vehicle.engine.firingFrequency / 2.0     // Max frequency based on rev limit
+		if freqMax > 250.0 {
+			firingFrequency = (250 / freqMax) * firingFrequency // Scale down to 250Hz max
+		}
 	}
 
 	// Clamp firing frequency to wider range for more pulses at high RPM
-	if firingFrequency < 6.0 {
-		firingFrequency = 6.0 // 167ms intervals at minimum
-	} else if firingFrequency > 150.0 {
-		firingFrequency = 150.0 // 6.67ms intervals at maximum (increased from 100Hz)
-	}
+	// 6.0   = 167.00ms intervals at minimum
+	// 150.0 =   6.67ms intervals at maximum
+	firingFrequency, _ = signal.LimitWindow(firingFrequency, 6.0, 250.0) // Clamp to 6Hz - 150Hz range
+
+	// Calculate RPM proportion relative to rev limit
+	rpmProportion := rpm / revLimit
 
 	// Normalize RPM from 0 to max
-	rpmNormalized := rpm / revLimit
-	if rpmNormalized < 0 {
-		rpmNormalized = 0
-	} else if rpmNormalized > 1 {
-		rpmNormalized = 1
-	}
+	// Is this even necessary? rpm should never really be above revLimit
+	rpmNormalized, _ := signal.LimitWindow(rpmProportion, 0.0, 1.0)
 
 	// Generate amplitude with louder idle feedback and linear 30% volume reduction at max RPM
 	// Start with higher base amplitude for idle/low RPM feedback
-	baseAmplitude := 0.7 + (rpmNormalized * 0.1) // Range: 0.7 to 0.8
+	// baseAmplitude := 0.7 + (rpmNormalized * 0.1) // Range: 0.7 to 0.8
+	baseAmplitude := 0.6 + (throttleProportion * 0.3) // Range: 0.6 to 0.9
 
 	// Apply 30% linear volume reduction from idle to max RPM
 	// At idle (0 RPM): 1.0 factor (full volume)
 	// At max RPM: 0.7 factor (30% reduction)
-	volumeReductionFactor := 1.0 - (rpmNormalized * 0.3)
-	baseAmplitude *= volumeReductionFactor
+	// volumeReductionFactor := 1.0 - (rpmNormalized * 0.3)
+	// baseAmplitude *= volumeReductionFactor
 
 	// Add engine-specific roughness variation
 	// Roughness decreases with RPM and smoothness characteristic
@@ -241,28 +249,24 @@ func (a *App) generateEngineHaptic() {
 	amplitude := baseAmplitude + (engineRoughness * rpmNormalized * 0.1)
 
 	// Ensure amplitude stays within bounds
-	if amplitude < 0.2 {
-		amplitude = 0.2
-	} else if amplitude > 0.9 {
-		amplitude = 0.9
-	}
+	amplitude, _ = signal.LimitWindow(amplitude, 0.2, 0.9)
 
-	// Generate engine vibration waveform for 6 frames
-	sampleRate := float64(a.config.GetSampleRateHz())
-	samplesPerBuffer := int(sampleRate / 10.0) // 60 FPS / 6 frames = 10 Hz update rate
+	// Create pulses with increasing width and overlap at higher RPM
+	// Pulse width gets much wider at higher RPM, allowing up to 25% overlap
+	pulseDutyCycle := 0.25 + (rpmProportion * 0.50) // 25% width at idle, 75% width at high RPM (allows 25% overlap)
+
+	// Generate engine vibration waveform for updataRate frames
+	sampleRate := float64(a.synth.GetSampleRate())
+	samplesPerBuffer := int(sampleRate / updateHz)
 	engineBuffer := make([]float64, samplesPerBuffer)
 
 	// Normal engine pulse generation (rev limiter already checked above)
 	for i := range engineBuffer {
 		// Use realistic firing frequency for pulse timing
-		pulsesPerSecond := firingFrequency
-		samplesPerPulse := sampleRate / pulsesPerSecond
+		samplesPerPulse := sampleRate / firingFrequency
 
 		// Create pulses based on engine firing events
 		pulsePosition := float64(i) / samplesPerPulse
-		pulseFraction := pulsePosition - math.Floor(pulsePosition) // 0.0 to 1.0 within each pulse cycle
-
-		var pulseValue float64
 
 		// Detect pulse trigger point (beginning of each cycle)
 		currentPulseIndex := int(math.Floor(pulsePosition))
@@ -276,17 +280,11 @@ func (a *App) generateEngineHaptic() {
 			a.state.enginePulsePolarity = !a.state.enginePulsePolarity
 		}
 
-		// Always generate pulse value based on position within current pulse cycle
-		pulsePhase := pulseFraction // 0.0 to 1.0 within the pulse cycle
-
-		// Create pulses with increasing width and overlap at higher RPM
-		// Pulse width gets much wider at higher RPM, allowing up to 25% overlap
-		rpmFactor := rpm / revLimit
-		pulseWidth := 0.25 + (rpmFactor * 0.50) // 25% width at idle, 75% width at high RPM (allows 25% overlap)
-
-		if pulsePhase < pulseWidth {
+		var pulseValue float64
+		pulsePhase := pulsePosition - math.Floor(pulsePosition) // 0.0 to 1.0 within each pulse cycle
+		if pulsePhase < pulseDutyCycle {
 			// Inside the pulse - create a sharp, distinct pulse
-			pulsePhaseNormalized := pulsePhase / pulseWidth // 0.0 to 1.0 within pulse width
+			pulsePhaseNormalized := pulsePhase / pulseDutyCycle // 0.0 to 1.0 within pulse width
 
 			if pulsePhaseNormalized < 0.3 {
 				// Quick attack (30% of pulse width)
