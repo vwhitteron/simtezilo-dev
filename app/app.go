@@ -23,8 +23,8 @@ import (
 )
 
 type vehicleRecord struct {
-	vehicleID uint32
-	engine    engineCharacteristics
+	ID     uint32
+	engine engineCharacteristics
 }
 
 type stateRecord struct {
@@ -99,9 +99,9 @@ func NewApp(opts AppOptions) (*App, error) {
 	zerolog.FloatingPointPrecision = 5
 
 	// update to configured log level when greater than current
-	configLogLevel, err := zerolog.ParseLevel(a.config.App.LogLevel)
+	configLogLevel, err := zerolog.ParseLevel(a.config.GetAppLogLevel())
 	if err != nil {
-		a.log.Error().Str("config value", a.config.App.LogLevel).Msg("invalid log level")
+		a.log.Error().Int("config value", int(configLogLevel)).Msg("invalid log level")
 	}
 	if configLogLevel < a.log.GetLevel() || configLogLevel >= zerolog.NoLevel {
 		a.log = a.log.Level(configLogLevel).With().Logger()
@@ -110,8 +110,9 @@ func NewApp(opts AppOptions) (*App, error) {
 	}
 
 	// load language translations
+	configLanguage := a.config.GetAppLanguage()
 	a.i18n = i18n.NewLanguage(
-		&a.config.App.Language,
+		&configLanguage,
 		a.log,
 	)
 	a.log.Debug().Str("language", a.i18n.Code).Str("result", "success").Msg("init language")
@@ -119,12 +120,12 @@ func NewApp(opts AppOptions) (*App, error) {
 	hidEvents := make(chan ui.HIDInputEvent, 10)
 
 	// initialise display and button hardware
-	switch a.config.Hardware.Model {
+	switch a.config.GetHardwareModel() {
 	case "pirateaudio":
 		hardware.Init()
 
 		a.display, err = pirateaudio.NewDisplay(pirateaudio.DisplayOptions{
-			Orientation: a.config.Hardware.DisplayOrientation,
+			Orientation: a.config.GetDisplayOrientation(),
 			I18n:        a.i18n,
 		})
 		if err != nil {
@@ -152,7 +153,7 @@ func NewApp(opts AppOptions) (*App, error) {
 		hardware.Init()
 
 		a.display, err = spotpear.NewDisplay(spotpear.DisplayOptions{
-			Orientation: a.config.Hardware.DisplayOrientation,
+			Orientation: a.config.GetDisplayOrientation(),
 			I18n:        a.i18n,
 		})
 		if err != nil {
@@ -180,7 +181,7 @@ func NewApp(opts AppOptions) (*App, error) {
 		hardware.Init()
 
 		a.display, err = waveshare.NewDisplay(waveshare.DisplayOptions{
-			Orientation: a.config.Hardware.DisplayOrientation,
+			Orientation: a.config.GetDisplayOrientation(),
 			I18n:        a.i18n,
 		})
 		if err != nil {
@@ -231,7 +232,7 @@ func NewApp(opts AppOptions) (*App, error) {
 
 	// initialise synthesizer
 	a.synth, err = synth.NewSynth(synth.SynthOpts{
-		Config:     a.config.Synthesizer,
+		Config:     a.config.GetSynthesizer(),
 		Logger:     a.log,
 		Kinematics: &a.kinematics,
 	})
@@ -248,10 +249,11 @@ func NewApp(opts AppOptions) (*App, error) {
 	}
 
 	// initialise GT telemetry client
+	gtClientLogger := a.log.With().Str("component", "gt client").Logger()
 	a.gtClient, err = telemetry_client.NewGTClient(telemetry_client.GTClientOpts{
-		Source:   a.config.Telemetry.Source,
-		Logger:   &a.log,
-		LogLevel: a.config.App.LogLevel,
+		Source:   a.config.GetTelemetrySource(),
+		Logger:   &gtClientLogger,
+		LogLevel: a.config.GetAppLogLevel(),
 	})
 	if err != nil {
 		a.log.Error().
@@ -410,14 +412,14 @@ func (a *App) updateVehicle() {
 	}
 
 	a.vehicle = vehicleRecord{
-		vehicleID: a.gtClient.Telemetry.VehicleID(),
-		engine:    engine,
+		ID:     a.gtClient.Telemetry.VehicleID(),
+		engine: engine,
 	}
 
 	a.log.Debug().Uint32("ID", a.state.last.vehicleID).Msg("vehicle ID changed")
 
 	a.log.Info().
-		Uint32("ID", a.state.last.vehicleID).
+		Uint32("ID", a.vehicle.ID).
 		Str("manufacturer", a.gtClient.Telemetry.VehicleManufacturer()).
 		Str("model", a.gtClient.Telemetry.VehicleModel()).
 		Str("type", vehicleType).
@@ -426,9 +428,9 @@ func (a *App) updateVehicle() {
 
 	switch vehicleType {
 	case "race":
-		a.transmissionGainMin = a.config.Synthesizer.TransmissionGain + a.config.Synthesizer.TransmissionGainMinRace
+		a.transmissionGainMin = a.config.GetTransmissionGain() + a.config.GetTransmissionGainMinRace()
 	default:
-		a.transmissionGainMin = a.config.Synthesizer.TransmissionGain + a.config.Synthesizer.TransmissionGainMinStreet
+		a.transmissionGainMin = a.config.GetTransmissionGain() + a.config.GetTransmissionGainMinStreet()
 	}
 
 	a.state.last.vehicleID = a.state.current.vehicleID

@@ -137,7 +137,7 @@ func getEngineFiringFrequency(geometry string, chambers int) float64 {
 }
 
 func (a *App) generateEngineHaptic() {
-	if a.config.Synthesizer.EngineGain == -60 {
+	if a.config.GetEngineGain() == -60 {
 		return
 	}
 
@@ -248,7 +248,7 @@ func (a *App) generateEngineHaptic() {
 	}
 
 	// Generate engine vibration waveform for 6 frames
-	sampleRate := float64(a.config.Synthesizer.SampleRateHz)
+	sampleRate := float64(a.config.GetSampleRateHz())
 	samplesPerBuffer := int(sampleRate / 10.0) // 60 FPS / 6 frames = 10 Hz update rate
 	engineBuffer := make([]float64, samplesPerBuffer)
 

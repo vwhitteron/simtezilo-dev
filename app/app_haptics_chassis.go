@@ -12,7 +12,7 @@ func (a *App) generateChassisHaptic() {
 
 	pulseFrequencyHz := a.calculateChassisHapticPulseFrequency()
 
-	pulseWidth := math.Round(float64(a.config.Synthesizer.SampleRateHz) / (2 * pulseFrequencyHz))
+	pulseWidth := math.Round(float64(a.config.GetSampleRateHz()) / (2 * pulseFrequencyHz))
 
 	pulseAmplitude := a.calculateChassisHapticPulseAmplitude()
 
@@ -51,7 +51,7 @@ func (a *App) calculateChassisHapticPulseAmplitude() float64 {
 	pulseAmplitude = signal.Scale(pulseAmplitude, a.config.GetJerkScale())
 
 	p1 := pulseAmplitude
-	pulseAmplitude, wasLimited := signal.LimitMax(pulseAmplitude, a.config.Synthesizer.PulseMaxAmplitude)
+	pulseAmplitude, wasLimited := signal.LimitMax(pulseAmplitude, a.config.GetPulseMaxAmplitude())
 	if wasLimited {
 		a.log.Debug().Float64("pulse", p1).Msg("limiter")
 	}

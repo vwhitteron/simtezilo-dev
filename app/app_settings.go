@@ -176,7 +176,7 @@ func (a *App) settingAction(setting string, action string) string {
 		case "decrease":
 			return a.config.PreviousLanguage()
 		default:
-			return a.config.GetLanguage()
+			return a.config.GetAppLanguage()
 		}
 	default:
 		return "error"
