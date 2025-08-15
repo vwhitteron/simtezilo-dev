@@ -316,13 +316,32 @@ func (a *App) generateEngineHaptic() {
 
 			if pulsePhaseNormalized < 0.3 {
 				// Quick attack (30% of pulse width)
+				// Adjust attack characteristics based on engine balance
+				// Poor balance = sharper attack, good balance = smoother attack
+				attackSharpness := 1.0 - (a.vehicle.engine.haptics.primaryBalance * 0.6) // 0.4 to 1.0 range
 				attackPhase := pulsePhaseNormalized / 0.3
-				pulseValue = math.Sin(attackPhase * math.Pi / 2)
+				
+				// Use different attack curves based on engine balance
+				if a.vehicle.engine.haptics.primaryBalance < 0.7 {
+					// Sharp, aggressive attack for poorly balanced engines
+					pulseValue = math.Pow(math.Sin(attackPhase * math.Pi / 2), attackSharpness)
+				} else {
+					// Smoother attack for well-balanced engines
+					pulseValue = math.Sin(attackPhase * math.Pi / 2) * attackSharpness
+				}
 			} else {
 				// Quick decay (70% of pulse width)
+				// Adjust decay based on both primary and secondary balance
 				decayPhase := (pulsePhaseNormalized - 0.3) / 0.7
-				decayRate := 4.0 + (1.0-a.vehicle.engine.haptics.primaryBalance)*2.0 // Sharp decay for poorly balanced engines
-				pulseValue = math.Exp(-decayPhase * decayRate)
+				
+				// Primary balance affects base decay rate
+				primaryDecayRate := 4.0 + (1.0-a.vehicle.engine.haptics.primaryBalance)*2.0
+				
+				// Secondary balance affects decay smoothness
+				secondaryDecayFactor := 1.0 + (1.0-a.vehicle.engine.haptics.secondaryBalance)*0.5
+				
+				combinedDecayRate := primaryDecayRate * secondaryDecayFactor
+				pulseValue = math.Exp(-decayPhase * combinedDecayRate)
 			}
 
 			// Apply polarity - alternating positive and negative pulses
