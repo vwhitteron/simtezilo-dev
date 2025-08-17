@@ -403,15 +403,15 @@ func (a *App) resetState() {
 func (a *App) updateVehicle() {
 	vehicleType := a.gtClient.Telemetry.VehicleType()
 	engineLayout := a.gtClient.Telemetry.VehicleEngineLayout()
-	cylinderAngle := a.gtClient.Telemetry.VehicleEngineCylinderAngle()
+	bankAngle := a.gtClient.Telemetry.VehicleEngineBankAngle()
 	crankPlaneAngle := a.gtClient.Telemetry.VehicleEngineCrankPlaneAngle()
 
-	engine, err := getEngineCharacteristics(engineLayout, cylinderAngle, crankPlaneAngle)
+	engine, err := getEngineCharacteristics(engineLayout, bankAngle, crankPlaneAngle)
 	if err != nil {
 		a.log.Error().
 			Err(err).
 			Str("engine_layout", engineLayout).
-			Float32("cylinder_angle", cylinderAngle).
+			Float32("cylinder_angle", bankAngle).
 			Float32("crank_plane_angle", crankPlaneAngle).
 			Msg("failed to get engine characteristics")
 	}
@@ -436,7 +436,7 @@ func (a *App) updateVehicle() {
 		Str("type", vehicleType).
 		Str("engine_layout", engineLayout).
 		Float32("crank_plane_angle", crankPlaneAngle).
-		Float32("cylinder_angle", cylinderAngle).
+		Float32("cylinder_angle", bankAngle).
 		Str("resolved_engine", engine.dbEntry).
 		Uint16("rev_limit", a.vehicle.revLimit).
 		Msg("vehicle update")
