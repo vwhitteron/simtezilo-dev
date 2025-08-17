@@ -46,7 +46,7 @@ func NewSynth(opts SynthOpts) (*Synthesizer, error) {
 
 	bufferSlotSize := opts.Config.SampleRateHz / 60
 	bufferSlotCount := 20
-	buffer := NewBuffer(bufferSlotSize, bufferSlotCount, mixer, opts.Logger.With().Str("component", "synth buffer").Logger())
+	buffer := NewBuffer(bufferSlotSize, bufferSlotCount)
 
 	outputDevice, err := NewOutputDevice(SynthOutDeviceOpts{
 		Logger: opts.Logger.With().Str("component", "synth output device").Logger(),
@@ -95,23 +95,23 @@ func (s *Synthesizer) ReadBuffer(length int) []float64 {
 }
 
 func (s *Synthesizer) WriteBuffer(channel string, sample []float64) {
-	s.buffer.Write(channel, sample, false)
+	s.buffer.Write(channel, sample, 1.0, false)
 }
 
 func (s *Synthesizer) OverwriteBuffer(channel string, sample []float64) {
-	s.buffer.Write(channel, sample, true)
+	s.buffer.Write(channel, sample, 1.0, true)
 }
 
 func (s *Synthesizer) ShiftBuffer(samples int) {
-	s.buffer.ShiftBuffer(samples)
+	s.buffer.Shift(samples)
 }
 
 func (s *Synthesizer) GetBufferLength() int {
-	return s.buffer.GetLength()
+	return s.buffer.Length()
 }
 
 func (s *Synthesizer) ClearBuffer() {
-	s.buffer.ClearBuffer()
+	s.buffer.Clear()
 }
 
 func (s *Synthesizer) GetChannelMagnitude(name string) (float64, error) {
@@ -141,13 +141,13 @@ func (s *Synthesizer) GetEffectSample(name string) []float64 {
 func (s *Synthesizer) PlayEffect(name string) {
 	// TODO: handle invalid effect name
 	sample := s.effects.GetSample(name)
-	s.buffer.Write(name, sample, false)
+	s.buffer.Write(name, sample, 1.0, false)
 }
 
 func (s *Synthesizer) PlayEffectWithMagnitude(name string, magnitude float64) {
 	// TODO: handle invalid effect name
 	sample := s.effects.GetSample(name)
-	s.buffer.WriteWithMagnitude(name, magnitude, sample)
+	s.buffer.Write(name, sample, magnitude, false)
 }
 
 func (s *Synthesizer) Close() error {

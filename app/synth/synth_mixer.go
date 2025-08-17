@@ -2,7 +2,6 @@ package synth
 
 import (
 	"fmt"
-	"math"
 	"sync"
 	"time"
 
@@ -281,18 +280,4 @@ func (m *Mixer) watchForConfigChanges() {
 			m.log.Debug().Str("channel", name).Float64("gain", *channel.configGain).Str("event", "change").Msg("config watch")
 		}
 	}
-}
-
-// Mixes two samples using an Automatic Gain Control (AGC) algorithm.
-// Returns the mixed sample and the peak value which is later used to scale a slice of samples.
-func mixSampleAGC(sample1 float64, sample2 float64, peak *float64) float64 {
-	sum := sample1 + sample2
-
-	sumAbs := math.Abs(sum)
-
-	if sumAbs > *peak {
-		*peak = sumAbs
-	}
-
-	return sum
 }

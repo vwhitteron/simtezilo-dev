@@ -2,37 +2,31 @@ package synth
 
 import (
 	"sync"
-
-	"github.com/rs/zerolog"
 )
 
 type Buffer struct {
 	buffer     []float64
 	bufferSize int
-	log        zerolog.Logger
-	mixer      *Mixer
 	mu         sync.Mutex
 	slots      int
 	slotSize   int
 }
 
-func NewBuffer(slotSize int, slots int, mixer *Mixer, logger zerolog.Logger) *Buffer {
+func NewBuffer(slotSize int, slots int) *Buffer {
 	bufferSize := slotSize * slots * 2
 	buffer := &Buffer{
 		buffer:     make([]float64, bufferSize),
 		bufferSize: bufferSize,
-		log:        logger,
-		mixer:      mixer,
 		slots:      slots,
 		slotSize:   slotSize,
 	}
 
-	buffer.ClearBuffer()
+	buffer.Clear()
 
 	return buffer
 }
 
-func (b *Buffer) ClearBuffer() {
+func (b *Buffer) Clear() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -41,61 +35,8 @@ func (b *Buffer) ClearBuffer() {
 	}
 }
 
-func (b *Buffer) GetLength() int {
+func (b *Buffer) Length() int {
 	return b.bufferSize
-}
-
-func (b *Buffer) Write(channel string, samples []float64, overwrite bool) {
-	magnitude, err := b.mixer.GetChannelPowerRatio(channel)
-	if err != nil {
-		b.log.Error().Err(err).Str("channel", channel).Msg("get channel power ratio")
-
-		return
-	}
-
-	outSamples := make([]float64, len(samples))
-	if overwrite { // TODO: need channel buffers as these samples are mixed directly onto the output buffer
-		for i := range samples {
-			outSamples[i] = samples[i] * magnitude
-		}
-	} else {
-		outSamples = b.mixSamples(samples, magnitude)
-	}
-	copy(b.buffer, outSamples)
-}
-
-func (b *Buffer) WriteWithMagnitude(channel string, magnitude float64, samples []float64) {
-	channelMagnitude, err := b.mixer.GetChannelPowerRatio(channel)
-	if err != nil {
-		b.log.Error().Err(err).Str("channel", channel).Msg("get channel power ratio")
-
-		return
-	}
-
-	outSamples := b.mixSamples(samples, magnitude*channelMagnitude)
-	copy(b.buffer, outSamples)
-}
-
-func (b *Buffer) mixSamples(inSamples []float64, magnitude float64) []float64 {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	peak := 0.0
-	outSamples := make([]float64, len(inSamples))
-
-	for i := range inSamples {
-		inputSample := inSamples[i] * magnitude
-		bufferSample := b.buffer[i]
-
-		outSamples[i] = b.mixer.MixSample(inputSample, bufferSample, &peak)
-	}
-
-	if peak > 1.0 {
-		scaleSamplesPeak(&outSamples, peak)
-		b.log.Debug().Float64("peak", peak).Float64("magnitude", magnitude).Msg("AGC applied")
-	}
-
-	return outSamples
 }
 
 func (b *Buffer) Read(length int) []float64 {
@@ -111,7 +52,19 @@ func (b *Buffer) Read(length int) []float64 {
 	return samples
 }
 
-func (b *Buffer) ShiftBuffer(samples int) {
+func (b *Buffer) Write(channel string, samples []float64, magnitude float64, overwrite bool) {
+	outSamples := make([]float64, len(samples))
+	if overwrite { // TODO: need channel buffers as these samples are mixed directly onto the output buffer
+		for i := range samples {
+			outSamples[i] = samples[i] * magnitude
+		}
+	} else {
+		outSamples = b.mixSamples(samples, magnitude)
+	}
+	copy(b.buffer, outSamples)
+}
+
+func (b *Buffer) Shift(samples int) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -120,4 +73,25 @@ func (b *Buffer) ShiftBuffer(samples int) {
 	for i := range bufferMax {
 		b.buffer[i] = b.buffer[i+samples]
 	}
+}
+
+func (b *Buffer) mixSamples(inSamples []float64, magnitude float64) []float64 {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	peak := 0.0
+	outSamples := make([]float64, len(inSamples))
+
+	for i := range inSamples {
+		inputSample := inSamples[i] * magnitude
+		bufferSample := b.buffer[i]
+
+		outSamples[i] = mixSampleAGC(inputSample, bufferSample, &peak)
+	}
+
+	if peak > 1.0 {
+		scaleSamplesPeak(&outSamples, peak)
+	}
+
+	return outSamples
 }
