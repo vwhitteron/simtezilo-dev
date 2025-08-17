@@ -52,7 +52,7 @@ func NewMixer(mixerConfig MixerConfig) (*Mixer, error) {
 		silenced:     true,
 	}
 
-	m.AddChannel("master", mixerConfig.MasterGain)
+	m.AddChannel("_master", mixerConfig.MasterGain)
 
 	go m.watchForConfigChanges()
 
@@ -60,7 +60,7 @@ func NewMixer(mixerConfig MixerConfig) (*Mixer, error) {
 }
 
 func (m *Mixer) Close() {
-	m.SetChannelGain("master", config.MinimumGain)
+	m.SetChannelGain("_master", config.MinimumGain)
 }
 
 func (m *Mixer) GetBufferLength() int {
@@ -123,8 +123,9 @@ func (m *Mixer) GetChannelNames() []string {
 	defer m.mu.RUnlock()
 
 	for name := range m.channels {
-		if name == "master" {
-			continue // skip master channel
+		// skip internal channels
+		if name[0:1] == "_" {
+			continue
 		}
 
 		names = append(names, name)
@@ -192,12 +193,12 @@ func (m *Mixer) SetFader(gain float64) {
 	m.faderGain = gain
 	m.mu.Unlock()
 
-	_ = m.SetChannelGain("master", m.faderGain)
+	_ = m.SetChannelGain("_master", m.faderGain)
 }
 
 func (m *Mixer) FadeIn(period time.Duration) {
 	m.mu.RLock()
-	master := m.channels["master"]
+	master := m.channels["_master"]
 	m.mu.RUnlock()
 
 	if master.activeGain == *master.configGain || m.fadeInActive {
@@ -221,12 +222,12 @@ func (m *Mixer) FadeIn(period time.Duration) {
 				m.mu.Lock()
 				m.faderGain = *master.configGain
 				m.mu.Unlock()
-				_ = m.SetChannelGain("master", *master.configGain)
+				_ = m.SetChannelGain("_master", *master.configGain)
 
 				break
 			}
 
-			_ = m.SetChannelGain("master", m.faderGain)
+			_ = m.SetChannelGain("_master", m.faderGain)
 
 			time.Sleep(fadeInInterval)
 		}
@@ -245,7 +246,12 @@ func (m *Mixer) MixToMaster(length int) {
 	outSamples := make([]float64, length)
 
 	var peak float64 = 0
-	for _, channel := range m.channels {
+	for name, channel := range m.channels {
+		// skip internal channels
+		if name[0:1] == "_" {
+			continue
+		}
+
 		samples := channel.Read(length)
 
 		for i, sample := range samples {
@@ -258,7 +264,7 @@ func (m *Mixer) MixToMaster(length int) {
 		magnitude = 1.0 / peak
 	}
 
-	m.channels["master"].Write(outSamples, magnitude, true)
+	m.channels["_master"].Write(outSamples, magnitude, true)
 }
 
 func (m *Mixer) Shift(length int) {
@@ -288,7 +294,7 @@ func (m *Mixer) watchForConfigChanges() {
 
 			_ = m.SetChannelGain(name, *channel.configGain)
 
-			if name == "master" {
+			if name == "_master" {
 				if m.faderGain != channel.activeGain {
 					m.mu.Lock()
 					m.faderGain = channel.activeGain

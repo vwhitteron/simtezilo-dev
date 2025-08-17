@@ -88,7 +88,7 @@ func (s *Synthesizer) GetBufferLength() int {
 func (s *Synthesizer) ReadBufferNew(length int) []float64 {
 	s.mixer.MixToMaster(length)
 
-	return s.mixer.ReadChannel("master", length)
+	return s.mixer.ReadChannel("_master", length)
 }
 
 func (s *Synthesizer) WriteBuffer(channel string, sample []float64) {
@@ -128,7 +128,7 @@ func (s *Synthesizer) FadeIn(period time.Duration) {
 }
 
 func (s *Synthesizer) ApplyMasterGain(value float64) float64 {
-	outputGain, _ := s.mixer.GetChannelPowerRatio("master")
+	outputGain, _ := s.mixer.GetChannelPowerRatio("_master")
 
 	return value * outputGain
 }
