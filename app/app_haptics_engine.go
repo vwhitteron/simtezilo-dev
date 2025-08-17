@@ -4,95 +4,12 @@ import (
 	"math"
 	"strconv"
 
+	"github.com/vwhitteron/simtezilo-dev/app/haptics"
 	"github.com/vwhitteron/simtezilo-dev/app/signal"
 )
 
 const updateFrames uint32 = 2
 const updateHz float64 = frameRate / float64(updateFrames)
-
-// Engine haptic profiles for different engine layouts
-// Primary Balance: 0.0 (poor primary balance) to 1.0 (perfect primary balance)
-// Secondary Balance: 0.0 (poor secondary balance) to 1.0 (perfect secondary balance)
-// V8 variants: V8C = cross-plane crank (~90°), V8F = flat-plane crank (~180°)
-var engineHapticProfiles = map[string]engineHapticProfile{
-	"I3": {
-		primaryBalance:   0.95,
-		secondaryBalance: 0.85,
-	},
-	"I4": {
-		primaryBalance:   0.6,
-		secondaryBalance: 0.8,
-	},
-	"I5": {
-		primaryBalance:   0.7,
-		secondaryBalance: 0.6,
-	},
-	"I6": {
-		primaryBalance:   0.9,
-		secondaryBalance: 0.95,
-	},
-	"I8": {
-		primaryBalance:   0.95,
-		secondaryBalance: 0.98,
-	},
-	"H4": {
-		primaryBalance:   0.8,
-		secondaryBalance: 0.95,
-	},
-	"H6": {
-		primaryBalance:   0.92,
-		secondaryBalance: 0.975,
-	},
-	"H12": {
-		primaryBalance:   0.98,
-		secondaryBalance: 0.99,
-	},
-	"V4": {
-		primaryBalance:   0.65,
-		secondaryBalance: 0.85,
-	},
-	"V6": {
-		primaryBalance:   0.85,
-		secondaryBalance: 0.96,
-	},
-	"V8": {
-		primaryBalance:   0.95,
-		secondaryBalance: 0.98,
-	},
-	"V8.c90": {
-		primaryBalance:   0.95,
-		secondaryBalance: 0.98,
-	},
-	"V8.c180": {
-		primaryBalance:   0.85,
-		secondaryBalance: 0.92,
-	},
-	"V10": {
-		primaryBalance:   0.88,
-		secondaryBalance: 0.965,
-	},
-	"V12": {
-		primaryBalance:   0.98,
-		secondaryBalance: 0.99,
-	},
-	"W16": {
-		primaryBalance:   0.99,
-		secondaryBalance: 0.995,
-	},
-	"K2": {
-		primaryBalance:   0.85,
-		secondaryBalance: 0.96,
-	},
-	"K4": {
-		primaryBalance:   0.75,
-		secondaryBalance: 0.88,
-	},
-}
-
-type engineHapticProfile struct {
-	primaryBalance   float64
-	secondaryBalance float64
-}
 
 type engineCharacteristics struct {
 	layout          string
@@ -100,17 +17,10 @@ type engineCharacteristics struct {
 	geometry        string
 	chambers        int
 	firingFrequency float64
-	haptics         engineHapticProfile
+	haptics         haptics.EngineProfile
 }
 
-var EngineGeometryMap = map[string]string{
-	"H": "horizontally-opposed",
-	"I": "inline",
-	"K": "Wankel", // kreiskolbenmotor (KKM)
-	"V": "V",
-	"W": "W",
-}
-
+// getEngineCharacteristics retrieves engine characteristics based on layout and angles
 func getEngineCharacteristics(engineLayout string, cylinderAngle float32, crankPlaneAngle float32) (engineCharacteristics, error) {
 	if engineLayout == "" {
 		return engineCharacteristics{}, nil
@@ -122,22 +32,19 @@ func getEngineCharacteristics(engineLayout string, cylinderAngle float32, crankP
 		return engineCharacteristics{}, err // Return error if conversion fails
 	}
 
-	// Default to I4 haptic profile
-	hapticProfile := engineHapticProfile{
-		primaryBalance:   0.6,
-		secondaryBalance: 0.8,
-	}
+	// Default to inline 4 cylinder engine haptic profile
+	hapticProfile := haptics.EngineProfiles["I4"]
 
 	layoutVariations := []string{
-		engineLayout + ".v" + strconv.FormatFloat(float64(cylinderAngle), 'f', 0, 32) + ".c" + strconv.FormatFloat(float64(crankPlaneAngle), 'f', 0, 32),
-		engineLayout + ".c" + strconv.FormatFloat(float64(crankPlaneAngle), 'f', 0, 32),
-		engineLayout + ".v" + strconv.FormatFloat(float64(cylinderAngle), 'f', 0, 32),
+		engineLayout + ".B" + strconv.FormatFloat(float64(cylinderAngle), 'f', 0, 32) + ".C" + strconv.FormatFloat(float64(crankPlaneAngle), 'f', 0, 32),
+		engineLayout + ".C" + strconv.FormatFloat(float64(crankPlaneAngle), 'f', 0, 32),
+		engineLayout + ".B" + strconv.FormatFloat(float64(cylinderAngle), 'f', 0, 32),
 		engineLayout,
 	}
 
 	var dbEntry string
 	for _, variation := range layoutVariations {
-		if profile, ok := engineHapticProfiles[variation]; ok {
+		if profile, ok := haptics.EngineProfiles[variation]; ok {
 			hapticProfile = profile
 			dbEntry = variation
 
@@ -155,14 +62,16 @@ func getEngineCharacteristics(engineLayout string, cylinderAngle float32, crankP
 	}, nil
 }
 
+// getEngineFiringFrequency calculates the firing frequency based on engine geometry and chamber count
 func getEngineFiringFrequency(geometry string, chambers int) float64 {
-	// Wankel engines fire 3 times per rotor per revolution
-	if geometry == "K" {
+	switch geometry {
+	case "K": // Wankel rotary engines fire 3 times per rotor per revolution
 		return (float64(chambers) * 3.0) / 60.0
+	case "S": // Two stroke engines fire once per cylinder every revolution
+		return float64(chambers) / 60.0
+	default: // Four stroke engines fire once per cylinder every 2 revolutions
+		return (float64(chambers) / 2.0) / 60.0
 	}
-
-	// Four stroke engines fire once per cylinder every 2 revolutions
-	return (float64(chambers) / 2.0) / 60.0
 }
 
 func (a *App) generateEngineHaptic() {
@@ -214,7 +123,13 @@ func (a *App) generateEngineHaptic() {
 		// Create a dramatic RPM-dependent frequency curve for Wankels
 		// Idle: ~8Hz (125ms intervals), High RPM: ~80Hz (12.5ms intervals)
 		rpmFactor := rpm / revLimit
-		firingFrequency = 8.0 + (rpmFactor * 72.0) // 8Hz to 80Hz range
+
+		// Adjust frequency range based on Wankel balance characteristics
+		// Better balanced Wankels can handle higher frequencies
+		baseFreqMin := 6.0 + (a.vehicle.engine.haptics.PrimaryBalance * 4.0)     // 6-10Hz range
+		baseFreqMax := 60.0 + (a.vehicle.engine.haptics.SecondaryBalance * 40.0) // 60-100Hz range
+
+		firingFrequency = baseFreqMin + (rpmFactor * (baseFreqMax - baseFreqMin))
 	} else {
 		// For regular engines, also reduce frequency range for better perception
 		firingFrequency = (rpm * a.vehicle.engine.firingFrequency) / 2.0 // Halve frequency for all engines
@@ -250,24 +165,73 @@ func (a *App) generateEngineHaptic() {
 	// Add engine-specific roughness variation
 	// Roughness based on primary and secondary balance characteristics
 	var engineRoughness float64
-	if rpm <= 2400.0 {
+	if a.vehicle.engine.geometry == "K" {
+		// Wankel engines have unique roughness characteristics
+		roughnessPhase := float64(a.state.current.seq) * 0.003
+		// Wankel apex seal roughness varies with rotor balance
+		apexSealRoughness := (1.0 - a.vehicle.engine.haptics.PrimaryBalance) * 0.08
+		// Rotor housing eccentricity affects secondary roughness
+		housingRoughness := (1.0 - a.vehicle.engine.haptics.SecondaryBalance) * 0.05
+		roughnessIntensity := apexSealRoughness + housingRoughness*0.7
+
+		// Wankels get smoother at higher RPM due to improved sealing
+		rpmSmoothingFactor := math.Min(rpm/4000.0, 1.0) // Smooth out by 4000 RPM
+		engineRoughness = math.Sin(roughnessPhase) * roughnessIntensity * (1.0 - rpmSmoothingFactor*0.8)
+
+		// Add characteristic Wankel "chatter" at low RPM
+		if rpm < 2000.0 {
+			chatterPhase := float64(a.state.current.seq) * 0.008
+			chatterIntensity := (1.0 - a.vehicle.engine.haptics.SecondaryBalance) * 0.03
+			engineRoughness += math.Sin(chatterPhase) * chatterIntensity * (1.0 - rpm/2000.0)
+		}
+	} else if a.vehicle.engine.geometry == "S" {
+		// 2-stroke engines have characteristic roughness due to scavenging process
+		roughnessPhase := float64(a.state.current.seq) * 0.007
+
+		// Scavenging port roughness - more pronounced at lower RPM
+		scavengingRoughness := (1.0 - a.vehicle.engine.haptics.PrimaryBalance) * 0.20
+		// Exhaust port blowdown creates secondary roughness
+		exhaustRoughness := (1.0 - a.vehicle.engine.haptics.SecondaryBalance) * 0.12
+
+		// 2-strokes are inherently rougher due to overlapping combustion/exhaust cycles
+		baseRoughness := scavengingRoughness + exhaustRoughness*0.6
+
+		// Add characteristic 2-stroke "buzz" - more intense at mid RPM
+		rpmFactor := math.Min(rpm/6000.0, 1.0)
+		buzzIntensity := baseRoughness * (0.5 + rpmFactor*0.8) // Peak intensity around mid-RPM
+
+		engineRoughness = math.Sin(roughnessPhase)*buzzIntensity + math.Sin(roughnessPhase*2.3)*buzzIntensity*0.4
+
+		// Add port timing irregularities at low RPM
+		if rpm < 3000.0 {
+			portPhase := float64(a.state.current.seq) * 0.012
+			portIrregularity := (1.0 - a.vehicle.engine.haptics.SecondaryBalance) * 0.08
+			engineRoughness += math.Sin(portPhase) * portIrregularity * (1.0 - rpm/3000.0)
+		}
+
+		// 2-strokes get slightly smoother at very high RPM due to better scavenging
+		if rpm > 4000.0 {
+			smoothingFactor := math.Min((rpm-4000.0)/4000.0, 0.3) // Max 30% smoothing
+			engineRoughness *= (1.0 - smoothingFactor)
+		}
+	} else if rpm <= 2400.0 {
 		// Low RPM roughness varies by engine type
 		roughnessPhase := float64(a.state.current.seq) * 0.005
 		// Poor primary balance creates more low-frequency roughness
-		primaryRoughness := (1.0 - a.vehicle.engine.haptics.primaryBalance) * 0.15
+		primaryRoughness := (1.0 - a.vehicle.engine.haptics.PrimaryBalance) * 0.15
 		// Poor secondary balance creates more high-frequency roughness
-		secondaryRoughness := (1.0 - a.vehicle.engine.haptics.secondaryBalance) * 0.08
+		secondaryRoughness := (1.0 - a.vehicle.engine.haptics.SecondaryBalance) * 0.08
 		roughnessIntensity := primaryRoughness + secondaryRoughness*0.5
 		engineRoughness = math.Sin(roughnessPhase)*roughnessIntensity + math.Sin(roughnessPhase*1.7)*roughnessIntensity*0.5
 
 		// Reduce roughness as RPM increases (engines smooth out)
 		rpmSmoothingFactor := rpm / 2400.0
-		engineRoughness *= (1.0 - rpmSmoothingFactor*a.vehicle.engine.haptics.primaryBalance)
+		engineRoughness *= (1.0 - rpmSmoothingFactor*a.vehicle.engine.haptics.PrimaryBalance)
 	} else {
 		// High RPM: roughness based on engine balance characteristics
-		if a.vehicle.engine.haptics.primaryBalance < 0.9 {
+		if a.vehicle.engine.haptics.PrimaryBalance < 0.9 {
 			roughnessPhase := float64(a.state.current.seq) * 0.002
-			highRpmRoughness := (1.0 - a.vehicle.engine.haptics.primaryBalance) * 0.02 // Poor primary balance creates roughness
+			highRpmRoughness := (1.0 - a.vehicle.engine.haptics.PrimaryBalance) * 0.02 // Poor primary balance creates roughness
 			engineRoughness = math.Sin(roughnessPhase) * highRpmRoughness
 		} else {
 			engineRoughness = 0.0 // Well-balanced engines have no roughness at high RPM
@@ -318,30 +282,78 @@ func (a *App) generateEngineHaptic() {
 				// Quick attack (30% of pulse width)
 				// Adjust attack characteristics based on engine balance
 				// Poor balance = sharper attack, good balance = smoother attack
-				attackSharpness := 1.0 - (a.vehicle.engine.haptics.primaryBalance * 0.6) // 0.4 to 1.0 range
+				attackSharpness := 1.0 - (a.vehicle.engine.haptics.PrimaryBalance * 0.6) // 0.4 to 1.0 range
 				attackPhase := pulsePhaseNormalized / 0.3
-				
-				// Use different attack curves based on engine balance
-				if a.vehicle.engine.haptics.primaryBalance < 0.7 {
-					// Sharp, aggressive attack for poorly balanced engines
-					pulseValue = math.Pow(math.Sin(attackPhase * math.Pi / 2), attackSharpness)
+
+				// Special handling for Wankel engines
+				if a.vehicle.engine.geometry == "K" {
+					// Wankels have unique triangular rotor pulses - more gradual attack
+					attackSharpness *= 0.7 // Reduce sharpness for Wankel characteristic
+					pulseValue = math.Sin(attackPhase*math.Pi/2) * attackSharpness
+
+					// Add slight rotor eccentricity modulation
+					eccentricityFactor := 1.0 + (1.0-a.vehicle.engine.haptics.SecondaryBalance)*0.1*math.Sin(attackPhase*math.Pi*3)
+					pulseValue *= eccentricityFactor
+				} else if a.vehicle.engine.geometry == "S" {
+					// 2-stroke engines have very sharp, aggressive attack due to rapid combustion
+					attackSharpness *= 1.3 // Increase sharpness for 2-stroke characteristic
+
+					// 2-strokes have a more explosive attack than 4-strokes
+					pulseValue = math.Pow(math.Sin(attackPhase*math.Pi/2), attackSharpness*0.6)
+
+					// Add port opening/closing noise during attack
+					portNoise := (1.0 - a.vehicle.engine.haptics.SecondaryBalance) * 0.15
+					portPhase := attackPhase * math.Pi * 4 // Higher frequency port effects
+					pulseValue += math.Sin(portPhase) * portNoise * attackPhase
 				} else {
-					// Smoother attack for well-balanced engines
-					pulseValue = math.Sin(attackPhase * math.Pi / 2) * attackSharpness
+					// Use different attack curves based on engine balance
+					if a.vehicle.engine.haptics.PrimaryBalance < 0.7 {
+						// Sharp, aggressive attack for poorly balanced engines
+						pulseValue = math.Pow(math.Sin(attackPhase*math.Pi/2), attackSharpness)
+					} else {
+						// Smoother attack for well-balanced engines
+						pulseValue = math.Sin(attackPhase*math.Pi/2) * attackSharpness
+					}
 				}
 			} else {
 				// Quick decay (70% of pulse width)
 				// Adjust decay based on both primary and secondary balance
 				decayPhase := (pulsePhaseNormalized - 0.3) / 0.7
-				
-				// Primary balance affects base decay rate
-				primaryDecayRate := 4.0 + (1.0-a.vehicle.engine.haptics.primaryBalance)*2.0
-				
-				// Secondary balance affects decay smoothness
-				secondaryDecayFactor := 1.0 + (1.0-a.vehicle.engine.haptics.secondaryBalance)*0.5
-				
-				combinedDecayRate := primaryDecayRate * secondaryDecayFactor
-				pulseValue = math.Exp(-decayPhase * combinedDecayRate)
+
+				if a.vehicle.engine.geometry == "K" {
+					// Wankel decay characteristics - smoother, more gradual
+					primaryDecayRate := 3.0 + (1.0-a.vehicle.engine.haptics.PrimaryBalance)*1.5
+					secondaryDecayFactor := 1.0 + (1.0-a.vehicle.engine.haptics.SecondaryBalance)*0.3
+					combinedDecayRate := primaryDecayRate * secondaryDecayFactor
+
+					// Wankels have more gradual decay due to chamber expansion characteristics
+					pulseValue = math.Exp(-decayPhase*combinedDecayRate) * (1.0 - decayPhase*0.1)
+				} else if a.vehicle.engine.geometry == "S" {
+					// 2-stroke decay characteristics - rapid but irregular due to exhaust blowdown
+					primaryDecayRate := 5.0 + (1.0-a.vehicle.engine.haptics.PrimaryBalance)*3.0
+					secondaryDecayFactor := 1.0 + (1.0-a.vehicle.engine.haptics.SecondaryBalance)*0.8
+
+					combinedDecayRate := primaryDecayRate * secondaryDecayFactor
+
+					// 2-strokes have rapid decay with exhaust port effects
+					baseDecay := math.Exp(-decayPhase * combinedDecayRate)
+
+					// Add exhaust blowdown characteristics - creates a "ragged" decay
+					blowdownIntensity := (1.0 - a.vehicle.engine.haptics.SecondaryBalance) * 0.25
+					blowdownPhase := decayPhase * math.Pi * 3 // Higher frequency for port effects
+					blowdownEffect := math.Sin(blowdownPhase) * blowdownIntensity * (1.0 - decayPhase)
+
+					pulseValue = baseDecay + blowdownEffect
+				} else {
+					// Primary balance affects base decay rate
+					primaryDecayRate := 4.0 + (1.0-a.vehicle.engine.haptics.PrimaryBalance)*2.0
+
+					// Secondary balance affects decay smoothness
+					secondaryDecayFactor := 1.0 + (1.0-a.vehicle.engine.haptics.SecondaryBalance)*0.5
+
+					combinedDecayRate := primaryDecayRate * secondaryDecayFactor
+					pulseValue = math.Exp(-decayPhase * combinedDecayRate)
+				}
 			}
 
 			// Apply polarity - alternating positive and negative pulses
@@ -350,7 +362,7 @@ func (a *App) generateEngineHaptic() {
 			}
 
 			// Add per-pulse roughness variation based on engine characteristics
-			secondaryImbalance := 1.0 - a.vehicle.engine.haptics.secondaryBalance
+			secondaryImbalance := 1.0 - a.vehicle.engine.haptics.SecondaryBalance
 			if rpm <= 2400.0 && secondaryImbalance > 0.02 {
 				roughnessPhase := float64(a.state.current.seq+uint32(i)) * 0.0005
 				roughnessVariation := 1.0 + (math.Sin(roughnessPhase) * secondaryImbalance * 0.3)
