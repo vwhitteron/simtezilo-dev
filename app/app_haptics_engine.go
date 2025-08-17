@@ -38,7 +38,7 @@ func getEngineCharacteristics(engineLayout string, cylinderAngle float32, crankP
 	}
 
 	// Default to inline 4 cylinder engine haptic profile
-	hapticProfile := haptics.EngineProfiles["I4"]
+	hapticProfile := haptics.EngineProfile{}
 
 	layoutVariations := []string{
 		engineLayout + ".B" + strconv.FormatFloat(float64(cylinderAngle), 'f', 0, 32) + ".C" + strconv.FormatFloat(float64(crankPlaneAngle), 'f', 0, 32),
@@ -70,6 +70,8 @@ func getEngineCharacteristics(engineLayout string, cylinderAngle float32, crankP
 // getEngineFiringFrequency calculates the firing frequency based on engine geometry and chamber count
 func getEngineFiringFrequency(geometry string, chambers int) float64 {
 	switch geometry {
+	case "":
+		return 0.0 // No engine haptics
 	case "K": // Wankel rotary engines fire 3 times per rotor per revolution
 		return (float64(chambers) * 3.0) / 60.0
 	case "S": // Two stroke engines fire once per cylinder every revolution
@@ -80,7 +82,13 @@ func getEngineFiringFrequency(geometry string, chambers int) float64 {
 }
 
 func (a *App) generateEngineHaptic() {
+	// Engine haptics are silenced
 	if a.config.GetEngineGain() == -60 {
+		return
+	}
+
+	// No engine haptics configured
+	if a.vehicle.engine.firingFrequency == 0 {
 		return
 	}
 
