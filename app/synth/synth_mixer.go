@@ -9,17 +9,11 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/config"
 )
 
-// TODO: remove and default to sum
-var algorithms = []string{
-	"sum",
-	"rss",
-}
-
 type Mixer struct {
 	configGainIncrement *float64
 
-	channels     map[string]MixerChannel
-	algorithm    int
+	channels     map[string]*MixerChannel
+	bufferSize   int
 	log          zerolog.Logger
 	faderGain    float64 // controls fade-in after pause or session reset
 	fadeInActive bool
@@ -31,29 +25,34 @@ type Mixer struct {
 type MixerChannel struct {
 	activeGain float64
 	configGain *float64
+	buffer     *Buffer
+}
+
+type MixerConfig struct {
+	MasterGain    *float64
+	GainIncrement *float64
+	BufferSize    int
+	Logger        zerolog.Logger
 }
 
 // TODO: set gain and gainIncrement to defaults and add setters instead
-func NewMixer(gain *float64, gainIncrement *float64, logger zerolog.Logger) (*Mixer, error) {
-	if gain == nil || gainIncrement == nil {
+func NewMixer(mixerConfig MixerConfig) (*Mixer, error) {
+	if mixerConfig.MasterGain == nil || mixerConfig.GainIncrement == nil {
 		return nil, fmt.Errorf("gain and gainIncrement must be valid pointers")
 	}
 
 	m := &Mixer{
-		configGainIncrement: gainIncrement,
+		configGainIncrement: mixerConfig.GainIncrement,
 
-		channels: map[string]MixerChannel{
-			"master": {
-				activeGain: *gain,
-				configGain: gain,
-			},
-		},
-		algorithm:    0,
-		log:          logger,
+		bufferSize:   mixerConfig.BufferSize,
+		channels:     map[string]*MixerChannel{},
+		log:          mixerConfig.Logger,
 		faderGain:    config.MinimumGain,
 		fadeInActive: false,
 		silenced:     true,
 	}
+
+	m.AddChannel("master", mixerConfig.MasterGain)
 
 	go m.watchForConfigChanges()
 
@@ -61,12 +60,11 @@ func NewMixer(gain *float64, gainIncrement *float64, logger zerolog.Logger) (*Mi
 }
 
 func (m *Mixer) Close() {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	m.SetChannelGain("master", config.MinimumGain)
+}
 
-	master := m.channels["master"]
-	master.activeGain = -60
-	m.channels["master"] = master
+func (m *Mixer) GetBufferLength() int {
+	return m.bufferSize
 }
 
 func (m *Mixer) AddChannel(name string, gain *float64) error {
@@ -77,12 +75,45 @@ func (m *Mixer) AddChannel(name string, gain *float64) error {
 		return fmt.Errorf("channel %q already exists", name)
 	}
 
-	m.channels[name] = MixerChannel{
+	m.channels[name] = &MixerChannel{
 		activeGain: *gain,
 		configGain: gain,
+		buffer:     NewBuffer(m.bufferSize),
 	}
 
 	return nil
+}
+
+func (m *MixerChannel) Read(length int) []float64 {
+	return m.buffer.Read(length)
+}
+
+func (m *MixerChannel) Write(samples []float64, magnitude float64, overwrite bool) {
+	m.buffer.Write(samples, magnitude, overwrite)
+}
+
+func (m *Mixer) WriteChannel(name string, samples []float64, magnitude float64, overwrite bool) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if _, ok := m.channels[name]; !ok {
+		return fmt.Errorf("channel not found: %q", name)
+	}
+
+	m.channels[name].Write(samples, magnitude, overwrite)
+
+	return nil
+}
+
+func (m *Mixer) ReadChannel(name string, length int) []float64 {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if _, ok := m.channels[name]; !ok {
+		return nil
+	}
+
+	return m.channels[name].Read(length)
 }
 
 func (m *Mixer) GetChannelNames() []string {
@@ -91,46 +122,16 @@ func (m *Mixer) GetChannelNames() []string {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	i := 0
 	for name := range m.channels {
-		names[i] = name
-		i++
+		if name == "master" {
+			continue // skip master channel
+		}
+
+		names = append(names, name)
 	}
 
 	return names
 }
-
-func (m *Mixer) SetAlgorithm(algorithmName string) error {
-	for i, name := range algorithms {
-		if name == algorithmName {
-			m.algorithm = i
-
-			return nil
-		}
-	}
-
-	return fmt.Errorf("algorithm %q not found", algorithmName)
-}
-
-// TODO: remove functionality
-func (m *Mixer) GetAlgorithm() string {
-	return algorithms[m.algorithm]
-}
-
-// TODO: remove functionality
-func (m *Mixer) NextAlgorithm() string {
-	m.algorithm = (m.algorithm + 1) % len(algorithms)
-
-	return algorithms[m.algorithm]
-}
-
-// TODO: remove functionality
-func (m *Mixer) PreviousAlgorithm() string {
-	m.algorithm = (m.algorithm - 1 + len(algorithms)) % len(algorithms)
-
-	return algorithms[m.algorithm]
-}
-
 func (m *Mixer) GetChannelGain(name string) (float64, error) {
 	channel, ok := m.channels[name]
 	if !ok {
@@ -240,14 +241,32 @@ func (m *Mixer) FadeIn(period time.Duration) {
 	}()
 }
 
-func (m *Mixer) MixSample(sample1 float64, sample2 float64, peak *float64) float64 {
-	switch m.algorithm {
-	case 0:
-		return mixSampleAGC(sample1, sample2, peak)
-	case 1:
-		return mixSamplesRSS(sample1, sample2, peak)
-	default:
-		return 0.0
+func (m *Mixer) MixToMaster(length int) {
+	outSamples := make([]float64, length)
+
+	var peak float64 = 0
+	for _, channel := range m.channels {
+		samples := channel.Read(length)
+
+		for i, sample := range samples {
+			outSamples[i] = mixSampleAGC(outSamples[i], sample, &peak)
+		}
+	}
+
+	magnitude := 1.0
+	if peak > 1.0 {
+		magnitude = 1.0 / peak
+	}
+
+	m.channels["master"].Write(outSamples, magnitude, true)
+}
+
+func (m *Mixer) Shift(length int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for _, channel := range m.channels {
+		channel.buffer.Shift(length)
 	}
 }
 

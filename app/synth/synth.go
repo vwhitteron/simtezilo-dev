@@ -1,7 +1,6 @@
 package synth
 
 import (
-	"encoding/binary"
 	"fmt"
 	"os"
 	"time"
@@ -13,10 +12,9 @@ import (
 )
 
 type Synthesizer struct {
-	buffer       *Buffer
 	effects      *EffectsSampleBank
 	log          zerolog.Logger
-	Mixer        *Mixer
+	mixer        *Mixer
 	outputDevice *OutputDevice
 	kinematics   *kinematics.KinematicsTracker
 	sampleRate   int
@@ -30,11 +28,16 @@ type SynthOpts struct {
 }
 
 func NewSynth(opts SynthOpts) (*Synthesizer, error) {
-	mixer, err := NewMixer(
-		&opts.Config.MasterGain,
-		&opts.Config.GainIncrement,
-		opts.Logger.With().Str("component", "synth mixer").Logger(),
-	)
+	bufferSlotSize := opts.Config.SampleRateHz / 60
+	bufferSlotCount := 20
+	bufferSize := bufferSlotSize * bufferSlotCount * 2 // 40 frames of audio at 8khz
+
+	mixer, err := NewMixer(MixerConfig{
+		MasterGain:    &opts.Config.MasterGain,
+		GainIncrement: &opts.Config.GainIncrement,
+		BufferSize:    bufferSize,
+		Logger:        opts.Logger.With().Str("component", "synth mixer").Logger(),
+	})
 	if err != nil {
 		return nil, fmt.Errorf("create mixer: %w", err)
 	}
@@ -42,11 +45,6 @@ func NewSynth(opts SynthOpts) (*Synthesizer, error) {
 	_ = mixer.AddChannel("transmission", &opts.Config.TransmissionGain)
 	_ = mixer.AddChannel("chassis", &opts.Config.ChassisGain)
 	_ = mixer.AddChannel("engine", &opts.Config.EngineGain)
-	_ = mixer.SetAlgorithm(opts.Config.Algorithm)
-
-	bufferSlotSize := opts.Config.SampleRateHz / 60
-	bufferSlotCount := 20
-	buffer := NewBuffer(bufferSlotSize, bufferSlotCount)
 
 	outputDevice, err := NewOutputDevice(SynthOutDeviceOpts{
 		Logger: opts.Logger.With().Str("component", "synth output device").Logger(),
@@ -68,10 +66,9 @@ func NewSynth(opts SynthOpts) (*Synthesizer, error) {
 	effects := NewEffectsSampleBank(opts.Config.SampleRateHz)
 
 	return &Synthesizer{
-		buffer:       buffer,
 		effects:      effects,
 		log:          opts.Logger.With().Str("component", "synth").Logger(),
-		Mixer:        mixer,
+		mixer:        mixer,
 		outputDevice: outputDevice,
 		kinematics:   opts.Kinematics,
 		sampleRate:   opts.Config.SampleRateHz,
@@ -83,54 +80,62 @@ func (s *Synthesizer) GetSampleRate() int {
 	return s.sampleRate
 }
 
+func (s *Synthesizer) GetBufferLength() int {
+	return s.mixer.GetBufferLength()
+}
+
 // Buffer accessor methods
-func (s *Synthesizer) ReadBuffer(length int) []float64 {
-	sample := s.buffer.Read(length)
+func (s *Synthesizer) ReadBufferNew(length int) []float64 {
+	s.mixer.MixToMaster(length)
 
-	if s.outFile != nil {
-		_ = binary.Write(s.outFile, binary.LittleEndian, sample)
-	}
-
-	return sample
+	return s.mixer.ReadChannel("master", length)
 }
 
 func (s *Synthesizer) WriteBuffer(channel string, sample []float64) {
-	s.buffer.Write(channel, sample, 1.0, false)
+	magnitude, err := s.mixer.GetChannelPowerRatio(channel)
+	if err != nil {
+		s.log.Error().Err(err).Str("channel", channel).Msg("failed to get channel power ratio")
+		return
+	}
+
+	s.mixer.WriteChannel(channel, sample, magnitude, false)
 }
 
 func (s *Synthesizer) OverwriteBuffer(channel string, sample []float64) {
-	s.buffer.Write(channel, sample, 1.0, true)
+	magnitude, err := s.mixer.GetChannelPowerRatio(channel)
+	if err != nil {
+		s.log.Error().Err(err).Str("channel", channel).Msg("failed to get channel power ratio")
+		return
+	}
+
+	s.mixer.WriteChannel(channel, sample, magnitude, true)
 }
 
-func (s *Synthesizer) ShiftBuffer(samples int) {
-	s.buffer.Shift(samples)
-}
-
-func (s *Synthesizer) GetBufferLength() int {
-	return s.buffer.Length()
+func (s *Synthesizer) ShiftBuffer(length int) {
+	s.mixer.Shift(length)
 }
 
 func (s *Synthesizer) ClearBuffer() {
-	s.buffer.Clear()
+	s.mixer.Shift(s.mixer.GetBufferLength())
 }
 
 func (s *Synthesizer) GetChannelMagnitude(name string) (float64, error) {
-	return s.Mixer.GetChannelPowerRatio(name)
+	return s.mixer.GetChannelPowerRatio(name)
 }
 
 func (s *Synthesizer) FadeIn(period time.Duration) {
-	s.Mixer.FadeIn(period)
+	s.mixer.FadeIn(period)
 }
 
 func (s *Synthesizer) ApplyMasterGain(value float64) float64 {
-	outputGain, _ := s.Mixer.GetChannelPowerRatio("master")
+	outputGain, _ := s.mixer.GetChannelPowerRatio("master")
 
 	return value * outputGain
 }
 
 func (s *Synthesizer) Silence() {
-	s.Mixer.SetFader(config.MinimumGain)
-	s.Mixer.silenced = true
+	s.mixer.SetFader(config.MinimumGain)
+	s.mixer.silenced = true
 }
 
 // Effect accessor methods
@@ -138,20 +143,22 @@ func (s *Synthesizer) GetEffectSample(name string) []float64 {
 	return s.effects.GetSample(name)
 }
 
-func (s *Synthesizer) PlayEffect(name string) {
-	// TODO: handle invalid effect name
-	sample := s.effects.GetSample(name)
-	s.buffer.Write(name, sample, 1.0, false)
-}
+func (s *Synthesizer) PlayEffect(name string, magnitude float64) {
+	channelMagnitude, err := s.mixer.GetChannelPowerRatio(name)
+	if err != nil {
+		s.log.Error().Err(err).Str("channel", name).Msg("failed to get channel power ratio")
+		return
+	}
 
-func (s *Synthesizer) PlayEffectWithMagnitude(name string, magnitude float64) {
+	magnitude *= channelMagnitude
+
 	// TODO: handle invalid effect name
 	sample := s.effects.GetSample(name)
-	s.buffer.Write(name, sample, magnitude, false)
+	s.mixer.WriteChannel(name, sample, magnitude, false)
 }
 
 func (s *Synthesizer) Close() error {
-	s.Mixer.Close()
+	s.mixer.Close()
 
 	return s.outFile.Close()
 }

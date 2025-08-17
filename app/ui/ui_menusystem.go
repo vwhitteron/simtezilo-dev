@@ -21,7 +21,6 @@ func NewMenuSystem() *MenuSystem {
 			"fMax",
 			"tCurve",
 			"tSat",
-			"mix",
 			"lang",
 		},
 	}

@@ -24,7 +24,6 @@ type hardware struct {
 type Synthesizer struct {
 	SampleRateHz              int
 	OutputFile                string
-	Algorithm                 string
 	MasterGain                float64
 	ChassisGain               float64
 	TransmissionGain          float64
@@ -100,7 +99,6 @@ var defaultConfig = viperConfig{
 	Synthesizer: &Synthesizer{
 		SampleRateHz:              8000,
 		OutputFile:                "",
-		Algorithm:                 "sum",
 		MasterGain:                -15,
 		GainIncrement:             0.25,
 		ChassisGain:               0,

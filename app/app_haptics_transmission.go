@@ -10,7 +10,7 @@ import (
 func (a *App) playGearShiftHaptic() {
 	magnitude := a.determineGearShiftMagnitude()
 
-	a.synth.PlayEffectWithMagnitude("transmission", magnitude)
+	a.synth.PlayEffect("transmission", magnitude)
 	a.log.Debug().
 		Int("sequence_id", int(a.state.current.seq)).
 		Float64("magnitude", magnitude).

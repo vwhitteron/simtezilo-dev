@@ -2,8 +2,6 @@ package synth
 
 import (
 	"math"
-
-	"github.com/vwhitteron/simtezilo-dev/app/signal"
 )
 
 // GainToPowerRatio converts a gain value in dB to a power ratio magnitude.
@@ -46,24 +44,24 @@ func mixSampleAGC(sample1 float64, sample2 float64, peak *float64) float64 {
 // Mixes two samples using a Root Square Sum algorithm.
 // If peak is less than 0, it applies a limiter to the output sample to prevent clipping.
 // Otherwise, the RSS mixed sample and the peak value are returned.
-func mixSamplesRSS(sample1 float64, sample2 float64, peak *float64) float64 {
-	sampleOut := 0.0
+// func mixSamplesRSS(sample1 float64, sample2 float64, peak *float64) float64 {
+// 	sampleOut := 0.0
 
-	squareSample1 := signal.Polarity(sample1) * sample1 * sample1
-	squareSample2 := signal.Polarity(sample2) * sample2 * sample2
-	sum := math.Abs(squareSample1 + squareSample2)
-	sampleOut = math.Sqrt(sum)
+// 	squareSample1 := signal.Polarity(sample1) * sample1 * sample1
+// 	squareSample2 := signal.Polarity(sample2) * sample2 * sample2
+// 	sum := math.Abs(squareSample1 + squareSample2)
+// 	sampleOut = math.Sqrt(sum)
 
-	if sampleOut > *peak {
-		*peak = sampleOut
-	}
+// 	if sampleOut > *peak {
+// 		*peak = sampleOut
+// 	}
 
-	// Restore the signal to its original polarity since RSS always results in a
-	// positive value
-	sampleOut = sampleOut * signal.Polarity(sample1+sample2)
+// 	// Restore the signal to its original polarity since RSS always results in a
+// 	// positive value
+// 	sampleOut = sampleOut * signal.Polarity(sample1+sample2)
 
-	return sampleOut
-}
+// 	return sampleOut
+// }
 
 // Adjusts the gain on a slice of samples using the peak value.
 func scaleSamplesPeak(samples *[]float64, peak float64) {

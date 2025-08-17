@@ -5,20 +5,13 @@ import (
 )
 
 type Buffer struct {
-	buffer     []float64
-	bufferSize int
-	mu         sync.Mutex
-	slots      int
-	slotSize   int
+	buffer []float64
+	mu     sync.Mutex
 }
 
-func NewBuffer(slotSize int, slots int) *Buffer {
-	bufferSize := slotSize * slots * 2
+func NewBuffer(size int) *Buffer {
 	buffer := &Buffer{
-		buffer:     make([]float64, bufferSize),
-		bufferSize: bufferSize,
-		slots:      slots,
-		slotSize:   slotSize,
+		buffer: make([]float64, size),
 	}
 
 	buffer.Clear()
@@ -30,13 +23,13 @@ func (b *Buffer) Clear() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	for i := range b.bufferSize {
+	for i := range len(b.buffer) {
 		b.buffer[i] = 0
 	}
 }
 
 func (b *Buffer) Length() int {
-	return b.bufferSize
+	return len(b.buffer)
 }
 
 func (b *Buffer) Read(length int) []float64 {
@@ -52,7 +45,7 @@ func (b *Buffer) Read(length int) []float64 {
 	return samples
 }
 
-func (b *Buffer) Write(channel string, samples []float64, magnitude float64, overwrite bool) {
+func (b *Buffer) Write(samples []float64, magnitude float64, overwrite bool) {
 	outSamples := make([]float64, len(samples))
 	if overwrite { // TODO: need channel buffers as these samples are mixed directly onto the output buffer
 		for i := range samples {
@@ -68,7 +61,7 @@ func (b *Buffer) Shift(samples int) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	bufferMax := b.bufferSize - samples
+	bufferMax := len(b.buffer) - samples
 
 	for i := range bufferMax {
 		b.buffer[i] = b.buffer[i+samples]

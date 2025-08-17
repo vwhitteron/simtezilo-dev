@@ -35,7 +35,8 @@ func NewBumpStream(synth *Synthesizer) BumpStream {
 }
 
 func (b BumpStream) Stream(samples [][2]float64) (n int, ok bool) {
-	buffer := b.synth.ReadBuffer(len(samples))
+	// buffer := b.synth.ReadBuffer(len(samples))
+	buffer := b.synth.ReadBufferNew(len(samples))
 
 	for i := range samples {
 		samples[i][0] = b.synth.ApplyMasterGain(buffer[i])
