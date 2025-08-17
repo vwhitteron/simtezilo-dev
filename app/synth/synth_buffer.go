@@ -45,7 +45,7 @@ func (b *Buffer) GetLength() int {
 	return b.bufferSize
 }
 
-func (b *Buffer) Write(channel string, samples []float64) {
+func (b *Buffer) Write(channel string, samples []float64, overwrite bool) {
 	magnitude, err := b.mixer.GetChannelPowerRatio(channel)
 	if err != nil {
 		b.log.Error().Err(err).Str("channel", channel).Msg("get channel power ratio")
@@ -53,12 +53,14 @@ func (b *Buffer) Write(channel string, samples []float64) {
 		return
 	}
 
-	// if channel == "engine" {
-	// 	gain, _ := b.mixer.GetChannelGain(channel)
-	// 	b.log.Info().Float64("gain", gain).Float64("magnitude", magnitude).Str("channel", channel).Msg("write sample to channel")
-	// }
-
-	outSamples := b.mixSamples(samples, magnitude)
+	outSamples := make([]float64, len(samples))
+	if overwrite { // TODO: need channel buffers as these samples are mixed directly onto the output buffer
+		for i := range samples {
+			outSamples[i] = samples[i] * magnitude
+		}
+	} else {
+		outSamples = b.mixSamples(samples, magnitude)
+	}
 	copy(b.buffer, outSamples)
 }
 

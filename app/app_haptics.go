@@ -111,7 +111,6 @@ func (a *App) hapticEvents() {
 	}
 
 	a.generateChassisHaptic()
-	a.generateEngineHaptic()
 
 	a.state.last = a.state.current
 	a.kinematics.Current.ComputeTime = time.Since(startTime)

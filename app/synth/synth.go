@@ -95,7 +95,11 @@ func (s *Synthesizer) ReadBuffer(length int) []float64 {
 }
 
 func (s *Synthesizer) WriteBuffer(channel string, sample []float64) {
-	s.buffer.Write(channel, sample)
+	s.buffer.Write(channel, sample, false)
+}
+
+func (s *Synthesizer) OverwriteBuffer(channel string, sample []float64) {
+	s.buffer.Write(channel, sample, true)
 }
 
 func (s *Synthesizer) ShiftBuffer(samples int) {
@@ -118,7 +122,7 @@ func (s *Synthesizer) FadeIn(period time.Duration) {
 	s.Mixer.FadeIn(period)
 }
 
-func (s *Synthesizer) MixOutput(value float64) float64 {
+func (s *Synthesizer) ApplyMasterGain(value float64) float64 {
 	outputGain, _ := s.Mixer.GetChannelPowerRatio("master")
 
 	return value * outputGain
@@ -137,7 +141,7 @@ func (s *Synthesizer) GetEffectSample(name string) []float64 {
 func (s *Synthesizer) PlayEffect(name string) {
 	// TODO: handle invalid effect name
 	sample := s.effects.GetSample(name)
-	s.buffer.Write(name, sample)
+	s.buffer.Write(name, sample, false)
 }
 
 func (s *Synthesizer) PlayEffectWithMagnitude(name string, magnitude float64) {

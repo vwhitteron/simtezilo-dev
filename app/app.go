@@ -37,13 +37,11 @@ type stateRecord struct {
 }
 
 type appState struct {
-	hapticsEnabled      bool // TODO: move state to haptics?
-	telemetryActive     bool
-	current             stateRecord
-	last                stateRecord
-	lastKnownRPM        float64   // Cache last known RPM for fallback
-	lastRPMTime         time.Time // Timestamp of last known RPM
-	enginePulsePolarity bool      // Alternating polarity for engine pulses
+	hapticsEnabled  bool // TODO: move state to haptics?
+	telemetryActive bool
+	current         stateRecord
+	last            stateRecord
+	engine          engineState
 }
 
 type App struct {
@@ -316,9 +314,10 @@ func (a *App) Run() {
 
 	go speaker.Play(chassisStreamer)
 
-	ticker120fps := time.NewTicker((1000 / 120) * time.Millisecond)
-	ticker60fps := time.NewTicker((1000 / 60) * time.Millisecond)
-	ticker15fps := time.NewTicker((1000 / 15) * time.Millisecond)
+	tickerHaptics := time.NewTicker((1000 / hapticFrameRate) * time.Millisecond)
+	tickerGeneral := time.NewTicker((1000 / telemetryFrameRate) * time.Millisecond)
+	tickerEngineHaptics := time.NewTicker((1000 / engineHapticFrameRate) * time.Millisecond)
+	tickerDisplay := time.NewTicker((1000 / displayFramRate) * time.Millisecond)
 
 	a.log.Debug().Str("component", "app").Str("result", "success").Msg("main loop started")
 
@@ -326,12 +325,14 @@ func (a *App) Run() {
 		select {
 		case <-a.done:
 			return
-		case <-ticker120fps.C:
+		case <-tickerHaptics.C:
 			a.hapticEvents()
-		case <-ticker60fps.C:
+		case <-tickerGeneral.C:
 			a.sessionIsComplete()
 			a.sendTelemetryChartData()
-		case <-ticker15fps.C:
+		case <-tickerEngineHaptics.C:
+			a.generateEngineHaptic()
+		case <-tickerDisplay.C:
 			a.ui.UpdateDisplay(ui.LiveData{
 				Gear:            a.kinematics.Current.TransmissionGear,
 				TelemetryActive: a.state.telemetryActive,

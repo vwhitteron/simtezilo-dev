@@ -38,8 +38,8 @@ func (b BumpStream) Stream(samples [][2]float64) (n int, ok bool) {
 	buffer := b.synth.ReadBuffer(len(samples))
 
 	for i := range samples {
-		samples[i][0] = b.synth.MixOutput(buffer[i])
-		samples[i][1] = b.synth.MixOutput(buffer[i])
+		samples[i][0] = b.synth.ApplyMasterGain(buffer[i])
+		samples[i][1] = b.synth.ApplyMasterGain(buffer[i])
 	}
 
 	b.synth.ShiftBuffer(len(samples))

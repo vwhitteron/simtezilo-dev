@@ -3,13 +3,18 @@ package app
 import (
 	"math"
 	"strconv"
+	"time"
 
 	"github.com/vwhitteron/simtezilo-dev/app/haptics"
 	"github.com/vwhitteron/simtezilo-dev/app/signal"
 )
 
-const updateFrames uint32 = 2
-const updateHz float64 = frameRate / float64(updateFrames)
+type engineState struct {
+	lastSeq       uint32    // Last sequence ID for engine haptics
+	lastKnownRPM  float64   // Cache last known RPM for fallback
+	lastEventTime time.Time // Timestamp of last engine haptic event
+	pulsePolarity bool      // Alternating polarity for engine pulses
+}
 
 type engineCharacteristics struct {
 	layout          string
@@ -79,8 +84,7 @@ func (a *App) generateEngineHaptic() {
 		return
 	}
 
-	// Generate haptics every 6 frames to reduce computational load
-	if a.state.current.seq%updateFrames != 0 {
+	if !a.state.telemetryActive {
 		return
 	}
 
@@ -92,23 +96,34 @@ func (a *App) generateEngineHaptic() {
 		throttleProportion = 0.0
 	}
 
-	// TODO: This won't work until engine haptics are generated even when sequence ID does not advance
 	// Cache last known RPM and timestamp for fallback when telemetry is unavailable
-	// currentTime := time.Now()
-	// if rpm >= 0 {
-	// 	// Update last known good RPM and timestamp
-	// 	a.state.lastKnownRPM = rpm
-	// 	a.state.lastRPMTime = currentTime
-	// } else if a.state.lastKnownRPM >= 0 && currentTime.Sub(a.state.lastRPMTime) < 2000*time.Millisecond {
-	// 	// Use cached RPM for up to 2 seconds if telemetry is unavailable
-	// 	rpm = a.state.lastKnownRPM
-	// }
+	currentTime := time.Now()
+	if a.state.current.seq > a.state.engine.lastSeq {
+		// Update last known good RPM and timestamp
+		a.state.engine.lastKnownRPM = rpm
+		a.state.engine.lastEventTime = currentTime
+		a.state.engine.lastSeq = a.state.current.seq
+	} else if currentTime.Sub(a.state.engine.lastEventTime) > 1000*time.Millisecond {
+		// stop engine haptics of no telemetry received for 1 second or more
+		return
+	} else {
+		// Use cached RPM for up to 2 seconds if telemetry is unavailable
+		rpm = a.state.engine.lastKnownRPM
+	}
+
+	// Generate engine vibration waveform for double the engine haptic frame rate
+	// This overfills the engine haptics buffer with the current rpm waveform in case the buffer
+	// reader is too fast. This does mean the rpm waveform on the tail end of the buffer is not
+	// correct when these events occur. The buffer is overwritten every interval so for typical
+	// events where the reader is not fetching too far it will get the correct waveform for the
+	// current rpm value.
+	sampleRate := float64(a.synth.GetSampleRate())
+	samplesPerBuffer := int(sampleRate/engineHapticFrameRate) * 2
+	engineBuffer := make([]float64, samplesPerBuffer)
 
 	// No haptics when engine is not running
 	if rpm == 0 {
-		sampleRate := float64(a.synth.GetSampleRate())
-		samplesPerBuffer := int(sampleRate / updateHz) // 60 FPS / 6 frames = 10 Hz update rate
-		a.synth.WriteBuffer("engine", make([]float64, samplesPerBuffer))
+		a.synth.WriteBuffer("engine", engineBuffer)
 
 		return
 	}
@@ -122,20 +137,25 @@ func (a *App) generateEngineHaptic() {
 	if a.vehicle.engine.geometry == "K" {
 		// Create a dramatic RPM-dependent frequency curve for Wankels
 		// Idle: ~8Hz (125ms intervals), High RPM: ~80Hz (12.5ms intervals)
-		rpmFactor := rpm / revLimit
+		rpmPercent := rpm / revLimit
 
 		// Adjust frequency range based on Wankel balance characteristics
 		// Better balanced Wankels can handle higher frequencies
 		baseFreqMin := 6.0 + (a.vehicle.engine.haptics.PrimaryBalance * 4.0)     // 6-10Hz range
 		baseFreqMax := 60.0 + (a.vehicle.engine.haptics.SecondaryBalance * 40.0) // 60-100Hz range
 
-		firingFrequency = baseFreqMin + (rpmFactor * (baseFreqMax - baseFreqMin))
+		firingFrequency = baseFreqMin + (rpmPercent * (baseFreqMax - baseFreqMin))
 	} else {
 		// For regular engines, also reduce frequency range for better perception
-		firingFrequency = (rpm * a.vehicle.engine.firingFrequency) / 2.0 // Halve frequency for all engines
-		freqMax := revLimit * a.vehicle.engine.firingFrequency / 2.0     // Max frequency based on rev limit
-		if freqMax > 250.0 {
-			firingFrequency = (250 / freqMax) * firingFrequency // Scale down to 250Hz max
+		firingFrequency = (rpm * a.vehicle.engine.firingFrequency)
+
+		// Reduce frequency for engines with more chambers to keep within haptic frequency limits
+		if a.vehicle.engine.chambers > 6 {
+			firingFrequency *= 0.7
+		}
+		freqMax := revLimit * a.vehicle.engine.firingFrequency // Max frequency based on rev limit
+		if freqMax > 350.0 {
+			firingFrequency = (350 / freqMax) * firingFrequency // Scale down to 250Hz max
 		}
 	}
 
@@ -145,11 +165,11 @@ func (a *App) generateEngineHaptic() {
 	firingFrequency, _ = signal.LimitWindow(firingFrequency, 6.0, 250.0) // Clamp to 6Hz - 150Hz range
 
 	// Calculate RPM proportion relative to rev limit
-	rpmProportion := rpm / revLimit
+	rpmPercent := rpm / revLimit
 
 	// Normalize RPM from 0 to max
 	// Is this even necessary? rpm should never really be above revLimit
-	rpmNormalized, _ := signal.LimitWindow(rpmProportion, 0.0, 1.0)
+	rpmNormalized, _ := signal.LimitWindow(rpmPercent, 0.0, 1.0)
 
 	// Generate amplitude with louder idle feedback and linear 30% volume reduction at max RPM
 	// Start with higher base amplitude for idle/low RPM feedback
@@ -245,12 +265,7 @@ func (a *App) generateEngineHaptic() {
 
 	// Create pulses with increasing width and overlap at higher RPM
 	// Pulse width gets much wider at higher RPM, allowing up to 25% overlap
-	pulseDutyCycle := 0.25 + (rpmProportion * 0.50) // 25% width at idle, 75% width at high RPM (allows 25% overlap)
-
-	// Generate engine vibration waveform for updataRate frames
-	sampleRate := float64(a.synth.GetSampleRate())
-	samplesPerBuffer := int(sampleRate / updateHz)
-	engineBuffer := make([]float64, samplesPerBuffer)
+	pulseDutyCycle := 0.25 + (rpmPercent * 0.50) // 25% width at idle, 75% width at high RPM (allows 25% overlap)
 
 	// Normal engine pulse generation (rev limiter already checked above)
 	for i := range engineBuffer {
@@ -269,7 +284,7 @@ func (a *App) generateEngineHaptic() {
 
 		// Toggle polarity when a new pulse is triggered
 		if pulseTriggered {
-			a.state.enginePulsePolarity = !a.state.enginePulsePolarity
+			a.state.engine.pulsePolarity = !a.state.engine.pulsePolarity
 		}
 
 		var pulseValue float64
@@ -286,7 +301,8 @@ func (a *App) generateEngineHaptic() {
 				attackPhase := pulsePhaseNormalized / 0.3
 
 				// Special handling for Wankel engines
-				if a.vehicle.engine.geometry == "K" {
+				switch a.vehicle.engine.geometry {
+				case "K":
 					// Wankels have unique triangular rotor pulses - more gradual attack
 					attackSharpness *= 0.7 // Reduce sharpness for Wankel characteristic
 					pulseValue = math.Sin(attackPhase*math.Pi/2) * attackSharpness
@@ -294,7 +310,7 @@ func (a *App) generateEngineHaptic() {
 					// Add slight rotor eccentricity modulation
 					eccentricityFactor := 1.0 + (1.0-a.vehicle.engine.haptics.SecondaryBalance)*0.1*math.Sin(attackPhase*math.Pi*3)
 					pulseValue *= eccentricityFactor
-				} else if a.vehicle.engine.geometry == "S" {
+				case "S":
 					// 2-stroke engines have very sharp, aggressive attack due to rapid combustion
 					attackSharpness *= 1.3 // Increase sharpness for 2-stroke characteristic
 
@@ -305,7 +321,7 @@ func (a *App) generateEngineHaptic() {
 					portNoise := (1.0 - a.vehicle.engine.haptics.SecondaryBalance) * 0.15
 					portPhase := attackPhase * math.Pi * 4 // Higher frequency port effects
 					pulseValue += math.Sin(portPhase) * portNoise * attackPhase
-				} else {
+				default:
 					// Use different attack curves based on engine balance
 					if a.vehicle.engine.haptics.PrimaryBalance < 0.7 {
 						// Sharp, aggressive attack for poorly balanced engines
@@ -320,7 +336,8 @@ func (a *App) generateEngineHaptic() {
 				// Adjust decay based on both primary and secondary balance
 				decayPhase := (pulsePhaseNormalized - 0.3) / 0.7
 
-				if a.vehicle.engine.geometry == "K" {
+				switch a.vehicle.engine.geometry {
+				case "K":
 					// Wankel decay characteristics - smoother, more gradual
 					primaryDecayRate := 3.0 + (1.0-a.vehicle.engine.haptics.PrimaryBalance)*1.5
 					secondaryDecayFactor := 1.0 + (1.0-a.vehicle.engine.haptics.SecondaryBalance)*0.3
@@ -328,7 +345,7 @@ func (a *App) generateEngineHaptic() {
 
 					// Wankels have more gradual decay due to chamber expansion characteristics
 					pulseValue = math.Exp(-decayPhase*combinedDecayRate) * (1.0 - decayPhase*0.1)
-				} else if a.vehicle.engine.geometry == "S" {
+				case "S":
 					// 2-stroke decay characteristics - rapid but irregular due to exhaust blowdown
 					primaryDecayRate := 5.0 + (1.0-a.vehicle.engine.haptics.PrimaryBalance)*3.0
 					secondaryDecayFactor := 1.0 + (1.0-a.vehicle.engine.haptics.SecondaryBalance)*0.8
@@ -344,7 +361,7 @@ func (a *App) generateEngineHaptic() {
 					blowdownEffect := math.Sin(blowdownPhase) * blowdownIntensity * (1.0 - decayPhase)
 
 					pulseValue = baseDecay + blowdownEffect
-				} else {
+				default:
 					// Primary balance affects base decay rate
 					primaryDecayRate := 4.0 + (1.0-a.vehicle.engine.haptics.PrimaryBalance)*2.0
 
@@ -357,7 +374,7 @@ func (a *App) generateEngineHaptic() {
 			}
 
 			// Apply polarity - alternating positive and negative pulses
-			if !a.state.enginePulsePolarity {
+			if !a.state.engine.pulsePolarity {
 				pulseValue = -pulseValue
 			}
 
@@ -383,5 +400,5 @@ func (a *App) generateEngineHaptic() {
 		engineBuffer[i] = amplitude * pulseValue
 	}
 
-	a.synth.WriteBuffer("engine", engineBuffer)
+	a.synth.OverwriteBuffer("engine", engineBuffer)
 }
