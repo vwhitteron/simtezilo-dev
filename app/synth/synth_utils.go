@@ -26,9 +26,9 @@ func GainToAmplitudeRatio(gain float64) float64 {
 	return amplitudeRatio
 }
 
-// Mixes two samples using an Automatic Gain Control (AGC) algorithm.
+// Mixes two samples using a simple sum algorithm.
 // Returns the mixed sample and the peak value which is later used to scale a slice of samples.
-func mixSampleAGC(sample1 float64, sample2 float64, peak *float64) float64 {
+func mixSampleSum(sample1 float64, sample2 float64, peak *float64) float64 {
 	sum := sample1 + sample2
 
 	sumAbs := math.Abs(sum)

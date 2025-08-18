@@ -79,7 +79,7 @@ func (b *Buffer) mixSamples(inSamples []float64, magnitude float64) []float64 {
 		inputSample := inSamples[i] * magnitude
 		bufferSample := b.buffer[i]
 
-		outSamples[i] = mixSampleAGC(inputSample, bufferSample, &peak)
+		outSamples[i] = mixSampleSum(inputSample, bufferSample, &peak)
 	}
 
 	if peak > 1.0 {
