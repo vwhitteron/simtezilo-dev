@@ -245,23 +245,59 @@ func (m *Mixer) FadeIn(period time.Duration) {
 func (m *Mixer) MixToMaster(length int) {
 	outSamples := make([]float64, length)
 
+	// mix in the chassis and transmission channels with equal priority
 	var peak float64 = 0
-	for name, channel := range m.channels {
-		// skip internal channels
-		if name[0:1] == "_" {
+	for _, name := range []string{"chassis", "transmission"} {
+		channel, ok := m.channels[name]
+		if !ok {
+			m.log.Error().Str("channel", name).Msg("channel not found in mixer")
 			continue
 		}
 
 		samples := channel.Read(length)
 
 		for i, sample := range samples {
-			outSamples[i] = mixSampleAGC(outSamples[i], sample, &peak)
+			outSamples[i] = mixSampleSum(outSamples[i], sample, &peak)
 		}
 	}
 
-	magnitude := 1.0
 	if peak > 1.0 {
-		magnitude = 1.0 / peak
+		scaleSamplesPeak(&outSamples, peak)
+	}
+
+	magnitude := 1.0
+	// mix in the engine channel with lower priority
+	channel, ok := m.channels["engine"]
+	if !ok {
+		m.log.Error().Str("channel", "engine").Msg("channel not found in mixer")
+	} else {
+		outSamplesTmp := make([]float64, length)
+		engineSamples := channel.Read(length)
+
+		done := false
+		count := 0
+		for !done {
+			p := 0.0
+			for i, engineSample := range engineSamples {
+				outSamplesTmp[i] = mixSampleSum(outSamples[i], engineSample, &p)
+			}
+
+			if p > 1.0 {
+				if count == 0 {
+					scaleSamplesPeak(&engineSamples, p*2)
+					count++
+				} else {
+					done = true
+					magnitude = 1.0 / p
+				}
+
+				continue
+			}
+
+			done = true
+		}
+
+		copy(outSamples, outSamplesTmp)
 	}
 
 	m.channels["_master"].Write(outSamples, magnitude, true)
