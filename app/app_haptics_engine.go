@@ -245,7 +245,7 @@ func (a *App) generateEngineHaptic() {
 		}
 	}
 
-	amplitude := baseAmplitude + (engineRoughness * rpmNormalized * 0.1)
+	amplitude := (baseAmplitude * a.vehicle.engine.haptics.Magnitude) + (engineRoughness * rpmNormalized * 0.1)
 
 	// Ensure amplitude stays within bounds
 	amplitude, _ = signal.LimitWindow(amplitude, 0.2, 0.9)

@@ -426,18 +426,22 @@ func (a *App) updateVehicle() {
 	// pulseAdjust := (12 + (float64(engine.chambers) / 2) - (math.Sqrt(float64(engine.chambers)))) / 10
 	var pulseAdjust float64
 	switch engine.chambers {
+	case 3:
+		pulseAdjust = 1.0
+	case 4:
+		pulseAdjust = 1.0
 	case 5:
 		pulseAdjust = 0.81
 	case 6:
 		pulseAdjust = 0.68
 	case 8:
-		pulseAdjust = 0.52
+		pulseAdjust = 0.5
 	case 10:
-		pulseAdjust = 0.42
+		pulseAdjust = 0.41
 	case 12:
-		pulseAdjust = 0.370
+		pulseAdjust = 0.336
 	case 16:
-		pulseAdjust = 0.281
+		pulseAdjust = 0.26
 	default:
 		pulseAdjust = 1.0
 	}
@@ -479,6 +483,7 @@ func (a *App) updateVehicle() {
 		Float32("cylinder_angle", bankAngle).
 		Str("resolved_engine", engine.dbEntry).
 		Uint16("rev_limit", a.vehicle.revLimit).
+		Float64("pulse_adjust", a.vehicle.pulseAdjust).
 		Msg("vehicle update")
 
 	switch vehicleType {
