@@ -5,9 +5,12 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/vwhitteron/simtezilo-dev/app/config"
 	"github.com/vwhitteron/simtezilo-dev/app/haptics"
 	"github.com/vwhitteron/simtezilo-dev/app/signal"
 )
+
+const maxPulseRate float64 = 300.0 // Max pulse rate for engine haptics
 
 type engineState struct {
 	lastSeq       uint32    // Last sequence ID for engine haptics
@@ -83,7 +86,7 @@ func getEngineFiringFrequency(geometry string, chambers int) float64 {
 
 func (a *App) generateEngineHaptic() {
 	// Engine haptics are silenced
-	if a.config.GetEngineGain() == -60 {
+	if a.config.GetEngineGain() <= config.MinimumGain {
 		return
 	}
 
@@ -139,38 +142,14 @@ func (a *App) generateEngineHaptic() {
 	// Use the vehicle's actual rev limiter maximum RPM from telemetry
 	revLimit := float64(a.gtClient.Telemetry.EngineRPMLight().Max)
 
-	var firingFrequency float64
+	var pulseRate float64
 	// For high-firing engines like Wankels, use a completely different approach
 	// Map RPM to a much lower frequency range for perceptible intervals
 	if a.vehicle.engine.geometry == "K" {
-		// Create a dramatic RPM-dependent frequency curve for Wankels
-		// Idle: ~8Hz (125ms intervals), High RPM: ~80Hz (12.5ms intervals)
-		rpmPercent := rpm / revLimit
-
-		// Adjust frequency range based on Wankel balance characteristics
-		// Better balanced Wankels can handle higher frequencies
-		baseFreqMin := 6.0 + (a.vehicle.engine.haptics.PrimaryBalance * 4.0)     // 6-10Hz range
-		baseFreqMax := 60.0 + (a.vehicle.engine.haptics.SecondaryBalance * 40.0) // 60-100Hz range
-
-		firingFrequency = baseFreqMin + (rpmPercent * (baseFreqMax - baseFreqMin))
+		pulseRate = rpm * a.vehicle.engine.firingFrequency * a.vehicle.pulseAdjust
 	} else {
-		// For regular engines, also reduce frequency range for better perception
-		firingFrequency = (rpm * a.vehicle.engine.firingFrequency)
-
-		// Reduce frequency for engines with more chambers to keep within haptic frequency limits
-		if a.vehicle.engine.chambers > 6 {
-			firingFrequency *= 0.7
-		}
-		freqMax := revLimit * a.vehicle.engine.firingFrequency // Max frequency based on rev limit
-		if freqMax > 350.0 {
-			firingFrequency = (350 / freqMax) * firingFrequency // Scale down to 250Hz max
-		}
+		pulseRate = rpm * a.vehicle.engine.firingFrequency * a.vehicle.pulseAdjust
 	}
-
-	// Clamp firing frequency to wider range for more pulses at high RPM
-	// 6.0   = 167.00ms intervals at minimum
-	// 150.0 =   6.67ms intervals at maximum
-	firingFrequency, _ = signal.LimitWindow(firingFrequency, 6.0, 250.0) // Clamp to 6Hz - 150Hz range
 
 	// Calculate RPM proportion relative to rev limit
 	rpmPercent := rpm / revLimit
@@ -278,7 +257,7 @@ func (a *App) generateEngineHaptic() {
 	// Normal engine pulse generation (rev limiter already checked above)
 	for i := range engineBuffer {
 		// Use realistic firing frequency for pulse timing
-		samplesPerPulse := sampleRate / firingFrequency
+		samplesPerPulse := sampleRate / pulseRate
 
 		// Create pulses based on engine firing events
 		pulsePosition := float64(i) / samplesPerPulse

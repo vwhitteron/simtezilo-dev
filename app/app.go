@@ -23,9 +23,10 @@ import (
 )
 
 type vehicleRecord struct {
-	ID       uint32
-	engine   engineCharacteristics
-	revLimit uint16
+	ID          uint32
+	engine      engineCharacteristics
+	revLimit    uint16
+	pulseAdjust float64
 }
 
 type stateRecord struct {
@@ -417,10 +418,48 @@ func (a *App) updateVehicle() {
 			Msg("failed to get engine characteristics")
 	}
 
+	revLimit := a.gtClient.Telemetry.EngineRPMLight().Max
+	peakNaturalPulseRate := float64(revLimit) * engine.firingFrequency
+
+	// Basic pulse rate adjustment based cylinder count for typical 8k rev limit
+	// Engines with 4 cylinders or less do not require adjustment
+	// pulseAdjust := (12 + (float64(engine.chambers) / 2) - (math.Sqrt(float64(engine.chambers)))) / 10
+	var pulseAdjust float64
+	switch engine.chambers {
+	case 5:
+		pulseAdjust = 0.81
+	case 6:
+		pulseAdjust = 0.68
+	case 8:
+		pulseAdjust = 0.52
+	case 10:
+		pulseAdjust = 0.42
+	case 12:
+		pulseAdjust = 0.370
+	case 16:
+		pulseAdjust = 0.281
+	default:
+		pulseAdjust = 1.0
+	}
+
+	// Heavy pulse rate adjustment for high rev limit engines
+	peakPulseRate := peakNaturalPulseRate * pulseAdjust
+	if peakPulseRate > maxPulseRate {
+		a.log.Info().Msg("pulse scale")
+		pulseAdjust = (maxPulseRate / peakPulseRate) * pulseAdjust
+		peakPulseRate *= pulseAdjust
+	}
+	a.log.Info().
+		Float64("pulse_adjust", pulseAdjust).
+		Float64("peak_pulse_rate", peakPulseRate).
+		Float64("peak_natural_pulse_rate", peakNaturalPulseRate).
+		Msg("pulse rate")
+
 	a.vehicle = vehicleRecord{
-		ID:       a.gtClient.Telemetry.VehicleID(),
-		engine:   engine,
-		revLimit: a.gtClient.Telemetry.EngineRPMLight().Max,
+		ID:          a.gtClient.Telemetry.VehicleID(),
+		engine:      engine,
+		revLimit:    revLimit,
+		pulseAdjust: pulseAdjust,
 	}
 
 	// Set default rev limit if not available
