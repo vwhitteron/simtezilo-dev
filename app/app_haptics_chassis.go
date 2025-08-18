@@ -4,10 +4,15 @@ import (
 	"math"
 	"time"
 
+	"github.com/vwhitteron/simtezilo-dev/app/config"
 	"github.com/vwhitteron/simtezilo-dev/app/signal"
 )
 
 func (a *App) generateChassisHaptic() {
+	if a.config.GetChassisGain() <= config.MinimumGain {
+		return
+	}
+
 	startTime := time.Now()
 
 	pulseFrequencyHz := a.calculateChassisHapticPulseFrequency()
