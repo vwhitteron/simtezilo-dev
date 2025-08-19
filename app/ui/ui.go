@@ -126,7 +126,7 @@ func (u *UserInterface) DrawWaitDisplay() {
 		return
 	}
 
-	_ = u.Screen.RenderSplashScreen(u.i18n.GetString("ui.waiting"))
+	_ = u.Screen.RenderSplashScreen(u.i18n.GetString("ui.ready"))
 
 	u.mode = ScreenModeWait
 
