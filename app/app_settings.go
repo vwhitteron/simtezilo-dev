@@ -17,16 +17,16 @@ func (a *App) settingAction(setting string, action string) string {
 		}
 
 		return strconv.FormatFloat(value, 'f', 2, 64)
-	case "ePMag":
+	case "ePVol":
 		value := float64(0)
 
 		switch action {
 		case "increase":
-			value = a.config.IncreaseEnginePulseMagnitude()
+			value = a.config.IncreaseEnginePulseGain()
 		case "decrease":
-			value = a.config.DecreaseEnginePulseMagnitude()
+			value = a.config.DecreaseEnginePulseGain()
 		default:
-			value = a.config.GetEnginePulseMagnitude()
+			value = a.config.GetEnginePulseGain()
 		}
 
 		return strconv.FormatFloat(value, 'f', 2, 64)

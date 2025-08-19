@@ -22,6 +22,6 @@ package haptics
 type EngineProfile struct {
 	PrimaryBalance   float64 // 0.0 (unbalanced) to 1.0 (perfectly balanced)
 	SecondaryBalance float64 // 0.0 (unbalanced) to 1.0 (perfectly balanced)
-	Magnitude        float64 // 0.0 (no feedback) to 1.0 (maximum feedback)
+	Gain             float64 // additional gain offset to apply to the haptic feedback
 	PulseScale       float64 // 1.0 for no scaling, <1.0 for reduced pulse rate
 }

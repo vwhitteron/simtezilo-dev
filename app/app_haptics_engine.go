@@ -8,6 +8,7 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/config"
 	"github.com/vwhitteron/simtezilo-dev/app/haptics"
 	"github.com/vwhitteron/simtezilo-dev/app/signal"
+	"github.com/vwhitteron/simtezilo-dev/app/synth"
 )
 
 const maxPulseRate float64 = 300.0 // Max pulse rate for engine haptics
@@ -50,7 +51,7 @@ func (a *App) getEngineCharacteristics(engineLayout string, cylinderAngle float3
 	hapticProfile := &haptics.EngineProfile{
 		PrimaryBalance:   1.0,
 		SecondaryBalance: 1.0,
-		Magnitude:        1.0,
+		Gain:             0.0,
 		PulseScale:       1.0,
 	}
 	dbEntry := ""
@@ -106,11 +107,11 @@ func (a *App) generateEngineHaptic() {
 	}
 
 	rpm := float64(a.gtClient.Telemetry.EngineRPM())
-	throttleProportion := float64(a.gtClient.Telemetry.ThrottleOutputPercent())
-	if throttleProportion > 0 {
-		throttleProportion /= 100.0
+	throttlePercent := float64(a.gtClient.Telemetry.ThrottleOutputPercent())
+	if throttlePercent > 0 {
+		throttlePercent /= 100.0
 	} else {
-		throttleProportion = 0.0
+		throttlePercent = 0.0
 	}
 
 	// Cache last known RPM and timestamp for fallback when telemetry is unavailable
@@ -169,7 +170,7 @@ func (a *App) generateEngineHaptic() {
 	// Generate amplitude with louder idle feedback and linear 30% volume reduction at max RPM
 	// Start with higher base amplitude for idle/low RPM feedback
 	// baseAmplitude := 0.7 + (rpmNormalized * 0.1) // Range: 0.7 to 0.8
-	baseAmplitude := 0.6 + (throttleProportion * 0.3) // Range: 0.6 to 0.9
+	baseAmplitude := 0.7 + (throttlePercent * 0.3) // Range: 0.6 to 0.9
 
 	// Apply 30% linear volume reduction from idle to max RPM
 	// At idle (0 RPM): 1.0 factor (full volume)
@@ -253,10 +254,10 @@ func (a *App) generateEngineHaptic() {
 		}
 	}
 
-	amplitude := (baseAmplitude * a.vehicle.engine.haptics.Magnitude) + (engineRoughness * rpmNormalized * 0.1)
+	amplitude := (baseAmplitude + (engineRoughness * rpmNormalized * 0.1)) * synth.GainToPowerRatio(a.vehicle.engine.haptics.Gain)
 
 	// Ensure amplitude stays within bounds
-	amplitude, _ = signal.LimitWindow(amplitude, 0.2, 0.9)
+	amplitude, _ = signal.LimitWindow(amplitude, 0, 1)
 
 	// Create pulses with increasing width and overlap at higher RPM
 	// Pulse width gets much wider at higher RPM, allowing up to 25% overlap

@@ -32,7 +32,7 @@ var Translations = map[string]string{
 	"ui.menu.evol":       "エンジン音量",
 	"ui.menu.eprimary":   "エンジンバランス1",
 	"ui.menu.esecondary": "エンジンバランス2",
-	"ui.menu.epmag":      "エンジン音量",
+	"ui.menu.epvol":      "エンジン音量",
 	"ui.menu.epscale":    "エンジンパルススケール",
 	"ui.menu.vcurve":     "FFB曲線",
 	"ui.menu.vsat":       "FFB飽和",

@@ -23,7 +23,7 @@ func NewMenuSystem() *MenuSystem {
 			"tSat",
 			"ePrimary",
 			"eSecondary",
-			"ePMag",
+			"ePVol",
 			"ePScale",
 			"lang",
 		},
