@@ -19,7 +19,7 @@ func SetupHID(hidEvent chan ui.HIDInputEvent) {
 	})
 
 	OnButtonYPressed(func() {
-		hidEvent <- ui.HIDInputPower
+		hidEvent <- ui.HIDInputLeft
 	})
 }
 
