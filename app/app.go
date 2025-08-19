@@ -447,6 +447,7 @@ func (a *App) updateVehicle() {
 		Float64("peak_natural_pulse_rate", peakNaturalPulseRate).
 		Float64("pulse_scale", a.vehicle.engine.haptics.PulseScale).
 		Float64("peak_pulse_rate", peakPulseRate).
+		Float64("pulse_overlap", a.vehicle.engine.pulseOverlap).
 		Msg("engine characteristics")
 
 	a.log.Info().
