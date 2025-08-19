@@ -252,6 +252,25 @@ func (a *App) generateEngineHaptic() {
 		return
 	}
 
+	// Apply 30% linear volume reduction from idle to max RPM
+	// At idle (0 RPM): 1.0 factor (full volume)
+	// At max RPM: 0.7 factor (30% reduction)
+	// volumeReductionFactor := 1.0 - (rpmNormalized * 0.3)
+	// baseAmplitude *= volumeReductionFactor
+
+	// Add engine-specific roughness variation
+	// Roughness based on primary and secondary balance characteristics
+	engineRoughness := a.calculateEngineRoughness(rpm)
+
+	a.generatePulseWaveform(rpm, engineRoughness, &engineBuffer)
+
+	a.synth.OverwriteBuffer("engine", engineBuffer)
+}
+
+func (a *App) generatePulseWaveform(rpm float64, engineRoughness float64, engineBuffer *[]float64) {
+	sampleRate := float64(a.synth.GetSampleRate())
+	rpmPercent := rpm / float64(a.vehicle.revLimit)
+
 	var pulseRate float64
 	// For high-firing engines like Wankels, use a completely different approach
 	// Map RPM to a much lower frequency range for perceptible intervals
@@ -263,6 +282,12 @@ func (a *App) generateEngineHaptic() {
 		pulseRate = rpm * a.vehicle.engine.firingFrequency * a.vehicle.engine.haptics.PulseScale
 	}
 
+	// Use calculated engine overlap based on cylinder/crank alignment
+	overlap := 0.5 - a.vehicle.engine.pulseOverlap
+	// Create pulses with increasing width and overlap at higher RPM
+	// Pulse width gets much wider at higher RPM, allowing up to the calculated overlap percentage
+	pulseDutyCycle := overlap + (rpmPercent * overlap * 2) // Base overlap at idle, up to 2x overlap at high RPM
+
 	throttlePercent := float64(a.gtClient.Telemetry.ThrottleOutputPercent()) / 100
 	throttlePercent, _ = signal.LimitWindow(throttlePercent, 0.0, 1.0)
 
@@ -271,32 +296,14 @@ func (a *App) generateEngineHaptic() {
 	// baseAmplitude := 0.7 + (rpmNormalized * 0.1) // Range: 0.7 to 0.8
 	baseAmplitude := 0.7 + (throttlePercent * 0.3) // Range: 0.6 to 0.9
 
-	// Apply 30% linear volume reduction from idle to max RPM
-	// At idle (0 RPM): 1.0 factor (full volume)
-	// At max RPM: 0.7 factor (30% reduction)
-	// volumeReductionFactor := 1.0 - (rpmNormalized * 0.3)
-	// baseAmplitude *= volumeReductionFactor
-
-	// Add engine-specific roughness variation
-	// Roughness based on primary and secondary balance characteristics
-	engineRoughness := a.calculateEngineRoughness(rpm)
-
-	rpmPercent := rpm / float64(a.vehicle.revLimit)
 	rpmNormalized, _ := signal.LimitWindow(rpmPercent, 0.0, 1.0)
-
 	amplitude := (baseAmplitude + (engineRoughness * rpmNormalized * 0.1)) * synth.GainToPowerRatio(a.vehicle.engine.haptics.Gain)
 
 	// Ensure amplitude stays within bounds
 	amplitude, _ = signal.LimitWindow(amplitude, 0, 1)
 
-	// Use calculated engine overlap based on cylinder/crank alignment
-	overlap := 0.5 - a.vehicle.engine.pulseOverlap
-	// Create pulses with increasing width and overlap at higher RPM
-	// Pulse width gets much wider at higher RPM, allowing up to the calculated overlap percentage
-	pulseDutyCycle := overlap + (rpmPercent * overlap * 2) // Base overlap at idle, up to 2x overlap at high RPM
-
 	// Normal engine pulse generation (rev limiter already checked above)
-	for i := range engineBuffer {
+	for i := range *engineBuffer {
 		// Use realistic firing frequency for pulse timing
 		samplesPerPulse := sampleRate / pulseRate
 
@@ -423,10 +430,8 @@ func (a *App) generateEngineHaptic() {
 		// Ensure the magnitude stays within bounds
 		pulseValue, _ = signal.LimitWindow(pulseValue, -1.0, 1.0)
 
-		engineBuffer[i] = amplitude * pulseValue
+		(*engineBuffer)[i] = amplitude * pulseValue
 	}
-
-	a.synth.OverwriteBuffer("engine", engineBuffer)
 }
 
 func (a *App) calculateEngineRoughness(rpm float64) float64 {
