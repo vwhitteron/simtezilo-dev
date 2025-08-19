@@ -21,6 +21,10 @@ func NewMenuSystem() *MenuSystem {
 			"fMax",
 			"tCurve",
 			"tSat",
+			"ePrimary",
+			"eSecondary",
+			"ePMag",
+			"ePScale",
 			"lang",
 		},
 	}

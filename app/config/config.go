@@ -7,6 +7,7 @@ import (
 
 	"github.com/rs/zerolog"
 	"github.com/spf13/viper"
+	appHaptics "github.com/vwhitteron/simtezilo-dev/app/haptics"
 	"github.com/vwhitteron/simtezilo-dev/app/i18n"
 )
 
@@ -43,14 +44,16 @@ type haptics struct {
 	jerkScale                    float64
 	snapCurve                    int
 	snapMax                      int
-	snapScale                    float64
+	_snapScale                   float64
 	pulseMaxAmplitude            float64
 	pulseMaxFrequencyHz          float64
 	pulseMinFrequencyHz          float64
-	pulseWidthMax                float64
-	pulseWidthMin                float64
-	engineFrequencyMin           float64
-	engineFrequencyMax           float64
+	_pulseWidthMax               float64
+	_pulseWidthMin               float64
+	engineFrequencyMin           float64 // TODO: unused, probably remove
+	engineFrequencyMax           float64 // TODO: unused, probably remove
+	engineProfiles               map[string]appHaptics.EngineProfile
+	_engineProfile               *appHaptics.EngineProfile
 }
 
 type Telemetry struct {
@@ -69,53 +72,6 @@ type viperConfig struct {
 type Config struct {
 	viper *viperConfig
 	mu    sync.RWMutex
-}
-
-var defaultConfig = viperConfig{
-	App: &app{
-		Language: "en",
-		LogLevel: "info",
-	},
-	Hardware: &hardware{
-		Model:              "none",
-		DisplayOrientation: 0,
-	},
-	Haptics: &haptics{
-		dynamicTransmissionFeedback:  true,
-		dynamicTransmissionCurve:     150,
-		dynamicTransmissionGforceMax: 1.0,
-		jerkCurve:                    375,
-		jerkMax:                      50,
-		snapCurve:                    420,
-		snapMax:                      52,
-		pulseMaxAmplitude:            1,
-		pulseMaxFrequencyHz:          60,
-		pulseMinFrequencyHz:          16,
-		pulseWidthMax:                0.5,
-		pulseWidthMin:                0.1,
-		engineFrequencyMin:           15,
-		engineFrequencyMax:           45,
-	},
-	Synthesizer: &Synthesizer{
-		SampleRateHz:              8000,
-		OutputFile:                "",
-		MasterGain:                -15,
-		GainIncrement:             0.25,
-		ChassisGain:               0,
-		TransmissionGain:          -2,
-		TransmissionGainMinRace:   -7,
-		TransmissionGainMinStreet: -10,
-		EngineGain:                -8,
-		Eq: []float64{
-			1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, // 10-19Hz
-			1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, // 20-29Hz
-			1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, // 30-39Hz
-			1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, 1.00, // 40-49Hz
-		},
-	},
-	Telemetry: &Telemetry{
-		Source: "udp://255.255.255.255:33739",
-	},
 }
 
 func NewConfig(filename string, log zerolog.Logger) *Config {
@@ -157,8 +113,8 @@ func NewConfig(filename string, log zerolog.Logger) *Config {
 		}
 	}
 
-	c.viper.Haptics.pulseWidthMin = float64(c.viper.Synthesizer.SampleRateHz) / (2 * c.viper.Haptics.pulseMaxFrequencyHz)
-	c.viper.Haptics.pulseWidthMax = float64(c.viper.Synthesizer.SampleRateHz) / (2 * c.viper.Haptics.pulseMinFrequencyHz)
+	c.viper.Haptics._pulseWidthMin = float64(c.viper.Synthesizer.SampleRateHz) / (2 * c.viper.Haptics.pulseMaxFrequencyHz)
+	c.viper.Haptics._pulseWidthMax = float64(c.viper.Synthesizer.SampleRateHz) / (2 * c.viper.Haptics.pulseMinFrequencyHz)
 
 	c.UpdateJerkScale()
 	c.UpdateSnapScale()
@@ -564,7 +520,7 @@ func (c *Config) GetSnapScale() float64 {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	return c.viper.Haptics.snapScale
+	return c.viper.Haptics._snapScale
 }
 
 func (c *Config) UpdateSnapScale() {
@@ -574,7 +530,7 @@ func (c *Config) UpdateSnapScale() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.viper.Haptics.snapScale = 1 / math.Pow(snapMax, exponent)
+	c.viper.Haptics._snapScale = 1 / math.Pow(snapMax, exponent)
 }
 
 func (c *Config) IncreaseSnapMax() int {
@@ -684,7 +640,6 @@ func (c *Config) IncreaseTransmissionGforceMax() float64 {
 	return c.viper.Haptics.dynamicTransmissionGforceMax
 }
 
-// TODO: unused, probably remove
 func (c *Config) GetEngineFrequencyMin() float64 {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -692,7 +647,6 @@ func (c *Config) GetEngineFrequencyMin() float64 {
 	return c.viper.Haptics.engineFrequencyMin
 }
 
-// TODO: unused, probably remove
 func (c *Config) GetEngineFrequencyMax() float64 {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -707,6 +661,166 @@ func (c *Config) GetMinHz() float64 {
 	return c.viper.Haptics.pulseMinFrequencyHz
 }
 
+func (c *Config) GetEngineProfile(name string) *appHaptics.EngineProfile {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if profile, ok := c.viper.Haptics.engineProfiles[name]; ok {
+		c.viper.Haptics._engineProfile = &profile
+
+		return c.viper.Haptics._engineProfile
+	}
+
+	return nil
+}
+
+func (c *Config) GetEnginePrimaryBalance() float64 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if c.viper.Haptics._engineProfile == nil {
+		return 0.0
+	}
+
+	return c.viper.Haptics._engineProfile.PrimaryBalance
+}
+
+func (c *Config) IncreaseEnginePrimaryBalance() float64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.viper.Haptics._engineProfile.PrimaryBalance < 1.0 {
+		c.viper.Haptics._engineProfile.PrimaryBalance += 0.01
+	} else {
+		c.viper.Haptics._engineProfile.PrimaryBalance = 1.0
+	}
+
+	return c.viper.Haptics._engineProfile.PrimaryBalance
+}
+
+func (c *Config) DecreaseEnginePrimaryBalance() float64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.viper.Haptics._engineProfile.PrimaryBalance > 0.0 {
+		c.viper.Haptics._engineProfile.PrimaryBalance -= 0.01
+	} else {
+		c.viper.Haptics._engineProfile.PrimaryBalance = 0.0
+	}
+
+	return c.viper.Haptics._engineProfile.PrimaryBalance
+}
+
+func (c *Config) GetEngineSecondaryBalance() float64 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if c.viper.Haptics._engineProfile == nil {
+		return 0.0
+	}
+
+	return c.viper.Haptics._engineProfile.SecondaryBalance
+}
+
+func (c *Config) IncreaseEngineSecondaryBalance() float64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.viper.Haptics._engineProfile.SecondaryBalance < 1.0 {
+		c.viper.Haptics._engineProfile.SecondaryBalance += 0.01
+	} else {
+		c.viper.Haptics._engineProfile.SecondaryBalance = 1.0
+	}
+
+	return c.viper.Haptics._engineProfile.SecondaryBalance
+}
+
+func (c *Config) DecreaseEngineSecondaryBalance() float64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.viper.Haptics._engineProfile.SecondaryBalance > 0.0 {
+		c.viper.Haptics._engineProfile.SecondaryBalance -= 0.01
+	} else {
+		c.viper.Haptics._engineProfile.SecondaryBalance = 0.0
+	}
+
+	return c.viper.Haptics._engineProfile.SecondaryBalance
+}
+
+func (c *Config) GetEnginePulseMagnitude() float64 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if c.viper.Haptics._engineProfile == nil {
+		return 0.0
+	}
+
+	return c.viper.Haptics._engineProfile.Magnitude
+}
+
+func (c *Config) IncreaseEnginePulseMagnitude() float64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.viper.Haptics._engineProfile.Magnitude < 1.0 {
+		c.viper.Haptics._engineProfile.Magnitude += 0.01
+	} else {
+		c.viper.Haptics._engineProfile.Magnitude = 1.0
+	}
+
+	return c.viper.Haptics._engineProfile.Magnitude
+}
+
+func (c *Config) DecreaseEnginePulseMagnitude() float64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.viper.Haptics._engineProfile.Magnitude > 0.0 {
+		c.viper.Haptics._engineProfile.Magnitude -= 0.01
+	} else {
+		c.viper.Haptics._engineProfile.Magnitude = 0.0
+	}
+
+	return c.viper.Haptics._engineProfile.Magnitude
+}
+
+func (c *Config) GetEnginePulseScale() float64 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if c.viper.Haptics._engineProfile == nil {
+		return 0.0
+	}
+
+	return c.viper.Haptics._engineProfile.PulseScale
+}
+
+func (c *Config) IncreaseEnginePulseScale() float64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.viper.Haptics._engineProfile.PulseScale < 1.0 {
+		c.viper.Haptics._engineProfile.PulseScale += 0.01
+	} else {
+		c.viper.Haptics._engineProfile.PulseScale = 1.0
+	}
+
+	return c.viper.Haptics._engineProfile.PulseScale
+}
+
+func (c *Config) DecreaseEnginePulseScale() float64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.viper.Haptics._engineProfile.PulseScale > 0.0 {
+		c.viper.Haptics._engineProfile.PulseScale -= 0.01
+	} else {
+		c.viper.Haptics._engineProfile.PulseScale = 0.0
+	}
+
+	return c.viper.Haptics._engineProfile.PulseScale
+}
+
 func (c *Config) DecreaseMinHz() int {
 	c.mu.Lock()
 
@@ -716,7 +830,7 @@ func (c *Config) DecreaseMinHz() int {
 		c.viper.Haptics.pulseMinFrequencyHz = 5
 	}
 
-	c.viper.Haptics.pulseWidthMax = float64(c.viper.Synthesizer.SampleRateHz) / (2 * c.viper.Haptics.pulseMinFrequencyHz)
+	c.viper.Haptics._pulseWidthMax = float64(c.viper.Synthesizer.SampleRateHz) / (2 * c.viper.Haptics.pulseMinFrequencyHz)
 
 	c.mu.Unlock()
 
@@ -732,7 +846,7 @@ func (c *Config) IncreaseMinHz() int {
 		c.viper.Haptics.pulseMinFrequencyHz = 25
 	}
 
-	c.viper.Haptics.pulseWidthMax = float64(c.viper.Synthesizer.SampleRateHz) / (2 * c.viper.Haptics.pulseMinFrequencyHz)
+	c.viper.Haptics._pulseWidthMax = float64(c.viper.Synthesizer.SampleRateHz) / (2 * c.viper.Haptics.pulseMinFrequencyHz)
 
 	c.mu.Unlock()
 
@@ -755,7 +869,7 @@ func (c *Config) DecreaseMaxHz() int {
 		c.viper.Haptics.pulseMaxFrequencyHz = 25
 	}
 
-	c.viper.Haptics.pulseWidthMin = float64(c.viper.Synthesizer.SampleRateHz) / (2 * c.viper.Haptics.pulseMaxFrequencyHz)
+	c.viper.Haptics._pulseWidthMin = float64(c.viper.Synthesizer.SampleRateHz) / (2 * c.viper.Haptics.pulseMaxFrequencyHz)
 
 	c.mu.Unlock()
 
@@ -771,7 +885,7 @@ func (c *Config) IncreaseMaxHz() int {
 		c.viper.Haptics.pulseMaxFrequencyHz = 100
 	}
 
-	c.viper.Haptics.pulseWidthMin = float64(c.viper.Synthesizer.SampleRateHz) / (2 * c.viper.Haptics.pulseMaxFrequencyHz)
+	c.viper.Haptics._pulseWidthMin = float64(c.viper.Synthesizer.SampleRateHz) / (2 * c.viper.Haptics.pulseMaxFrequencyHz)
 
 	c.mu.Unlock()
 
@@ -789,14 +903,14 @@ func (c *Config) GetPulseWidthMin() float64 {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	return c.viper.Haptics.pulseWidthMin
+	return c.viper.Haptics._pulseWidthMin
 }
 
 func (c *Config) GetPulseWidthMax() float64 {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	return c.viper.Haptics.pulseWidthMax
+	return c.viper.Haptics._pulseWidthMax
 }
 
 func (c *Config) GetPulseMaxAmplitude() float64 {

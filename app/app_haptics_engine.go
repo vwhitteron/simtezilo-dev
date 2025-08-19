@@ -25,11 +25,11 @@ type engineCharacteristics struct {
 	geometry        string
 	chambers        int
 	firingFrequency float64
-	haptics         haptics.EngineProfile
+	haptics         *haptics.EngineProfile
 }
 
 // getEngineCharacteristics retrieves engine characteristics based on layout and angles
-func getEngineCharacteristics(engineLayout string, cylinderAngle float32, crankPlaneAngle float32) (engineCharacteristics, error) {
+func (a *App) getEngineCharacteristics(engineLayout string, cylinderAngle float32, crankPlaneAngle float32) (engineCharacteristics, error) {
 	if engineLayout == "" {
 		return engineCharacteristics{}, nil
 	}
@@ -40,9 +40,6 @@ func getEngineCharacteristics(engineLayout string, cylinderAngle float32, crankP
 		return engineCharacteristics{}, err // Return error if conversion fails
 	}
 
-	// Default to inline 4 cylinder engine haptic profile
-	hapticProfile := haptics.EngineProfile{}
-
 	layoutVariations := []string{
 		engineLayout + ".B" + strconv.FormatFloat(float64(cylinderAngle), 'f', 0, 32) + ".C" + strconv.FormatFloat(float64(crankPlaneAngle), 'f', 0, 32),
 		engineLayout + ".C" + strconv.FormatFloat(float64(crankPlaneAngle), 'f', 0, 32),
@@ -50,14 +47,23 @@ func getEngineCharacteristics(engineLayout string, cylinderAngle float32, crankP
 		engineLayout,
 	}
 
-	var dbEntry string
+	hapticProfile := &haptics.EngineProfile{
+		PrimaryBalance:   1.0,
+		SecondaryBalance: 1.0,
+		Magnitude:        1.0,
+		PulseScale:       1.0,
+	}
+	dbEntry := ""
 	for _, variation := range layoutVariations {
-		if profile, ok := haptics.EngineProfiles[variation]; ok {
-			hapticProfile = profile
-			dbEntry = variation
-
-			break
+		profile := a.config.GetEngineProfile(variation)
+		if profile == nil {
+			continue
 		}
+
+		hapticProfile = profile
+		dbEntry = variation
+
+		break
 	}
 
 	return engineCharacteristics{
@@ -146,9 +152,11 @@ func (a *App) generateEngineHaptic() {
 	// For high-firing engines like Wankels, use a completely different approach
 	// Map RPM to a much lower frequency range for perceptible intervals
 	if a.vehicle.engine.geometry == "K" {
-		pulseRate = rpm * a.vehicle.engine.firingFrequency * a.vehicle.pulseAdjust
+		// pulseRate = rpm * a.vehicle.engine.firingFrequency * a.vehicle.pulseScale
+		pulseRate = rpm * a.vehicle.engine.firingFrequency * a.vehicle.engine.haptics.PulseScale
 	} else {
-		pulseRate = rpm * a.vehicle.engine.firingFrequency * a.vehicle.pulseAdjust
+		// pulseRate = rpm * a.vehicle.engine.firingFrequency * a.vehicle.pulseScale
+		pulseRate = rpm * a.vehicle.engine.firingFrequency * a.vehicle.engine.haptics.PulseScale
 	}
 
 	// Calculate RPM proportion relative to rev limit
