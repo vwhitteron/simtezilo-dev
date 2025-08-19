@@ -98,6 +98,8 @@ func LimitMin(value float64, min float64) (float64, bool) {
 		value = -value
 	}
 
+	value = max(value, min)
+
 	if value < min {
 		value = min
 	}
@@ -116,9 +118,7 @@ func LimitMax(value float64, max float64) (float64, bool) {
 		value = -value
 	}
 
-	if value > max {
-		value = max
-	}
+	value = min(value, max)
 
 	if isNeg {
 		value = -value
