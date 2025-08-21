@@ -294,6 +294,20 @@ func (a *App) generatePulseWaveform(rpm float64, engineRoughness float64, engine
 	throttlePercent := float64(a.gtClient.Telemetry.ThrottleOutputPercent()) / 100
 	throttlePercent, _ = signal.LimitWindow(throttlePercent, 0.0, 1.0)
 
+	var gainOffset float64
+	var amplitudeScale float64
+	switch a.vehicle.vehicleType {
+	case "race":
+		gainOffset = 0.0
+		amplitudeScale = 0.3
+	case "tuned":
+		gainOffset = -3.0
+		amplitudeScale = 0.2
+	default: // "street" or other types
+		gainOffset = -4.75
+		amplitudeScale = 0.01
+	}
+
 	// Generate amplitude with louder idle feedback and linear 30% volume reduction at max RPM
 	// Start with higher base amplitude for idle/low RPM feedback
 	// baseAmplitude := 0.7 + (rpmNormalized * 0.1) // Range: 0.7 to 0.8

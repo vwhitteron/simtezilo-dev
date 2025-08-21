@@ -23,9 +23,10 @@ import (
 )
 
 type vehicleRecord struct {
-	ID       uint32
-	engine   engineCharacteristics
-	revLimit uint16
+	ID          uint32
+	vehicleType string
+	engine      engineCharacteristics
+	revLimit    uint16
 }
 
 type stateRecord struct {
@@ -430,9 +431,10 @@ func (a *App) updateVehicle() {
 	}
 
 	a.vehicle = vehicleRecord{
-		ID:       a.gtClient.Telemetry.VehicleID(),
-		engine:   engine,
-		revLimit: revLimit,
+		ID:          a.gtClient.Telemetry.VehicleID(),
+		vehicleType: vehicleType,
+		engine:      engine,
+		revLimit:    revLimit,
 	}
 
 	// Set default rev limit if not available
