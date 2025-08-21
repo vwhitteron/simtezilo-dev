@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"math"
 	"strconv"
 	"time"
@@ -33,7 +34,9 @@ type engineCharacteristics struct {
 // getEngineCharacteristics retrieves engine characteristics based on layout and angles
 func (a *App) getEngineCharacteristics(engineLayout string, cylinderAngle float32, crankPlaneAngle float32) (engineCharacteristics, error) {
 	if engineLayout == "" {
-		return engineCharacteristics{}, nil
+		return engineCharacteristics{
+			haptics: &haptics.EngineProfile{},
+		}, fmt.Errorf("engine layout not provided")
 	}
 
 	geometryCode := engineLayout[:1]                // Get first character for geometry
