@@ -90,7 +90,7 @@ func TestCalculateEngineOverlap(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := calculateEngineOverlap(tt.cylinderAngle, tt.crankPlaneAngle, tt.chambers, tt.geometry)
+			result := calculatePulseOverlap(tt.cylinderAngle, tt.crankPlaneAngle, tt.chambers, tt.geometry)
 
 			if result < tt.expectedRange[0] || result > tt.expectedRange[1] {
 				t.Errorf("calculateEngineOverlap() = %v, expected range [%v, %v] for %s",
@@ -110,16 +110,16 @@ func TestCalculateEngineOverlap(t *testing.T) {
 
 func TestCalculateEngineOverlapEdgeCases(t *testing.T) {
 	// Test angle wraparound (angles > 180 should be treated as 360-angle)
-	result1 := calculateEngineOverlap(0.0, 270.0, 8, "V") // 270° difference = 90° effective
-	result2 := calculateEngineOverlap(0.0, 90.0, 8, "V")  // 90° difference
+	result1 := calculatePulseOverlap(0.0, 270.0, 8, "V") // 270° difference = 90° effective
+	result2 := calculatePulseOverlap(0.0, 90.0, 8, "V")  // 90° difference
 
 	if result1 != result2 {
 		t.Errorf("Angle wraparound failed: 270° difference (%v) should equal 90° difference (%v)", result1, result2)
 	}
 
 	// Test negative angles
-	result3 := calculateEngineOverlap(-45.0, 45.0, 6, "V") // 90° difference
-	result4 := calculateEngineOverlap(45.0, -45.0, 6, "V") // 90° difference
+	result3 := calculatePulseOverlap(-45.0, 45.0, 6, "V") // 90° difference
+	result4 := calculatePulseOverlap(45.0, -45.0, 6, "V") // 90° difference
 
 	if result3 != result4 {
 		t.Errorf("Negative angle handling failed: results should be symmetric (%v vs %v)", result3, result4)

@@ -31,6 +31,70 @@ type engineCharacteristics struct {
 	haptics         *haptics.EngineProfile
 }
 
+func (a *App) generateEngineHaptic() {
+	// Engine haptics are silenced
+	if a.config.GetEngineGain() <= config.MinimumGain {
+		return
+	}
+
+	// No engine haptics configured
+	if a.vehicle.engine.firingFrequency == 0 {
+		return
+	}
+
+	if !a.state.telemetryActive {
+		return
+	}
+
+	rpm := float64(a.gtClient.Telemetry.EngineRPM())
+
+	// Cache last known RPM and timestamp for fallback when telemetry is unavailable
+	currentTime := time.Now()
+	if a.state.current.seq > a.state.engine.lastSeq {
+		// Update last known good RPM and timestamp
+		a.state.engine.lastKnownRPM = rpm
+		a.state.engine.lastEventTime = currentTime
+		a.state.engine.lastSeq = a.state.current.seq
+	} else if currentTime.Sub(a.state.engine.lastEventTime) > 1000*time.Millisecond {
+		// stop engine haptics of no telemetry received for 1 second or more
+		return
+	} else {
+		// Use cached RPM for up to 2 seconds if telemetry is unavailable
+		rpm = a.state.engine.lastKnownRPM
+	}
+
+	// Generate engine vibration waveform for double the engine haptic frame rate
+	// This overfills the engine haptics buffer with the current rpm waveform in case the buffer
+	// reader is too fast. This does mean the rpm waveform on the tail end of the buffer is not
+	// correct when these events occur. The buffer is overwritten every interval so for typical
+	// events where the reader is not fetching too far it will get the correct waveform for the
+	// current rpm value.
+	sampleRate := float64(a.synth.GetSampleRate())
+	samplesPerBuffer := int(sampleRate/engineHapticFrameRate) * 2
+	engineBuffer := make([]float64, samplesPerBuffer)
+
+	// No haptics when engine is not running
+	if rpm == 0 {
+		a.synth.WriteBuffer("engine", engineBuffer)
+
+		return
+	}
+
+	// Apply 30% linear volume reduction from idle to max RPM
+	// At idle (0 RPM): 1.0 factor (full volume)
+	// At max RPM: 0.7 factor (30% reduction)
+	// volumeReductionFactor := 1.0 - (rpmNormalized * 0.3)
+	// baseAmplitude *= volumeReductionFactor
+
+	// Add engine-specific roughness variation
+	// Roughness based on primary and secondary balance characteristics
+	engineRoughness := a.calculateEngineRoughness(rpm)
+
+	a.generatePulseWaveform(rpm, engineRoughness, &engineBuffer)
+
+	a.synth.OverwriteBuffer("engine", engineBuffer)
+}
+
 // getEngineCharacteristics retrieves engine characteristics based on layout and angles
 func (a *App) getEngineCharacteristics(engineLayout string, cylinderAngle float32, crankPlaneAngle float32) (engineCharacteristics, error) {
 	if engineLayout == "" {
@@ -71,16 +135,13 @@ func (a *App) getEngineCharacteristics(engineLayout string, cylinderAngle float3
 		break
 	}
 
-	firingFreq := getEngineFiringFrequency(geometryCode, chambers)
-	overlapFactor := calculateEngineOverlap(cylinderAngle, crankPlaneAngle, chambers, geometryCode)
-
 	return engineCharacteristics{
 		layout:          engineLayout,
 		dbEntry:         dbEntry,
 		geometry:        geometryCode,
 		chambers:        chambers,
-		firingFrequency: firingFreq,
-		pulseOverlap:    overlapFactor,
+		firingFrequency: getEngineFiringFrequency(geometryCode, chambers),
+		pulseOverlap:    0.5 - calculatePulseOverlap(cylinderAngle, crankPlaneAngle, chambers, geometryCode),
 		haptics:         hapticProfile,
 	}, nil
 }
@@ -99,12 +160,12 @@ func getEngineFiringFrequency(geometry string, chambers int) float64 {
 	}
 }
 
-// calculateEngineOverlap calculates pulse overlap based on alignment between crank plane angle and cylinder bank angle
+// calculatePulseOverlap calculates pulse overlap based on alignment between crank plane angle and cylinder bank angle
 // Returns overlap factor from 0.0 (no overlap/perfect alignment) to 1.0 (maximum overlap/misalignment)
 // This value is currently used for pulse width overlap. Timing clustering is disabled pending better implementation.
 // - Low values (0.0-0.2): Well-aligned engines (e.g., 60° V6 with 120° crank)
 // - High values (0.3-0.8): Misaligned engines (e.g., 90° V6 with 120° crank)
-func calculateEngineOverlap(cylinderAngle, crankPlaneAngle float32, chambers int, geometry string) float64 {
+func calculatePulseOverlap(cylinderAngle, crankPlaneAngle float32, chambers int, geometry string) float64 {
 	// Rotary engines don't use conventional cylinder banks or crank planes
 	if geometry == "K" {
 		// Wankel overlap based on rotor count and housing design
@@ -209,90 +270,15 @@ func calculateEngineOverlap(cylinderAngle, crankPlaneAngle float32, chambers int
 	return finalOverlap
 }
 
-func (a *App) generateEngineHaptic() {
-	// Engine haptics are silenced
-	if a.config.GetEngineGain() <= config.MinimumGain {
-		return
-	}
-
-	// No engine haptics configured
-	if a.vehicle.engine.firingFrequency == 0 {
-		return
-	}
-
-	if !a.state.telemetryActive {
-		return
-	}
-
-	rpm := float64(a.gtClient.Telemetry.EngineRPM())
-
-	// Cache last known RPM and timestamp for fallback when telemetry is unavailable
-	currentTime := time.Now()
-	if a.state.current.seq > a.state.engine.lastSeq {
-		// Update last known good RPM and timestamp
-		a.state.engine.lastKnownRPM = rpm
-		a.state.engine.lastEventTime = currentTime
-		a.state.engine.lastSeq = a.state.current.seq
-	} else if currentTime.Sub(a.state.engine.lastEventTime) > 1000*time.Millisecond {
-		// stop engine haptics of no telemetry received for 1 second or more
-		return
-	} else {
-		// Use cached RPM for up to 2 seconds if telemetry is unavailable
-		rpm = a.state.engine.lastKnownRPM
-	}
-
-	// Generate engine vibration waveform for double the engine haptic frame rate
-	// This overfills the engine haptics buffer with the current rpm waveform in case the buffer
-	// reader is too fast. This does mean the rpm waveform on the tail end of the buffer is not
-	// correct when these events occur. The buffer is overwritten every interval so for typical
-	// events where the reader is not fetching too far it will get the correct waveform for the
-	// current rpm value.
-	sampleRate := float64(a.synth.GetSampleRate())
-	samplesPerBuffer := int(sampleRate/engineHapticFrameRate) * 2
-	engineBuffer := make([]float64, samplesPerBuffer)
-
-	// No haptics when engine is not running
-	if rpm == 0 {
-		a.synth.WriteBuffer("engine", engineBuffer)
-
-		return
-	}
-
-	// Apply 30% linear volume reduction from idle to max RPM
-	// At idle (0 RPM): 1.0 factor (full volume)
-	// At max RPM: 0.7 factor (30% reduction)
-	// volumeReductionFactor := 1.0 - (rpmNormalized * 0.3)
-	// baseAmplitude *= volumeReductionFactor
-
-	// Add engine-specific roughness variation
-	// Roughness based on primary and secondary balance characteristics
-	engineRoughness := a.calculateEngineRoughness(rpm)
-
-	a.generatePulseWaveform(rpm, engineRoughness, &engineBuffer)
-
-	a.synth.OverwriteBuffer("engine", engineBuffer)
-}
-
 func (a *App) generatePulseWaveform(rpm float64, engineRoughness float64, engineBuffer *[]float64) {
 	sampleRate := float64(a.synth.GetSampleRate())
 	rpmPercent := rpm / float64(a.vehicle.revLimit)
 
-	var pulseRate float64
-	// For high-firing engines like Wankels, use a completely different approach
-	// Map RPM to a much lower frequency range for perceptible intervals
-	if a.vehicle.engine.geometry == "K" {
-		// pulseRate = rpm * a.vehicle.engine.firingFrequency * a.vehicle.pulseScale
-		pulseRate = rpm * a.vehicle.engine.firingFrequency * a.vehicle.engine.haptics.PulseScale
-	} else {
-		// pulseRate = rpm * a.vehicle.engine.firingFrequency * a.vehicle.pulseScale
-		pulseRate = rpm * a.vehicle.engine.firingFrequency * a.vehicle.engine.haptics.PulseScale
-	}
+	pulseRate := rpm * a.vehicle.engine.firingFrequency * a.vehicle.engine.haptics.PulseScale
 
-	// Use calculated engine overlap based on cylinder/crank alignment
-	overlap := 0.5 - a.vehicle.engine.pulseOverlap
 	// Create pulses with increasing width and overlap at higher RPM
 	// Pulse width gets much wider at higher RPM, allowing up to the calculated overlap percentage
-	pulseDutyCycle := overlap + (rpmPercent * overlap * 2) // Base overlap at idle, up to 2x overlap at high RPM
+	pulseDutyCycle := a.vehicle.engine.pulseOverlap + (rpmPercent * a.vehicle.engine.pulseOverlap * 2) // Base overlap at idle, up to 2x overlap at high RPM
 
 	throttlePercent := float64(a.gtClient.Telemetry.ThrottleOutputPercent()) / 100
 	throttlePercent, _ = signal.LimitWindow(throttlePercent, 0.0, 1.0)
@@ -313,7 +299,6 @@ func (a *App) generatePulseWaveform(rpm float64, engineRoughness float64, engine
 
 	// Generate amplitude with louder idle feedback and linear 30% volume reduction at max RPM
 	// Start with higher base amplitude for idle/low RPM feedback
-	// baseAmplitude := 0.7 + (rpmNormalized * 0.1) // Range: 0.7 to 0.8
 	baseAmplitude := 0.7 + (throttlePercent * amplitudeScale)
 
 	rpmNormalized, _ := signal.LimitWindow(rpmPercent, 0.0, 1.0)
@@ -328,7 +313,6 @@ func (a *App) generatePulseWaveform(rpm float64, engineRoughness float64, engine
 		samplesPerPulse := sampleRate / pulseRate
 
 		// Create pulses based on engine firing events with uniform timing
-		// TODO: Re-implement clustering effect with better algorithm if needed
 		pulsePosition := float64(i) / samplesPerPulse
 
 		// Detect pulse trigger point (beginning of each cycle)
