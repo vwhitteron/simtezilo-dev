@@ -70,6 +70,7 @@ type App struct {
 }
 
 type AppOptions struct {
+	VehicleDB  string
 	Done       chan bool
 	Logger     *zerolog.Logger
 	WebEnabled bool
@@ -250,9 +251,10 @@ func NewApp(opts AppOptions) (*App, error) {
 	// initialise GT telemetry client
 	gtClientLogger := a.log.With().Str("component", "gt client").Logger()
 	a.gtClient, err = telemetry_client.NewGTClient(telemetry_client.GTClientOpts{
-		Source:   a.config.GetTelemetrySource(),
-		Logger:   &gtClientLogger,
-		LogLevel: a.config.GetAppLogLevel(),
+		Source:    a.config.GetTelemetrySource(),
+		Logger:    &gtClientLogger,
+		LogLevel:  a.config.GetAppLogLevel(),
+		VehicleDB: opts.VehicleDB,
 	})
 	if err != nil {
 		a.log.Error().

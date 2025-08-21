@@ -26,10 +26,12 @@ func main() {
 		done <- true
 	}()
 
+	var vehicleDB string
 	var logLevelArg string
 	var profilerEndpoint string
 	var webEnabled bool
 
+	flag.StringVar(&vehicleDB, "d", "", "Path to vehicle database file")
 	flag.StringVar(&logLevelArg, "l", "info", "Log level. Default is 'info'")
 	flag.StringVar(&profilerEndpoint, "p", "", "Send profiles to this Pyroscope endpoint (http://host:port). Default is off")
 	flag.BoolVar(&webEnabled, "w", false, "Enable web server. Default is false")
@@ -52,6 +54,7 @@ func main() {
 	}
 
 	app, err := app.NewApp(app.AppOptions{
+		VehicleDB:  vehicleDB,
 		Done:       done,
 		Logger:     &logger,
 		WebEnabled: webEnabled,
