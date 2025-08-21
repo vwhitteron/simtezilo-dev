@@ -100,7 +100,10 @@ func getEngineFiringFrequency(geometry string, chambers int) float64 {
 }
 
 // calculateEngineOverlap calculates pulse overlap based on alignment between crank plane angle and cylinder bank angle
-// Returns overlap factor from 0.0 (no overlap) to 1.0 (maximum overlap)
+// Returns overlap factor from 0.0 (no overlap/perfect alignment) to 1.0 (maximum overlap/misalignment)
+// This value is currently used for pulse width overlap. Timing clustering is disabled pending better implementation.
+// - Low values (0.0-0.2): Well-aligned engines (e.g., 60° V6 with 120° crank)
+// - High values (0.3-0.8): Misaligned engines (e.g., 90° V6 with 120° crank)
 func calculateEngineOverlap(cylinderAngle, crankPlaneAngle float32, chambers int, geometry string) float64 {
 	// Rotary engines don't use conventional cylinder banks or crank planes
 	if geometry == "K" {
@@ -311,10 +314,10 @@ func (a *App) generatePulseWaveform(rpm float64, engineRoughness float64, engine
 	// Generate amplitude with louder idle feedback and linear 30% volume reduction at max RPM
 	// Start with higher base amplitude for idle/low RPM feedback
 	// baseAmplitude := 0.7 + (rpmNormalized * 0.1) // Range: 0.7 to 0.8
-	baseAmplitude := 0.7 + (throttlePercent * 0.3) // Range: 0.6 to 0.9
+	baseAmplitude := 0.7 + (throttlePercent * amplitudeScale)
 
 	rpmNormalized, _ := signal.LimitWindow(rpmPercent, 0.0, 1.0)
-	amplitude := (baseAmplitude + (engineRoughness * rpmNormalized * 0.1)) * synth.GainToPowerRatio(a.vehicle.engine.haptics.Gain)
+	amplitude := (baseAmplitude + (engineRoughness * rpmNormalized * 0.1)) * synth.GainToPowerRatio(a.vehicle.engine.haptics.Gain+gainOffset)
 
 	// Ensure amplitude stays within bounds
 	amplitude, _ = signal.LimitWindow(amplitude, 0, 1)
@@ -324,12 +327,19 @@ func (a *App) generatePulseWaveform(rpm float64, engineRoughness float64, engine
 		// Use realistic firing frequency for pulse timing
 		samplesPerPulse := sampleRate / pulseRate
 
-		// Create pulses based on engine firing events
+		// Create pulses based on engine firing events with uniform timing
+		// TODO: Re-implement clustering effect with better algorithm if needed
 		pulsePosition := float64(i) / samplesPerPulse
 
 		// Detect pulse trigger point (beginning of each cycle)
 		currentPulseIndex := int(math.Floor(pulsePosition))
-		lastPulseIndex := int(math.Floor((float64(i - 1)) / samplesPerPulse))
+		var lastPulseIndex int
+		if i > 0 {
+			lastPulsePosition := float64(i-1) / samplesPerPulse
+			lastPulseIndex = int(math.Floor(lastPulsePosition))
+		} else {
+			lastPulseIndex = -1
+		}
 
 		// Check if we've crossed into a new pulse cycle
 		pulseTriggered := (i > 0) && (currentPulseIndex != lastPulseIndex)
@@ -525,5 +535,6 @@ func (a *App) calculateEngineRoughness(rpm float64) float64 {
 			engineRoughness = 0.0 // Well-balanced engines have no roughness at high RPM
 		}
 	}
+
 	return engineRoughness
 }
