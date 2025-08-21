@@ -43,9 +43,9 @@ func (a *App) getEngineCharacteristics(engineLayout string, cylinderAngle float3
 	}
 
 	layoutVariations := []string{
-		engineLayout + ".B" + strconv.FormatFloat(float64(cylinderAngle), 'f', 0, 32) + ".C" + strconv.FormatFloat(float64(crankPlaneAngle), 'f', 0, 32),
-		engineLayout + ".C" + strconv.FormatFloat(float64(crankPlaneAngle), 'f', 0, 32),
-		engineLayout + ".B" + strconv.FormatFloat(float64(cylinderAngle), 'f', 0, 32),
+		engineLayout + "_B" + strconv.FormatFloat(float64(cylinderAngle), 'f', 0, 32) + ")_C" + strconv.FormatFloat(float64(crankPlaneAngle), 'f', 0, 32),
+		engineLayout + "_C" + strconv.FormatFloat(float64(crankPlaneAngle), 'f', 0, 32),
+		engineLayout + "_B" + strconv.FormatFloat(float64(cylinderAngle), 'f', 0, 32),
 		engineLayout,
 	}
 

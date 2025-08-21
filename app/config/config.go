@@ -651,6 +651,8 @@ func (c *Config) GetMinHz() float64 {
 func (c *Config) GetEngineProfile(name string) *appHaptics.EngineProfile {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
+
+	name = strings.ToLower(name)
 	if profile, ok := c.viper.Haptics.EngineProfiles[name]; ok {
 		c.viper.Haptics._engineProfile = &profile
 
