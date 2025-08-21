@@ -714,7 +714,7 @@ func (c *Config) IncreaseEngineSecondaryBalance() float64 {
 
 	c.viper.Haptics._engineProfile.SecondaryBalance = min(
 		1.0,
-		c.viper.Haptics._engineProfile.SecondaryBalance+c.viper.Synthesizer.GainIncrement,
+		c.viper.Haptics._engineProfile.SecondaryBalance+0.01,
 	)
 
 	return c.viper.Haptics._engineProfile.SecondaryBalance
@@ -726,7 +726,7 @@ func (c *Config) DecreaseEngineSecondaryBalance() float64 {
 
 	c.viper.Haptics._engineProfile.SecondaryBalance = max(
 		0.0,
-		c.viper.Haptics._engineProfile.SecondaryBalance-c.viper.Synthesizer.GainIncrement,
+		c.viper.Haptics._engineProfile.SecondaryBalance-0.01,
 	)
 
 	return c.viper.Haptics._engineProfile.SecondaryBalance
