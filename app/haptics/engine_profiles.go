@@ -11,7 +11,6 @@ package haptics
 // K: Wankel rotary (kreiskolbenmotor/KKM)
 // R: Rotary (reserved)
 // S: 2 stroke
-// T: Turbine (reserved)
 // V: V
 // W: W
 
