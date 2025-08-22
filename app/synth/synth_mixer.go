@@ -52,7 +52,10 @@ func NewMixer(mixerConfig MixerConfig) (*Mixer, error) {
 		silenced:     true,
 	}
 
-	m.AddChannel("_master", mixerConfig.MasterGain)
+	err := m.AddChannel("_master", mixerConfig.MasterGain)
+	if err != nil {
+		return nil, fmt.Errorf("add master channel: %w", err)
+	}
 
 	go m.watchForConfigChanges()
 
@@ -60,7 +63,7 @@ func NewMixer(mixerConfig MixerConfig) (*Mixer, error) {
 }
 
 func (m *Mixer) Close() {
-	m.SetChannelGain("_master", config.MinimumGain)
+	_ = m.SetChannelGain("_master", config.MinimumGain)
 }
 
 func (m *Mixer) GetBufferLength() int {

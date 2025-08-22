@@ -50,8 +50,6 @@ type haptics struct {
 	PulseMinFrequencyHz          float64
 	_pulseWidthMax               float64
 	_pulseWidthMin               float64
-	EngineFrequencyMin           float64 // TODO: unused, probably remove
-	EngineFrequencyMax           float64 // TODO: unused, probably remove
 	EngineProfiles               map[string]appHaptics.EngineProfile
 	_engineProfile               *appHaptics.EngineProfile
 }
@@ -625,20 +623,6 @@ func (c *Config) IncreaseTransmissionGforceMax() float64 {
 	c.mu.Unlock()
 
 	return c.viper.Haptics.DynamicTransmissionGforceMax
-}
-
-func (c *Config) GetEngineFrequencyMin() float64 {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.Haptics.EngineFrequencyMin
-}
-
-func (c *Config) GetEngineFrequencyMax() float64 {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.Haptics.EngineFrequencyMax
 }
 
 func (c *Config) GetMinHz() float64 {

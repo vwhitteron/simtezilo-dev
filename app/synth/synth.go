@@ -98,7 +98,7 @@ func (s *Synthesizer) WriteBuffer(channel string, sample []float64) {
 		return
 	}
 
-	s.mixer.WriteChannel(channel, sample, magnitude, false)
+	_ = s.mixer.WriteChannel(channel, sample, magnitude, false)
 }
 
 func (s *Synthesizer) OverwriteBuffer(channel string, sample []float64) {
@@ -108,7 +108,7 @@ func (s *Synthesizer) OverwriteBuffer(channel string, sample []float64) {
 		return
 	}
 
-	s.mixer.WriteChannel(channel, sample, magnitude, true)
+	_ = s.mixer.WriteChannel(channel, sample, magnitude, true)
 }
 
 func (s *Synthesizer) ShiftBuffer(length int) {
@@ -154,7 +154,7 @@ func (s *Synthesizer) PlayEffect(name string, magnitude float64) {
 
 	// TODO: handle invalid effect name
 	sample := s.effects.GetSample(name)
-	s.mixer.WriteChannel(name, sample, magnitude, false)
+	_ = s.mixer.WriteChannel(name, sample, magnitude, false)
 }
 
 func (s *Synthesizer) Close() error {
