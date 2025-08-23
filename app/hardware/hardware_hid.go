@@ -12,8 +12,8 @@ import (
 )
 
 const (
-	debouncedLow  = 0x00
-	debouncedHigh = 0xFF
+	debouncedLow  uint8 = 0x00
+	debouncedHigh uint8 = 0xFF
 
 	gpioReadSampleRate = 5 * time.Millisecond // Rate at which GPIO pin is sampled for debouncing
 
@@ -39,8 +39,9 @@ func OnGPIOButtonPressed(n int, fn func()) {
 			log.Fatal(err)
 		}
 
-		// Initialise the stable state and debounce buffer based on the current GPIO level
-		lastStableLevel, gpioStates := initStableGPIOState(p)
+		// Initialise the stable state and debounce buffer to a button up state
+		lastStableLevel := gpio.High
+		gpioStates := debouncedHigh
 
 		// button edge detection and debounce
 		for {
@@ -81,25 +82,6 @@ func OnGPIOButtonPressed(n int, fn func()) {
 		}
 
 	}()
-}
-
-// initStableGPIOState waits for a stable GPIO state and returns the GPIO level
-// and the associated GPIO state chronology value
-func initStableGPIOState(pin gpio.PinIO) (gpio.Level, uint8) {
-	var gpioStates uint8 = 0x00
-	ticker := time.NewTicker(5 * time.Millisecond)
-	defer ticker.Stop()
-
-	for {
-		updateGPIOStates(pin, &gpioStates)
-
-		// Check if state has stabilised
-		if stableLevel, isStable := getStableGPIOState(gpioStates); isStable {
-			return stableLevel, gpioStates
-		}
-
-		<-ticker.C
-	}
 }
 
 // updateGPIOStates reads the pin and updates the GPIO state chronology value
