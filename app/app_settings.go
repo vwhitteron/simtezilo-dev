@@ -141,7 +141,7 @@ func (a *App) settingAction(setting string, action string) string {
 		case "decrease":
 			return a.config.PreviousLanguage()
 		default:
-			return a.config.GetAppLanguage()
+			return *a.config.GetAppLanguage()
 		}
 	case "tCurve":
 		value := 0

@@ -92,6 +92,7 @@ func (l *Language) watchForConfigChanges() {
 	l.log.Debug().Str("event", "start").Msg("config watch")
 
 	for {
+		// TODO: this delay causes the setting title to lag behind changes to the language
 		time.Sleep(200 * time.Millisecond)
 
 		if *l.configLangCode == l.Code {

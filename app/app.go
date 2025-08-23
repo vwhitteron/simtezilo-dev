@@ -111,9 +111,8 @@ func NewApp(opts AppOptions) (*App, error) {
 	}
 
 	// load language translations
-	configLanguage := a.config.GetAppLanguage()
 	a.i18n = i18n.NewLanguage(
-		&configLanguage,
+		a.config.GetAppLanguage(),
 		a.log,
 	)
 	a.log.Debug().Str("language", a.i18n.Code).Str("result", "success").Msg("init language")

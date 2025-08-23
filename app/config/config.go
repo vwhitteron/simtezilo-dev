@@ -121,15 +121,15 @@ func NewConfig(filename string, log zerolog.Logger) *Config {
 }
 
 // App methods
-func (c *Config) GetAppLanguage() string {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+func (c *Config) GetAppLanguage() *string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	if c.viper.App.Language == "" {
-		return "en"
+		c.viper.App.Language = "en"
 	}
 
-	return c.viper.App.Language
+	return &c.viper.App.Language
 }
 
 func (c *Config) NextLanguage() string {
