@@ -121,7 +121,7 @@ func (u *UserInterface) DisplayToggleOff() bool {
 }
 
 // TODO: move it elsewhere or get rid of it entirely
-func (u *UserInterface) DrawWaitDisplay() {
+func (u *UserInterface) DrawReadyDisplay() {
 	if int(u.mode) == int(ScreenModeWait) && !u.displayData.forceRefresh {
 		return
 	}
@@ -176,21 +176,21 @@ func (u *UserInterface) UpdateDisplay(data LiveData) {
 			if data.TelemetryActive {
 				u.DrawLiveDisplay(data)
 			} else {
-				u.DrawWaitDisplay()
+				u.DrawReadyDisplay()
 			}
 		}
 	case ScreenModeLive:
 		if data.TelemetryActive {
 			u.DrawLiveDisplay(data)
 		} else {
-			u.DrawWaitDisplay()
+			u.DrawReadyDisplay()
 		}
 	case ScreenModeStartup:
 		if u.displaySplashTimeoutReached() {
 			if data.TelemetryActive {
 				u.DrawLiveDisplay(data)
 			} else {
-				u.DrawWaitDisplay()
+				u.DrawReadyDisplay()
 				u.RegisterActivity()
 			}
 		}
