@@ -5,6 +5,7 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/ui"
 )
 
+// TODO: implement button rotation logic
 func SetupHID(hidEvent chan ui.HIDInputEvent) {
 	OnButtonUpPressed(func() {
 		hidEvent <- ui.HIDInputUp
