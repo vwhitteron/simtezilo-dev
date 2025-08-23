@@ -1,8 +1,10 @@
 package hardware
 
 import (
+	"context"
 	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	"periph.io/x/conn/v3/gpio"
@@ -20,6 +22,13 @@ const (
 	autoRepeatInitialRate  = 200 * time.Millisecond // Initial auto-repeat rate
 	autoRepeatMaxRate      = 50 * time.Millisecond  // Fastest auto-repeat rate
 )
+
+// Global auto-repeat management
+var autoRepeatManager struct {
+	sync.Mutex
+	cancel context.CancelFunc
+	active bool
+}
 
 func OnGPIOButtonPressed(n int, fn func()) {
 	go func() {
@@ -54,38 +63,10 @@ func OnGPIOButtonPressed(n int, fn func()) {
 							// Trigger callback on stable transition to LOW (button pressed with pull-up)
 							if stableLevel == gpio.Low {
 								fn()
-
-								// Auto-repeat when the button is held down
-								go func() {
-									// Initial delay before repeat begins
-									time.Sleep(autoRepeatInitialDelay)
-
-									repeatStartTime := time.Now()
-
-									for {
-										// Exit automatic repeat if button has been released
-										if p.Read() == gpio.High {
-											return
-										}
-
-										fn()
-
-										elapsed := time.Since(repeatStartTime)
-
-										// Linear acceleration of repeat rate
-										acceleration := min(
-											1.0,
-											float64(elapsed)/float64(autoRepeatMaxTime),
-										)
-
-										// Interpolate between initial and acclerated repeat rates
-										repeatRate := float64(autoRepeatInitialRate) - (float64(autoRepeatInitialRate-autoRepeatMaxRate) * acceleration)
-
-										time.Sleep(time.Duration(repeatRate))
-									}
-								}()
+								startAutoRepeat(p, fn)
 							}
 						}
+
 						break debouncer
 					}
 				default:
@@ -143,4 +124,73 @@ func getStableGPIOState(gpioStates uint8) (gpio.Level, bool) {
 	default: // Not yet stable
 		return gpio.Low, false
 	}
+}
+
+// stopActiveAutoRepeat stops any active auto-repeat and marks the system as available
+func stopActiveAutoRepeat() {
+	autoRepeatManager.Lock()
+	defer autoRepeatManager.Unlock()
+
+	if autoRepeatManager.active && autoRepeatManager.cancel != nil {
+		autoRepeatManager.cancel()
+	}
+
+	autoRepeatManager.active = false
+	autoRepeatManager.cancel = nil
+}
+
+// startAutoRepeat starts a new auto-repeat session, stopping any existing one
+func startAutoRepeat(p gpio.PinIO, fn func()) {
+	stopActiveAutoRepeat()
+
+	// Start a new auto-repeat handler
+	ctx, cancel := context.WithCancel(context.Background())
+	autoRepeatManager.Lock()
+	autoRepeatManager.cancel = cancel
+	autoRepeatManager.active = true
+	autoRepeatManager.Unlock()
+
+	go func() {
+		defer stopActiveAutoRepeat()
+
+		// Initial delay before repeat begins or another button is pressed
+		select {
+		case <-time.After(autoRepeatInitialDelay):
+		case <-ctx.Done():
+			return
+		}
+
+		// Check if button is still pressed after delay
+		if p.Read() == gpio.High {
+			return
+		}
+
+		repeatStartTime := time.Now()
+
+		for {
+			// Finish auto repeat if the button has been released
+			if p.Read() == gpio.High {
+				return
+			}
+
+			fn()
+
+			elapsed := time.Since(repeatStartTime)
+
+			// Linear acceleration of repeat rate
+			acceleration := min(
+				1.0,
+				float64(elapsed)/float64(autoRepeatMaxTime),
+			)
+
+			// Interpolate between initial and accelerated repeat rates
+			repeatRate := float64(autoRepeatInitialRate) - (float64(autoRepeatInitialRate-autoRepeatMaxRate) * acceleration)
+
+			select {
+			case <-time.After(time.Duration(repeatRate)):
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
 }
