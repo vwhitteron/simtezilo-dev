@@ -125,7 +125,7 @@ func (a *App) getEngineCharacteristics(engineLayout string, cylinderAngle float3
 	dbEntry := ""
 	for _, variation := range layoutVariations {
 		profile := a.config.GetEngineProfile(variation)
-		if profile == nil {
+		if profile == nil { // technically this should never happen
 			continue
 		}
 

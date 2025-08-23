@@ -275,13 +275,6 @@ func (c *Config) IncreaseChassisGain() float64 {
 	return c.viper.Synthesizer.ChassisGain
 }
 
-func (c *Config) GetTransmissionGain() float64 {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.Synthesizer.TransmissionGain
-}
-
 func (c *Config) DecreaseChassisGain() float64 {
 	c.mu.Lock()
 
@@ -293,6 +286,13 @@ func (c *Config) DecreaseChassisGain() float64 {
 	c.mu.Unlock()
 
 	return c.viper.Synthesizer.ChassisGain
+}
+
+func (c *Config) GetTransmissionGain() float64 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.Synthesizer.TransmissionGain
 }
 
 func (c *Config) IncreaseTransmissionGain() float64 {
@@ -383,12 +383,12 @@ func (c *Config) GetJerkCurve() float64 {
 	return float64(c.viper.Haptics.JerkCurve) / 1000.0
 }
 
-func (c *Config) DecreaseJerkCurve() int {
+func (c *Config) IncreaseJerkCurve() int {
 	c.mu.Lock()
 
-	c.viper.Haptics.JerkCurve = max(
-		5,
-		c.viper.Haptics.JerkCurve-5,
+	c.viper.Haptics.JerkCurve = min(
+		955,
+		c.viper.Haptics.JerkCurve+5,
 	)
 
 	c.mu.Unlock()
@@ -398,12 +398,12 @@ func (c *Config) DecreaseJerkCurve() int {
 	return c.viper.Haptics.JerkCurve
 }
 
-func (c *Config) IncreaseJerkCurve() int {
+func (c *Config) DecreaseJerkCurve() int {
 	c.mu.Lock()
 
-	c.viper.Haptics.JerkCurve = min(
-		1000,
-		c.viper.Haptics.JerkCurve+5,
+	c.viper.Haptics.JerkCurve = max(
+		5,
+		c.viper.Haptics.JerkCurve-5,
 	)
 
 	c.mu.Unlock()
@@ -475,14 +475,13 @@ func (c *Config) GetSnapCurve() float64 {
 	return float64(c.viper.Haptics.SnapCurve) / 1000.0
 }
 
-func (c *Config) DecreaseSnapCurve() int {
+func (c *Config) IncreaseSnapCurve() int {
 	c.mu.Lock()
 
-	if c.viper.Haptics.SnapCurve >= 10 {
-		c.viper.Haptics.SnapCurve -= 5
-	} else {
-		c.viper.Haptics.SnapCurve = 5
-	}
+	c.viper.Haptics.SnapCurve = min(
+		955,
+		c.viper.Haptics.SnapCurve+5,
+	)
 
 	c.mu.Unlock()
 
@@ -491,13 +490,14 @@ func (c *Config) DecreaseSnapCurve() int {
 	return c.viper.Haptics.SnapCurve
 }
 
-func (c *Config) IncreaseSnapCurve() int {
+func (c *Config) DecreaseSnapCurve() int {
 	c.mu.Lock()
 
-	c.viper.Haptics.SnapCurve = min(
-		1000,
-		c.viper.Haptics.SnapCurve+5,
-	)
+	if c.viper.Haptics.SnapCurve >= 10 {
+		c.viper.Haptics.SnapCurve -= 5
+	} else {
+		c.viper.Haptics.SnapCurve = 5
+	}
 
 	c.mu.Unlock()
 
@@ -524,6 +524,13 @@ func (c *Config) UpdateSnapScale() {
 	c.viper.Haptics._snapScale = 1 / math.Pow(snapMax, exponent)
 }
 
+func (c *Config) GetSnapMax() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.Haptics.SnapMax
+}
+
 func (c *Config) IncreaseSnapMax() int {
 	c.mu.Lock()
 
@@ -535,13 +542,6 @@ func (c *Config) IncreaseSnapMax() int {
 	c.mu.Unlock()
 
 	c.UpdateSnapScale()
-
-	return c.viper.Haptics.SnapMax
-}
-
-func (c *Config) GetSnapMax() int {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
 
 	return c.viper.Haptics.SnapMax
 }
@@ -568,25 +568,25 @@ func (c *Config) GetTransmissionCurve() float64 {
 	return float64(c.viper.Haptics.DynamicTransmissionCurve) / 1000
 }
 
-func (c *Config) DecreaseTransmissionCurve() int {
+func (c *Config) IncreaseTransmissionCurve() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	c.viper.Haptics.DynamicTransmissionCurve = min(
-		5,
+		955,
 		c.viper.Haptics.DynamicTransmissionCurve+5,
 	)
 
 	return c.viper.Haptics.DynamicTransmissionCurve
 }
 
-func (c *Config) IncreaseTransmissionCurve() int {
+func (c *Config) DecreaseTransmissionCurve() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	c.viper.Haptics.DynamicTransmissionCurve = max(
-		955,
-		c.viper.Haptics.DynamicTransmissionCurve+5,
+		5,
+		c.viper.Haptics.DynamicTransmissionCurve-5,
 	)
 
 	return c.viper.Haptics.DynamicTransmissionCurve
@@ -595,19 +595,6 @@ func (c *Config) IncreaseTransmissionCurve() int {
 func (c *Config) GetTransmissionGforceMax() float64 {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-
-	return c.viper.Haptics.DynamicTransmissionGforceMax
-}
-
-func (c *Config) DecreaseTransmissionGforceMax() float64 {
-	c.mu.Lock()
-
-	c.viper.Haptics.DynamicTransmissionGforceMax = max(
-		0.1,
-		c.viper.Haptics.DynamicTransmissionGforceMax-0.1,
-	)
-
-	c.mu.Unlock()
 
 	return c.viper.Haptics.DynamicTransmissionGforceMax
 }
@@ -625,6 +612,19 @@ func (c *Config) IncreaseTransmissionGforceMax() float64 {
 	return c.viper.Haptics.DynamicTransmissionGforceMax
 }
 
+func (c *Config) DecreaseTransmissionGforceMax() float64 {
+	c.mu.Lock()
+
+	c.viper.Haptics.DynamicTransmissionGforceMax = max(
+		0.1,
+		c.viper.Haptics.DynamicTransmissionGforceMax-0.1,
+	)
+
+	c.mu.Unlock()
+
+	return c.viper.Haptics.DynamicTransmissionGforceMax
+}
+
 func (c *Config) GetMinHz() float64 {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -633,17 +633,22 @@ func (c *Config) GetMinHz() float64 {
 }
 
 func (c *Config) GetEngineProfile(name string) *appHaptics.EngineProfile {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	name = strings.ToLower(name)
 	if profile, ok := c.viper.Haptics.EngineProfiles[name]; ok {
 		c.viper.Haptics._engineProfile = &profile
-
-		return c.viper.Haptics._engineProfile
+	} else {
+		c.viper.Haptics._engineProfile = &appHaptics.EngineProfile{
+			PrimaryBalance:   1.0,
+			SecondaryBalance: 1.0,
+			Gain:             MinimumGain,
+			PulseScale:       1.0,
+		}
 	}
 
-	return nil
+	return c.viper.Haptics._engineProfile
 }
 
 func (c *Config) GetEnginePrimaryBalance() float64 {
@@ -651,7 +656,7 @@ func (c *Config) GetEnginePrimaryBalance() float64 {
 	defer c.mu.RUnlock()
 
 	if c.viper.Haptics._engineProfile == nil {
-		return 0.0
+		return 1.0
 	}
 
 	return c.viper.Haptics._engineProfile.PrimaryBalance
@@ -660,6 +665,10 @@ func (c *Config) GetEnginePrimaryBalance() float64 {
 func (c *Config) IncreaseEnginePrimaryBalance() float64 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
+	if c.viper.Haptics._engineProfile == nil {
+		return 1.0
+	}
 
 	c.viper.Haptics._engineProfile.PrimaryBalance = min(
 		1.0,
@@ -672,6 +681,10 @@ func (c *Config) IncreaseEnginePrimaryBalance() float64 {
 func (c *Config) DecreaseEnginePrimaryBalance() float64 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
+	if c.viper.Haptics._engineProfile == nil {
+		return 1.0
+	}
 
 	c.viper.Haptics._engineProfile.PrimaryBalance = max(
 		0.0,
@@ -686,7 +699,7 @@ func (c *Config) GetEngineSecondaryBalance() float64 {
 	defer c.mu.RUnlock()
 
 	if c.viper.Haptics._engineProfile == nil {
-		return 0.0
+		return 1.0
 	}
 
 	return c.viper.Haptics._engineProfile.SecondaryBalance
@@ -695,6 +708,10 @@ func (c *Config) GetEngineSecondaryBalance() float64 {
 func (c *Config) IncreaseEngineSecondaryBalance() float64 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
+	if c.viper.Haptics._engineProfile == nil {
+		return 1.0
+	}
 
 	c.viper.Haptics._engineProfile.SecondaryBalance = min(
 		1.0,
@@ -720,9 +737,8 @@ func (c *Config) GetEnginePulseGain() float64 {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	// TODO: makre sure this is never nil?
 	if c.viper.Haptics._engineProfile == nil {
-		return MaximumGain
+		return MinimumGain
 	}
 
 	return c.viper.Haptics._engineProfile.Gain
@@ -731,6 +747,10 @@ func (c *Config) GetEnginePulseGain() float64 {
 func (c *Config) IncreaseEnginePulseGain() float64 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
+	if c.viper.Haptics._engineProfile == nil {
+		return MinimumGain
+	}
 
 	c.viper.Haptics._engineProfile.Gain = min(
 		MaximumGain,
@@ -743,6 +763,10 @@ func (c *Config) IncreaseEnginePulseGain() float64 {
 func (c *Config) DecreaseEnginePulseGain() float64 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
+	if c.viper.Haptics._engineProfile == nil {
+		return MinimumGain
+	}
 
 	c.viper.Haptics._engineProfile.Gain = max(
 		MinimumGain,
@@ -757,7 +781,7 @@ func (c *Config) GetEnginePulseScale() float64 {
 	defer c.mu.RUnlock()
 
 	if c.viper.Haptics._engineProfile == nil {
-		return 0.0
+		return 1.0
 	}
 
 	return c.viper.Haptics._engineProfile.PulseScale
@@ -766,6 +790,10 @@ func (c *Config) GetEnginePulseScale() float64 {
 func (c *Config) IncreaseEnginePulseScale() float64 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
+	if c.viper.Haptics._engineProfile == nil {
+		return 1.0
+	}
 
 	c.viper.Haptics._engineProfile.PulseScale = min(
 		1.0,
@@ -779,6 +807,10 @@ func (c *Config) DecreaseEnginePulseScale() float64 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	if c.viper.Haptics._engineProfile == nil {
+		return 1.0
+	}
+
 	c.viper.Haptics._engineProfile.PulseScale = max(
 		0.0,
 		c.viper.Haptics._engineProfile.PulseScale-0.01,
@@ -787,10 +819,10 @@ func (c *Config) DecreaseEnginePulseScale() float64 {
 	return c.viper.Haptics._engineProfile.PulseScale
 }
 
-func (c *Config) DecreaseMinHz() int {
+func (c *Config) IncreaseMinHz() int {
 	c.mu.Lock()
 
-	c.viper.Haptics.PulseMinFrequencyHz = max(5, c.viper.Haptics.PulseMinFrequencyHz-1)
+	c.viper.Haptics.PulseMinFrequencyHz = min(25, c.viper.Haptics.PulseMinFrequencyHz+1)
 	c.viper.Haptics._pulseWidthMax = float64(c.viper.Synthesizer.SampleRateHz) / (2 * c.viper.Haptics.PulseMinFrequencyHz)
 
 	c.mu.Unlock()
@@ -798,10 +830,10 @@ func (c *Config) DecreaseMinHz() int {
 	return int(c.viper.Haptics.PulseMinFrequencyHz)
 }
 
-func (c *Config) IncreaseMinHz() int {
+func (c *Config) DecreaseMinHz() int {
 	c.mu.Lock()
 
-	c.viper.Haptics.PulseMinFrequencyHz = min(25, c.viper.Haptics.PulseMinFrequencyHz+1)
+	c.viper.Haptics.PulseMinFrequencyHz = max(5, c.viper.Haptics.PulseMinFrequencyHz-1)
 	c.viper.Haptics._pulseWidthMax = float64(c.viper.Synthesizer.SampleRateHz) / (2 * c.viper.Haptics.PulseMinFrequencyHz)
 
 	c.mu.Unlock()
@@ -816,21 +848,21 @@ func (c *Config) GetMaxHz() float64 {
 	return c.viper.Haptics.PulseMaxFrequencyHz
 }
 
-func (c *Config) DecreaseMaxHz() int {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	c.viper.Haptics.PulseMaxFrequencyHz = max(26, c.viper.Haptics.PulseMaxFrequencyHz-1)
-	c.viper.Haptics._pulseWidthMin = float64(c.viper.Synthesizer.SampleRateHz) / (2 * c.viper.Haptics.PulseMaxFrequencyHz)
-
-	return int(c.viper.Haptics.PulseMaxFrequencyHz)
-}
-
 func (c *Config) IncreaseMaxHz() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	c.viper.Haptics.PulseMaxFrequencyHz = min(100, c.viper.Haptics.PulseMaxFrequencyHz+1)
+	c.viper.Haptics._pulseWidthMin = float64(c.viper.Synthesizer.SampleRateHz) / (2 * c.viper.Haptics.PulseMaxFrequencyHz)
+
+	return int(c.viper.Haptics.PulseMaxFrequencyHz)
+}
+
+func (c *Config) DecreaseMaxHz() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.Haptics.PulseMaxFrequencyHz = max(26, c.viper.Haptics.PulseMaxFrequencyHz-1)
 	c.viper.Haptics._pulseWidthMin = float64(c.viper.Synthesizer.SampleRateHz) / (2 * c.viper.Haptics.PulseMaxFrequencyHz)
 
 	return int(c.viper.Haptics.PulseMaxFrequencyHz)
