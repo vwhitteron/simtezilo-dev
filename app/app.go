@@ -124,9 +124,10 @@ func NewApp(opts AppOptions) (*App, error) {
 	switch a.config.GetHardwareModel() {
 	case "pirateaudio":
 		hardware.Init()
+		orientation := a.config.GetDisplayOrientation()
 
 		a.display, err = pirateaudio.NewDisplay(pirateaudio.DisplayOptions{
-			Orientation: a.config.GetDisplayOrientation(),
+			Orientation: orientation,
 			I18n:        a.i18n,
 		})
 		if err != nil {
@@ -145,7 +146,7 @@ func NewApp(opts AppOptions) (*App, error) {
 			Str("result", "success").
 			Msg("init")
 
-		pirateaudio.SetupHID(hidEvents)
+		pirateaudio.SetupHID(orientation, hidEvents)
 		a.log.Debug().
 			Str("component", "pirate audio").
 			Str("sub", "hid").
@@ -180,9 +181,10 @@ func NewApp(opts AppOptions) (*App, error) {
 			Msg("init")
 	case "waveshare":
 		hardware.Init()
+		orientation := a.config.GetDisplayOrientation()
 
 		a.display, err = waveshare.NewDisplay(waveshare.DisplayOptions{
-			Orientation: a.config.GetDisplayOrientation(),
+			Orientation: orientation,
 			I18n:        a.i18n,
 		})
 		if err != nil {
@@ -201,7 +203,7 @@ func NewApp(opts AppOptions) (*App, error) {
 			Str("result", "success").
 			Msg("init")
 
-		waveshare.SetupHID(hidEvents)
+		waveshare.SetupHID(orientation, hidEvents)
 		log.Debug().
 			Str("component", "waveshare 14972").
 			Str("sub", "hid").

@@ -5,21 +5,50 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/ui"
 )
 
-func SetupHID(hidEvent chan ui.HIDInputEvent) {
+func SetupHID(orientation int, hidEvent chan ui.HIDInputEvent) {
+	rotationOffset := (orientation / 90) % 4
+
+	baseDpadMapping := []ui.HIDInputEvent{
+		ui.HIDInputUp,    // Dpad Up
+		ui.HIDInputRight, // Dpad Right
+		ui.HIDInputLeft,  // Dpad Down
+		ui.HIDInputDown,  // Dpad Left
+	}
+
+	// Rotate Dpad mapping based on orientation
+	rotatedDpadMapping := make([]ui.HIDInputEvent, 4)
+	for i := 0; i < 4; i++ {
+		rotatedDpadMapping[i] = baseDpadMapping[(i-rotationOffset+4)%4]
+	}
+
+	baseAuxMapping := []ui.HIDInputEvent{
+		ui.HIDInputEscape, // Button 1
+		ui.HIDInputNone,   // Button 2
+		ui.HIDInputPower,  // Button 3
+	}
+
+	// Reverse auxilliary button order at 90 and 180 degree orientation
+	rotatedAuxMapping := make([]ui.HIDInputEvent, 3)
+	if rotationOffset == 1 || rotationOffset == 3 {
+		for i := 0; i < 3; i++ {
+			rotatedAuxMapping[i] = baseAuxMapping[3-i]
+		}
+	}
+
 	OnButtonUpPressed(func() {
-		hidEvent <- ui.HIDInputUp
-	})
-
-	OnButtonDownPressed(func() {
-		hidEvent <- ui.HIDInputDown
-	})
-
-	OnButtonLeftPressed(func() {
-		hidEvent <- ui.HIDInputLeft
+		hidEvent <- rotatedDpadMapping[0]
 	})
 
 	OnButtonRightPressed(func() {
-		hidEvent <- ui.HIDInputRight
+		hidEvent <- rotatedDpadMapping[1]
+	})
+
+	OnButtonDownPressed(func() {
+		hidEvent <- rotatedDpadMapping[2]
+	})
+
+	OnButtonLeftPressed(func() {
+		hidEvent <- rotatedDpadMapping[3]
 	})
 
 	OnButtonCenterPressed(func() {
@@ -27,15 +56,15 @@ func SetupHID(hidEvent chan ui.HIDInputEvent) {
 	})
 
 	OnButtonOnePressed(func() {
-		hidEvent <- ui.HIDInputEscape
+		hidEvent <- rotatedAuxMapping[0]
 	})
 
 	OnButtonTwoPressed(func() {
-		hidEvent <- ui.HIDInputNone
+		hidEvent <- rotatedAuxMapping[1]
 	})
 
 	OnButtonThreePressed(func() {
-		hidEvent <- ui.HIDInputPower
+		hidEvent <- rotatedAuxMapping[2]
 	})
 }
 

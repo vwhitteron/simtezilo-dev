@@ -5,21 +5,35 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/ui"
 )
 
-func SetupHID(hidEvent chan ui.HIDInputEvent) {
-	OnButtonAPressed(func() {
-		hidEvent <- ui.HIDInputUp
-	})
+func SetupHID(orientation int, hidEvent chan ui.HIDInputEvent) {
+	rotationOffset := (orientation / 90) % 4
 
-	OnButtonBPressed(func() {
-		hidEvent <- ui.HIDInputDown
+	baseMapping := []ui.HIDInputEvent{
+		ui.HIDInputUp,    // Button A
+		ui.HIDInputRight, // Button X
+		ui.HIDInputLeft,  // Button Y
+		ui.HIDInputDown,  // Button B
+	}
+
+	rotatedMapping := make([]ui.HIDInputEvent, 4)
+	for i := 0; i < 4; i++ {
+		rotatedMapping[i] = baseMapping[(i-rotationOffset+4)%4]
+	}
+
+	OnButtonAPressed(func() {
+		hidEvent <- rotatedMapping[0]
 	})
 
 	OnButtonXPressed(func() {
-		hidEvent <- ui.HIDInputRight
+		hidEvent <- rotatedMapping[1]
 	})
 
 	OnButtonYPressed(func() {
-		hidEvent <- ui.HIDInputLeft
+		hidEvent <- rotatedMapping[2]
+	})
+
+	OnButtonBPressed(func() {
+		hidEvent <- rotatedMapping[3]
 	})
 }
 
