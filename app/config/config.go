@@ -640,12 +640,7 @@ func (c *Config) GetEngineProfile(name string) *appHaptics.EngineProfile {
 	if profile, ok := c.viper.Haptics.EngineProfiles[name]; ok {
 		c.viper.Haptics._engineProfile = &profile
 	} else {
-		c.viper.Haptics._engineProfile = &appHaptics.EngineProfile{
-			PrimaryBalance:   1.0,
-			SecondaryBalance: 1.0,
-			Gain:             MinimumGain,
-			PulseScale:       1.0,
-		}
+		c.viper.Haptics._engineProfile = nil
 	}
 
 	return c.viper.Haptics._engineProfile
