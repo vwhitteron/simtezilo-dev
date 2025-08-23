@@ -725,6 +725,10 @@ func (c *Config) DecreaseEngineSecondaryBalance() float64 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	if c.viper.Haptics._engineProfile == nil {
+		return 1.0
+	}
+
 	c.viper.Haptics._engineProfile.SecondaryBalance = max(
 		0.0,
 		c.viper.Haptics._engineProfile.SecondaryBalance-0.01,
