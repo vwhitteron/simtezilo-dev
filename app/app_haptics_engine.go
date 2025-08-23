@@ -110,16 +110,16 @@ func (a *App) getEngineCharacteristics(engineLayout string, cylinderAngle float3
 	}
 
 	layoutVariations := []string{
-		engineLayout + "_B" + strconv.FormatFloat(float64(cylinderAngle), 'f', 0, 32) + ")_C" + strconv.FormatFloat(float64(crankPlaneAngle), 'f', 0, 32),
-		engineLayout + "_C" + strconv.FormatFloat(float64(crankPlaneAngle), 'f', 0, 32),
-		engineLayout + "_B" + strconv.FormatFloat(float64(cylinderAngle), 'f', 0, 32),
+		engineLayout + "_b" + strconv.FormatFloat(float64(cylinderAngle), 'f', 0, 32) + "_c" + strconv.FormatFloat(float64(crankPlaneAngle), 'f', 0, 32),
+		engineLayout + "_c" + strconv.FormatFloat(float64(crankPlaneAngle), 'f', 0, 32),
+		engineLayout + "_b" + strconv.FormatFloat(float64(cylinderAngle), 'f', 0, 32),
 		engineLayout,
 	}
 
 	hapticProfile := &haptics.EngineProfile{
 		PrimaryBalance:   1.0,
 		SecondaryBalance: 1.0,
-		Gain:             0.0,
+		Gain:             config.MinimumGain,
 		PulseScale:       1.0,
 	}
 	dbEntry := ""
@@ -302,7 +302,8 @@ func (a *App) generatePulseWaveform(rpm float64, engineRoughness float64, engine
 	baseAmplitude := 0.7 + (throttlePercent * amplitudeScale)
 
 	rpmNormalized, _ := signal.LimitWindow(rpmPercent, 0.0, 1.0)
-	amplitude := (baseAmplitude + (engineRoughness * rpmNormalized * 0.1)) * synth.GainToPowerRatio(a.vehicle.engine.haptics.Gain+gainOffset)
+	adjust := synth.GainToPowerRatio(a.vehicle.engine.haptics.Gain + gainOffset)
+	amplitude := (baseAmplitude + (engineRoughness * rpmNormalized * 0.1)) * adjust
 
 	// Ensure amplitude stays within bounds
 	amplitude, _ = signal.LimitWindow(amplitude, 0, 1)
