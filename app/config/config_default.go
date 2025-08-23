@@ -27,36 +27,39 @@ var defaultConfig = viperConfig{
 		_pulseWidthMax:               0.5,
 		_pulseWidthMin:               0.1,
 		EngineProfiles: map[string]appHaptics.EngineProfile{
-			"s1":           {PrimaryBalance: 0.15, SecondaryBalance: 0.250, Gain: +0.0, PulseScale: 1.00},
-			"i2":           {PrimaryBalance: 0.65, SecondaryBalance: 0.850, Gain: -2.0, PulseScale: 1.00},
-			"i3":           {PrimaryBalance: 0.95, SecondaryBalance: 0.850, Gain: -2.0, PulseScale: 1.00},
-			"i4":           {PrimaryBalance: 0.60, SecondaryBalance: 0.800, Gain: -3.5, PulseScale: 0.50},
-			"i5":           {PrimaryBalance: 0.70, SecondaryBalance: 0.600, Gain: -1.0, PulseScale: 0.50},
-			"i6":           {PrimaryBalance: 0.90, SecondaryBalance: 0.950, Gain: -2.5, PulseScale: 0.50},
-			"i8":           {PrimaryBalance: 0.95, SecondaryBalance: 0.980, Gain: -1.5, PulseScale: 0.50},
-			"v4":           {PrimaryBalance: 0.65, SecondaryBalance: 0.850, Gain: -2.5, PulseScale: 1.00},
-			"v6":           {PrimaryBalance: 0.85, SecondaryBalance: 0.960, Gain: +0.0, PulseScale: 0.50},
-			"v6.b15.c120":  {PrimaryBalance: 0.88, SecondaryBalance: 0.940, Gain: +0.0, PulseScale: 0.50},
-			"v6.b75.c120":  {PrimaryBalance: 0.83, SecondaryBalance: 0.940, Gain: +0.0, PulseScale: 0.50},
-			"v6.b80.c120":  {PrimaryBalance: 0.82, SecondaryBalance: 0.930, Gain: +0.0, PulseScale: 0.50},
-			"v6.b90.c120":  {PrimaryBalance: 0.80, SecondaryBalance: 0.920, Gain: +0.0, PulseScale: 0.50},
-			"v6.b120.c120": {PrimaryBalance: 0.75, SecondaryBalance: 0.880, Gain: +0.0, PulseScale: 0.50},
-			"v8":           {PrimaryBalance: 0.95, SecondaryBalance: 0.980, Gain: -3.0, PulseScale: 0.25},
-			"v8.b90.c180":  {PrimaryBalance: 0.85, SecondaryBalance: 0.920, Gain: +0.0, PulseScale: 0.50},
-			"v10":          {PrimaryBalance: 0.88, SecondaryBalance: 0.965, Gain: -2.0, PulseScale: 0.25},
-			"v10.b90.v72":  {PrimaryBalance: 0.86, SecondaryBalance: 0.940, Gain: -1.5, PulseScale: 0.25},
-			"v12":          {PrimaryBalance: 0.99, SecondaryBalance: 0.995, Gain: -2.0, PulseScale: 0.25},
-			"v12.b60.c120": {PrimaryBalance: 0.96, SecondaryBalance: 0.985, Gain: -2.0, PulseScale: 0.25},
-			"v12.b75.c60":  {PrimaryBalance: 0.97, SecondaryBalance: 0.988, Gain: -2.0, PulseScale: 0.25},
-			"v12.b100.c60": {PrimaryBalance: 0.95, SecondaryBalance: 0.980, Gain: -1.5, PulseScale: 0.25},
-			"v12.b144.c60": {PrimaryBalance: 0.93, SecondaryBalance: 0.975, Gain: -1.5, PulseScale: 0.25},
-			"w16":          {PrimaryBalance: 0.99, SecondaryBalance: 0.995, Gain: -1.5, PulseScale: 0.25},
-			"h2":           {PrimaryBalance: 0.70, SecondaryBalance: 0.950, Gain: +0.0, PulseScale: 1.00},
-			"h4":           {PrimaryBalance: 0.80, SecondaryBalance: 0.950, Gain: +0.0, PulseScale: 1.00},
-			"h6":           {PrimaryBalance: 0.92, SecondaryBalance: 0.975, Gain: -1.5, PulseScale: 0.50},
-			"h12":          {PrimaryBalance: 0.98, SecondaryBalance: 0.990, Gain: +0.0, PulseScale: 0.25},
-			"K2":           {PrimaryBalance: 0.85, SecondaryBalance: 0.960, Gain: +0.0, PulseScale: 0.33},
-			"K4":           {PrimaryBalance: 0.75, SecondaryBalance: 0.880, Gain: +0.0, PulseScale: 0.16},
+			"s1":           {PrimaryBalance: 0.15, SecondaryBalance: 0.250, Gain: +0.00, PulseScale: 1.00},
+			"i2":           {PrimaryBalance: 0.65, SecondaryBalance: 0.850, Gain: -2.00, PulseScale: 1.00},
+			"i3":           {PrimaryBalance: 0.95, SecondaryBalance: 0.850, Gain: -5.00, PulseScale: 1.00}, // Daihatsu COPEN RJ VGT
+			"i4":           {PrimaryBalance: 0.76, SecondaryBalance: 0.800, Gain: -3.25, PulseScale: 0.68}, // Toyota Supra GT500 '97
+			"i5":           {PrimaryBalance: 0.60, SecondaryBalance: 0.600, Gain: -2.50, PulseScale: 0.60}, // Audi Sport quattro S1 Pikes Peak '87
+			"i6":           {PrimaryBalance: 0.90, SecondaryBalance: 0.950, Gain: -2.00, PulseScale: 0.50}, // Toyota GR Supra Racing Concept '18
+			"i8":           {PrimaryBalance: 0.92, SecondaryBalance: 0.980, Gain: -3.00, PulseScale: 0.32}, // Mercedes-Benz W 196 R '55
+			"v4":           {PrimaryBalance: 0.70, SecondaryBalance: 0.850, Gain: -1.50, PulseScale: 0.90}, // Porsche 919 Hybrid '16
+			"v6":           {PrimaryBalance: 0.80, SecondaryBalance: 0.960, Gain: -2.50, PulseScale: 0.50}, // REF v6_b60_c120
+			"v6_b15_c120":  {PrimaryBalance: 0.85, SecondaryBalance: 0.960, Gain: -2.75, PulseScale: 0.50}, // Volkswagen GTI VGT (Gr.3)
+			"v6_b60_c120":  {PrimaryBalance: 0.80, SecondaryBalance: 0.960, Gain: -2.50, PulseScale: 0.50}, // Renault R.S.01 GT3 '16
+			"v6_b75_c120":  {PrimaryBalance: 0.83, SecondaryBalance: 0.940, Gain: +0.00, PulseScale: 0.50}, // Honda NSX Gr.3
+			"v6_b80_c120":  {PrimaryBalance: 0.62, SecondaryBalance: 0.930, Gain: -3.00, PulseScale: 0.33}, // Mclaren MP4/4 '88
+			"v6_b90_c120":  {PrimaryBalance: 0.80, SecondaryBalance: 0.720, Gain: +0.00, PulseScale: 0.60}, // Toyota GR010 HYBRID '21
+			"v6_b120_c120": {PrimaryBalance: 0.75, SecondaryBalance: 0.880, Gain: +0.00, PulseScale: 0.50}, // Audo R18 TDI '11
+			"v8":           {PrimaryBalance: 0.86, SecondaryBalance: 0.980, Gain: -4.00, PulseScale: 0.55}, // REF v8_b90_c90
+			"v8_b90_c180":  {PrimaryBalance: 0.78, SecondaryBalance: 0.980, Gain: -5.00, PulseScale: 0.33}, // Nissan R92CP '92
+			"v8_b90_c90":   {PrimaryBalance: 0.86, SecondaryBalance: 0.980, Gain: -4.00, PulseScale: 0.55}, // M6 GT3 Endurance Model '16
+			"v10":          {PrimaryBalance: 0.88, SecondaryBalance: 0.965, Gain: -2.00, PulseScale: 0.25}, // REF v10_b72_c72
+			"v10_b72_v72":  {PrimaryBalance: 0.86, SecondaryBalance: 0.940, Gain: -1.50, PulseScale: 0.25},
+			"v10_b90_v72":  {PrimaryBalance: 0.86, SecondaryBalance: 0.940, Gain: -1.50, PulseScale: 0.25},
+			"v12":          {PrimaryBalance: 0.99, SecondaryBalance: 0.995, Gain: -2.00, PulseScale: 0.25}, // REF v12_b60_c120
+			"v12_b60_c120": {PrimaryBalance: 0.96, SecondaryBalance: 0.985, Gain: -2.00, PulseScale: 0.25},
+			"v12_b75_c60":  {PrimaryBalance: 0.97, SecondaryBalance: 0.988, Gain: -2.00, PulseScale: 0.25},
+			"v12_b100_c60": {PrimaryBalance: 0.95, SecondaryBalance: 0.980, Gain: -1.50, PulseScale: 0.25},
+			"v12_b144_c60": {PrimaryBalance: 0.93, SecondaryBalance: 0.975, Gain: -1.50, PulseScale: 0.25},
+			"w16":          {PrimaryBalance: 0.99, SecondaryBalance: 0.995, Gain: -1.50, PulseScale: 0.25},
+			"h2":           {PrimaryBalance: 0.70, SecondaryBalance: 0.950, Gain: +0.00, PulseScale: 1.00},
+			"h4":           {PrimaryBalance: 0.80, SecondaryBalance: 0.950, Gain: -3.75, PulseScale: 0.80}, // BRZ GT300 '21
+			"h6":           {PrimaryBalance: 0.92, SecondaryBalance: 0.975, Gain: -2.00, PulseScale: 0.50}, // Porsche 911 RSR (991) '17
+			"h12":          {PrimaryBalance: 0.98, SecondaryBalance: 0.990, Gain: +0.00, PulseScale: 0.25},
+			"k2":           {PrimaryBalance: 0.85, SecondaryBalance: 0.960, Gain: +0.00, PulseScale: 0.33},
+			"k4":           {PrimaryBalance: 0.75, SecondaryBalance: 0.800, Gain: +0.00, PulseScale: 0.10}, // Mazda 787B '91
 		},
 	},
 	Synthesizer: &Synthesizer{
