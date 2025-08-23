@@ -293,7 +293,32 @@ func NewApp(opts AppOptions) (*App, error) {
 func (a *App) Run() {
 	go a.ui.HIDEventHandler()
 
-	go a.gtClient.Run()
+	go func() {
+		for {
+			err, recoverable := a.gtClient.Run()
+			if err != nil {
+				if recoverable {
+					a.log.Error().
+						Err(err).
+						Str("component", "gt client").
+						Str("result", "failure").
+						Msg("run")
+
+					a.ui.Screen.RenderSplashScreen("GT client error")
+
+					continue
+				} else {
+					a.ui.Screen.RenderErrorScreen("GT client error")
+
+					a.log.Fatal().
+						Err(err).
+						Str("component", "gt client").
+						Str("result", "failure").
+						Msg("run")
+				}
+			}
+		}
+	}()
 
 	if a.webEnabled {
 		a.webUI = webui.NewWebUI(a.log, a.telemetryChartFeed)
