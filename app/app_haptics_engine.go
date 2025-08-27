@@ -96,7 +96,7 @@ func (a *App) generateEngineHaptic() {
 }
 
 // getEngineCharacteristics retrieves engine characteristics based on layout and angles
-func (a *App) getEngineCharacteristics(engineLayout string, cylinderAngle float32, crankPlaneAngle float32) (engineCharacteristics, error) {
+func (a *App) getEngineCharacteristics(engineLayout string, cylinderAngle float32, crankPlaneAngle float32, revLimit uint16) (engineCharacteristics, error) {
 	if engineLayout == "" {
 		return engineCharacteristics{
 			haptics: &haptics.EngineProfile{},
@@ -109,10 +109,24 @@ func (a *App) getEngineCharacteristics(engineLayout string, cylinderAngle float3
 		return engineCharacteristics{}, err // Return error if conversion fails
 	}
 
+	revRange := "std"
+	switch {
+	case revLimit > 13000:
+		revRange = "high"
+	case revLimit > 9000:
+		revRange = "med"
+	case revLimit < 6000:
+		revRange = "low"
+	}
+
 	layoutVariations := []string{
+		engineLayout + "_b" + strconv.FormatFloat(float64(cylinderAngle), 'f', 0, 32) + "_c" + strconv.FormatFloat(float64(crankPlaneAngle), 'f', 0, 32) + "_r" + revRange,
 		engineLayout + "_b" + strconv.FormatFloat(float64(cylinderAngle), 'f', 0, 32) + "_c" + strconv.FormatFloat(float64(crankPlaneAngle), 'f', 0, 32),
+		engineLayout + "_c" + strconv.FormatFloat(float64(crankPlaneAngle), 'f', 0, 32) + "_r" + revRange,
 		engineLayout + "_c" + strconv.FormatFloat(float64(crankPlaneAngle), 'f', 0, 32),
+		engineLayout + "_b" + strconv.FormatFloat(float64(cylinderAngle), 'f', 0, 32) + "_r" + revRange,
 		engineLayout + "_b" + strconv.FormatFloat(float64(cylinderAngle), 'f', 0, 32),
+		engineLayout + "_r" + revRange,
 		engineLayout,
 	}
 

@@ -436,8 +436,9 @@ func (a *App) updateVehicle() {
 	engineLayout := a.gtClient.Telemetry.VehicleEngineLayout()
 	bankAngle := a.gtClient.Telemetry.VehicleEngineBankAngle()
 	crankPlaneAngle := a.gtClient.Telemetry.VehicleEngineCrankPlaneAngle()
+	revLimit := a.gtClient.Telemetry.EngineRPMLight().Max
 
-	engine, err := a.getEngineCharacteristics(engineLayout, bankAngle, crankPlaneAngle)
+	engine, err := a.getEngineCharacteristics(engineLayout, bankAngle, crankPlaneAngle, revLimit)
 	if err != nil {
 		a.log.Error().
 			Err(err).
@@ -447,7 +448,6 @@ func (a *App) updateVehicle() {
 			Msg("failed to get engine characteristics")
 	}
 
-	revLimit := a.gtClient.Telemetry.EngineRPMLight().Max
 	peakNaturalPulseRate := float64(revLimit) * engine.firingFrequency
 
 	// Heavy pulse rate adjustment for high rev limit engines
