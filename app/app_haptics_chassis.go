@@ -17,7 +17,7 @@ func (a *App) generateChassisHaptic() {
 
 	pulseFrequencyHz := a.calculateChassisHapticPulseFrequency()
 
-	pulseWidth := math.Round(float64(a.config.GetSampleRateHz()) / (2 * pulseFrequencyHz))
+	pulseWidth := math.Round(float64(a.config.GetInternalSampleRateHz()) / (2 * pulseFrequencyHz))
 
 	pulseAmplitude := a.calculateChassisHapticPulseAmplitude()
 

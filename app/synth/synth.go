@@ -28,7 +28,7 @@ type SynthOpts struct {
 }
 
 func NewSynth(opts SynthOpts) (*Synthesizer, error) {
-	bufferSlotSize := opts.Config.SampleRateHz / 60
+	bufferSlotSize := opts.Config.InternalSampleRateHz / 60
 	bufferSlotCount := 20
 	bufferSize := bufferSlotSize * bufferSlotCount * 2 // 40 frames of audio at 8khz
 
@@ -63,7 +63,7 @@ func NewSynth(opts SynthOpts) (*Synthesizer, error) {
 		log.Info().Str("file", opts.Config.OutputFile).Msg("saving audio output")
 	}
 
-	effects := NewEffectsSampleBank(opts.Config.SampleRateHz)
+	effects := NewEffectsSampleBank(opts.Config.InternalSampleRateHz)
 
 	return &Synthesizer{
 		effects:      effects,
@@ -71,7 +71,7 @@ func NewSynth(opts SynthOpts) (*Synthesizer, error) {
 		mixer:        mixer,
 		outputDevice: outputDevice,
 		kinematics:   opts.Kinematics,
-		sampleRate:   opts.Config.SampleRateHz,
+		sampleRate:   opts.Config.InternalSampleRateHz,
 		outFile:      outFile,
 	}, nil
 }

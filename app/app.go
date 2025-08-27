@@ -325,10 +325,11 @@ func (a *App) Run() {
 		go a.webUI.Start()
 	}
 
-	chassisStreamer := synth.NewBumpStream(a.synth)
+	outputSampleRate := beep.SampleRate(a.config.GetOutputSampleRateHz())
+	hapticStreamer := synth.NewHapticStream(a.synth, outputSampleRate)
 	err := speaker.Init(
-		beep.SampleRate(a.synth.GetSampleRate()),
-		a.synth.GetSampleRate()/15,
+		outputSampleRate,
+		outputSampleRate.N(time.Second/15),
 	)
 	if err != nil {
 		a.log.Error().
@@ -341,7 +342,7 @@ func (a *App) Run() {
 		return
 	}
 
-	go speaker.Play(chassisStreamer)
+	go speaker.Play(hapticStreamer)
 
 	tickerHaptics := time.NewTicker((1000 / hapticFrameRate) * time.Millisecond)
 	tickerGeneral := time.NewTicker((1000 / telemetryFrameRate) * time.Millisecond)

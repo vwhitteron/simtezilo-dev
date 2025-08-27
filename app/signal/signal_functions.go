@@ -16,7 +16,7 @@ func Abs(value float64) float64 {
 
 func Equalize(value float64, pulseWidth float64, synth *config.Synthesizer) float64 {
 
-	freq := int(math.Round(float64(synth.SampleRateHz) / (2 * pulseWidth)))
+	freq := int(math.Round(float64(synth.InternalSampleRateHz) / (2 * pulseWidth)))
 
 	if freq < 10 || freq > 49 {
 		return value

@@ -63,7 +63,8 @@ var defaultConfig = viperConfig{
 		},
 	},
 	Synthesizer: &Synthesizer{
-		SampleRateHz:              8000,
+		InternalSampleRateHz:      8000,
+		OutputSampleRateHz:        8000,
 		OutputFile:                "",
 		MasterGain:                -15,
 		GainIncrement:             0.25,

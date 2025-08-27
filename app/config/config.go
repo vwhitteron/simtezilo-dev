@@ -23,7 +23,8 @@ type hardware struct {
 }
 
 type Synthesizer struct {
-	SampleRateHz              int
+	InternalSampleRateHz      int
+	OutputSampleRateHz        int
 	OutputFile                string
 	MasterGain                float64
 	ChassisGain               float64
@@ -111,8 +112,8 @@ func NewConfig(filename string, log zerolog.Logger) *Config {
 		}
 	}
 
-	c.viper.Haptics._pulseWidthMin = float64(c.viper.Synthesizer.SampleRateHz) / (2 * c.viper.Haptics.PulseMaxFrequencyHz)
-	c.viper.Haptics._pulseWidthMax = float64(c.viper.Synthesizer.SampleRateHz) / (2 * c.viper.Haptics.PulseMinFrequencyHz)
+	c.viper.Haptics._pulseWidthMin = float64(c.viper.Synthesizer.InternalSampleRateHz) / (2 * c.viper.Haptics.PulseMaxFrequencyHz)
+	c.viper.Haptics._pulseWidthMax = float64(c.viper.Synthesizer.InternalSampleRateHz) / (2 * c.viper.Haptics.PulseMinFrequencyHz)
 
 	c.UpdateJerkScale()
 	c.UpdateSnapScale()
@@ -215,11 +216,18 @@ func (c *Config) GetSynthesizer() *Synthesizer {
 	return c.viper.Synthesizer
 }
 
-func (c *Config) GetSampleRateHz() int {
+func (c *Config) GetInternalSampleRateHz() int {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	return c.viper.Synthesizer.SampleRateHz
+	return c.viper.Synthesizer.InternalSampleRateHz
+}
+
+func (c *Config) GetOutputSampleRateHz() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.Synthesizer.OutputSampleRateHz
 }
 
 func (c *Config) GetMasterGain() float64 {
@@ -822,7 +830,7 @@ func (c *Config) IncreaseMinHz() int {
 	c.mu.Lock()
 
 	c.viper.Haptics.PulseMinFrequencyHz = min(25, c.viper.Haptics.PulseMinFrequencyHz+1)
-	c.viper.Haptics._pulseWidthMax = float64(c.viper.Synthesizer.SampleRateHz) / (2 * c.viper.Haptics.PulseMinFrequencyHz)
+	c.viper.Haptics._pulseWidthMax = float64(c.viper.Synthesizer.InternalSampleRateHz) / (2 * c.viper.Haptics.PulseMinFrequencyHz)
 
 	c.mu.Unlock()
 
@@ -833,7 +841,7 @@ func (c *Config) DecreaseMinHz() int {
 	c.mu.Lock()
 
 	c.viper.Haptics.PulseMinFrequencyHz = max(5, c.viper.Haptics.PulseMinFrequencyHz-1)
-	c.viper.Haptics._pulseWidthMax = float64(c.viper.Synthesizer.SampleRateHz) / (2 * c.viper.Haptics.PulseMinFrequencyHz)
+	c.viper.Haptics._pulseWidthMax = float64(c.viper.Synthesizer.InternalSampleRateHz) / (2 * c.viper.Haptics.PulseMinFrequencyHz)
 
 	c.mu.Unlock()
 
@@ -852,7 +860,7 @@ func (c *Config) IncreaseMaxHz() int {
 	defer c.mu.Unlock()
 
 	c.viper.Haptics.PulseMaxFrequencyHz = min(100, c.viper.Haptics.PulseMaxFrequencyHz+1)
-	c.viper.Haptics._pulseWidthMin = float64(c.viper.Synthesizer.SampleRateHz) / (2 * c.viper.Haptics.PulseMaxFrequencyHz)
+	c.viper.Haptics._pulseWidthMin = float64(c.viper.Synthesizer.InternalSampleRateHz) / (2 * c.viper.Haptics.PulseMaxFrequencyHz)
 
 	return int(c.viper.Haptics.PulseMaxFrequencyHz)
 }
@@ -862,7 +870,7 @@ func (c *Config) DecreaseMaxHz() int {
 	defer c.mu.Unlock()
 
 	c.viper.Haptics.PulseMaxFrequencyHz = max(26, c.viper.Haptics.PulseMaxFrequencyHz-1)
-	c.viper.Haptics._pulseWidthMin = float64(c.viper.Synthesizer.SampleRateHz) / (2 * c.viper.Haptics.PulseMaxFrequencyHz)
+	c.viper.Haptics._pulseWidthMin = float64(c.viper.Synthesizer.InternalSampleRateHz) / (2 * c.viper.Haptics.PulseMaxFrequencyHz)
 
 	return int(c.viper.Haptics.PulseMaxFrequencyHz)
 }
