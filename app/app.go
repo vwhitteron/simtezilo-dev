@@ -232,6 +232,18 @@ func NewApp(opts AppOptions) (*App, error) {
 		Done:             a.done,
 	})
 
+	err = a.ui.Screen.RenderSplashScreen(Version)
+	if err != nil {
+		a.log.Error().
+			Err(err).
+			Str("component", "ui").
+			Str("sub", "screen").
+			Str("result", "failure").
+			Msg("render splash screen")
+
+		return nil, fmt.Errorf("render splash screen: %w", err)
+	}
+
 	// initialise synthesizer
 	a.synth, err = synth.NewSynth(synth.SynthOpts{
 		Config:     a.config.GetSynthesizer(),
@@ -268,18 +280,6 @@ func NewApp(opts AppOptions) (*App, error) {
 		_ = a.ui.Screen.RenderErrorScreen("GT client init")
 
 		return nil, err
-	}
-
-	err = a.ui.Screen.RenderSplashScreen(Version)
-	if err != nil {
-		a.log.Error().
-			Err(err).
-			Str("component", "ui").
-			Str("sub", "screen").
-			Str("result", "failure").
-			Msg("render splash screen")
-
-		return nil, fmt.Errorf("render splash screen: %w", err)
 	}
 
 	a.log.Debug().
