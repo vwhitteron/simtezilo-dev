@@ -94,10 +94,12 @@ func (b *RingBuffer) Write(samples []float64, overwrite bool) {
 	}
 
 	if !overwrite {
-		samples = b.mixSamples(samples)
+		// Mix mode: mix directly into the buffer at readPos like adaptive buffer
+		b.mixIntoBuffer(samples)
+	} else {
+		// Overwrite mode: write to writePos
+		b.writeToBuffer(samples, true)
 	}
-
-	b.writeToRing(samples, true)
 }
 
 // readFromBuffer reads samples from the ring buffer
@@ -126,9 +128,9 @@ func (b *RingBuffer) readFromBuffer(length int, scrub bool) []float64 {
 	return samples
 }
 
-// writeToRing writes samples to the ring buffer
+// writeToBuffer writes samples to the ring buffer
 // The advance parameter determines whether to move the write position forward
-func (b *RingBuffer) writeToRing(samples []float64, advance bool) {
+func (b *RingBuffer) writeToBuffer(samples []float64, advance bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -144,6 +146,43 @@ func (b *RingBuffer) writeToRing(samples []float64, advance bool) {
 				// A better approach might be to return an error or block
 				b.readPos = (b.readPos + 1) % b.size
 			}
+		}
+	}
+}
+
+// mixIntoBuffer mixes samples directly into the buffer at the correct positions
+// This is similar to the adaptive buffer's approach to avoid position mismatches
+func (b *RingBuffer) mixIntoBuffer(samples []float64) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	peak := 0.0
+
+	for i, inputSample := range samples {
+		// Mix at position relative to readPos, like adaptive buffer
+		mixPos := (b.readPos + i) % b.size
+		
+		var existingSample float64
+		if i < b.used {
+			existingSample = b.buffer[mixPos]
+		}
+
+		mixedSample := mixSampleSum(inputSample, existingSample, &peak)
+		b.buffer[mixPos] = mixedSample
+	}
+
+	// Update used count if we mixed beyond existing content
+	if len(samples) > b.used {
+		b.used = len(samples)
+		// Update writePos to account for new content
+		b.writePos = (b.readPos + b.used) % b.size
+	}
+
+	// Apply peak limiting if necessary
+	if peak > 1.0 {
+		for i := 0; i < len(samples); i++ {
+			pos := (b.readPos + i) % b.size
+			b.buffer[pos] /= peak
 		}
 	}
 }

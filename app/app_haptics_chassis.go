@@ -24,10 +24,34 @@ func (a *App) generateChassisHaptic() {
 	waveOffset := pulseWidth / 2
 	waveSamplePeriod := math.Pi / pulseWidth
 
-	bufferLen := a.synth.GetBufferLength()
-	pulseBuffer := make([]float64, bufferLen)
+	// Calculate buffer size based on the actual pulse waveform length
+	// The pulse needs pulseWidth * 2 samples for a complete cycle
+	// Low frequency pulses (8Hz) need ~1000 samples (125ms)
+	// High frequency pulses (60Hz) need ~134 samples (17ms)
+	pulseLength := int(pulseWidth * 2)
 
-	for i := range int(pulseWidth * 2) {
+	// Ensure minimum buffer size for very high frequency pulses
+	sampleRate := float64(a.config.GetInternalSampleRateHz())
+	minSamplesPerFrame := int(sampleRate / hapticFrameRate)
+
+	// Use the larger of: complete pulse length or minimum frame size
+	// This allows low-frequency pulses to be generated completely
+	bufferSize := pulseLength
+	if bufferSize < minSamplesPerFrame {
+		bufferSize = minSamplesPerFrame
+	}
+
+	pulseBuffer := make([]float64, bufferSize)
+
+	// bufferLen := a.synth.GetBufferLength()
+	// pulseBuffer := make([]float64, bufferLen)
+
+	// Generate the complete pulse waveform
+	// for i := range int(pulseWidth * 2) {
+	for i := range bufferSize {
+		if i > pulseLength {
+			break
+		}
 		phase := waveSamplePeriod * (float64(i) - waveOffset)
 		pulseBuffer[i] = ((pulseAmplitude * math.Sin(phase)) + pulseAmplitude) / 2
 	}

@@ -63,14 +63,11 @@ func (a *App) generateEngineHaptic() {
 		rpm = a.state.engine.lastKnownRPM
 	}
 
-	// Generate engine vibration waveform for double the engine haptic frame rate
-	// This overfills the engine haptics buffer with the current rpm waveform in case the buffer
-	// reader is too fast. This does mean the rpm waveform on the tail end of the buffer is not
-	// correct when these events occur. The buffer is overwritten every interval so for typical
-	// events where the reader is not fetching too far it will get the correct waveform for the
-	// current rpm value.
+	// Generate engine vibration waveform for 2 frames worth of samples
+	// This provides a small buffer to prevent underruns while keeping latency low
 	sampleRate := float64(a.synth.GetSampleRate())
-	samplesPerBuffer := int(sampleRate/engineHapticFrameRate) * 2
+	samplesPerFrame := int(sampleRate / engineHapticFrameRate)
+	samplesPerBuffer := samplesPerFrame * 2 // Exactly 2 frames worth
 	engineBuffer := make([]float64, samplesPerBuffer)
 
 	// No haptics when engine is not running
