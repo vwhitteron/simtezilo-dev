@@ -27,10 +27,9 @@ type SynthOpts struct {
 	Kinematics *kinematics.KinematicsTracker
 }
 
-func NewSynth(opts SynthOpts) (*Synthesizer, error) {
-	bufferSlotSize := opts.Config.InternalSampleRateHz / 60
-	bufferSlotCount := 20
-	bufferSize := bufferSlotSize * bufferSlotCount * 2 // 40 frames of audio at 8khz
+func NewSynthesizer(opts *SynthOpts) (*Synthesizer, error) {
+	bufferTimeSeconds := 2.0
+	bufferSize := int(float64(opts.Config.InternalSampleRateHz) * bufferTimeSeconds)
 
 	mixer, err := NewMixer(MixerConfig{
 		MasterGain:    &opts.Config.MasterGain,
@@ -111,12 +110,12 @@ func (s *Synthesizer) OverwriteBuffer(channel string, sample []float64) {
 	_ = s.mixer.WriteChannel(channel, sample, magnitude, true)
 }
 
-func (s *Synthesizer) ShiftBuffer(length int) {
-	s.mixer.Shift(length)
+func (s *Synthesizer) AdvanceBuffers(length int) {
+	s.mixer.AdvanceBuffers(length)
 }
 
-func (s *Synthesizer) ClearBuffer() {
-	s.mixer.Shift(s.mixer.GetBufferLength())
+func (s *Synthesizer) ClearBuffers() {
+	s.mixer.ClearBuffers()
 }
 
 func (s *Synthesizer) GetChannelMagnitude(name string) (float64, error) {

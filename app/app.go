@@ -245,7 +245,7 @@ func NewApp(opts AppOptions) (*App, error) {
 	}
 
 	// initialise synthesizer
-	a.synth, err = synth.NewSynth(synth.SynthOpts{
+	a.synth, err = synth.NewSynthesizer(&synth.SynthOpts{
 		Config:     a.config.GetSynthesizer(),
 		Logger:     a.log,
 		Kinematics: &a.kinematics,
@@ -428,7 +428,7 @@ func (a *App) resetState() {
 
 	a.kinematics = kinematics.NewKinematicsTracker()
 
-	a.synth.ClearBuffer()
+	a.synth.ClearBuffers()
 }
 
 func (a *App) updateVehicle() {

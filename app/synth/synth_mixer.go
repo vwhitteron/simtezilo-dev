@@ -25,7 +25,7 @@ type Mixer struct {
 type MixerChannel struct {
 	activeGain float64
 	configGain *float64
-	buffer     *Buffer
+	buffer     Buffer
 }
 
 type MixerConfig struct {
@@ -81,7 +81,8 @@ func (m *Mixer) AddChannel(name string, gain *float64) error {
 	m.channels[name] = &MixerChannel{
 		activeGain: *gain,
 		configGain: gain,
-		buffer:     NewBuffer(m.bufferSize),
+		// buffer:     NewRingBuffer(m.bufferSize),
+		buffer: NewLinearBuffer(m.bufferSize),
 	}
 
 	return nil
@@ -92,7 +93,9 @@ func (m *MixerChannel) Read(length int) []float64 {
 }
 
 func (m *MixerChannel) Write(samples []float64, magnitude float64, overwrite bool) {
-	m.buffer.Write(samples, magnitude, overwrite)
+	scaleSamples(&samples, magnitude)
+
+	m.buffer.Write(samples, overwrite)
 }
 
 func (m *Mixer) WriteChannel(name string, samples []float64, magnitude float64, overwrite bool) error {
@@ -306,12 +309,21 @@ func (m *Mixer) MixToMaster(length int) {
 	m.channels["_master"].Write(outSamples, magnitude, true)
 }
 
-func (m *Mixer) Shift(length int) {
+func (m *Mixer) ClearBuffers() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	for _, channel := range m.channels {
-		channel.buffer.Shift(length)
+		channel.buffer.Clear()
+	}
+}
+
+func (m *Mixer) AdvanceBuffers(length int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for _, channel := range m.channels {
+		channel.buffer.Advance(length)
 	}
 }
 

@@ -71,7 +71,12 @@ func scaleSamplesPeak(samples *[]float64, peak float64) {
 
 	scale := 1.0 / peak
 
+	scaleSamples(samples, scale)
+}
+
+// Adjusts the scale of the samples by the given magnitude
+func scaleSamples(samples *[]float64, magnitude float64) {
 	for i := range *samples {
-		(*samples)[i] = (*samples)[i] * scale
+		(*samples)[i] = (*samples)[i] * magnitude
 	}
 }

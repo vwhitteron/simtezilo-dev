@@ -62,7 +62,7 @@ func (s *Streamer) Stream(samples [][2]float64) (n int, ok bool) {
 		samples[i][1] = s.synth.ApplyMasterGain(buffer[i])
 	}
 
-	s.synth.ShiftBuffer(len(samples))
+	s.synth.AdvanceBuffers(len(samples))
 
 	return len(samples), true
 }

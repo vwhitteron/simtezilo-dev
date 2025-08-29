@@ -18,7 +18,7 @@ func (a *App) enableHaptics() {
 func (a *App) disableHaptics(reason string) {
 	// speaker.Suspend()
 	a.synth.Silence()
-	a.synth.ClearBuffer()
+	a.synth.ClearBuffers()
 	a.state.hapticsEnabled = false
 
 	a.log.Debug().Bool("haptics enabled", a.state.hapticsEnabled).Str("reason", reason).Msg("haptics state change")
