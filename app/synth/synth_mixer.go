@@ -103,7 +103,6 @@ func (m *MixerChannel) Read(length int) []float64 {
 
 func (m *MixerChannel) Write(samples []float64, magnitude float64, overwrite bool) {
 	scaleSamples(&samples, magnitude)
-
 	m.buffer.Write(samples, overwrite)
 }
 
@@ -289,24 +288,29 @@ func (m *Mixer) MixToMaster(length int) {
 	if !ok {
 		m.log.Error().Str("channel", "engine").Msg("channel not found in mixer")
 	} else {
-		outSamplesTmp := make([]float64, length)
+		outSamplesWork := make([]float64, length)
 		engineSamples := channel.Read(length)
 
+		remixed := false
 		done := false
-		count := 0
+
 		for !done {
-			p := 0.0
+			peak := 0.0
+
+			// Perform direct mix and get the peak value
 			for i, engineSample := range engineSamples {
-				outSamplesTmp[i] = mixSampleSum(outSamples[i], engineSample, &p)
+				outSamplesWork[i] = mixSampleSum(outSamples[i], engineSample, &peak)
 			}
 
-			if p > 1.0 {
-				if count == 0 {
-					scaleSamplesPeak(&engineSamples, p*2)
-					count++
+			if peak > 1.0 {
+				if !remixed {
+					// Re-mix with reduced engine scale when the peak would cause clipping
+					scaleSamplesPeak(&engineSamples, peak*2)
+					remixed = true
 				} else {
+					// Remix is still a little high (fp precision) so just reduce the whole signal
 					done = true
-					magnitude = 1.0 / p
+					magnitude = 1.0 / peak
 				}
 
 				continue
@@ -315,7 +319,7 @@ func (m *Mixer) MixToMaster(length int) {
 			done = true
 		}
 
-		copy(outSamples, outSamplesTmp)
+		copy(outSamples, outSamplesWork)
 	}
 
 	m.channels["_master"].Write(outSamples, magnitude, true)

@@ -161,7 +161,7 @@ func (b *RingBuffer) mixIntoBuffer(samples []float64) {
 	for i, inputSample := range samples {
 		// Mix at position relative to readPos, like adaptive buffer
 		mixPos := (b.readPos + i) % b.size
-		
+
 		var existingSample float64
 		if i < b.used {
 			existingSample = b.buffer[mixPos]
