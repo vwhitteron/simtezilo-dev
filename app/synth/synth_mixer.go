@@ -19,6 +19,10 @@ type Mixer struct {
 	fadeInActive bool
 	silenced     bool
 
+	// Buffer monitoring
+	lastHealthCheck     time.Time
+	healthCheckInterval time.Duration
+
 	mu sync.RWMutex
 }
 
@@ -50,6 +54,10 @@ func NewMixer(mixerConfig MixerConfig) (*Mixer, error) {
 		faderGain:    config.MinimumGain,
 		fadeInActive: false,
 		silenced:     true,
+
+		// Initialize buffer monitoring
+		lastHealthCheck:     time.Now(),
+		healthCheckInterval: 5 * time.Second,
 	}
 
 	err := m.AddChannel("_master", mixerConfig.MasterGain)
@@ -81,8 +89,9 @@ func (m *Mixer) AddChannel(name string, gain *float64) error {
 	m.channels[name] = &MixerChannel{
 		activeGain: *gain,
 		configGain: gain,
-		// buffer:     NewRingBuffer(m.bufferSize),
-		buffer: NewLinearBuffer(m.bufferSize),
+		// buffer:     NewLinearBuffer(m.bufferSize),
+		// buffer: NewRingBuffer(m.bufferSize),
+		buffer: NewAdaptiveBuffer(m.bufferSize),
 	}
 
 	return nil
@@ -118,6 +127,9 @@ func (m *Mixer) ReadChannel(name string, length int) []float64 {
 	if _, ok := m.channels[name]; !ok {
 		return nil
 	}
+
+	// Check buffer health periodically
+	m.checkBufferHealth()
 
 	return m.channels[name].Read(length)
 }
@@ -315,6 +327,36 @@ func (m *Mixer) ClearBuffers() {
 
 	for _, channel := range m.channels {
 		channel.buffer.Clear()
+	}
+}
+
+// checkBufferHealth monitors buffer health and logs issues
+func (m *Mixer) checkBufferHealth() {
+	now := time.Now()
+	if now.Sub(m.lastHealthCheck) < m.healthCheckInterval {
+		return
+	}
+
+	m.lastHealthCheck = now
+
+	for name, channel := range m.channels {
+		if name == "_master" {
+			continue
+		}
+
+		// Check if the buffer supports health monitoring
+		if adaptiveBuffer, ok := channel.buffer.(*AdaptiveBuffer); ok {
+			overflows, underruns, fillRatio := adaptiveBuffer.Health()
+
+			if overflows > 0 || underruns > 0 || fillRatio > 0.9 || fillRatio < 0.1 {
+				m.log.Warn().
+					Str("channel", name).
+					Int("overflows", overflows).
+					Int("underruns", underruns).
+					Float64("fillRatio", fillRatio).
+					Msg("buffer health issue detected")
+			}
+		}
 	}
 }
 
