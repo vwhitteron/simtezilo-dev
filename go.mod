@@ -11,9 +11,9 @@ require (
 	github.com/grafana/pyroscope-go v1.2.2
 	github.com/rs/zerolog v1.34.0
 	github.com/spf13/viper v1.20.1
-	github.com/stretchr/testify v1.10.0
+	github.com/stretchr/testify v1.11.0
 	github.com/theojulienne/go-wireless v1.2.0
-	github.com/zetetos/gt-telemetry v1.9.1-0.20250823083520-240a2bbf680d
+	github.com/zetetos/gt-telemetry v1.10.0
 	golang.org/x/image v0.27.0
 	periph.io/x/conn/v3 v3.7.2
 	periph.io/x/host/v3 v3.8.2
