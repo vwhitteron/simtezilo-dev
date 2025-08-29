@@ -271,6 +271,10 @@ func (m *Mixer) MixToMaster(length int) {
 			continue
 		}
 
+		if *channel.configGain == config.MinimumGain {
+			continue
+		}
+
 		samples := channel.Read(length)
 
 		for i, sample := range samples {
@@ -287,7 +291,7 @@ func (m *Mixer) MixToMaster(length int) {
 	channel, ok := m.channels["engine"]
 	if !ok {
 		m.log.Error().Str("channel", "engine").Msg("channel not found in mixer")
-	} else {
+	} else if *channel.configGain > config.MinimumGain {
 		outSamplesWork := make([]float64, length)
 		engineSamples := channel.Read(length)
 
