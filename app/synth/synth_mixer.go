@@ -318,15 +318,6 @@ func (m *Mixer) ClearBuffers() {
 	}
 }
 
-func (m *Mixer) AdvanceBuffers(length int) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	for _, channel := range m.channels {
-		channel.buffer.Advance(length)
-	}
-}
-
 // TODO: is there a better way to integrate config changes?
 func (m *Mixer) watchForConfigChanges() {
 	m.log.Debug().Str("event", "start").Msg("config watch")

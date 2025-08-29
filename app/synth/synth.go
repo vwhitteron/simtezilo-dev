@@ -84,7 +84,7 @@ func (s *Synthesizer) GetBufferLength() int {
 }
 
 // Buffer accessor methods
-func (s *Synthesizer) ReadBufferNew(length int) []float64 {
+func (s *Synthesizer) ReadBuffer(length int) []float64 {
 	s.mixer.MixToMaster(length)
 
 	return s.mixer.ReadChannel("_master", length)
@@ -108,10 +108,6 @@ func (s *Synthesizer) OverwriteBuffer(channel string, sample []float64) {
 	}
 
 	_ = s.mixer.WriteChannel(channel, sample, magnitude, true)
-}
-
-func (s *Synthesizer) AdvanceBuffers(length int) {
-	s.mixer.AdvanceBuffers(length)
 }
 
 func (s *Synthesizer) ClearBuffers() {

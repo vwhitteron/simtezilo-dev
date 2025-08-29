@@ -55,14 +55,12 @@ type Streamer struct {
 }
 
 func (s *Streamer) Stream(samples [][2]float64) (n int, ok bool) {
-	buffer := s.synth.ReadBufferNew(len(samples))
+	buffer := s.synth.ReadBuffer(len(samples))
 
 	for i := range samples {
 		samples[i][0] = s.synth.ApplyMasterGain(buffer[i])
 		samples[i][1] = s.synth.ApplyMasterGain(buffer[i])
 	}
-
-	s.synth.AdvanceBuffers(len(samples))
 
 	return len(samples), true
 }

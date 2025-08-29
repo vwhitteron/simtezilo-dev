@@ -58,26 +58,16 @@ func (b *RingBuffer) Used() int {
 	return b.used
 }
 
+// Inspect returns a copy of the requested number of samples from the buffer
+// The samples stored in the buffer are not modified and remain in place
+func (b *RingBuffer) Inspect(length int) []float64 {
+	return b.readFromBuffer(length, false)
+}
+
 // Read returns the requested number of samples from the buffer
-// The retrieved samples are not zeroed out and remain in the buffer
+// The samples stored in the buffer are zeroed out
 func (b *RingBuffer) Read(length int) []float64 {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	if length > b.used {
-		length = b.used
-	}
-
-	samples := make([]float64, length)
-
-	for i := range length {
-		samples[i] = b.buffer[b.readPos]
-		b.readPos = (b.readPos + 1) % b.size
-	}
-
-	b.used -= length
-
-	return samples
+	return b.readFromBuffer(length, true)
 }
 
 // Write adds the given samples to the buffer
@@ -91,11 +81,38 @@ func (b *RingBuffer) Write(samples []float64, overwrite bool) {
 		samples = b.mixSamples(samples)
 	}
 
-	b.writeToRing(samples, true)
+	b.writeToBuffer(samples, true)
 }
 
-// writeToRing writes samples to the ring buffer
-func (b *RingBuffer) writeToRing(samples []float64, advance bool) {
+// readFromBuffer reads samples from the ring buffer
+// When scrub is true, the samples are zeroed out in the buffer
+func (b *RingBuffer) readFromBuffer(length int, scrub bool) []float64 {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	if length > b.used {
+		length = b.used
+	}
+
+	samples := make([]float64, length)
+
+	for i := range length {
+		samples[i] = b.buffer[b.readPos]
+
+		if scrub {
+			b.buffer[b.readPos] = 0
+			b.used--
+		}
+
+		b.readPos = (b.readPos + 1) % b.size
+	}
+
+	return samples
+}
+
+// writeToBuffer writes samples to the ring buffer
+// The advance parameter determines whether to move the write position forward
+func (b *RingBuffer) writeToBuffer(samples []float64, advance bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -111,24 +128,6 @@ func (b *RingBuffer) writeToRing(samples []float64, advance bool) {
 			}
 		}
 	}
-}
-
-// Advance moves the read position forward by the specified number of samples
-// The samples between the start and end positions are zeroed out
-func (b *RingBuffer) Advance(samples int) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	if samples > b.used {
-		samples = b.used
-	}
-
-	for i := 0; i < samples; i++ {
-		b.buffer[b.readPos] = 0
-		b.readPos = (b.readPos + 1) % b.size
-	}
-
-	b.used -= samples
 }
 
 // mixSamples mixes the input samples with the existing samples in the buffer

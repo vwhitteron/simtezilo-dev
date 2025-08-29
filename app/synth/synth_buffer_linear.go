@@ -35,16 +35,31 @@ func (b *LinearBuffer) Length() int {
 	return len(b.buffer)
 }
 
+// Inspect returns a copy of the requested number of samples from the buffer
+// The samples stored in the buffer are not modified and remain in place
+func (b *LinearBuffer) Inspect(length int) []float64 {
+	return b.readFromBuffer(length, false)
+}
+
 // Read returns the requested number of samples from the buffer
-// The retrieved samples are not zeroed out and remain in the buffer
+// The samples stored in the buffer are zeroed out
 func (b *LinearBuffer) Read(length int) []float64 {
+	return b.readFromBuffer(length, true)
+}
+
+// readFromBuffer reads samples from the ring buffer
+// When scrub is true, the samples are zeroed out in the buffer
+func (b *LinearBuffer) readFromBuffer(length int, scrub bool) []float64 {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
 	samples := make([]float64, length)
-
 	for i := range length {
 		samples[i] = b.buffer[i]
+
+		if scrub {
+			b.buffer[i] = 0
+		}
 	}
 
 	return samples
@@ -62,19 +77,6 @@ func (b *LinearBuffer) Write(samples []float64, overwrite bool) {
 	}
 
 	copy(b.buffer, samples)
-}
-
-// Advance shifts the contents of the buffer forward by the specified number of samples
-// The samples between the start of the buffer and the sample count are discarded
-func (b *LinearBuffer) Advance(samples int) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	bufferMax := len(b.buffer) - samples
-
-	for i := range bufferMax {
-		b.buffer[i] = b.buffer[i+samples]
-	}
 }
 
 // mixSamples mixes the input samples with the existing samples in the buffer
