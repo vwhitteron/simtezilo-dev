@@ -58,6 +58,22 @@ func (b *RingBuffer) Used() int {
 	return b.used
 }
 
+// Available returns the number of samples that can be written before the buffer is full
+func (b *RingBuffer) Available() int {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+
+	return b.size - b.used
+}
+
+// IsFull returns true if the buffer is at capacity
+func (b *RingBuffer) IsFull() bool {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+
+	return b.used >= b.size
+}
+
 // Inspect returns a copy of the requested number of samples from the buffer
 // The samples stored in the buffer are not modified and remain in place
 func (b *RingBuffer) Inspect(length int) []float64 {
@@ -81,7 +97,7 @@ func (b *RingBuffer) Write(samples []float64, overwrite bool) {
 		samples = b.mixSamples(samples)
 	}
 
-	b.writeToBuffer(samples, true)
+	b.writeToRing(samples, true)
 }
 
 // readFromBuffer reads samples from the ring buffer
@@ -110,9 +126,9 @@ func (b *RingBuffer) readFromBuffer(length int, scrub bool) []float64 {
 	return samples
 }
 
-// writeToBuffer writes samples to the ring buffer
+// writeToRing writes samples to the ring buffer
 // The advance parameter determines whether to move the write position forward
-func (b *RingBuffer) writeToBuffer(samples []float64, advance bool) {
+func (b *RingBuffer) writeToRing(samples []float64, advance bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -123,7 +139,9 @@ func (b *RingBuffer) writeToBuffer(samples []float64, advance bool) {
 			if b.used < b.size {
 				b.used++
 			} else {
-				// Buffer is full, advance read pointer to maintain buffer size
+				// Buffer is full, we need to drop the oldest sample
+				// This maintains a consistent buffer size but may cause dropouts
+				// A better approach might be to return an error or block
 				b.readPos = (b.readPos + 1) % b.size
 			}
 		}
@@ -136,16 +154,14 @@ func (b *RingBuffer) mixSamples(inSamples []float64) []float64 {
 	peak := 0.0
 
 	b.mu.RLock()
-	readPos := b.readPos
-	bufferUsed := b.used
-	b.mu.RUnlock()
+	defer b.mu.RUnlock()
 
 	for i := range inSamples {
 		inputSample := inSamples[i]
 
 		var bufferSample float64
-		if i < bufferUsed {
-			bufferPos := (readPos + i) % b.size
+		if i < b.used {
+			bufferPos := (b.readPos + i) % b.size
 			bufferSample = b.buffer[bufferPos]
 		}
 
