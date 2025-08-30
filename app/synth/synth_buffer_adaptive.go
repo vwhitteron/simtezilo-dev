@@ -12,7 +12,7 @@ type AdaptiveBuffer struct {
 	mu       sync.RWMutex
 	writePos int // current write position
 	readPos  int // current read position
-	size     int // buffer size
+	capacity int // buffer size
 	used     int // number of samples currently in buffer
 
 	// Adaptive features
@@ -23,14 +23,17 @@ type AdaptiveBuffer struct {
 }
 
 // NewAdaptiveBuffer creates a new adaptive buffer
-func NewAdaptiveBuffer(size int) *AdaptiveBuffer {
-	targetFill := size / 4 // Keep buffer 25% full on average
+// bufferDuration: duration of audio the buffer should hold
+// sampleRateHz: sample rate in Hz to calculate buffer size in samples
+func NewAdaptiveBuffer(length time.Duration, sampleRateHz int) *AdaptiveBuffer {
+	capacity := int(length.Seconds() * float64(sampleRateHz))
+	targetFill := capacity / 4 // Keep buffer 25% full on average
 
 	buffer := &AdaptiveBuffer{
-		buffer:     make([]float64, size),
+		buffer:     make([]float64, capacity),
 		writePos:   0,
 		readPos:    0,
-		size:       size,
+		capacity:   capacity,
 		used:       0,
 		targetFill: targetFill,
 		lastAccess: time.Now(),
@@ -45,7 +48,7 @@ func (b *AdaptiveBuffer) Clear() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	for i := range b.size {
+	for i := range b.capacity {
 		b.buffer[i] = 0
 	}
 
@@ -59,7 +62,7 @@ func (b *AdaptiveBuffer) Clear() {
 
 // Length returns the total buffer capacity
 func (b *AdaptiveBuffer) Length() int {
-	return b.size
+	return b.capacity
 }
 
 // Used returns the number of samples currently in the buffer
@@ -73,7 +76,7 @@ func (b *AdaptiveBuffer) Used() int {
 func (b *AdaptiveBuffer) Available() int {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
-	return b.size - b.used
+	return b.capacity - b.used
 }
 
 // Health returns buffer health metrics
@@ -81,7 +84,7 @@ func (b *AdaptiveBuffer) Health() (overflows, underruns int, fillRatio float64) 
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 
-	fillRatio = float64(b.used) / float64(b.size)
+	fillRatio = float64(b.used) / float64(b.capacity)
 	return b.overflows, b.underruns, fillRatio
 }
 
@@ -107,13 +110,13 @@ func (b *AdaptiveBuffer) Write(samples []float64, overwrite bool) {
 	b.lastAccess = time.Now()
 
 	// Check for potential overflow
-	if len(samples) > (b.size-b.used) && overwrite {
+	if len(samples) > (b.capacity-b.used) && overwrite {
 		b.overflows++
 
 		// If overwrite is false and we're mixing, we need to be more careful
 		if !overwrite {
 			// Drop oldest samples to make room, but try to preserve audio continuity
-			samplesToDrop := len(samples) - (b.size - b.used)
+			samplesToDrop := len(samples) - (b.capacity - b.used)
 			b.dropOldestSamples(samplesToDrop)
 		}
 	}
@@ -122,13 +125,13 @@ func (b *AdaptiveBuffer) Write(samples []float64, overwrite bool) {
 		// Overwrite mode: just write samples to buffer
 		for _, sample := range samples {
 			b.buffer[b.writePos] = sample
-			b.writePos = (b.writePos + 1) % b.size
+			b.writePos = (b.writePos + 1) % b.capacity
 
-			if b.used < b.size {
+			if b.used < b.capacity {
 				b.used++
 			} else {
 				// Buffer full, advance read pointer (circular overwrite)
-				b.readPos = (b.readPos + 1) % b.size
+				b.readPos = (b.readPos + 1) % b.capacity
 			}
 		}
 	} else {
@@ -136,7 +139,7 @@ func (b *AdaptiveBuffer) Write(samples []float64, overwrite bool) {
 		peak := 0.0
 		for i, inputSample := range samples {
 			// Calculate position to mix at (starting from read position)
-			mixPos := (b.readPos + i) % b.size
+			mixPos := (b.readPos + i) % b.capacity
 
 			// Only mix if we have existing content at this position
 			var mixedSample float64
@@ -158,7 +161,7 @@ func (b *AdaptiveBuffer) Write(samples []float64, overwrite bool) {
 		// Apply peak limiting if necessary
 		if peak > 1.0 {
 			for i := 0; i < len(samples); i++ {
-				pos := (b.readPos + i) % b.size
+				pos := (b.readPos + i) % b.capacity
 				b.buffer[pos] /= peak
 			}
 		}
@@ -190,7 +193,7 @@ func (b *AdaptiveBuffer) readFromBuffer(length int, consume bool) []float64 {
 			b.used--
 		}
 
-		b.readPos = (b.readPos + 1) % b.size
+		b.readPos = (b.readPos + 1) % b.capacity
 	}
 
 	return samples
@@ -200,34 +203,34 @@ func (b *AdaptiveBuffer) readFromBuffer(length int, consume bool) []float64 {
 func (b *AdaptiveBuffer) dropOldestSamples(count int) {
 	for i := 0; i < count && b.used > 0; i++ {
 		b.buffer[b.readPos] = 0
-		b.readPos = (b.readPos + 1) % b.size
+		b.readPos = (b.readPos + 1) % b.capacity
 		b.used--
 	}
 }
 
 // mixSamplesInternal mixes input samples with existing buffer content
-func (b *AdaptiveBuffer) mixSamplesInternal(inSamples []float64) []float64 {
-	outSamples := make([]float64, len(inSamples))
-	peak := 0.0
+// func (b *AdaptiveBuffer) mixSamplesInternal(inSamples []float64) []float64 {
+// 	outSamples := make([]float64, len(inSamples))
+// 	peak := 0.0
 
-	for i := range inSamples {
-		inputSample := inSamples[i]
+// 	for i := range inSamples {
+// 		inputSample := inSamples[i]
 
-		var bufferSample float64
-		if i < b.used {
-			bufferPos := (b.readPos + i) % b.size
-			bufferSample = b.buffer[bufferPos]
-		}
+// 		var bufferSample float64
+// 		if i < b.used {
+// 			bufferPos := (b.readPos + i) % b.size
+// 			bufferSample = b.buffer[bufferPos]
+// 		}
 
-		outSamples[i] = mixSampleSum(inputSample, bufferSample, &peak)
-	}
+// 		outSamples[i] = mixSampleSum(inputSample, bufferSample, &peak)
+// 	}
 
-	if peak > 1.0 {
-		scaleSamplesPeak(&outSamples, peak)
-	}
+// 	if peak > 1.0 {
+// 		scaleSamplesPeak(&outSamples, peak)
+// 	}
 
-	return outSamples
-}
+// 	return outSamples
+// }
 
 // IsStarved returns true if buffer is running low
 func (b *AdaptiveBuffer) IsStarved() bool {
@@ -242,7 +245,7 @@ func (b *AdaptiveBuffer) IsOverfull() bool {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 
-	return b.used > (b.size * 3 / 4)
+	return b.used > (b.capacity * 3 / 4)
 }
 
 // GetOptimalReadSize suggests optimal read size based on current state
@@ -251,7 +254,7 @@ func (b *AdaptiveBuffer) GetOptimalReadSize(requestedSize int) int {
 	defer b.mu.RUnlock()
 
 	// If we're overfull, suggest reading more to drain buffer
-	if b.used > (b.size * 3 / 4) {
+	if b.used > (b.capacity * 3 / 4) {
 		return min(requestedSize*2, b.used)
 	}
 

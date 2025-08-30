@@ -2,6 +2,7 @@ package synth
 
 import (
 	"sync"
+	"time"
 )
 
 type LinearBuffer struct {
@@ -9,10 +10,14 @@ type LinearBuffer struct {
 	mu     sync.Mutex
 }
 
-// NewRingBuffer creates a new ring buffer that can hold the specified number of samples
-func NewLinearBuffer(size int) *LinearBuffer {
+// NewLinearBuffer creates a new linear buffer that can hold the specified duration of audio
+// bufferDuration: duration of audio the buffer should hold
+// sampleRateHz: sample rate in Hz to calculate buffer size in samples
+func NewLinearBuffer(length time.Duration, sampleRateHz int) *LinearBuffer {
+	capacity := int(length.Seconds() * float64(sampleRateHz))
+
 	buffer := &LinearBuffer{
-		buffer: make([]float64, size),
+		buffer: make([]float64, capacity),
 	}
 
 	buffer.Clear()

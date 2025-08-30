@@ -2,6 +2,7 @@ package synth
 
 import (
 	"sync"
+	"time"
 )
 
 // RingBuffer implements a ring buffer for audio samples
@@ -12,17 +13,21 @@ type RingBuffer struct {
 	// Ring buffer state
 	writePos int // current write position
 	readPos  int // current read position
-	size     int // buffer size
+	capacity int // capacity of buffer in samples
 	used     int // number of samples currently in buffer
 }
 
-// NewRingBuffer creates a new ring buffer that can hold the specified number of samples
-func NewRingBuffer(size int) *RingBuffer {
+// NewRingBuffer creates a new ring buffer that can hold the specified duration of audio
+// bufferDuration: duration of audio the buffer should hold
+// sampleRateHz: sample rate in Hz to calculate buffer size in samples
+func NewRingBuffer(length time.Duration, sampleRateHz int) *RingBuffer {
+	capacity := int(length.Seconds() * float64(sampleRateHz))
+
 	buffer := &RingBuffer{
-		buffer:   make([]float64, size),
+		buffer:   make([]float64, capacity),
 		writePos: 0,
 		readPos:  0,
-		size:     size,
+		capacity: capacity,
 		used:     0,
 	}
 
@@ -36,7 +41,7 @@ func (b *RingBuffer) Clear() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	for i := range b.size {
+	for i := range b.capacity {
 		b.buffer[i] = 0
 	}
 
@@ -47,7 +52,7 @@ func (b *RingBuffer) Clear() {
 
 // Used returns the total number of samples the buffer can hold
 func (b *RingBuffer) Length() int {
-	return b.size
+	return b.capacity
 }
 
 // Used returns the number of samples currently in the buffer
@@ -63,7 +68,7 @@ func (b *RingBuffer) Available() int {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 
-	return b.size - b.used
+	return b.capacity - b.used
 }
 
 // IsFull returns true if the buffer is at capacity
@@ -71,7 +76,7 @@ func (b *RingBuffer) IsFull() bool {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 
-	return b.used >= b.size
+	return b.used >= b.capacity
 }
 
 // Inspect returns a copy of the requested number of samples from the buffer
@@ -122,7 +127,7 @@ func (b *RingBuffer) readFromBuffer(length int, scrub bool) []float64 {
 			b.used--
 		}
 
-		b.readPos = (b.readPos + 1) % b.size
+		b.readPos = (b.readPos + 1) % b.capacity
 	}
 
 	return samples
@@ -137,14 +142,14 @@ func (b *RingBuffer) writeToBuffer(samples []float64, advance bool) {
 	for _, sample := range samples {
 		b.buffer[b.writePos] = sample
 		if advance {
-			b.writePos = (b.writePos + 1) % b.size
-			if b.used < b.size {
+			b.writePos = (b.writePos + 1) % b.capacity
+			if b.used < b.capacity {
 				b.used++
 			} else {
 				// Buffer is full, we need to drop the oldest sample
 				// This maintains a consistent buffer size but may cause dropouts
 				// A better approach might be to return an error or block
-				b.readPos = (b.readPos + 1) % b.size
+				b.readPos = (b.readPos + 1) % b.capacity
 			}
 		}
 	}
@@ -160,7 +165,7 @@ func (b *RingBuffer) mixIntoBuffer(samples []float64) {
 
 	for i, inputSample := range samples {
 		// Mix at position relative to readPos, like adaptive buffer
-		mixPos := (b.readPos + i) % b.size
+		mixPos := (b.readPos + i) % b.capacity
 
 		var existingSample float64
 		if i < b.used {
@@ -175,41 +180,41 @@ func (b *RingBuffer) mixIntoBuffer(samples []float64) {
 	if len(samples) > b.used {
 		b.used = len(samples)
 		// Update writePos to account for new content
-		b.writePos = (b.readPos + b.used) % b.size
+		b.writePos = (b.readPos + b.used) % b.capacity
 	}
 
 	// Apply peak limiting if necessary
 	if peak > 1.0 {
 		for i := 0; i < len(samples); i++ {
-			pos := (b.readPos + i) % b.size
+			pos := (b.readPos + i) % b.capacity
 			b.buffer[pos] /= peak
 		}
 	}
 }
 
 // mixSamples mixes the input samples with the existing samples in the buffer
-func (b *RingBuffer) mixSamples(inSamples []float64) []float64 {
-	outSamples := make([]float64, len(inSamples))
-	peak := 0.0
+// func (b *RingBuffer) mixSamples(inSamples []float64) []float64 {
+// 	outSamples := make([]float64, len(inSamples))
+// 	peak := 0.0
 
-	b.mu.RLock()
-	defer b.mu.RUnlock()
+// 	b.mu.RLock()
+// 	defer b.mu.RUnlock()
 
-	for i := range inSamples {
-		inputSample := inSamples[i]
+// 	for i := range inSamples {
+// 		inputSample := inSamples[i]
 
-		var bufferSample float64
-		if i < b.used {
-			bufferPos := (b.readPos + i) % b.size
-			bufferSample = b.buffer[bufferPos]
-		}
+// 		var bufferSample float64
+// 		if i < b.used {
+// 			bufferPos := (b.readPos + i) % b.size
+// 			bufferSample = b.buffer[bufferPos]
+// 		}
 
-		outSamples[i] = mixSampleSum(inputSample, bufferSample, &peak)
-	}
+// 		outSamples[i] = mixSampleSum(inputSample, bufferSample, &peak)
+// 	}
 
-	if peak > 1.0 {
-		scaleSamplesPeak(&outSamples, peak)
-	}
+// 	if peak > 1.0 {
+// 		scaleSamplesPeak(&outSamples, peak)
+// 	}
 
-	return outSamples
-}
+// 	return outSamples
+// }

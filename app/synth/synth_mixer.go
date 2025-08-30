@@ -13,7 +13,8 @@ type Mixer struct {
 	configGainIncrement *float64
 
 	channels     map[string]*MixerChannel
-	bufferSize   int
+	bufferLength time.Duration // Duration of audio the buffer should hold
+	sampleRateHz int           // Sample rate in Hz
 	log          zerolog.Logger
 	faderGain    float64 // controls fade-in after pause or session reset
 	fadeInActive bool
@@ -35,7 +36,8 @@ type MixerChannel struct {
 type MixerConfig struct {
 	MasterGain    *float64
 	GainIncrement *float64
-	BufferSize    int
+	BufferLength  time.Duration // Duration of audio the buffer should hold
+	SampleRateHz  int           // Sample rate in Hz
 	Logger        zerolog.Logger
 }
 
@@ -48,7 +50,8 @@ func NewMixer(mixerConfig MixerConfig) (*Mixer, error) {
 	m := &Mixer{
 		configGainIncrement: mixerConfig.GainIncrement,
 
-		bufferSize:   mixerConfig.BufferSize,
+		bufferLength: mixerConfig.BufferLength,
+		sampleRateHz: mixerConfig.SampleRateHz,
 		channels:     map[string]*MixerChannel{},
 		log:          mixerConfig.Logger,
 		faderGain:    config.MinimumGain,
@@ -74,8 +77,8 @@ func (m *Mixer) Close() {
 	_ = m.SetChannelGain("_master", config.MinimumGain)
 }
 
-func (m *Mixer) GetBufferLength() int {
-	return m.bufferSize
+func (m *Mixer) GetBufferCapacity() int {
+	return int(m.bufferLength.Seconds() * float64(m.sampleRateHz))
 }
 
 func (m *Mixer) AddChannel(name string, gain *float64) error {
@@ -89,9 +92,9 @@ func (m *Mixer) AddChannel(name string, gain *float64) error {
 	m.channels[name] = &MixerChannel{
 		activeGain: *gain,
 		configGain: gain,
-		// buffer:     NewLinearBuffer(m.bufferSize),
-		// buffer:     NewRingBuffer(m.bufferSize),
-		buffer: NewAdaptiveBuffer(m.bufferSize),
+		// buffer:     NewLinearBuffer(m.bufferTime, m.sampleRateHz),
+		// buffer:     NewRingBuffer(m.bufferTime, m.sampleRateHz),
+		buffer: NewAdaptiveBuffer(m.bufferLength, m.sampleRateHz),
 	}
 
 	return nil

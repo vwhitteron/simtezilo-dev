@@ -28,13 +28,13 @@ type SynthOpts struct {
 }
 
 func NewSynthesizer(opts *SynthOpts) (*Synthesizer, error) {
-	bufferTimeSeconds := 2.0
-	bufferSize := int(float64(opts.Config.InternalSampleRateHz) * bufferTimeSeconds)
+	bufferLength := 2 * time.Second
 
 	mixer, err := NewMixer(MixerConfig{
 		MasterGain:    &opts.Config.MasterGain,
 		GainIncrement: &opts.Config.GainIncrement,
-		BufferSize:    bufferSize,
+		BufferLength:  bufferLength,
+		SampleRateHz:  opts.Config.InternalSampleRateHz,
 		Logger:        opts.Logger.With().Str("component", "synth mixer").Logger(),
 	})
 	if err != nil {
@@ -79,8 +79,8 @@ func (s *Synthesizer) GetSampleRate() int {
 	return s.sampleRate
 }
 
-func (s *Synthesizer) GetBufferLength() int {
-	return s.mixer.GetBufferLength()
+func (s *Synthesizer) GetBufferCapacity() int {
+	return s.mixer.GetBufferCapacity()
 }
 
 // Buffer accessor methods

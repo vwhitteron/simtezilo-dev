@@ -6,24 +6,26 @@ import (
 )
 
 func TestAdaptiveBufferBasicOperations(t *testing.T) {
-	buffer := NewAdaptiveBuffer(100)
+	// Create a buffer that holds approximately 96 samples (2ms at 48000 Hz)
+	buffer := NewAdaptiveBuffer(2*time.Millisecond, 48000)
 
 	// Test basic properties
-	if buffer.Length() != 100 {
-		t.Errorf("Expected buffer length 100, got %d", buffer.Length())
+	if buffer.Length() != 96 {
+		t.Errorf("Expected buffer length 96, got %d", buffer.Length())
 	}
 
 	if buffer.Used() != 0 {
 		t.Errorf("Expected empty buffer, got %d used", buffer.Used())
 	}
 
-	if buffer.Available() != 100 {
-		t.Errorf("Expected 100 available, got %d", buffer.Available())
+	if buffer.Available() != 96 {
+		t.Errorf("Expected 96 available, got %d", buffer.Available())
 	}
 }
 
 func TestAdaptiveBufferWriteRead(t *testing.T) {
-	buffer := NewAdaptiveBuffer(10)
+	// Create a buffer that holds 10 samples (1ms at 10000 Hz)
+	buffer := NewAdaptiveBuffer(time.Millisecond, 10000)
 
 	// Write some samples
 	samples := []float64{1.0, 2.0, 3.0, 4.0, 5.0}
@@ -49,7 +51,8 @@ func TestAdaptiveBufferWriteRead(t *testing.T) {
 }
 
 func TestAdaptiveBufferOverflow(t *testing.T) {
-	buffer := NewAdaptiveBuffer(5)
+	// Create a buffer that holds 5 samples (1ms at 5000 Hz)
+	buffer := NewAdaptiveBuffer(time.Millisecond, 5000)
 
 	// Fill buffer completely
 	samples1 := []float64{1.0, 2.0, 3.0, 4.0, 5.0}
@@ -71,7 +74,8 @@ func TestAdaptiveBufferOverflow(t *testing.T) {
 }
 
 func TestAdaptiveBufferMixing(t *testing.T) {
-	buffer := NewAdaptiveBuffer(10)
+	// Create a buffer that holds 10 samples (1ms at 10000 Hz)
+	buffer := NewAdaptiveBuffer(time.Millisecond, 10000)
 
 	// Write initial samples
 	samples1 := []float64{0.5, 0.5, 0.5}
@@ -91,7 +95,8 @@ func TestAdaptiveBufferMixing(t *testing.T) {
 }
 
 func TestAdaptiveBufferUnderrun(t *testing.T) {
-	buffer := NewAdaptiveBuffer(10)
+	// Create a buffer that holds 10 samples (1ms at 10000 Hz)
+	buffer := NewAdaptiveBuffer(time.Millisecond, 10000)
 
 	// Write fewer samples than we'll try to read
 	samples := []float64{1.0, 2.0}
@@ -112,7 +117,8 @@ func TestAdaptiveBufferUnderrun(t *testing.T) {
 }
 
 func TestAdaptiveBufferHealthMonitoring(t *testing.T) {
-	buffer := NewAdaptiveBuffer(10)
+	// Create a buffer that holds 10 samples (1ms at 10000 Hz)
+	buffer := NewAdaptiveBuffer(time.Millisecond, 10000)
 
 	// Test fill ratio
 	samples := []float64{1.0, 2.0, 3.0, 4.0, 5.0}
@@ -144,7 +150,8 @@ func TestAdaptiveBufferHealthMonitoring(t *testing.T) {
 }
 
 func TestAdaptiveBufferConcurrency(t *testing.T) {
-	buffer := NewAdaptiveBuffer(100)
+	// Create a buffer that holds 96 samples (2ms at 48000 Hz)
+	buffer := NewAdaptiveBuffer(2*time.Millisecond, 48000)
 
 	// Test concurrent writes and reads
 	done := make(chan bool, 2)
