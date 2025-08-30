@@ -7,6 +7,7 @@ import (
 
 	"github.com/rs/zerolog"
 	"github.com/vwhitteron/simtezilo-dev/app/config"
+	"github.com/vwhitteron/simtezilo-dev/app/signal"
 )
 
 type Mixer struct {
@@ -324,6 +325,74 @@ func (m *Mixer) MixToMaster(length int) {
 			}
 
 			done = true
+		}
+
+		copy(outSamples, outSamplesWork)
+	}
+
+	m.channels["_master"].Write(outSamples, magnitude, true)
+}
+
+func (m *Mixer) MixToMaster2(length int) {
+	outSamples := make([]float64, length)
+
+	// mix in the chassis and transmission channels with equal priority
+	var peak float64 = 0
+	for _, name := range []string{"chassis", "transmission"} {
+		channel, ok := m.channels[name]
+		if !ok {
+			m.log.Error().Str("channel", name).Msg("channel not found in mixer")
+			continue
+		}
+
+		if *channel.configGain == config.MinimumGain {
+			continue
+		}
+
+		samples := channel.Read(length)
+
+		for i, sample := range samples {
+			outSamples[i] = mixSampleSum(outSamples[i], sample, &peak)
+		}
+	}
+
+	if peak > 1.0 {
+		scaleSamplesPeak(&outSamples, peak)
+	}
+
+	magnitude := 1.0
+	// mix in the engine channel with lower priority
+	channel, ok := m.channels["engine"]
+	if !ok {
+		m.log.Error().Str("channel", "engine").Msg("channel not found in mixer")
+	} else if *channel.configGain > config.MinimumGain {
+		outSamplesWork := make([]float64, length)
+		engineSamples := channel.Read(length)
+
+		// Perform direct mix and get the peak value
+		for i, engineSample := range engineSamples {
+			peak := 0.0
+
+			engineScaled := engineSample
+
+			engineMax := 1.0 - signal.Abs(outSamples[i])
+			if engineSample > engineMax || engineSample < -engineMax {
+				engineScaled = engineMax * engineSample
+			}
+
+			mixed := mixSampleSum(outSamples[i], engineScaled, &peak)
+
+			outSamplesWork[i] = mixed
+
+			if mixed > 1.0 || mixed < -1.0 {
+				m.log.Warn().
+					Float64("sample", outSamples[i]).
+					Float64("engine", engineSample).
+					Float64("engineScaled", engineScaled).
+					Float64("mixed", mixed).
+					Float64("peak", peak).
+					Msg("clipping")
+			}
 		}
 
 		copy(outSamples, outSamplesWork)

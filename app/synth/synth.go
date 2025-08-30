@@ -85,7 +85,7 @@ func (s *Synthesizer) GetBufferCapacity() int {
 
 // Buffer accessor methods
 func (s *Synthesizer) ReadBuffer(length int) []float64 {
-	s.mixer.MixToMaster(length)
+	s.mixer.MixToMaster2(length)
 
 	return s.mixer.ReadChannel("_master", length)
 }
