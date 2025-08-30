@@ -70,7 +70,7 @@ func (a *App) generateEngineHaptic() {
 	bufferSamples := samplesPerFrame * 2 // Exactly 2 frames worth
 	engineBuffer := make([]float64, bufferSamples)
 
-	currentBuffer := a.synth.InspectChannelBuffer("engine", samplesPerFrame)
+	currentBuffer := a.synth.InspectChannelBuffer("engine", samplesPerFrame, 0)
 	offset := synth.FindSampleZeroCrossing(&currentBuffer)
 
 	// No haptics when engine is not running

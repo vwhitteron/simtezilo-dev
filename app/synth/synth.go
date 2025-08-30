@@ -84,8 +84,8 @@ func (s *Synthesizer) GetBufferCapacity() int {
 }
 
 // Buffer accessor methods
-func (s *Synthesizer) InspectChannelBuffer(name string, length int) []float64 {
-	return s.mixer.InspectChannelBuffer(name, length)
+func (s *Synthesizer) InspectChannelBuffer(name string, length int, offset int) []float64 {
+	return s.mixer.InspectChannelBuffer(name, length, offset)
 }
 
 func (s *Synthesizer) ReadBuffer(length int) []float64 {

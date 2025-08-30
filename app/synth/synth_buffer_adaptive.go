@@ -92,9 +92,11 @@ func (b *AdaptiveBuffer) Health() (overflows, underruns int, fillRatio float64) 
 	return b.overflows, b.underruns, fillRatio
 }
 
-// Inspect returns a copy of samples from the current buffer write position without consuming them.
-// If length exceeds available samples, returns only available samples.
-func (b *AdaptiveBuffer) Inspect(length int) []float64 {
+// Inspect returns a copy of samples from the buffer without consuming them.
+// offset: position relative to write position (negative values read historical samples)
+// length: number of samples to read
+// If offset + length exceeds available samples, returns only available samples.
+func (b *AdaptiveBuffer) Inspect(length int, offset int) []float64 {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 
@@ -102,18 +104,44 @@ func (b *AdaptiveBuffer) Inspect(length int) []float64 {
 		return nil
 	}
 
-	if length > b.used {
-		length = b.used
+	// Calculate the actual read position with offset applied
+	readPosition := (b.writePos + offset) % b.capacity
+	if readPosition < 0 {
+		readPosition += b.capacity
+	}
+
+	// Determine maximum available samples considering the offset
+	var maxAvailable int
+	if offset >= 0 {
+		// Reading forward from write position
+		maxAvailable = b.capacity - offset
+		if maxAvailable > (b.capacity - b.used) {
+			maxAvailable = b.capacity - b.used
+		}
+	} else {
+		// Reading backward (historical samples)
+		maxAvailable = b.used + offset
+		if maxAvailable < 0 {
+			maxAvailable = 0
+		}
+	}
+
+	if length > maxAvailable {
+		length = maxAvailable
+	}
+
+	if length <= 0 {
+		return nil
 	}
 
 	result := make([]float64, length)
 
-	end := b.writePos + length
+	end := readPosition + length
 	if end <= b.capacity {
-		copy(result, b.buffer[b.writePos:end])
+		copy(result, b.buffer[readPosition:end])
 	} else {
-		firstPart := b.capacity - b.writePos
-		copy(result[:firstPart], b.buffer[b.writePos:])
+		firstPart := b.capacity - readPosition
+		copy(result[:firstPart], b.buffer[readPosition:])
 		copy(result[firstPart:], b.buffer[:end-b.capacity])
 	}
 

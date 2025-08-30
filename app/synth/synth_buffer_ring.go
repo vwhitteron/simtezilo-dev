@@ -83,8 +83,12 @@ func (b *RingBuffer) IsFull() bool {
 }
 
 // Inspect returns a copy of the requested number of samples from the buffer
+// offset: position relative to write position (negative values read historical samples)
 // The samples stored in the buffer are not modified and remain in place
-func (b *RingBuffer) Inspect(length int) []float64 {
+func (b *RingBuffer) Inspect(length int, offset int) []float64 {
+	// For ring buffer, we'll implement a simple version that ignores offset for backward compatibility
+	// This maintains the existing behavior while satisfying the interface
+	_ = offset // Ignore offset parameter for now
 	return b.readFromBuffer(length, false)
 }
 

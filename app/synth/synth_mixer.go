@@ -145,12 +145,12 @@ func (m *Mixer) ReadChannel(name string, length int) []float64 {
 	return m.channels[name].Read(length)
 }
 
-func (m *Mixer) InspectChannelBuffer(name string, length int) []float64 {
+func (m *Mixer) InspectChannelBuffer(name string, length int, offset int) []float64 {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
 	if channel, ok := m.channels[name]; ok {
-		return channel.buffer.Inspect(length)
+		return channel.buffer.Inspect(length, offset)
 	}
 
 	return nil
