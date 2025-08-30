@@ -90,7 +90,7 @@ func (m *Mixer) AddChannel(name string, gain *float64) error {
 		activeGain: *gain,
 		configGain: gain,
 		// buffer:     NewLinearBuffer(m.bufferSize),
-		// buffer: NewRingBuffer(m.bufferSize),
+		// buffer:     NewRingBuffer(m.bufferSize),
 		buffer: NewAdaptiveBuffer(m.bufferSize),
 	}
 
