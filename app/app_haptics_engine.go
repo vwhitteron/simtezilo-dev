@@ -67,8 +67,8 @@ func (a *App) generateEngineHaptic() {
 	// This provides a small buffer to prevent underruns while keeping latency low
 	sampleRate := float64(a.synth.GetSampleRate())
 	samplesPerFrame := int(sampleRate / engineHapticFrameRate)
-	samplesPerBuffer := samplesPerFrame * 2 // Exactly 2 frames worth
-	engineBuffer := make([]float64, samplesPerBuffer)
+	bufferSamples := samplesPerFrame * 2 // Exactly 2 frames worth
+	engineBuffer := make([]float64, bufferSamples)
 
 	// No haptics when engine is not running
 	if rpm == 0 {
