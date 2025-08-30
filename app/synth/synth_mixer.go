@@ -355,17 +355,22 @@ func (m *Mixer) checkBufferHealth() {
 			continue
 		}
 
+		if *channel.configGain <= config.MinimumGain {
+			continue
+		}
+
 		// Check if the buffer supports health monitoring
 		if adaptiveBuffer, ok := channel.buffer.(*AdaptiveBuffer); ok {
 			overflows, underruns, fillRatio := adaptiveBuffer.Health()
 
 			if overflows > 0 || underruns > 0 || fillRatio > 0.9 || fillRatio < 0.1 {
 				m.log.Warn().
+					Bool("healthy", false).
 					Str("channel", name).
 					Int("overflows", overflows).
 					Int("underruns", underruns).
 					Float64("fillRatio", fillRatio).
-					Msg("buffer health issue detected")
+					Msg("buffer")
 			}
 		}
 	}

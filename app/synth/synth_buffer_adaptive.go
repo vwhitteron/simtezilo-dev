@@ -19,7 +19,7 @@ type AdaptiveBuffer struct {
 	overflows  int       // count of buffer overflows
 	underruns  int       // count of buffer underruns
 	lastAccess time.Time // last time buffer was accessed
-	targetFill int       // target fill level to maintain
+	readDelay  int       // delay between buffer write and read
 }
 
 // NewAdaptiveBuffer creates a new adaptive buffer
@@ -27,26 +27,27 @@ type AdaptiveBuffer struct {
 // sampleRateHz: sample rate in Hz to calculate buffer size in samples
 func NewAdaptiveBuffer(length time.Duration, sampleRateHz int) *AdaptiveBuffer {
 	capacity := int(length.Seconds() * float64(sampleRateHz))
-	targetFill := capacity / 4 // Keep buffer 25% full on average
+	readDelay := (sampleRateHz / 1000) * 24 * int(time.Millisecond)
 
 	buffer := &AdaptiveBuffer{
-		buffer:     make([]float64, capacity),
-		writePos:   0,
-		readPos:    0,
-		capacity:   capacity,
-		used:       0,
-		targetFill: targetFill,
-		lastAccess: time.Now(),
+		buffer:    make([]float64, capacity),
+		writePos:  0,
+		readPos:   0,
+		capacity:  capacity,
+		used:      0,
+		readDelay: readDelay,
 	}
 
+	buffer.updateLastAccess()
+
 	buffer.Clear()
+
 	return buffer
 }
 
 // Clear zeros out the entire buffer and resets state
 func (b *AdaptiveBuffer) Clear() {
 	b.mu.Lock()
-	defer b.mu.Unlock()
 
 	for i := range b.capacity {
 		b.buffer[i] = 0
@@ -57,7 +58,10 @@ func (b *AdaptiveBuffer) Clear() {
 	b.used = 0
 	b.overflows = 0
 	b.underruns = 0
-	b.lastAccess = time.Now()
+
+	b.mu.Unlock()
+
+	b.updateLastAccess()
 }
 
 // Length returns the total buffer capacity
@@ -104,10 +108,10 @@ func (b *AdaptiveBuffer) Write(samples []float64, overwrite bool) {
 		return
 	}
 
+	b.updateLastAccess()
+
 	b.mu.Lock()
 	defer b.mu.Unlock()
-
-	b.lastAccess = time.Now()
 
 	// Check for potential overflow
 	if len(samples) > (b.capacity-b.used) && overwrite {
@@ -170,10 +174,10 @@ func (b *AdaptiveBuffer) Write(samples []float64, overwrite bool) {
 
 // readFromBuffer internal implementation for reading
 func (b *AdaptiveBuffer) readFromBuffer(length int, consume bool) []float64 {
+	b.updateLastAccess()
+
 	b.mu.Lock()
 	defer b.mu.Unlock()
-
-	b.lastAccess = time.Now()
 
 	// Check for underrun
 	if length > b.used {
@@ -232,12 +236,19 @@ func (b *AdaptiveBuffer) dropOldestSamples(count int) {
 // 	return outSamples
 // }
 
+func (b *AdaptiveBuffer) updateLastAccess() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	b.lastAccess = time.Now()
+}
+
 // IsStarved returns true if buffer is running low
 func (b *AdaptiveBuffer) IsStarved() bool {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 
-	return b.used <= (b.targetFill / 2)
+	return b.used <= b.readDelay
 }
 
 // IsOverfull returns true if buffer is too full
@@ -259,17 +270,10 @@ func (b *AdaptiveBuffer) GetOptimalReadSize(requestedSize int) int {
 	}
 
 	// If we're starved, suggest reading less to preserve buffer
-	if b.used < (b.targetFill / 2) {
+	if b.used < (b.readDelay / 2) {
 		return min(requestedSize/2, b.used)
 	}
 
 	// Normal case
 	return min(requestedSize, b.used)
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }
