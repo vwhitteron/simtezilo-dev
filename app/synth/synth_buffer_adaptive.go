@@ -27,14 +27,14 @@ type AdaptiveBuffer struct {
 // sampleRateHz: sample rate in Hz to calculate buffer size in samples
 func NewAdaptiveBuffer(length time.Duration, sampleRateHz int) *AdaptiveBuffer {
 	capacity := int(length.Seconds() * float64(sampleRateHz))
-	readDelay := (sampleRateHz / 1000) * 24 * int(time.Millisecond)
+	readDelay := (sampleRateHz / 1000) * 24
 
 	buffer := &AdaptiveBuffer{
 		buffer:    make([]float64, capacity),
-		writePos:  0,
+		writePos:  readDelay,
 		readPos:   0,
 		capacity:  capacity,
-		used:      0,
+		used:      readDelay,
 		readDelay: readDelay,
 	}
 
@@ -53,9 +53,9 @@ func (b *AdaptiveBuffer) Clear() {
 		b.buffer[i] = 0
 	}
 
-	b.writePos = 0
+	b.writePos = b.readDelay
 	b.readPos = 0
-	b.used = 0
+	b.used = b.readDelay
 	b.overflows = 0
 	b.underruns = 0
 

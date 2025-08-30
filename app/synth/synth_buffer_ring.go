@@ -11,10 +11,11 @@ type RingBuffer struct {
 	mu     sync.RWMutex
 
 	// Ring buffer state
-	writePos int // current write position
-	readPos  int // current read position
-	capacity int // capacity of buffer in samples
-	used     int // number of samples currently in buffer
+	readPos   int // current read position
+	writePos  int // current write position
+	capacity  int // capacity of buffer in samples
+	used      int // number of samples currently in buffer
+	readDelay int // delay between buffer write and read
 }
 
 // NewRingBuffer creates a new ring buffer that can hold the specified duration of audio
@@ -22,13 +23,15 @@ type RingBuffer struct {
 // sampleRateHz: sample rate in Hz to calculate buffer size in samples
 func NewRingBuffer(length time.Duration, sampleRateHz int) *RingBuffer {
 	capacity := int(length.Seconds() * float64(sampleRateHz))
+	readDelay := (sampleRateHz / 1000) * 24
 
 	buffer := &RingBuffer{
-		buffer:   make([]float64, capacity),
-		writePos: 0,
-		readPos:  0,
-		capacity: capacity,
-		used:     0,
+		buffer:    make([]float64, capacity),
+		readPos:   0,
+		writePos:  readDelay,
+		capacity:  capacity,
+		used:      readDelay,
+		readDelay: readDelay,
 	}
 
 	buffer.Clear()
@@ -45,9 +48,9 @@ func (b *RingBuffer) Clear() {
 		b.buffer[i] = 0
 	}
 
-	b.writePos = 0
 	b.readPos = 0
-	b.used = 0
+	b.writePos = b.readDelay
+	b.used = b.readDelay
 }
 
 // Used returns the total number of samples the buffer can hold
