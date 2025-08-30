@@ -26,6 +26,40 @@ func GainToAmplitudeRatio(gain float64) float64 {
 	return amplitudeRatio
 }
 
+// findZeroCrossing searches for the first zero point or crossing in a given array of samples
+// If no zero point or crossing is found then it returns the first index of the sample
+func FindSampleZeroCrossing(samples *[]float64) int {
+	// Find zero crossing or polarity change within the current buffer content
+	zeroCrossingPos := 0
+	searchRange := len(*samples)
+
+	if searchRange <= 1 {
+		return zeroCrossingPos
+	}
+
+	// Look for zero crossings in the current buffer content
+	for i := range searchRange - 1 {
+		currentSample := (*samples)[i]
+		nextSample := (*samples)[i+1]
+
+		// Check for exact zero
+		if currentSample == 0.0 {
+			zeroCrossingPos = i
+
+			break
+		}
+
+		// Check for polarity change (zero crossing)
+		if (currentSample > 0 && nextSample < 0) || (currentSample < 0 && nextSample > 0) {
+			zeroCrossingPos = i + 1
+
+			break
+		}
+	}
+
+	return zeroCrossingPos
+}
+
 // Mixes two samples using a simple sum algorithm.
 // Returns the mixed sample and the peak value which is later used to scale a slice of samples.
 func mixSampleSum(sample1 float64, sample2 float64, peak *float64) float64 {

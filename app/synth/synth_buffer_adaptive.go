@@ -92,9 +92,32 @@ func (b *AdaptiveBuffer) Health() (overflows, underruns int, fillRatio float64) 
 	return b.overflows, b.underruns, fillRatio
 }
 
-// Inspect returns a copy of samples without consuming them
+// Inspect returns a copy of samples from the current buffer write position without consuming them.
+// If length exceeds available samples, returns only available samples.
 func (b *AdaptiveBuffer) Inspect(length int) []float64 {
-	return b.readFromBuffer(length, false)
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+
+	if length <= 0 {
+		return nil
+	}
+
+	if length > b.used {
+		length = b.used
+	}
+
+	result := make([]float64, length)
+
+	end := b.writePos + length
+	if end <= b.capacity {
+		copy(result, b.buffer[b.writePos:end])
+	} else {
+		firstPart := b.capacity - b.writePos
+		copy(result[:firstPart], b.buffer[b.writePos:])
+		copy(result[firstPart:], b.buffer[:end-b.capacity])
+	}
+
+	return result
 }
 
 // Read returns samples and consumes them
@@ -103,7 +126,7 @@ func (b *AdaptiveBuffer) Read(length int) []float64 {
 }
 
 // Write adds samples to the buffer with overflow protection
-func (b *AdaptiveBuffer) Write(samples []float64, overwrite bool) {
+func (b *AdaptiveBuffer) Write(samples []float64, offset int, overwrite bool) {
 	if len(samples) == 0 {
 		return
 	}
@@ -112,6 +135,10 @@ func (b *AdaptiveBuffer) Write(samples []float64, overwrite bool) {
 
 	b.mu.Lock()
 	defer b.mu.Unlock()
+
+	if offset != 0 {
+		b.writePos = (b.writePos + offset) % b.capacity
+	}
 
 	// Check for potential overflow
 	if len(samples) > (b.capacity-b.used) && overwrite {
@@ -171,6 +198,78 @@ func (b *AdaptiveBuffer) Write(samples []float64, overwrite bool) {
 		}
 	}
 }
+
+// TODO: REMOVE
+// WriteAtZeroCrossover writes samples starting from a zero crossing or polarity change
+// in the current buffer. If no zero crossing is found within the sample range, it overwrites anyway.
+// The entire new sample is written from the zero crossover point.
+// func (b *AdaptiveBuffer) WriteAtZeroCrossover(samples []float64) {
+// 	if len(samples) == 0 {
+// 		return
+// 	}
+
+// 	b.updateLastAccess()
+
+// 	b.mu.Lock()
+// 	defer b.mu.Unlock()
+
+// 	zeroCrossingPos := FindSampleZeroCrossing(&samples)
+
+// 	// // Find zero crossing or polarity change within the current buffer content
+// 	// zeroCrossingPos := -1
+// 	// searchRange := min(len(samples), b.used)
+
+// 	// if searchRange > 1 {
+// 	// 	// Look for zero crossings in the current buffer content
+// 	// 	for i := 0; i < searchRange-1; i++ {
+// 	// 		currentPos := (b.readPos + i) % b.capacity
+// 	// 		nextPos := (b.readPos + i + 1) % b.capacity
+
+// 	// 		currentSample := b.buffer[currentPos]
+// 	// 		nextSample := b.buffer[nextPos]
+
+// 	// 		// Check for exact zero
+// 	// 		if currentSample == 0.0 {
+// 	// 			zeroCrossingPos = i
+// 	// 			break
+// 	// 		}
+
+// 	// 		// Check for polarity change (zero crossing)
+// 	// 		if (currentSample > 0 && nextSample < 0) || (currentSample < 0 && nextSample > 0) {
+// 	// 			zeroCrossingPos = i + 1 // Start writing from the next position
+// 	// 			break
+// 	// 		}
+// 	// 	}
+// 	// }
+
+// 	// // If no zero crossing found, start writing from the beginning
+// 	// if zeroCrossingPos == -1 {
+// 	// 	zeroCrossingPos = 0
+// 	// }
+
+// 	// Write the entire new sample starting from the zero crossover point
+// 	writeStartPos := (b.readPos + zeroCrossingPos) % b.capacity
+
+// 	for i, sample := range samples {
+// 		writePos := (writeStartPos + i) % b.capacity
+// 		b.buffer[writePos] = sample
+
+// 		// Update buffer state
+// 		samplesFromRead := zeroCrossingPos + i + 1
+// 		if samplesFromRead > b.used {
+// 			b.used = samplesFromRead
+// 		}
+
+// 		// Ensure we don't exceed buffer capacity
+// 		if b.used > b.capacity {
+// 			// Advance read position to prevent overflow
+// 			samplesOverflow := b.used - b.capacity
+// 			b.readPos = (b.readPos + samplesOverflow) % b.capacity
+// 			b.used = b.capacity
+// 			b.overflows++
+// 		}
+// 	}
+// }
 
 // readFromBuffer internal implementation for reading
 func (b *AdaptiveBuffer) readFromBuffer(length int, consume bool) []float64 {

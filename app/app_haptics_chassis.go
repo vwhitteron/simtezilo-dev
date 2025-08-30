@@ -56,7 +56,7 @@ func (a *App) generateChassisHaptic() {
 		pulseBuffer[i] = ((pulseAmplitude * math.Sin(phase)) + pulseAmplitude) / 2
 	}
 
-	a.synth.WriteBuffer("chassis", pulseBuffer)
+	a.synth.WriteBuffer("chassis", pulseBuffer, 0)
 
 	// log large amplitude values
 	if pulseAmplitude > 1.0 || pulseAmplitude < -1.0 {

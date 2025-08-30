@@ -84,30 +84,34 @@ func (s *Synthesizer) GetBufferCapacity() int {
 }
 
 // Buffer accessor methods
+func (s *Synthesizer) InspectChannelBuffer(name string, length int) []float64 {
+	return s.mixer.InspectChannelBuffer(name, length)
+}
+
 func (s *Synthesizer) ReadBuffer(length int) []float64 {
 	s.mixer.MixToMaster2(length)
 
 	return s.mixer.ReadChannel("_master", length)
 }
 
-func (s *Synthesizer) WriteBuffer(channel string, sample []float64) {
+func (s *Synthesizer) WriteBuffer(channel string, sample []float64, offset int) {
 	magnitude, err := s.mixer.GetChannelPowerRatio(channel)
 	if err != nil {
 		s.log.Error().Err(err).Str("channel", channel).Msg("failed to get channel power ratio")
 		return
 	}
 
-	_ = s.mixer.WriteChannel(channel, sample, magnitude, false)
+	_ = s.mixer.WriteChannel(channel, sample, magnitude, offset, false)
 }
 
-func (s *Synthesizer) OverwriteBuffer(channel string, sample []float64) {
+func (s *Synthesizer) OverwriteBuffer(channel string, sample []float64, offset int) {
 	magnitude, err := s.mixer.GetChannelPowerRatio(channel)
 	if err != nil {
 		s.log.Error().Err(err).Str("channel", channel).Msg("failed to get channel power ratio")
 		return
 	}
 
-	_ = s.mixer.WriteChannel(channel, sample, magnitude, true)
+	_ = s.mixer.WriteChannel(channel, sample, magnitude, offset, true)
 }
 
 func (s *Synthesizer) ClearBuffers() {
@@ -149,7 +153,7 @@ func (s *Synthesizer) PlayEffect(name string, magnitude float64) {
 
 	// TODO: handle invalid effect name
 	sample := s.effects.GetSample(name)
-	_ = s.mixer.WriteChannel(name, sample, magnitude, false)
+	_ = s.mixer.WriteChannel(name, sample, magnitude, 0, false)
 }
 
 func (s *Synthesizer) Close() error {

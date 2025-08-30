@@ -105,12 +105,20 @@ func (m *MixerChannel) Read(length int) []float64 {
 	return m.buffer.Read(length)
 }
 
-func (m *MixerChannel) Write(samples []float64, magnitude float64, overwrite bool) {
+func (m *MixerChannel) Write(samples []float64, magnitude float64, offset int, overwrite bool) {
 	scaleSamples(&samples, magnitude)
-	m.buffer.Write(samples, overwrite)
+
+	m.buffer.Write(samples, offset, overwrite)
 }
 
-func (m *Mixer) WriteChannel(name string, samples []float64, magnitude float64, overwrite bool) error {
+// TODO: REMOVE
+// func (m *MixerChannel) WriteZeroCrossover(samples []float64, magnitude float64) {
+// 	scaleSamples(&samples, magnitude)
+
+// 	m.buffer.WriteAtZeroCrossover(samples)
+// }
+
+func (m *Mixer) WriteChannel(name string, samples []float64, magnitude float64, offset int, overwrite bool) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -118,7 +126,7 @@ func (m *Mixer) WriteChannel(name string, samples []float64, magnitude float64, 
 		return fmt.Errorf("channel not found: %q", name)
 	}
 
-	m.channels[name].Write(samples, magnitude, overwrite)
+	m.channels[name].Write(samples, magnitude, offset, overwrite)
 
 	return nil
 }
@@ -135,6 +143,17 @@ func (m *Mixer) ReadChannel(name string, length int) []float64 {
 	m.checkBufferHealth()
 
 	return m.channels[name].Read(length)
+}
+
+func (m *Mixer) InspectChannelBuffer(name string, length int) []float64 {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if channel, ok := m.channels[name]; ok {
+		return channel.buffer.Inspect(length)
+	}
+
+	return nil
 }
 
 func (m *Mixer) GetChannelNames() []string {
@@ -330,7 +349,7 @@ func (m *Mixer) MixToMaster(length int) {
 		copy(outSamples, outSamplesWork)
 	}
 
-	m.channels["_master"].Write(outSamples, magnitude, true)
+	m.channels["_master"].Write(outSamples, magnitude, 0, true)
 }
 
 func (m *Mixer) MixToMaster2(length int) {
@@ -398,7 +417,7 @@ func (m *Mixer) MixToMaster2(length int) {
 		copy(outSamples, outSamplesWork)
 	}
 
-	m.channels["_master"].Write(outSamples, magnitude, true)
+	m.channels["_master"].Write(outSamples, magnitude, 0, true)
 }
 
 func (m *Mixer) ClearBuffers() {

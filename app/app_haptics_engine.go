@@ -70,9 +70,12 @@ func (a *App) generateEngineHaptic() {
 	bufferSamples := samplesPerFrame * 2 // Exactly 2 frames worth
 	engineBuffer := make([]float64, bufferSamples)
 
+	currentBuffer := a.synth.InspectChannelBuffer("engine", samplesPerFrame)
+	offset := synth.FindSampleZeroCrossing(&currentBuffer)
+
 	// No haptics when engine is not running
 	if rpm == 0 {
-		a.synth.WriteBuffer("engine", engineBuffer)
+		a.synth.OverwriteBuffer("engine", engineBuffer, offset)
 
 		return
 	}
@@ -89,7 +92,7 @@ func (a *App) generateEngineHaptic() {
 
 	a.generatePulseWaveform(rpm, engineRoughness, &engineBuffer)
 
-	a.synth.OverwriteBuffer("engine", engineBuffer)
+	a.synth.OverwriteBuffer("engine", engineBuffer, offset)
 }
 
 // getEngineCharacteristics retrieves engine characteristics based on layout and angles

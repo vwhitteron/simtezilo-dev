@@ -5,5 +5,6 @@ type Buffer interface {
 	Length() int
 	Inspect(samples int) []float64
 	Read(length int) []float64
-	Write(samples []float64, overwrite bool)
+	Write(samples []float64, offset int, overwrite bool)
+	// WriteAtZeroCrossover(samples []float64)
 }
