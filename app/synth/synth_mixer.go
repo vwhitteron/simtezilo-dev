@@ -105,8 +105,10 @@ func (m *MixerChannel) Read(length int) []float64 {
 	return m.buffer.Read(length)
 }
 
+// TODO: scaling slice in-place cause the gear shift wavform to be reduced every time it is played
+// is this the correct thing to do?
 func (m *MixerChannel) Write(samples []float64, magnitude float64, offset int, overwrite bool) {
-	scaleSamples(&samples, magnitude)
+	ScaleSamples(&samples, magnitude)
 
 	m.buffer.Write(samples, offset, overwrite)
 }
@@ -452,7 +454,7 @@ func (m *Mixer) checkBufferHealth() {
 			overflows, underruns, fillRatio := adaptiveBuffer.Health()
 
 			if overflows > 0 || underruns > 0 || fillRatio > 0.9 || fillRatio < 0.1 {
-				m.log.Warn().
+				m.log.Debug().
 					Bool("healthy", false).
 					Str("channel", name).
 					Int("overflows", overflows).
