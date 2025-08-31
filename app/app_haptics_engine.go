@@ -70,8 +70,17 @@ func (a *App) generateEngineHaptic() {
 	bufferSamples := samplesPerFrame * 2 // Exactly 2 frames worth
 	engineBuffer := make([]float64, bufferSamples)
 
-	currentBuffer := a.synth.InspectChannelBuffer("engine", samplesPerFrame, 0)
-	offset := synth.FindSampleZeroCrossing(&currentBuffer)
+	// offset := a.prepareSamplesForSmoothJoin(samplesPerFrame, &engineBuffer)
+
+	offset := 0
+	lastPolarity := 0
+	lookback := 20
+
+	// Stitch the new engine samples smoothly with the current buffer contents
+	inspectBuffer := a.synth.InspectChannelBuffer("engine", samplesPerFrame+lookback, -lookback)
+	if inspectBuffer != nil && len(inspectBuffer) >= samplesPerFrame {
+		offset, lastPolarity = synth.FindSampleZeroCrossing(inspectBuffer[lookback:samplesPerFrame])
+	}
 
 	// No haptics when engine is not running
 	if rpm == 0 {
@@ -91,6 +100,12 @@ func (a *App) generateEngineHaptic() {
 	engineRoughness := a.calculateEngineRoughness(rpm)
 
 	a.generatePulseWaveform(rpm, engineRoughness, &engineBuffer)
+
+	// Adjust engine buffer polarity to be the inverse of the last pulse
+	currentPolarity := synth.SamplePolarity(engineBuffer[0:lookback])
+	if currentPolarity == float64(lastPolarity) {
+		synth.InvertSamplePolarity(&engineBuffer)
+	}
 
 	a.synth.OverwriteBuffer("engine", engineBuffer, offset)
 }

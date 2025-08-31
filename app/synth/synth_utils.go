@@ -27,37 +27,83 @@ func GainToAmplitudeRatio(gain float64) float64 {
 }
 
 // findZeroCrossing searches for the first zero point or crossing in a given array of samples
-// If no zero point or crossing is found then it returns the first index of the sample
-func FindSampleZeroCrossing(samples *[]float64) int {
+// Returns the position of the zero crossing and the polarity just before the crossing (-1 or 1)
+// If no zero point or crossing is found then it returns the first index and polarity of first sample
+func FindSampleZeroCrossing(samples []float64) (offset int, polarity int) {
 	// Find zero crossing or polarity change within the current buffer content
-	zeroCrossingPos := 0
-	searchRange := len(*samples)
+	offset = 0
+	polarity = 1
 
+	searchRange := len(samples)
 	if searchRange <= 1 {
-		return zeroCrossingPos
+		if searchRange == 1 {
+			if samples[0] < 0 {
+				polarity = -1
+			}
+		}
+		return offset, polarity
+	}
+
+	// Determine initial polarity from first sample
+	if samples[0] < 0 {
+		polarity = -1
 	}
 
 	// Look for zero crossings in the current buffer content
 	for i := range searchRange - 1 {
-		currentSample := (*samples)[i]
-		nextSample := (*samples)[i+1]
+		currentSample := (samples)[i]
+		nextSample := (samples)[i+1]
 
 		// Check for exact zero
 		if currentSample == 0.0 {
-			zeroCrossingPos = i
-
+			offset = i
+			// For exact zero, use polarity from previous sample if available
+			if i > 0 {
+				if samples[i-1] < 0 {
+					polarity = -1
+				} else {
+					polarity = 1
+				}
+			}
 			break
 		}
 
 		// Check for polarity change (zero crossing)
 		if (currentSample > 0 && nextSample < 0) || (currentSample < 0 && nextSample > 0) {
-			zeroCrossingPos = i + 1
-
+			offset = i + 1
+			// Polarity before crossing is the polarity of current sample
+			if currentSample < 0 {
+				polarity = -1
+			} else {
+				polarity = 1
+			}
 			break
 		}
 	}
 
-	return zeroCrossingPos
+	return offset, polarity
+}
+
+// SamplePolarity returns the polarity of the given samples (-1 negative, 1 positive).
+// The samples are checked from the last to the first and the polority is returned
+// as soon as a non-zero sample is encountered.
+// If all samples are zero, it returns positive polarity.
+func SamplePolarity(samples []float64) float64 {
+	for i := len(samples) - 1; i >= 0; i-- {
+		if samples[i] < 0 {
+			return -1
+		}
+	}
+
+	return 1
+}
+
+// InvertSamplePolarity inverts the polarity of the given samples.
+func InvertSamplePolarity(samples *[]float64) {
+	for i := range *samples {
+		(*samples)[i] = -(*samples)[i]
+	}
+}
 }
 
 // Mixes two samples using a simple sum algorithm.
