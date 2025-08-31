@@ -153,7 +153,13 @@ func (s *Synthesizer) PlayEffect(name string, magnitude float64) {
 
 	// TODO: handle invalid effect name
 	sample := s.effects.GetSample(name)
-	_ = s.mixer.WriteChannel(name, sample, magnitude, 0, false)
+
+	// TODO: copying to a new sample as the slice is scaled by magnitude in-place which
+	// causes the effect volume to be reduced every time it is played
+	tmpSample := make([]float64, len(sample))
+	copy(tmpSample, sample)
+
+	_ = s.mixer.WriteChannel(name, tmpSample, magnitude, 0, false)
 }
 
 func (s *Synthesizer) Close() error {
