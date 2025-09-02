@@ -176,18 +176,21 @@ func (m *Mixer) GetChannelNames() []string {
 	return names
 }
 func (m *Mixer) GetChannelGain(name string) (float64, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
 	channel, ok := m.channels[name]
 	if !ok {
 		return 0, fmt.Errorf("channel %q does not exist", name)
 	}
 
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
 	return channel.activeGain, nil
 }
 
 func (m *Mixer) SetChannelGain(name string, gain float64) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	channel, ok := m.channels[name]
 	if !ok {
 		return fmt.Errorf("channel %q does not exist", name)
@@ -196,9 +199,6 @@ func (m *Mixer) SetChannelGain(name string, gain float64) error {
 	if channel.activeGain == gain {
 		return nil
 	}
-
-	m.mu.Lock()
-	defer m.mu.Unlock()
 
 	channel.activeGain = gain
 	m.channels[name] = channel
@@ -289,10 +289,13 @@ func (m *Mixer) MixToMaster(length int) {
 
 	// mix in the chassis and transmission channels with equal priority
 	var peak float64 = 0
+	m.mu.RLock() // TODO: locking is too complicated, maybe have per channel locks
 	for _, name := range []string{"chassis", "transmission"} {
 		channel, ok := m.channels[name]
 		if !ok {
+			m.mu.RUnlock()
 			m.log.Error().Str("channel", name).Msg("channel not found in mixer")
+			m.mu.RLock()
 			continue
 		}
 
@@ -315,7 +318,9 @@ func (m *Mixer) MixToMaster(length int) {
 	// mix in the engine channel with lower priority
 	channel, ok := m.channels["engine"]
 	if !ok {
+		m.mu.RUnlock()
 		m.log.Error().Str("channel", "engine").Msg("channel not found in mixer")
+		m.mu.RLock()
 	} else if *channel.configGain > config.MinimumGain {
 		outSamplesWork := make([]float64, length)
 		engineSamples := channel.Read(length)
@@ -351,7 +356,10 @@ func (m *Mixer) MixToMaster(length int) {
 		copy(outSamples, outSamplesWork)
 	}
 
-	m.channels["_master"].Write(outSamples, magnitude, 0, true)
+	masterChannel := m.channels["_master"]
+	m.mu.RUnlock()
+
+	masterChannel.Write(outSamples, magnitude, 0, true)
 }
 
 func (m *Mixer) MixToMaster2(length int) {
@@ -359,10 +367,13 @@ func (m *Mixer) MixToMaster2(length int) {
 
 	// mix in the chassis and transmission channels with equal priority
 	var peak float64 = 0
+	m.mu.RLock()
 	for _, name := range []string{"chassis", "transmission"} {
 		channel, ok := m.channels[name]
 		if !ok {
+			m.mu.RUnlock()
 			m.log.Error().Str("channel", name).Msg("channel not found in mixer")
+			m.mu.RLock()
 			continue
 		}
 
@@ -385,7 +396,9 @@ func (m *Mixer) MixToMaster2(length int) {
 	// mix in the engine channel with lower priority
 	channel, ok := m.channels["engine"]
 	if !ok {
+		m.mu.RUnlock()
 		m.log.Error().Str("channel", "engine").Msg("channel not found in mixer")
+		m.mu.RLock()
 	} else if *channel.configGain > config.MinimumGain {
 		outSamplesWork := make([]float64, length)
 		engineSamples := channel.Read(length)
@@ -419,7 +432,10 @@ func (m *Mixer) MixToMaster2(length int) {
 		copy(outSamples, outSamplesWork)
 	}
 
-	m.channels["_master"].Write(outSamples, magnitude, 0, true)
+	masterChannel := m.channels["_master"]
+	m.mu.RUnlock()
+
+	masterChannel.Write(outSamples, magnitude, 0, true)
 }
 
 func (m *Mixer) ClearBuffers() {
@@ -477,11 +493,13 @@ func (m *Mixer) watchForConfigChanges() {
 			continue
 		}
 
+		m.mu.RLock()
 		for name, channel := range m.channels {
 			if channel.activeGain == *channel.configGain {
 				continue
 			}
 
+			m.mu.RUnlock()
 			_ = m.SetChannelGain(name, *channel.configGain)
 
 			if name == "_master" {
@@ -493,6 +511,8 @@ func (m *Mixer) watchForConfigChanges() {
 			}
 
 			m.log.Debug().Str("channel", name).Float64("gain", *channel.configGain).Str("event", "change").Msg("config watch")
+			m.mu.RLock()
 		}
+		m.mu.RUnlock()
 	}
 }
