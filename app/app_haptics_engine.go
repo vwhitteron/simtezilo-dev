@@ -318,29 +318,25 @@ func (a *App) generatePulseWaveform(rpm float64, engineRoughness float64, engine
 	throttlePercent := float64(a.gtClient.Telemetry.ThrottleOutputPercent()) / 100
 	throttlePercent, _ = signal.LimitWindow(throttlePercent, 0.0, 1.0)
 
-	var gainOffset float64
-	var amplitudeScale float64
+	var vehicleTypeGain float64
 	switch a.vehicle.vehicleType {
 	case "race":
-		gainOffset = 0.0
-		amplitudeScale = 0.3
+		vehicleTypeGain = 0.0
 	case "tuned":
-		gainOffset = -3.0
-		amplitudeScale = 0.2
+		vehicleTypeGain = -3.0
 	default: // "street" or other types
-		gainOffset = -4.75
-		amplitudeScale = 0.01
+		vehicleTypeGain = -4.75
 	}
 
-	// Generate amplitude with louder idle feedback and linear 30% volume reduction at max RPM
-	// Start with higher base amplitude for idle/low RPM feedback
-	baseAmplitude := 0.7 + (throttlePercent * amplitudeScale)
+	rpmPercent, _ = signal.LimitWindow(rpmPercent, 0.0, 1.0)
 
-	rpmNormalized, _ := signal.LimitWindow(rpmPercent, 0.0, 1.0)
-	adjust := synth.GainToPowerRatio(a.vehicle.engine.haptics.Gain + gainOffset)
-	amplitude := (baseAmplitude + (engineRoughness * rpmNormalized * 0.1)) * adjust
+	// Apply engine load based engine vibration (-1db at idle)
+	engineLoadGainIncrease := 1.0
+	engineLoadGain := (1 - throttlePercent) * engineLoadGainIncrease
+	adjust := synth.GainToPowerRatio(a.vehicle.engine.haptics.Gain + vehicleTypeGain + engineLoadGain)
 
-	// Ensure amplitude stays within bounds
+	// Apply roughness to engine vibration
+	amplitude := (1.0 - (engineRoughness * rpmPercent * 0.1)) * adjust
 	amplitude, _ = signal.LimitWindow(amplitude, 0, 1)
 
 	// Normal engine pulse generation (rev limiter already checked above)
