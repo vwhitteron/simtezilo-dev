@@ -185,13 +185,6 @@ func (a *App) notifyLapNumber() {
 	raceProgress := int8(100*float64(a.state.current.currentLapNumber)/float64(raceLaps)) % 4
 	lapsRemaining := raceLaps - a.state.current.currentLapNumber + 1
 
-	a.log.Info().
-		Int16("lap", a.state.current.currentLapNumber).
-		Int16("raceLaps", raceLaps).
-		Int8("lastProgress", a.pitRadioState.lastRaceProgress).
-		Int8("progress", raceProgress).
-		Msg("Lap progress")
-
 	message := ""
 	switch {
 	case a.state.current.currentLapNumber == raceLaps:
