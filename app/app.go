@@ -69,6 +69,21 @@ type pitRadioState struct {
 	// Current position tracking with debouncing
 	currentPosition        int16
 	positionNotifyDebounce time.Time
+
+	// Fuel monitoring state
+	lastFuelLevel           float32
+	fuelUsedPerLap          float32
+	averageFuelUsagePerLap  float32
+	sampledLaps             int
+	lastNotifiedFuelWarning int16
+	fuelUsageHistory        []float32
+	maxFuelHistorySize      int
+
+	// Lap distance estimation for fuel calculations
+	estimatedLapDistance float64
+	lastPosition         struct{ X, Y, Z float32 }
+	lapDistanceTracked   float64
+	isTrackingDistance   bool
 }
 
 type App struct {

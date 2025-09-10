@@ -15,7 +15,19 @@ func (a *App) resetPitRadioState() {
 		lastNotifiedLapTime:    a.gtClient.Telemetry.LastLaptime(),
 		lastNotifiedPosition:   a.gtClient.Telemetry.StartingPosition(), // TODO: switch to GridPosition when gt-telemetry updated
 		positionNotifyDebounce: time.Now().Add(24 * time.Hour),
+
+		// Initialize fuel monitoring
+		lastFuelLevel:      a.gtClient.Telemetry.FuelLevelPercent(),
+		fuelUsageHistory:   make([]float32, 0, 5),
+		maxFuelHistorySize: 5,
+		isTrackingDistance: true,
 	}
+
+	// Initialize lap distance tracking
+	a.pitRadioState.lastPosition.X = a.gtClient.Telemetry.PositionalMapCoordinates().X
+	a.pitRadioState.lastPosition.Y = a.gtClient.Telemetry.PositionalMapCoordinates().Y
+	a.pitRadioState.lastPosition.Z = a.gtClient.Telemetry.PositionalMapCoordinates().Z
+	a.pitRadioState.lapDistanceTracked = 0
 
 	a.log.Info().
 		Str("component", "app").
@@ -41,6 +53,12 @@ func (a *App) sendPitRadioMessage() {
 
 		return
 	}
+
+	// Update fuel monitoring
+	a.updateFuelMonitoring()
+
+	// Check for fuel warnings
+	a.checkFuelWarnings()
 
 	if a.positionHasChanged() {
 		a.notifyPosition()
@@ -294,4 +312,181 @@ func pronounceTime(minutes string, seconds string, milliseconds string, includeU
 	}
 
 	return strings.Join(announce, " ")
+}
+
+// updateFuelMonitoring tracks fuel consumption and lap distance
+func (a *App) updateFuelMonitoring() {
+	if a.pitRadioState == nil {
+		return
+	}
+
+	currentLap := a.gtClient.Telemetry.CurrentLap()
+	currentFuel := a.gtClient.Telemetry.FuelLevelPercent()
+
+	// Initialize on first update
+	if a.pitRadioState.lastNotifiedLapNumber == 0 {
+		a.pitRadioState.lastFuelLevel = currentFuel
+		return
+	}
+
+	// Update lap distance estimation
+	a.updateLapDistance()
+
+	// Check for new lap completion
+	if currentLap > a.pitRadioState.lastNotifiedLapNumber && a.pitRadioState.lastNotifiedLapNumber > 0 {
+		a.processNewLapFuel(currentFuel, currentLap)
+	}
+
+	a.pitRadioState.lastFuelLevel = currentFuel
+}
+
+// updateLapDistance tracks the distance covered in the current lap
+func (a *App) updateLapDistance() {
+	currentPos := struct{ X, Y, Z float32 }{
+		X: a.gtClient.Telemetry.PositionalMapCoordinates().X,
+		Y: a.gtClient.Telemetry.PositionalMapCoordinates().Y,
+		Z: a.gtClient.Telemetry.PositionalMapCoordinates().Z,
+	}
+
+	if a.pitRadioState.isTrackingDistance && a.pitRadioState.lastPosition.X != 0 {
+		// Calculate distance between current and last position
+		dx := float64(currentPos.X - a.pitRadioState.lastPosition.X)
+		dy := float64(currentPos.Y - a.pitRadioState.lastPosition.Y)
+		dz := float64(currentPos.Z - a.pitRadioState.lastPosition.Z)
+		distance := dx*dx + dy*dy + dz*dz // Using squared distance for performance
+
+		// Only add reasonable distance increments (filter out teleports/glitches)
+		if distance > 0 && distance < 250000 { // Max ~500m between updates (squared)
+			a.pitRadioState.lapDistanceTracked += distance
+		}
+	}
+
+	a.pitRadioState.lastPosition = currentPos
+}
+
+// processNewLapFuel handles fuel consumption calculation when a new lap is detected
+func (a *App) processNewLapFuel(currentFuel float32, currentLap int16) {
+	// Calculate fuel used in the completed lap
+	fuelUsed := a.pitRadioState.lastFuelLevel - currentFuel
+
+	// Only process if we have valid fuel usage data
+	if fuelUsed > 0 && fuelUsed < 1.0 { // Sanity check
+		a.addFuelUsageToHistory(fuelUsed)
+		a.calculateAverageFuelUsage()
+
+		a.log.Debug().
+			Str("component", "fuel").
+			Int16("lap", currentLap-1).
+			Float32("fuel_used_percent", fuelUsed*100).
+			Float32("current_fuel_percent", currentFuel*100).
+			Float32("average_usage_percent", a.pitRadioState.averageFuelUsagePerLap*100).
+			Msg("Lap fuel consumption")
+
+		// Finalize lap distance if we were tracking it
+		if a.pitRadioState.isTrackingDistance && a.pitRadioState.lapDistanceTracked > 0 {
+			a.pitRadioState.estimatedLapDistance = a.pitRadioState.lapDistanceTracked
+			a.log.Debug().
+				Str("component", "fuel").
+				Float64("estimated_distance_m", a.pitRadioState.estimatedLapDistance).
+				Msg("Estimated lap distance")
+		}
+	}
+
+	// Reset distance tracking for new lap
+	a.pitRadioState.lapDistanceTracked = 0
+	a.pitRadioState.isTrackingDistance = true
+}
+
+// addFuelUsageToHistory adds fuel usage data to the rolling history
+func (a *App) addFuelUsageToHistory(fuelUsed float32) {
+	if len(a.pitRadioState.fuelUsageHistory) >= a.pitRadioState.maxFuelHistorySize {
+		// Remove oldest entry
+		a.pitRadioState.fuelUsageHistory = a.pitRadioState.fuelUsageHistory[1:]
+	}
+	a.pitRadioState.fuelUsageHistory = append(a.pitRadioState.fuelUsageHistory, fuelUsed)
+	a.pitRadioState.sampledLaps = len(a.pitRadioState.fuelUsageHistory)
+}
+
+// calculateAverageFuelUsage computes the average fuel usage per lap
+func (a *App) calculateAverageFuelUsage() {
+	if len(a.pitRadioState.fuelUsageHistory) == 0 {
+		return
+	}
+
+	var total float32
+	for _, usage := range a.pitRadioState.fuelUsageHistory {
+		total += usage
+	}
+	a.pitRadioState.averageFuelUsagePerLap = total / float32(len(a.pitRadioState.fuelUsageHistory))
+}
+
+// checkFuelWarnings determines if a pit stop should be called and sends the notification
+func (a *App) checkFuelWarnings() {
+	if a.pitRadioState.averageFuelUsagePerLap <= 0 || a.pitRadioState.sampledLaps < 2 {
+		return // Insufficient fuel data for prediction
+	}
+
+	currentFuel := a.gtClient.Telemetry.FuelLevelPercent()
+	currentLap := a.gtClient.Telemetry.CurrentLap()
+	raceLaps := a.gtClient.Telemetry.RaceLaps()
+
+	// Don't notify if already notified for this lap
+	if a.pitRadioState.lastNotifiedFuelWarning == currentLap {
+		return
+	}
+
+	// Calculate fuel needed for next lap plus a safety margin
+	safetyMargin := a.pitRadioState.averageFuelUsagePerLap * 0.1 // 10% safety margin
+	fuelNeededForNextLap := a.pitRadioState.averageFuelUsagePerLap + safetyMargin
+
+	// Calculate remaining laps in race
+	remainingLaps := int16(raceLaps) - currentLap
+
+	// Calculate fuel needed to finish the race
+	fuelNeededToFinish := float32(remainingLaps) * a.pitRadioState.averageFuelUsagePerLap
+
+	var message string
+	shouldNotify := false
+
+	// Check if we need to pit this lap
+	if currentFuel < fuelNeededForNextLap {
+		// message = fmt.Sprintf("Pit this lap! Fuel low: %.1f percent remaining, need %.1f percent for next lap",
+		// 	currentFuel*100, fuelNeededForNextLap*100)
+		message = "Box this lap. Fuel low"
+		shouldNotify = true
+	} else if currentFuel < fuelNeededToFinish && remainingLaps > 1 {
+		// Check if we'll run out before race end (early warning)
+		remainingLapsWithFuel := currentFuel / a.pitRadioState.averageFuelUsagePerLap
+		if remainingLapsWithFuel < float32(remainingLaps) {
+			message = fmt.Sprintf("Fuel strategy: %.1f laps remaining with current fuel, %d laps in race",
+				remainingLapsWithFuel, remainingLaps)
+			shouldNotify = true
+		}
+	}
+
+	if shouldNotify {
+		a.pitRadioState.lastNotifiedFuelWarning = currentLap
+		a.sendFuelWarning(message)
+	}
+}
+
+// sendFuelWarning sends a fuel-related warning message to the pit radio
+func (a *App) sendFuelWarning(message string) {
+	if a.pitRadio != nil {
+		err := a.pitRadio.Send(message)
+		if err != nil {
+			a.log.Error().
+				Err(err).
+				Str("component", "discord").
+				Str("message", message).
+				Msg("Failed to send fuel warning message")
+		} else {
+			a.log.Info().
+				Str("component", "discord").
+				Str("message", message).
+				Int16("lap", a.state.current.currentLapNumber).
+				Float32("fuel_percent", a.gtClient.Telemetry.FuelLevelPercent()*100).
+				Msg("Fuel warning message sent")
+		}
+	}
 }
