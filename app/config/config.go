@@ -17,6 +17,11 @@ type app struct {
 	ReplayMode bool
 }
 
+type discord struct {
+	Token     string
+	ChannelID string
+}
+
 type hardware struct {
 	Model              string
 	DisplayOrientation int
@@ -61,6 +66,7 @@ type Telemetry struct {
 
 type viperConfig struct {
 	App         *app
+	Discord     *discord
 	Hardware    *hardware
 	Haptics     *haptics
 	Synthesizer *Synthesizer
@@ -191,6 +197,20 @@ func (c *Config) GetAppReplayMode() bool {
 	defer c.mu.RUnlock()
 
 	return c.viper.App.ReplayMode
+}
+
+func (c *Config) GetDiscordToken() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.Discord.Token
+}
+
+func (c *Config) GetDiscordChannelID() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.Discord.ChannelID
 }
 
 // Hardware methods

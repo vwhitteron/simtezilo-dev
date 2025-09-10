@@ -16,6 +16,7 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/waveshare"
 	"github.com/vwhitteron/simtezilo-dev/app/i18n"
 	"github.com/vwhitteron/simtezilo-dev/app/kinematics"
+	"github.com/vwhitteron/simtezilo-dev/app/pitradio"
 	"github.com/vwhitteron/simtezilo-dev/app/synth"
 	"github.com/vwhitteron/simtezilo-dev/app/ui"
 	"github.com/vwhitteron/simtezilo-dev/app/ui/webui"
@@ -35,6 +36,9 @@ type stateRecord struct {
 	timeOfDay time.Duration
 	gear      int
 	vehicleID uint32
+	lap       uint16
+	position  uint8
+	lapTime   time.Duration
 }
 
 type appState struct {
@@ -56,6 +60,7 @@ type App struct {
 	display hardware.Display
 
 	gtClient   *telemetry_client.GTClient
+	pitRadio   pitradio.PitRadioService
 	kinematics kinematics.KinematicsTracker
 	synth      *synth.Synthesizer
 
@@ -63,6 +68,9 @@ type App struct {
 
 	state   appState
 	vehicle vehicleRecord
+
+	// Separate state tracker for Discord communications to avoid interference from haptic ticker resets
+	commsState *commsState
 
 	telemetryChartFeed chan map[string]float32
 	webEnabled         bool
@@ -282,6 +290,15 @@ func NewApp(opts AppOptions) (*App, error) {
 		return nil, err
 	}
 
+	a.pitRadio, err = pitradio.NewDiscordBot(a.config.GetDiscordToken(), a.config.GetDiscordChannelID())
+	if err != nil {
+		a.log.Error().
+			Err(err).
+			Str("component", "discord").
+			Str("result", "failure").
+			Msg("init")
+	}
+
 	a.log.Debug().
 		Str("component", "app").
 		Str("result", "success").
@@ -292,6 +309,26 @@ func NewApp(opts AppOptions) (*App, error) {
 
 func (a *App) Run() {
 	go a.ui.HIDEventHandler()
+
+	go func() {
+		err := a.pitRadio.Connect()
+		if err != nil {
+			a.log.Error().
+				Err(err).
+				Str("component", "discord").
+				Str("result", "failure").
+				Msg("init")
+
+			return
+		}
+
+		a.log.Info().
+			Str("component", "discord").
+			Str("result", "success").
+			Msg("init")
+
+		// a.comms.Send("Radio check")
+	}()
 
 	go func() {
 		for {
@@ -347,7 +384,8 @@ func (a *App) Run() {
 	tickerHaptics := time.NewTicker((1000 / hapticFrameRate) * time.Millisecond)
 	tickerGeneral := time.NewTicker((1000 / telemetryFrameRate) * time.Millisecond)
 	tickerEngineHaptics := time.NewTicker((1000 / engineHapticFrameRate) * time.Millisecond)
-	tickerDisplay := time.NewTicker((1000 / displayFramRate) * time.Millisecond)
+	tickerDisplay := time.NewTicker((1000 / displayFrameRate) * time.Millisecond)
+	tickerPitRadio := time.NewTicker((1000 / pitRadioFrameRate) * time.Millisecond)
 
 	a.log.Debug().Str("component", "app").Str("result", "success").Msg("main loop started")
 
@@ -367,6 +405,8 @@ func (a *App) Run() {
 				Gear:            a.kinematics.Current.TransmissionGear,
 				TelemetryActive: a.state.telemetryActive,
 			})
+		case <-tickerPitRadio.C:
+			a.sendPitRadioMessage()
 		}
 	}
 }
@@ -382,6 +422,8 @@ func (a *App) Close() {
 			Str("result", "failure").
 			Msg("close")
 	}
+
+	a.pitRadio.Disconnect()
 
 	err = a.ui.Screen.RenderSplashScreen(a.i18n.GetString("ui.quit"))
 	if err != nil {
@@ -423,6 +465,8 @@ func (a *App) sessionHasReset() bool {
 
 func (a *App) resetState() {
 	a.state.last = a.state.current
+
+	a.resetCommsState()
 
 	a.synth.Silence()
 

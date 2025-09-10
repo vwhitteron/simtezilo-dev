@@ -9,6 +9,10 @@ var defaultConfig = viperConfig{
 		Language: "en",
 		LogLevel: "info",
 	},
+	Discord: &discord{
+		Token:     "",
+		ChannelID: "",
+	},
 	Hardware: &hardware{
 		Model:              "none",
 		DisplayOrientation: 0,

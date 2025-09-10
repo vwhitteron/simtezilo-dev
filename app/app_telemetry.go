@@ -8,6 +8,15 @@ func (a *App) updateState() {
 	a.state.current.timeOfDay = a.gtClient.Telemetry.TimeOfDay()
 	a.state.current.vehicleID = a.gtClient.Telemetry.VehicleID()
 	a.state.current.gear = a.gtClient.Telemetry.CurrentGear()
+	
+	// Update lap, position, and lap time data for Discord notifications
+	a.state.current.lap = uint16(a.gtClient.Telemetry.CurrentLap())
+	a.state.current.lapTime = a.gtClient.Telemetry.LastLaptime()
+	
+	// Note: Gran Turismo telemetry doesn't provide race position directly
+	// Position tracking would need to be implemented via external data or calculated
+	// For now, we'll leave position tracking as a placeholder for future enhancement
+	// a.state.current.position = // No direct method available in GT telemetry
 }
 
 // vehicleIsOnTrack checks if the vehicle is on track based on telemetry data.
