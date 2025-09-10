@@ -37,15 +37,16 @@ func (a *App) generateTorqueCurveWaveform(rpm float64, engineRoughness float64, 
 	case "V":
 		// V engines: Balance depends on bank angle and crank configuration
 		// Secondary balance creates variations at different harmonics
-		if a.vehicle.engine.chambers == 8 {
+		switch a.vehicle.engine.chambers {
+		case 8:
 			// V8 with typical 90° bank angle
 			secondaryTorqueFreq = primaryTorqueFreq * 1.5
 			tertiaryTorqueFreq = primaryTorqueFreq * 3.0
-		} else if a.vehicle.engine.chambers == 6 {
+		case 6:
 			// V6 configurations vary widely
 			secondaryTorqueFreq = primaryTorqueFreq * 1.33
 			tertiaryTorqueFreq = primaryTorqueFreq * 2.67
-		} else {
+		default:
 			// Other V configurations
 			secondaryTorqueFreq = primaryTorqueFreq * 1.25
 			tertiaryTorqueFreq = primaryTorqueFreq * 2.5
