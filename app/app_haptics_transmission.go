@@ -13,7 +13,7 @@ func (a *App) playGearShiftHaptic() {
 	a.synth.PlayEffect("transmission", magnitude)
 
 	a.log.Debug().
-		Int("sequence_id", int(a.state.current.seq)).
+		Int("sequence_id", int(a.state.current.sequenceNumber)).
 		Float64("magnitude", magnitude).
 		Float64("gforce", a.kinematics.GetSurgeGforce()).
 		Int("gear", a.kinematics.Current.TransmissionGear).

@@ -3,20 +3,15 @@ package app
 func (a *App) updateState() {
 	a.state.last = a.state.current
 
-	a.state.current.seq = a.gtClient.Telemetry.SequenceID()
-	a.state.current.seqDelta = a.state.current.seq - a.state.last.seq
+	a.state.current.sequenceNumber = a.gtClient.Telemetry.SequenceID()
+	a.state.current.sequenceDelta = a.state.current.sequenceNumber - a.state.last.sequenceNumber
 	a.state.current.timeOfDay = a.gtClient.Telemetry.TimeOfDay()
 	a.state.current.vehicleID = a.gtClient.Telemetry.VehicleID()
-	a.state.current.gear = a.gtClient.Telemetry.CurrentGear()
-	
-	// Update lap, position, and lap time data for Discord notifications
-	a.state.current.lap = uint16(a.gtClient.Telemetry.CurrentLap())
-	a.state.current.lapTime = a.gtClient.Telemetry.LastLaptime()
-	
-	// Note: Gran Turismo telemetry doesn't provide race position directly
-	// Position tracking would need to be implemented via external data or calculated
-	// For now, we'll leave position tracking as a placeholder for future enhancement
-	// a.state.current.position = // No direct method available in GT telemetry
+	a.state.current.currentGear = a.gtClient.Telemetry.CurrentGear()
+
+	// Update lap and lap time data for Discord notifications
+	a.state.current.currentLapNumber = a.gtClient.Telemetry.CurrentLap()
+	a.state.current.lastLapTime = a.gtClient.Telemetry.LastLaptime()
 }
 
 // vehicleIsOnTrack checks if the vehicle is on track based on telemetry data.
@@ -27,7 +22,7 @@ func (a *App) vehicleIsOnTrack() bool {
 }
 
 func (a *App) sequenceHasAdvanced() bool {
-	if a.state.current.seq == 0 || a.state.current.seqDelta == 0 {
+	if a.state.current.sequenceNumber == 0 || a.state.current.sequenceDelta == 0 {
 		return false
 	}
 
@@ -61,7 +56,7 @@ func (a *App) telemetryIsActive() bool {
 }
 
 func (a *App) telemetryPacketsDropped() uint32 {
-	dropped := a.state.current.seqDelta - 1
+	dropped := a.state.current.sequenceDelta - 1
 
 	if dropped > 1 {
 		a.log.Debug().Uint32("dropped", dropped).Msg("telemetry packets")

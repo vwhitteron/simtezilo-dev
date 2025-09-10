@@ -8,24 +8,12 @@ import (
 
 const positionDebounceTime = 3 * time.Second
 
-// commsState tracks state specifically for Discord communications
-// This is separate from appState to avoid interference from haptic ticker resets
-type commsState struct {
-	lastLap          uint16
-	lastLapTime      time.Duration
-	lastRaceProgress int8
-	lastPosition     int16
-
-	position           int16
-	positionNotifyTime time.Time // Debounce position changes until this time is reached
-}
-
-func (a *App) resetCommsState() {
-	a.commsState = &commsState{
-		lastLap:            uint16(a.gtClient.Telemetry.CurrentLap()),
-		lastLapTime:        a.gtClient.Telemetry.LastLaptime(),
-		lastPosition:       a.gtClient.Telemetry.StartingPosition(), // TODO: switch to GridPosition when gt-telelmetry updated
-		positionNotifyTime: time.Now().Add(24 * time.Hour),
+func (a *App) resetPitRadioState() {
+	a.pitRadioState = &pitRadioState{
+		lastNotifiedLapNumber:  a.gtClient.Telemetry.CurrentLap(),
+		lastNotifiedLapTime:    a.gtClient.Telemetry.LastLaptime(),
+		lastNotifiedPosition:   a.gtClient.Telemetry.StartingPosition(), // TODO: switch to GridPosition when gt-telemetry updated
+		positionNotifyDebounce: time.Now().Add(24 * time.Hour),
 	}
 
 	a.log.Info().
@@ -44,12 +32,12 @@ func (a *App) sendPitRadioMessage() {
 	}
 
 	if a.timeOfDayHasReset() {
-		a.resetCommsState()
+		a.resetPitRadioState()
 	}
 
-	// Initialize comms state tracker if not already done
-	if a.commsState == nil {
-		a.resetCommsState()
+	// Initialize pit radio state tracker if not already done
+	if a.pitRadioState == nil {
+		a.resetPitRadioState()
 
 		return
 	}
@@ -66,34 +54,34 @@ func (a *App) sendPitRadioMessage() {
 
 		a.notifyLapNumber()
 
-		// Update the comms state tracker after processing
-		a.commsState.lastLap = a.state.current.lap
-		a.commsState.lastLapTime = a.state.current.lapTime
+		// Update the pit radio state tracker after processing
+		a.pitRadioState.lastNotifiedLapNumber = a.state.current.currentLapNumber
+		a.pitRadioState.lastNotifiedLapTime = a.state.current.lastLapTime
 	}
 }
 
-// isNewLap checks for new lap using the dedicated comms state tracker
+// isNewLap checks for new lap using the dedicated pit radio state tracker
 func (a *App) isNewLap() bool {
-	if a.commsState == nil {
+	if a.pitRadioState == nil {
 		return false
 	}
 
-	if a.state.current.lap <= 0 {
+	if a.state.current.currentLapNumber <= 0 {
 		return false
 	}
 
-	// Check if current lap is greater than the last tracked lap for comms
+	// Check if current lap is greater than the last tracked lap for pit radio
 	// and ensure we have valid lap data
-	return a.state.current.lap > a.commsState.lastLap
+	return a.state.current.currentLapNumber > a.pitRadioState.lastNotifiedLapNumber
 }
 
 // positionHasChanged checks if the grid position has changed since the last update
 func (a *App) positionHasChanged() bool {
-	if a.commsState == nil {
+	if a.pitRadioState == nil {
 		return false
 	}
 
-	if a.state.current.lap <= 0 {
+	if a.state.current.currentLapNumber <= 0 {
 		return false
 	}
 
@@ -103,33 +91,33 @@ func (a *App) positionHasChanged() bool {
 		return false
 	}
 
-	if position == a.commsState.lastPosition {
+	if position == a.pitRadioState.lastNotifiedPosition {
 		return false
-	} else if a.commsState.position != position {
-		a.commsState.position = position
-		a.commsState.positionNotifyTime = time.Now().Add(positionDebounceTime)
+	} else if a.pitRadioState.currentPosition != position {
+		a.pitRadioState.currentPosition = position
+		a.pitRadioState.positionNotifyDebounce = time.Now().Add(positionDebounceTime)
 
 		a.log.Debug().
 			Str("component", "discord").
 			Int16("new_position", position).
-			Int16("old_position", a.commsState.lastPosition).
+			Int16("old_position", a.pitRadioState.lastNotifiedPosition).
 			Msg("Position change")
 	}
 
 	// Debounce position changes until time delay reached
-	if time.Now().Before(a.commsState.positionNotifyTime) {
+	if time.Now().Before(a.pitRadioState.positionNotifyDebounce) {
 		return false
 	}
 
 	// Reset debounce timer
-	a.commsState.positionNotifyTime = time.Now().Add(24 * time.Hour)
-	a.commsState.lastPosition = a.commsState.position
+	a.pitRadioState.positionNotifyDebounce = time.Now().Add(24 * time.Hour)
+	a.pitRadioState.lastNotifiedPosition = a.pitRadioState.currentPosition
 
 	return true
 }
 
 func (a *App) notifyPosition() {
-	message := fmt.Sprintf("P%d", a.commsState.position)
+	message := fmt.Sprintf("P%d", a.pitRadioState.currentPosition)
 
 	if a.pitRadio != nil {
 		err := a.pitRadio.Send(message)
@@ -143,7 +131,7 @@ func (a *App) notifyPosition() {
 			a.log.Debug().
 				Str("component", "discord").
 				Str("message", message).
-				Uint16("lap", a.state.current.lap).
+				Int16("lap", a.state.current.currentLapNumber).
 				Msg("Position change message sent")
 		}
 	}
@@ -151,20 +139,20 @@ func (a *App) notifyPosition() {
 
 // notifyLapTime sends lap time notifications to Discord
 func (a *App) notifyLapTime() {
-	if a.state.current.lapTime <= 0 {
+	if a.state.current.lastLapTime <= 0 {
 		return
 	}
 
-	message := notifyDuration(a.state.current.lapTime)
+	message := notifyDuration(a.state.current.lastLapTime)
 
 	// Check if this lap matches or beats the best lap time
 	bestLapTime := a.gtClient.Telemetry.BestLaptime()
-	if bestLapTime > 0 && a.state.current.lapTime <= bestLapTime {
+	if bestLapTime > 0 && a.state.current.lastLapTime <= bestLapTime {
 		message = "lap record. " + message
 	}
 
-	if a.state.current.lapTime > bestLapTime {
-		message = "Down " + notifyDuration(a.state.current.lapTime-bestLapTime) + " seconds"
+	if a.state.current.lastLapTime > bestLapTime {
+		message = "Down " + notifyDuration(a.state.current.lastLapTime-bestLapTime) + " seconds"
 	}
 
 	// Send lap time message to Discord
@@ -180,45 +168,45 @@ func (a *App) notifyLapTime() {
 			a.log.Debug().
 				Str("component", "discord").
 				Str("message", message).
-				Uint16("lap", a.state.current.lap).
-				Dur("lapTime", a.state.current.lapTime).
+				Int16("lap", a.state.current.currentLapNumber).
+				Dur("lapTime", a.state.current.lastLapTime).
 				Msg("Lap time message sent")
 		}
 	}
 }
 
 func (a *App) notifyLapNumber() {
-	if a.state.current.lap == 0 {
+	if a.state.current.currentLapNumber == 0 {
 		return
 	}
 
-	raceLaps := a.gtClient.Telemetry.RaceLaps()
+	raceLaps := int16(a.gtClient.Telemetry.RaceLaps())
 	longRace := raceLaps > 10
-	raceProgress := int8(100*float64(a.state.current.lap)/float64(raceLaps)) % 4
-	lapsRemaining := raceLaps - a.state.current.lap + 1
+	raceProgress := int8(100*float64(a.state.current.currentLapNumber)/float64(raceLaps)) % 4
+	lapsRemaining := raceLaps - a.state.current.currentLapNumber + 1
 
 	a.log.Info().
-		Uint16("lap", a.state.current.lap).
-		Uint16("raceLaps", raceLaps).
-		Int8("lastProgress", a.commsState.lastRaceProgress).
+		Int16("lap", a.state.current.currentLapNumber).
+		Int16("raceLaps", raceLaps).
+		Int8("lastProgress", a.pitRadioState.lastRaceProgress).
 		Int8("progress", raceProgress).
 		Msg("Lap progress")
 
 	message := ""
 	switch {
-	case a.state.current.lap == raceLaps:
+	case a.state.current.currentLapNumber == raceLaps:
 		message = "final lap"
-	case raceLaps-a.state.current.lap <= 3 && longRace:
+	case raceLaps-a.state.current.currentLapNumber <= 3 && longRace:
 		message = fmt.Sprintf("%d laps remaining", lapsRemaining)
-	case raceProgress > a.commsState.lastRaceProgress && raceProgress == 3 && longRace:
-		message = fmt.Sprintf("Lap %d, %d laps remaining", a.state.current.lap, lapsRemaining)
-	case raceProgress > a.commsState.lastRaceProgress && raceProgress == 2:
-		message = fmt.Sprintf("Lap %d, halfway there", a.state.current.lap)
-	case raceProgress > a.commsState.lastRaceProgress && raceProgress == 1 && longRace:
-		message = fmt.Sprintf("Lap %d, %d laps remaining", a.state.current.lap, lapsRemaining)
+	case raceProgress > a.pitRadioState.lastRaceProgress && raceProgress == 3 && longRace:
+		message = fmt.Sprintf("Lap %d, %d laps remaining", a.state.current.currentLapNumber, lapsRemaining)
+	case raceProgress > a.pitRadioState.lastRaceProgress && raceProgress == 2:
+		message = fmt.Sprintf("Lap %d, halfway there", a.state.current.currentLapNumber)
+	case raceProgress > a.pitRadioState.lastRaceProgress && raceProgress == 1 && longRace:
+		message = fmt.Sprintf("Lap %d, %d laps remaining", a.state.current.currentLapNumber, lapsRemaining)
 	}
 
-	a.commsState.lastRaceProgress = raceProgress
+	a.pitRadioState.lastRaceProgress = raceProgress
 
 	if message == "" {
 		return
@@ -237,7 +225,7 @@ func (a *App) notifyLapNumber() {
 			a.log.Debug().
 				Str("component", "discord").
 				Str("message", message).
-				Uint16("lap", a.state.current.lap).
+				Int16("lap", a.state.current.currentLapNumber).
 				Msg("Lap number message sent")
 		}
 	}

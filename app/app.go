@@ -23,6 +23,7 @@ import (
 	telemetry_client "github.com/zetetos/gt-telemetry"
 )
 
+// vehicleRecord holds static vehicle data loaded from the GT vehicle database
 type vehicleRecord struct {
 	ID          uint32
 	vehicleType string
@@ -30,23 +31,44 @@ type vehicleRecord struct {
 	revLimit    uint16
 }
 
-type stateRecord struct {
-	seq       uint32
-	seqDelta  uint32
-	timeOfDay time.Duration
-	gear      int
-	vehicleID uint32
-	lap       uint16
-	position  uint8
-	lapTime   time.Duration
+// raceState holds transient race data for haptic generation and pit radio notifications
+type raceState struct {
+	// Telemetry session information
+	sequenceNumber uint32
+	sequenceDelta  uint32
+	timeOfDay      time.Duration
+
+	// Vehicle information
+	currentGear int
+	vehicleID   uint32
+
+	// Race timing information
+	currentLapNumber int16
+	lastLapTime      time.Duration
 }
 
+// appState holds the overall application state
 type appState struct {
 	hapticsEnabled  bool // TODO: move state to haptics?
 	telemetryActive bool
-	current         stateRecord
-	last            stateRecord
+	current         raceState
+	last            raceState
 	engine          engineState
+}
+
+// pitRadioState tracks Discord/pit radio communication state
+// Handled separately from the main race state to prevent interference due to differences
+// in refresh rates
+type pitRadioState struct {
+	// Last values sent to prevent duplicate messages
+	lastNotifiedLapNumber int16
+	lastNotifiedLapTime   time.Duration
+	lastRaceProgress      int8
+	lastNotifiedPosition  int16
+
+	// Current position tracking with debouncing
+	currentPosition        int16
+	positionNotifyDebounce time.Time
 }
 
 type App struct {
@@ -66,11 +88,9 @@ type App struct {
 
 	transmissionGainMin float64
 
-	state   appState
-	vehicle vehicleRecord
-
-	// Separate state tracker for Discord communications to avoid interference from haptic ticker resets
-	commsState *commsState
+	state         appState
+	pitRadioState *pitRadioState
+	vehicle       vehicleRecord
 
 	telemetryChartFeed chan map[string]float32
 	webEnabled         bool
@@ -90,11 +110,11 @@ func NewApp(opts AppOptions) (*App, error) {
 		log:  opts.Logger.With().Str("component", "app").Logger(),
 		done: opts.Done,
 		state: appState{
-			current: stateRecord{
-				gear: kinematics.NullGear,
+			current: raceState{
+				currentGear: kinematics.NullGear,
 			},
-			last: stateRecord{
-				gear: kinematics.NullGear,
+			last: raceState{
+				currentGear: kinematics.NullGear,
 			},
 		},
 		kinematics:         kinematics.NewKinematicsTracker(),
@@ -440,7 +460,7 @@ func (a *App) Close() {
 
 func (a *App) sessionIsComplete() bool {
 	if a.gtClient.Finished {
-		a.state.current.gear = kinematics.NullGear
+		a.state.current.currentGear = kinematics.NullGear
 		a.resetState()
 		a.log.Debug().Msg("session finished")
 		a.done <- true
@@ -454,7 +474,7 @@ func (a *App) sessionIsComplete() bool {
 func (a *App) sessionHasReset() bool {
 	if a.gtClient.Telemetry.Flags().Loading {
 		a.log.Debug().
-			Uint32("sequence_id", a.state.current.seq).
+			Uint32("sequence_id", a.state.current.sequenceNumber).
 			Msg("loading flag detected")
 
 		return true
@@ -466,7 +486,7 @@ func (a *App) sessionHasReset() bool {
 func (a *App) resetState() {
 	a.state.last = a.state.current
 
-	a.resetCommsState()
+	a.resetPitRadioState()
 
 	a.synth.Silence()
 
@@ -541,7 +561,7 @@ func (a *App) updateVehicle() {
 	}
 
 	a.state.last.vehicleID = a.state.current.vehicleID
-	a.state.last.gear = a.state.current.gear
+	a.state.last.currentGear = a.state.current.currentGear
 }
 
 func (a *App) gearHasChanged() bool {

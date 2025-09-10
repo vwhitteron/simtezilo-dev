@@ -134,7 +134,7 @@ func (a *App) generateTorqueCurveWaveform(rpm float64, engineRoughness float64, 
 		combinedTorque := primaryComponent + secondaryComponent + tertiaryComponent
 
 		// Add engine-specific roughness modulation
-		roughnessPhase := float64(a.state.current.seq+uint32(i)) * 0.0003
+		roughnessPhase := float64(a.state.current.sequenceNumber+uint32(i)) * 0.0003
 		roughnessVariation := 1.0 + (engineRoughness * math.Sin(roughnessPhase) * 0.2)
 		combinedTorque *= roughnessVariation
 

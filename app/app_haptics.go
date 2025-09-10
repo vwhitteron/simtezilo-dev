@@ -65,7 +65,7 @@ func (a *App) hapticEvents() {
 	}
 
 	// Initialise the gear if it hasn't been set yet
-	if a.state.last.gear == kinematics.NullGear {
+	if a.state.last.currentGear == kinematics.NullGear {
 		a.resetState()
 		a.disableHaptics("initialising gear")
 
@@ -77,7 +77,7 @@ func (a *App) hapticEvents() {
 		a.disableHaptics("time of day reset")
 
 		a.log.Debug().
-			Uint32("sequence_id", a.state.current.seq).
+			Uint32("sequence_id", a.state.current.sequenceNumber).
 			Str("current_time_of_day", a.state.current.timeOfDay.String()).
 			Str("last_time_of_day", a.state.last.timeOfDay.String()).
 			Msg("time of day reset")
@@ -95,14 +95,14 @@ func (a *App) hapticEvents() {
 
 	// a.ui.SetLive(true)
 
-	a.kinematics.Current.SequenceID = a.state.current.seq
+	a.kinematics.Current.SequenceID = a.state.current.sequenceNumber
 
 	// no haptics if telemetry packets dropped/missed
 	// if a.telemetryPacketsDropped() > 1 {
 	// 	return
 	// }
 
-	windowSeconds := (float64(a.state.current.seqDelta) / frameRate)
+	windowSeconds := (float64(a.state.current.sequenceDelta) / frameRate)
 
 	a.kinematics.Update(windowSeconds, a.gtClient)
 

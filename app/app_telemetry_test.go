@@ -26,8 +26,8 @@ func (suite *TelemetryTestSuite) SetupTest() {
 	suite.app = &App{
 		gtClient: gtClient,
 		state: appState{
-			current: stateRecord{},
-			last:    stateRecord{},
+			current: raceState{},
+			last:    raceState{},
 		},
 	}
 }
@@ -57,8 +57,8 @@ func (suite *TelemetryTestSuite) SetupTest() {
 
 func (suite *TelemetryTestSuite) TestSequenceHasAdvancedReturnsFalseWhenSequenceIDHasNotChanged() {
 	// Arramge
-	suite.app.state.last.seq = 102
-	suite.app.state.current.seq = 102
+	suite.app.state.last.sequenceNumber = 102
+	suite.app.state.current.sequenceNumber = 102
 
 	// Act
 	result := suite.app.sequenceHasAdvanced()
@@ -69,8 +69,8 @@ func (suite *TelemetryTestSuite) TestSequenceHasAdvancedReturnsFalseWhenSequence
 
 func (suite *TelemetryTestSuite) TestSequenceHasAdvancedReturnsTrueWhenSequenceIDIncreases() {
 	// Arrange
-	suite.app.state.current.seq = 101
-	suite.app.state.current.seqDelta = 1
+	suite.app.state.current.sequenceNumber = 101
+	suite.app.state.current.sequenceDelta = 1
 
 	// Act
 	result := suite.app.sequenceHasAdvanced()
@@ -146,7 +146,7 @@ func (suite *TelemetryTestSuite) TestTimeOfDayHasResetReturnsFalseWhenTimeOfDayD
 
 func (suite *TelemetryTestSuite) TestTelemetryPacketsDroppedReturnsZeroWhenNoPacketsDropped() {
 	// Arrange
-	suite.app.state.current.seqDelta = 1
+	suite.app.state.current.sequenceDelta = 1
 
 	// Act
 	dropped := suite.app.telemetryPacketsDropped()
@@ -157,7 +157,7 @@ func (suite *TelemetryTestSuite) TestTelemetryPacketsDroppedReturnsZeroWhenNoPac
 
 func (suite *TelemetryTestSuite) TestTelemetryPacketsDroppedReturnsCorrectCountWhenPacketsDropped() {
 	// Arrange
-	suite.app.state.current.seqDelta = 5
+	suite.app.state.current.sequenceDelta = 5
 
 	// Act
 	dropped := suite.app.telemetryPacketsDropped()
