@@ -347,7 +347,7 @@ func (a *App) Run() {
 			Str("result", "success").
 			Msg("init")
 
-		// a.comms.Send("Radio check")
+		a.pitRadio.Send("Radio check")
 	}()
 
 	go func() {
