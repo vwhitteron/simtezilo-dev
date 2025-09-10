@@ -7,6 +7,7 @@ import (
 )
 
 const positionDebounceTime = 3 * time.Second
+const messagePause = 3 * time.Second
 
 func (a *App) resetPitRadioState() {
 	a.pitRadioState = &pitRadioState{
@@ -35,7 +36,6 @@ func (a *App) sendPitRadioMessage() {
 		a.resetPitRadioState()
 	}
 
-	// Initialize pit radio state tracker if not already done
 	if a.pitRadioState == nil {
 		a.resetPitRadioState()
 
@@ -46,15 +46,13 @@ func (a *App) sendPitRadioMessage() {
 		a.notifyPosition()
 	}
 
-	// Check for new lap and send lap time message
 	if a.isNewLap() {
 		a.notifyLapTime()
 
-		time.Sleep(2 * time.Second) // Brief pause to avoid message overlap
+		time.Sleep(messagePause)
 
 		a.notifyLapNumber()
 
-		// Update the pit radio state tracker after processing
 		a.pitRadioState.lastNotifiedLapNumber = a.state.current.currentLapNumber
 		a.pitRadioState.lastNotifiedLapTime = a.state.current.lastLapTime
 	}
@@ -143,16 +141,16 @@ func (a *App) notifyLapTime() {
 		return
 	}
 
-	message := notifyDuration(a.state.current.lastLapTime)
-
-	// Check if this lap matches or beats the best lap time
+	var message string
 	bestLapTime := a.gtClient.Telemetry.BestLaptime()
-	if bestLapTime > 0 && a.state.current.lastLapTime <= bestLapTime {
-		message = "lap record. " + message
-	}
 
-	if a.state.current.lastLapTime > bestLapTime {
+	// TODO: add config option to notify all laps or best lap only
+	if bestLapTime > 0 && a.state.current.lastLapTime <= bestLapTime {
+		message = "lap record. " + notifyDuration(a.state.current.lastLapTime)
+	} else if a.state.current.lastLapTime > bestLapTime {
 		message = "Down " + notifyDuration(a.state.current.lastLapTime-bestLapTime) + " seconds"
+	} else {
+		message = notifyDuration(a.state.current.lastLapTime)
 	}
 
 	// Send lap time message to Discord
@@ -182,24 +180,38 @@ func (a *App) notifyLapNumber() {
 
 	raceLaps := int16(a.gtClient.Telemetry.RaceLaps())
 	longRace := raceLaps > 10
-	raceProgress := int8(100*float64(a.state.current.currentLapNumber)/float64(raceLaps)) % 4
 	lapsRemaining := raceLaps - a.state.current.currentLapNumber + 1
+	raceProgressPercent := int8(100 * float64(a.state.current.currentLapNumber) / float64(raceLaps))
+
+	var currentQuarter int8
+	switch {
+	case raceProgressPercent >= 75:
+		currentQuarter = 3
+	case raceProgressPercent >= 50:
+		currentQuarter = 2
+	case raceProgressPercent >= 25:
+		currentQuarter = 1
+	default:
+		currentQuarter = 0
+	}
 
 	message := ""
 	switch {
+	case lapsRemaining <= 0:
+		message = "race complete"
 	case a.state.current.currentLapNumber == raceLaps:
 		message = "final lap"
-	case raceLaps-a.state.current.currentLapNumber <= 3 && longRace:
+	case lapsRemaining <= 3 && longRace:
 		message = fmt.Sprintf("%d laps remaining", lapsRemaining)
-	case raceProgress > a.pitRadioState.lastRaceProgress && raceProgress == 3 && longRace:
+	case currentQuarter > a.pitRadioState.lastRaceProgress && currentQuarter == 3 && longRace:
 		message = fmt.Sprintf("Lap %d, %d laps remaining", a.state.current.currentLapNumber, lapsRemaining)
-	case raceProgress > a.pitRadioState.lastRaceProgress && raceProgress == 2:
+	case currentQuarter > a.pitRadioState.lastRaceProgress && currentQuarter == 2:
 		message = fmt.Sprintf("Lap %d, halfway there", a.state.current.currentLapNumber)
-	case raceProgress > a.pitRadioState.lastRaceProgress && raceProgress == 1 && longRace:
+	case currentQuarter > a.pitRadioState.lastRaceProgress && currentQuarter == 1 && longRace:
 		message = fmt.Sprintf("Lap %d, %d laps remaining", a.state.current.currentLapNumber, lapsRemaining)
 	}
 
-	a.pitRadioState.lastRaceProgress = raceProgress
+	a.pitRadioState.lastRaceProgress = currentQuarter
 
 	if message == "" {
 		return
