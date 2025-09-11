@@ -10,3 +10,8 @@ const telemetryFrameRate = frameRate
 
 // TODO: find a better place for this
 const snapMultiplier = 160
+
+const (
+	softReset = iota
+	hardReset
+)

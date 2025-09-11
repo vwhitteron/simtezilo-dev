@@ -34,7 +34,7 @@ func (a *App) hapticEvents() {
 	}
 
 	if a.vehicleHasChanged() {
-		a.resetState()
+		a.resetState(hardReset)
 		a.disableHaptics("vehicle changed")
 
 		a.updateVehicle()
@@ -47,7 +47,7 @@ func (a *App) hapticEvents() {
 		a.state.telemetryActive = false
 
 		if a.state.hapticsEnabled {
-			a.resetState()
+			a.resetState(softReset)
 			a.disableHaptics("not live")
 		}
 
@@ -58,7 +58,7 @@ func (a *App) hapticEvents() {
 
 	// The loading flag typically means the session has restarted
 	if a.sessionHasReset() {
-		a.resetState()
+		a.resetState(softReset)
 		a.disableHaptics("session reset")
 
 		return
@@ -66,14 +66,14 @@ func (a *App) hapticEvents() {
 
 	// Initialise the gear if it hasn't been set yet
 	if a.state.last.currentGear == kinematics.NullGear {
-		a.resetState()
+		a.resetState(hardReset)
 		a.disableHaptics("initialising gear")
 
 		return
 	}
 
 	if a.timeOfDayHasReset() {
-		a.resetState()
+		a.resetState(softReset)
 		a.disableHaptics("time of day reset")
 
 		a.log.Debug().

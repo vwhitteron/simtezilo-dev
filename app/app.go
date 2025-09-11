@@ -71,18 +71,19 @@ type pitRadioState struct {
 	positionNotifyDebounce time.Time
 
 	// Fuel monitoring state
-	lastFuelLevel           float32
+	lastFuelPercent         float32
 	fuelUsedPerLap          float32
 	averageFuelUsagePerLap  float32
 	sampledLaps             int
 	lastNotifiedFuelWarning int16
 	fuelUsageHistory        []float32
-	maxFuelHistorySize      int
 
 	// Lap distance estimation for fuel calculations
+	lastLapNumber        int16
 	estimatedLapDistance float64
-	lastPosition         struct{ X, Y, Z float32 }
-	lapDistanceTracked   float64
+	lastPosition         telemetry_client.Vector
+	lapDistance          float64
+	distanceTraveled     float64
 	isTrackingDistance   bool
 }
 
@@ -476,7 +477,7 @@ func (a *App) Close() {
 func (a *App) sessionIsComplete() bool {
 	if a.gtClient.Finished {
 		a.state.current.currentGear = kinematics.NullGear
-		a.resetState()
+		a.resetState(hardReset)
 		a.log.Debug().Msg("session finished")
 		a.done <- true
 
@@ -498,10 +499,15 @@ func (a *App) sessionHasReset() bool {
 	return false
 }
 
-func (a *App) resetState() {
+func (a *App) resetState(resetType int) {
 	a.state.last = a.state.current
 
-	a.resetPitRadioState()
+	switch resetType {
+	case hardReset:
+		a.resetPitRadioState(true)
+	default:
+		a.resetPitRadioState(false)
+	}
 
 	a.synth.Silence()
 
