@@ -71,12 +71,13 @@ type pitRadioState struct {
 	positionNotifyDebounce time.Time
 
 	// Fuel monitoring state
-	lastFuelPercent         float32
-	fuelUsedPerLap          float32
-	averageFuelUsagePerLap  float32
-	sampledLaps             int
-	lastNotifiedFuelWarning int16
-	fuelUsageHistory        []float32
+	lastFuelPercent           float32
+	fuelUsedPerLap            float32
+	averageFuelUsagePerLap    float32
+	sampledLaps               int
+	lastNotifiedFuelWarning   int16
+	fuelNotifyPrewarnComplete bool
+	fuelUsageHistory          []float32
 
 	// Lap distance estimation for fuel calculations
 	lastLapNumber        int16

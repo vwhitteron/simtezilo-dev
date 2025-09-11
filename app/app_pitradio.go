@@ -27,6 +27,7 @@ func (a *App) resetPitRadioState(isNewTrack bool) {
 	a.pitRadioState.lastLapNumber = min(a.gtClient.Telemetry.CurrentLap()-1, 0)
 	a.pitRadioState.lapDistance = 0
 	a.pitRadioState.distanceTraveled = 0
+	a.pitRadioState.fuelNotifyPrewarnComplete = false
 
 	if len(a.pitRadioState.fuelUsageHistory) == 0 {
 		a.pitRadioState.fuelUsageHistory = make([]float32, 0, 5)
@@ -405,6 +406,11 @@ func (a *App) processNewLapFuel() {
 		}
 	}
 
+	// Vehicle has been refueled
+	if currentFuelPercent > a.pitRadioState.lastFuelPercent {
+		a.pitRadioState.fuelNotifyPrewarnComplete = false
+	}
+
 	a.pitRadioState.lastFuelPercent = currentFuelPercent
 
 	// Reset distance tracking for new lap
@@ -446,6 +452,33 @@ func (a *App) calculateAverageFuelUsage() {
 	a.pitRadioState.averageFuelUsagePerLap = total / count
 }
 
+// calculateFuelForCurrentAndNextLap calculates fuel needed for the rest of the current lap plus the next lap
+func (a *App) calculateFuelForCurrentAndNextLap() float32 {
+	// If we don't have lap distance data, fall back to 2 full laps as a conservative estimate
+	if a.pitRadioState.estimatedLapDistance <= 0 {
+		return a.pitRadioState.averageFuelUsagePerLap * 2.0 * (1.0 + fuelSafetyMargin) * 100
+	}
+
+	// Calculate current lap progress (0.0 to 1.0)
+	lapProgress := float64(0)
+	if a.pitRadioState.lapDistance > 0 {
+		lapProgress = a.pitRadioState.lapDistance / a.pitRadioState.estimatedLapDistance
+		// Cap progress at 1.0 to handle cases where current distance exceeds estimated
+		if lapProgress > 1.0 {
+			lapProgress = 1.0
+		}
+	}
+
+	// Calculate remaining portion of current lap (0.0 to 1.0)
+	remainingCurrentLap := 1.0 - lapProgress
+
+	// Fuel needed = (remaining current lap + 1 full next lap) * average usage * safety margin
+	totalLapsNeeded := float32(remainingCurrentLap + 1.0)
+	fuelNeeded := totalLapsNeeded * a.pitRadioState.averageFuelUsagePerLap * (1.0 + fuelSafetyMargin) * 100
+
+	return fuelNeeded
+}
+
 // checkFuelWarnings determines if a pit stop should be called and sends the notification
 func (a *App) checkFuelWarnings() {
 	currentFuelPercent := a.gtClient.Telemetry.FuelLevelPercent()
@@ -465,6 +498,9 @@ func (a *App) checkFuelWarnings() {
 	// Calculate fuel needed for next lap plus a safety margin
 	fuelPercentNeededForNextLap := a.pitRadioState.averageFuelUsagePerLap * (1.0 + fuelSafetyMargin) * 100
 
+	// Calculate fuel needed for rest of current lap + next lap
+	fuelPercentNeededForCurrentAndNextLap := a.calculateFuelForCurrentAndNextLap()
+
 	// Calculate remaining laps in race
 	remainingLaps := int16(raceLaps) - currentLap
 
@@ -472,22 +508,27 @@ func (a *App) checkFuelWarnings() {
 	fuelPercentNeededToFinish := float32(remainingLaps) * a.pitRadioState.averageFuelUsagePerLap * (1.0 + fuelSafetyMargin) * 100
 
 	if a.state.current.sequenceNumber%600 == 0 {
-		fmt.Printf("Current fuel: %.2f%%, Need for next lap: %.2f%%, Need to finish: %.2f%%\n", currentFuelPercent, fuelPercentNeededForNextLap, fuelPercentNeededToFinish)
+		fmt.Printf("Current fuel: %.2f%%, Need for next lap: %.2f%%, Need for current+next: %.2f%%, Need to finish: %.2f%%\n",
+			currentFuelPercent, fuelPercentNeededForNextLap, fuelPercentNeededForCurrentAndNextLap, fuelPercentNeededToFinish)
 	}
 
 	var message string
 	shouldNotify := false
 
-	// Check if we need to pit this lap
+	// Check if we need to pit this lap - now based on current + next lap needs
 	if currentFuelPercent <= 1 {
 		message = "Out of fuel!"
 		shouldNotify = true
-	} else if currentFuelPercent < fuelPercentNeededForNextLap*2 {
-		message = "Box this lap. Fuel low"
+	} else if currentFuelPercent < fuelPercentNeededForNextLap {
+		message = "Fuel insufficient, map 5 box box box"
+		shouldNotify = true
+	} else if currentFuelPercent < fuelPercentNeededForCurrentAndNextLap {
+		message = "Box this lap for fuel"
 		shouldNotify = true
 	} else if currentFuelPercent < fuelPercentNeededForNextLap*(1.0+float32(fuelPreWarnLaps)) {
 		message = fmt.Sprintf("Refuel in %d laps", int(currentFuelPercent/fuelPercentNeededForNextLap))
-		shouldNotify = true
+		shouldNotify = !a.pitRadioState.fuelNotifyPrewarnComplete
+		a.pitRadioState.fuelNotifyPrewarnComplete = true
 	} else if currentFuelPercent < fuelPercentNeededToFinish && remainingLaps > 1 {
 		// Check if we'll run out before race end (early warning)
 		fuelRangeLaps := currentFuelPercent / a.pitRadioState.averageFuelUsagePerLap
@@ -519,7 +560,7 @@ func (a *App) sendFuelWarning(message string) {
 				Str("component", "discord").
 				Str("message", message).
 				Int16("lap", a.state.current.currentLapNumber).
-				Float32("fuel_percent", a.gtClient.Telemetry.FuelLevelPercent()*100).
+				Float32("fuel_percent", a.gtClient.Telemetry.FuelLevelPercent()).
 				Msg("Fuel warning message sent")
 		}
 	}
