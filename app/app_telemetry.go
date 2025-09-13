@@ -103,16 +103,18 @@ func (a *App) updateState() (didUpdate bool) {
 	a.state.current.lapNumber = a.gtClient.Telemetry.CurrentLap()
 	a.state.current.lastLapTime = a.gtClient.Telemetry.LastLaptime()
 
+	if a.vehicleHasChanged() {
+		// a.resetState(resetTrackData)
+		a.disableHaptics("vehicle changed")
+
+		a.updateVehicle()
+	}
+
 	return true
 }
 
 // vehicleHasChanged checks if the vehicle has changed based on telemetry data.
 func (a *App) vehicleHasChanged() bool {
-	// Ignore post-initial state when last vehicle ID is zero
-	if a.state.current.vehicleID != 0 || a.state.last.vehicleID == 0 {
-		return false
-	}
-
 	return a.state.current.vehicleID != a.state.last.vehicleID
 }
 

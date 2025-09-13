@@ -37,15 +37,6 @@ func (a *App) hapticEvents() {
 		return
 	}
 
-	if a.vehicleHasChanged() {
-		a.resetState(resetTrackData)
-		a.disableHaptics("vehicle changed")
-
-		a.updateVehicle()
-
-		return
-	}
-
 	// Disable haptics when the telemetry inactive
 	if !a.telemetryIsActive() {
 		a.state.telemetryActive = false
