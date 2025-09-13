@@ -1,26 +1,36 @@
 package app
 
-func (a *App) updateState() {
-	a.state.last = a.state.current
+// checkForNewLap sends an event to the lapStartEvents channel when a new lap is detected.
+func (a *App) checkForNewLap() {
+	current := a.state.current.lapNumber
+	last := a.state.last.lapNumber
+	lapDelta := current - last
 
-	a.state.current.sequenceNumber = a.gtClient.Telemetry.SequenceID()
-	a.state.current.sequenceDelta = a.state.current.sequenceNumber - a.state.last.sequenceNumber
-	a.state.current.timeOfDay = a.gtClient.Telemetry.TimeOfDay()
-	a.state.current.vehicleID = a.gtClient.Telemetry.VehicleID()
-	a.state.current.currentGear = a.gtClient.Telemetry.CurrentGear()
+	if lapDelta == 1 {
+		a.lapStartEvents <- a.state.current.sequenceNumber
 
-	// Update lap and lap time data for Discord notifications
-	a.state.current.currentLapNumber = a.gtClient.Telemetry.CurrentLap()
-	a.state.current.lastLapTime = a.gtClient.Telemetry.LastLaptime()
+		a.log.Debug().
+			Int16("current", a.state.current.lapNumber).
+			Int16("previous", a.state.last.lapNumber).
+			Str("status", "normal").
+			Msg("New lap started")
+	} else if lapDelta > 1 {
+		a.log.Debug().
+			Int16("current", a.state.current.lapNumber).
+			Int16("previous", a.state.last.lapNumber).
+			Str("status", "skip forwards").
+			Msg("New lap started")
+	} else if lapDelta < 0 {
+		a.log.Debug().
+			Int16("current", a.state.current.lapNumber).
+			Int16("previous", a.state.last.lapNumber).
+			Str("status", "skip backwards or reset").
+			Msg("New lap started")
+
+	}
 }
 
-// vehicleIsOnTrack checks if the vehicle is on track based on telemetry data.
-// When in the menu system the race laps will be set to uin16 max.
-// When at a  track screen before a session has started, the race laps will be set to 0.
-func (a *App) vehicleIsOnTrack() bool {
-	return a.gtClient.Telemetry.RaceLaps() < 65000
-}
-
+// sequenceHasAdvanced checks if the telemetry sequence number has advanced.
 func (a *App) sequenceHasAdvanced() bool {
 	if a.state.current.sequenceNumber == 0 || a.state.current.sequenceDelta == 0 {
 		return false
@@ -29,11 +39,7 @@ func (a *App) sequenceHasAdvanced() bool {
 	return true
 }
 
-func (a *App) timeOfDayHasReset() bool {
-	timeOfDayDelta := a.state.current.timeOfDay - a.state.last.timeOfDay
-	return timeOfDayDelta.Milliseconds() < 0
-}
-
+// telemetryIsActive checks if the telemetry is in an active state.
 func (a *App) telemetryIsActive() bool {
 	if a.gtClient.Telemetry.Flags().GamePaused {
 		return false
@@ -55,6 +61,8 @@ func (a *App) telemetryIsActive() bool {
 	return false
 }
 
+// telemetryPacketsDropped checks if telemetry packets have been dropped.
+// Returns the count of dropped packets.
 func (a *App) telemetryPacketsDropped() uint32 {
 	dropped := a.state.current.sequenceDelta - 1
 
@@ -65,6 +73,52 @@ func (a *App) telemetryPacketsDropped() uint32 {
 	return dropped
 }
 
+// timeOfDayHasReset checks if the time of day has reset (gone backwards).
+func (a *App) timeOfDayHasReset() bool {
+	timeOfDayDelta := a.state.current.timeOfDay - a.state.last.timeOfDay
+	return timeOfDayDelta.Milliseconds() < 0
+}
+
+// updateState copies the current state to the previous state and updates the current
+// state with the latest telemetry data.
+// State updates are skipped if the sequence ID has not changed.
+// A boolean is returned indicating if the statewas updated (true) or not (false).
+func (a *App) updateState() (didUpdate bool) {
+	if a.gtClient.Telemetry.SequenceID() == a.state.current.sequenceNumber {
+		return false
+	}
+
+	a.state.last = a.state.current
+
+	// Session
+	a.state.current.sequenceNumber = a.gtClient.Telemetry.SequenceID()
+	a.state.current.sequenceDelta = a.state.current.sequenceNumber - a.state.last.sequenceNumber
+	a.state.current.timeOfDay = a.gtClient.Telemetry.TimeOfDay()
+
+	// Vehicle
+	a.state.current.vehicleID = a.gtClient.Telemetry.VehicleID()
+	a.state.current.transmissionGear = a.gtClient.Telemetry.CurrentGear()
+
+	// Lap
+	a.state.current.lapNumber = a.gtClient.Telemetry.CurrentLap()
+	a.state.current.lastLapTime = a.gtClient.Telemetry.LastLaptime()
+
+	return true
+}
+
+// vehicleHasChanged checks if the vehicle has changed based on telemetry data.
 func (a *App) vehicleHasChanged() bool {
+	// Ignore post-initial state when last vehicle ID is zero
+	if a.state.current.vehicleID != 0 || a.state.last.vehicleID == 0 {
+		return false
+	}
+
 	return a.state.current.vehicleID != a.state.last.vehicleID
+}
+
+// vehicleIsOnTrack checks if the vehicle is on track based on telemetry data.
+// When in the menu system the race laps will be set to uin16 max.
+// When at a  track screen before a session has started, the race laps will be set to 0.
+func (a *App) vehicleIsOnTrack() bool {
+	return a.gtClient.Telemetry.RaceLaps() < 65000
 }

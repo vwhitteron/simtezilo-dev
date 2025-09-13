@@ -23,7 +23,12 @@ const (
 	HIDInputPower
 )
 
+// HIDEventHandler processes HID input events and updates the UI based on the event type.
 func (u *UserInterface) HIDEventHandler() {
+	u.log.Debug().
+		Str("component", "HID event handler").
+		Msg("Start")
+
 	ready := false
 	for key := range u.hidEvents {
 		// discard hid events in the first 2 seconds after app start

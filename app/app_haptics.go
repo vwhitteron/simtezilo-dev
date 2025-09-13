@@ -4,9 +4,9 @@ import (
 	"time"
 
 	"github.com/vwhitteron/simtezilo-dev/app/config"
-	"github.com/vwhitteron/simtezilo-dev/app/kinematics"
 )
 
+// enableHaptics enables the haptic feedback system.
 func (a *App) enableHaptics() {
 	// speaker.Resume()
 	a.synth.FadeIn(config.FadeInDuration)
@@ -15,26 +15,30 @@ func (a *App) enableHaptics() {
 	a.log.Debug().Bool("haptics enabled", a.state.hapticsEnabled).Msg("haptics state change")
 }
 
+// disableHaptics disables the haptic feedback system.
+// Takes a reason string for logging purposes.
 func (a *App) disableHaptics(reason string) {
 	// speaker.Suspend()
 	a.synth.Silence()
-	a.synth.ClearBuffers()
 	a.state.hapticsEnabled = false
 
 	a.log.Debug().Bool("haptics enabled", a.state.hapticsEnabled).Str("reason", reason).Msg("haptics state change")
 }
 
+// hapticEvents generates haptic feedback based on the vehicle telemetry data.
 func (a *App) hapticEvents() {
 	startTime := time.Now()
 
-	a.updateState()
+	if didUpdate := a.updateState(); !didUpdate {
+		return
+	}
 
 	if !a.sequenceHasAdvanced() {
 		return
 	}
 
 	if a.vehicleHasChanged() {
-		a.resetState(hardReset)
+		a.resetState(resetTrackData)
 		a.disableHaptics("vehicle changed")
 
 		a.updateVehicle()
@@ -42,12 +46,12 @@ func (a *App) hapticEvents() {
 		return
 	}
 
-	// Do nothing if telemetry is not indicating an active state
+	// Disable haptics when the telemetry inactive
 	if !a.telemetryIsActive() {
 		a.state.telemetryActive = false
 
 		if a.state.hapticsEnabled {
-			a.resetState(softReset)
+			a.resetState(retainTrackData)
 			a.disableHaptics("not live")
 		}
 
@@ -56,24 +60,16 @@ func (a *App) hapticEvents() {
 
 	a.state.telemetryActive = true
 
-	// The loading flag typically means the session has restarted
+	// The loading flag typically means the session has restarted or the car has pitted
 	if a.sessionHasReset() {
-		a.resetState(softReset)
+		a.resetState(retainTrackData)
 		a.disableHaptics("session reset")
 
 		return
 	}
 
-	// Initialise the gear if it hasn't been set yet
-	if a.state.last.currentGear == kinematics.NullGear {
-		a.resetState(hardReset)
-		a.disableHaptics("initialising gear")
-
-		return
-	}
-
 	if a.timeOfDayHasReset() {
-		a.resetState(softReset)
+		a.resetState(retainTrackData)
 		a.disableHaptics("time of day reset")
 
 		a.log.Debug().
@@ -84,10 +80,6 @@ func (a *App) hapticEvents() {
 
 		return
 	}
-
-	// if !a.kinematics.VehicleIsInMotion() {
-	// 	return
-	// }
 
 	if !a.state.hapticsEnabled {
 		a.enableHaptics()
@@ -112,7 +104,6 @@ func (a *App) hapticEvents() {
 
 	a.generateChassisHaptic()
 
-	a.state.last = a.state.current
 	a.kinematics.Current.ComputeTime = time.Since(startTime)
 	a.kinematics.Last = a.kinematics.Current
 

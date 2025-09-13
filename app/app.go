@@ -39,12 +39,12 @@ type raceState struct {
 	timeOfDay      time.Duration
 
 	// Vehicle information
-	currentGear int
-	vehicleID   uint32
+	transmissionGear int
+	vehicleID        uint32
 
 	// Race timing information
-	currentLapNumber int16
-	lastLapTime      time.Duration
+	lapNumber   int16
+	lastLapTime time.Duration
 }
 
 // appState holds the overall application state
@@ -81,6 +81,8 @@ type App struct {
 	webEnabled         bool
 	webUI              *webui.WebUI
 	webSequenceId      uint32
+
+	lapStartEvents chan uint32
 }
 
 type AppOptions struct {
@@ -96,15 +98,16 @@ func NewApp(opts AppOptions) (*App, error) {
 		done: opts.Done,
 		state: appState{
 			current: raceState{
-				currentGear: kinematics.NullGear,
+				transmissionGear: kinematics.NullGear,
 			},
 			last: raceState{
-				currentGear: kinematics.NullGear,
+				transmissionGear: kinematics.NullGear,
 			},
 		},
 		kinematics:         kinematics.NewKinematicsTracker(),
 		telemetryChartFeed: make(chan map[string]float32, 600),
 		webEnabled:         opts.WebEnabled,
+		lapStartEvents:     make(chan uint32),
 	}
 
 	// load config from file
@@ -315,6 +318,8 @@ func NewApp(opts AppOptions) (*App, error) {
 func (a *App) Run() {
 	go a.ui.HIDEventHandler()
 
+	go a.newLapHandler()
+
 	go func() {
 		err := a.pitRadio.Connect()
 		if err != nil {
@@ -400,6 +405,7 @@ func (a *App) Run() {
 			return
 		case <-tickerHaptics.C:
 			a.hapticEvents()
+			a.checkForNewLap()
 		case <-tickerGeneral.C:
 			a.sessionIsComplete()
 			a.sendTelemetryChartData()
@@ -445,8 +451,6 @@ func (a *App) Close() {
 
 func (a *App) sessionIsComplete() bool {
 	if a.gtClient.Finished {
-		a.state.current.currentGear = kinematics.NullGear
-		a.resetState(hardReset)
 		a.log.Debug().Msg("session finished")
 		a.done <- true
 
@@ -468,21 +472,22 @@ func (a *App) sessionHasReset() bool {
 	return false
 }
 
-func (a *App) resetState(resetType int) {
-	a.state.last = a.state.current
-
-	switch resetType {
-	case hardReset:
-		a.resetPitRadioState(true)
-	default:
-		a.resetPitRadioState(false)
+// resetState resets the application state and optionally retains or resets the track data state
+// trackDataAction: retainTrackData (true) or resetTrackData (false)
+func (a *App) resetState(trackDataAction trackDataAction) {
+	a.state.last = raceState{
+		transmissionGear: kinematics.NullGear,
 	}
+
+	a.state.current = raceState{
+		transmissionGear: kinematics.NullGear,
+	}
+
+	a.resetPitRadioState(trackDataAction)
 
 	a.synth.Silence()
 
 	a.kinematics = kinematics.NewKinematicsTracker()
-
-	a.synth.ClearBuffers()
 }
 
 func (a *App) updateVehicle() {
@@ -551,7 +556,7 @@ func (a *App) updateVehicle() {
 	}
 
 	a.state.last.vehicleID = a.state.current.vehicleID
-	a.state.last.currentGear = a.state.current.currentGear
+	a.state.last.transmissionGear = a.state.current.transmissionGear
 }
 
 func (a *App) gearHasChanged() bool {

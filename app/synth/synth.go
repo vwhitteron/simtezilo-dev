@@ -114,6 +114,7 @@ func (s *Synthesizer) OverwriteBuffer(channel string, sample []float64, offset i
 	_ = s.mixer.WriteChannel(channel, sample, magnitude, offset, true)
 }
 
+// TODO: remove if not required
 func (s *Synthesizer) ClearBuffers() {
 	s.mixer.ClearBuffers()
 }
@@ -135,6 +136,8 @@ func (s *Synthesizer) ApplyMasterGain(value float64) float64 {
 func (s *Synthesizer) Silence() {
 	s.mixer.SetFader(config.MinimumGain)
 	s.mixer.silenced = true
+
+	s.mixer.ClearBuffers()
 }
 
 // Effect accessor methods
