@@ -306,6 +306,7 @@ func NewApp(opts AppOptions) (*App, error) {
 			Str("result", "failure").
 			Msg("init")
 	}
+	a.resetPitRadioState(resetTrackData)
 
 	a.log.Debug().
 		Str("component", "app").

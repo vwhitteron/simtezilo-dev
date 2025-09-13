@@ -253,6 +253,10 @@ func (a *App) notifyPosition() {
 
 // notifyLapTime sends lap time notifications over the pit radio
 func (a *App) notifyLapTime() {
+	if a.pitRadioState == nil {
+		return
+	}
+
 	a.pitRadioState.lastNotifiedLapTime = a.state.current.lastLapTime
 
 	if a.state.current.lastLapTime <= 0 {
@@ -293,6 +297,10 @@ func (a *App) notifyLapTime() {
 
 // notifyLapNumber sends lap number notifications over the pit radio
 func (a *App) notifyLapNumber() {
+	if a.pitRadioState == nil {
+		return
+	}
+
 	a.pitRadioState.lastNotifiedLapNumber = a.state.current.lapNumber
 
 	if a.state.current.lapNumber == 0 {
@@ -500,6 +508,10 @@ func (a *App) updateDistanceTravelled() {
 
 // updateLapDistance updates the lap distance when a fully sampled lap has been completed
 func (a *App) udpateLapDistance() {
+	if a.pitRadioState == nil {
+		return
+	}
+
 	currentLap := a.gtClient.Telemetry.CurrentLap()
 	lastLap := currentLap - 1
 
