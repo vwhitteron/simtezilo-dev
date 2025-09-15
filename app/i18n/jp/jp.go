@@ -1,5 +1,7 @@
 package jp
 
+import "github.com/vwhitteron/simtezilo-dev/app/i18n/translations"
+
 const (
 	Code             = "jp"
 	Name             = "日本語"
@@ -11,37 +13,50 @@ const (
 	ValueFontScale   = 1.0
 )
 
-var Translations = map[string]string{
-	"app.name":        "シムテジロ",
-	"app.description": "シンセサイザーのエミュレーション",
-	"app.version":     "バージョン",
+var Translations = map[translations.Key]string{
+	translations.AppName:        "シムテジロ",
+	translations.AppDescription: "シンセサイザーのエミュレーション",
+	translations.AppVersion:     "バージョン",
 
-	"ui.error":    "エラー",
-	"ui.success":  "成功",
-	"ui.quit":     "終了",
-	"ui.starting": "開始",
-	"ui.stopping": "停止",
-	"ui.loading":  "読み込み中",
-	"ui.waiting":  "待機中",
-	"ui.ready":    "準備完了",
-	"ui.settings": "設定",
+	translations.UIError:    "エラー",
+	translations.UISuccess:  "成功",
+	translations.UIQuit:     "終了",
+	translations.UIStarting: "開始",
+	translations.UIStopping: "停止",
+	translations.UILoading:  "読み込み中",
+	translations.UIWaiting:  "待機中",
+	translations.UIReady:    "準備完了",
+	translations.UISettings: "設定",
 
-	"ui.menu.vol":        "音量",
-	"ui.menu.cvol":       "シャーシ音量",
-	"ui.menu.tvol":       "ギア音量",
-	"ui.menu.evol":       "エンジン音量",
-	"ui.menu.eprimary":   "エンジンバランス1",
-	"ui.menu.esecondary": "エンジンバランス2",
-	"ui.menu.epvol":      "エンジン音量",
-	"ui.menu.epscale":    "エンジンパルススケール",
-	"ui.menu.vcurve":     "FFB曲線",
-	"ui.menu.vsat":       "FFB飽和",
-	"ui.menu.fcurve":     "周波数曲線",
-	"ui.menu.fsat":       "周波数飽和",
-	"ui.menu.fmin":       "周波数最小",
-	"ui.menu.fmax":       "周波数最大",
-	"ui.menu.tcurve":     "ギア曲線",
-	"ui.menu.tsat":       "ギア飽和",
-	"ui.menu.mix":        "ミキサーアルゴ",
-	"ui.menu.lang":       "言語",
+	translations.UIMenuVol:        "音量",
+	translations.UIMenuCVol:       "シャーシ音量",
+	translations.UIMenuTVol:       "ギア音量",
+	translations.UIMenuEVol:       "エンジン音量",
+	translations.UIMenuEPrimary:   "エンジンバランス1",
+	translations.UIMenuESecondary: "エンジンバランス2",
+	translations.UIMenuEPVol:      "エンジン音量",
+	translations.UIMenuEPScale:    "エンジンパルススケール",
+	translations.UIMenuVCurve:     "FFB曲線",
+	translations.UIMenuVSat:       "FFB飽和",
+	translations.UIMenuFCurve:     "周波数曲線",
+	translations.UIMenuFSat:       "周波数飽和",
+	translations.UIMenuFMin:       "周波数最小",
+	translations.UIMenuFMax:       "周波数最大",
+	translations.UIMenuTCurve:     "ギア曲線",
+	translations.UIMenuTSat:       "ギア飽和",
+	translations.UIMenuMix:        "ミキサーアルゴ",
+	translations.UIMenuLang:       "言語",
+
+	translations.RadioOnline:            "無線チェック",
+	translations.RadioLapRecord:         "最速ラップ",
+	translations.RadioFuelRange:         "燃料範囲は%d周。残り%d周",
+	translations.RadioFuelPreWarn:       "%d周で燃料補給",
+	translations.RadioBoxForFuel:        "ボックスこのラップを燃料用に",
+	translations.RadioFuelCritical:      "燃料危機的、マップ5 ボックスボックスボックス",
+	translations.RadioOutOfFuel:         "燃料切れ、予備に切り替え、すぐにボックス",
+	translations.RadioLapsRemaining:     "%dラップ残り",
+	translations.RadioLapsWithRemaining: "ラップ%d、残り%dラップ",
+	translations.RadioLapsHalfway:       "ラップ%d、中間地点まで",
+	translations.RadioFinalLap:          "最終ラップ",
+	translations.RadioRaceFinish:        "レース終了",
 }

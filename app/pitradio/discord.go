@@ -7,8 +7,8 @@ import (
 )
 
 type DiscordBot struct {
-	channelID string
-	session   *discordgo.Session
+	channelID string             // Discord channel ID where messages will be sent
+	session   *discordgo.Session // Currently connected Discord session
 }
 
 // NewDiscordBot creates a new Discord bot instance.
@@ -37,6 +37,10 @@ func NewDiscordBot(token string, channelID string) (*DiscordBot, error) {
 
 // Connect establishes a connection to the Discord WebSocket.
 func (d *DiscordBot) Connect() error {
+	if d.session == nil {
+		return fmt.Errorf("discord session not initialized")
+	}
+
 	err := d.session.Open()
 	if err != nil {
 		return fmt.Errorf("open Discord session: %w", err)
@@ -50,7 +54,7 @@ func (d *DiscordBot) Connect() error {
 // Disconnect terminates the connection to the Discord WebSocket.
 func (d *DiscordBot) Disconnect() error {
 	if d.session == nil {
-		return nil
+		return fmt.Errorf("discord session not initialized")
 	}
 
 	err := d.session.Close()
@@ -64,7 +68,8 @@ func (d *DiscordBot) Disconnect() error {
 // Send sends a message to the Discord channel.
 func (d *DiscordBot) Send(message string) error {
 	if d.session == nil {
-		return nil
+		return fmt.Errorf("discord session not initialized")
+
 	}
 
 	_, err := d.session.ChannelMessageSend(d.channelID, message)

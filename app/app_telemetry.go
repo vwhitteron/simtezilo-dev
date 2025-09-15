@@ -75,7 +75,12 @@ func (a *App) telemetryPacketsDropped() uint32 {
 
 // timeOfDayHasReset checks if the time of day has reset (gone backwards).
 func (a *App) timeOfDayHasReset() bool {
+	if a.state.current.sequenceNumber == 0 {
+		return false
+	}
+
 	timeOfDayDelta := a.state.current.timeOfDay - a.state.last.timeOfDay
+
 	return timeOfDayDelta.Milliseconds() < 0
 }
 
@@ -96,7 +101,6 @@ func (a *App) updateState() (didUpdate bool) {
 	a.state.current.timeOfDay = a.gtClient.Telemetry.TimeOfDay()
 
 	// Vehicle
-	a.state.current.vehicleID = a.gtClient.Telemetry.VehicleID()
 	a.state.current.transmissionGear = a.gtClient.Telemetry.CurrentGear()
 
 	// Lap
@@ -104,7 +108,6 @@ func (a *App) updateState() (didUpdate bool) {
 	a.state.current.lastLapTime = a.gtClient.Telemetry.LastLaptime()
 
 	if a.vehicleHasChanged() {
-		// a.resetState(resetTrackData)
 		a.disableHaptics("vehicle changed")
 
 		a.updateVehicle()
@@ -115,7 +118,7 @@ func (a *App) updateState() (didUpdate bool) {
 
 // vehicleHasChanged checks if the vehicle has changed based on telemetry data.
 func (a *App) vehicleHasChanged() bool {
-	return a.state.current.vehicleID != a.state.last.vehicleID
+	return a.vehicle.ID != a.gtClient.Telemetry.VehicleID()
 }
 
 // vehicleIsOnTrack checks if the vehicle is on track based on telemetry data.

@@ -1,5 +1,7 @@
 package en
 
+import "github.com/vwhitteron/simtezilo-dev/app/i18n/translations"
+
 const (
 	Code             = "en"
 	Name             = "English"
@@ -11,37 +13,50 @@ const (
 	ValueFontScale   = 1.0
 )
 
-var Translations = map[string]string{
-	"app.name":        "Simtezilo",
-	"app.description": "Sim Racing Haptics Synthesizer",
-	"app.version":     "version",
+var Translations = map[translations.Key]string{
+	translations.AppName:        "Simtezilo",
+	translations.AppDescription: "Sim Racing Haptics Synthesizer",
+	translations.AppVersion:     "version",
 
-	"ui.error":    "error",
-	"ui.success":  "success",
-	"ui.quit":     "goodbye",
-	"ui.starting": "starting",
-	"ui.stopping": "stopping",
-	"ui.loading":  "loading",
-	"ui.waiting":  "waiting",
-	"ui.ready":    "ready",
-	"ui.settings": "settings",
+	translations.UIError:    "error",
+	translations.UISuccess:  "success",
+	translations.UIQuit:     "goodbye",
+	translations.UIStarting: "starting",
+	translations.UIStopping: "stopping",
+	translations.UILoading:  "loading",
+	translations.UIWaiting:  "waiting",
+	translations.UIReady:    "ready",
+	translations.UISettings: "settings",
 
-	"ui.menu.vol":        "Master Gain",
-	"ui.menu.cvol":       "Chassis Gain",
-	"ui.menu.tvol":       "Trans Gain",
-	"ui.menu.evol":       "Engine Gain",
-	"ui.menu.eprimary":   "Engine Bal 1",
-	"ui.menu.esecondary": "Engine Bal 2",
-	"ui.menu.epvol":      "Engine Pul Gain",
-	"ui.menu.epscale":    "Engine Pul Scale",
-	"ui.menu.vcurve":     "FFB Curve",
-	"ui.menu.vsat":       "FFB Saturation",
-	"ui.menu.fcurve":     "Freq Curve",
-	"ui.menu.fsat":       "Freq Saturation",
-	"ui.menu.fmin":       "Freq Min",
-	"ui.menu.fmax":       "Freq Max",
-	"ui.menu.tcurve":     "Trans Curve",
-	"ui.menu.tsat":       "Trans Saturation",
-	"ui.menu.mix":        "Mix Algo",
-	"ui.menu.lang":       "Language",
+	translations.UIMenuVol:        "Master Gain",
+	translations.UIMenuCVol:       "Chassis Gain",
+	translations.UIMenuTVol:       "Trans Gain",
+	translations.UIMenuEVol:       "Engine Gain",
+	translations.UIMenuEPrimary:   "Engine Bal 1",
+	translations.UIMenuESecondary: "Engine Bal 2",
+	translations.UIMenuEPVol:      "Engine Pul Gain",
+	translations.UIMenuEPScale:    "Engine Pul Scale",
+	translations.UIMenuVCurve:     "FFB Curve",
+	translations.UIMenuVSat:       "FFB Saturation",
+	translations.UIMenuFCurve:     "Freq Curve",
+	translations.UIMenuFSat:       "Freq Saturation",
+	translations.UIMenuFMin:       "Freq Min",
+	translations.UIMenuFMax:       "Freq Max",
+	translations.UIMenuTCurve:     "Trans Curve",
+	translations.UIMenuTSat:       "Trans Saturation",
+	translations.UIMenuMix:        "Mix Algo",
+	translations.UIMenuLang:       "Language",
+
+	translations.RadioOnline:            "Radio check",
+	translations.RadioLapRecord:         "Lap record",
+	translations.RadioFuelRange:         "Fuel range %d laps. %d laps remaining",
+	translations.RadioFuelPreWarn:       "Refuel in %d laps",
+	translations.RadioBoxForFuel:        "Box this lap for fuel",
+	translations.RadioFuelCritical:      "Fuel critical, map 5 boxboxbox",
+	translations.RadioOutOfFuel:         "Out of fuel, switch to reserve and box immediately",
+	translations.RadioLapsRemaining:     "%d laps remaining",
+	translations.RadioLapsWithRemaining: "Lap %d, %d laps remaining",
+	translations.RadioLapsHalfway:       "Lap %d, halfway there",
+	translations.RadioFinalLap:          "Final lap",
+	translations.RadioRaceFinish:        "Race complete",
 }

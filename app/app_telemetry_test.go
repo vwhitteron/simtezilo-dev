@@ -81,6 +81,7 @@ func (suite *TelemetryTestSuite) TestSequenceHasAdvancedReturnsTrueWhenSequenceI
 
 func (suite *TelemetryTestSuite) TestTimeOfDayHasResetReturnsTrueWhenTimeOfDayDeltaIsNegative() {
 	// Arrange
+	suite.app.state.current.sequenceNumber = 1
 	suite.app.state.last.timeOfDay = 900 * time.Second
 	suite.app.state.current.timeOfDay = 780 * time.Second
 
@@ -168,8 +169,8 @@ func (suite *TelemetryTestSuite) TestTelemetryPacketsDroppedReturnsCorrectCountW
 
 func (suite *TelemetryTestSuite) TestVehicleHasChangedReturnsTrueWhenVehicleIDChanges() {
 	// Arrange
-	suite.app.state.last.vehicleID = 1234
-	suite.app.state.current.vehicleID = 1235
+	suite.app.vehicle.ID = 1234
+	suite.app.gtClient.Telemetry.RawTelemetry.VehicleId = 1235
 
 	// Act
 	result := suite.app.vehicleHasChanged()
@@ -180,8 +181,8 @@ func (suite *TelemetryTestSuite) TestVehicleHasChangedReturnsTrueWhenVehicleIDCh
 
 func (suite *TelemetryTestSuite) TestVehicleHasChangedReturnsFalseWhenVehicleIDDoesNotChange() {
 	// Arrange
-	suite.app.state.last.vehicleID = 0
-	suite.app.state.current.vehicleID = 0
+	suite.app.vehicle.ID = 1230
+	suite.app.gtClient.Telemetry.RawTelemetry.VehicleId = 1230
 
 	// Act
 	result := suite.app.vehicleHasChanged()

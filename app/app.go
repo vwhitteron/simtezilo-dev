@@ -15,6 +15,7 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/spotpear"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/waveshare"
 	"github.com/vwhitteron/simtezilo-dev/app/i18n"
+	"github.com/vwhitteron/simtezilo-dev/app/i18n/translations"
 	"github.com/vwhitteron/simtezilo-dev/app/kinematics"
 	"github.com/vwhitteron/simtezilo-dev/app/pitradio"
 	"github.com/vwhitteron/simtezilo-dev/app/synth"
@@ -40,7 +41,6 @@ type raceState struct {
 
 	// Vehicle information
 	transmissionGear int
-	vehicleID        uint32
 
 	// Race timing information
 	lapNumber   int16
@@ -70,6 +70,9 @@ type App struct {
 	pitRadio   pitradio.PitRadioService
 	kinematics kinematics.KinematicsTracker
 	synth      *synth.Synthesizer
+
+	fuelRange fuelRangeEstimation
+	circuit   lapDistanceEstimation
 
 	transmissionGainMin float64
 
@@ -306,7 +309,8 @@ func NewApp(opts AppOptions) (*App, error) {
 			Str("result", "failure").
 			Msg("init")
 	}
-	a.resetPitRadioState(resetTrackData)
+
+	a.resetPitRadioState()
 
 	a.log.Debug().
 		Str("component", "app").
@@ -319,7 +323,9 @@ func NewApp(opts AppOptions) (*App, error) {
 func (a *App) Run() {
 	go a.ui.HIDEventHandler()
 
-	go a.newLapHandler()
+	go a.newLapFuelRangeHandler()
+
+	go a.newLapNotificationHandler()
 
 	go func() {
 		err := a.pitRadio.Connect()
@@ -338,7 +344,7 @@ func (a *App) Run() {
 			Str("result", "success").
 			Msg("init")
 
-		a.pitRadio.Send("Radio check")
+		a.pitRadio.Send(a.i18n.GetString(translations.RadioOnline))
 	}()
 
 	go func() {
@@ -406,6 +412,7 @@ func (a *App) Run() {
 			return
 		case <-tickerHaptics.C:
 			a.hapticEvents()
+			a.updateFuelConsumption()
 			a.checkForNewLap()
 		case <-tickerGeneral.C:
 			a.sessionIsComplete()
@@ -473,9 +480,8 @@ func (a *App) sessionHasReset() bool {
 	return false
 }
 
-// resetState resets the application state and optionally retains or resets the track data state
-// trackDataAction: retainTrackData (true) or resetTrackData (false)
-func (a *App) resetState(trackDataAction trackDataAction) {
+// resetAppState resets the application state
+func (a *App) resetAppState() {
 	a.state.last = raceState{
 		transmissionGear: kinematics.NullGear,
 	}
@@ -483,8 +489,6 @@ func (a *App) resetState(trackDataAction trackDataAction) {
 	a.state.current = raceState{
 		transmissionGear: kinematics.NullGear,
 	}
-
-	a.resetPitRadioState(trackDataAction)
 
 	a.synth.Silence()
 
@@ -556,8 +560,9 @@ func (a *App) updateVehicle() {
 		a.transmissionGainMin = a.config.GetTransmissionGain() + a.config.GetTransmissionGainMinStreet()
 	}
 
-	a.state.last.vehicleID = a.state.current.vehicleID
 	a.state.last.transmissionGear = a.state.current.transmissionGear
+
+	a.resetFuelRange()
 }
 
 func (a *App) gearHasChanged() bool {

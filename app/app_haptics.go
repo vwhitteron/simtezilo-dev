@@ -42,7 +42,7 @@ func (a *App) hapticEvents() {
 		a.state.telemetryActive = false
 
 		if a.state.hapticsEnabled {
-			a.resetState(retainTrackData)
+			a.resetAppState()
 			a.disableHaptics("not live")
 		}
 
@@ -53,21 +53,24 @@ func (a *App) hapticEvents() {
 
 	// The loading flag typically means the session has restarted or the car has pitted
 	if a.sessionHasReset() {
-		a.resetState(retainTrackData)
+		a.resetAppState()
 		a.disableHaptics("session reset")
 
 		return
 	}
 
 	if a.timeOfDayHasReset() {
-		a.resetState(retainTrackData)
-		a.disableHaptics("time of day reset")
-
-		a.log.Debug().
+		a.log.Info().
 			Uint32("sequence_id", a.state.current.sequenceNumber).
 			Str("current_time_of_day", a.state.current.timeOfDay.String()).
 			Str("last_time_of_day", a.state.last.timeOfDay.String()).
 			Msg("time of day reset")
+
+		a.resetAppState()
+
+		a.resetFuelRange()
+
+		a.disableHaptics("time of day reset")
 
 		return
 	}
