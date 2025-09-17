@@ -8,6 +8,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/vwhitteron/simtezilo-dev/app/i18n/en"
 	"github.com/vwhitteron/simtezilo-dev/app/i18n/jp"
+	translationkeys "github.com/vwhitteron/simtezilo-dev/app/i18n/translations"
 )
 
 const InvalidKey = "invalidkey"
@@ -20,7 +21,7 @@ type Font struct {
 type Language struct {
 	Code        string
 	Name        string
-	String      map[string]string
+	Keys        map[translationkeys.Key]string
 	FontRegular Font
 	FontValue   Font
 
@@ -52,37 +53,37 @@ func (l *Language) GetCurrentLanguage() string {
 }
 
 // GetString retrieves the translation for the given key.
-func (l *Language) GetString(key string) string {
-	key = strings.ToLower(key)
+func (l *Language) GetString(key translationkeys.Key) string {
+	key = key.ToLower()
 
-	if val, ok := l.String[key]; ok {
-		l.log.Debug().Str("key", key).Str("lang", l.Code).Str("result", "success").Msg("translation lookup")
+	if val, ok := l.Keys[key]; ok {
+		l.log.Debug().Str("key", key.String()).Str("lang", l.Code).Str("result", "success").Msg("translation lookup")
 
 		return val
 	}
 
-	l.log.Error().Str("key", key).Str("lang", l.Code).Str("result", "failure").Msg("translation lookup")
+	l.log.Error().Str("key", key.String()).Str("lang", l.Code).Str("result", "failure").Msg("translation lookup")
 
 	return l.getFallbackString(key)
 }
 
 // GetFallbackString retrieves the fallback translation for the given key.
-func (l *Language) getFallbackString(key string) string {
-	key = strings.ToLower(key)
+func (l *Language) getFallbackString(key translationkeys.Key) string {
+	key = key.ToLower()
 
 	if l.fallback == nil {
-		l.log.Error().Str("key", key).Str("lang", "fallback").Str("result", "failure").Msg("translation lookup")
+		l.log.Error().Str("key", key.String()).Str("lang", "fallback").Str("result", "failure").Msg("translation lookup")
 
 		return InvalidKey
 	}
 
-	if val, ok := l.fallback.String[key]; ok {
-		l.log.Debug().Str("key", key).Str("lang", "fallback").Str("result", "success").Msg("translation lookup")
+	if val, ok := l.fallback.Keys[key]; ok {
+		l.log.Debug().Str("key", key.String()).Str("lang", "fallback").Str("result", "success").Msg("translation lookup")
 
 		return val
 	}
 
-	l.log.Error().Str("key", key).Str("lang", "fallback").Str("result", "failure").Msg("translation lookup")
+	l.log.Error().Str("key", key.String()).Str("lang", "fallback").Str("result", "failure").Msg("translation lookup")
 
 	return InvalidKey
 }
@@ -102,7 +103,7 @@ func (l *Language) watchForConfigChanges() {
 		language := getLanguage(*l.configLangCode, l.log)
 		l.Code = language.Code
 		l.Name = language.Name
-		l.String = language.String
+		l.Keys = language.Keys
 		l.FontRegular = language.FontRegular
 		l.FontValue = language.FontValue
 		l.fallback = language.fallback
@@ -126,9 +127,9 @@ func getLanguage(langCode string, logger zerolog.Logger) *Language {
 			fontRegular = nil
 		}
 		return &Language{
-			Code:   jp.Code,
-			Name:   jp.Name,
-			String: jp.Translations,
+			Code: jp.Code,
+			Name: jp.Name,
+			Keys: jp.Translations,
 			FontRegular: Font{
 				Font:  fontRegular,
 				Scale: jp.RegularFontScale,
@@ -152,9 +153,9 @@ func getLanguage(langCode string, logger zerolog.Logger) *Language {
 			fontEn = nil
 		}
 		return &Language{
-			Code:   en.Code,
-			Name:   en.Name,
-			String: en.Translations,
+			Code: en.Code,
+			Name: en.Name,
+			Keys: en.Translations,
 			FontRegular: Font{
 				Font:  fontEn,
 				Scale: en.RegularFontScale,

@@ -52,10 +52,10 @@ func (a *App) generateEngineHaptic() {
 
 	// Cache last known RPM and timestamp for fallback when telemetry is unavailable
 	currentTime := time.Now()
-	if a.state.current.seq > a.state.engine.lastSeq {
+	if a.state.current.sequenceNumber > a.state.engine.lastSeq {
 		a.state.engine.lastKnownRPM = rpm
 		a.state.engine.lastEventTime = currentTime
-		a.state.engine.lastSeq = a.state.current.seq
+		a.state.engine.lastSeq = a.state.current.sequenceNumber
 	} else if currentTime.Sub(a.state.engine.lastEventTime) > 1000*time.Millisecond {
 		// stop engine haptics of no telemetry received for 1 second or more
 		return
@@ -305,7 +305,7 @@ func (a *App) calculateEngineRoughness(rpm float64) float64 {
 	var engineRoughness float64
 	switch a.vehicle.engine.geometry {
 	case "K":
-		roughnessPhase := float64(a.state.current.seq) * 0.003
+		roughnessPhase := float64(a.state.current.sequenceNumber) * 0.003
 		apexSealRoughness := (1.0 - a.vehicle.engine.haptics.PrimaryBalance) * 0.08
 		housingEccentricity := (1.0 - a.vehicle.engine.haptics.SecondaryBalance) * 0.05
 		roughnessIntensity := apexSealRoughness + housingEccentricity*0.7
@@ -316,13 +316,13 @@ func (a *App) calculateEngineRoughness(rpm float64) float64 {
 
 		// Add characteristic Wankel "chatter" at low RPM
 		if rpm < 2000.0 {
-			chatterPhase := float64(a.state.current.seq) * 0.008
+			chatterPhase := float64(a.state.current.sequenceNumber) * 0.008
 			chatterIntensity := (1.0 - a.vehicle.engine.haptics.SecondaryBalance) * 0.03
 			engineRoughness += math.Sin(chatterPhase) * chatterIntensity * (1.0 - rpm/2000.0)
 		}
 	case "S":
 		// 2-stroke engines have characteristic roughness due to scavenging process
-		roughnessPhase := float64(a.state.current.seq) * 0.007
+		roughnessPhase := float64(a.state.current.sequenceNumber) * 0.007
 		scavenging := (1.0 - a.vehicle.engine.haptics.PrimaryBalance) * 0.20
 		exhaustBlowdown := (1.0 - a.vehicle.engine.haptics.SecondaryBalance) * 0.12
 		intakeExhaustoverlap := 0.6
@@ -336,7 +336,7 @@ func (a *App) calculateEngineRoughness(rpm float64) float64 {
 
 		// Add port timing irregularities at low RPM
 		if rpm < 3000.0 {
-			portPhase := float64(a.state.current.seq) * 0.012
+			portPhase := float64(a.state.current.sequenceNumber) * 0.012
 			portIrregularity := (1.0 - a.vehicle.engine.haptics.SecondaryBalance) * 0.08
 			engineRoughness += math.Sin(portPhase) * portIrregularity * (1.0 - rpm/3000.0)
 		}
@@ -349,7 +349,7 @@ func (a *App) calculateEngineRoughness(rpm float64) float64 {
 	default:
 		// Default to 4-stroke engine characteristics
 		if rpm <= 2400.0 {
-			roughnessPhase := float64(a.state.current.seq) * 0.005
+			roughnessPhase := float64(a.state.current.sequenceNumber) * 0.005
 			// Poor primary balance creates more low-frequency roughness
 			primaryRoughness := (1.0 - a.vehicle.engine.haptics.PrimaryBalance) * 0.15
 			// Poor secondary balance creates more high-frequency roughness
@@ -363,7 +363,7 @@ func (a *App) calculateEngineRoughness(rpm float64) float64 {
 		} else {
 			// High RPM: roughness based on engine balance characteristics
 			if a.vehicle.engine.haptics.PrimaryBalance < 0.9 {
-				roughnessPhase := float64(a.state.current.seq) * 0.002
+				roughnessPhase := float64(a.state.current.sequenceNumber) * 0.002
 				highRpmRoughness := (1.0 - a.vehicle.engine.haptics.PrimaryBalance) * 0.02 // Poor primary balance creates roughness
 				engineRoughness = math.Sin(roughnessPhase) * highRpmRoughness
 			} else {
@@ -454,7 +454,7 @@ func (a *App) generatePulseWaveform(rpm float64, engineRoughness float64, engine
 			// Add per-pulse roughness variation based on engine characteristics
 			secondaryImbalance := 1.0 - a.vehicle.engine.haptics.SecondaryBalance
 			if rpm <= 2400.0 && secondaryImbalance > 0.02 {
-				roughnessPhase := float64(a.state.current.seq+uint32(i)) * 0.0005
+				roughnessPhase := float64(a.state.current.sequenceNumber+uint32(i)) * 0.0005
 				roughnessVariation := 1.0 + (math.Sin(roughnessPhase) * secondaryImbalance * 0.3)
 				pulseValue *= roughnessVariation
 			}

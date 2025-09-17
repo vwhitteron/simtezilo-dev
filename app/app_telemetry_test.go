@@ -26,8 +26,8 @@ func (suite *TelemetryTestSuite) SetupTest() {
 	suite.app = &App{
 		gtClient: gtClient,
 		state: appState{
-			current: stateRecord{},
-			last:    stateRecord{},
+			current: raceState{},
+			last:    raceState{},
 		},
 	}
 }
@@ -57,8 +57,8 @@ func (suite *TelemetryTestSuite) SetupTest() {
 
 func (suite *TelemetryTestSuite) TestSequenceHasAdvancedReturnsFalseWhenSequenceIDHasNotChanged() {
 	// Arramge
-	suite.app.state.last.seq = 102
-	suite.app.state.current.seq = 102
+	suite.app.state.last.sequenceNumber = 102
+	suite.app.state.current.sequenceNumber = 102
 
 	// Act
 	result := suite.app.sequenceHasAdvanced()
@@ -69,8 +69,8 @@ func (suite *TelemetryTestSuite) TestSequenceHasAdvancedReturnsFalseWhenSequence
 
 func (suite *TelemetryTestSuite) TestSequenceHasAdvancedReturnsTrueWhenSequenceIDIncreases() {
 	// Arrange
-	suite.app.state.current.seq = 101
-	suite.app.state.current.seqDelta = 1
+	suite.app.state.current.sequenceNumber = 101
+	suite.app.state.current.sequenceDelta = 1
 
 	// Act
 	result := suite.app.sequenceHasAdvanced()
@@ -81,6 +81,7 @@ func (suite *TelemetryTestSuite) TestSequenceHasAdvancedReturnsTrueWhenSequenceI
 
 func (suite *TelemetryTestSuite) TestTimeOfDayHasResetReturnsTrueWhenTimeOfDayDeltaIsNegative() {
 	// Arrange
+	suite.app.state.current.sequenceNumber = 1
 	suite.app.state.last.timeOfDay = 900 * time.Second
 	suite.app.state.current.timeOfDay = 780 * time.Second
 
@@ -146,7 +147,7 @@ func (suite *TelemetryTestSuite) TestTimeOfDayHasResetReturnsFalseWhenTimeOfDayD
 
 func (suite *TelemetryTestSuite) TestTelemetryPacketsDroppedReturnsZeroWhenNoPacketsDropped() {
 	// Arrange
-	suite.app.state.current.seqDelta = 1
+	suite.app.state.current.sequenceDelta = 1
 
 	// Act
 	dropped := suite.app.telemetryPacketsDropped()
@@ -157,7 +158,7 @@ func (suite *TelemetryTestSuite) TestTelemetryPacketsDroppedReturnsZeroWhenNoPac
 
 func (suite *TelemetryTestSuite) TestTelemetryPacketsDroppedReturnsCorrectCountWhenPacketsDropped() {
 	// Arrange
-	suite.app.state.current.seqDelta = 5
+	suite.app.state.current.sequenceDelta = 5
 
 	// Act
 	dropped := suite.app.telemetryPacketsDropped()
@@ -168,8 +169,8 @@ func (suite *TelemetryTestSuite) TestTelemetryPacketsDroppedReturnsCorrectCountW
 
 func (suite *TelemetryTestSuite) TestVehicleHasChangedReturnsTrueWhenVehicleIDChanges() {
 	// Arrange
-	suite.app.state.last.vehicleID = 1234
-	suite.app.state.current.vehicleID = 1235
+	suite.app.vehicle.ID = 1234
+	suite.app.gtClient.Telemetry.RawTelemetry.VehicleId = 1235
 
 	// Act
 	result := suite.app.vehicleHasChanged()
@@ -180,8 +181,8 @@ func (suite *TelemetryTestSuite) TestVehicleHasChangedReturnsTrueWhenVehicleIDCh
 
 func (suite *TelemetryTestSuite) TestVehicleHasChangedReturnsFalseWhenVehicleIDDoesNotChange() {
 	// Arrange
-	suite.app.state.last.vehicleID = 0
-	suite.app.state.current.vehicleID = 0
+	suite.app.vehicle.ID = 1230
+	suite.app.gtClient.Telemetry.RawTelemetry.VehicleId = 1230
 
 	// Act
 	result := suite.app.vehicleHasChanged()

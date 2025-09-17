@@ -15,13 +15,16 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/spotpear"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/waveshare"
 	"github.com/vwhitteron/simtezilo-dev/app/i18n"
+	"github.com/vwhitteron/simtezilo-dev/app/i18n/translations"
 	"github.com/vwhitteron/simtezilo-dev/app/kinematics"
+	"github.com/vwhitteron/simtezilo-dev/app/pitradio"
 	"github.com/vwhitteron/simtezilo-dev/app/synth"
 	"github.com/vwhitteron/simtezilo-dev/app/ui"
 	"github.com/vwhitteron/simtezilo-dev/app/ui/webui"
 	telemetry_client "github.com/zetetos/gt-telemetry"
 )
 
+// vehicleRecord holds static vehicle data loaded from the GT vehicle database
 type vehicleRecord struct {
 	ID          uint32
 	vehicleType string
@@ -29,19 +32,27 @@ type vehicleRecord struct {
 	revLimit    uint16
 }
 
-type stateRecord struct {
-	seq       uint32
-	seqDelta  uint32
-	timeOfDay time.Duration
-	gear      int
-	vehicleID uint32
+// raceState holds transient race data for haptic generation and pit radio notifications
+type raceState struct {
+	// Telemetry session information
+	sequenceNumber uint32
+	sequenceDelta  uint32
+	timeOfDay      time.Duration
+
+	// Vehicle information
+	transmissionGear int
+
+	// Race timing information
+	lapNumber   int16
+	lastLapTime time.Duration
 }
 
+// appState holds the overall application state
 type appState struct {
 	hapticsEnabled  bool // TODO: move state to haptics?
 	telemetryActive bool
-	current         stateRecord
-	last            stateRecord
+	current         raceState
+	last            raceState
 	engine          engineState
 }
 
@@ -56,18 +67,25 @@ type App struct {
 	display hardware.Display
 
 	gtClient   *telemetry_client.GTClient
+	pitRadio   pitradio.PitRadioService
 	kinematics kinematics.KinematicsTracker
 	synth      *synth.Synthesizer
 
+	fuelRange fuelRangeEstimation
+	circuit   lapDistanceEstimation
+
 	transmissionGainMin float64
 
-	state   appState
-	vehicle vehicleRecord
+	state         appState
+	pitRadioState *pitRadioState
+	vehicle       vehicleRecord
 
 	telemetryChartFeed chan map[string]float32
 	webEnabled         bool
 	webUI              *webui.WebUI
 	webSequenceId      uint32
+
+	lapStartEvents chan uint32
 }
 
 type AppOptions struct {
@@ -82,20 +100,21 @@ func NewApp(opts AppOptions) (*App, error) {
 		log:  opts.Logger.With().Str("component", "app").Logger(),
 		done: opts.Done,
 		state: appState{
-			current: stateRecord{
-				gear: kinematics.NullGear,
+			current: raceState{
+				transmissionGear: kinematics.NullGear,
 			},
-			last: stateRecord{
-				gear: kinematics.NullGear,
+			last: raceState{
+				transmissionGear: kinematics.NullGear,
 			},
 		},
 		kinematics:         kinematics.NewKinematicsTracker(),
 		telemetryChartFeed: make(chan map[string]float32, 600),
 		webEnabled:         opts.WebEnabled,
+		lapStartEvents:     make(chan uint32),
 	}
 
 	// load config from file
-	a.config = config.NewConfig("simtezilo.conf", a.log)
+	a.config = config.New("simtezilo.conf", a.log)
 
 	zerolog.FloatingPointPrecision = 5
 
@@ -282,6 +301,17 @@ func NewApp(opts AppOptions) (*App, error) {
 		return nil, err
 	}
 
+	a.pitRadio, err = pitradio.NewDiscordBot(a.config.GetDiscordToken(), a.config.GetDiscordChannelID())
+	if err != nil {
+		a.log.Error().
+			Err(err).
+			Str("component", "discord").
+			Str("result", "failure").
+			Msg("init")
+	}
+
+	a.resetPitRadioState()
+
 	a.log.Debug().
 		Str("component", "app").
 		Str("result", "success").
@@ -292,6 +322,30 @@ func NewApp(opts AppOptions) (*App, error) {
 
 func (a *App) Run() {
 	go a.ui.HIDEventHandler()
+
+	go a.newLapFuelRangeHandler()
+
+	go a.newLapNotificationHandler()
+
+	go func() {
+		err := a.pitRadio.Connect()
+		if err != nil {
+			a.log.Error().
+				Err(err).
+				Str("component", "discord").
+				Str("result", "failure").
+				Msg("init")
+
+			return
+		}
+
+		a.log.Debug().
+			Str("component", "discord").
+			Str("result", "success").
+			Msg("init")
+
+		a.pitRadio.Send(a.i18n.GetString(translations.RadioOnline))
+	}()
 
 	go func() {
 		for {
@@ -347,7 +401,8 @@ func (a *App) Run() {
 	tickerHaptics := time.NewTicker((1000 / hapticFrameRate) * time.Millisecond)
 	tickerGeneral := time.NewTicker((1000 / telemetryFrameRate) * time.Millisecond)
 	tickerEngineHaptics := time.NewTicker((1000 / engineHapticFrameRate) * time.Millisecond)
-	tickerDisplay := time.NewTicker((1000 / displayFramRate) * time.Millisecond)
+	tickerDisplay := time.NewTicker((1000 / displayFrameRate) * time.Millisecond)
+	tickerPitRadio := time.NewTicker((1000 / pitRadioFrameRate) * time.Millisecond)
 
 	a.log.Debug().Str("component", "app").Str("result", "success").Msg("main loop started")
 
@@ -357,6 +412,8 @@ func (a *App) Run() {
 			return
 		case <-tickerHaptics.C:
 			a.hapticEvents()
+			a.updateFuelConsumption()
+			a.checkForNewLap()
 		case <-tickerGeneral.C:
 			a.sessionIsComplete()
 			a.sendTelemetryChartData()
@@ -367,6 +424,8 @@ func (a *App) Run() {
 				Gear:            a.kinematics.Current.TransmissionGear,
 				TelemetryActive: a.state.telemetryActive,
 			})
+		case <-tickerPitRadio.C:
+			a.sendPitRadioMessage()
 		}
 	}
 }
@@ -383,6 +442,8 @@ func (a *App) Close() {
 			Msg("close")
 	}
 
+	a.pitRadio.Disconnect()
+
 	err = a.ui.Screen.RenderSplashScreen(a.i18n.GetString("ui.quit"))
 	if err != nil {
 		a.log.Error().
@@ -398,8 +459,6 @@ func (a *App) Close() {
 
 func (a *App) sessionIsComplete() bool {
 	if a.gtClient.Finished {
-		a.state.current.gear = kinematics.NullGear
-		a.resetState()
 		a.log.Debug().Msg("session finished")
 		a.done <- true
 
@@ -412,7 +471,7 @@ func (a *App) sessionIsComplete() bool {
 func (a *App) sessionHasReset() bool {
 	if a.gtClient.Telemetry.Flags().Loading {
 		a.log.Debug().
-			Uint32("sequence_id", a.state.current.seq).
+			Uint32("sequence_id", a.state.current.sequenceNumber).
 			Msg("loading flag detected")
 
 		return true
@@ -421,14 +480,19 @@ func (a *App) sessionHasReset() bool {
 	return false
 }
 
-func (a *App) resetState() {
-	a.state.last = a.state.current
+// resetAppState resets the application state
+func (a *App) resetAppState() {
+	a.state.last = raceState{
+		transmissionGear: kinematics.NullGear,
+	}
+
+	a.state.current = raceState{
+		transmissionGear: kinematics.NullGear,
+	}
 
 	a.synth.Silence()
 
 	a.kinematics = kinematics.NewKinematicsTracker()
-
-	a.synth.ClearBuffers()
 }
 
 func (a *App) updateVehicle() {
@@ -496,8 +560,9 @@ func (a *App) updateVehicle() {
 		a.transmissionGainMin = a.config.GetTransmissionGain() + a.config.GetTransmissionGainMinStreet()
 	}
 
-	a.state.last.vehicleID = a.state.current.vehicleID
-	a.state.last.gear = a.state.current.gear
+	a.state.last.transmissionGear = a.state.current.transmissionGear
+
+	a.resetFuelRange()
 }
 
 func (a *App) gearHasChanged() bool {

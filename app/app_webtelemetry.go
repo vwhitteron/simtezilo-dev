@@ -31,7 +31,7 @@ func (a *App) sendTelemetryChartData() {
 	go func() {
 		a.telemetryChartFeed <- map[string]float32{
 			"computeTime":                 float32(a.kinematics.Last.ComputeTime.Microseconds()),
-			"seq":                         float32(a.state.current.seq),
+			"seq":                         float32(a.state.current.sequenceNumber),
 			"timeOfDay":                   float32(a.gtClient.Telemetry.TimeOfDay().Milliseconds()),
 			"throttleInput":               a.gtClient.Telemetry.ThrottleInputPercent(),
 			"throttleOutput":              a.gtClient.Telemetry.ThrottleOutputPercent(),
@@ -40,6 +40,10 @@ func (a *App) sendTelemetryChartData() {
 			"rpm":                         a.gtClient.Telemetry.EngineRPM(),
 			"speed":                       a.gtClient.Telemetry.GroundSpeedKPH(),
 			"gear":                        float32(a.kinematics.Current.TransmissionGear),
+			"fuelUsagePerKm":              float32(a.fuelRange.usageRatePerKm),
+			"fuelUsagePerKmEMA":           float32(a.fuelRange.usageRatePerKmMA),
+			"fuelRangeKm":                 float32(a.getFuelRangeMetersSafe() / 1000),
+			"fuelRangeLaps":               float32(a.getFuelRangeLapsSafe()),
 			"surgeGforce":                 float32(a.kinematics.Current.SixDOFTranslation.Acceleration) / kinematics.GravityConstant,
 			"surgeGforceCalc":             float32(a.kinematics.Current.SurgeCalculated) / kinematics.GravityConstant,
 			"SixDOFTranslationalJerk":     float32(a.kinematics.Current.SixDOFTranslation.Jerk),

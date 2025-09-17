@@ -155,7 +155,7 @@ func (a *App) generateBalancedWaveform(rpm float64, engineRoughness float64, eng
 
 		// Add engine roughness similar to original implementation
 		if engineRoughness > 0.01 {
-			roughnessPhase := float64(a.state.current.seq+uint32(i)) * 0.001
+			roughnessPhase := float64(a.state.current.sequenceNumber+uint32(i)) * 0.001
 			roughnessContribution := math.Sin(roughnessPhase) * engineRoughness * 0.1
 			waveformValue += roughnessContribution
 		}

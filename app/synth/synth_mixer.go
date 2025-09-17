@@ -400,36 +400,39 @@ func (m *Mixer) MixToMaster2(length int) {
 		m.log.Error().Str("channel", "engine").Msg("channel not found in mixer")
 		m.mu.RLock()
 	} else if *channel.configGain > config.MinimumGain {
-		outSamplesWork := make([]float64, length)
 		engineSamples := channel.Read(length)
 
-		// Perform direct mix and get the peak value
-		for i, engineSample := range engineSamples {
-			peak := 0.0
+		if len(engineSamples) > 0 {
+			outSamplesWork := make([]float64, length)
 
-			engineScaled := engineSample
+			// Perform direct mix and get the peak value
+			for i, engineSample := range engineSamples {
+				peak := 0.0
 
-			engineMax := 1.0 - signal.Abs(outSamples[i])
-			if engineSample > engineMax || engineSample < -engineMax {
-				engineScaled = engineMax * engineSample
+				engineScaled := engineSample
+
+				engineMax := 1.0 - signal.Abs(outSamples[i])
+				if engineSample > engineMax || engineSample < -engineMax {
+					engineScaled = engineMax * engineSample
+				}
+
+				mixed := mixSampleSum(outSamples[i], engineScaled, &peak)
+
+				outSamplesWork[i] = mixed
+
+				if mixed > 1.0 || mixed < -1.0 {
+					m.log.Warn().
+						Float64("sample", outSamples[i]).
+						Float64("engine", engineSample).
+						Float64("engineScaled", engineScaled).
+						Float64("mixed", mixed).
+						Float64("peak", peak).
+						Msg("clipping")
+				}
 			}
 
-			mixed := mixSampleSum(outSamples[i], engineScaled, &peak)
-
-			outSamplesWork[i] = mixed
-
-			if mixed > 1.0 || mixed < -1.0 {
-				m.log.Warn().
-					Float64("sample", outSamples[i]).
-					Float64("engine", engineSample).
-					Float64("engineScaled", engineScaled).
-					Float64("mixed", mixed).
-					Float64("peak", peak).
-					Msg("clipping")
-			}
+			copy(outSamples, outSamplesWork)
 		}
-
-		copy(outSamples, outSamplesWork)
 	}
 
 	masterChannel := m.channels["_master"]

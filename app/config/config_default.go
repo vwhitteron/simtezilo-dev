@@ -66,6 +66,16 @@ var defaultConfig = viperConfig{
 			"k4":                  {PrimaryBalance: 0.75, SecondaryBalance: 0.800, Gain: +0.00, PulseScale: 0.10}, // Mazda 787B '91
 		},
 	},
+	PitRadio: &pitRadio{
+		FuelPreWarnNotifyLaps:       3.0,
+		FuelStrategyNotifyLaps:      5.0,
+		FuelRangeSafetyMarginLaps:   0.2,
+		FuelRangeSafetyMarginMeters: 2000,
+		MessageSendIntervalMs:       5000,
+		DiscordToken:                "",
+		DiscordChannelID:            "",
+	},
+
 	Synthesizer: &Synthesizer{
 		InternalSampleRateHz:      8000,
 		OutputSampleRateHz:        32000,

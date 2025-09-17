@@ -3,6 +3,8 @@ package ui
 import (
 	"strconv"
 	"time"
+
+	"github.com/vwhitteron/simtezilo-dev/app/i18n/translations"
 )
 
 type HIDInputEvent int
@@ -23,7 +25,12 @@ const (
 	HIDInputPower
 )
 
+// HIDEventHandler processes HID input events and updates the UI based on the event type.
 func (u *UserInterface) HIDEventHandler() {
+	u.log.Debug().
+		Str("component", "HID event handler").
+		Msg("Start")
+
 	ready := false
 	for key := range u.hidEvents {
 		// discard hid events in the first 2 seconds after app start
@@ -117,7 +124,17 @@ func (u *UserInterface) HIDEventHandler() {
 			continue
 		}
 
-		title := u.i18n.GetString("ui.menu." + menuPage)
+		title := "???"
+
+		key, err := translations.StringToKey("ui.menu." + menuPage)
+		if err != nil {
+			u.log.Error().
+				Err(err).
+				Str("menuPage", menuPage).
+				Msg("Failed to convert menu page to translation key")
+		} else {
+			title = u.i18n.GetString(key)
+		}
 
 		_ = u.Screen.RenderSettingScreen(title, value)
 	}
