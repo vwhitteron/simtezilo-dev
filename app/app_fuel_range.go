@@ -10,13 +10,10 @@ import (
 
 const (
 	// Fuel range
-	samplingInitialState        int16   = -2              // Lap number to signify an initialised sampling state
-	fuelRangeSamples            int     = 600             // Number of samples for rolling average
-	fuelRangeUpdateInterval             = 2 * time.Second // Interval at which lap and distarnce fuel range is updated
-	fuelRangeSafetyMarginLaps   float64 = 0.2             // Lap distance safety margin for fuel range calculations
-	fuelRangeSafetyMarginMeters float64 = 2000            // 1000 meters safety margin for distance-based calculations
-	fuelRangeLapsInitialValue   float64 = 10000           // Initial high lap value to indicate uninitialized state
-	fuelRangeMetersInitialValue float64 = 1000 * 10000    // Initial high distance value to indicate uninitialized state
+	samplingInitialState        int16   = -2           // Lap number to signify an initialised sampling state
+	fuelRangeSamples            int     = 600          // Number of samples for rolling average
+	fuelRangeLapsInitialValue   float64 = 10000        // Initial high lap value to indicate uninitialized state
+	fuelRangeMetersInitialValue float64 = 1000 * 10000 // Initial high distance value to indicate uninitialized state
 
 	// Distance
 	shortestSampleDistance float64 = 300       // Minimum distance in meters to be considered for range calculations
@@ -47,6 +44,7 @@ type lapDistanceEstimation struct {
 	lapDistanceMeters       float64                 // Track lap distance in meters
 	distanceTravelledMeters float64                 // Total distance travelled in the session in meters
 	circuitPosition         telemetry_client.Vector // Last known circuit position for distance calculations
+	startLinePosition       struct{ X, Y, Z int16 } // Position of the start/finish line
 	lapProgress             float64                 // Current lap progress
 }
 
@@ -84,6 +82,7 @@ func (a *App) newLapFuelRangeHandler() {
 	for {
 		select {
 		case <-a.lapStartEvents:
+			a.updateStartLinePosition()
 			a.udpateLapDistance()
 		default:
 			time.Sleep(16 * time.Millisecond)
@@ -129,7 +128,7 @@ func (a *App) updateFuelConsumption() {
 		fmt.Printf("FUEL l: rate=%.2f%%/lap, range=%.2f laps, range safe=%.2f laps, range ma=%.2f laps, range safe ma=%.2f laps, range box=%.2f laps\n",
 			fuelUsagePerLap,
 			a.fuelRange.distanceLaps,
-			max(a.fuelRange.distanceLaps-fuelRangeSafetyMarginLaps, 0),
+			max(a.fuelRange.distanceLaps-a.config.GetFuelRangeSafetyMarginLaps(), 0),
 			a.fuelRange.distanceLapsMA,
 			a.getFuelRangeLapsSafe(),
 			a.getFuelRangeLapsUntilBox(),
@@ -139,7 +138,7 @@ func (a *App) updateFuelConsumption() {
 			a.fuelRange.usageRatePerKm,
 			a.fuelRange.usageRatePerKmMA,
 			a.fuelRange.distanceMeters/1000,
-			max((a.fuelRange.distanceMeters-fuelRangeSafetyMarginMeters)/1000, 0),
+			max((a.fuelRange.distanceMeters-a.config.GetFuelRangeSafetyMarginMeters())/1000, 0),
 			a.fuelRange.distanceMetersMA/1000,
 			a.getFuelRangeMetersSafe()/1000,
 		)
@@ -185,6 +184,46 @@ func (a *App) updateDistanceTravelled() {
 	}
 
 	a.circuit.circuitPosition = currentPos
+}
+
+func (a *App) updateStartLinePosition() {
+	currentPos := a.gtClient.Telemetry.PositionalMapCoordinates()
+
+	// 10m precision for X and Y, 3m for Z
+	normalisedPos := struct{ X, Y, Z int16 }{
+		X: int16(currentPos.X / 20),
+		Y: int16(currentPos.Y / 20),
+		Z: int16(currentPos.Z / 5),
+	}
+
+	xDelta := normalisedPos.X - a.circuit.startLinePosition.X
+	yDelta := normalisedPos.Y - a.circuit.startLinePosition.Y
+	zDelta := normalisedPos.Z - a.circuit.startLinePosition.Z
+
+	if xDelta+yDelta+zDelta == 0 {
+		return
+	}
+
+	initialUpdate := false
+	if a.circuit.startLinePosition.X == 0 && a.circuit.startLinePosition.Y == 0 && a.circuit.startLinePosition.Z == 0 {
+		initialUpdate = true
+	}
+
+	if xDelta != 0 || yDelta != 0 || zDelta != 0 {
+		a.log.Warn().
+			Str("component", "fuel").
+			Bool("first_update", initialUpdate).
+			Int16("x_delta", xDelta).
+			Int16("y_delta", yDelta).
+			Int16("z_delta", zDelta).
+			Str("position", fmt.Sprintf("(x: %d, y: %d, z: %d)", normalisedPos.X, normalisedPos.Y, normalisedPos.Z)).
+			Msg("Start/finish line position updated")
+	}
+
+	a.resetLapDistance()
+
+	a.circuit.startLinePosition = normalisedPos
+
 }
 
 func (a *App) updateLapProgess() {
@@ -368,7 +407,7 @@ func (a *App) updateFuelRangeLaps() {
 
 // getFuelRangeDistanceSafe returns the fuel range in meters with safety margin applied
 func (a *App) getFuelRangeMetersSafe() (rangeMeters float64) {
-	rangeMeters = max(a.fuelRange.distanceMetersMA-fuelRangeSafetyMarginMeters, 0)
+	rangeMeters = max(a.fuelRange.distanceMetersMA-a.config.GetFuelRangeSafetyMarginMeters(), 0)
 
 	return min(rangeMeters, fuelRangeMetersInitialValue)
 }
@@ -376,7 +415,7 @@ func (a *App) getFuelRangeMetersSafe() (rangeMeters float64) {
 // getFuelRangeLapsSafe returns the fuel range in laps with safety margin applied
 // The range returned is capped between 0 and fuelRangeLapsInitialValue
 func (a *App) getFuelRangeLapsSafe() (rangeLaps float64) {
-	rangeLaps = max(a.fuelRange.distanceLapsMA-fuelRangeSafetyMarginLaps, 0)
+	rangeLaps = max(a.fuelRange.distanceLapsMA-a.config.GetFuelRangeSafetyMarginLaps(), 0)
 
 	return min(rangeLaps, fuelRangeLapsInitialValue)
 }

@@ -114,7 +114,7 @@ func NewApp(opts AppOptions) (*App, error) {
 	}
 
 	// load config from file
-	a.config = config.NewConfig("simtezilo.conf", a.log)
+	a.config = config.New("simtezilo.conf", a.log)
 
 	zerolog.FloatingPointPrecision = 5
 

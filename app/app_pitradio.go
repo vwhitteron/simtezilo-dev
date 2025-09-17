@@ -9,10 +9,8 @@ import (
 )
 
 const (
-	fuelPreWarnNotifyLaps  float64 = 3               // Fuel range laps to send pre-warn notifications
-	fuelStrategyNotifyLaps float64 = 5               // Fuel range laps between update notifications
-	positionDebounceTime           = 5 * time.Second // Suppress position change notifications for this duration
-	messagePause                   = 5 * time.Second // Pause between pit radio messages
+	positionDebounceTime = 5 * time.Second // Suppress position change notifications for this duration
+	messagePause         = 5 * time.Second // Pause between pit radio messages
 )
 
 // pitRadioState tracks Discord/pit radio communication state
@@ -387,7 +385,7 @@ func (a *App) notifyFuelWarnings() {
 			suppressNotify = false
 			a.pitRadioState.lastNotifiedLapFuelWarning = currentLap
 		}
-	case fuelRangeLapsUntilBox <= fuelPreWarnNotifyLaps:
+	case fuelRangeLapsUntilBox <= a.config.GetFuelPreWarnNotifyLaps():
 		// Early warning when range drops below threshold plus pre-warn buffer
 		format := a.i18n.GetString(translations.RadioFuelPreWarn)
 		message = fmt.Sprintf(format, int(fuelRangeLapsUntilBox))
@@ -397,12 +395,14 @@ func (a *App) notifyFuelWarnings() {
 			a.pitRadioState.fuelNotifyPrewarnIssued = true
 			a.pitRadioState.lastNotifiedLapFuelWarning = currentLap
 		}
-	case remainingLaps > fuelRangeLaps && int16(currentLap)%int16(fuelStrategyNotifyLaps) == 0:
+	case remainingLaps > fuelRangeLaps && int16(currentLap)%int16(a.config.GetFuelStrategyNotifyLaps()) == 0:
 		// Periodic fuel range updates when insufficient fuel for the remainder of the race
 		format := a.i18n.GetString(translations.RadioFuelRange)
 		message = fmt.Sprintf(format, int(fuelRangeLaps), int(remainingLaps))
 
-		if a.pitRadioState.lastNotifiedLapFuelStrategy != currentLap {
+		if a.pitRadioState.lastNotifiedLapFuelWarning == currentLap {
+			suppressNotify = true
+		} else if a.pitRadioState.lastNotifiedLapFuelStrategy != currentLap {
 			suppressNotify = false
 			a.pitRadioState.lastNotifiedLapFuelStrategy = currentLap
 		}

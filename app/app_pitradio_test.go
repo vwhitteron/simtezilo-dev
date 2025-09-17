@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/suite"
+	"github.com/vwhitteron/simtezilo-dev/app/config"
 	"github.com/vwhitteron/simtezilo-dev/app/i18n"
 	"github.com/vwhitteron/simtezilo-dev/app/i18n/translations"
 	telemetry "github.com/zetetos/gt-telemetry"
@@ -52,6 +54,7 @@ func (suite *PitRadioTestSuite) SetupTest() {
 	}
 
 	suite.app = &App{
+		config:   nil,
 		gtClient: gtClient,
 		state: appState{
 			current: raceState{},
@@ -64,13 +67,34 @@ func (suite *PitRadioTestSuite) SetupTest() {
 	}
 }
 
+func (suite *PitRadioTestSuite) TestNoNotifyOnRaceStart() {
+	// Arrange
+	suite.app.pitRadioState.fuelNotifyPrewarnIssued = false
+	suite.app.gtClient.Telemetry.RawTelemetry.FuelLevel = 99.9
+	suite.app.gtClient.Telemetry.RawTelemetry.FuelCapacity = 100
+	suite.app.circuit.lapDistanceMeters = 0
+	want := "out of fuel"
+	suite.app.i18n.Keys = map[translations.Key]string{
+		translations.RadioOutOfFuel: want,
+	}
+
+	// Act
+	suite.app.notifyFuelWarnings()
+	got := len(suite.pitRadio.messages)
+	suite.Require().Equal(1, got, "Expected one message to be sent")
+
+	// Assert
+	suite.Equal(want, suite.pitRadio.messages[0], "Expected out of fuel message")
+}
+
 func (suite *PitRadioTestSuite) TestNotifyOutOfFuel() {
 	// Arrange
+	want := "out of fuel"
+
 	suite.app.pitRadioState.fuelNotifyPrewarnIssued = false
 	suite.app.gtClient.Telemetry.RawTelemetry.FuelLevel = 0
 	suite.app.gtClient.Telemetry.RawTelemetry.FuelCapacity = 1
 	suite.app.circuit.lapDistanceMeters = 1000
-	want := "out of fuel"
 	suite.app.i18n.Keys = map[translations.Key]string{
 		translations.RadioOutOfFuel: want,
 	}
@@ -86,13 +110,21 @@ func (suite *PitRadioTestSuite) TestNotifyOutOfFuel() {
 
 func (suite *PitRadioTestSuite) TestNotifyFuelCritical() {
 	// Arrange
+	want := "fuel critical"
+
+	configJSON := []byte(`{
+		"pitRadio": {
+			"fuelRangeSafetyMarginLaps": 0.3
+		}
+	}`)
+
+	// FIXME
+	suite.app.config = config.NewFromJSON(configJSON, zerolog.Nop())
 	suite.app.gtClient.Telemetry.RawTelemetry.CurrentLap = 2
 	suite.app.pitRadioState.lastNotifiedLapFuelWarning = 1
-	// const app.fuelRangeSafetyMarginLaps = 0.2
-	suite.app.fuelRange.distanceLapsMA = 1.0 // laps safe: 1.0-0.2 = 0.8
-	suite.app.circuit.lapProgress = 0.1      // laps until box: 0.8-(1.0-0.1) = -0.1
+	suite.app.fuelRange.distanceLapsMA = 1.0 // laps safe: 1.0-0.3 = 0.7
+	suite.app.circuit.lapProgress = 0.1      // laps until box: 0.7-(1.0-0.1) = -0.2
 	suite.app.circuit.lapDistanceMeters = 1000
-	want := "fuel critical"
 	suite.app.i18n.Keys = map[translations.Key]string{
 		translations.RadioFuelCritical: want,
 	}
@@ -108,13 +140,20 @@ func (suite *PitRadioTestSuite) TestNotifyFuelCritical() {
 
 func (suite *PitRadioTestSuite) TestNotifyBoxForFuel() {
 	// Arrange
+	want := "box for fuel"
+
+	configJSON := []byte(`{
+		"pitRadio": {
+			"fuelRangeSafetyMarginLaps": 0.3
+		}
+	}`)
+
+	suite.app.config = config.NewFromJSON(configJSON, zerolog.Nop())
 	suite.app.gtClient.Telemetry.RawTelemetry.CurrentLap = 2
 	suite.app.pitRadioState.lastNotifiedLapFuelWarning = 1
-	// const app.fuelRangeSafetyMarginLaps = 0.2
-	suite.app.fuelRange.distanceLapsMA = 1.1 // laps safe: 1.1-0.2 = 0.9
+	suite.app.fuelRange.distanceLapsMA = 1.2 // laps safe: 1.2-0.3 = 0.9
 	suite.app.circuit.lapProgress = 0.2      // laps until box: 0.9-(1.0-0.2) = 0.1
 	suite.app.circuit.lapDistanceMeters = 1000
-	want := "box for fuel"
 	suite.app.i18n.Keys = map[translations.Key]string{
 		translations.RadioBoxForFuel: want,
 	}
@@ -130,14 +169,21 @@ func (suite *PitRadioTestSuite) TestNotifyBoxForFuel() {
 
 func (suite *PitRadioTestSuite) TestNotifyFuelPreWarn() {
 	// Arrange
+	want := "refuel in 3 laps"
+
+	configJSON := []byte(`{
+		"pitRadio": {
+			"fuelPreWarnNotifyLaps": 4.0,
+			"fuelRangeSafetyMarginLaps": 0.3,
+		}
+	}`)
+
+	suite.app.config = config.NewFromJSON(configJSON, zerolog.Nop())
 	suite.app.gtClient.Telemetry.RawTelemetry.CurrentLap = 2
 	suite.app.pitRadioState.lastNotifiedLapFuelWarning = 1
-	// const app.fuelPreWarnNotifyLaps = 3.0
-	// const app.fuelRangeSafetyMarginLaps = 0.2
-	suite.app.fuelRange.distanceLapsMA = 4.0 // laps safe: 4.0-0.2 = 3.8
-	suite.app.circuit.lapProgress = 0.2      // laps until box: 3.8-(1.0-0.2) = 3.0
+	suite.app.fuelRange.distanceLapsMA = 4.0 // laps safe: 4.0-0.3 = 3.7
+	suite.app.circuit.lapProgress = 0.2      // laps until box: 3.7-(1.0-0.3) = 3.0
 	suite.app.circuit.lapDistanceMeters = 1000
-	want := "refuel in 3 laps"
 	suite.app.i18n.Keys = map[translations.Key]string{
 		translations.RadioFuelPreWarn: "refuel in %d laps",
 	}
@@ -151,19 +197,26 @@ func (suite *PitRadioTestSuite) TestNotifyFuelPreWarn() {
 	suite.Equal(want, suite.pitRadio.messages[0], "Expected box for fuel message")
 }
 
-func (suite *PitRadioTestSuite) TestNotifyFuelStrategyUpdate() {
+func (suite *PitRadioTestSuite) TestNotifyFuelStrategyUpdateSentOnNotifyLaps() {
 	// Arrange
-	suite.app.gtClient.Telemetry.RawTelemetry.CurrentLap = 5
-	suite.app.gtClient.Telemetry.RawTelemetry.RaceLaps = 20 // 17 laps remaining
-	suite.app.pitRadioState.lastNotifiedLapFuelStrategy = 2
-	// const app.fuelStrategyNotifyLaps = 5
-	// const app.fuelRangeSafetyMarginLaps = 0.2
-	suite.app.fuelRange.distanceLapsMA = 10.6 // laps safe: 10.6-0.2 = 10.4
-	suite.app.circuit.lapProgress = 0.7       // laps until box: 10.4-(1.0-0.7) = 10.1
+	wantFmt := "range %d, %d remaining"
+	want := fmt.Sprintf(wantFmt, 9, 10)
+
+	configJSON := []byte(`{
+		"pitRadio": {
+			"fuelStrategyNotifyLaps": 5.0,
+			"fuelRangeSafetyMarginLaps": 0.3,
+		}
+	}`)
+
+	suite.app.config = config.NewFromJSON(configJSON, zerolog.Nop())
+	suite.app.gtClient.Telemetry.RawTelemetry.CurrentLap = 10
+	suite.app.gtClient.Telemetry.RawTelemetry.RaceLaps = 20 // 10 laps remaining
+	suite.app.pitRadioState.lastNotifiedLapFuelStrategy = 5
+	suite.app.fuelRange.distanceLapsMA = 10.1 // laps safe: 10.1-0.3 = 9.8
 	suite.app.circuit.lapDistanceMeters = 1000
-	want := "range 10, 15 remaining"
 	suite.app.i18n.Keys = map[translations.Key]string{
-		translations.RadioFuelRange: "range %d, %d remaining",
+		translations.RadioFuelRange: wantFmt,
 	}
 
 	// Act
@@ -173,4 +226,53 @@ func (suite *PitRadioTestSuite) TestNotifyFuelStrategyUpdate() {
 
 	// Assert
 	suite.Equal(want, suite.pitRadio.messages[0], "Expected box for fuel message")
+}
+
+func (suite *PitRadioTestSuite) TestNotifyFuelStrategyUpdateNotSentOnNonNotifyLaps() {
+	// Arrange
+	want := 0
+
+	configJSON := []byte(`{
+		"pitRadio": {
+			"fuelStrategyNotifyLaps": 6.0,
+			"fuelRangeSafetyMarginLaps": 0.3
+		}
+	}`)
+
+	suite.app.config = config.NewFromJSON(configJSON, zerolog.Nop())
+	suite.app.gtClient.Telemetry.RawTelemetry.CurrentLap = 13
+	suite.app.gtClient.Telemetry.RawTelemetry.RaceLaps = 20 // 8 laps remaining
+	suite.app.pitRadioState.lastNotifiedLapFuelStrategy = 6
+	suite.app.fuelRange.distanceLapsMA = 8.1 // laps safe: 8.1-0.3 = 7.8
+	suite.app.circuit.lapDistanceMeters = 1000
+
+	// Act
+	suite.app.notifyFuelWarnings()
+	got := len(suite.pitRadio.messages)
+
+	// Assert
+	suite.Equal(want, got, "Expected no messages to be sent")
+}
+
+type testFuelStrategy struct {
+	currentLap uint16
+	fuelRange  float64
+	notifyLaps uint16
+}
+
+func (suite *PitRadioTestSuite) setupOutOfFuelStrategyNotification(raceLaps uint16, currentLap uint16, fuelRange float64) {
+	configJSON := []byte(`{
+		"pitRadio": {
+			"fuelStrategyNotifyLaps": 6.0,
+			"fuelRangeSafetyMarginLaps": 0.3
+		}
+	}`)
+
+	suite.app.config = config.NewFromJSON(configJSON, zerolog.Nop())
+
+	suite.app.gtClient.Telemetry.RawTelemetry.CurrentLap = currentLap
+	suite.app.gtClient.Telemetry.RawTelemetry.RaceLaps = raceLaps
+	suite.app.pitRadioState.lastNotifiedLapFuelStrategy = 6
+	suite.app.fuelRange.distanceLapsMA = 8.1 // laps safe: 8.1-0.3 = 7.8
+	suite.app.circuit.lapDistanceMeters = 1000
 }

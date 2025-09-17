@@ -1,11 +1,13 @@
 package config
 
 import (
+	"bytes"
 	"math"
 	"strings"
 	"sync"
 
 	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
 	appHaptics "github.com/vwhitteron/simtezilo-dev/app/haptics"
 	"github.com/vwhitteron/simtezilo-dev/app/i18n"
@@ -15,30 +17,6 @@ type app struct {
 	Language   string
 	LogLevel   string
 	ReplayMode bool
-}
-
-type discord struct {
-	Token     string
-	ChannelID string
-}
-
-type hardware struct {
-	Model              string
-	DisplayOrientation int
-}
-
-type Synthesizer struct {
-	InternalSampleRateHz      int
-	OutputSampleRateHz        int
-	OutputFile                string
-	MasterGain                float64
-	ChassisGain               float64
-	TransmissionGain          float64
-	TransmissionGainMinRace   float64
-	TransmissionGainMinStreet float64
-	EngineGain                float64
-	GainIncrement             float64
-	Eq                        []float64
 }
 
 type haptics struct {
@@ -60,15 +38,44 @@ type haptics struct {
 	_engineProfile               *appHaptics.EngineProfile
 }
 
+type hardware struct {
+	Model              string
+	DisplayOrientation int
+}
+
+type pitRadio struct {
+	FuelPreWarnNotifyLaps       float64
+	FuelStrategyNotifyLaps      float64
+	FuelRangeSafetyMarginLaps   float64
+	FuelRangeSafetyMarginMeters float64
+	MessageSendIntervalMs       int
+	DiscordToken                string
+	DiscordChannelID            string
+}
+
+type Synthesizer struct {
+	InternalSampleRateHz      int
+	OutputSampleRateHz        int
+	OutputFile                string
+	MasterGain                float64
+	ChassisGain               float64
+	TransmissionGain          float64
+	TransmissionGainMinRace   float64
+	TransmissionGainMinStreet float64
+	EngineGain                float64
+	GainIncrement             float64
+	Eq                        []float64
+}
+
 type Telemetry struct {
 	Source string
 }
 
 type viperConfig struct {
 	App         *app
-	Discord     *discord
 	Hardware    *hardware
 	Haptics     *haptics
+	PitRadio    *pitRadio
 	Synthesizer *Synthesizer
 	Telemetry   *Telemetry
 }
@@ -79,7 +86,8 @@ type Config struct {
 	mu    sync.RWMutex
 }
 
-func NewConfig(filename string, log zerolog.Logger) *Config {
+// New creates a new Config instance loading configuration from the specified filename
+func New(filename string, log zerolog.Logger) *Config {
 	c := &Config{
 		viper: &defaultConfig,
 	}
@@ -109,6 +117,41 @@ func NewConfig(filename string, log zerolog.Logger) *Config {
 
 	log.Debug().Str("source", configSource).Msg("config loaded")
 
+	c.finalise()
+
+	return c
+}
+
+// NewFromJSON creates a new Config instance loading configuration from the provided JSON byte slice
+func NewFromJSON(json []byte, log zerolog.Logger) *Config {
+	c := &Config{
+		// 	viper: &viperConfig{},
+		// }
+		viper: &defaultConfig,
+	}
+
+	viper.SetConfigType("json")
+	err := viper.ReadConfig(bytes.NewBuffer(json))
+	if err != nil {
+		log.Error().Err(err).Msg("read config file")
+	} else {
+		err = viper.Unmarshal(c.viper)
+		if err != nil {
+			log.Error().Err(err).Msg("unmarshal config")
+		}
+	}
+
+	configSource := "JSON string"
+
+	log.Debug().Str("source", configSource).Msg("config loaded")
+
+	c.finalise()
+
+	return c
+}
+
+// finalise performs validation of the config and updates any derived configuration values
+func (c *Config) finalise() {
 	if len(c.viper.Synthesizer.Eq) != 40 {
 		log.Warn().Int("length", len(c.viper.Synthesizer.Eq)).Msg("invalid synthesizer EQ length")
 
@@ -123,8 +166,6 @@ func NewConfig(filename string, log zerolog.Logger) *Config {
 
 	c.UpdateJerkScale()
 	c.UpdateSnapScale()
-
-	return c
 }
 
 // App methods
@@ -199,20 +240,6 @@ func (c *Config) GetAppReplayMode() bool {
 	return c.viper.App.ReplayMode
 }
 
-func (c *Config) GetDiscordToken() string {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.Discord.Token
-}
-
-func (c *Config) GetDiscordChannelID() string {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.Discord.ChannelID
-}
-
 // Hardware methods
 func (c *Config) GetHardwareModel() string {
 	c.mu.RLock()
@@ -226,174 +253,6 @@ func (c *Config) GetDisplayOrientation() int {
 	defer c.mu.RUnlock()
 
 	return c.viper.Hardware.DisplayOrientation
-}
-
-// Synthesizer methods
-func (c *Config) GetSynthesizer() *Synthesizer {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.Synthesizer
-}
-
-func (c *Config) GetInternalSampleRateHz() int {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.Synthesizer.InternalSampleRateHz
-}
-
-func (c *Config) GetOutputSampleRateHz() int {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.Synthesizer.OutputSampleRateHz
-}
-
-func (c *Config) GetMasterGain() float64 {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.Synthesizer.MasterGain
-}
-
-func (c *Config) IncreaseMasterGain() float64 {
-	c.mu.Lock()
-
-	c.viper.Synthesizer.MasterGain = min(
-		MaximumGain,
-		c.viper.Synthesizer.MasterGain+c.viper.Synthesizer.GainIncrement,
-	)
-
-	c.mu.Unlock()
-
-	return c.viper.Synthesizer.MasterGain
-}
-
-func (c *Config) DecreaseMasterGain() float64 {
-	c.mu.Lock()
-
-	c.viper.Synthesizer.MasterGain = max(
-		MinimumGain,
-		c.viper.Synthesizer.MasterGain-c.viper.Synthesizer.GainIncrement,
-	)
-
-	c.mu.Unlock()
-
-	return c.viper.Synthesizer.MasterGain
-}
-
-func (c *Config) GetChassisGain() float64 {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.Synthesizer.ChassisGain
-}
-
-func (c *Config) IncreaseChassisGain() float64 {
-	c.mu.Lock()
-
-	c.viper.Synthesizer.ChassisGain = min(
-		MaximumGain,
-		c.viper.Synthesizer.ChassisGain+c.viper.Synthesizer.GainIncrement,
-	)
-
-	c.mu.Unlock()
-
-	return c.viper.Synthesizer.ChassisGain
-}
-
-func (c *Config) DecreaseChassisGain() float64 {
-	c.mu.Lock()
-
-	c.viper.Synthesizer.ChassisGain = max(
-		MinimumGain,
-		c.viper.Synthesizer.ChassisGain-c.viper.Synthesizer.GainIncrement,
-	)
-
-	c.mu.Unlock()
-
-	return c.viper.Synthesizer.ChassisGain
-}
-
-func (c *Config) GetTransmissionGain() float64 {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.Synthesizer.TransmissionGain
-}
-
-func (c *Config) IncreaseTransmissionGain() float64 {
-	c.mu.Lock()
-
-	c.viper.Synthesizer.TransmissionGain = min(
-		MaximumGain,
-		c.viper.Synthesizer.TransmissionGain+c.viper.Synthesizer.GainIncrement,
-	)
-
-	c.mu.Unlock()
-
-	return c.viper.Synthesizer.TransmissionGain
-}
-
-func (c *Config) DecreaseTransmissionGain() float64 {
-	c.mu.Lock()
-
-	c.viper.Synthesizer.TransmissionGain = max(
-		MinimumGain,
-		c.viper.Synthesizer.TransmissionGain-c.viper.Synthesizer.GainIncrement,
-	)
-
-	c.mu.Unlock()
-
-	return c.viper.Synthesizer.TransmissionGain
-}
-
-func (c *Config) GetTransmissionGainMinRace() float64 {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.Synthesizer.TransmissionGainMinRace
-}
-
-func (c *Config) GetTransmissionGainMinStreet() float64 {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.Synthesizer.TransmissionGainMinStreet
-}
-
-func (c *Config) GetEngineGain() float64 {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.Synthesizer.EngineGain
-}
-
-func (c *Config) IncreaseEngineGain() float64 {
-	c.mu.Lock()
-
-	c.viper.Synthesizer.EngineGain = min(
-		MaximumGain,
-		c.viper.Synthesizer.EngineGain+c.viper.Synthesizer.GainIncrement,
-	)
-
-	c.mu.Unlock()
-
-	return c.viper.Synthesizer.EngineGain
-}
-
-func (c *Config) DecreaseEngineGain() float64 {
-	c.mu.Lock()
-
-	c.viper.Synthesizer.EngineGain = max(
-		MinimumGain,
-		c.viper.Synthesizer.EngineGain-c.viper.Synthesizer.GainIncrement,
-	)
-
-	c.mu.Unlock()
-
-	return c.viper.Synthesizer.EngineGain
 }
 
 // Haptics methods
@@ -921,6 +780,224 @@ func (c *Config) GetPulseMaxAmplitude() float64 {
 	defer c.mu.RUnlock()
 
 	return c.viper.Haptics.PulseMaxAmplitude
+}
+
+// PitRadio methods
+func (c *Config) GetFuelPreWarnNotifyLaps() float64 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.PitRadio.FuelPreWarnNotifyLaps
+}
+
+func (c *Config) GetFuelStrategyNotifyLaps() float64 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.PitRadio.FuelStrategyNotifyLaps
+}
+
+func (c *Config) GetFuelRangeSafetyMarginLaps() float64 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.PitRadio.FuelRangeSafetyMarginLaps
+}
+
+func (c *Config) GetFuelRangeSafetyMarginMeters() float64 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.PitRadio.FuelRangeSafetyMarginMeters
+}
+
+func (c *Config) GetMessageSendIntervalMs() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.PitRadio.MessageSendIntervalMs
+}
+
+func (c *Config) GetDiscordToken() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.PitRadio.DiscordToken
+}
+
+func (c *Config) GetDiscordChannelID() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.PitRadio.DiscordChannelID
+}
+
+// Synthesizer methods
+func (c *Config) GetSynthesizer() *Synthesizer {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.Synthesizer
+}
+
+func (c *Config) GetInternalSampleRateHz() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.Synthesizer.InternalSampleRateHz
+}
+
+func (c *Config) GetOutputSampleRateHz() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.Synthesizer.OutputSampleRateHz
+}
+
+func (c *Config) GetMasterGain() float64 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.Synthesizer.MasterGain
+}
+
+func (c *Config) IncreaseMasterGain() float64 {
+	c.mu.Lock()
+
+	c.viper.Synthesizer.MasterGain = min(
+		MaximumGain,
+		c.viper.Synthesizer.MasterGain+c.viper.Synthesizer.GainIncrement,
+	)
+
+	c.mu.Unlock()
+
+	return c.viper.Synthesizer.MasterGain
+}
+
+func (c *Config) DecreaseMasterGain() float64 {
+	c.mu.Lock()
+
+	c.viper.Synthesizer.MasterGain = max(
+		MinimumGain,
+		c.viper.Synthesizer.MasterGain-c.viper.Synthesizer.GainIncrement,
+	)
+
+	c.mu.Unlock()
+
+	return c.viper.Synthesizer.MasterGain
+}
+
+func (c *Config) GetChassisGain() float64 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.Synthesizer.ChassisGain
+}
+
+func (c *Config) IncreaseChassisGain() float64 {
+	c.mu.Lock()
+
+	c.viper.Synthesizer.ChassisGain = min(
+		MaximumGain,
+		c.viper.Synthesizer.ChassisGain+c.viper.Synthesizer.GainIncrement,
+	)
+
+	c.mu.Unlock()
+
+	return c.viper.Synthesizer.ChassisGain
+}
+
+func (c *Config) DecreaseChassisGain() float64 {
+	c.mu.Lock()
+
+	c.viper.Synthesizer.ChassisGain = max(
+		MinimumGain,
+		c.viper.Synthesizer.ChassisGain-c.viper.Synthesizer.GainIncrement,
+	)
+
+	c.mu.Unlock()
+
+	return c.viper.Synthesizer.ChassisGain
+}
+
+func (c *Config) GetTransmissionGain() float64 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.Synthesizer.TransmissionGain
+}
+
+func (c *Config) IncreaseTransmissionGain() float64 {
+	c.mu.Lock()
+
+	c.viper.Synthesizer.TransmissionGain = min(
+		MaximumGain,
+		c.viper.Synthesizer.TransmissionGain+c.viper.Synthesizer.GainIncrement,
+	)
+
+	c.mu.Unlock()
+
+	return c.viper.Synthesizer.TransmissionGain
+}
+
+func (c *Config) DecreaseTransmissionGain() float64 {
+	c.mu.Lock()
+
+	c.viper.Synthesizer.TransmissionGain = max(
+		MinimumGain,
+		c.viper.Synthesizer.TransmissionGain-c.viper.Synthesizer.GainIncrement,
+	)
+
+	c.mu.Unlock()
+
+	return c.viper.Synthesizer.TransmissionGain
+}
+
+func (c *Config) GetTransmissionGainMinRace() float64 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.Synthesizer.TransmissionGainMinRace
+}
+
+func (c *Config) GetTransmissionGainMinStreet() float64 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.Synthesizer.TransmissionGainMinStreet
+}
+
+func (c *Config) GetEngineGain() float64 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.Synthesizer.EngineGain
+}
+
+func (c *Config) IncreaseEngineGain() float64 {
+	c.mu.Lock()
+
+	c.viper.Synthesizer.EngineGain = min(
+		MaximumGain,
+		c.viper.Synthesizer.EngineGain+c.viper.Synthesizer.GainIncrement,
+	)
+
+	c.mu.Unlock()
+
+	return c.viper.Synthesizer.EngineGain
+}
+
+func (c *Config) DecreaseEngineGain() float64 {
+	c.mu.Lock()
+
+	c.viper.Synthesizer.EngineGain = max(
+		MinimumGain,
+		c.viper.Synthesizer.EngineGain-c.viper.Synthesizer.GainIncrement,
+	)
+
+	c.mu.Unlock()
+
+	return c.viper.Synthesizer.EngineGain
 }
 
 // Telemetry methods
