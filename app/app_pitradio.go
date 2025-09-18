@@ -62,6 +62,10 @@ func (a *App) sendPitRadioMessage() {
 		return
 	}
 
+	if a.state.current.lapNumber <= 0 {
+		return
+	}
+
 	a.notifyFuelWarnings()
 
 	a.notifyGridPositionChange()
@@ -311,49 +315,24 @@ func (a *App) notifyLapProgress() {
 	}
 }
 
-// notifyDuration formats a time.Duration value for text and speech output
-func notifyDuration(lapTime time.Duration) string {
-	minutes := int(lapTime.Minutes())
-	lapTime = lapTime - (time.Duration(minutes) * time.Minute)
-
-	seconds := int(lapTime.Seconds())
-	lapTime = lapTime - (time.Duration(seconds) * time.Second)
-
-	milliseconds := int(lapTime.Milliseconds())
-
-	minutesStr := fmt.Sprintf("%d", minutes)
-
-	var secondsStr string
-	if seconds == 0 {
-		secondsStr = "0"
-	} else {
-		secondsFmt := "%02d"
-		if minutesStr == "0" {
-			secondsFmt = "%d"
-		}
-
-		secondsStr = fmt.Sprintf(secondsFmt, seconds)
+func (a *App) notifyFuelWarnings() {
+	if a.fuelRange == nil {
+		return
 	}
 
-	millisecondsStr := fmt.Sprintf("%03d", milliseconds)
-
-	fmt.Printf("%s:%s.%s\n", minutesStr, secondsStr, millisecondsStr)
-
-	return pronounceTime(minutesStr, secondsStr, millisecondsStr, false)
-}
-
-// notifyFuelWarnings determines if a pit stop should be called and sends the notification
-func (a *App) notifyFuelWarnings() {
-	// Insufficient fuel data for prediction
-	if a.circuit.lapDistanceMeters <= 0 {
+	lapDistanceMeters := a.circuit.LapDistanceMeters()
+	if lapDistanceMeters <= 0 {
 		return
 	}
 
 	currentLap := a.gtClient.Telemetry.CurrentLap()
 
 	remainingLaps := float64(a.gtClient.Telemetry.RaceLaps()) - float64(currentLap)
-	fuelRangeLaps := a.getFuelRangeLapsSafe()
-	fuelRangeLapsUntilBox := a.getFuelRangeLapsUntilBox()
+
+	fuelRangeLaps := a.fuelRange.DistanceLaps(lapDistanceMeters)
+	fuelRangeLapsSafe := max(fuelRangeLaps-a.config.GetFuelRangeSafetyMarginLaps(), 0)
+	lapProgressRemaining := a.circuit.LapProgressRemaining(1.0) // TODO: store lap distance travelled somewhere
+	fuelRangeLapsUntilBox := max(fuelRangeLapsSafe-lapProgressRemaining, 0)
 
 	var message string
 	suppressNotify := true
@@ -419,21 +398,51 @@ func (a *App) notifyFuelWarnings() {
 		if err != nil {
 			a.log.Error().
 				Err(err).
-				Str("component", "discord").
 				Str("message", message).
 				Msg("Send fuel warning message")
 		} else {
 			a.log.Info().
-				Str("component", "discord").
 				Str("message", message).
 				Int16("lap", a.state.current.lapNumber).
 				Float32("fuel_percent", a.gtClient.Telemetry.FuelLevelPercent()).
-				Float64("fuel_range_with_safety_laps", fuelRangeLaps).
-				Float64("fuel_range_effective", fuelRangeLapsUntilBox).
-				Float64("lap_progress", a.circuit.lapProgress).
+				Float64("fuel_range_laps", fuelRangeLaps).
+				Float64("fuel_range_to_box", fuelRangeLapsUntilBox).
+				Float64("lap_progress_remaining", lapProgressRemaining).
 				Msg("Send fuel warning message")
 		}
 	}
+
+}
+
+// notifyDuration formats a time.Duration value for text and speech output
+func notifyDuration(lapTime time.Duration) string {
+	minutes := int(lapTime.Minutes())
+	lapTime = lapTime - (time.Duration(minutes) * time.Minute)
+
+	seconds := int(lapTime.Seconds())
+	lapTime = lapTime - (time.Duration(seconds) * time.Second)
+
+	milliseconds := int(lapTime.Milliseconds())
+
+	minutesStr := fmt.Sprintf("%d", minutes)
+
+	var secondsStr string
+	if seconds == 0 {
+		secondsStr = "0"
+	} else {
+		secondsFmt := "%02d"
+		if minutesStr == "0" {
+			secondsFmt = "%d"
+		}
+
+		secondsStr = fmt.Sprintf(secondsFmt, seconds)
+	}
+
+	millisecondsStr := fmt.Sprintf("%03d", milliseconds)
+
+	fmt.Printf("%s:%s.%s\n", minutesStr, secondsStr, millisecondsStr)
+
+	return pronounceTime(minutesStr, secondsStr, millisecondsStr, false)
 }
 
 // pronounceTime formats minutes, seconds and millisecond time components for text and speech output

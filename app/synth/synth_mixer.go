@@ -39,7 +39,7 @@ type MixerConfig struct {
 	GainIncrement *float64
 	BufferLength  time.Duration // Duration of audio the buffer should hold
 	SampleRateHz  int           // Sample rate in Hz
-	Logger        zerolog.Logger
+	Log           zerolog.Logger
 }
 
 // TODO: set gain and gainIncrement to defaults and add setters instead
@@ -54,7 +54,7 @@ func NewMixer(mixerConfig MixerConfig) (*Mixer, error) {
 		bufferLength: mixerConfig.BufferLength,
 		sampleRateHz: mixerConfig.SampleRateHz,
 		channels:     map[string]*MixerChannel{},
-		log:          mixerConfig.Logger,
+		log:          mixerConfig.Log,
 		faderGain:    config.MinimumGain,
 		fadeInActive: false,
 		silenced:     true,

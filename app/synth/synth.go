@@ -35,7 +35,7 @@ func NewSynthesizer(opts *SynthOpts) (*Synthesizer, error) {
 		GainIncrement: &opts.Config.GainIncrement,
 		BufferLength:  bufferLength,
 		SampleRateHz:  opts.Config.InternalSampleRateHz,
-		Logger:        opts.Logger.With().Str("component", "synth mixer").Logger(),
+		Log:           opts.Logger.With().Str("package", "synth mixer").Logger(),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create mixer: %w", err)
@@ -46,7 +46,7 @@ func NewSynthesizer(opts *SynthOpts) (*Synthesizer, error) {
 	_ = mixer.AddChannel("engine", &opts.Config.EngineGain)
 
 	outputDevice, err := NewOutputDevice(SynthOutDeviceOpts{
-		Logger: opts.Logger.With().Str("component", "synth output device").Logger(),
+		Log: opts.Logger.With().Str("package", "synth output device").Logger(),
 	})
 	if err != nil {
 		return nil, err
@@ -66,7 +66,7 @@ func NewSynthesizer(opts *SynthOpts) (*Synthesizer, error) {
 
 	return &Synthesizer{
 		effects:      effects,
-		log:          opts.Logger.With().Str("component", "synth").Logger(),
+		log:          opts.Logger.With().Str("package", "synth").Logger(),
 		mixer:        mixer,
 		outputDevice: outputDevice,
 		kinematics:   opts.Kinematics,

@@ -50,7 +50,7 @@ func NewUserInterface(config *Config) *UserInterface {
 		display:          config.Display,
 		hidEvents:        config.HIDEvents,
 		menuSystem:       NewMenuSystem(),
-		log:              config.Log,
+		log:              config.Log.With().Str("package", "ui").Logger(),
 		displayData:      LiveData{Gear: kinematics.NullGear},
 		mode:             ScreenModeStartup,
 		startTime:        time.Now(),

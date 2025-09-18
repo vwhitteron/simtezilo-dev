@@ -8,7 +8,9 @@ import (
 	"github.com/gopxl/beep/speaker"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+	"github.com/vwhitteron/simtezilo-dev/app/circuit"
 	"github.com/vwhitteron/simtezilo-dev/app/config"
+	"github.com/vwhitteron/simtezilo-dev/app/fuelrange"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/console"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/pirateaudio"
@@ -71,8 +73,8 @@ type App struct {
 	kinematics kinematics.KinematicsTracker
 	synth      *synth.Synthesizer
 
-	fuelRange fuelRangeEstimation
-	circuit   lapDistanceEstimation
+	fuelRange *fuelrange.Range
+	circuit   *circuit.Circuit
 
 	transmissionGainMin float64
 
@@ -97,7 +99,7 @@ type AppOptions struct {
 
 func NewApp(opts AppOptions) (*App, error) {
 	a := &App{
-		log:  opts.Logger.With().Str("component", "app").Logger(),
+		log:  opts.Logger.With().Str("package", "app").Logger(),
 		done: opts.Done,
 		state: appState{
 			current: raceState{
@@ -114,7 +116,7 @@ func NewApp(opts AppOptions) (*App, error) {
 	}
 
 	// load config from file
-	a.config = config.New("simtezilo.conf", a.log)
+	a.config = config.New("simtezilo.conf", *opts.Logger)
 
 	zerolog.FloatingPointPrecision = 5
 
@@ -132,7 +134,7 @@ func NewApp(opts AppOptions) (*App, error) {
 	// load language translations
 	a.i18n = i18n.NewLanguage(
 		a.config.GetAppLanguage(),
-		a.log,
+		*opts.Logger,
 	)
 	a.log.Debug().Str("language", a.i18n.Code).Str("result", "success").Msg("init language")
 
@@ -246,7 +248,7 @@ func NewApp(opts AppOptions) (*App, error) {
 		HIDEvents:        hidEvents,
 		Display:          a.display,
 		LiveData:         &ui.LiveData{Gear: kinematics.NullGear},
-		Log:              a.log.With().Str("component", "ui").Logger(),
+		Log:              *opts.Logger,
 		SettingsCallback: a.settingAction,
 		Done:             a.done,
 	})
@@ -266,7 +268,7 @@ func NewApp(opts AppOptions) (*App, error) {
 	// initialise synthesizer
 	a.synth, err = synth.NewSynthesizer(&synth.SynthOpts{
 		Config:     a.config.GetSynthesizer(),
-		Logger:     a.log,
+		Logger:     *opts.Logger,
 		Kinematics: &a.kinematics,
 	})
 	if err != nil {
@@ -282,7 +284,7 @@ func NewApp(opts AppOptions) (*App, error) {
 	}
 
 	// initialise GT telemetry client
-	gtClientLogger := a.log.With().Str("component", "gt client").Logger()
+	gtClientLogger := opts.Logger.With().Str("component", "gt client").Logger()
 	a.gtClient, err = telemetry_client.NewGTClient(telemetry_client.GTClientOpts{
 		Source:    a.config.GetTelemetrySource(),
 		Logger:    &gtClientLogger,
@@ -299,6 +301,18 @@ func NewApp(opts AppOptions) (*App, error) {
 		_ = a.ui.Screen.RenderErrorScreen("GT client init")
 
 		return nil, err
+	}
+
+	a.fuelRange = fuelrange.New(*opts.Logger)
+
+	a.circuit, err = circuit.New(*opts.Logger)
+	if err != nil {
+		// TODO: fatal error?
+		a.log.Error().
+			Err(err).
+			Str("package", "circuit").
+			Str("result", "failure").
+			Msg("init")
 	}
 
 	a.pitRadio, err = pitradio.NewDiscordBot(a.config.GetDiscordToken(), a.config.GetDiscordChannelID())
@@ -412,10 +426,10 @@ func (a *App) Run() {
 			return
 		case <-tickerHaptics.C:
 			a.hapticEvents()
-			a.updateFuelConsumption()
 			a.checkForNewLap()
 		case <-tickerGeneral.C:
 			a.sessionIsComplete()
+			a.updateFuelConsumption()
 			a.sendTelemetryChartData()
 		case <-tickerEngineHaptics.C:
 			a.generateEngineHaptic()
@@ -562,7 +576,7 @@ func (a *App) updateVehicle() {
 
 	a.state.last.transmissionGear = a.state.current.transmissionGear
 
-	a.resetFuelRange()
+	a.fuelRange.Reset()
 }
 
 func (a *App) gearHasChanged() bool {

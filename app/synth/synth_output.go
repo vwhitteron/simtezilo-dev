@@ -12,7 +12,7 @@ type OutputDevice struct {
 
 type SynthOutDeviceOpts struct {
 	OutputFile string
-	Logger     zerolog.Logger
+	Log        zerolog.Logger
 }
 
 func NewOutputDevice(opts SynthOutDeviceOpts) (*OutputDevice, error) {
@@ -20,7 +20,7 @@ func NewOutputDevice(opts SynthOutDeviceOpts) (*OutputDevice, error) {
 
 	return &OutputDevice{
 		samples: buffers,
-		log:     opts.Logger,
+		log:     opts.Log,
 	}, nil
 }
 

@@ -60,7 +60,7 @@ func (a *App) hapticEvents() {
 	}
 
 	if a.timeOfDayHasReset() {
-		a.log.Info().
+		a.log.Debug().
 			Uint32("sequence_id", a.state.current.sequenceNumber).
 			Str("current_time_of_day", a.state.current.timeOfDay.String()).
 			Str("last_time_of_day", a.state.last.timeOfDay.String()).
@@ -68,7 +68,7 @@ func (a *App) hapticEvents() {
 
 		a.resetAppState()
 
-		a.resetFuelRange()
+		a.fuelRange.Reset() // TODO: move this elsewhere?
 
 		a.disableHaptics("time of day reset")
 
