@@ -425,7 +425,9 @@ func (a *App) Run() {
 		case <-a.done:
 			return
 		case <-tickerHaptics.C:
-			a.hapticEvents()
+			if didUpdate := a.updateState(); didUpdate {
+				a.hapticEvents()
+			}
 			a.checkForNewLap()
 		case <-tickerGeneral.C:
 			a.sessionIsComplete()

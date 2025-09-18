@@ -42,7 +42,7 @@ func (a *App) sendTelemetryChartData() {
 			"gear":                        float32(a.kinematics.Current.TransmissionGear),
 			"fuelUsagePerKm":              float32(a.fuelRange.UsageRatePerKm()),
 			"fuelRangeKm":                 float32(a.fuelRange.DistanceMeters() / 1000),
-			"fuelRangeLaps":               float32(a.fuelRange.DistanceLaps(a.circuit.LapDistanceMeters())),
+			"fuelRangeLaps":               float32(a.fuelRange.DistanceLaps(a.circuit.LengthMeters())),
 			"surgeGforce":                 float32(a.kinematics.Current.SixDOFTranslation.Acceleration) / kinematics.GravityConstant,
 			"surgeGforceCalc":             float32(a.kinematics.Current.SurgeCalculated) / kinematics.GravityConstant,
 			"SixDOFTranslationalJerk":     float32(a.kinematics.Current.SixDOFTranslation.Jerk),

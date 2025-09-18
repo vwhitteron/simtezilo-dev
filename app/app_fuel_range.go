@@ -30,6 +30,11 @@ func (a *App) updateFuelConsumption() {
 		return
 	}
 
+	if a.timeOfDayHasReset() {
+		a.fuelRange.Reset()
+		a.circuit.ResetLapProgress()
+	}
+
 	coordinates := a.gtClient.Telemetry.PositionalMapCoordinates()
 	fuelLevel := a.gtClient.Telemetry.FuelLevelPercent()
 

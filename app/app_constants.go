@@ -1,17 +1,12 @@
 package app
 
-const frameRate = 60
+const frameRate = 60 // 60 Hz
 
-const pitRadioFrameRate = frameRate / 2
-const displayFrameRate = frameRate / 4
-const engineHapticFrameRate = frameRate / 2
-const hapticFrameRate = frameRate * 2
-const telemetryFrameRate = frameRate
+const pitRadioFrameRate = 1      // 1 Hz
+const displayFrameRate = 15      // 15 Hz
+const engineHapticFrameRate = 30 // 30 Hz
+const hapticFrameRate = 120      // 120 Hz
+const telemetryFrameRate = 60    // 60 Hz
 
 // TODO: find a better place for this
 const snapMultiplier = 160
-
-const (
-	softReset = iota
-	hardReset
-)

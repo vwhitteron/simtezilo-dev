@@ -29,10 +29,6 @@ func (a *App) disableHaptics(reason string) {
 func (a *App) hapticEvents() {
 	startTime := time.Now()
 
-	if didUpdate := a.updateState(); !didUpdate {
-		return
-	}
-
 	if !a.sequenceHasAdvanced() {
 		return
 	}
@@ -67,8 +63,6 @@ func (a *App) hapticEvents() {
 			Msg("time of day reset")
 
 		a.resetAppState()
-
-		a.fuelRange.Reset() // TODO: move this elsewhere?
 
 		a.disableHaptics("time of day reset")
 

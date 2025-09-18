@@ -2,15 +2,20 @@ package fuelrange
 
 import (
 	"math"
+	"sort"
 
 	"github.com/rs/zerolog"
 	telemetry "github.com/zetetos/gt-telemetry"
 )
 
 const (
-	initialFuelLevel float64 = -1.0  // Initial fuel level in percent
-	sampleCount      int     = 60    // Number of samples to store in the buffer
-	rangeLapsUnknown float64 = 10000 // Default (very high) range in laps when unknown
+	initialFuelLevel     float64 = -1.0                    // Initial fuel level in percent
+	sampleCount          int     = 60                      // Number of samples to store in the buffer
+	rangeLapsUnknown     float64 = 10000                   // Default (very high) range in laps when unknown
+	rangeDistanceUnknown float64 = rangeLapsUnknown * 1000 // Default (unknown) range in meters
+	fuelRatePercentile   int     = 50                      // Percentile fuel consumption rate to use for range estimation
+	fuelRangeMinSamples  int     = 10                      // Minimum number of samples required to provide a reliable range estimate
+	teleportDistanceMax  float64 = 500                     // Maximum distance in meters to consider between updates (filter out teleports)
 )
 
 var (
@@ -55,21 +60,16 @@ func (r *Range) Reset() {
 // DistanceMeters returns the estimated distance in meters that can be travelled with current fuel level
 func (r *Range) DistanceMeters() float64 {
 	// Fuel rate not available
-	if r.fuelRateMA() <= 0 {
-		return rangeLapsUnknown
+	if r.fuelRate <= 0 {
+		return rangeDistanceUnknown
 	}
 
 	// Not enough samples to provide a reliable estimate
-	if len(r.fuelRateSamples) < 10 {
-		return rangeLapsUnknown
+	if len(r.fuelRateSamples) < fuelRangeMinSamples {
+		return rangeDistanceUnknown
 	}
 
-	return r.distanceMeters
-}
-
-// UsageRatePerKm returns the current fuel consumption rate in percent per km
-func (r *Range) UsageRatePerKm() float64 {
-	return r.fuelRate * 1000
+	return r.distanceMeters - r.distanceSinceLastUpdate
 }
 
 // RangeLaps returns the estimated number of laps that can be completed on a circuit of given length
@@ -81,7 +81,12 @@ func (r *Range) DistanceLaps(lengthMeters float64) float64 {
 
 	distanceMeters := r.DistanceMeters()
 
-	return max(distanceMeters/lengthMeters, 0)
+	return distanceMeters / lengthMeters
+}
+
+// UsageRatePerKm returns the current fuel consumption rate in percent per km
+func (r *Range) UsageRatePerKm() float64 {
+	return r.fuelRate * 1000
 }
 
 // Update updates fuel consumption basedon the current coordinate and fuel level
@@ -109,12 +114,13 @@ func (r *Range) Update(coordinate telemetry.Vector, fuelLevel float32) {
 
 		r.fuelRateSamples = append(r.fuelRateSamples, fuelPerMeter)
 
-		r.fuelRate = r.fuelRateMA()
+		r.fuelRate = r.fuelRatePercentile(fuelRatePercentile)
 
 		r.distanceMeters = float64(fuelLevel) / r.fuelRate
 
 		r.log.Debug().
-			Float64("fuel_rate", r.fuelRate).
+			Float64("fuel_rate_ma", r.fuelRateMA()).
+			Float64("fuel_rate_p80", r.fuelRate).
 			Float64("consumed", consumed).
 			Float64("distance_m", r.distanceSinceLastUpdate).
 			Float64("range_m", r.distanceMeters).
@@ -150,11 +156,11 @@ func (r *Range) distanceTravelled(currentPos telemetry.Vector) float64 {
 	distance := math.Sqrt(dx*dx + dy*dy + dz*dz)
 
 	// drop unreasonable distance increments (teleports/glitches)
-	if distance < 0 || distance > 500 {
+	if distance < 0 || distance > teleportDistanceMax {
 		r.log.Debug().
 			Float64("distance", distance).
 			Int("Min", 0).
-			Int("Max", 500).
+			Int("Max", int(teleportDistanceMax)).
 			Msg("Distance travelled out of acceptable range")
 
 		return 0
@@ -179,4 +185,19 @@ func (r *Range) fuelRateMA() float64 {
 	}
 
 	return sum / float64(len(r.fuelRateSamples))
+}
+
+// fuelRatePercentile returns the specified percentile fuel range in percent per km
+func (r *Range) fuelRatePercentile(percentile int) float64 {
+	if len(r.fuelRateSamples) == 0 {
+		return 0
+	}
+
+	percentileFraction := float64(percentile) / 100.0
+	index := int(float64(len(r.fuelRateSamples)) * percentileFraction)
+
+	// Calculate the 80th percentile fuel range
+	sort.Float64s(r.fuelRateSamples)
+
+	return r.fuelRateSamples[index]
 }

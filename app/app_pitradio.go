@@ -18,6 +18,7 @@ type pitRadioState struct {
 	// Nofification tracking to prevent duplicate or noisy messages
 	fuelNotifyPrewarnIssued     bool          // Flag indicating whether the fuel pre-warn notification has been sent
 	fuelNotifyEmptyIssued       bool          // Flag indicating whether the fuel empty notification has been sent
+	lastNotifiedLapFuelCritical int16         // Last lap number when a critical fuel warning was sent
 	lastNotifiedLapFuelWarning  int16         // Last lap number when a fuel warning was sent
 	lastNotifiedLapFuelStrategy int16         // Last lap number when a fuel strategy was sent
 	lastNotifiedLapNumber       int16         // Last notified lap number
@@ -73,7 +74,7 @@ func (a *App) sendPitRadioMessage() {
 
 func (a *App) newLapNotificationHandler() {
 	a.log.Debug().
-		Str("component", "new lap notification handler").
+		Str("handler", "new lap notification").
 		Msg("Start")
 
 	for {
@@ -91,7 +92,7 @@ func (a *App) newLapNotificationHandler() {
 
 			a.notifyLapProgress()
 		default:
-			time.Sleep(250 * time.Millisecond)
+			time.Sleep(8 * time.Millisecond)
 		}
 	}
 }
@@ -119,7 +120,6 @@ func (a *App) positionHasChanged() bool {
 		a.pitRadioState.debounceGirdPositionNotify = time.Now().Add(positionDebounceTime)
 
 		a.log.Debug().
-			Str("component", "pit radio").
 			Int16("new_position", position).
 			Int16("old_position", a.pitRadioState.lastNotifiedGridPosition).
 			Msg("Position change")
@@ -150,15 +150,13 @@ func (a *App) notifyGridPositionChange() {
 		if err != nil {
 			a.log.Error().
 				Err(err).
-				Str("component", "pit radio").
 				Str("message", message).
-				Msg("Failed to send position change message")
+				Msg("Send position change message")
 		} else {
 			a.log.Debug().
-				Str("component", "pit radio").
 				Str("message", message).
 				Int16("lap", a.state.current.lapNumber).
-				Msg("Position change message sent")
+				Msg("Send position change message")
 		}
 	}
 }
@@ -198,14 +196,13 @@ func (a *App) notifyLapTime() {
 			Err(err).
 			Str("component", "pit radio").
 			Str("message", message).
-			Msg("Failed to send lap time message")
+			Msg("Send lap time message")
 	} else {
 		a.log.Debug().
-			Str("component", "pit radio").
 			Str("message", message).
 			Int16("lap", a.state.current.lapNumber).
 			Dur("lapTime", a.state.current.lastLapTime).
-			Msg("Lap time message sent")
+			Msg("Send lap time message")
 	}
 }
 
@@ -225,15 +222,13 @@ func (a *App) notifyLapNumber() {
 	if err != nil {
 		a.log.Error().
 			Err(err).
-			Str("component", "pit radio").
 			Str("message", message).
-			Msg("Failed to send lap message")
+			Msg("Send lap number message")
 	} else {
 		a.log.Debug().
-			Str("component", "pit radio").
 			Str("message", message).
 			Int16("lap", a.state.current.lapNumber).
-			Msg("Lap message sent")
+			Msg("Send lap number message")
 	}
 }
 
@@ -302,15 +297,13 @@ func (a *App) notifyLapProgress() {
 		if err != nil {
 			a.log.Error().
 				Err(err).
-				Str("component", "pit radio").
 				Str("message", message).
-				Msg("Failed to send lap number message")
+				Msg("Send lap number message")
 		} else {
 			a.log.Debug().
-				Str("component", "pit radio").
 				Str("message", message).
 				Int16("lap", a.state.current.lapNumber).
-				Msg("Lap number message sent")
+				Msg("Send lap number message")
 		}
 	}
 }
@@ -320,8 +313,8 @@ func (a *App) notifyFuelWarnings() {
 		return
 	}
 
-	lapDistanceMeters := a.circuit.LapDistanceMeters()
-	if lapDistanceMeters <= 0 {
+	circuitLengthMeters := a.circuit.LengthMeters()
+	if circuitLengthMeters <= 0 {
 		return
 	}
 
@@ -329,17 +322,24 @@ func (a *App) notifyFuelWarnings() {
 
 	remainingLaps := float64(a.gtClient.Telemetry.RaceLaps()) - float64(currentLap)
 
-	fuelRangeLaps := a.fuelRange.DistanceLaps(lapDistanceMeters)
-	fuelRangeLapsSafe := max(fuelRangeLaps-a.config.GetFuelRangeSafetyMarginLaps(), 0)
-	lapProgressRemaining := a.circuit.LapProgressRemaining(1.0) // TODO: store lap distance travelled somewhere
-	fuelRangeLapsUntilBox := max(fuelRangeLapsSafe-lapProgressRemaining, 0)
+	fuelRangeLaps := a.fuelRange.DistanceLaps(circuitLengthMeters)
+	fuelRangeLapsSafe := fuelRangeLaps - a.config.GetFuelRangeSafetyMarginLaps()
+	fuelRangeMeters := a.fuelRange.DistanceMeters()
+	lapProgress := a.circuit.LapProgress()
+	fuelRangeLapsUntilBox := fuelRangeLapsSafe + lapProgress
 
 	var message string
 	suppressNotify := true
 
+	fuelEmpty := a.gtClient.Telemetry.FuelLevelPercent() <= 0
+	fuelCritical := fuelRangeLapsUntilBox <= 0.5
+	boxThisLap := fuelRangeLapsUntilBox <= 1
+	boxInAFewLaps := fuelRangeLapsUntilBox <= a.config.GetFuelPreWarnNotifyLaps()+a.config.GetFuelRangeSafetyMarginLaps()
+	fuelStrategyUpdate := remainingLaps > fuelRangeLaps && int16(currentLap)%int16(a.config.GetFuelStrategyNotifyLaps()) == 0
+
 	// Critical fuel warnings based on lap range
 	switch {
-	case a.gtClient.Telemetry.FuelLevelPercent() <= 0:
+	case fuelEmpty:
 		// Fuel eempty
 		message = a.i18n.GetString(translations.RadioOutOfFuel)
 
@@ -348,15 +348,15 @@ func (a *App) notifyFuelWarnings() {
 			a.pitRadioState.fuelNotifyEmptyIssued = true
 			a.pitRadioState.lastNotifiedLapFuelWarning = currentLap
 		}
-	case fuelRangeLapsUntilBox <= 0:
+	case fuelCritical:
 		// Fuel will run out during this lap
 		message = a.i18n.GetString(translations.RadioFuelCritical)
 
-		if a.pitRadioState.lastNotifiedLapFuelWarning != currentLap {
+		if a.pitRadioState.lastNotifiedLapFuelCritical != currentLap {
 			suppressNotify = false
-			a.pitRadioState.lastNotifiedLapFuelWarning = currentLap
+			a.pitRadioState.lastNotifiedLapFuelCritical = currentLap
 		}
-	case fuelRangeLapsUntilBox <= 1:
+	case boxThisLap:
 		// Fuel will run out during the next lap
 		message = a.i18n.GetString(translations.RadioBoxForFuel)
 
@@ -364,7 +364,7 @@ func (a *App) notifyFuelWarnings() {
 			suppressNotify = false
 			a.pitRadioState.lastNotifiedLapFuelWarning = currentLap
 		}
-	case fuelRangeLapsUntilBox <= a.config.GetFuelPreWarnNotifyLaps():
+	case boxInAFewLaps:
 		// Early warning when range drops below threshold plus pre-warn buffer
 		format := a.i18n.GetString(translations.RadioFuelPreWarn)
 		message = fmt.Sprintf(format, int(fuelRangeLapsUntilBox))
@@ -374,7 +374,7 @@ func (a *App) notifyFuelWarnings() {
 			a.pitRadioState.fuelNotifyPrewarnIssued = true
 			a.pitRadioState.lastNotifiedLapFuelWarning = currentLap
 		}
-	case remainingLaps > fuelRangeLaps && int16(currentLap)%int16(a.config.GetFuelStrategyNotifyLaps()) == 0:
+	case fuelStrategyUpdate:
 		// Periodic fuel range updates when insufficient fuel for the remainder of the race
 		format := a.i18n.GetString(translations.RadioFuelRange)
 		message = fmt.Sprintf(format, int(fuelRangeLaps), int(remainingLaps))
@@ -399,16 +399,19 @@ func (a *App) notifyFuelWarnings() {
 			a.log.Error().
 				Err(err).
 				Str("message", message).
-				Msg("Send fuel warning message")
+				Msg("Send fuel message")
 		} else {
 			a.log.Info().
 				Str("message", message).
 				Int16("lap", a.state.current.lapNumber).
 				Float32("fuel_percent", a.gtClient.Telemetry.FuelLevelPercent()).
-				Float64("fuel_range_laps", fuelRangeLaps).
-				Float64("fuel_range_to_box", fuelRangeLapsUntilBox).
-				Float64("lap_progress_remaining", lapProgressRemaining).
-				Msg("Send fuel warning message")
+				Float64("lap_meters", circuitLengthMeters).
+				Float64("range_meters", fuelRangeMeters).
+				Float64("range_laps", fuelRangeLaps).
+				Float64("range_laps_safe", fuelRangeLapsSafe).
+				Float64("range_laps_to_box", fuelRangeLapsUntilBox).
+				Float64("lap_progress", lapProgress).
+				Msg("Send fuel message")
 		}
 	}
 
