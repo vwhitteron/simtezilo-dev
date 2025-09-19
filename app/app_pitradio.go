@@ -69,6 +69,8 @@ func (a *App) sendPitRadioMessage() {
 
 	a.notifyFuelWarnings()
 
+	a.notifyLapProgress()
+
 	a.notifyGridPositionChange()
 }
 
@@ -87,10 +89,6 @@ func (a *App) newLapNotificationHandler() {
 			time.Sleep(messagePause)
 
 			a.notifyLapNumber()
-
-			time.Sleep(messagePause)
-
-			a.notifyLapProgress()
 		default:
 			time.Sleep(8 * time.Millisecond)
 		}
@@ -238,7 +236,7 @@ func (a *App) notifyLapProgress() {
 		return
 	}
 
-	a.pitRadioState.lastNotifiedLapNumber = a.state.current.lapNumber
+	progressInterval := 25 // Percentage interval for lap progress notifications
 
 	if a.state.current.lapNumber == 0 {
 		return
@@ -250,43 +248,48 @@ func (a *App) notifyLapProgress() {
 		return
 	}
 
-	longRace := raceLaps > 10
-	lapsRemaining := raceLaps - a.state.current.lapNumber + 1
-	raceProgressPercent := int8(100 * float64(a.state.current.lapNumber) / float64(raceLaps))
-
-	var currentQuarter int8
-	switch {
-	case raceProgressPercent >= 75:
-		currentQuarter = 3
-	case raceProgressPercent >= 50:
-		currentQuarter = 2
-	case raceProgressPercent >= 25:
-		currentQuarter = 1
-	default:
-		currentQuarter = 0
+	circuitLengthMeters := a.circuit.LengthMeters()
+	if circuitLengthMeters <= 0 {
+		return
 	}
+
+	// Calculate race progress based on distance in meters
+	totalRaceDistanceMeters := float64(raceLaps) * circuitLengthMeters
+	currentRaceDistanceMeters := float64(a.state.current.lapNumber-1)*circuitLengthMeters + a.circuit.LapProgress()*circuitLengthMeters
+
+	raceProgressPercent := int8(100 * currentRaceDistanceMeters / totalRaceDistanceMeters)
+
+	// Calculate current progress interval based on progressInterval
+	currentProgressInterval := int8((raceProgressPercent / int8(progressInterval)) * int8(progressInterval))
+
+	// Skip notifications at 0%
+	if raceProgressPercent <= 0 {
+		return
+	}
+
+	longRace := raceLaps > 8
+	lapsRemaining := raceLaps - a.state.current.lapNumber + 1
+
+	raceCompleted := lapsRemaining <= 0
+	finalLap := a.state.current.lapNumber == raceLaps
+	LastFewLaps := lapsRemaining <= 3 && longRace
+	NotifyInterval := currentProgressInterval > a.pitRadioState.lastNotifiedRaceProgress
 
 	message := ""
 	switch {
-	case lapsRemaining <= 0:
+	case raceCompleted:
 		message = a.i18n.GetString(translations.RadioRaceFinish)
-	case a.state.current.lapNumber == raceLaps:
+	case finalLap:
 		message = a.i18n.GetString(translations.RadioFinalLap)
-	case lapsRemaining <= 3 && longRace:
-		format := a.i18n.GetString(translations.RadioLapsRemaining)
+	case LastFewLaps:
+		format := a.i18n.GetString(translations.RadioLapsRemainingFmt)
 		message = fmt.Sprintf(format, lapsRemaining)
-	case currentQuarter > a.pitRadioState.lastNotifiedRaceProgress && currentQuarter == 3 && longRace:
-		format := a.i18n.GetString(translations.RadioLapsWithRemaining)
-		message = fmt.Sprintf(format, a.state.current.lapNumber, lapsRemaining)
-	case currentQuarter > a.pitRadioState.lastNotifiedRaceProgress && currentQuarter == 2:
-		format := a.i18n.GetString(translations.RadioLapsHalfway)
-		message = fmt.Sprintf(format, a.state.current.lapNumber)
-	case currentQuarter > a.pitRadioState.lastNotifiedRaceProgress && currentQuarter == 1 && longRace:
-		format := a.i18n.GetString(translations.RadioLapsWithRemaining)
-		message = fmt.Sprintf(format, a.state.current.lapNumber, lapsRemaining)
-	}
+	case NotifyInterval:
+		format := a.i18n.GetString(translations.RadioRaceProgressFmt)
+		message = fmt.Sprintf(format, raceProgressPercent)
 
-	a.pitRadioState.lastNotifiedRaceProgress = currentQuarter
+		a.pitRadioState.lastNotifiedRaceProgress = currentProgressInterval
+	}
 
 	if message == "" {
 		return
@@ -366,7 +369,7 @@ func (a *App) notifyFuelWarnings() {
 		}
 	case boxInAFewLaps:
 		// Early warning when range drops below threshold plus pre-warn buffer
-		format := a.i18n.GetString(translations.RadioFuelPreWarn)
+		format := a.i18n.GetString(translations.RadioFuelPreWarnFmt)
 		message = fmt.Sprintf(format, int(fuelRangeLapsUntilBox))
 
 		if !a.pitRadioState.fuelNotifyPrewarnIssued {
@@ -376,7 +379,7 @@ func (a *App) notifyFuelWarnings() {
 		}
 	case fuelStrategyUpdate:
 		// Periodic fuel range updates when insufficient fuel for the remainder of the race
-		format := a.i18n.GetString(translations.RadioFuelRange)
+		format := a.i18n.GetString(translations.RadioFuelRangeFmt)
 		message = fmt.Sprintf(format, int(fuelRangeLaps), int(remainingLaps))
 
 		if a.pitRadioState.lastNotifiedLapFuelWarning == currentLap {

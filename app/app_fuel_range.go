@@ -2,6 +2,8 @@ package app
 
 import (
 	"time"
+
+	"github.com/vwhitteron/simtezilo-dev/app/circuit"
 )
 
 func (a *App) newLapFuelRangeHandler() {
@@ -12,8 +14,13 @@ func (a *App) newLapFuelRangeHandler() {
 	for {
 		select {
 		case <-a.lapStartEvents:
+			coordinates := a.gtClient.Telemetry.PositionalMapCoordinates()
+			odometerReading := a.odometer.Add(coordinates)
+			lap := a.state.current.lapNumber
+			a.circuit.UpdateDistanceTravelled(odometerReading, lap, circuit.StartLineCoordinate)
+
 			currentPos := a.gtClient.Telemetry.PositionalMapCoordinates()
-			a.circuit.UpdateCircuitByStartLine(currentPos)
+			a.circuit.UpdateCircuit(currentPos, circuit.StartLineCoordinate)
 		default:
 			time.Sleep(16 * time.Millisecond)
 		}
@@ -35,10 +42,14 @@ func (a *App) updateFuelConsumption() {
 		a.circuit.ResetLapProgress()
 	}
 
+	lap := a.state.current.lapNumber
 	coordinates := a.gtClient.Telemetry.PositionalMapCoordinates()
+	odometerReading := a.odometer.Add(coordinates)
+
 	fuelLevel := a.gtClient.Telemetry.FuelLevelPercent()
+	a.fuelRange.Update(odometerReading, fuelLevel)
 
-	a.fuelRange.Update(coordinates, fuelLevel)
+	a.circuit.UpdateDistanceTravelled(odometerReading, lap, circuit.GeneralCoordinate)
 
-	a.circuit.UpdateCircuitByCoordinates(coordinates)
+	a.circuit.UpdateCircuit(coordinates, circuit.GeneralCoordinate)
 }

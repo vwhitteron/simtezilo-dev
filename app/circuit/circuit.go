@@ -2,14 +2,18 @@ package circuit
 
 import (
 	"fmt"
-	"math"
 
 	"github.com/rs/zerolog"
 	gttelemetry "github.com/zetetos/gt-telemetry"
 )
 
+type updateType bool
+
 const (
 	shortestCircuitLengthMeters int = 900 // Minimum length in meters (Northern Isle Speedway)
+
+	StartLineCoordinate updateType = true
+	GeneralCoordinate   updateType = false
 )
 
 var circuitInfoInit = CircuitInfo{
@@ -24,8 +28,9 @@ type Circuit struct { // TODO: avoid stuttering Circuit.Circuit
 	log                     zerolog.Logger     // Logger instance
 	info                    CircuitInfo        // Current circuit information
 	database                *CircuitDB         // Circuit database
-	lapStartDistanceMeters  float64            // Distance at which the current lap started
-	distanceTravelledMeters float64            // Lap distance tracking for uknown circuits
+	lap                     int16              // Current lap number being tracked
+	lapStartOdometerReading float64            // Distance at which the current lap started
+	lapProgressMeters       float64            // Lap distance tracking for uknown circuits
 	lastCoordinate          gttelemetry.Vector // Last known coordinate for distance tracking
 }
 
@@ -38,8 +43,8 @@ func New(logger zerolog.Logger) (*Circuit, error) {
 
 	return &Circuit{
 		log:                     logger.With().Str("package", "circuit").Logger(),
-		lapStartDistanceMeters:  0,
-		distanceTravelledMeters: 0,
+		lapStartOdometerReading: 0,
+		lapProgressMeters:       0,
 		info:                    circuitInfoInit,
 		database:                database,
 		lastCoordinate:          gttelemetry.Vector{},
@@ -61,8 +66,8 @@ func (c *Circuit) Reset() {
 
 // ResetLapProgress clears the lap progress tracking without resetting the circuit information.
 func (c *Circuit) ResetLapProgress() {
-	c.lapStartDistanceMeters = 0
-	c.distanceTravelledMeters = 0
+	c.lapStartOdometerReading = 0
+	c.lapProgressMeters = 0
 	c.lastCoordinate = circuitInfoInit.StartLine
 
 	c.log.Info().
@@ -76,7 +81,7 @@ func (c *Circuit) LengthMeters() float64 {
 
 // LapProgress returns the progress through the current lap as a value between 0 and 1
 func (c *Circuit) LapProgress() float64 {
-	lapDistance := c.distanceTravelledMeters - c.lapStartDistanceMeters
+	lapDistance := c.lapProgressMeters - c.lapStartOdometerReading
 
 	if lapDistance < 0 || int(lapDistance) > c.info.Length {
 		return 0
@@ -92,35 +97,58 @@ func (c *Circuit) LapProgressRemaining() float64 {
 	return 1.0 - progress
 }
 
-// UpdateCircuitByStartLine updates the current circuit information based on the provided start line coordinate.
-func (c *Circuit) UpdateCircuitByStartLine(coordinate gttelemetry.Vector) {
+// UpdateCircuit updates the current circuit information by matching the provided coordinate with a circuit DB entry
+// The isStartLine flag indicates if the coordinate is from a start line crossing or general positional update
+// TODO: need start line coordinates are returned in CircuitInfo to avoid start line re-udpating c.info
+func (c *Circuit) UpdateCircuit(coordinate gttelemetry.Vector, updateType updateType) {
 	c.setLapStartMarker()
 
 	if c.database == nil {
 		return
 	}
 
-	// Only update the circuit by start line once after init/reset
-	if coordinate == c.info.StartLine {
+	var matchingCircuitIDs []string
+	if updateType == StartLineCoordinate {
+		// Only update the circuit by start line once after init/reset
+		if coordinate == c.info.StartLine {
+			return
+		}
+
+		var found bool
+		matchingCircuitIDs, found = c.database.GetTracksAtStartLine(coordinate)
+		if !found || len(matchingCircuitIDs) == 0 {
+			c.log.Debug().
+				Str("coordinate", fmt.Sprintf("(x: %.0f, y: %.0f, z: %.0f)", coordinate.X, coordinate.Y, coordinate.Z)).
+				Str("type", "start line").
+				Msg("No coordinate matched")
+
+			return
+		}
+	} else {
+		// Only update the circuit by coordinate after init/reset
+		if c.info != circuitInfoInit {
+			return
+		}
+
+		var found bool
+		matchingCircuitIDs, found = c.database.GetTracksAtCoordinate(coordinate)
+		if !found || len(matchingCircuitIDs) == 0 {
+			c.log.Debug().
+				Str("coordinate", fmt.Sprintf("(x: %.0f, y: %.0f, z: %.0f)", coordinate.X, coordinate.Y, coordinate.Z)).
+				Str("type", "circuit coordinate").
+				Msg("No coordinate matched")
+
+			return
+		}
+	}
+
+	if len(matchingCircuitIDs) != 1 {
 		return
 	}
 
-	circuitIDs, found := c.database.GetTracksAtStartLine(coordinate)
-	if !found || len(circuitIDs) == 0 {
-		c.log.Debug().
-			Str("coordinate", fmt.Sprintf("(x: %.0f, y: %.0f, z: %.0f)", coordinate.X, coordinate.Y, coordinate.Z)).
-			Str("source", "start line").
-			Msg("No coordinate matched")
+	circuitID := matchingCircuitIDs[0]
 
-		return
-	}
-
-	if len(circuitIDs) > 1 {
-		return
-	}
-
-	circuitID := circuitIDs[0]
-
+	var found bool
 	c.info, found = c.database.GetTrackByID(circuitID)
 	if !found {
 		c.log.Error().
@@ -139,58 +167,9 @@ func (c *Circuit) UpdateCircuitByStartLine(coordinate gttelemetry.Vector) {
 		Msg("Circuit updated")
 }
 
-// UpdateCircuitByCoordinates updates the current circuit information based on the provided positional coordinate
-// This feature provides faster circuit identification after initial start line detection.
-// TODO: need start line coordinates are returned in CircuitInfo to stop start line re-udpating c.info
-func (c *Circuit) UpdateCircuitByCoordinates(coordinate gttelemetry.Vector) {
-	c.updateDistanceTravelled(coordinate)
-
-	if c.database == nil {
-		return
-	}
-
-	// Only update the circuit by coordinate after init/reset
-	if c.info != circuitInfoInit {
-		return
-	}
-
-	circuitIDs, found := c.database.GetTracksAtCoordinate(coordinate)
-	if !found || len(circuitIDs) == 0 {
-		c.log.Debug().
-			Str("coordinate", fmt.Sprintf("(x: %.0f, y: %.0f, z: %.0f)", coordinate.X, coordinate.Y, coordinate.Z)).
-			Str("source", "circuit coordinate").
-			Msg("No coordinate matched")
-
-		return
-	}
-
-	if len(circuitIDs) > 1 {
-		return
-	}
-
-	circuitID := circuitIDs[0]
-
-	c.info, found = c.database.GetTrackByID(circuitID)
-	if !found {
-		c.log.Error().
-			Str("track_id", circuitID).
-			Str("source", "circuit coordinate").
-			Msg("Circuit not found in inventory")
-
-		c.info.ID = "unknown" // inhibit re-updating until init/reset
-
-		return
-	}
-
-	c.log.Info().
-		Str("track", c.info.Name).
-		Str("source", "circuit coordinate").
-		Msg("Circuit updated")
-}
-
 // setLapStartMarker sets the distance at which the current lap started.
 func (c *Circuit) setLapStartMarker() {
-	c.lapStartDistanceMeters = c.distanceTravelledMeters
+	c.lapStartOdometerReading = c.lapProgressMeters
 
 	if c.circuitIsKnown() {
 		return
@@ -202,11 +181,11 @@ func (c *Circuit) setLapStartMarker() {
 
 // setCircuitLength sets the circuit length if it can be determined from the distance travelled
 func (c *Circuit) setCircuitLength() {
-	if c.distanceTravelledMeters <= 0 {
+	if c.lapProgressMeters <= 0 {
 		return
 	}
 
-	circuitLength := int(c.distanceTravelledMeters - c.lapStartDistanceMeters)
+	circuitLength := int(c.lapProgressMeters - c.lapStartOdometerReading)
 
 	if circuitLength > shortestCircuitLengthMeters {
 		c.info.Length = circuitLength
@@ -215,25 +194,29 @@ func (c *Circuit) setCircuitLength() {
 
 // updateDistanceTravelled updates the total distance travelled based on the provided coordinate.
 // TODO: this is duplicated in fuelrange.distanceTravelled
-func (c *Circuit) updateDistanceTravelled(coordinate gttelemetry.Vector) {
-	if c.lastCoordinate.X == 0 {
-		c.lastCoordinate = coordinate
+func (c *Circuit) UpdateDistanceTravelled(odometerReading float64, lap int16, updateType updateType) {
+	// New lap started
+	if updateType == StartLineCoordinate {
+		c.lapStartOdometerReading = odometerReading
+		c.lapProgressMeters = 0
+		c.lap = lap
 
 		return
 	}
 
-	// Calculate distance between current and last position
-	dx := float64(coordinate.X - c.lastCoordinate.X)
-	dy := float64(coordinate.Y - c.lastCoordinate.Y)
-	dz := float64(coordinate.Z - c.lastCoordinate.Z)
-	distance := math.Sqrt(dx*dx + dy*dy + dz*dz)
-
-	// Only add reasonable distance increments (filter out teleports/glitches)
-	if distance > 0 && distance < 500 { // Max ~500m between updates
-		c.distanceTravelledMeters += distance
+	// Ignore updates until lap start marker is set
+	if c.lapStartOdometerReading < 0 {
+		return
 	}
 
-	c.lastCoordinate = coordinate
+	// Wait for next lap start when odometer rolled back/reset or unexpected lap change
+	if odometerReading < c.lapProgressMeters || lap != c.lap {
+		c.lapStartOdometerReading = -1
+		c.lapProgressMeters = 0
+		c.lap = lap
+	}
+
+	c.lapProgressMeters = odometerReading - c.lapStartOdometerReading
 }
 
 // circuitIsKnown returns true if the current circuit is known

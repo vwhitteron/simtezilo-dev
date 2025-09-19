@@ -19,6 +19,7 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/i18n"
 	"github.com/vwhitteron/simtezilo-dev/app/i18n/translations"
 	"github.com/vwhitteron/simtezilo-dev/app/kinematics"
+	"github.com/vwhitteron/simtezilo-dev/app/odometer"
 	"github.com/vwhitteron/simtezilo-dev/app/pitradio"
 	"github.com/vwhitteron/simtezilo-dev/app/synth"
 	"github.com/vwhitteron/simtezilo-dev/app/ui"
@@ -73,6 +74,7 @@ type App struct {
 	kinematics kinematics.KinematicsTracker
 	synth      *synth.Synthesizer
 
+	odometer  *odometer.Meter
 	fuelRange *fuelrange.Range
 	circuit   *circuit.Circuit
 
@@ -303,6 +305,8 @@ func NewApp(opts AppOptions) (*App, error) {
 		return nil, err
 	}
 
+	a.odometer = odometer.New(*opts.Logger)
+
 	a.fuelRange = fuelrange.New(*opts.Logger)
 
 	a.circuit, err = circuit.New(*opts.Logger)
@@ -336,6 +340,8 @@ func NewApp(opts AppOptions) (*App, error) {
 
 func (a *App) Run() {
 	go a.ui.HIDEventHandler()
+
+	go a.pitRadio.MessageDispatcher(a.log)
 
 	go a.newLapFuelRangeHandler()
 

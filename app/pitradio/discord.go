@@ -2,13 +2,16 @@ package pitradio
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/rs/zerolog"
 )
 
 type DiscordBot struct {
 	channelID string             // Discord channel ID where messages will be sent
 	session   *discordgo.Session // Currently connected Discord session
+	queue     chan string        // Message queue for sending messages
 }
 
 // NewDiscordBot creates a new Discord bot instance.
@@ -30,6 +33,7 @@ func NewDiscordBot(token string, channelID string) (*DiscordBot, error) {
 	bot := DiscordBot{
 		channelID: channelID,
 		session:   dg,
+		queue:     make(chan string, 100),
 	}
 
 	return &bot, nil
@@ -72,12 +76,28 @@ func (d *DiscordBot) Send(message string) error {
 
 	}
 
-	_, err := d.session.ChannelMessageSend(d.channelID, message)
-	if err != nil {
-		return fmt.Errorf("send message: %w", err)
-	}
+	d.queue <- message
 
 	return nil
+}
+
+// MessageDispatcher processes the message queue and sends messages to Discord.
+// This should be run as a goroutine.
+func (d *DiscordBot) MessageDispatcher(logger zerolog.Logger) {
+	for {
+		select {
+		case message := <-d.queue:
+			_, err := d.session.ChannelMessageSend(d.channelID, message)
+			if err != nil {
+				logger.Error().
+					Err(err).
+					Str("package", "discord").
+					Msg("send message to Discord channel")
+			}
+		default:
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
 }
 
 // ready updates the watch status of the bot user

@@ -20,8 +20,9 @@ type pitRadioMock struct {
 	failSend bool
 }
 
-func (m *pitRadioMock) Connect() error    { return nil }
-func (m *pitRadioMock) Disconnect() error { return nil }
+func (m *pitRadioMock) Connect() error                          { return nil }
+func (m *pitRadioMock) Disconnect() error                       { return nil }
+func (m *pitRadioMock) MessageDispatcher(logger zerolog.Logger) {}
 func (m *pitRadioMock) Send(msg string) error {
 	m.messages = append(m.messages, msg)
 
