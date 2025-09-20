@@ -16,19 +16,22 @@ const (
 // pitRadioState tracks Discord/pit radio communication state
 type pitRadioState struct {
 	// Nofification tracking to prevent duplicate or noisy messages
-	fuelNotifyPrewarnIssued     bool          // Flag indicating whether the fuel pre-warn notification has been sent
-	fuelNotifyEmptyIssued       bool          // Flag indicating whether the fuel empty notification has been sent
-	lastNotifiedLapFuelCritical int16         // Last lap number when a critical fuel warning was sent
-	lastNotifiedLapFuelWarning  int16         // Last lap number when a fuel warning was sent
-	lastNotifiedLapFuelStrategy int16         // Last lap number when a fuel strategy was sent
-	lastNotifiedLapNumber       int16         // Last notified lap number
-	lastNotifiedLapTime         time.Duration // Last notified lap time
-	lastNotifiedRaceProgress    int8          // Last notified race progress percentage
-	lastNotifiedGridPosition    int16         // Last notified grid position of the vehicle
-	debounceGirdPositionNotify  time.Time     // Suppress grid position change notifications until this time
+	fuelNotifyPrewarnIssued          bool          // Flag indicating whether the fuel pre-warn notification has been sent
+	fuelNotifyEmptyIssued            bool          // Flag indicating whether the fuel empty notification has been sent
+	lastNotifiedLapFuelCritical      int16         // Last lap number when a critical fuel warning was sent
+	lastNotifiedLapFuelWarning       int16         // Last lap number when a fuel warning was sent
+	lastNotifiedLapFuelStrategy      int16         // Last lap number when a fuel strategy was sent
+	lastNotifiedLapNumber            int16         // Last notified lap number
+	lastNotifiedLapTime              time.Duration // Last notified lap time
+	lastNotifiedRaceProgressInterval int8          // Last notified race progress percentage
+	lastNotifiedGridPosition         int16         // Last notified grid position of the vehicle
+	debounceGirdPositionNotify       time.Time     // Suppress grid position change notifications until this time
 
 	// Grid position tracking
 	currentGridPosition int16 // Current race position of the vehicle
+
+	// Circuit tracking
+	circuitName string // Current circuit name
 }
 
 func (a *App) resetPitRadioState() {
@@ -67,6 +70,8 @@ func (a *App) sendPitRadioMessage() {
 		return
 	}
 
+	a.notifyCircuitChange()
+
 	a.notifyFuelWarnings()
 
 	a.notifyLapProgress()
@@ -82,15 +87,44 @@ func (a *App) newLapNotificationHandler() {
 	for {
 		select {
 		case <-a.lapStartEvents:
-			time.Sleep(250 * time.Millisecond) // Wait for lap data to stabilise
-
 			a.notifyLapTime()
-
-			time.Sleep(messagePause)
-
 			a.notifyLapNumber()
 		default:
 			time.Sleep(8 * time.Millisecond)
+		}
+	}
+}
+
+// notifyCircuitChange sends a circuit change notification over the pit radio
+func (a *App) notifyCircuitChange() {
+	if a.pitRadioState == nil {
+		return
+	}
+
+	circuitName := a.circuit.Name()
+	if circuitName == "" || circuitName == "unknown" {
+		return
+	}
+
+	if circuitName == a.pitRadioState.circuitName {
+		return
+	}
+
+	a.pitRadioState.circuitName = circuitName
+
+	message := fmt.Sprintf("Circuit updated to %s", strings.ReplaceAll(circuitName, "_", " "))
+	if a.pitRadio != nil {
+		err := a.pitRadio.Send(message)
+		if err != nil {
+			a.log.Error().
+				Err(err).
+				Str("message", message).
+				Msg("Send circuit change message")
+		} else {
+			a.log.Debug().
+				Str("message", message).
+				Int16("lap", a.state.current.lapNumber).
+				Msg("Send circuit change message")
 		}
 	}
 }
@@ -209,10 +243,18 @@ func (a *App) notifyLapNumber() {
 		return
 	}
 
-	a.pitRadioState.lastNotifiedLapNumber = a.state.current.lapNumber
-	if a.state.current.lapNumber <= 0 {
+	currentLap := a.state.current.lapNumber
+	raceLaps := int16(a.gtClient.Telemetry.RaceLaps())
+
+	if a.pitRadioState.lastNotifiedLapNumber >= currentLap {
 		return
 	}
+
+	if currentLap <= 0 || currentLap > raceLaps {
+		return
+	}
+
+	a.pitRadioState.lastNotifiedLapNumber = currentLap
 
 	message := fmt.Sprintf("Lap %d", a.state.current.lapNumber)
 
@@ -238,7 +280,9 @@ func (a *App) notifyLapProgress() {
 
 	progressInterval := 25 // Percentage interval for lap progress notifications
 
-	if a.state.current.lapNumber == 0 {
+	currentLap := a.state.current.lapNumber
+
+	if currentLap == 0 {
 		return
 	}
 
@@ -255,7 +299,7 @@ func (a *App) notifyLapProgress() {
 
 	// Calculate race progress based on distance in meters
 	totalRaceDistanceMeters := float64(raceLaps) * circuitLengthMeters
-	currentRaceDistanceMeters := float64(a.state.current.lapNumber-1)*circuitLengthMeters + a.circuit.LapProgress()*circuitLengthMeters
+	currentRaceDistanceMeters := float64(currentLap-1)*circuitLengthMeters + a.circuit.LapProgress()*circuitLengthMeters
 
 	raceProgressPercent := int8(100 * currentRaceDistanceMeters / totalRaceDistanceMeters)
 
@@ -268,27 +312,33 @@ func (a *App) notifyLapProgress() {
 	}
 
 	longRace := raceLaps > 8
-	lapsRemaining := raceLaps - a.state.current.lapNumber + 1
+	lapsRemaining := raceLaps - currentLap + 1
 
-	raceCompleted := lapsRemaining <= 0
-	finalLap := a.state.current.lapNumber == raceLaps
-	LastFewLaps := lapsRemaining <= 3 && longRace
-	NotifyInterval := currentProgressInterval > a.pitRadioState.lastNotifiedRaceProgress
+	raceCompleted := lapsRemaining <= 0 && a.pitRadioState.lastNotifiedLapNumber != currentLap
+	finalLap := a.state.current.lapNumber == raceLaps && a.pitRadioState.lastNotifiedLapNumber != currentLap
+	LastFewLaps := lapsRemaining <= 3 && longRace && a.pitRadioState.lastNotifiedLapNumber != currentLap
+	NotifyInterval := currentProgressInterval > a.pitRadioState.lastNotifiedRaceProgressInterval && raceProgressPercent < 100
 
 	message := ""
 	switch {
 	case raceCompleted:
 		message = a.i18n.GetString(translations.RadioRaceFinish)
+
+		a.pitRadioState.lastNotifiedLapNumber = currentLap
 	case finalLap:
 		message = a.i18n.GetString(translations.RadioFinalLap)
+
+		a.pitRadioState.lastNotifiedLapNumber = currentLap
 	case LastFewLaps:
 		format := a.i18n.GetString(translations.RadioLapsRemainingFmt)
 		message = fmt.Sprintf(format, lapsRemaining)
+
+		a.pitRadioState.lastNotifiedLapNumber = currentLap
 	case NotifyInterval:
 		format := a.i18n.GetString(translations.RadioRaceProgressFmt)
 		message = fmt.Sprintf(format, raceProgressPercent)
 
-		a.pitRadioState.lastNotifiedRaceProgress = currentProgressInterval
+		a.pitRadioState.lastNotifiedRaceProgressInterval = currentProgressInterval
 	}
 
 	if message == "" {

@@ -20,7 +20,11 @@ func (a *App) newLapFuelRangeHandler() {
 			a.circuit.UpdateDistanceTravelled(odometerReading, lap, circuit.StartLineCoordinate)
 
 			currentPos := a.gtClient.Telemetry.PositionalMapCoordinates()
-			a.circuit.UpdateCircuit(currentPos, circuit.StartLineCoordinate)
+			if didUpdate := a.circuit.UpdateCircuit(currentPos, circuit.StartLineCoordinate); didUpdate {
+				a.odometer.Reset()
+				a.fuelRange.Reset()
+				a.state.last.lastLapTime = 0
+			}
 		default:
 			time.Sleep(16 * time.Millisecond)
 		}
@@ -38,6 +42,7 @@ func (a *App) updateFuelConsumption() {
 	}
 
 	if a.timeOfDayHasReset() {
+		a.odometer.Reset()
 		a.fuelRange.Reset()
 		a.circuit.ResetLapProgress()
 	}
@@ -51,5 +56,9 @@ func (a *App) updateFuelConsumption() {
 
 	a.circuit.UpdateDistanceTravelled(odometerReading, lap, circuit.GeneralCoordinate)
 
-	a.circuit.UpdateCircuit(coordinates, circuit.GeneralCoordinate)
+	if didUpdate := a.circuit.UpdateCircuit(coordinates, circuit.GeneralCoordinate); didUpdate {
+		a.odometer.Reset()
+		a.fuelRange.Reset()
+		a.state.last.lastLapTime = 0
+	}
 }

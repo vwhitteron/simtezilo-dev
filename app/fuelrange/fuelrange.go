@@ -9,11 +9,11 @@ import (
 const (
 	initialFuelLevel       float64 = -1.0                    // Initial fuel level in percent
 	initialOdometerReading float64 = -1.0                    // Initial odometer reading in meters
-	sampleCount            int     = 60                      // Number of samples to store in the buffer
+	sampleCount            int     = 6000                    // Number of samples to store in the buffer
 	rangeLapsUnknown       float64 = 10000                   // Default (very high) range in laps when unknown
 	rangeDistanceUnknown   float64 = rangeLapsUnknown * 1000 // Default (unknown) range in meters
 	fuelRatePercentile     int     = 50                      // Percentile fuel consumption rate to use for range estimation
-	fuelRangeMinSamples    int     = 10                      // Minimum number of samples required to provide a reliable range estimate
+	fuelRangeMinSamples    int     = 1000                    // Minimum number of samples required to provide a reliable range estimate
 )
 
 type Range struct {
@@ -25,6 +25,8 @@ type Range struct {
 	fuelRate                float64   // Moving average fuel consumption rate in percent per km
 	distanceMeters          float64   // Estimated distance in meters that can be travelled with current fuel level
 	refueling               bool      // Flag to indicate if refuelling is in progress
+	isLive                  bool      // Flag to indicate if a session is live or a replay
+	minSamples              int       // Minimum number of samples required to provide a reliable range estimate
 }
 
 // New creates a new fuel range estimator
@@ -42,13 +44,39 @@ func New(logger zerolog.Logger) *Range {
 func (r *Range) Reset() {
 	r.fuelLevelAtLastUpdate = initialFuelLevel
 	r.distanceSinceLastUpdate = 0
-	r.fuelRateSamples = make([]float64, 0, sampleCount)
 	r.fuelRate = 0
 	r.distanceMeters = 0
 	r.refueling = false
 
+	minSamples := fuelRangeMinSamples
+	totalSamples := sampleCount
+
+	// Replays reduce fuel samples by ~100x compared to a live session
+	if r.isLive {
+		minSamples = fuelRangeMinSamples / 100
+		totalSamples = sampleCount / 100
+	}
+
+	r.minSamples = minSamples
+	r.fuelRateSamples = make([]float64, 0, totalSamples)
+
 	r.log.Debug().
 		Msg("Fuel range reset")
+}
+
+// SetLive sets the replaying flag to indicate if the current session is a replay
+func (r *Range) SetLive(isLive bool) {
+	if r.isLive == isLive {
+		return
+	}
+
+	r.isLive = isLive
+
+	r.log.Info().
+		Bool("is_live", isLive).
+		Msg("Set fuel range sample granularity")
+
+	r.Reset()
 }
 
 // Update updates fuel consumption based on the current coordinate and fuel level
@@ -89,7 +117,8 @@ func (r *Range) Update(odometerReading float64, fuelLevel float32) {
 
 		r.fuelRateSamples = append(r.fuelRateSamples, fuelPerMeter)
 
-		r.fuelRate = r.fuelRatePercentile(fuelRatePercentile)
+		// r.fuelRate = r.fuelRatePercentile(fuelRatePercentile)
+		r.fuelRate = r.fuelRateMA()
 
 		r.distanceMeters = float64(fuelLevel) / r.fuelRate
 

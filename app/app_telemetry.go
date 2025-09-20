@@ -30,6 +30,38 @@ func (a *App) checkForNewLap() {
 	}
 }
 
+func (a *App) checkRaceComplete() {
+	lastLap := a.state.last.lapNumber
+	currentLap := a.state.current.lapNumber
+	raceLaps := int16(a.gtClient.Telemetry.RaceLaps())
+
+	// TODO: handle endurance races, time trials and free practice sessions
+	if raceLaps == 0 {
+		a.state.raceCompleteTime = 0
+
+		return
+	}
+
+	// Invalid state
+	if lastLap > currentLap || lastLap >= raceLaps {
+		a.state.raceCompleteTime = 0
+
+		return
+	}
+
+	if currentLap >= raceLaps {
+		if a.state.raceCompleteTime == 0 {
+			a.state.raceCompleteTime = a.gtClient.Telemetry.TimeOfDay()
+		}
+
+		a.log.Info().
+			Int16("current_lap", currentLap).
+			Int16("race_laps", raceLaps).
+			Msg("Race complete")
+		return
+	}
+}
+
 // sequenceHasAdvanced checks if the telemetry sequence number has advanced.
 func (a *App) sequenceHasAdvanced() bool {
 	if a.state.current.sequenceNumber == 0 || a.state.current.sequenceDelta == 0 {
@@ -99,19 +131,14 @@ func (a *App) updateState() (didUpdate bool) {
 	a.state.current.sequenceNumber = a.gtClient.Telemetry.SequenceID()
 	a.state.current.sequenceDelta = a.state.current.sequenceNumber - a.state.last.sequenceNumber
 	a.state.current.timeOfDay = a.gtClient.Telemetry.TimeOfDay()
+	a.state.current.isLive = a.gtClient.Telemetry.Flags().Live
 
 	// Vehicle
 	a.state.current.transmissionGear = a.gtClient.Telemetry.CurrentGear()
 
-	// Lap
+	// Race
 	a.state.current.lapNumber = a.gtClient.Telemetry.CurrentLap()
 	a.state.current.lastLapTime = a.gtClient.Telemetry.LastLaptime()
-
-	if a.vehicleHasChanged() {
-		a.disableHaptics("vehicle changed")
-
-		a.updateVehicle()
-	}
 
 	return true
 }

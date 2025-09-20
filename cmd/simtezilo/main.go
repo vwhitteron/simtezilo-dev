@@ -53,7 +53,7 @@ func main() {
 		logger.Fatal().Err(err).Msg("Failed to setup Pyroscope profiler")
 	}
 
-	app, err := app.NewApp(app.AppOptions{
+	app, err := app.New(app.AppOptions{
 		VehicleDB:  vehicleDB,
 		Done:       done,
 		Logger:     &logger,

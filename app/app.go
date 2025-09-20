@@ -29,77 +29,82 @@ import (
 
 // vehicleRecord holds static vehicle data loaded from the GT vehicle database
 type vehicleRecord struct {
-	ID          uint32
-	vehicleType string
-	engine      engineCharacteristics
-	revLimit    uint16
+	ID          uint32                // Unique vehicle ID from telemetry
+	vehicleType string                // Vehicle type
+	engine      engineCharacteristics // Engine characteristics
+	revLimit    uint16                // Engine rev limit in RPM
 }
 
 // raceState holds transient race data for haptic generation and pit radio notifications
 type raceState struct {
 	// Telemetry session information
-	sequenceNumber uint32
-	sequenceDelta  uint32
-	timeOfDay      time.Duration
+	sequenceNumber uint32        // Current telemetry sequence number
+	sequenceDelta  uint32        // Delta between current and last telemetry sequence number
+	timeOfDay      time.Duration // Time of day in the telemetry session
 
 	// Vehicle information
-	transmissionGear int
+	transmissionGear int // Current transmission gear
 
 	// Race timing information
-	lapNumber   int16
-	lastLapTime time.Duration
+	lapNumber   int16         // Current lap number
+	lastLapTime time.Duration // Last lap time duration
+	isLive      bool          // Flag to indicate if the telemetry is live or a replay
 }
 
 // appState holds the overall application state
 type appState struct {
-	hapticsEnabled  bool // TODO: move state to haptics?
-	telemetryActive bool
-	current         raceState
-	last            raceState
-	engine          engineState
+	hapticsEnabled   bool          // Flag to indicate if haptics are enabled // TODO: move state to haptics?
+	telemetryActive  bool          // Flag to indicate if telemetry is active
+	raceCompleteTime time.Duration // Time of day when the race was completed
+	current          raceState     // Race state at the current telemetry sequence
+	last             raceState     // Race state at the last telemetry sequence
+	engine           engineState   // Engine state for haptic generation
 }
 
+// App is the main application struct holding all components and state
 type App struct {
-	log    zerolog.Logger
-	config *config.Config
-	done   chan bool
+	log    zerolog.Logger // Application logger
+	config *config.Config // Application configuration
+	done   chan bool      // Channel to signal application shutdown
 
-	ui *ui.UserInterface
+	ui *ui.UserInterface // User interface manager
 
-	i18n    *i18n.Language
-	display hardware.Display
+	i18n    *i18n.Language   // Language translations
+	display hardware.Display // Hardware display interface
 
-	gtClient   *telemetry_client.GTClient
-	pitRadio   pitradio.PitRadioService
-	kinematics kinematics.KinematicsTracker
-	synth      *synth.Synthesizer
+	gtClient   *telemetry_client.GTClient   // GT telemetry client
+	pitRadio   pitradio.PitRadioService     // Pit radio notification service
+	kinematics kinematics.KinematicsTracker // Vehicle kinematics tracker
+	synth      *synth.Synthesizer           // Audio synthesizer for haptic feedback
 
-	odometer  *odometer.Meter
-	fuelRange *fuelrange.Range
-	circuit   *circuit.Circuit
+	odometer  *odometer.Meter  // Odometer for distance tracking
+	fuelRange *fuelrange.Range // Fuel range estimator
+	circuit   *circuit.Circuit // Circuit information and tracking
 
-	transmissionGainMin float64
+	transmissionGainMin float64 // Minimum transmission gain based on vehicle type
 
-	state         appState
-	pitRadioState *pitRadioState
-	vehicle       vehicleRecord
+	state         appState       // Application state tracker
+	pitRadioState *pitRadioState // Current pit radio state
+	vehicle       vehicleRecord  // Current vehicle information
 
-	telemetryChartFeed chan map[string]float32
-	webEnabled         bool
-	webUI              *webui.WebUI
-	webSequenceId      uint32
+	telemetryChartFeed chan map[string]float32 // Channel for sending telemetry data to web UI
+	webEnabled         bool                    // Flag to enable or disable the web UI
+	webUI              *webui.WebUI            // Web UI server and handler
+	webSequenceId      uint32                  // Last sequence ID sent to the web UI
 
-	lapStartEvents chan uint32
+	lapStartEvents chan uint32 // Channel for notifying new lap starts
 }
 
+// AppOptions holds configuration options for initializing the App
 type AppOptions struct {
-	VehicleDB  string
-	Done       chan bool
-	Logger     *zerolog.Logger
-	WebEnabled bool
+	VehicleDB  string          // Path to an external vehicle database file
+	Done       chan bool       // Channel to signal application shutdown
+	Logger     *zerolog.Logger // Logger instance for application logging
+	WebEnabled bool            // Flag to enable or disable the web UI
 }
 
-func NewApp(opts AppOptions) (*App, error) {
+// New creates a new App instance and sets up all components based on the provided options
+func New(opts AppOptions) (*App, error) {
 	a := &App{
 		log:  opts.Logger.With().Str("package", "app").Logger(),
 		done: opts.Done,
@@ -338,6 +343,7 @@ func NewApp(opts AppOptions) (*App, error) {
 	return a, nil
 }
 
+// Run starts the main application loop and associated goroutines
 func (a *App) Run() {
 	go a.ui.HIDEventHandler()
 
@@ -432,8 +438,11 @@ func (a *App) Run() {
 			return
 		case <-tickerHaptics.C:
 			if didUpdate := a.updateState(); didUpdate {
+				a.handleVehicleChange()
+				a.handleLiveFlagChange()
 				a.hapticEvents()
 			}
+			a.checkRaceComplete()
 			a.checkForNewLap()
 		case <-tickerGeneral.C:
 			a.sessionIsComplete()
@@ -452,6 +461,7 @@ func (a *App) Run() {
 	}
 }
 
+// Close performs cleanup and resource deallocation before application exit
 func (a *App) Close() {
 	a.log.Info().Msg("Shutting down app")
 
@@ -479,6 +489,8 @@ func (a *App) Close() {
 	a.display.Close()
 }
 
+// sessionIsComplete checks if the session has completed.
+// Returns true if the session is complete and signals the done channel.
 func (a *App) sessionIsComplete() bool {
 	if a.gtClient.Finished {
 		a.log.Debug().Msg("session finished")
@@ -490,6 +502,8 @@ func (a *App) sessionIsComplete() bool {
 	return false
 }
 
+// sessionHasReset checks if the session has been reset based on telemetry data.
+// Returns true if the session has been reset.
 func (a *App) sessionHasReset() bool {
 	if a.gtClient.Telemetry.Flags().Loading {
 		a.log.Debug().
@@ -506,10 +520,12 @@ func (a *App) sessionHasReset() bool {
 func (a *App) resetAppState() {
 	a.state.last = raceState{
 		transmissionGear: kinematics.NullGear,
+		isLive:           true,
 	}
 
 	a.state.current = raceState{
 		transmissionGear: kinematics.NullGear,
+		isLive:           true,
 	}
 
 	a.synth.Silence()
@@ -517,6 +533,29 @@ func (a *App) resetAppState() {
 	a.kinematics = kinematics.NewKinematicsTracker()
 }
 
+// handleLiveFlagChange checks for changes in the telemetry live/replay flag and updates the fuel range estimator accordingly
+func (a *App) handleLiveFlagChange() {
+	currentLive := a.state.current.isLive
+	lastLive := a.state.last.isLive
+
+	// if a.state.current.isLive == a.state.last.isLive {
+	if currentLive == lastLive {
+		return
+	}
+
+	a.fuelRange.SetLive(a.state.current.isLive)
+}
+
+// handleVehicleChange checks for changes in the vehicle and updates vehicle data accordingly
+func (a *App) handleVehicleChange() {
+	if a.vehicleHasChanged() {
+		a.disableHaptics("vehicle changed")
+
+		a.updateVehicle()
+	}
+}
+
+// updateVehicle updates the vehicle characteristcs from the current telemetry vehicle ID
 func (a *App) updateVehicle() {
 	vehicleType := a.gtClient.Telemetry.VehicleType()
 	engineLayout := a.gtClient.Telemetry.VehicleEngineLayout()
@@ -584,9 +623,11 @@ func (a *App) updateVehicle() {
 
 	a.state.last.transmissionGear = a.state.current.transmissionGear
 
+	a.odometer.Reset()
 	a.fuelRange.Reset()
 }
 
+// gearHasChanged checks if the gear has changed based on telemetry data.
 func (a *App) gearHasChanged() bool {
 	// ignore gear change events from initial unset state
 	if a.kinematics.Current.TransmissionGear == kinematics.NullGear ||
@@ -599,4 +640,15 @@ func (a *App) gearHasChanged() bool {
 	}
 
 	return true
+}
+
+// raceComplete returns true 5 seconds after the race has completed
+func (a *App) raceHasFinished() bool {
+	currentTime := a.gtClient.Telemetry.TimeOfDay()
+
+	if a.state.raceCompleteTime > currentTime+5*time.Second {
+		return true
+	}
+
+	return false
 }
