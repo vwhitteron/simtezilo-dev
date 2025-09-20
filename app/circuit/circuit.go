@@ -12,10 +12,11 @@ type updateType bool
 const (
 	shortestCircuitLengthMeters int = 900 // Minimum length in meters (Northern Isle Speedway)
 
-	StartLineCoordinate updateType = true
-	GeneralCoordinate   updateType = false
+	StartLineCoordinate updateType = true  // Flag to indicate a coordinate is from start line crossing
+	GeneralCoordinate   updateType = false // Flag to indicate a coordinate is from general circuit position
 )
 
+// Initial unknown circuit info
 var circuitInfoInit = CircuitInfo{
 	ID:        "unknown",
 	Name:      "unknown",
@@ -74,6 +75,11 @@ func (c *Circuit) ResetLapProgress() {
 		Msg("Circuit reset")
 }
 
+// CircuitName returns the name of the current circuit.
+func (c *Circuit) Name() string {
+	return c.info.Name
+}
+
 // LengthMeters returns the length of the current circuit in meters.
 func (c *Circuit) LengthMeters() float64 {
 	return float64(c.info.Length)
@@ -100,18 +106,18 @@ func (c *Circuit) LapProgressRemaining() float64 {
 // UpdateCircuit updates the current circuit information by matching the provided coordinate with a circuit DB entry
 // The isStartLine flag indicates if the coordinate is from a start line crossing or general positional update
 // TODO: need start line coordinates are returned in CircuitInfo to avoid start line re-udpating c.info
-func (c *Circuit) UpdateCircuit(coordinate gttelemetry.Vector, updateType updateType) {
+func (c *Circuit) UpdateCircuit(coordinate gttelemetry.Vector, updateType updateType) (didUpdate bool) {
 	c.setLapStartMarker()
 
 	if c.database == nil {
-		return
+		return false
 	}
 
 	var matchingCircuitIDs []string
 	if updateType == StartLineCoordinate {
 		// Only update the circuit by start line once after init/reset
 		if coordinate == c.info.StartLine {
-			return
+			return false
 		}
 
 		var found bool
@@ -122,12 +128,12 @@ func (c *Circuit) UpdateCircuit(coordinate gttelemetry.Vector, updateType update
 				Str("type", "start line").
 				Msg("No coordinate matched")
 
-			return
+			return false
 		}
 	} else {
 		// Only update the circuit by coordinate after init/reset
 		if c.info != circuitInfoInit {
-			return
+			return false
 		}
 
 		var found bool
@@ -138,7 +144,7 @@ func (c *Circuit) UpdateCircuit(coordinate gttelemetry.Vector, updateType update
 				Str("type", "circuit coordinate").
 				Msg("No coordinate matched")
 
-			return
+			return false
 		}
 	}
 
@@ -148,6 +154,11 @@ func (c *Circuit) UpdateCircuit(coordinate gttelemetry.Vector, updateType update
 
 	circuitID := matchingCircuitIDs[0]
 
+	// No change in circuit ID
+	if circuitID == c.info.ID {
+		return false
+	}
+
 	var found bool
 	c.info, found = c.database.GetTrackByID(circuitID)
 	if !found {
@@ -156,7 +167,7 @@ func (c *Circuit) UpdateCircuit(coordinate gttelemetry.Vector, updateType update
 			Str("source", "start line").
 			Msg("Circuit not found in inventory")
 
-		return
+		return false
 	}
 
 	c.info.StartLine = coordinate
@@ -165,6 +176,8 @@ func (c *Circuit) UpdateCircuit(coordinate gttelemetry.Vector, updateType update
 		Str("track", c.info.Name).
 		Str("source", "start line").
 		Msg("Circuit updated")
+
+	return true
 }
 
 // setLapStartMarker sets the distance at which the current lap started.
