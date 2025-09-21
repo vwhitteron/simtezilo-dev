@@ -1,35 +1,33 @@
 package app
 
 import (
-	"time"
-
 	"github.com/vwhitteron/simtezilo-dev/app/circuit"
 )
 
-func (a *App) newLapFuelRangeHandler() {
-	a.log.Debug().
-		Str("component", "new lap fuel range handler").
-		Msg("Start")
+// func (a *App) newLapFuelRangeHandler() {
+// 	a.log.Debug().
+// 		Str("component", "new lap fuel range handler").
+// 		Msg("Start")
 
-	for {
-		select {
-		case <-a.lapStartEvents:
-			coordinates := a.gtClient.Telemetry.PositionalMapCoordinates()
-			odometerReading := a.odometer.Add(coordinates)
-			lap := a.state.current.lapNumber
-			a.circuit.UpdateDistanceTravelled(odometerReading, lap, circuit.StartLineCoordinate)
+// 	for {
+// 		select {
+// 		case <-a.lapStartEvents:
+// 			coordinates := a.gtClient.Telemetry.PositionalMapCoordinates()
+// 			odometerReading := a.odometer.Add(coordinates)
+// 			lap := a.state.current.lapNumber
+// 			a.circuit.UpdateDistanceTravelled(odometerReading, lap, circuit.StartLineCoordinate)
 
-			currentPos := a.gtClient.Telemetry.PositionalMapCoordinates()
-			if didUpdate := a.circuit.UpdateCircuit(currentPos, circuit.StartLineCoordinate); didUpdate {
-				a.odometer.Reset()
-				a.fuelRange.Reset()
-				a.state.last.lastLapTime = 0
-			}
-		default:
-			time.Sleep(16 * time.Millisecond)
-		}
-	}
-}
+// 			currentPos := a.gtClient.Telemetry.PositionalMapCoordinates()
+// 			if didUpdate := a.circuit.UpdateCircuit(currentPos, circuit.StartLineCoordinate); didUpdate {
+// 				a.odometer.Reset()
+// 				a.fuelRange.Reset()
+// 				a.state.last.lastLapTime = 0
+// 			}
+// 		default:
+// 			time.Sleep(16 * time.Millisecond)
+// 		}
+// 	}
+// }
 
 // updateFuelConsumption calculates lap distance, vehicle fuel consumption and range
 func (a *App) updateFuelConsumption() {

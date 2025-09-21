@@ -102,9 +102,5 @@ func (d *DiscordBot) MessageDispatcher(logger zerolog.Logger) {
 
 // ready updates the watch status of the bot user
 func ready(s *discordgo.Session, event *discordgo.Event) {
-	err := s.UpdateWatchStatus(0, "Gran Turismo 7")
-	if err != nil {
-		fmt.Println(err.Error())
-		return
-	}
+	_ = s.UpdateWatchStatus(0, "Gran Turismo 7")
 }

@@ -10,7 +10,7 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/fuelrange"
 	"github.com/vwhitteron/simtezilo-dev/app/i18n"
 	"github.com/vwhitteron/simtezilo-dev/app/i18n/translations"
-	telemetry "github.com/zetetos/gt-telemetry"
+	gttelemetry "github.com/zetetos/gt-telemetry"
 )
 
 // --- Mocks and stubs ---
@@ -46,7 +46,7 @@ func TestPitRadioTestSuite(t *testing.T) {
 }
 
 func (suite *PitRadioTestSuite) SetupTest() {
-	gtClient, err := telemetry.NewGTClient(telemetry.GTClientOpts{})
+	gtClient, err := gttelemetry.New(gttelemetry.Options{})
 	if err != nil {
 		suite.FailNow("Failed to create GTClient", err)
 	}

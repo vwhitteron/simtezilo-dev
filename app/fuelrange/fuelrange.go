@@ -9,11 +9,11 @@ import (
 const (
 	initialFuelLevel       float64 = -1.0                    // Initial fuel level in percent
 	initialOdometerReading float64 = -1.0                    // Initial odometer reading in meters
-	sampleCount            int     = 6000                    // Number of samples to store in the buffer
 	rangeLapsUnknown       float64 = 10000                   // Default (very high) range in laps when unknown
 	rangeDistanceUnknown   float64 = rangeLapsUnknown * 1000 // Default (unknown) range in meters
 	fuelRatePercentile     int     = 50                      // Percentile fuel consumption rate to use for range estimation
 	fuelRangeMinSamples    int     = 1000                    // Minimum number of samples required to provide a reliable range estimate
+	fuelRangeMaxSamples    int     = 6000                    // Number of samples to store in the buffer
 )
 
 type Range struct {
@@ -26,6 +26,7 @@ type Range struct {
 	distanceMeters          float64   // Estimated distance in meters that can be travelled with current fuel level
 	refueling               bool      // Flag to indicate if refuelling is in progress
 	isLive                  bool      // Flag to indicate if a session is live or a replay
+	maxSamples              int       // Maximum number of samples to store in the buffer
 	minSamples              int       // Minimum number of samples required to provide a reliable range estimate
 }
 
@@ -48,19 +49,19 @@ func (r *Range) Reset() {
 	r.distanceMeters = 0
 	r.refueling = false
 
-	minSamples := fuelRangeMinSamples
-	totalSamples := sampleCount
-
 	// Replays reduce fuel samples by ~100x compared to a live session
-	if r.isLive {
-		minSamples = fuelRangeMinSamples / 100
-		totalSamples = sampleCount / 100
+	minSamples := fuelRangeMinSamples
+	maxSamples := fuelRangeMaxSamples
+	if !r.isLive {
+		minSamples = minSamples / 100
+		maxSamples = maxSamples / 100
 	}
 
 	r.minSamples = minSamples
-	r.fuelRateSamples = make([]float64, 0, totalSamples)
+	r.maxSamples = maxSamples
+	r.fuelRateSamples = make([]float64, 0, r.maxSamples)
 
-	r.log.Debug().
+	r.log.Info().
 		Msg("Fuel range reset")
 }
 
@@ -91,10 +92,10 @@ func (r *Range) Update(odometerReading float64, fuelLevel float32) {
 
 	// Reset fuel range when odometer is rolled back or reset
 	if odometerReading < r.lastOdometerReading {
-		r.log.Debug().
+		r.log.Info().
 			Float64("last_odometer", r.lastOdometerReading).
 			Float64("current_odometer", odometerReading).
-			Msg("Odometer reset")
+			Msg("Odometer reset detected")
 
 		r.Reset()
 
@@ -106,10 +107,10 @@ func (r *Range) Update(odometerReading float64, fuelLevel float32) {
 
 	consumed := r.fuelConsumed(float64(fuelLevel))
 
-	length := len(r.fuelRateSamples)
+	samples := len(r.fuelRateSamples)
 
 	if consumed > 0 && r.distanceSinceLastUpdate > 0 {
-		if length >= sampleCount {
+		if samples >= fuelRangeMaxSamples {
 			r.fuelRateSamples = r.fuelRateSamples[1:]
 		}
 
@@ -158,7 +159,7 @@ func (r *Range) DistanceMeters() float64 {
 	}
 
 	// Not enough samples to provide a reliable estimate
-	if len(r.fuelRateSamples) < fuelRangeMinSamples {
+	if len(r.fuelRateSamples) < r.minSamples {
 		return rangeDistanceUnknown
 	}
 

@@ -131,8 +131,8 @@ github.com/theojulienne/go-wireless v1.2.0 h1:9ElC6Tv17jqiIXwskVH4GuScK5qAzvLAuL
 github.com/theojulienne/go-wireless v1.2.0/go.mod h1:VgY9MuPShbRUwTVQArIgfwYJwAs9Q1zObxJiQFiVK8E=
 github.com/xo/terminfo v0.0.0-20210125001918-ca9a967f8778 h1:QldyIu/L63oPpyvQmHgvgickp1Yw510KJOqX7H24mg8=
 github.com/xo/terminfo v0.0.0-20210125001918-ca9a967f8778/go.mod h1:2MuV+tbUrU1zIOPMxZ5EncGwgmMJsa+9ucAQZXxsObs=
-github.com/zetetos/gt-telemetry v1.10.1-0.20250911011215-5bade5d610a0 h1:8CnVuBqTIcjXdiVCu+lOr2lEHF/wdRoXqEWHe5JUt9w=
-github.com/zetetos/gt-telemetry v1.10.1-0.20250911011215-5bade5d610a0/go.mod h1:Q13RteVzm1qq3QErFJxMRlvcE5TnY5ZujT2FuHrdCMg=
+github.com/zetetos/gt-telemetry v1.10.1-0.20250921103704-d4978a8b92dc h1:DJYnhW9/xgXuYLQ9oZdmUmUcmjdGlPwnKbIwAW9ZQrw=
+github.com/zetetos/gt-telemetry v1.10.1-0.20250921103704-d4978a8b92dc/go.mod h1:zjQkWn4hvnvQ9ItXMmE4Ka7kbqJsASOWT27XFiJvzkc=
 go.uber.org/multierr v1.11.0 h1:blXXJkSxSSfBVBlC76pxqeO+LN3aDfLQo+309xJstO0=
 go.uber.org/multierr v1.11.0/go.mod h1:20+QtiLqy0Nd6FdQB9TLXag12DsQkrbs3htMFfDN80Y=
 golang.org/x/crypto v0.0.0-20210421170649-83a5a9bb288b/go.mod h1:T9bdIzuCu7OtxOm1hfPfRQxPLYneinmdGuTeoZ9dtd4=

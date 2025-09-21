@@ -79,21 +79,21 @@ func (a *App) sendPitRadioMessage() {
 	a.notifyGridPositionChange()
 }
 
-func (a *App) newLapNotificationHandler() {
-	a.log.Debug().
-		Str("handler", "new lap notification").
-		Msg("Start")
+// func (a *App) newLapNotificationHandler() {
+// 	a.log.Debug().
+// 		Str("handler", "new lap notification").
+// 		Msg("Start")
 
-	for {
-		select {
-		case <-a.lapStartEvents:
-			a.notifyLapTime()
-			a.notifyLapNumber()
-		default:
-			time.Sleep(8 * time.Millisecond)
-		}
-	}
-}
+// 	for {
+// 		select {
+// 		case <-a.lapStartEvents:
+// 			a.notifyLapTime()
+// 			a.notifyLapNumber()
+// 		default:
+// 			time.Sleep(8 * time.Millisecond)
+// 		}
+// 	}
+// }
 
 // notifyCircuitChange sends a circuit change notification over the pit radio
 func (a *App) notifyCircuitChange() {
@@ -199,6 +199,10 @@ func (a *App) notifyLapTime() {
 		return
 	}
 
+	if a.pitRadioState.lastNotifiedLapTime == a.state.current.lastLapTime {
+		return
+	}
+
 	a.pitRadioState.lastNotifiedLapTime = a.state.current.lastLapTime
 
 	if a.state.current.lastLapTime <= 0 {
@@ -247,10 +251,14 @@ func (a *App) notifyLapNumber() {
 	raceLaps := int16(a.gtClient.Telemetry.RaceLaps())
 
 	if a.pitRadioState.lastNotifiedLapNumber >= currentLap {
+		fmt.Printf("Lap already notified: last %d current %d\n", a.pitRadioState.lastNotifiedLapNumber, currentLap)
+
 		return
 	}
 
 	if currentLap <= 0 || currentLap > raceLaps {
+		fmt.Printf("Invalid lap number: %d of %d\n", currentLap, raceLaps)
+
 		return
 	}
 
@@ -495,8 +503,6 @@ func notifyDuration(lapTime time.Duration) string {
 	}
 
 	millisecondsStr := fmt.Sprintf("%03d", milliseconds)
-
-	fmt.Printf("%s:%s.%s\n", minutesStr, secondsStr, millisecondsStr)
 
 	return pronounceTime(minutesStr, secondsStr, millisecondsStr, false)
 }

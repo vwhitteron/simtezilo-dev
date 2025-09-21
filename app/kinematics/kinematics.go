@@ -7,7 +7,8 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/kinematics/translationalenvelope"
 	"github.com/vwhitteron/simtezilo-dev/app/kinematics/vector"
 	"github.com/vwhitteron/simtezilo-dev/app/signal"
-	telemetry_client "github.com/zetetos/gt-telemetry"
+	gttelemetry "github.com/zetetos/gt-telemetry"
+	gtmodels "github.com/zetetos/gt-telemetry/pkg/models"
 )
 
 type PositionalDerivatives struct {
@@ -19,20 +20,20 @@ type PositionalDerivatives struct {
 
 type CalculatedTranslationalDerivatives struct {
 	PositionalDerivatives
-	Delta    telemetry_client.Vector
-	Velocity telemetry_client.Vector
+	Delta    gtmodels.Vector
+	Velocity gtmodels.Vector
 }
 
 type RotationalDerivatives struct {
 	PositionalDerivatives
-	Delta    telemetry_client.RotationalEnvelope
-	Velocity telemetry_client.RotationalEnvelope
+	Delta    gtmodels.RotationalEnvelope
+	Velocity gtmodels.RotationalEnvelope
 }
 
 type TranslationalDerivatives struct {
 	PositionalDerivatives
-	Delta    telemetry_client.TranslationalEnvelope
-	Velocity telemetry_client.TranslationalEnvelope
+	Delta    gtmodels.TranslationalEnvelope
+	Velocity gtmodels.TranslationalEnvelope
 }
 
 type Kinematics struct {
@@ -81,7 +82,7 @@ func newKinematics() Kinematics {
 }
 
 // TODO: ideally this should not be given the gt client
-func (k *KinematicsTracker) Update(windowSeconds float64, gtclient *telemetry_client.GTClient) {
+func (k *KinematicsTracker) Update(windowSeconds float64, gtclient *gttelemetry.Client) {
 	k.Last = k.Current
 
 	k.Current.Format = getTelemetryFormat(gtclient)
@@ -141,13 +142,14 @@ func (k *KinematicsTracker) GetSurgeGforce() float64 {
 	return gForce
 }
 
-func getTelemetryFormat(gt *telemetry_client.GTClient) string {
-	format, _ := gt.Telemetry.RawTelemetry.HasSectionTilde()
-	if format {
+func getTelemetryFormat(gt *gttelemetry.Client) string {
+	isAddendum2, _ := gt.Telemetry.RawTelemetry.Addendum2Format()
+	if isAddendum2 {
 		return "~"
 	}
-	format, _ = gt.Telemetry.RawTelemetry.HasSectionB()
-	if format {
+
+	isAddendum1, _ := gt.Telemetry.RawTelemetry.Addendum1Format()
+	if isAddendum1 {
 		return "B"
 	}
 

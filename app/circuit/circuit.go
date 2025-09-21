@@ -4,7 +4,8 @@ import (
 	"fmt"
 
 	"github.com/rs/zerolog"
-	gttelemetry "github.com/zetetos/gt-telemetry"
+	gtcircuits "github.com/zetetos/gt-telemetry/pkg/circuits"
+	gtmodels "github.com/zetetos/gt-telemetry/pkg/models"
 )
 
 type updateType bool
@@ -17,44 +18,39 @@ const (
 )
 
 // Initial unknown circuit info
-var circuitInfoInit = CircuitInfo{
+var circuitInfoInit = gtcircuits.CircuitInfo{
 	ID:        "unknown",
 	Name:      "unknown",
 	Length:    0,
-	StartLine: gttelemetry.Vector{X: 0, Y: 0, Z: 0},
+	StartLine: gtmodels.CoordinateNorm{X: 0, Y: 0, Z: 0},
 }
 
-// CircuitInfo holds information about a racing circuit.
+// TODO: add godoc
 type Circuit struct { // TODO: avoid stuttering Circuit.Circuit
-	log                     zerolog.Logger     // Logger instance
-	info                    CircuitInfo        // Current circuit information
-	database                *CircuitDB         // Circuit database
-	lap                     int16              // Current lap number being tracked
-	lapStartOdometerReading float64            // Distance at which the current lap started
-	lapProgressMeters       float64            // Lap distance tracking for uknown circuits
-	lastCoordinate          gttelemetry.Vector // Last known coordinate for distance tracking
+	database                gtcircuits.CircuitDB   // Circuit database for track identification
+	log                     zerolog.Logger         // Logger instance
+	info                    gtcircuits.CircuitInfo // Current circuit information
+	lap                     int16                  // Current lap number being tracked
+	lapStartOdometerReading float64                // Distance at which the current lap started
+	lapProgressMeters       float64                // Lap distance tracking for uknown circuits
+	lastCoordinate          gtmodels.Coordinate    // Last known coordinate for distance tracking
 }
 
 // New creates a new Circuit instance with the provided logger and initializes the circuit database.
-func New(logger zerolog.Logger) (*Circuit, error) {
-	database, err := NewDB() // TODO: support loading db from file
-	if err != nil {
-		return nil, fmt.Errorf("create circuit database: %w", err)
-	}
-
+func New(db gtcircuits.CircuitDB, logger zerolog.Logger) (*Circuit, error) {
 	return &Circuit{
+		database:                db,
 		log:                     logger.With().Str("package", "circuit").Logger(),
 		lapStartOdometerReading: 0,
 		lapProgressMeters:       0,
 		info:                    circuitInfoInit,
-		database:                database,
-		lastCoordinate:          gttelemetry.Vector{},
+		lastCoordinate:          gtmodels.Coordinate{},
 	}, nil
 }
 
 // Reset clears the current circuit information and lap start marker distance.
 func (c *Circuit) Reset() {
-	c.info = CircuitInfo{
+	c.info = gtcircuits.CircuitInfo{
 		ID:   circuitInfoInit.ID,
 		Name: circuitInfoInit.Name,
 	}
@@ -65,11 +61,21 @@ func (c *Circuit) Reset() {
 		Msg("Circuit reset")
 }
 
+func (c *Circuit) SetCircuit(circuit gtcircuits.CircuitInfo) (didUpdate bool) {
+	if c.info.ID == circuit.ID {
+		return false
+	}
+
+	c.info = circuit
+
+	return true
+}
+
 // ResetLapProgress clears the lap progress tracking without resetting the circuit information.
 func (c *Circuit) ResetLapProgress() {
 	c.lapStartOdometerReading = 0
 	c.lapProgressMeters = 0
-	c.lastCoordinate = circuitInfoInit.StartLine
+	c.lastCoordinate = gtmodels.Coordinate{}
 
 	c.log.Info().
 		Msg("Circuit reset")
@@ -106,22 +112,20 @@ func (c *Circuit) LapProgressRemaining() float64 {
 // UpdateCircuit updates the current circuit information by matching the provided coordinate with a circuit DB entry
 // The isStartLine flag indicates if the coordinate is from a start line crossing or general positional update
 // TODO: need start line coordinates are returned in CircuitInfo to avoid start line re-udpating c.info
-func (c *Circuit) UpdateCircuit(coordinate gttelemetry.Vector, updateType updateType) (didUpdate bool) {
+func (c *Circuit) UpdateCircuit(coordinate gtmodels.Coordinate, updateType updateType) (didUpdate bool) {
 	c.setLapStartMarker()
 
-	if c.database == nil {
-		return false
-	}
+	coordinateNorm := gtcircuits.NormaliseStartLineCoordinate(coordinate)
 
 	var matchingCircuitIDs []string
 	if updateType == StartLineCoordinate {
 		// Only update the circuit by start line once after init/reset
-		if coordinate == c.info.StartLine {
+		if coordinateNorm == c.info.StartLine {
 			return false
 		}
 
 		var found bool
-		matchingCircuitIDs, found = c.database.GetTracksAtStartLine(coordinate)
+		matchingCircuitIDs, found = c.database.GetCircuitsAtStartLine(coordinate)
 		if !found || len(matchingCircuitIDs) == 0 {
 			c.log.Debug().
 				Str("coordinate", fmt.Sprintf("(x: %.0f, y: %.0f, z: %.0f)", coordinate.X, coordinate.Y, coordinate.Z)).
@@ -137,7 +141,7 @@ func (c *Circuit) UpdateCircuit(coordinate gttelemetry.Vector, updateType update
 		}
 
 		var found bool
-		matchingCircuitIDs, found = c.database.GetTracksAtCoordinate(coordinate)
+		matchingCircuitIDs, found = c.database.GetCircuitsAtCoordinate(coordinate)
 		if !found || len(matchingCircuitIDs) == 0 {
 			c.log.Debug().
 				Str("coordinate", fmt.Sprintf("(x: %.0f, y: %.0f, z: %.0f)", coordinate.X, coordinate.Y, coordinate.Z)).
@@ -160,7 +164,7 @@ func (c *Circuit) UpdateCircuit(coordinate gttelemetry.Vector, updateType update
 	}
 
 	var found bool
-	c.info, found = c.database.GetTrackByID(circuitID)
+	c.info, found = c.database.GetCircuitByID(circuitID)
 	if !found {
 		c.log.Error().
 			Str("track_id", circuitID).
@@ -170,7 +174,7 @@ func (c *Circuit) UpdateCircuit(coordinate gttelemetry.Vector, updateType update
 		return false
 	}
 
-	c.info.StartLine = coordinate
+	c.info.StartLine = coordinateNorm
 
 	c.log.Info().
 		Str("track", c.info.Name).
@@ -235,4 +239,13 @@ func (c *Circuit) UpdateDistanceTravelled(odometerReading float64, lap int16, up
 // circuitIsKnown returns true if the current circuit is known
 func (c *Circuit) circuitIsKnown() bool {
 	return c.info.ID != circuitInfoInit.ID
+}
+
+// coordinateFloatToInt converts a float32 based gttelemetry.Coordinate to an int16 based circuits.Coordinate
+func coordinateFloatToInt(coordinate gtmodels.Coordinate) gtmodels.CoordinateNorm {
+	return gtmodels.CoordinateNorm{
+		X: int16(coordinate.X),
+		Y: int16(coordinate.Y),
+		Z: int16(coordinate.Z),
+	}
 }

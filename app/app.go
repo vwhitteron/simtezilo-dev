@@ -24,7 +24,7 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/synth"
 	"github.com/vwhitteron/simtezilo-dev/app/ui"
 	"github.com/vwhitteron/simtezilo-dev/app/ui/webui"
-	telemetry_client "github.com/zetetos/gt-telemetry"
+	gttelemetry "github.com/zetetos/gt-telemetry"
 )
 
 // vehicleRecord holds static vehicle data loaded from the GT vehicle database
@@ -72,7 +72,7 @@ type App struct {
 	i18n    *i18n.Language   // Language translations
 	display hardware.Display // Hardware display interface
 
-	gtClient   *telemetry_client.GTClient   // GT telemetry client
+	gtClient   *gttelemetry.Client          // GT telemetry client
 	pitRadio   pitradio.PitRadioService     // Pit radio notification service
 	kinematics kinematics.KinematicsTracker // Vehicle kinematics tracker
 	synth      *synth.Synthesizer           // Audio synthesizer for haptic feedback
@@ -292,7 +292,7 @@ func New(opts AppOptions) (*App, error) {
 
 	// initialise GT telemetry client
 	gtClientLogger := opts.Logger.With().Str("component", "gt client").Logger()
-	a.gtClient, err = telemetry_client.NewGTClient(telemetry_client.GTClientOpts{
+	a.gtClient, err = gttelemetry.New(gttelemetry.Options{
 		Source:    a.config.GetTelemetrySource(),
 		Logger:    &gtClientLogger,
 		LogLevel:  a.config.GetAppLogLevel(),
@@ -314,7 +314,7 @@ func New(opts AppOptions) (*App, error) {
 
 	a.fuelRange = fuelrange.New(*opts.Logger)
 
-	a.circuit, err = circuit.New(*opts.Logger)
+	a.circuit, err = circuit.New(*a.gtClient.CircuitDB, *opts.Logger)
 	if err != nil {
 		// TODO: fatal error?
 		a.log.Error().
@@ -345,13 +345,48 @@ func New(opts AppOptions) (*App, error) {
 
 // Run starts the main application loop and associated goroutines
 func (a *App) Run() {
+	a.startBackgroundTasks()
+
+	a.startAudioOutput()
+
+	a.mainLoop()
+}
+
+// Close performs cleanup and resource deallocation before application exit
+func (a *App) Close() {
+	a.log.Info().Msg("Shutting down app")
+
+	err := a.synth.Close()
+	if err != nil {
+		a.log.Error().
+			Err(err).
+			Str("component", "audio output device").
+			Str("result", "failure").
+			Msg("close")
+	}
+
+	a.pitRadio.Disconnect()
+
+	err = a.ui.Screen.RenderSplashScreen(a.i18n.GetString("ui.quit"))
+	if err != nil {
+		a.log.Error().
+			Err(err).
+			Str("component", "ui").
+			Str("sub", "screen").
+			Str("result", "failure").
+			Msg("render splash screen")
+	}
+	time.Sleep(1 * time.Second)
+	a.display.Close()
+}
+
+// startBackgroundTasks launches all necessary background goroutines for the application
+func (a *App) startBackgroundTasks() {
 	go a.ui.HIDEventHandler()
 
 	go a.pitRadio.MessageDispatcher(a.log)
 
-	go a.newLapFuelRangeHandler()
-
-	go a.newLapNotificationHandler()
+	go a.newLapHandler()
 
 	go func() {
 		err := a.pitRadio.Connect()
@@ -404,7 +439,9 @@ func (a *App) Run() {
 		a.webUI = webui.NewWebUI(a.log, a.telemetryChartFeed)
 		go a.webUI.Start()
 	}
+}
 
+func (a *App) startAudioOutput() {
 	outputSampleRate := beep.SampleRate(a.config.GetOutputSampleRateHz())
 	hapticStreamer := synth.NewHapticStream(a.synth, outputSampleRate)
 	err := speaker.Init(
@@ -423,7 +460,10 @@ func (a *App) Run() {
 	}
 
 	go speaker.Play(hapticStreamer)
+}
 
+// mainLoop is the primary application loop handling telemetry updates, haptics, UI updates, and pit radio notifications
+func (a *App) mainLoop() {
 	tickerHaptics := time.NewTicker((1000 / hapticFrameRate) * time.Millisecond)
 	tickerGeneral := time.NewTicker((1000 / telemetryFrameRate) * time.Millisecond)
 	tickerEngineHaptics := time.NewTicker((1000 / engineHapticFrameRate) * time.Millisecond)
@@ -461,32 +501,33 @@ func (a *App) Run() {
 	}
 }
 
-// Close performs cleanup and resource deallocation before application exit
-func (a *App) Close() {
-	a.log.Info().Msg("Shutting down app")
+func (a *App) newLapHandler() bool {
+	a.log.Debug().
+		Str("handler", "new lap events").
+		Msg("Start")
 
-	err := a.synth.Close()
-	if err != nil {
-		a.log.Error().
-			Err(err).
-			Str("component", "audio output device").
-			Str("result", "failure").
-			Msg("close")
+	for {
+		select {
+		case <-a.lapStartEvents:
+			coordinates := a.gtClient.Telemetry.PositionalMapCoordinates()
+			odometerReading := a.odometer.Add(coordinates)
+			lap := a.state.current.lapNumber
+			a.circuit.UpdateDistanceTravelled(odometerReading, lap, circuit.StartLineCoordinate)
+
+			currentPos := a.gtClient.Telemetry.PositionalMapCoordinates()
+			if didUpdate := a.circuit.UpdateCircuit(currentPos, circuit.StartLineCoordinate); didUpdate {
+				a.odometer.Reset()
+				a.fuelRange.Reset()
+				a.state.last.lastLapTime = 0
+			}
+
+			a.notifyLapTime()
+			a.notifyLapNumber()
+		default:
+			time.Sleep(8 * time.Millisecond)
+		}
 	}
 
-	a.pitRadio.Disconnect()
-
-	err = a.ui.Screen.RenderSplashScreen(a.i18n.GetString("ui.quit"))
-	if err != nil {
-		a.log.Error().
-			Err(err).
-			Str("component", "ui").
-			Str("sub", "screen").
-			Str("result", "failure").
-			Msg("render splash screen")
-	}
-	time.Sleep(1 * time.Second)
-	a.display.Close()
 }
 
 // sessionIsComplete checks if the session has completed.
@@ -543,6 +584,7 @@ func (a *App) handleLiveFlagChange() {
 		return
 	}
 
+	a.odometer.Reset()
 	a.fuelRange.SetLive(a.state.current.isLive)
 }
 

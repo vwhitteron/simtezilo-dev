@@ -152,5 +152,5 @@ func (a *App) vehicleHasChanged() bool {
 // When in the menu system the race laps will be set to uin16 max.
 // When at a  track screen before a session has started, the race laps will be set to 0.
 func (a *App) vehicleIsOnTrack() bool {
-	return a.gtClient.Telemetry.RaceLaps() < 65000
+	return a.gtClient.Telemetry.RaceLaps() < 32000
 }

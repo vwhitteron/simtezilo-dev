@@ -4,7 +4,7 @@ import (
 	"math"
 
 	"github.com/rs/zerolog"
-	telemetry "github.com/zetetos/gt-telemetry"
+	gtmodels "github.com/zetetos/gt-telemetry/pkg/models"
 )
 
 const (
@@ -12,16 +12,16 @@ const (
 )
 
 type Meter struct {
-	log            zerolog.Logger   // Logger instance
-	distanceMeters float64          // Total distance in meters
-	lastCoordinate telemetry.Vector // Last known coordinate for distance tracking
+	log            zerolog.Logger      // Logger instance
+	distanceMeters float64             // Total distance in meters
+	lastCoordinate gtmodels.Coordinate // Last known coordinate for distance tracking
 }
 
 func New(logger zerolog.Logger) *Meter {
 	m := Meter{
 		log:            logger.With().Str("package", "odometer").Logger(),
 		distanceMeters: 0,
-		lastCoordinate: telemetry.Vector{},
+		lastCoordinate: gtmodels.Coordinate{},
 	}
 
 	return &m
@@ -30,11 +30,14 @@ func New(logger zerolog.Logger) *Meter {
 // Reset clears the odometer distance and last known coordinate.
 func (m *Meter) Reset() {
 	m.distanceMeters = 0
-	m.lastCoordinate = telemetry.Vector{}
+	m.lastCoordinate = gtmodels.Coordinate{}
+
+	m.log.Info().
+		Msg("Odometer reset")
 }
 
 // Add updates the odometer with the current position and returns the distance travelled since the last update.
-func (m *Meter) Add(currentPos telemetry.Vector) float64 {
+func (m *Meter) Add(currentPos gtmodels.Coordinate) float64 {
 	dx := float64(currentPos.X - m.lastCoordinate.X)
 	dy := float64(currentPos.Y - m.lastCoordinate.Y)
 	dz := float64(currentPos.Z - m.lastCoordinate.Z)

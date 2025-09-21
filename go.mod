@@ -1,6 +1,6 @@
 module github.com/vwhitteron/simtezilo-dev
 
-go 1.24.4
+go 1.24.7
 
 require (
 	atomicgo.dev/keyboard v0.2.9
@@ -13,7 +13,7 @@ require (
 	github.com/spf13/viper v1.20.1
 	github.com/stretchr/testify v1.11.1
 	github.com/theojulienne/go-wireless v1.2.0
-	github.com/zetetos/gt-telemetry v1.10.1-0.20250911011215-5bade5d610a0
+	github.com/zetetos/gt-telemetry v1.10.1-0.20250921103704-d4978a8b92dc
 	golang.org/x/image v0.27.0
 	periph.io/x/conn/v3 v3.7.2
 	periph.io/x/host/v3 v3.8.2

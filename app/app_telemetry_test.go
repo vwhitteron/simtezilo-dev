@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/suite"
-	telemetry "github.com/zetetos/gt-telemetry"
+	gttelemetry "github.com/zetetos/gt-telemetry"
 )
 
 type TelemetryTestSuite struct {
@@ -18,7 +18,7 @@ func TestTelemetryTestSuite(t *testing.T) {
 }
 
 func (suite *TelemetryTestSuite) SetupTest() {
-	gtClient, err := telemetry.NewGTClient(telemetry.GTClientOpts{})
+	gtClient, err := gttelemetry.New(gttelemetry.Options{})
 	if err != nil {
 		suite.FailNow("Failed to create GTClient", err)
 	}
