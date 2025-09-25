@@ -5,6 +5,7 @@ import (
 
 	"github.com/rs/zerolog"
 	gtcircuits "github.com/zetetos/gt-telemetry/pkg/circuits"
+	"github.com/zetetos/gt-telemetry/pkg/models"
 	gtmodels "github.com/zetetos/gt-telemetry/pkg/models"
 )
 
@@ -117,7 +118,7 @@ func (c *Circuit) UpdateCircuit(coordinate gtmodels.Coordinate, updateType updat
 
 	coordinateNorm := gtcircuits.NormaliseStartLineCoordinate(coordinate)
 
-	var matchingCircuitIDs []string
+	var circuitID string
 	if updateType == CoordinateTypeStartLine {
 		// Only update the circuit by start line once after init/reset
 		if coordinateNorm == c.info.StartLine {
@@ -125,8 +126,8 @@ func (c *Circuit) UpdateCircuit(coordinate gtmodels.Coordinate, updateType updat
 		}
 
 		var found bool
-		matchingCircuitIDs, found = c.database.GetCircuitsAtStartLine(coordinate)
-		if !found || len(matchingCircuitIDs) == 0 {
+		circuitID, found = c.database.GetCircuitAtCoordinate(coordinate, models.CoordinateTypeStartLine)
+		if !found || len(circuitID) == 0 {
 			c.log.Debug().
 				Str("coordinate", fmt.Sprintf("(x: %.0f, y: %.0f, z: %.0f)", coordinate.X, coordinate.Y, coordinate.Z)).
 				Str("type", "start line").
@@ -141,8 +142,8 @@ func (c *Circuit) UpdateCircuit(coordinate gtmodels.Coordinate, updateType updat
 		}
 
 		var found bool
-		matchingCircuitIDs, found = c.database.GetCircuitsAtCoordinate(coordinate)
-		if !found || len(matchingCircuitIDs) == 0 {
+		circuitID, found = c.database.GetCircuitAtCoordinate(coordinate, models.CoordinateTypeCircuit)
+		if !found {
 			c.log.Debug().
 				Str("coordinate", fmt.Sprintf("(x: %.0f, y: %.0f, z: %.0f)", coordinate.X, coordinate.Y, coordinate.Z)).
 				Str("type", "circuit coordinate").
@@ -151,12 +152,6 @@ func (c *Circuit) UpdateCircuit(coordinate gtmodels.Coordinate, updateType updat
 			return false
 		}
 	}
-
-	if len(matchingCircuitIDs) != 1 {
-		return
-	}
-
-	circuitID := matchingCircuitIDs[0]
 
 	// No change in circuit ID
 	if circuitID == c.info.ID {
