@@ -1,6 +1,6 @@
 module github.com/vwhitteron/simtezilo-dev
 
-go 1.24.7
+go 1.24.6
 
 require (
 	atomicgo.dev/keyboard v0.2.9
