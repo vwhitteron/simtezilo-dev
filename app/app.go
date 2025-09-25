@@ -27,6 +27,15 @@ import (
 	gttelemetry "github.com/zetetos/gt-telemetry"
 )
 
+type gameState int
+
+const (
+	gameStateUnknown gameState = iota
+	gameStateMainMenu
+	gameStateRaceMenu
+	gameStateOnCircuit
+)
+
 // vehicleRecord holds static vehicle data loaded from the GT vehicle database
 type vehicleRecord struct {
 	ID          uint32                // Unique vehicle ID from telemetry
@@ -49,6 +58,7 @@ type raceState struct {
 	lapNumber   int16         // Current lap number
 	lastLapTime time.Duration // Last lap time duration
 	isLive      bool          // Flag to indicate if the telemetry is live or a replay
+	gameState   gameState
 }
 
 // appState holds the overall application state
@@ -477,26 +487,42 @@ func (a *App) mainLoop() {
 		case <-a.done:
 			return
 		case <-tickerHaptics.C:
+			a.handleGameStateChange()
+
+			if !a.gtClient.Telemetry.IsOnCircuit() {
+				continue
+			}
+
 			if didUpdate := a.updateState(); didUpdate {
 				a.handleVehicleChange()
-				a.handleLiveFlagChange()
-				a.hapticEvents()
+				a.generateForceHaptics()
 			}
 			a.checkRaceComplete()
 			a.checkForNewLap()
+
 		case <-tickerGeneral.C:
-			a.sessionIsComplete()
-			a.updateFuelConsumption()
+			if a.gtClient.Telemetry.IsOnCircuit() {
+				a.updateFuelConsumption()
+			}
+			a.updateCircuit()
 			a.sendTelemetryChartData()
+
 		case <-tickerEngineHaptics.C:
-			a.generateEngineHaptic()
+			if a.gtClient.Telemetry.IsOnCircuit() {
+				a.generateEngineHaptic()
+			}
+
 		case <-tickerDisplay.C:
 			a.ui.UpdateDisplay(ui.LiveData{
 				Gear:            a.kinematics.Current.TransmissionGear,
 				TelemetryActive: a.state.telemetryActive,
 			})
+
 		case <-tickerPitRadio.C:
-			a.sendPitRadioMessage()
+			if a.gtClient.Telemetry.IsOnCircuit() {
+				a.sendPitRadioMessage()
+			}
+
 		}
 	}
 }
@@ -509,13 +535,12 @@ func (a *App) newLapHandler() bool {
 	for {
 		select {
 		case <-a.lapStartEvents:
-			coordinates := a.gtClient.Telemetry.PositionalMapCoordinates()
-			odometerReading := a.odometer.Add(coordinates)
 			lap := a.state.current.lapNumber
-			a.circuit.UpdateDistanceTravelled(odometerReading, lap, circuit.StartLineCoordinate)
+			coordinate := a.gtClient.Telemetry.PositionalMapCoordinates()
+			odometerReading := a.odometer.Add(coordinate)
+			a.circuit.UpdateDistanceTravelled(odometerReading, lap, circuit.CoordinateTypeStartLine)
 
-			currentPos := a.gtClient.Telemetry.PositionalMapCoordinates()
-			if didUpdate := a.circuit.UpdateCircuit(currentPos, circuit.StartLineCoordinate); didUpdate {
+			if didUpdate := a.circuit.UpdateCircuit(coordinate, circuit.CoordinateTypeStartLine); didUpdate {
 				a.odometer.Reset()
 				a.fuelRange.Reset()
 				a.state.last.lastLapTime = 0
@@ -531,11 +556,10 @@ func (a *App) newLapHandler() bool {
 }
 
 // sessionIsComplete checks if the session has completed.
-// Returns true if the session is complete and signals the done channel.
+// Returns true if the session is complete
 func (a *App) sessionIsComplete() bool {
 	if a.gtClient.Finished {
 		a.log.Debug().Msg("session finished")
-		a.done <- true
 
 		return true
 	}
@@ -562,11 +586,13 @@ func (a *App) resetAppState() {
 	a.state.last = raceState{
 		transmissionGear: kinematics.NullGear,
 		isLive:           true,
+		gameState:        a.getGameState(),
 	}
 
 	a.state.current = raceState{
 		transmissionGear: kinematics.NullGear,
 		isLive:           true,
+		gameState:        a.getGameState(),
 	}
 
 	a.synth.Silence()
@@ -574,18 +600,83 @@ func (a *App) resetAppState() {
 	a.kinematics = kinematics.NewKinematicsTracker()
 }
 
-// handleLiveFlagChange checks for changes in the telemetry live/replay flag and updates the fuel range estimator accordingly
-func (a *App) handleLiveFlagChange() {
-	currentLive := a.state.current.isLive
-	lastLive := a.state.last.isLive
+func (a *App) getGameState() gameState {
+	switch {
 
-	// if a.state.current.isLive == a.state.last.isLive {
-	if currentLive == lastLive {
+	case a.gtClient.Telemetry.IsInMainMenu():
+		return gameStateMainMenu
+
+	case a.gtClient.Telemetry.IsInRaceMenu():
+		return gameStateRaceMenu
+
+	case a.gtClient.Telemetry.IsOnCircuit():
+		return gameStateOnCircuit
+
+	default:
+		return gameStateUnknown
+
+	}
+}
+
+func (a *App) handleGameStateChange() {
+	if a.state.current.gameState == a.state.last.gameState {
 		return
 	}
 
-	a.odometer.Reset()
-	a.fuelRange.SetLive(a.state.current.isLive)
+	switch {
+	case a.state.current.gameState == gameStateMainMenu:
+		a.disableHaptics("main menu")
+		a.resetPitRadioState()
+		a.vehicle = vehicleRecord{}
+		a.odometer.Reset()
+		a.fuelRange.Reset()
+		a.circuit.Reset()
+		a.resetAppState()
+
+		a.log.Debug().Msg("Entere main menu")
+
+	case a.state.current.gameState == gameStateRaceMenu:
+		a.disableHaptics("race menu")
+		a.resetPitRadioState()
+		a.odometer.Reset()
+		a.fuelRange.ResetEstimate()
+		a.circuit.ResetLapProgress()
+
+		a.log.Debug().Msg("Entere race menu")
+
+	case a.state.current.gameState == gameStateOnCircuit:
+		a.log.Debug().Msg("Vehicle on circuit")
+
+	case a.liveFlagHasChanged():
+		a.resetPitRadioState()
+		a.vehicle = vehicleRecord{}
+		a.odometer.Reset()
+		a.fuelRange.Reset()
+		a.fuelRange.SetLive(a.state.current.isLive)
+		a.circuit.Reset()
+		a.resetAppState()
+
+		a.log.Debug().Bool("is_live", a.state.current.isLive).Msg("Live flag change")
+
+	case a.timeOfDayHasReset():
+		a.resetPitRadioState()
+		a.odometer.Reset()
+		a.fuelRange.Reset()
+		a.circuit.ResetLapProgress()
+
+		a.log.Debug().Msg("Time of day reset")
+
+	// Assune vehicle pit stop
+	case a.gtClient.Telemetry.Flags().Loading:
+		a.fuelRange.ResetEstimate()
+
+		a.log.Debug().Msg("Loading flag")
+
+	}
+
+	if a.sessionIsComplete() {
+		a.done <- true
+	}
 }
 
 // handleVehicleChange checks for changes in the vehicle and updates vehicle data accordingly

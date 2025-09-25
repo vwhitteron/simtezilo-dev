@@ -27,8 +27,8 @@ func (a *App) disableHaptics(reason string) {
 	a.log.Debug().Bool("haptics enabled", a.state.hapticsEnabled).Str("reason", reason).Msg("haptics state change")
 }
 
-// hapticEvents generates haptic feedback based on the vehicle telemetry data.
-func (a *App) hapticEvents() {
+// generateForceHaptics generates haptic feedback based on the vehicle telemetry data.
+func (a *App) generateForceHaptics() {
 	startTime := time.Now()
 
 	if !a.sequenceHasAdvanced() {

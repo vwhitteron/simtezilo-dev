@@ -65,6 +65,16 @@ func (r *Range) Reset() {
 		Msg("Fuel range reset")
 }
 
+// ResetEstimate resets only the fuel range estimate but retains odometer and samples
+func (r *Range) ResetEstimate() {
+	r.distanceMeters = rangeDistanceUnknown
+	r.distanceSinceLastUpdate = 0
+	r.fuelRate = 0
+
+	r.log.Info().
+		Msg("Fuel range estimate reset")
+}
+
 // SetLive sets the replaying flag to indicate if the current session is a replay
 func (r *Range) SetLive(isLive bool) {
 	if r.isLive == isLive {
@@ -136,18 +146,16 @@ func (r *Range) Update(odometerReading float64, fuelLevel float32) {
 		r.fuelLevelAtLastUpdate = float64(fuelLevel)
 		r.refueling = false
 	} else if consumed < -1 {
-		// Detect refuelling (small margin to avoid occasional noise)
+		// Detect refuelling (-1 gives small margin to avoid occasional noise)
 		if !r.refueling {
+			r.ResetEstimate()
+			r.refueling = true
+
 			r.log.Debug().
 				Float32("fuel_level", fuelLevel).
 				Float64("last_fuel_level", r.fuelLevelAtLastUpdate).
 				Msg("Refuel detected")
-			r.refueling = true
 		}
-
-		r.Reset()
-
-		r.refueling = true
 	}
 }
 

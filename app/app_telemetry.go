@@ -116,6 +116,11 @@ func (a *App) timeOfDayHasReset() bool {
 	return timeOfDayDelta.Milliseconds() < 0
 }
 
+// liveFlagHasChanged checks if the live flag has changed between live and replay modes
+func (a *App) liveFlagHasChanged() bool {
+	return a.state.current.isLive != a.state.last.isLive
+}
+
 // updateState copies the current state to the previous state and updates the current
 // state with the latest telemetry data.
 // State updates are skipped if the sequence ID has not changed.
@@ -126,6 +131,9 @@ func (a *App) updateState() (didUpdate bool) {
 	}
 
 	a.state.last = a.state.current
+
+	// Game
+	a.state.current.gameState = a.getGameState()
 
 	// Session
 	a.state.current.sequenceNumber = a.gtClient.Telemetry.SequenceID()

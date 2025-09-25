@@ -31,11 +31,7 @@ import (
 
 // updateFuelConsumption calculates lap distance, vehicle fuel consumption and range
 func (a *App) updateFuelConsumption() {
-	if !a.sequenceHasAdvanced() {
-		return
-	}
-
-	if !a.telemetryIsActive() {
+	if !a.sequenceHasAdvanced() || !a.telemetryIsActive() {
 		return
 	}
 
@@ -52,9 +48,13 @@ func (a *App) updateFuelConsumption() {
 	fuelLevel := a.gtClient.Telemetry.FuelLevelPercent()
 	a.fuelRange.Update(odometerReading, fuelLevel)
 
-	a.circuit.UpdateDistanceTravelled(odometerReading, lap, circuit.GeneralCoordinate)
+	a.circuit.UpdateDistanceTravelled(odometerReading, lap, circuit.CoordinateTypeGeneral)
+}
 
-	if didUpdate := a.circuit.UpdateCircuit(coordinates, circuit.GeneralCoordinate); didUpdate {
+func (a *App) updateCircuit() {
+	coordinates := a.gtClient.Telemetry.PositionalMapCoordinates()
+
+	if didUpdate := a.circuit.UpdateCircuit(coordinates, circuit.CoordinateTypeGeneral); didUpdate {
 		a.odometer.Reset()
 		a.fuelRange.Reset()
 		a.state.last.lastLapTime = 0

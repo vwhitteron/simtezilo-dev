@@ -13,8 +13,8 @@ type updateType bool
 const (
 	shortestCircuitLengthMeters int = 900 // Minimum length in meters (Northern Isle Speedway)
 
-	StartLineCoordinate updateType = true  // Flag to indicate a coordinate is from start line crossing
-	GeneralCoordinate   updateType = false // Flag to indicate a coordinate is from general circuit position
+	CoordinateTypeStartLine updateType = true  // Flag to indicate a coordinate is from start line crossing
+	CoordinateTypeGeneral   updateType = false // Flag to indicate a coordinate is from general circuit position
 )
 
 // Initial unknown circuit info
@@ -118,7 +118,7 @@ func (c *Circuit) UpdateCircuit(coordinate gtmodels.Coordinate, updateType updat
 	coordinateNorm := gtcircuits.NormaliseStartLineCoordinate(coordinate)
 
 	var matchingCircuitIDs []string
-	if updateType == StartLineCoordinate {
+	if updateType == CoordinateTypeStartLine {
 		// Only update the circuit by start line once after init/reset
 		if coordinateNorm == c.info.StartLine {
 			return false
@@ -213,7 +213,7 @@ func (c *Circuit) setCircuitLength() {
 // TODO: this is duplicated in fuelrange.distanceTravelled
 func (c *Circuit) UpdateDistanceTravelled(odometerReading float64, lap int16, updateType updateType) {
 	// New lap started
-	if updateType == StartLineCoordinate {
+	if updateType == CoordinateTypeStartLine {
 		c.lapStartOdometerReading = odometerReading
 		c.lapProgressMeters = 0
 		c.lap = lap
