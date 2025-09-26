@@ -8,7 +8,7 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/kinematics/vector"
 	"github.com/vwhitteron/simtezilo-dev/app/signal"
 	gttelemetry "github.com/zetetos/gt-telemetry"
-	gtmodels "github.com/zetetos/gt-telemetry/pkg/models"
+	"github.com/zetetos/gt-telemetry/pkg/models"
 )
 
 type PositionalDerivatives struct {
@@ -20,20 +20,20 @@ type PositionalDerivatives struct {
 
 type CalculatedTranslationalDerivatives struct {
 	PositionalDerivatives
-	Delta    gtmodels.Vector
-	Velocity gtmodels.Vector
+	Delta    models.Vector
+	Velocity models.Vector
 }
 
 type RotationalDerivatives struct {
 	PositionalDerivatives
-	Delta    gtmodels.RotationalEnvelope
-	Velocity gtmodels.RotationalEnvelope
+	Delta    models.RotationalEnvelope
+	Velocity models.RotationalEnvelope
 }
 
 type TranslationalDerivatives struct {
 	PositionalDerivatives
-	Delta    gtmodels.TranslationalEnvelope
-	Velocity gtmodels.TranslationalEnvelope
+	Delta    models.TranslationalEnvelope
+	Velocity models.TranslationalEnvelope
 }
 
 type Kinematics struct {

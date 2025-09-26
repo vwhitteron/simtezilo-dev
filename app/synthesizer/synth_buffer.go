@@ -1,4 +1,4 @@
-package synth
+package synthesizer
 
 type Buffer interface {
 	Clear()

@@ -4,12 +4,9 @@ import (
 	"fmt"
 
 	"github.com/rs/zerolog"
-	gtcircuits "github.com/zetetos/gt-telemetry/pkg/circuits"
+	"github.com/zetetos/gt-telemetry/pkg/circuits"
 	"github.com/zetetos/gt-telemetry/pkg/models"
-	gtmodels "github.com/zetetos/gt-telemetry/pkg/models"
 )
-
-type updateType bool
 
 const (
 	shortestCircuitLengthMeters int = 900 // Minimum length in meters (Northern Isle Speedway)
@@ -19,39 +16,39 @@ const (
 )
 
 // Initial unknown circuit info
-var circuitInfoInit = gtcircuits.CircuitInfo{
+var circuitInfoInit = circuits.CircuitInfo{
 	ID:        "unknown",
 	Name:      "unknown",
 	Length:    0,
-	StartLine: gtmodels.CoordinateNorm{X: 0, Y: 0, Z: 0},
+	StartLine: models.CoordinateNorm{X: 0, Y: 0, Z: 0},
 }
 
 // TODO: add godoc
-type Circuit struct { // TODO: avoid stuttering Circuit.Circuit
-	database                gtcircuits.CircuitDB   // Circuit database for track identification
-	log                     zerolog.Logger         // Logger instance
-	info                    gtcircuits.CircuitInfo // Current circuit information
-	lap                     int16                  // Current lap number being tracked
-	lapStartOdometerReading float64                // Distance at which the current lap started
-	lapProgressMeters       float64                // Lap distance tracking for uknown circuits
-	lastCoordinate          gtmodels.Coordinate    // Last known coordinate for distance tracking
+type Circuit struct {
+	database                circuits.CircuitDB   // Circuit database for track identification
+	log                     zerolog.Logger       // Logger instance
+	info                    circuits.CircuitInfo // Current circuit information
+	lap                     int16                // Current lap number being tracked
+	lapStartOdometerReading float64              // Distance at which the current lap started
+	lapProgressMeters       float64              // Lap distance tracking for uknown circuits
+	lastCoordinate          models.Coordinate    // Last known coordinate for distance tracking
 }
 
 // New creates a new Circuit instance with the provided logger and initializes the circuit database.
-func New(db gtcircuits.CircuitDB, logger zerolog.Logger) (*Circuit, error) {
+func New(db circuits.CircuitDB, logger zerolog.Logger) (*Circuit, error) {
 	return &Circuit{
 		database:                db,
 		log:                     logger.With().Str("package", "circuit").Logger(),
 		lapStartOdometerReading: 0,
 		lapProgressMeters:       0,
 		info:                    circuitInfoInit,
-		lastCoordinate:          gtmodels.Coordinate{},
+		lastCoordinate:          models.Coordinate{},
 	}, nil
 }
 
 // Reset clears the current circuit information and lap start marker distance.
 func (c *Circuit) Reset() {
-	c.info = gtcircuits.CircuitInfo{
+	c.info = circuits.CircuitInfo{
 		ID:   circuitInfoInit.ID,
 		Name: circuitInfoInit.Name,
 	}
@@ -76,7 +73,7 @@ func (c *Circuit) SetCircuit(circuit gtcircuits.CircuitInfo) (didUpdate bool) {
 func (c *Circuit) ResetLapProgress() {
 	c.lapStartOdometerReading = 0
 	c.lapProgressMeters = 0
-	c.lastCoordinate = gtmodels.Coordinate{}
+	c.lastCoordinate = models.Coordinate{}
 
 	c.log.Info().
 		Msg("Circuit reset")

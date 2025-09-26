@@ -21,7 +21,7 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/kinematics"
 	"github.com/vwhitteron/simtezilo-dev/app/odometer"
 	"github.com/vwhitteron/simtezilo-dev/app/pitradio"
-	"github.com/vwhitteron/simtezilo-dev/app/synth"
+	"github.com/vwhitteron/simtezilo-dev/app/synthesizer"
 	"github.com/vwhitteron/simtezilo-dev/app/ui"
 	"github.com/vwhitteron/simtezilo-dev/app/ui/webui"
 	gttelemetry "github.com/zetetos/gt-telemetry"
@@ -85,11 +85,11 @@ type App struct {
 	gtClient   *gttelemetry.Client          // GT telemetry client
 	pitRadio   pitradio.PitRadioService     // Pit radio notification service
 	kinematics kinematics.KinematicsTracker // Vehicle kinematics tracker
-	synth      *synth.Synthesizer           // Audio synthesizer for haptic feedback
+	synth      *synthesizer.Synthesizer     // Audio synthesizer for haptic feedback
 
-	odometer  *odometer.Meter  // Odometer for distance tracking
-	fuelRange *fuelrange.Range // Fuel range estimator
-	circuit   *circuit.Circuit // Circuit information and tracking
+	odometer  *odometer.Odometer   // Odometer for distance tracking
+	fuelRange *fuelrange.FuelRange // Fuel range estimator
+	circuit   *circuit.Circuit     // Circuit information and tracking
 
 	transmissionGainMin float64 // Minimum transmission gain based on vehicle type
 
@@ -283,7 +283,7 @@ func New(opts AppOptions) (*App, error) {
 	}
 
 	// initialise synthesizer
-	a.synth, err = synth.NewSynthesizer(&synth.SynthOpts{
+	a.synth, err = synthesizer.New(&synthesizer.SynthOpts{
 		Config:     a.config.GetSynthesizer(),
 		Logger:     *opts.Logger,
 		Kinematics: &a.kinematics,
@@ -446,14 +446,14 @@ func (a *App) startBackgroundTasks() {
 	}()
 
 	if a.webEnabled {
-		a.webUI = webui.NewWebUI(a.log, a.telemetryChartFeed)
+		a.webUI = webui.New(a.log, a.telemetryChartFeed)
 		go a.webUI.Start()
 	}
 }
 
 func (a *App) startAudioOutput() {
 	outputSampleRate := beep.SampleRate(a.config.GetOutputSampleRateHz())
-	hapticStreamer := synth.NewHapticStream(a.synth, outputSampleRate)
+	hapticStreamer := synthesizer.NewHapticStream(a.synth, outputSampleRate)
 	err := speaker.Init(
 		outputSampleRate,
 		outputSampleRate.N(time.Second/15),
@@ -502,7 +502,7 @@ func (a *App) mainLoop() {
 
 		case <-tickerGeneral.C:
 			if a.gtClient.Telemetry.IsOnCircuit() {
-				a.updateFuelConsumption()
+				a.updateFuelRange()
 			}
 			a.updateCircuit()
 			a.sendTelemetryChartData()

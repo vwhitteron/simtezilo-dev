@@ -20,7 +20,7 @@ type WebUI struct {
 	telemetryChartFeed chan map[string]float32
 }
 
-func NewWebUI(log zerolog.Logger, telemetryChartFeed chan map[string]float32) *WebUI {
+func New(log zerolog.Logger, telemetryChartFeed chan map[string]float32) *WebUI {
 	return &WebUI{
 		log:                log.With().Str("component", "web ui").Logger(),
 		webSocketClients:   0,

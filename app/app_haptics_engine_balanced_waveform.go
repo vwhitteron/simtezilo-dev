@@ -4,7 +4,7 @@ import (
 	"math"
 
 	"github.com/vwhitteron/simtezilo-dev/app/signal"
-	"github.com/vwhitteron/simtezilo-dev/app/synth"
+	"github.com/vwhitteron/simtezilo-dev/app/synthesizer"
 )
 
 // generateBalancedWaveform creates engine haptic waveforms based on primary and secondary balance characteristics
@@ -55,7 +55,7 @@ func (a *App) generateBalancedWaveform(rpm float64, engineRoughness float64, eng
 	rpmNormalized, _ := signal.LimitWindow(rpmPercent, 0.0, 1.0)
 
 	// Apply full gain control - this should be able to reduce volume significantly
-	gainAdjust := synth.GainToPowerRatio(a.vehicle.engine.haptics.Gain + gainOffset)
+	gainAdjust := synthesizer.GainToPowerRatio(a.vehicle.engine.haptics.Gain + gainOffset)
 
 	// Calculate boost to reach signal max at 0dB gain, but scaled for proper gain response
 	// At 0dB gain (gainAdjust = 1.0), we want amplitude near 1.0

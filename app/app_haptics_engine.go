@@ -9,7 +9,7 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/config"
 	"github.com/vwhitteron/simtezilo-dev/app/haptics"
 	"github.com/vwhitteron/simtezilo-dev/app/signal"
-	"github.com/vwhitteron/simtezilo-dev/app/synth"
+	"github.com/vwhitteron/simtezilo-dev/app/synthesizer"
 )
 
 const maxPulseRate float64 = 300.0 // Max pulse rate for engine haptics
@@ -78,7 +78,7 @@ func (a *App) generateEngineHaptic() {
 	// Stitch the new engine samples smoothly with the current buffer contents
 	inspectBuffer := a.synth.InspectChannelBuffer("engine", samplesPerFrame+lookback, -lookback)
 	if inspectBuffer != nil && len(inspectBuffer) >= samplesPerFrame {
-		offset, lastPolarity = synth.FindSampleZeroCrossing(inspectBuffer[lookback:samplesPerFrame])
+		offset, lastPolarity = synthesizer.FindSampleZeroCrossing(inspectBuffer[lookback:samplesPerFrame])
 	}
 
 	// No haptics when engine is not running
@@ -99,9 +99,9 @@ func (a *App) generateEngineHaptic() {
 	// a.generateTorqueCurveWaveform(rpm, engineRoughness, &engineBuffer)
 
 	// Adjust engine buffer polarity to be the inverse of the last pulse
-	currentPolarity := synth.SamplePolarity(engineBuffer[0:lookback])
+	currentPolarity := synthesizer.SamplePolarity(engineBuffer[0:lookback])
 	if currentPolarity == float64(lastPolarity) {
-		synth.InvertSamplePolarity(&engineBuffer)
+		synthesizer.InvertSamplePolarity(&engineBuffer)
 	}
 
 	a.synth.OverwriteBuffer("engine", engineBuffer, offset)
@@ -398,7 +398,7 @@ func (a *App) generatePulseWaveform(rpm float64, engineRoughness float64, engine
 	engineLoadGain := (1 - throttlePercent) * engineLoadGainIncrease
 	roughness := 1.0 - (engineRoughness * rpmPercent * 0.1)
 	gain := a.vehicle.engine.haptics.Gain + vehicleTypeGain + engineLoadGain
-	amplitude := synth.GainToPowerRatio(gain) * roughness
+	amplitude := synthesizer.GainToPowerRatio(gain) * roughness
 	amplitude, _ = signal.LimitWindow(amplitude, 0, 1)
 
 	sampleRate := float64(a.synth.GetSampleRate())

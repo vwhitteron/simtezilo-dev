@@ -1,4 +1,4 @@
-package synth
+package synthesizer
 
 import (
 	"fmt"
@@ -27,7 +27,7 @@ type SynthOpts struct {
 	Kinematics *kinematics.KinematicsTracker
 }
 
-func NewSynthesizer(opts *SynthOpts) (*Synthesizer, error) {
+func New(opts *SynthOpts) (*Synthesizer, error) {
 	bufferLength := 2 * time.Second
 
 	mixer, err := NewMixer(MixerConfig{

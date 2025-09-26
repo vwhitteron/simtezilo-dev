@@ -1,4 +1,4 @@
-package synth
+package synthesizer
 
 import (
 	"fmt"

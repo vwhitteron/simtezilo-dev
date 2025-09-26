@@ -4,7 +4,7 @@ import (
 	"math"
 
 	"github.com/vwhitteron/simtezilo-dev/app/signal"
-	"github.com/vwhitteron/simtezilo-dev/app/synth"
+	"github.com/vwhitteron/simtezilo-dev/app/synthesizer"
 )
 
 // generateTorqueCurveWaveform creates engine haptic waveforms based on engine-specific torque curves
@@ -99,9 +99,9 @@ func (a *App) generateTorqueCurveWaveform(rpm float64, engineRoughness float64, 
 	rpmNormalized, _ := signal.LimitWindow(rpmPercent, 0.0, 1.0)
 
 	// Apply -1dB power ratio scaling based on RPM
-	rpmPowerRatio := synth.GainToPowerRatio(-1.0 * rpmNormalized)
+	rpmPowerRatio := synthesizer.GainToPowerRatio(-1.0 * rpmNormalized)
 
-	adjust := synth.GainToPowerRatio(a.vehicle.engine.haptics.Gain + gainOffset)
+	adjust := synthesizer.GainToPowerRatio(a.vehicle.engine.haptics.Gain + gainOffset)
 
 	// Primary torque component - fundamental firing frequency
 	// Affected by primary balance (crankshaft and main bearing design)

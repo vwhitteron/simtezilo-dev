@@ -4,7 +4,7 @@ import (
 	"math"
 
 	"github.com/vwhitteron/simtezilo-dev/app/signal"
-	"github.com/vwhitteron/simtezilo-dev/app/synth"
+	"github.com/vwhitteron/simtezilo-dev/app/synthesizer"
 )
 
 func (a *App) playGearShiftHaptic() {
@@ -31,7 +31,7 @@ func (a *App) determineGearShiftMagnitude() float64 {
 	gforceMax := a.config.GetTransmissionGforceMax()
 	volumeCurve := a.config.GetTransmissionCurve()
 
-	magnitudeMin := synth.GainToPowerRatio(a.transmissionGainMin)
+	magnitudeMin := synthesizer.GainToPowerRatio(a.transmissionGainMin)
 
 	magnitude := math.Pow((gForce/gforceMax), volumeCurve) * synthMagnitude
 	magnitude, _ = signal.LimitWindow(magnitude, magnitudeMin, synthMagnitude)
