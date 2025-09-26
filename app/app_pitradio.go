@@ -10,7 +10,6 @@ import (
 
 const (
 	positionDebounceTime = 5 * time.Second // Suppress position change notifications for this duration
-	messagePause         = 5 * time.Second // Pause between pit radio messages
 )
 
 // pitRadioState tracks Discord/pit radio communication state

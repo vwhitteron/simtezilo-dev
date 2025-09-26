@@ -50,28 +50,6 @@ func (a *App) generateForceHaptics() {
 
 	a.state.telemetryActive = true
 
-	// The loading flag typically means the session has restarted or the car has pitted
-	if a.sessionHasReset() {
-		a.resetAppState()
-		a.disableHaptics("session reset")
-
-		return
-	}
-
-	if a.timeOfDayHasReset() {
-		a.log.Debug().
-			Uint32("sequence_id", a.state.current.sequenceNumber).
-			Str("current_time_of_day", a.state.current.timeOfDay.String()).
-			Str("last_time_of_day", a.state.last.timeOfDay.String()).
-			Msg("time of day reset")
-
-		a.resetAppState()
-
-		a.disableHaptics("time of day reset")
-
-		return
-	}
-
 	if !a.state.hapticsEnabled {
 		a.enableHaptics()
 	}

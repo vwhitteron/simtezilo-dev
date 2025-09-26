@@ -25,6 +25,7 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/ui"
 	"github.com/vwhitteron/simtezilo-dev/app/ui/webui"
 	gttelemetry "github.com/zetetos/gt-telemetry"
+	"github.com/zetetos/gt-telemetry/pkg/models"
 )
 
 type gameState int
@@ -489,14 +490,17 @@ func (a *App) mainLoop() {
 		case <-tickerHaptics.C:
 			a.handleGameStateChange()
 
-			if !a.gtClient.Telemetry.IsOnCircuit() {
+			stateChanged := a.updateState()
+
+			if a.gtClient.Telemetry.IsInMainMenu() {
 				continue
 			}
 
-			if didUpdate := a.updateState(); didUpdate {
+			if stateChanged {
 				a.handleVehicleChange()
 				a.generateForceHaptics()
 			}
+
 			a.checkRaceComplete()
 			a.checkForNewLap()
 
@@ -567,26 +571,12 @@ func (a *App) sessionIsComplete() bool {
 	return false
 }
 
-// sessionHasReset checks if the session has been reset based on telemetry data.
-// Returns true if the session has been reset.
-func (a *App) sessionHasReset() bool {
-	if a.gtClient.Telemetry.Flags().Loading {
-		a.log.Debug().
-			Uint32("sequence_id", a.state.current.sequenceNumber).
-			Msg("loading flag detected")
-
-		return true
-	}
-
-	return false
-}
-
 // resetAppState resets the application state
 func (a *App) resetAppState() {
 	a.state.last = raceState{
 		transmissionGear: kinematics.NullGear,
 		isLive:           true,
-		gameState:        a.getGameState(),
+		gameState:        a.state.current.gameState,
 	}
 
 	a.state.current = raceState{
@@ -598,6 +588,8 @@ func (a *App) resetAppState() {
 	a.synth.Silence()
 
 	a.kinematics = kinematics.NewKinematicsTracker()
+
+	a.log.Info().Msg("App state reset")
 }
 
 func (a *App) getGameState() gameState {
@@ -633,7 +625,7 @@ func (a *App) handleGameStateChange() {
 		a.circuit.Reset()
 		a.resetAppState()
 
-		a.log.Debug().Msg("Entere main menu")
+		a.log.Info().Msg("Entered main menu")
 
 	case a.state.current.gameState == gameStateRaceMenu:
 		a.disableHaptics("race menu")
@@ -642,10 +634,10 @@ func (a *App) handleGameStateChange() {
 		a.fuelRange.ResetEstimate()
 		a.circuit.ResetLapProgress()
 
-		a.log.Debug().Msg("Entere race menu")
+		a.log.Info().Msg("Entered race menu")
 
 	case a.state.current.gameState == gameStateOnCircuit:
-		a.log.Debug().Msg("Vehicle on circuit")
+		a.log.Info().Msg("Vehicle on circuit")
 
 	case a.liveFlagHasChanged():
 		a.resetPitRadioState()
@@ -656,15 +648,16 @@ func (a *App) handleGameStateChange() {
 		a.circuit.Reset()
 		a.resetAppState()
 
-		a.log.Debug().Bool("is_live", a.state.current.isLive).Msg("Live flag change")
+		a.log.Info().Bool("is_live", a.state.current.isLive).Msg("Live flag change")
 
 	case a.timeOfDayHasReset():
+		a.disableHaptics("time of day reset")
 		a.resetPitRadioState()
 		a.odometer.Reset()
 		a.fuelRange.Reset()
 		a.circuit.ResetLapProgress()
 
-		a.log.Debug().Msg("Time of day reset")
+		a.log.Info().Msg("Time of day reset")
 
 	// Assune vehicle pit stop
 	case a.gtClient.Telemetry.Flags().Loading:
@@ -727,6 +720,18 @@ func (a *App) updateVehicle() {
 		a.vehicle.revLimit = 8000
 	}
 
+	switch vehicleType {
+	case "race":
+		a.transmissionGainMin = a.config.GetTransmissionGain() + a.config.GetTransmissionGainMinRace()
+	default:
+		a.transmissionGainMin = a.config.GetTransmissionGain() + a.config.GetTransmissionGainMinStreet()
+	}
+
+	a.state.last.transmissionGear = a.state.current.transmissionGear
+
+	a.odometer.Reset()
+	a.fuelRange.Reset()
+
 	a.log.Debug().
 		Str("engine_layout", a.vehicle.engine.layout).
 		Str("resolved_engine", a.vehicle.engine.dbEntry).
@@ -746,18 +751,6 @@ func (a *App) updateVehicle() {
 		Str("type", vehicleType).
 		Str("engine", a.vehicle.engine.dbEntry).
 		Msg("vehicle update")
-
-	switch vehicleType {
-	case "race":
-		a.transmissionGainMin = a.config.GetTransmissionGain() + a.config.GetTransmissionGainMinRace()
-	default:
-		a.transmissionGainMin = a.config.GetTransmissionGain() + a.config.GetTransmissionGainMinStreet()
-	}
-
-	a.state.last.transmissionGear = a.state.current.transmissionGear
-
-	a.odometer.Reset()
-	a.fuelRange.Reset()
 }
 
 // gearHasChanged checks if the gear has changed based on telemetry data.
