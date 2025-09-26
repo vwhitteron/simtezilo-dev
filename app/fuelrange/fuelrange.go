@@ -210,7 +210,8 @@ func (r *FuelRange) fuelRateMA() float64 {
 }
 
 // fuelRatePercentile returns the specified percentile fuel range in percent per km
-func (r *FuelRange) fuelRatePercentile(percentile int) float64 {
+// TODO: remove or keep and make private. Public to stop linter error
+func (r *FuelRange) FuelRatePercentile(percentile int) float64 {
 	if len(r.fuelRateSamples) == 0 {
 		return 0
 	}

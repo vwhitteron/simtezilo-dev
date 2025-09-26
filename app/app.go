@@ -376,7 +376,14 @@ func (a *App) Close() {
 			Msg("close")
 	}
 
-	a.pitRadio.Disconnect()
+	err = a.pitRadio.Disconnect()
+	if err != nil {
+		a.log.Error().
+			Err(err).
+			Str("component", "discord").
+			Str("result", "failure").
+			Msg("close")
+	}
 
 	err = a.ui.Screen.RenderSplashScreen(a.i18n.GetString("ui.quit"))
 	if err != nil {
@@ -416,7 +423,7 @@ func (a *App) startBackgroundTasks() {
 			Str("result", "success").
 			Msg("init")
 
-		a.pitRadio.Send(a.i18n.GetString(translations.RadioOnline))
+		_ = a.pitRadio.Send(a.i18n.GetString(translations.RadioOnline))
 	}()
 
 	go func() {
@@ -430,11 +437,11 @@ func (a *App) startBackgroundTasks() {
 						Str("result", "failure").
 						Msg("run")
 
-					a.ui.Screen.RenderSplashScreen("GT client error")
+					_ = a.ui.Screen.RenderSplashScreen("GT client error")
 
 					continue
 				} else {
-					a.ui.Screen.RenderErrorScreen("GT client error")
+					_ = a.ui.Screen.RenderErrorScreen("GT client error")
 
 					a.log.Fatal().
 						Err(err).
@@ -771,9 +778,5 @@ func (a *App) gearHasChanged() bool {
 func (a *App) raceHasFinished() bool {
 	currentTime := a.gtClient.Telemetry.TimeOfDay()
 
-	if a.state.raceCompleteTime > currentTime+5*time.Second {
-		return true
-	}
-
-	return false
+	return a.state.raceCompleteTime > currentTime+5*time.Second
 }

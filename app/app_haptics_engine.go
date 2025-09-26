@@ -431,7 +431,7 @@ func (a *App) generatePulseWaveform(rpm float64, engineRoughness float64, engine
 			a.state.engine.pulsePolarity = !a.state.engine.pulsePolarity
 		}
 
-		var pulseValue float64 = 0.0
+		pulseValue := 0.0
 		pulsePhase := pulsePosition - math.Floor(pulsePosition) // 0.0 to 1.0 within each pulse cycle
 		if pulsePhase < pulseDutyCycle {
 			// Inside the pulse - create a sharp, distinct pulse

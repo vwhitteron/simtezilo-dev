@@ -71,7 +71,7 @@ func (c *Circuit) getCandidate(circuitID string) *CircuitCandidate {
 // bestCandidate returns the circuit candidate with the highest confidence above threshold
 func (c *Circuit) bestCandidate() *CircuitCandidate {
 	var bestCandidate *CircuitCandidate
-	var highestConfidence float64 = 0.0
+	highestConfidence := float64(0.0)
 
 	for _, candidate := range c.candidates {
 		if candidate.confidence < minConfidenceThreshold {

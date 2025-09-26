@@ -11,7 +11,8 @@ import (
 // and torsional excitation characteristics as documented by EPI Engineering.
 // This function incorporates both primary and secondary balance configurations to model
 // realistic engine torque output variations.
-func (a *App) generateTorqueCurveWaveform(rpm float64, engineRoughness float64, engineBuffer *[]float64) {
+// TODO: remove or keep and make private. Public to stop linter error
+func (a *App) GenerateTorqueCurveWaveform(rpm float64, engineRoughness float64, engineBuffer *[]float64) {
 	sampleRate := float64(a.synth.GetSampleRate())
 	rpmPercent := rpm / float64(a.vehicle.revLimit)
 

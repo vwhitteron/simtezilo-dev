@@ -9,7 +9,8 @@ import (
 
 // generateBalancedWaveform creates engine haptic waveforms based on primary and secondary balance characteristics
 // with consideration for the 160Hz low-pass filter of the output device
-func (a *App) generateBalancedWaveform(rpm float64, engineRoughness float64, engineBuffer *[]float64) {
+// TODO: remove or keep and make private. Public to stop linter error
+func (a *App) GenerateBalancedWaveform(rpm float64, engineRoughness float64, engineBuffer *[]float64) {
 	sampleRate := float64(a.synth.GetSampleRate())
 	rpmPercent := rpm / float64(a.vehicle.revLimit)
 
