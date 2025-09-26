@@ -11,3 +11,6 @@ formatters:
       - gofumpt
       - goimports
       - golines
+
+issues:
+  exclude-use-default: false
