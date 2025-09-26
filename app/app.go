@@ -542,9 +542,8 @@ func (a *App) newLapHandler() bool {
 			lap := a.state.current.lapNumber
 			coordinate := a.gtClient.Telemetry.PositionalMapCoordinates()
 			odometerReading := a.odometer.Add(coordinate)
-			a.circuit.UpdateDistanceTravelled(odometerReading, lap, circuit.CoordinateTypeStartLine)
 
-			if didUpdate := a.circuit.UpdateCircuit(coordinate, circuit.CoordinateTypeStartLine); didUpdate {
+			if didUpdate := a.circuit.UpdateCircuit(odometerReading, lap, coordinate, models.CoordinateTypeStartLine); didUpdate {
 				a.odometer.Reset()
 				a.fuelRange.Reset()
 				a.state.last.lastLapTime = 0

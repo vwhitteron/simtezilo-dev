@@ -9,10 +9,8 @@ import (
 )
 
 const (
-	shortestCircuitLengthMeters int = 900 // Minimum length in meters (Northern Isle Speedway)
-
-	CoordinateTypeStartLine updateType = true  // Flag to indicate a coordinate is from start line crossing
-	CoordinateTypeGeneral   updateType = false // Flag to indicate a coordinate is from general circuit position
+	shortestCircuitLengthMeters int     = 900 // Minimum length in meters (Northern Isle Speedway)
+	minConfidenceThreshold      float64 = 0.3 // Minimum confidence threshold (30%) before choosing a circuit
 )
 
 // Initial unknown circuit info
@@ -32,6 +30,7 @@ type Circuit struct {
 	lapStartOdometerReading float64              // Distance at which the current lap started
 	lapProgressMeters       float64              // Lap distance tracking for uknown circuits
 	lastCoordinate          models.Coordinate    // Last known coordinate for distance tracking
+	candidates              CircuitCandidates    // Circuit candidates with confidence tracking
 }
 
 // New creates a new Circuit instance with the provided logger and initializes the circuit database.
@@ -43,6 +42,7 @@ func New(db circuits.CircuitDB, logger zerolog.Logger) (*Circuit, error) {
 		lapProgressMeters:       0,
 		info:                    circuitInfoInit,
 		lastCoordinate:          models.Coordinate{},
+		candidates:              make(CircuitCandidates),
 	}, nil
 }
 
@@ -53,20 +53,12 @@ func (c *Circuit) Reset() {
 		Name: circuitInfoInit.Name,
 	}
 
+	c.candidates = make(CircuitCandidates)
+
 	c.ResetLapProgress()
 
 	c.log.Info().
 		Msg("Circuit reset")
-}
-
-func (c *Circuit) SetCircuit(circuit gtcircuits.CircuitInfo) (didUpdate bool) {
-	if c.info.ID == circuit.ID {
-		return false
-	}
-
-	c.info = circuit
-
-	return true
 }
 
 // ResetLapProgress clears the lap progress tracking without resetting the circuit information.
@@ -108,72 +100,82 @@ func (c *Circuit) LapProgressRemaining() float64 {
 }
 
 // UpdateCircuit updates the current circuit information by matching the provided coordinate with a circuit DB entry
-// The isStartLine flag indicates if the coordinate is from a start line crossing or general positional update
-// TODO: need start line coordinates are returned in CircuitInfo to avoid start line re-udpating c.info
-func (c *Circuit) UpdateCircuit(coordinate gtmodels.Coordinate, updateType updateType) (didUpdate bool) {
+// The updateType flag indicates if the coordinate is from a start line crossing or general positional update
+func (c *Circuit) UpdateCircuit(odometerReading float64, lap int16, coordinate models.Coordinate, coordinateType models.CoordinateType) (didUpdate bool) {
+	c.updateDistanceTravelled(odometerReading, lap, coordinateType)
 	c.setLapStartMarker()
 
-	coordinateNorm := gtcircuits.NormaliseStartLineCoordinate(coordinate)
+	var matchingCircuits []string
 
-	var circuitID string
-	if updateType == CoordinateTypeStartLine {
-		// Only update the circuit by start line once after init/reset
-		if coordinateNorm == c.info.StartLine {
-			return false
-		}
-
-		var found bool
-		circuitID, found = c.database.GetCircuitAtCoordinate(coordinate, models.CoordinateTypeStartLine)
-		if !found || len(circuitID) == 0 {
-			c.log.Debug().
-				Str("coordinate", fmt.Sprintf("(x: %.0f, y: %.0f, z: %.0f)", coordinate.X, coordinate.Y, coordinate.Z)).
-				Str("type", "start line").
-				Msg("No coordinate matched")
-
-			return false
-		}
-	} else {
-		// Only update the circuit by coordinate after init/reset
-		if c.info != circuitInfoInit {
-			return false
-		}
-
-		var found bool
-		circuitID, found = c.database.GetCircuitAtCoordinate(coordinate, models.CoordinateTypeCircuit)
-		if !found {
-			c.log.Debug().
-				Str("coordinate", fmt.Sprintf("(x: %.0f, y: %.0f, z: %.0f)", coordinate.X, coordinate.Y, coordinate.Z)).
-				Str("type", "circuit coordinate").
-				Msg("No coordinate matched")
-
-			return false
-		}
+	circuitID, found := c.database.GetCircuitAtCoordinate(coordinate, coordinateType)
+	if found {
+		matchingCircuits = append(matchingCircuits, circuitID)
 	}
 
-	// No change in circuit ID
-	if circuitID == c.info.ID {
-		return false
-	}
+	coordinateNorm := circuits.NormaliseStartLineCoordinate(coordinate)
+	key := circuits.CoordinateNormToKey(coordinateNorm)
 
-	var found bool
-	c.info, found = c.database.GetCircuitByID(circuitID)
-	if !found {
-		c.log.Error().
-			Str("track_id", circuitID).
-			Str("source", "start line").
-			Msg("Circuit not found in inventory")
+	if len(matchingCircuits) == 0 {
+		c.log.Debug().
+			Str("coordinate", key).
+			Msg("No coordinate matched")
 
 		return false
 	}
 
-	c.info.StartLine = coordinateNorm
+	for _, circuitID := range matchingCircuits {
+		c.updateCandidateConfidence(circuitID, key)
+	}
 
-	c.log.Info().
-		Str("track", c.info.Name).
-		Str("source", "start line").
-		Msg("Circuit updated")
+	bestCandidate := c.bestCandidate()
+	if bestCandidate == nil {
+		return false
+	}
 
-	return true
+	if bestCandidate.info.ID != c.info.ID {
+		c.info = bestCandidate.info
+
+		if coordinateType == models.CoordinateTypeStartLine {
+			c.info.StartLine = coordinateNorm
+		}
+
+		c.log.Info().
+			Str("track", c.info.Variation).
+			Str("confidence", fmt.Sprintf("%.0f%%", bestCandidate.confidence*100)).
+			Int("matches", len(bestCandidate.matchedCoords)).
+			Msg("Circuit updated")
+
+		return true
+	}
+
+	return false
+}
+
+// updateDistanceTravelled updates the total distance travelled based on the provided coordinate.
+// TODO: this is duplicated in fuelrange.distanceTravelled
+func (c *Circuit) updateDistanceTravelled(odometerReading float64, lap int16, coordinateType models.CoordinateType) {
+	// New lap started
+	if coordinateType == models.CoordinateTypeStartLine {
+		c.lapStartOdometerReading = odometerReading
+		c.lapProgressMeters = 0
+		c.lap = lap
+
+		return
+	}
+
+	// Ignore updates until lap start marker is set
+	if c.lapStartOdometerReading < 0 {
+		return
+	}
+
+	// Wait for next lap start when odometer rolled back/reset or unexpected lap change
+	if odometerReading < c.lapProgressMeters || lap != c.lap {
+		c.lapStartOdometerReading = -1
+		c.lapProgressMeters = 0
+		c.lap = lap
+	}
+
+	c.lapProgressMeters = odometerReading - c.lapStartOdometerReading
 }
 
 // setLapStartMarker sets the distance at which the current lap started.
@@ -201,43 +203,7 @@ func (c *Circuit) setCircuitLength() {
 	}
 }
 
-// updateDistanceTravelled updates the total distance travelled based on the provided coordinate.
-// TODO: this is duplicated in fuelrange.distanceTravelled
-func (c *Circuit) UpdateDistanceTravelled(odometerReading float64, lap int16, updateType updateType) {
-	// New lap started
-	if updateType == CoordinateTypeStartLine {
-		c.lapStartOdometerReading = odometerReading
-		c.lapProgressMeters = 0
-		c.lap = lap
-
-		return
-	}
-
-	// Ignore updates until lap start marker is set
-	if c.lapStartOdometerReading < 0 {
-		return
-	}
-
-	// Wait for next lap start when odometer rolled back/reset or unexpected lap change
-	if odometerReading < c.lapProgressMeters || lap != c.lap {
-		c.lapStartOdometerReading = -1
-		c.lapProgressMeters = 0
-		c.lap = lap
-	}
-
-	c.lapProgressMeters = odometerReading - c.lapStartOdometerReading
-}
-
 // circuitIsKnown returns true if the current circuit is known
 func (c *Circuit) circuitIsKnown() bool {
 	return c.info.ID != circuitInfoInit.ID
-}
-
-// coordinateFloatToInt converts a float32 based gttelemetry.Coordinate to an int16 based circuits.Coordinate
-func coordinateFloatToInt(coordinate gtmodels.Coordinate) gtmodels.CoordinateNorm {
-	return gtmodels.CoordinateNorm{
-		X: int16(coordinate.X),
-		Y: int16(coordinate.Y),
-		Z: int16(coordinate.Z),
-	}
 }
