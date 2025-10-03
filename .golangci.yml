@@ -1,0 +1,165 @@
+version: "2"
+
+run:
+  allow-parallel-runners: true
+
+linters:
+  enable:
+    - arangolint
+    - asasalint
+    - asciicheck
+    - bidichk
+    - bodyclose
+    - canonicalheader
+    - containedctx
+    - contextcheck
+    - copyloopvar
+    - cyclop
+    - decorder
+    - depguard
+    - dogsled
+    - dupl
+    - dupword
+    - durationcheck
+    - embeddedstructfieldcheck
+    # - err113
+    - errcheck
+    - errchkjson
+    - errname
+    - errorlint
+    - exhaustive
+    # - exhaustruct # prefer shorter struct literals
+    - exptostd
+    - fatcontext
+    - forbidigo
+    - forcetypeassert
+    - funcorder
+    # - funlen
+    - ginkgolinter
+    - gocheckcompilerdirectives
+    - gochecknoglobals
+    - gochecknoinits
+    - gochecksumtype
+    # - gocognit
+    - goconst
+    - gocritic
+    # - gocyclo # use cyclop instead
+    - godot
+    - godox
+    - goheader
+    - gomoddirectives
+    - gomodguard
+    - goprintffuncname
+    - gosec
+    - gosmopolitan
+    - govet
+    - grouper
+    - iface
+    - importas
+    - inamedparam
+    - ineffassign
+    - interfacebloat
+    - intrange
+    - ireturn
+    - lll
+    - loggercheck
+    - maintidx
+    - makezero
+    - mirror
+    - misspell
+    # - mnd
+    - musttag
+    - nakedret
+    - nestif
+    - nilerr
+    - nilnesserr
+    - nilnil
+    - nlreturn
+    - noctx
+    - noinlineerr
+    - nolintlint
+    # - nonamedreturns # prefer named returns in some cases
+    - nosprintfhostport
+    - paralleltest
+    - perfsprint
+    - prealloc
+    - predeclared
+    - promlinter
+    - protogetter
+    - reassign
+    - recvcheck
+    - revive
+    - rowserrcheck
+    - sloglint
+    - spancheck
+    - sqlclosecheck
+    - staticcheck
+    - tagalign
+    - tagliatelle
+    - testableexamples
+    - testifylint
+    - testpackage
+    - thelper
+    - tparallel
+    - unconvert
+    - unparam
+    - unused
+    - usestdlibvars
+    - usetesting
+    - varnamelen
+    - wastedassign
+    - whitespace
+    # - wrapcheck
+    # - wsl # use wsl_v5 instead
+    - wsl_v5
+    - zerologlint
+  disable:
+  exclusions:
+    generated: lax
+    # presets:
+      # - comments
+      # - common-false-positives
+      # - legacy
+      # - std-error-handling
+    paths:
+      - internal/gttelemetry/gran_turismo_telemetry.go
+      - third_party$
+      - builtin$
+      - examples$
+  settings:
+    depguard:
+      rules:
+        main:
+          allow:
+            - $gostd
+            - github.com/stretchr/testify
+            - github.com/rs/zerolog
+            - golang.org/x/crypto/salsa20
+            - github.com/kaitai-io/kaitai_struct_go_runtime/kaitai
+            - github.com/zetetos/gt-telemetry
+    tagliatelle:
+      case:
+        rules:
+          json: goPascal
+
+
+formatters:
+  default:
+    enable:
+      - gci
+      - gofmt
+      - gofumpt
+      - goimports
+      - golines  exclusions:
+    # generated: lax
+    # paths:
+    #   - third_party$
+    #   - builtin$
+    #   - examples$
+
+issues:
+  exclude-use-default: false
+  exlude:
+    - path: _test.go
+      linters:
+        - mnd
