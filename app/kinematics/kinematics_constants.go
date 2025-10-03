@@ -3,7 +3,7 @@ package kinematics
 const GravityConstant = 9.80665 // m/s^2
 
 // TODO: find a better place for gear constants
-// Gear settings
+// Gear settings.
 const (
 	NeutralGear int = 15
 	ReverseGear int = 0

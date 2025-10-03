@@ -20,18 +20,21 @@ type PositionalDerivatives struct {
 
 type CalculatedTranslationalDerivatives struct {
 	PositionalDerivatives
+
 	Delta    models.Vector
 	Velocity models.Vector
 }
 
 type RotationalDerivatives struct {
 	PositionalDerivatives
+
 	Delta    models.RotationalEnvelope
 	Velocity models.RotationalEnvelope
 }
 
 type TranslationalDerivatives struct {
 	PositionalDerivatives
+
 	Delta    models.TranslationalEnvelope
 	Velocity models.TranslationalEnvelope
 }
@@ -81,7 +84,7 @@ func newKinematics() Kinematics {
 	}
 }
 
-// TODO: ideally this should not be given the gt client
+// TODO: ideally this should not be given the gt client.
 func (k *KinematicsTracker) Update(windowSeconds float64, gtclient *gttelemetry.Client) {
 	k.Last = k.Current
 

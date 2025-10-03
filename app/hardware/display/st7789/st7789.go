@@ -56,7 +56,8 @@ func NewSPI(config *SPIDeviceConfig) (*Device, error) {
 
 	if config.BacklightPin != gpio.INVALID {
 		// ensure successful access to the backlight pin and default to an off state
-		if err := config.BacklightPin.Out(gpio.Low); err != nil {
+		err := config.BacklightPin.Out(gpio.Low)
+		if err != nil {
 			return nil, fmt.Errorf("set backlight pin low: %w", err)
 		}
 	}
@@ -158,18 +159,21 @@ func (d *Device) Reset() error {
 	if err != nil {
 		return err
 	}
+
 	time.Sleep(10 * time.Millisecond)
 
 	err = d.reset.Out(gpio.Low)
 	if err != nil {
 		return err
 	}
+
 	time.Sleep(10 * time.Millisecond)
 
 	err = d.reset.Out(gpio.High)
 	if err != nil {
 		return err
 	}
+
 	time.Sleep(10 * time.Millisecond)
 
 	return nil
@@ -207,15 +211,18 @@ func (d *Device) Invert(blackOnWhite bool) {
 
 // SendData sends a block of data to the ST7789 display device.
 func (d *Device) SendData(c []byte) error {
-	if err := d.dataComm.Out(gpio.High); err != nil {
+	err := d.dataComm.Out(gpio.High)
+	if err != nil {
 		return err
 	}
+
 	return d.conn.Tx(c, nil)
 }
 
 // SendCommand sends a command to the ST7789 display device.
 func (d *Device) SendCommand(c []byte) error {
-	if err := d.dataComm.Out(gpio.Low); err != nil {
+	err := d.dataComm.Out(gpio.Low)
+	if err != nil {
 		return err
 	}
 

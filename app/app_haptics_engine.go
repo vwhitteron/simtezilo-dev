@@ -1,7 +1,7 @@
 package app
 
 import (
-	"fmt"
+	"errors"
 	"math"
 	"strconv"
 	"time"
@@ -112,10 +112,11 @@ func (a *App) getEngineCharacteristics(engineLayout string, cylinderAngle float3
 	if engineLayout == "" {
 		return engineCharacteristics{
 			haptics: &haptics.EngineProfile{},
-		}, fmt.Errorf("engine layout not provided")
+		}, errors.New("engine layout not provided")
 	}
 
-	geometryCode := engineLayout[:1]                // Get first character for geometry type
+	geometryCode := engineLayout[:1] // Get first character for geometry type
+
 	chambers, err := strconv.Atoi(engineLayout[1:]) // Get remaining characters for chamber count
 	if err != nil {
 		return engineCharacteristics{}, err // Return error if conversion fails
@@ -138,6 +139,7 @@ func (a *App) getEngineCharacteristics(engineLayout string, cylinderAngle float3
 	}
 
 	revRange := "std"
+
 	switch {
 	case revLimit > 13000:
 		revRange = "high"
@@ -216,8 +218,10 @@ func calculatePulseOverlap(cylinderAngle, crankPlaneAngle float32, chambers int,
 		firingOffset = 360.0 - firingOffset
 	}
 
-	var baseOverlap float64
-	var alignmentFactor float64
+	var (
+		baseOverlap     float64
+		alignmentFactor float64
+	)
 
 	switch geometry {
 	case "K": // Wankel engines have unique firing characteristics
@@ -303,6 +307,7 @@ func calculatePulseOverlap(cylinderAngle, crankPlaneAngle float32, chambers int,
 // calculateEngineRoughness calculates a roughness value based on the engine geometry and a given RPM
 func (a *App) calculateEngineRoughness(rpm float64) float64 {
 	var engineRoughness float64
+
 	switch a.vehicle.engine.geometry {
 	case "K":
 		roughnessPhase := float64(a.state.current.sequenceNumber) * 0.003
@@ -384,6 +389,7 @@ func (a *App) generatePulseWaveform(rpm float64, engineRoughness float64, engine
 	throttlePercent, _ = signal.LimitWindow(throttlePercent, 0.0, 1.0)
 
 	var vehicleTypeGain float64
+
 	switch a.vehicle.vehicleType {
 	case "race":
 		vehicleTypeGain = 0.0
@@ -415,7 +421,9 @@ func (a *App) generatePulseWaveform(rpm float64, engineRoughness float64, engine
 
 		// Detect pulse trigger point (beginning of each cycle)
 		currentPulseIndex := int(math.Floor(pulsePosition))
+
 		var lastPulseIndex int
+
 		if i > 0 {
 			lastPulsePosition := float64(i-1) / samplesPerPulse
 			lastPulseIndex = int(math.Floor(lastPulsePosition))
@@ -432,6 +440,7 @@ func (a *App) generatePulseWaveform(rpm float64, engineRoughness float64, engine
 		}
 
 		pulseValue := 0.0
+
 		pulsePhase := pulsePosition - math.Floor(pulsePosition) // 0.0 to 1.0 within each pulse cycle
 		if pulsePhase < pulseDutyCycle {
 			// Inside the pulse - create a sharp, distinct pulse
@@ -468,7 +477,7 @@ func (a *App) generatePulseWaveform(rpm float64, engineRoughness float64, engine
 }
 
 // generatePulswWankel creates a single pulse value for a Wankel engine based on a given phase value
-// and engine gemoetry
+// and engine geometry
 func generatePulseWankel(phase float64, engine *haptics.EngineProfile) (pulse float64) {
 	if phase < 0.3 {
 		// Quick attack (30% of pulse width)
@@ -502,7 +511,7 @@ func generatePulseWankel(phase float64, engine *haptics.EngineProfile) (pulse fl
 }
 
 // generatePulswTwoStroke creates a single pulse value for a 2-strok engine based on a given phase value
-// and engine gemoetry
+// and engine geometry
 func generatePulseTwoStroke(phase float64, engine *haptics.EngineProfile) (pulse float64) {
 	if phase < 0.3 {
 		// Quick attack (30% of pulse width)
@@ -547,7 +556,7 @@ func generatePulseTwoStroke(phase float64, engine *haptics.EngineProfile) (pulse
 }
 
 // generatePulswFourStroke creates a single pulse value for a 4-stroke engine based on a given phase value
-// and engine gemoetry
+// and engine geometry
 func generatePulseFourStroke(phase float64, engine *haptics.EngineProfile) (pulse float64) {
 	if phase < 0.3 {
 		// Quick attack (30% of pulse width)

@@ -18,18 +18,22 @@ import (
 func main() {
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+
 	done := make(chan bool, 1)
 
 	go func() {
 		sig := <-sigs
 		log.Printf("Received %v signal, shutting down\n", sig)
+
 		done <- true
 	}()
 
-	var vehicleDB string
-	var logLevelArg string
-	var profilerEndpoint string
-	var webEnabled bool
+	var (
+		vehicleDB        string
+		logLevelArg      string
+		profilerEndpoint string
+		webEnabled       bool
+	)
 
 	flag.StringVar(&vehicleDB, "d", "", "Path to vehicle database file")
 	flag.StringVar(&logLevelArg, "l", "info", "Log level. Default is 'info'")
@@ -41,11 +45,13 @@ func main() {
 	if err != nil {
 		log.Fatalf("Invalid log level: %s", err)
 	}
+
 	logger := zerolog.New(os.Stderr).With().Timestamp().Logger().Level(logLevel)
 
 	if app.BuildTime == "" {
 		app.BuildTime = time.Now().Format("2006-01-02_15:04:05")
 	}
+
 	logger.Info().Str("Version", app.Version).Str("BuildTime", app.BuildTime).Msg("Starting Simtezilo")
 
 	profiler, err := startPyroscope(profilerEndpoint, &logger)
@@ -67,6 +73,7 @@ func main() {
 
 	<-done
 	app.Close()
+
 	if profiler != nil {
 		err = profiler.Shutdown()
 		if err != nil {

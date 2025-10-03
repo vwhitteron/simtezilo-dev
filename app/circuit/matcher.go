@@ -6,7 +6,7 @@ import (
 	"github.com/zetetos/gt-telemetry/pkg/circuits"
 )
 
-// CircuitCandidate represents a potential circuit match with confidence tracking
+// CircuitCandidate represents a potential circuit match with confidence tracking.
 type CircuitCandidate struct {
 	info          circuits.CircuitInfo // Circuit information
 	matchedCoords map[string]bool      // Set of matched coordinates (as string keys)
@@ -15,7 +15,7 @@ type CircuitCandidate struct {
 
 type CircuitCandidates map[string]*CircuitCandidate
 
-// updateCandidateConfidence updates the match confidence for a circuit name based on a given coordinate key
+// updateCandidateConfidence updates the match confidence for a circuit name based on a given coordinate key.
 func (c *Circuit) updateCandidateConfidence(circuitId string, coordinateKey string) {
 	candidate := c.getCandidate(circuitId)
 	if candidate == nil {
@@ -43,7 +43,7 @@ func (c *Circuit) updateCandidateConfidence(circuitId string, coordinateKey stri
 		Msg("Updated circuit confidence")
 }
 
-// getCandidate gets an existing candidate or creates a new one
+// getCandidate gets an existing candidate or creates a new one.
 func (c *Circuit) getCandidate(circuitID string) *CircuitCandidate {
 	if candidate, exists := c.candidates[circuitID]; exists {
 		return candidate
@@ -54,6 +54,7 @@ func (c *Circuit) getCandidate(circuitID string) *CircuitCandidate {
 		c.log.Error().
 			Str("circuit_id", circuitID).
 			Msg("Circuit not found in database")
+
 		return nil
 	}
 
@@ -68,9 +69,10 @@ func (c *Circuit) getCandidate(circuitID string) *CircuitCandidate {
 	return candidate
 }
 
-// bestCandidate returns the circuit candidate with the highest confidence above threshold
+// bestCandidate returns the circuit candidate with the highest confidence above threshold.
 func (c *Circuit) bestCandidate() *CircuitCandidate {
 	var bestCandidate *CircuitCandidate
+
 	highestConfidence := float64(0.0)
 
 	for _, candidate := range c.candidates {

@@ -1,6 +1,7 @@
 package profiler
 
 import (
+	"errors"
 	"fmt"
 	"runtime"
 
@@ -15,7 +16,7 @@ type PyroscopeProfiler struct {
 
 func NewPyroscopeProfiler(endpoint string, tags map[string]string) (*PyroscopeProfiler, error) {
 	if endpoint == "" {
-		return nil, fmt.Errorf("profiler endpoint is required")
+		return nil, errors.New("profiler endpoint is required")
 	}
 
 	return &PyroscopeProfiler{
@@ -52,7 +53,7 @@ func (p *PyroscopeProfiler) Start() error {
 		},
 	})
 	if err != nil {
-		return fmt.Errorf("pyroscope.Start(): %v", err)
+		return fmt.Errorf("pyroscope.Start(): %w", err)
 	}
 
 	p.profiler = profiler
@@ -67,7 +68,7 @@ func (p *PyroscopeProfiler) Shutdown() error {
 
 	err := p.profiler.Stop()
 	if err != nil {
-		return fmt.Errorf("pyroscope.Stop(): %v", err)
+		return fmt.Errorf("pyroscope.Stop(): %w", err)
 	}
 
 	p.profiler = nil

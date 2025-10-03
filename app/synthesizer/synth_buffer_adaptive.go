@@ -6,7 +6,7 @@ import (
 )
 
 // AdaptiveBuffer implements an adaptive buffer that can handle varying read/write patterns
-// It combines ring buffer efficiency with overflow protection
+// It combines ring buffer efficiency with overflow protection.
 type AdaptiveBuffer struct {
 	buffer   []float64
 	mu       sync.RWMutex
@@ -24,7 +24,7 @@ type AdaptiveBuffer struct {
 
 // NewAdaptiveBuffer creates a new adaptive buffer
 // bufferDuration: duration of audio the buffer should hold
-// sampleRateHz: sample rate in Hz to calculate buffer size in samples
+// sampleRateHz: sample rate in Hz to calculate buffer size in samples.
 func NewAdaptiveBuffer(length time.Duration, sampleRateHz int) *AdaptiveBuffer {
 	capacity := int(length.Seconds() * float64(sampleRateHz))
 	readDelay := (sampleRateHz / 1000) * 24
@@ -45,7 +45,7 @@ func NewAdaptiveBuffer(length time.Duration, sampleRateHz int) *AdaptiveBuffer {
 	return buffer
 }
 
-// Clear zeros out the entire buffer and resets state
+// Clear zeros out the entire buffer and resets state.
 func (b *AdaptiveBuffer) Clear() {
 	b.mu.Lock()
 
@@ -64,31 +64,34 @@ func (b *AdaptiveBuffer) Clear() {
 	b.updateLastAccess()
 }
 
-// Length returns the total buffer capacity
+// Length returns the total buffer capacity.
 func (b *AdaptiveBuffer) Length() int {
 	return b.capacity
 }
 
-// Used returns the number of samples currently in the buffer
+// Used returns the number of samples currently in the buffer.
 func (b *AdaptiveBuffer) Used() int {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
+
 	return b.used
 }
 
-// Available returns space available for writing
+// Available returns space available for writing.
 func (b *AdaptiveBuffer) Available() int {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
+
 	return b.capacity - b.used
 }
 
-// Health returns buffer health metrics
+// Health returns buffer health metrics.
 func (b *AdaptiveBuffer) Health() (overflows, underruns int, fillRatio float64) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 
 	fillRatio = float64(b.used) / float64(b.capacity)
+
 	return b.overflows, b.underruns, fillRatio
 }
 
@@ -148,12 +151,12 @@ func (b *AdaptiveBuffer) Inspect(length int, offset int) []float64 {
 	return result
 }
 
-// Read returns samples and consumes them
+// Read returns samples and consumes them.
 func (b *AdaptiveBuffer) Read(length int) []float64 {
 	return b.readFromBuffer(length, true)
 }
 
-// Write adds samples to the buffer with overflow protection
+// Write adds samples to the buffer with overflow protection.
 func (b *AdaptiveBuffer) Write(samples []float64, offset int, overwrite bool) {
 	if len(samples) == 0 {
 		return
@@ -196,12 +199,14 @@ func (b *AdaptiveBuffer) Write(samples []float64, offset int, overwrite bool) {
 	} else {
 		// Mix mode: mix with existing buffer content starting from read position
 		peak := 0.0
+
 		for i, inputSample := range samples {
 			// Calculate position to mix at (starting from read position)
 			mixPos := (b.readPos + i) % b.capacity
 
 			// Only mix if we have existing content at this position
 			var mixedSample float64
+
 			if i < b.used {
 				existingSample := b.buffer[mixPos]
 				mixedSample = mixSampleSum(inputSample, existingSample, &peak)
@@ -219,7 +224,7 @@ func (b *AdaptiveBuffer) Write(samples []float64, offset int, overwrite bool) {
 
 		// Apply peak limiting if necessary
 		if peak > 1.0 {
-			for i := 0; i < len(samples); i++ {
+			for i := range len(samples) {
 				pos := (b.readPos + i) % b.capacity
 				b.buffer[pos] /= peak
 			}
@@ -227,7 +232,7 @@ func (b *AdaptiveBuffer) Write(samples []float64, offset int, overwrite bool) {
 	}
 }
 
-// readFromBuffer internal implementation for reading
+// readFromBuffer internal implementation for reading.
 func (b *AdaptiveBuffer) readFromBuffer(length int, consume bool) []float64 {
 	b.updateLastAccess()
 
@@ -239,6 +244,7 @@ func (b *AdaptiveBuffer) readFromBuffer(length int, consume bool) []float64 {
 		if consume {
 			b.underruns++
 		}
+
 		length = b.used
 	}
 
@@ -258,7 +264,7 @@ func (b *AdaptiveBuffer) readFromBuffer(length int, consume bool) []float64 {
 	return samples
 }
 
-// dropOldestSamples removes oldest samples to prevent overflow
+// dropOldestSamples removes oldest samples to prevent overflow.
 func (b *AdaptiveBuffer) dropOldestSamples(count int) {
 	for i := 0; i < count && b.used > 0; i++ {
 		b.buffer[b.readPos] = 0
@@ -298,7 +304,7 @@ func (b *AdaptiveBuffer) updateLastAccess() {
 	b.lastAccess = time.Now()
 }
 
-// IsStarved returns true if buffer is running low
+// IsStarved returns true if buffer is running low.
 func (b *AdaptiveBuffer) IsStarved() bool {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
@@ -306,7 +312,7 @@ func (b *AdaptiveBuffer) IsStarved() bool {
 	return b.used <= b.readDelay
 }
 
-// IsOverfull returns true if buffer is too full
+// IsOverfull returns true if buffer is too full.
 func (b *AdaptiveBuffer) IsOverfull() bool {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
@@ -314,7 +320,7 @@ func (b *AdaptiveBuffer) IsOverfull() bool {
 	return b.used > (b.capacity * 3 / 4)
 }
 
-// GetOptimalReadSize suggests optimal read size based on current state
+// GetOptimalReadSize suggests optimal read size based on current state.
 func (b *AdaptiveBuffer) GetOptimalReadSize(requestedSize int) int {
 	b.mu.RLock()
 	defer b.mu.RUnlock()

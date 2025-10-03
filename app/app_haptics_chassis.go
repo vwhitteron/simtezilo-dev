@@ -52,6 +52,7 @@ func (a *App) generateChassisHaptic() {
 		if i > pulseLength {
 			break
 		}
+
 		phase := waveSamplePeriod * (float64(i) - waveOffset)
 		pulseBuffer[i] = ((pulseAmplitude * math.Sin(phase)) + pulseAmplitude) / 2
 	}
@@ -80,6 +81,7 @@ func (a *App) calculateChassisHapticPulseAmplitude() float64 {
 	pulseAmplitude = signal.Scale(pulseAmplitude, a.config.GetJerkScale())
 
 	p1 := pulseAmplitude
+
 	pulseAmplitude, wasLimited := signal.LimitMax(pulseAmplitude, a.config.GetPulseMaxAmplitude())
 	if wasLimited {
 		a.log.Debug().Float64("pulse", p1).Msg("limiter")

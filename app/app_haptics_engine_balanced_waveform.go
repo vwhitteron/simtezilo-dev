@@ -9,7 +9,7 @@ import (
 
 // generateBalancedWaveform creates engine haptic waveforms based on primary and secondary balance characteristics
 // with consideration for the 160Hz low-pass filter of the output device
-// TODO: remove or keep and make private. Public to stop linter error
+// TODO: remove or keep and make private. Public to stop linter error.
 func (a *App) GenerateBalancedWaveform(rpm float64, engineRoughness float64, engineBuffer *[]float64) {
 	sampleRate := float64(a.synth.GetSampleRate())
 	rpmPercent := rpm / float64(a.vehicle.revLimit)
@@ -30,6 +30,7 @@ func (a *App) GenerateBalancedWaveform(rpm float64, engineRoughness float64, eng
 	if primaryFreq > maxUsableFreq {
 		primaryFreq = maxUsableFreq
 	}
+
 	if secondaryFreq > maxUsableFreq {
 		secondaryFreq = maxUsableFreq * 0.8 // Keep secondary below filter cutoff
 	}
@@ -37,8 +38,11 @@ func (a *App) GenerateBalancedWaveform(rpm float64, engineRoughness float64, eng
 	throttlePercent := float64(a.gtClient.Telemetry.ThrottleOutputPercent()) / 100
 	throttlePercent, _ = signal.LimitWindow(throttlePercent, 0.0, 1.0)
 
-	var gainOffset float64
-	var amplitudeScale float64
+	var (
+		gainOffset     float64
+		amplitudeScale float64
+	)
+
 	switch a.vehicle.vehicleType {
 	case "race":
 		gainOffset = 0.0
@@ -110,6 +114,7 @@ func (a *App) GenerateBalancedWaveform(rpm float64, engineRoughness float64, eng
 
 			// Engine-specific primary waveform characteristics
 			var primaryWave float64
+
 			switch a.vehicle.engine.geometry {
 			case "K": // Wankel
 				// Triangular rotor creates smoother primary vibrations
@@ -137,6 +142,7 @@ func (a *App) GenerateBalancedWaveform(rpm float64, engineRoughness float64, eng
 
 			// Engine-specific secondary waveform characteristics
 			var secondaryWave float64
+
 			switch a.vehicle.engine.geometry {
 			case "K": // Wankel
 				// Rotor housing vibrations - more complex waveform

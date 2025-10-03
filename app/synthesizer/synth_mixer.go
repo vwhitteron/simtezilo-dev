@@ -1,6 +1,7 @@
 package synthesizer
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -42,10 +43,10 @@ type MixerConfig struct {
 	Log           zerolog.Logger
 }
 
-// TODO: set gain and gainIncrement to defaults and add setters instead
+// TODO: set gain and gainIncrement to defaults and add setters instead.
 func NewMixer(mixerConfig MixerConfig) (*Mixer, error) {
 	if mixerConfig.MasterGain == nil || mixerConfig.GainIncrement == nil {
-		return nil, fmt.Errorf("gain and gainIncrement must be valid pointers")
+		return nil, errors.New("gain and gainIncrement must be valid pointers")
 	}
 
 	m := &Mixer{
@@ -289,13 +290,16 @@ func (m *Mixer) MixToMaster(length int) {
 
 	// mix in the chassis and transmission channels with equal priority
 	var peak float64 = 0
+
 	m.mu.RLock() // TODO: locking is too complicated, maybe have per channel locks
+
 	for _, name := range []string{"chassis", "transmission"} {
 		channel, ok := m.channels[name]
 		if !ok {
 			m.mu.RUnlock()
 			m.log.Error().Str("channel", name).Msg("channel not found in mixer")
 			m.mu.RLock()
+
 			continue
 		}
 
@@ -340,6 +344,7 @@ func (m *Mixer) MixToMaster(length int) {
 				if !remixed {
 					// Re-mix with reduced engine scale when the peak would cause clipping
 					scaleSamplesPeak(&engineSamples, peak*2)
+
 					remixed = true
 				} else {
 					// Remix is still a little high (fp precision) so just reduce the whole signal
@@ -367,13 +372,16 @@ func (m *Mixer) MixToMaster2(length int) {
 
 	// mix in the chassis and transmission channels with equal priority
 	var peak float64 = 0
+
 	m.mu.RLock()
+
 	for _, name := range []string{"chassis", "transmission"} {
 		channel, ok := m.channels[name]
 		if !ok {
 			m.mu.RUnlock()
 			m.log.Error().Str("channel", name).Msg("channel not found in mixer")
 			m.mu.RLock()
+
 			continue
 		}
 
@@ -450,7 +458,7 @@ func (m *Mixer) ClearBuffers() {
 	}
 }
 
-// checkBufferHealth monitors buffer health and logs issues
+// checkBufferHealth monitors buffer health and logs issues.
 func (m *Mixer) checkBufferHealth() {
 	now := time.Now()
 	if now.Sub(m.lastHealthCheck) < m.healthCheckInterval {
@@ -497,6 +505,7 @@ func (m *Mixer) watchForConfigChanges() {
 		}
 
 		m.mu.RLock()
+
 		for name, channel := range m.channels {
 			if channel.activeGain == *channel.configGain {
 				continue
@@ -516,6 +525,7 @@ func (m *Mixer) watchForConfigChanges() {
 			m.log.Debug().Str("channel", name).Float64("gain", *channel.configGain).Str("event", "change").Msg("config watch")
 			m.mu.RLock()
 		}
+
 		m.mu.RUnlock()
 	}
 }

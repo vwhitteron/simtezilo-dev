@@ -1,7 +1,7 @@
 package app
 
 import (
-	"fmt"
+	"errors"
 	"testing"
 
 	"github.com/rs/zerolog"
@@ -27,7 +27,7 @@ func (m *pitRadioMock) Send(msg string) error {
 	m.messages = append(m.messages, msg)
 
 	if m.failSend {
-		return fmt.Errorf("send failed")
+		return errors.New("send failed")
 	}
 
 	return nil
@@ -37,6 +37,7 @@ func (m *pitRadioMock) Send(msg string) error {
 
 type PitRadioTestSuite struct {
 	suite.Suite
+
 	app      *App
 	pitRadio pitRadioMock
 }

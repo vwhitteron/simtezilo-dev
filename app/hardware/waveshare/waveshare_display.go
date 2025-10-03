@@ -56,7 +56,7 @@ func NewDisplay(opts DisplayOptions) (*display.ST7789LCD, error) {
 //
 // This function is based on the Waveshare 1.3 inch LCD HAT code and Python ST7789 driver.
 // https://files.waveshare.com/upload/b/bd/1.3inch_LCD_HAT_code.7z
-// lib/LCD/LCD_1in3.c and python/ST7789.py
+// lib/LCD/LCD_1in3.c and python/ST7789.py.
 func setupDisplayFunc() func(*st7789.Device) {
 	return func(d *st7789.Device) {
 		d.Command(st7789.SWRESET)

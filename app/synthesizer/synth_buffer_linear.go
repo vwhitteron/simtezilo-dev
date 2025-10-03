@@ -12,7 +12,7 @@ type LinearBuffer struct {
 
 // NewLinearBuffer creates a new linear buffer that can hold the specified duration of audio
 // bufferDuration: duration of audio the buffer should hold
-// sampleRateHz: sample rate in Hz to calculate buffer size in samples
+// sampleRateHz: sample rate in Hz to calculate buffer size in samples.
 func NewLinearBuffer(length time.Duration, sampleRateHz int) *LinearBuffer {
 	capacity := int(length.Seconds() * float64(sampleRateHz))
 
@@ -25,7 +25,7 @@ func NewLinearBuffer(length time.Duration, sampleRateHz int) *LinearBuffer {
 	return buffer
 }
 
-// Clear zeros out the entire buffer and resets associated pointers
+// Clear zeros out the entire buffer and resets associated pointers.
 func (b *LinearBuffer) Clear() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -35,29 +35,30 @@ func (b *LinearBuffer) Clear() {
 	}
 }
 
-// Used returns the total number of samples the buffer can hold
+// Used returns the total number of samples the buffer can hold.
 func (b *LinearBuffer) Length() int {
 	return len(b.buffer)
 }
 
 // Inspect returns a copy of the requested number of samples from the buffer
 // offset: position relative to write position (negative values read historical samples)
-// The samples stored in the buffer are not modified and remain in place
+// The samples stored in the buffer are not modified and remain in place.
 func (b *LinearBuffer) Inspect(length int, offset int) []float64 {
 	// For linear buffer, we'll implement a simple version that ignores offset for backward compatibility
 	// This maintains the existing behavior while satisfying the interface
 	_ = offset // Ignore offset parameter for now
+
 	return b.readFromBuffer(length, false)
 }
 
 // Read returns the requested number of samples from the buffer
-// The samples stored in the buffer are zeroed out
+// The samples stored in the buffer are zeroed out.
 func (b *LinearBuffer) Read(length int) []float64 {
 	return b.readFromBuffer(length, true)
 }
 
 // readFromBuffer reads samples from the ring buffer
-// When scrub is true, the samples are zeroed out in the buffer
+// When scrub is true, the samples are zeroed out in the buffer.
 func (b *LinearBuffer) readFromBuffer(length int, scrub bool) []float64 {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -75,7 +76,7 @@ func (b *LinearBuffer) readFromBuffer(length int, scrub bool) []float64 {
 }
 
 // Write adds the given samples to the buffer
-// The overwrite parameter determines whether to overwrite or mix the samples with the existing buffer content
+// The overwrite parameter determines whether to overwrite or mix the samples with the existing buffer content.
 func (b *LinearBuffer) Write(samples []float64, overwrite bool) {
 	if len(samples) == 0 {
 		return
@@ -88,7 +89,7 @@ func (b *LinearBuffer) Write(samples []float64, overwrite bool) {
 	copy(b.buffer, samples)
 }
 
-// mixSamples mixes the input samples with the existing samples in the buffer
+// mixSamples mixes the input samples with the existing samples in the buffer.
 func (b *LinearBuffer) mixSamples(inSamples []float64) []float64 {
 	b.mu.Lock()
 	defer b.mu.Unlock()

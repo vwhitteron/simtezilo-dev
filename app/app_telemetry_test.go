@@ -10,6 +10,7 @@ import (
 
 type TelemetryTestSuite struct {
 	suite.Suite
+
 	app *App
 }
 

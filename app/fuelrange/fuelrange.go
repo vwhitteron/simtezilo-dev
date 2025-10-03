@@ -30,7 +30,7 @@ type FuelRange struct {
 	minSamples              int       // Minimum number of samples required to provide a reliable range estimate
 }
 
-// New creates a new fuel range estimator
+// New creates a new fuel range estimator.
 func New(logger zerolog.Logger) *FuelRange {
 	r := FuelRange{
 		log: logger.With().Str("package", "fuel").Logger(),
@@ -41,7 +41,7 @@ func New(logger zerolog.Logger) *FuelRange {
 	return &r
 }
 
-// Reset clears the internal state of the fuel range estimator
+// Reset clears the internal state of the fuel range estimator.
 func (r *FuelRange) Reset() {
 	r.fuelLevelAtLastUpdate = initialFuelLevel
 	r.distanceSinceLastUpdate = 0
@@ -52,6 +52,7 @@ func (r *FuelRange) Reset() {
 	// Replays reduce fuel samples by ~100x compared to a live session
 	minSamples := fuelRangeMinSamples
 	maxSamples := fuelRangeMaxSamples
+
 	if !r.isLive {
 		minSamples = minSamples / 100
 		maxSamples = maxSamples / 100
@@ -65,7 +66,7 @@ func (r *FuelRange) Reset() {
 		Msg("Fuel range reset")
 }
 
-// ResetEstimate resets only the fuel range estimate but retains odometer and samples
+// ResetEstimate resets only the fuel range estimate but retains odometer and samples.
 func (r *FuelRange) ResetEstimate() {
 	r.distanceMeters = rangeDistanceUnknown
 	r.distanceSinceLastUpdate = 0
@@ -75,7 +76,7 @@ func (r *FuelRange) ResetEstimate() {
 		Msg("Fuel range estimate reset")
 }
 
-// SetLive sets the replaying flag to indicate if the current session is a replay
+// SetLive sets the replaying flag to indicate if the current session is a replay.
 func (r *FuelRange) SetLive(isLive bool) {
 	if r.isLive == isLive {
 		return
@@ -90,7 +91,7 @@ func (r *FuelRange) SetLive(isLive bool) {
 	r.Reset()
 }
 
-// Update updates fuel consumption based on the current coordinate and fuel level
+// Update updates fuel consumption based on the current coordinate and fuel level.
 func (r *FuelRange) Update(odometerReading float64, fuelLevel float32) {
 	// Initialise Range after init/reset
 	if r.fuelLevelAtLastUpdate == initialFuelLevel || r.lastOdometerReading == initialOdometerReading {
@@ -159,7 +160,7 @@ func (r *FuelRange) Update(odometerReading float64, fuelLevel float32) {
 	}
 }
 
-// DistanceMeters returns the estimated distance in meters that can be travelled with current fuel level
+// DistanceMeters returns the estimated distance in meters that can be travelled with current fuel level.
 func (r *FuelRange) DistanceMeters() float64 {
 	// Fuel rate not available
 	if r.fuelRate <= 0 {
@@ -174,7 +175,7 @@ func (r *FuelRange) DistanceMeters() float64 {
 	return r.distanceMeters - r.distanceSinceLastUpdate
 }
 
-// RangeLaps returns the estimated number of laps that can be completed on a circuit of given length
+// RangeLaps returns the estimated number of laps that can be completed on a circuit of given length.
 func (r *FuelRange) DistanceLaps(lengthMeters float64) float64 {
 	// Invalid circuit length
 	if lengthMeters <= 0 {
@@ -186,19 +187,19 @@ func (r *FuelRange) DistanceLaps(lengthMeters float64) float64 {
 	return distanceMeters / lengthMeters
 }
 
-// UsageRatePerKm returns the current fuel consumption rate in percent per km
+// UsageRatePerKm returns the current fuel consumption rate in percent per km.
 func (r *FuelRange) UsageRatePerKm() float64 {
 	return r.fuelRate * 1000
 }
 
-// fuelConsumed returns the fuel consumed since the last update
+// fuelConsumed returns the fuel consumed since the last update.
 func (r *FuelRange) fuelConsumed(currentFuelLevel float64) float64 {
 	consumed := r.fuelLevelAtLastUpdate - currentFuelLevel
 
 	return consumed
 }
 
-// fuelRateMA returns the moving average fuel consumption rate in percent per km
+// fuelRateMA returns the moving average fuel consumption rate in percent per km.
 func (r *FuelRange) fuelRateMA() float64 {
 	var sum float64
 
@@ -210,7 +211,7 @@ func (r *FuelRange) fuelRateMA() float64 {
 }
 
 // fuelRatePercentile returns the specified percentile fuel range in percent per km
-// TODO: remove or keep and make private. Public to stop linter error
+// TODO: remove or keep and make private. Public to stop linter error.
 func (r *FuelRange) FuelRatePercentile(percentile int) float64 {
 	if len(r.fuelRateSamples) == 0 {
 		return 0

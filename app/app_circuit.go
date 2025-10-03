@@ -4,7 +4,7 @@ import (
 	"github.com/zetetos/gt-telemetry/pkg/models"
 )
 
-// updateCircuit checks for circuit changes and resets odometer and fuel range if needed
+// updateCircuit checks for circuit changes and resets odometer and fuel range if needed.
 func (a *App) updateCircuit() {
 	lap := a.state.current.lapNumber
 	odometer := a.odometer.Read()

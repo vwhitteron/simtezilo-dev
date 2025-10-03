@@ -18,7 +18,7 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/ui/gui"
 )
 
-// SineWave represents a sine wave generator
+// SineWave represents a sine wave generator.
 type SineWave struct {
 	Freq   float64 // frequency in Hz
 	phase  float64 // current phase
@@ -26,7 +26,7 @@ type SineWave struct {
 	Volume float64
 }
 
-// NewSineWave creates a new sine wave generator
+// NewSineWave creates a new sine wave generator.
 func NewSineWave(sampleRate beep.SampleRate, frequency, volume float64) *SineWave {
 	return &SineWave{
 		Freq:   frequency,
@@ -36,10 +36,9 @@ func NewSineWave(sampleRate beep.SampleRate, frequency, volume float64) *SineWav
 	}
 }
 
-// Stream generates the sine wave samples
+// Stream generates the sine wave samples.
 func (s *SineWave) Stream(samples [][2]float64) (n int, ok bool) {
 	for i := range samples {
-
 		// Calculate the sine wave value
 		sample := volumeToGain(s.Volume) * math.Sin(s.phase)
 
@@ -60,23 +59,25 @@ func (s *SineWave) Stream(samples [][2]float64) (n int, ok bool) {
 	return len(samples), true
 }
 
-// Err returns any error (none for infinite sine wave)
+// Err returns any error (none for infinite sine wave).
 func (s *SineWave) Err() error {
 	return nil
 }
 
-// SetFrequency changes the frequency of the sine wave
+// SetFrequency changes the frequency of the sine wave.
 func (s *SineWave) SetFrequency(freq float64) {
 	if freq < 5 {
 		freq = 5 // Minimum frequency to avoid inaudible sound
 	}
+
 	if freq > 160 {
 		freq = 160 // Maximum frequency to avoid exceeding human hearing range
 	}
+
 	s.Freq = freq
 }
 
-// SetVolume changes the volume (0.0 to 1.0)
+// SetVolume changes the volume (0.0 to 1.0).
 func (s *SineWave) SetVolume(vol float64) {
 	if vol >= 0 {
 		vol = 0
@@ -130,11 +131,13 @@ func main() {
 
 	// Audio parameters
 	sampleRate := beep.SampleRate(8000)
+
 	display, err := pirateaudio.NewDisplay(pirateaudio.DisplayOptions{
 		Orientation: 0,
 	})
 	if err != nil {
 		fmt.Printf("Failed to initialize display: %v\n", err)
+
 		hasDisplay = false
 	}
 
@@ -161,6 +164,7 @@ func main() {
 	err = speaker.Init(sampleRate, sampleRate.N(time.Second/10))
 	if err != nil {
 		fmt.Printf("Failed to initialize speaker: %v\n", err)
+
 		return
 	}
 
@@ -173,6 +177,7 @@ func main() {
 
 	// Play the sine wave
 	speaker.Play(sineWave)
+
 	go sineWave.KeyboardInput(done)
 
 	// Demonstrate frequency changes
@@ -193,8 +198,10 @@ func main() {
 						_ = renderer.RenderLiveScreen(value)
 					}
 				}
+
 				lastFreq = int(sineWave.Freq)
 				lastVolume = sineWave.Volume
+
 				time.Sleep(200 * time.Millisecond)
 			}
 		}
@@ -203,9 +210,11 @@ func main() {
 	select {
 	case <-done:
 		logger.Debug().Str("signal", "done").Msg("stopping")
+
 		break
 	case <-sigChan:
 		logger.Debug().Str("signal", "interrupt").Msg("stopping")
+
 		break
 	}
 
@@ -214,9 +223,11 @@ func main() {
 
 	// Graceful shutdown
 	speaker.Clear()
+
 	if hasDisplay {
 		// Show shutdown message clear and power off the display
 		_ = renderer.RenderLiveScreen("Goodbye!")
+
 		time.Sleep(500 * time.Millisecond) // Brief pause to show message
 		display.Clear()
 		display.Sleep()

@@ -29,9 +29,11 @@ func TestDurationCalculationExamples(t *testing.T) {
 			if adaptiveBuffer.Length() != tc.expected {
 				t.Errorf("AdaptiveBuffer: expected %d samples, got %d", tc.expected, adaptiveBuffer.Length())
 			}
+
 			if ringBuffer.Length() != tc.expected {
 				t.Errorf("RingBuffer: expected %d samples, got %d", tc.expected, ringBuffer.Length())
 			}
+
 			if linearBuffer.Length() != tc.expected {
 				t.Errorf("LinearBuffer: expected %d samples, got %d", tc.expected, linearBuffer.Length())
 			}

@@ -1,6 +1,6 @@
 package app
 
-// updateFuelRange calculates lap distance, vehicle fuel consumption and range
+// updateFuelRange calculates lap distance, vehicle fuel consumption and range.
 func (a *App) updateFuelRange() {
 	if !a.sequenceHasAdvanced() || !a.telemetryIsActive() {
 		return

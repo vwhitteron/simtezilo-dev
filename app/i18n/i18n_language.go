@@ -119,13 +119,17 @@ func getLanguage(langCode string, logger zerolog.Logger) *Language {
 		fontRegular, err := GetFont(jp.RegularFont)
 		if err != nil {
 			logger.Error().Err(err).Msg("failed to load regular font")
+
 			fontRegular = nil
 		}
+
 		fontValue, err := GetFont(jp.ValueFont)
 		if err != nil {
 			logger.Error().Err(err).Msg("failed to load regular font")
+
 			fontRegular = nil
 		}
+
 		return &Language{
 			Code: jp.Code,
 			Name: jp.Name,
@@ -145,13 +149,17 @@ func getLanguage(langCode string, logger zerolog.Logger) *Language {
 		fontEn, err := GetFont(en.RegularFont)
 		if err != nil {
 			logger.Error().Err(err).Msg("failed to load regular font")
+
 			fontEn = nil
 		}
+
 		fontValue, err := GetFont(en.ValueFont)
 		if err != nil {
 			logger.Error().Err(err).Msg("failed to load value font")
+
 			fontEn = nil
 		}
+
 		return &Language{
 			Code: en.Code,
 			Name: en.Name,

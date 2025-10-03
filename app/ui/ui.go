@@ -60,6 +60,7 @@ func NewUserInterface(config *Config) *UserInterface {
 	}
 
 	var err error
+
 	u.Screen, err = gui.NewScreen(&gui.Config{
 		DisplayDevice: config.Display,
 		I18n:          config.I18n,
@@ -120,7 +121,7 @@ func (u *UserInterface) DisplayToggleOff() bool {
 	return false
 }
 
-// TODO: move it elsewhere or get rid of it entirely
+// TODO: move it elsewhere or get rid of it entirely.
 func (u *UserInterface) DrawReadyDisplay() {
 	if int(u.mode) == int(ScreenModeWait) && !u.displayData.forceRefresh {
 		return
@@ -168,7 +169,7 @@ func (u *UserInterface) SettingAction(setting string, action string) string {
 	return u.settingsCallback(setting, action)
 }
 
-// TODO: clean up this logic and make it easier to understand
+// TODO: clean up this logic and make it easier to understand.
 func (u *UserInterface) UpdateDisplay(data LiveData) {
 	switch u.mode {
 	case ScreenModeSettings:

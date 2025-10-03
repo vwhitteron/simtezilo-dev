@@ -207,6 +207,7 @@ func (r *Screen) RenderSettingScreen(header string, value string) error {
 		Text:   "Setting " + header + ": " + value,
 		Canvas: canvas,
 	}
+
 	err := r.displayDevice.Write(content)
 	if err != nil {
 		return fmt.Errorf("write settings canvas to display: %w", err)

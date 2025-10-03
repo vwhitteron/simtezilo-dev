@@ -16,7 +16,7 @@ func SetupHID(orientation int, hidEvent chan ui.HIDInputEvent) {
 	}
 
 	rotatedMapping := make([]ui.HIDInputEvent, 4)
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		rotatedMapping[i] = baseMapping[(i-rotationOffset+4)%4]
 	}
 

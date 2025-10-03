@@ -3,9 +3,9 @@ package st7789
 type Rotation uint8
 
 const (
-	// REGISTERS
+	// REGISTERS.
 
-	// System function comand table 1
+	// System function comand table 1.
 	NOP       = 0x00
 	SWRESET   = 0x01
 	RDDID     = 0x04
@@ -55,7 +55,7 @@ const (
 	RDID2     = 0xDB
 	RDID3     = 0xDC
 
-	// System function comand table 1
+	// System function comand table 1.
 	RAMCTRL   = 0xB0
 	RGBCTRL   = 0xB1
 	PORCTRL   = 0xB2
@@ -92,16 +92,16 @@ const (
 	NVMSET    = 0xFC
 	PROMACT   = 0xFE
 
-	// COMMAND PARAMETERS
+	// COMMAND PARAMETERS.
 
 	BG_SPI_CS_BACK  = 0
 	BG_SPI_CS_FRONT = 1
 
-	// VDVVRHEN bits
+	// VDVVRHEN bits.
 	VDVVRHEN_CMDEN_NVM   = 0x00 // VDV and VRH register value comes from NVM
 	VDVVRHEN_CMDEN_WRITE = 0x01 // VDV and VRH register value comes from command write
 
-	// Color mode bits
+	// Color mode bits.
 	COLMOD_RGB_65K   = 0x50 // 16-bit color
 	COLMOD_RGB_262K  = 0x60 // 18-bit color
 	COLMOD_CTRL_4K   = 0x03 // 12-bit color
@@ -109,7 +109,7 @@ const (
 	COLMOD_CTRL_262K = 0x06 // 18-bit color
 	COLMOD_CTRL_16M  = 0x07 // truncates to 18 bits
 
-	// Allowable frame rate codes for FRCTRL2 (Identifier is in Hz)
+	// Allowable frame rate codes for FRCTRL2 (Identifier is in Hz).
 	FRAMERATE_119 = 0x00
 	FRAMERATE_111 = 0x01
 	FRAMERATE_105 = 0x02
@@ -143,7 +143,7 @@ const (
 	FRAMERATE_40  = 0x1E
 	FRAMERATE_39  = 0x1F
 
-	// LCMCTRL bits
+	// LCMCTRL bits.
 	LCMCTRL_XMY  = 0x40 // XOR MY setting in MADCTL
 	LCMCTRL_XBGR = 0x20 // XOR RGB setting in MADCTL
 	LCMCTRL_XREV = 0x10 // XOR inverse setting in INVON
@@ -152,7 +152,7 @@ const (
 	LCMCTRL_XMX  = 0x02 // XOR MX setting in MADCTL
 	LCMCTRL_XGS  = 0x01 // XOR GS setting in GATECTRL
 
-	// MADCTL bits
+	// MADCTL bits.
 	MADCTL_MY_TB   = 0x00 // Page address order top to bottom
 	MADCTL_MY_BT   = 0x80 // Page address order bottom to top
 	MADCTL_MX_LR   = 0x00 // Column address order left to right
@@ -178,7 +178,7 @@ const (
 
 // DefaultCOLMOD returns the default color mode settings specified by the manufacturer.
 //
-// COLMOD: 18-bit color, non-RGB
+// COLMOD: 18-bit color, non-RGB.
 func DefaultCOLMOD() []byte {
 	return []byte{COLMOD_CTRL_262K}
 }
@@ -197,21 +197,21 @@ func DefaultFRCTL1() []byte {
 
 // DefaultFRCTRL2 returns the default normal frame rate setting specified by the manufacturer.
 //
-// FRCTRL2: 60Hz
+// FRCTRL2: 60Hz.
 func DefaultFRCTRL2() []byte {
 	return []byte{FRAMERATE_60}
 }
 
 // DefaultGCTRL returns the default gate control settings specified by the manufacturer.
 //
-// GCTRL: High = 13.26v, Low = -10.43v
+// GCTRL: High = 13.26v, Low = -10.43v.
 func DefaultGCTRL() []byte {
 	return []byte{0x35}
 }
 
 // DefaultLCMCTRL returns the default LCM control settings specified by the manufacturer.
 //
-// LCMCTRL: XOR RGB/BGR, XOR Column Address Order, XOR Display Data Latch Order
+// LCMCTRL: XOR RGB/BGR, XOR Column Address Order, XOR Display Data Latch Order.
 func DefaultLCMCTRL() []byte {
 	return []byte{0x2C}
 }
@@ -223,7 +223,7 @@ func DefaultNVGAMCTRL() []byte {
 
 // DefaultPORCTRL returns the default porch control settings specified by the maufacturer.
 //
-// PORCTRL: Normal(Back Front), PSEN = disabled, Idle(Back, Front)
+// PORCTRL: Normal(Back Front), PSEN = disabled, Idle(Back, Front).
 func DefaultPORCTRL() []byte {
 	return []byte{0x0C, 0x0C, 0x00, 0x33, 0x33}
 }
@@ -235,14 +235,14 @@ func DefaultPVGAMCTRL() []byte {
 
 // DefaultPWCTRL1 returns the default power control 1 settings specified by the manufacturer.
 //
-// PWCTRL1: AVDD = 6.8v, AVCL = -4.6v, VDS = 2.3v
+// PWCTRL1: AVDD = 6.8v, AVCL = -4.6v, VDS = 2.3v.
 func DefaultPWCTRL1() []byte {
 	return []byte{0xA4, 0xA1}
 }
 
 // DefaultVCOMS returns the default VCOM settings specified by the manufacturer.
 //
-// VCOMS: 0.9v
+// VCOMS: 0.9v.
 func DefaultVCOMS() []byte {
 	return []byte{0x20}
 }
@@ -256,7 +256,7 @@ func DefaultVDVVRHEN() []byte {
 
 // DefaultVDVS returns the default VDV setting specified by the manufacturer.
 //
-// VDV: 0v
+// VDV: 0v.
 func DefaultVDVS() []byte {
 	return []byte{0x20}
 }

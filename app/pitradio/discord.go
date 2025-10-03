@@ -1,6 +1,7 @@
 package pitradio
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -18,11 +19,11 @@ type DiscordBot struct {
 // Requires a bot token and a channel ID.
 func NewDiscordBot(token string, channelID string) (*DiscordBot, error) {
 	if token == "" {
-		return nil, fmt.Errorf("invalid token")
+		return nil, errors.New("invalid token")
 	}
 
 	if channelID == "" {
-		return nil, fmt.Errorf("invalid channel ID")
+		return nil, errors.New("invalid channel ID")
 	}
 
 	dg, err := discordgo.New("Bot " + token)
@@ -42,7 +43,7 @@ func NewDiscordBot(token string, channelID string) (*DiscordBot, error) {
 // Connect establishes a connection to the Discord WebSocket.
 func (d *DiscordBot) Connect() error {
 	if d.session == nil {
-		return fmt.Errorf("discord session not initialized")
+		return errors.New("discord session not initialized")
 	}
 
 	err := d.session.Open()
@@ -58,7 +59,7 @@ func (d *DiscordBot) Connect() error {
 // Disconnect terminates the connection to the Discord WebSocket.
 func (d *DiscordBot) Disconnect() error {
 	if d.session == nil {
-		return fmt.Errorf("discord session not initialized")
+		return errors.New("discord session not initialized")
 	}
 
 	err := d.session.Close()
@@ -72,8 +73,7 @@ func (d *DiscordBot) Disconnect() error {
 // Send sends a message to the Discord channel.
 func (d *DiscordBot) Send(message string) error {
 	if d.session == nil {
-		return fmt.Errorf("discord session not initialized")
-
+		return errors.New("discord session not initialized")
 	}
 
 	d.queue <- message
@@ -100,7 +100,7 @@ func (d *DiscordBot) MessageDispatcher(logger zerolog.Logger) {
 	}
 }
 
-// ready updates the watch status of the bot user
+// ready updates the watch status of the bot user.
 func ready(s *discordgo.Session, event *discordgo.Event) {
 	_ = s.UpdateWatchStatus(0, "Gran Turismo 7")
 }

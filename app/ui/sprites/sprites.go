@@ -32,7 +32,7 @@ func NewSpriteSet() (*SpriteSet, error) {
 
 	img, _, err := image.Decode(data)
 	if err != nil {
-		return nil, fmt.Errorf("decoding image: %e", err)
+		return nil, fmt.Errorf("decoding image: %w", err)
 	}
 
 	return &SpriteSet{

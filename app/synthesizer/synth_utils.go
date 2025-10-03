@@ -28,7 +28,7 @@ func GainToAmplitudeRatio(gain float64) float64 {
 
 // findZeroCrossing searches for the first zero point or crossing in a given array of samples
 // Returns the position of the zero crossing and the polarity just before the crossing (-1 or 1)
-// If no zero point or crossing is found then it returns the first index and polarity of first sample
+// If no zero point or crossing is found then it returns the first index and polarity of first sample.
 func FindSampleZeroCrossing(samples []float64) (offset int, polarity int) {
 	// Find zero crossing or polarity change within the current buffer content
 	offset = 0
@@ -41,6 +41,7 @@ func FindSampleZeroCrossing(samples []float64) (offset int, polarity int) {
 				polarity = -1
 			}
 		}
+
 		return offset, polarity
 	}
 
@@ -65,6 +66,7 @@ func FindSampleZeroCrossing(samples []float64) (offset int, polarity int) {
 					polarity = 1
 				}
 			}
+
 			break
 		}
 
@@ -77,6 +79,7 @@ func FindSampleZeroCrossing(samples []float64) (offset int, polarity int) {
 			} else {
 				polarity = 1
 			}
+
 			break
 		}
 	}
@@ -105,7 +108,7 @@ func InvertSamplePolarity(samples *[]float64) {
 	}
 }
 
-// Adjusts the scale of the samples by the given magnitude
+// Adjusts the scale of the samples by the given magnitude.
 func ScaleSamples(samples *[]float64, magnitude float64) {
 	for i := range *samples {
 		(*samples)[i] = (*samples)[i] * magnitude

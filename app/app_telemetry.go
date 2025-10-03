@@ -26,7 +26,6 @@ func (a *App) checkForNewLap() {
 			Int16("previous", a.state.last.lapNumber).
 			Str("status", "skip backwards or reset").
 			Msg("New lap started")
-
 	}
 }
 
@@ -58,6 +57,7 @@ func (a *App) checkRaceComplete() {
 			Int16("current_lap", currentLap).
 			Int16("race_laps", raceLaps).
 			Msg("Race complete")
+
 		return
 	}
 }
@@ -116,7 +116,7 @@ func (a *App) timeOfDayHasReset() bool {
 	return timeOfDayDelta.Milliseconds() < 0
 }
 
-// liveFlagHasChanged checks if the live flag has changed between live and replay modes
+// liveFlagHasChanged checks if the live flag has changed between live and replay modes.
 func (a *App) liveFlagHasChanged() bool {
 	return a.state.current.isLive != a.state.last.isLive
 }

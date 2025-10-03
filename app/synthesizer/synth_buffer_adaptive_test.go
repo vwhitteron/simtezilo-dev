@@ -69,6 +69,7 @@ func TestAdaptiveBufferOverflow(t *testing.T) {
 	for i := range largeSamples {
 		largeSamples[i] = float64(i)
 	}
+
 	buffer.Write(largeSamples, 0, true)
 
 	overflows, _, _ := buffer.Health()
@@ -160,17 +161,21 @@ func TestAdaptiveBufferHealthMonitoring(t *testing.T) {
 	// Test starvation detection with minimal content
 	buffer.Clear()
 	buffer.Write([]float64{1.0}, 0, true) // Very low fill
+
 	if !buffer.IsStarved() {
 		t.Log("Buffer not detected as starved - may be due to readDelay effect")
 	}
 
 	// Test overfull detection
 	buffer.Clear()
+
 	largeSamples := make([]float64, 80) // Fill most of the buffer
 	for i := range largeSamples {
 		largeSamples[i] = float64(i)
 	}
+
 	buffer.Write(largeSamples, 0, true)
+
 	if !buffer.IsOverfull() {
 		t.Log("Buffer not detected as overfull - checking buffer state")
 		t.Logf("Used: %d, Capacity: %d, Fill ratio: %f", buffer.Used(), buffer.Length(), float64(buffer.Used())/float64(buffer.Length()))
@@ -186,20 +191,22 @@ func TestAdaptiveBufferConcurrency(t *testing.T) {
 
 	// Writer goroutine
 	go func() {
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			samples := []float64{float64(i), float64(i + 1)}
 			buffer.Write(samples, 0, true)
 			time.Sleep(time.Millisecond)
 		}
+
 		done <- true
 	}()
 
 	// Reader goroutine
 	go func() {
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			buffer.Read(2)
 			time.Sleep(time.Millisecond)
 		}
+
 		done <- true
 	}()
 

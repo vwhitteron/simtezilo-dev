@@ -143,6 +143,7 @@ func New(opts AppOptions) (*App, error) {
 	if err != nil {
 		a.log.Error().Int("config value", int(configLogLevel)).Msg("invalid log level")
 	}
+
 	if configLogLevel < a.log.GetLevel() || configLogLevel >= zerolog.NoLevel {
 		a.log = a.log.Level(configLogLevel).With().Logger()
 
@@ -162,6 +163,7 @@ func New(opts AppOptions) (*App, error) {
 	switch a.config.GetHardwareModel() {
 	case "pirateaudio":
 		hardware.Init()
+
 		orientation := a.config.GetDisplayOrientation()
 
 		a.display, err = pirateaudio.NewDisplay(pirateaudio.DisplayOptions{
@@ -178,6 +180,7 @@ func New(opts AppOptions) (*App, error) {
 
 			return nil, err
 		}
+
 		a.log.Debug().
 			Str("component", "pirate audio").
 			Str("sub", "display").
@@ -206,6 +209,7 @@ func New(opts AppOptions) (*App, error) {
 
 			return nil, err
 		}
+
 		a.log.Debug().
 			Str("component", "spotpear game 1.3").
 			Str("sub", "display").
@@ -219,6 +223,7 @@ func New(opts AppOptions) (*App, error) {
 			Msg("init")
 	case "waveshare":
 		hardware.Init()
+
 		orientation := a.config.GetDisplayOrientation()
 
 		a.display, err = waveshare.NewDisplay(waveshare.DisplayOptions{
@@ -235,6 +240,7 @@ func New(opts AppOptions) (*App, error) {
 
 			return nil, err
 		}
+
 		a.log.Debug().
 			Str("component", "waveshare 14972").
 			Str("sub", "display").
@@ -255,6 +261,7 @@ func New(opts AppOptions) (*App, error) {
 			Msg("init")
 
 		go console.SetupHID(hidEvents)
+
 		a.log.Debug().
 			Str("component", "console").
 			Str("sub", "hid").
@@ -303,6 +310,7 @@ func New(opts AppOptions) (*App, error) {
 
 	// initialise GT telemetry client
 	gtClientLogger := opts.Logger.With().Str("component", "gt client").Logger()
+
 	a.gtClient, err = gttelemetry.New(gttelemetry.Options{
 		Source:    a.config.GetTelemetrySource(),
 		Logger:    &gtClientLogger,
@@ -394,6 +402,7 @@ func (a *App) Close() {
 			Str("result", "failure").
 			Msg("render splash screen")
 	}
+
 	time.Sleep(1 * time.Second)
 	a.display.Close()
 }
@@ -462,6 +471,7 @@ func (a *App) startBackgroundTasks() {
 func (a *App) startAudioOutput() {
 	outputSampleRate := beep.SampleRate(a.config.GetOutputSampleRateHz())
 	hapticStreamer := synthesizer.NewHapticStream(a.synth, outputSampleRate)
+
 	err := speaker.Init(
 		outputSampleRate,
 		outputSampleRate.N(time.Second/15),
@@ -515,6 +525,7 @@ func (a *App) mainLoop() {
 			if a.gtClient.Telemetry.IsOnCircuit() {
 				a.updateFuelRange()
 			}
+
 			a.updateCircuit()
 			a.sendTelemetryChartData()
 
@@ -533,7 +544,6 @@ func (a *App) mainLoop() {
 			if a.gtClient.Telemetry.IsOnCircuit() {
 				a.sendPitRadioMessage()
 			}
-
 		}
 	}
 }
@@ -562,7 +572,6 @@ func (a *App) newLapHandler() bool {
 			time.Sleep(8 * time.Millisecond)
 		}
 	}
-
 }
 
 // sessionIsComplete checks if the session has completed.
@@ -600,7 +609,6 @@ func (a *App) resetAppState() {
 
 func (a *App) getGameState() gameState {
 	switch {
-
 	case a.gtClient.Telemetry.IsInMainMenu():
 		return gameStateMainMenu
 
@@ -612,7 +620,6 @@ func (a *App) getGameState() gameState {
 
 	default:
 		return gameStateUnknown
-
 	}
 }
 
@@ -670,7 +677,6 @@ func (a *App) handleGameStateChange() {
 		a.fuelRange.ResetEstimate()
 
 		a.log.Debug().Msg("Loading flag")
-
 	}
 
 	if a.sessionIsComplete() {
@@ -687,7 +693,7 @@ func (a *App) handleVehicleChange() {
 	}
 }
 
-// updateVehicle updates the vehicle characteristcs from the current telemetry vehicle ID
+// updateVehicle updates the vehicle characteristics from the current telemetry vehicle ID
 func (a *App) updateVehicle() {
 	vehicleType := a.gtClient.Telemetry.VehicleType()
 	engineLayout := a.gtClient.Telemetry.VehicleEngineLayout()

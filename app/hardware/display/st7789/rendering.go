@@ -7,7 +7,7 @@ import (
 	"image/draw"
 )
 
-// FillRectangle fills a rectangle at a given coordinates with a color
+// FillRectangle fills a rectangle at a given coordinates with a color.
 func (d *Device) FillRectangle(x, y, width, height uint16, c color.RGBA) error {
 	k, i := d.Size()
 	if width == 0 || height == 0 ||
@@ -16,12 +16,13 @@ func (d *Device) FillRectangle(x, y, width, height uint16, c color.RGBA) error {
 	}
 
 	d.SetWindow()
+
 	c565 := RGBAToRGB565(c)
 	c1 := uint8(c565)
 	c2 := uint8(c565 >> 8)
 
 	data := make([]uint8, d.PixelCount())
-	for i := int32(0); i < int32(d.pixelColumns); i++ {
+	for i := range int32(d.pixelColumns) {
 		data[i*2] = c1
 		data[i*2+1] = c2
 	}
@@ -33,6 +34,7 @@ func (d *Device) FillRectangle(x, y, width, height uint16, c color.RGBA) error {
 		} else {
 			_ = d.SendData(data[:j*2])
 		}
+
 		j -= int32(d.pixelRows)
 	}
 
@@ -48,7 +50,7 @@ func RGBAToRGB565(c color.RGBA) uint16 {
 	return (r << 11) | (g << 5) | b
 }
 
-// SetPixel sets a pixel in the screen
+// SetPixel sets a pixel in the screen.
 func (d *Device) SetPixel(x uint16, y uint16, c color.RGBA) {
 	resX, resY := d.getResolution()
 	if x >= resX || y >= resY {
@@ -58,7 +60,7 @@ func (d *Device) SetPixel(x uint16, y uint16, c color.RGBA) {
 	_ = d.FillRectangle(x, y, 1, 1, c)
 }
 
-// FillScreen fills the screen with a given color
+// FillScreen fills the screen with a given color.
 func (d *Device) FillScreen(c color.RGBA) {
 	x, y := d.getResolution()
 
@@ -67,15 +69,17 @@ func (d *Device) FillScreen(c color.RGBA) {
 
 func (d *Device) DrawRAW(img image.Image) {
 	d.SetWindow()
+
 	rect := img.Bounds()
 	rgbaimg := image.NewRGBA(rect)
 	draw.Draw(rgbaimg, rect, img, rect.Min, draw.Src)
 
 	data := []uint8{}
-	for column := 0; column < int(d.pixelColumns); column++ {
-		for row := 0; row < int(d.pixelRows); row++ {
-			x := rect.Min.X + int(d.pixelColumns) - column
-			y := rect.Min.Y + row
+
+	for column := range d.pixelColumns {
+		for row := range d.pixelRows {
+			x := rect.Min.X + int(d.pixelColumns) - int(column)
+			y := rect.Min.Y + int(row)
 			rgba := rgbaimg.At(x, y).(color.RGBA)
 			c565 := RGBAToRGB565(rgba)
 			data = append(data, uint8(c565), uint8(c565>>8))
@@ -85,6 +89,7 @@ func (d *Device) DrawRAW(img image.Image) {
 	chunkSize := 4096
 	for offset := 0; offset < len(data); offset += chunkSize {
 		end := min(offset+chunkSize, len(data))
+
 		err := d.SendData(data[offset:end])
 		if err != nil {
 			d.log.Error().

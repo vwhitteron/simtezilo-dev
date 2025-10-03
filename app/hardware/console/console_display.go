@@ -71,6 +71,7 @@ func (d *ConsoleDisplay) RotateCW() int {
 	if d.Orientation >= 360 {
 		d.Orientation = 0
 	}
+
 	return d.Orientation
 }
 
@@ -79,5 +80,6 @@ func (d *ConsoleDisplay) RotateCCW() int {
 	if d.Orientation < 0 {
 		d.Orientation = 270
 	}
+
 	return d.Orientation
 }

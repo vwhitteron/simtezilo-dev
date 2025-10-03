@@ -70,6 +70,7 @@ func (u *UserInterface) HIDEventHandler() {
 			if u.display.IsAwake() {
 				menuPage = u.menuSystem.PreviousMenuPage()
 			}
+
 			value = u.SettingAction(menuPage, "get")
 
 			u.log.Debug().
@@ -82,6 +83,7 @@ func (u *UserInterface) HIDEventHandler() {
 			if u.display.IsAwake() {
 				menuPage = u.menuSystem.NextMenuPage()
 			}
+
 			value = u.SettingAction(menuPage, "get")
 
 			u.log.Debug().
@@ -106,6 +108,7 @@ func (u *UserInterface) HIDEventHandler() {
 				Str("action", "quit").
 				Str("type", "app").
 				Msg("HID event")
+
 			u.done <- true
 		case HIDInputPower:
 			state := u.DisplayToggleOff()

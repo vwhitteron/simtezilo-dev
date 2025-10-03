@@ -79,5 +79,4 @@ func (a *App) generateForceHaptics() {
 	if a.kinematics.Current.ComputeTime.Microseconds() > 16000 {
 		a.log.Warn().Float64("ms", float64(a.kinematics.Current.ComputeTime.Milliseconds())).Msg("slow compute")
 	}
-
 }

@@ -11,7 +11,7 @@ import (
 // and torsional excitation characteristics as documented by EPI Engineering.
 // This function incorporates both primary and secondary balance configurations to model
 // realistic engine torque output variations.
-// TODO: remove or keep and make private. Public to stop linter error
+// TODO: remove or keep and make private. Public to stop linter error.
 func (a *App) GenerateTorqueCurveWaveform(rpm float64, engineRoughness float64, engineBuffer *[]float64) {
 	sampleRate := float64(a.synth.GetSampleRate())
 	rpmPercent := rpm / float64(a.vehicle.revLimit)
@@ -25,10 +25,13 @@ func (a *App) GenerateTorqueCurveWaveform(rpm float64, engineRoughness float64, 
 
 	// Secondary balance affects higher-order torque variations
 	// These occur at different multiples based on engine configuration
-	var secondaryTorqueFreq float64
-	var tertiaryTorqueFreq float64
+	var (
+		secondaryTorqueFreq float64
+		tertiaryTorqueFreq  float64
+	)
 
 	// Engine-specific torque curve harmonics based on layout and balance
+
 	switch a.vehicle.engine.layout {
 	case "I":
 		// Inline engines: Secondary balance affects reciprocating mass imbalance
@@ -67,9 +70,11 @@ func (a *App) GenerateTorqueCurveWaveform(rpm float64, engineRoughness float64, 
 	if primaryTorqueFreq > maxUsableFreq {
 		primaryTorqueFreq = maxUsableFreq
 	}
+
 	if secondaryTorqueFreq > maxUsableFreq {
 		secondaryTorqueFreq = maxUsableFreq * 0.8
 	}
+
 	if tertiaryTorqueFreq > maxUsableFreq {
 		tertiaryTorqueFreq = maxUsableFreq * 0.6
 	}
@@ -79,8 +84,11 @@ func (a *App) GenerateTorqueCurveWaveform(rpm float64, engineRoughness float64, 
 	throttlePercent, _ = signal.LimitWindow(throttlePercent, 0.0, 1.0)
 
 	// Vehicle type adjustments
-	var gainOffset float64
-	var amplitudeScale float64
+	var (
+		gainOffset     float64
+		amplitudeScale float64
+	)
+
 	switch a.vehicle.vehicleType {
 	case "race":
 		gainOffset = 0.0

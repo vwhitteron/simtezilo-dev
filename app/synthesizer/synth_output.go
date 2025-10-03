@@ -49,7 +49,7 @@ func NewHapticStream(synth *Synthesizer, outputSampleRate beep.SampleRate) *Hapt
 	}
 }
 
-// Streamer handles streaming at the synthesizer's native sample rate (8kHz)
+// Streamer handles streaming at the synthesizer's native sample rate (8kHz).
 type Streamer struct {
 	synth *Synthesizer
 }

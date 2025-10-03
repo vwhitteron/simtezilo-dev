@@ -13,7 +13,7 @@ const (
 	minConfidenceThreshold      float64 = 0.3 // Minimum confidence threshold (30%) before choosing a circuit
 )
 
-// Initial unknown circuit info
+// Initial unknown circuit info.
 var circuitInfoInit = circuits.CircuitInfo{
 	ID:        "unknown",
 	Name:      "unknown",
@@ -21,7 +21,7 @@ var circuitInfoInit = circuits.CircuitInfo{
 	StartLine: models.CoordinateNorm{X: 0, Y: 0, Z: 0},
 }
 
-// TODO: add godoc
+// TODO: add godoc.
 type Circuit struct {
 	database                circuits.CircuitDB   // Circuit database for track identification
 	log                     zerolog.Logger       // Logger instance
@@ -81,7 +81,7 @@ func (c *Circuit) LengthMeters() float64 {
 	return float64(c.info.Length)
 }
 
-// LapProgress returns the progress through the current lap as a value between 0 and 1
+// LapProgress returns the progress through the current lap as a value between 0 and 1.
 func (c *Circuit) LapProgress() float64 {
 	lapDistance := c.lapProgressMeters - c.lapStartOdometerReading
 
@@ -92,7 +92,7 @@ func (c *Circuit) LapProgress() float64 {
 	return lapDistance / float64(c.info.Length)
 }
 
-// LapProgressRemaining returns the remaining progress through the current lap as a value between 0 and 1
+// LapProgressRemaining returns the remaining progress through the current lap as a value between 0 and 1.
 func (c *Circuit) LapProgressRemaining() float64 {
 	progress := c.LapProgress()
 
@@ -100,7 +100,7 @@ func (c *Circuit) LapProgressRemaining() float64 {
 }
 
 // UpdateCircuit updates the current circuit information by matching the provided coordinate with a circuit DB entry
-// The updateType flag indicates if the coordinate is from a start line crossing or general positional update
+// The updateType flag indicates if the coordinate is from a start line crossing or general positional update.
 func (c *Circuit) UpdateCircuit(odometerReading float64, lap int16, coordinate models.Coordinate, coordinateType models.CoordinateType) (didUpdate bool) {
 	c.updateDistanceTravelled(odometerReading, lap, coordinateType)
 	c.setLapStartMarker()
@@ -152,7 +152,7 @@ func (c *Circuit) UpdateCircuit(odometerReading float64, lap int16, coordinate m
 }
 
 // updateDistanceTravelled updates the total distance travelled based on the provided coordinate.
-// TODO: this is duplicated in fuelrange.distanceTravelled
+// TODO: this is duplicated in fuelrange.distanceTravelled.
 func (c *Circuit) updateDistanceTravelled(odometerReading float64, lap int16, coordinateType models.CoordinateType) {
 	// New lap started
 	if coordinateType == models.CoordinateTypeStartLine {
@@ -187,10 +187,9 @@ func (c *Circuit) setLapStartMarker() {
 	}
 
 	c.setCircuitLength()
-
 }
 
-// setCircuitLength sets the circuit length if it can be determined from the distance travelled
+// setCircuitLength sets the circuit length if it can be determined from the distance travelled.
 func (c *Circuit) setCircuitLength() {
 	if c.lapProgressMeters <= 0 {
 		return
@@ -203,7 +202,7 @@ func (c *Circuit) setCircuitLength() {
 	}
 }
 
-// circuitIsKnown returns true if the current circuit is known
+// circuitIsKnown returns true if the current circuit is known.
 func (c *Circuit) circuitIsKnown() bool {
 	return c.info.ID != circuitInfoInit.ID
 }

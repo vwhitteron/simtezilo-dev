@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// RingBuffer implements a ring buffer for audio samples
+// RingBuffer implements a ring buffer for audio samples.
 type RingBuffer struct {
 	buffer []float64
 	mu     sync.RWMutex
@@ -20,7 +20,7 @@ type RingBuffer struct {
 
 // NewRingBuffer creates a new ring buffer that can hold the specified duration of audio
 // bufferDuration: duration of audio the buffer should hold
-// sampleRateHz: sample rate in Hz to calculate buffer size in samples
+// sampleRateHz: sample rate in Hz to calculate buffer size in samples.
 func NewRingBuffer(length time.Duration, sampleRateHz int) *RingBuffer {
 	capacity := int(length.Seconds() * float64(sampleRateHz))
 	readDelay := (sampleRateHz / 1000) * 24
@@ -39,7 +39,7 @@ func NewRingBuffer(length time.Duration, sampleRateHz int) *RingBuffer {
 	return buffer
 }
 
-// Clear zeros out the entire buffer and resets associated pointers
+// Clear zeros out the entire buffer and resets associated pointers.
 func (b *RingBuffer) Clear() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -53,12 +53,12 @@ func (b *RingBuffer) Clear() {
 	b.used = b.readDelay
 }
 
-// Used returns the total number of samples the buffer can hold
+// Used returns the total number of samples the buffer can hold.
 func (b *RingBuffer) Length() int {
 	return b.capacity
 }
 
-// Used returns the number of samples currently in the buffer
+// Used returns the number of samples currently in the buffer.
 func (b *RingBuffer) Used() int {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
@@ -66,7 +66,7 @@ func (b *RingBuffer) Used() int {
 	return b.used
 }
 
-// Available returns the number of samples that can be written before the buffer is full
+// Available returns the number of samples that can be written before the buffer is full.
 func (b *RingBuffer) Available() int {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
@@ -74,7 +74,7 @@ func (b *RingBuffer) Available() int {
 	return b.capacity - b.used
 }
 
-// IsFull returns true if the buffer is at capacity
+// IsFull returns true if the buffer is at capacity.
 func (b *RingBuffer) IsFull() bool {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
@@ -84,22 +84,23 @@ func (b *RingBuffer) IsFull() bool {
 
 // Inspect returns a copy of the requested number of samples from the buffer
 // offset: position relative to write position (negative values read historical samples)
-// The samples stored in the buffer are not modified and remain in place
+// The samples stored in the buffer are not modified and remain in place.
 func (b *RingBuffer) Inspect(length int, offset int) []float64 {
 	// For ring buffer, we'll implement a simple version that ignores offset for backward compatibility
 	// This maintains the existing behavior while satisfying the interface
 	_ = offset // Ignore offset parameter for now
+
 	return b.readFromBuffer(length, false)
 }
 
 // Read returns the requested number of samples from the buffer
-// The samples stored in the buffer are zeroed out
+// The samples stored in the buffer are zeroed out.
 func (b *RingBuffer) Read(length int) []float64 {
 	return b.readFromBuffer(length, true)
 }
 
 // Write adds the given samples to the buffer
-// The overwrite parameter determines whether to overwrite or mix the samples with the existing buffer content
+// The overwrite parameter determines whether to overwrite or mix the samples with the existing buffer content.
 func (b *RingBuffer) Write(samples []float64, overwrite bool) {
 	if len(samples) == 0 {
 		return
@@ -115,7 +116,7 @@ func (b *RingBuffer) Write(samples []float64, overwrite bool) {
 }
 
 // readFromBuffer reads samples from the ring buffer
-// When scrub is true, the samples are zeroed out in the buffer
+// When scrub is true, the samples are zeroed out in the buffer.
 func (b *RingBuffer) readFromBuffer(length int, scrub bool) []float64 {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -141,7 +142,7 @@ func (b *RingBuffer) readFromBuffer(length int, scrub bool) []float64 {
 }
 
 // writeToBuffer writes samples to the ring buffer
-// The advance parameter determines whether to move the write position forward
+// The advance parameter determines whether to move the write position forward.
 func (b *RingBuffer) writeToBuffer(samples []float64, advance bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -163,7 +164,7 @@ func (b *RingBuffer) writeToBuffer(samples []float64, advance bool) {
 }
 
 // mixIntoBuffer mixes samples directly into the buffer at the correct positions
-// This is similar to the adaptive buffer's approach to avoid position mismatches
+// This is similar to the adaptive buffer's approach to avoid position mismatches.
 func (b *RingBuffer) mixIntoBuffer(samples []float64) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -192,7 +193,7 @@ func (b *RingBuffer) mixIntoBuffer(samples []float64) {
 
 	// Apply peak limiting if necessary
 	if peak > 1.0 {
-		for i := 0; i < len(samples); i++ {
+		for i := range len(samples) {
 			pos := (b.readPos + i) % b.capacity
 			b.buffer[pos] /= peak
 		}

@@ -8,5 +8,5 @@ const engineHapticFrameRate = 30 // 30 Hz
 const hapticFrameRate = 120      // 120 Hz
 const telemetryFrameRate = 60    // 60 Hz
 
-// TODO: find a better place for this
+// TODO: find a better place for this.
 const snapMultiplier = 160

@@ -1,6 +1,7 @@
 package display
 
 import (
+	"errors"
 	"fmt"
 	"image"
 	"image/color"
@@ -51,12 +52,15 @@ var once sync.Once
 
 func NewDisplay(config *Config) (*ST7789LCD, error) {
 	if config == nil {
-		return nil, fmt.Errorf("no configuration provided")
+		return nil, errors.New("no configuration provided")
 	}
 
-	var err error
-	var spiPortCloser spi.PortCloser
-	var lcdDevice *st7789.Device
+	var (
+		err           error
+		spiPortCloser spi.PortCloser
+		lcdDevice     *st7789.Device
+	)
+
 	once.Do(func() {
 		spiPortCloser, err = spireg.Open(config.SPIPort)
 		if err != nil {
@@ -78,6 +82,7 @@ func NewDisplay(config *Config) (*ST7789LCD, error) {
 
 		lcdDevice, err = st7789.NewSPI(st7789Config)
 	})
+
 	if err != nil {
 		return nil, fmt.Errorf("initializing lcd device: %w", err)
 	}
@@ -103,7 +108,7 @@ func NewDisplay(config *Config) (*ST7789LCD, error) {
 	}
 
 	if config.I18n == nil {
-		return nil, fmt.Errorf("no font provided for display")
+		return nil, errors.New("no font provided for display")
 	}
 
 	lcd := &ST7789LCD{
@@ -129,6 +134,7 @@ func (l *ST7789LCD) Clear() {
 func (l *ST7789LCD) Close() {
 	l.Clear()
 	time.Sleep(1 * time.Second)
+
 	_ = l.device.PowerOff()
 	_ = l.port.Close()
 }
@@ -177,7 +183,7 @@ func (l *ST7789LCD) GetDPI() float64 {
 
 func (l *ST7789LCD) Write(content *Content) error {
 	if content.Canvas == nil {
-		return fmt.Errorf("canvas is nil")
+		return errors.New("canvas is nil")
 	}
 
 	l.device.DrawRAW(content.Canvas)
@@ -223,15 +229,19 @@ func (l *ST7789LCD) RotateCW() int {
 	switch l.rotation {
 	case st7789.ROTATION_90:
 		l.SetOrientation(180)
+
 		return 180
 	case st7789.ROTATION_180:
 		l.SetOrientation(270)
+
 		return 270
 	case st7789.ROTATION_270:
 		l.SetOrientation(0)
+
 		return 0
 	default:
 		l.SetOrientation(90)
+
 		return 90
 	}
 }
@@ -240,15 +250,19 @@ func (l *ST7789LCD) RotateCCW() int {
 	switch l.rotation {
 	case st7789.ROTATION_90:
 		l.SetOrientation(0)
+
 		return 0
 	case st7789.ROTATION_180:
 		l.SetOrientation(90)
+
 		return 90
 	case st7789.ROTATION_270:
 		l.SetOrientation(180)
+
 		return 180
 	default:
 		l.SetOrientation(270)
+
 		return 270
 	}
 }

@@ -17,7 +17,7 @@ func SetupHID(orientation int, hidEvent chan ui.HIDInputEvent) {
 
 	// Rotate Dpad mapping based on orientation
 	rotatedDpadMapping := make([]ui.HIDInputEvent, 4)
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		rotatedDpadMapping[i] = baseDpadMapping[(i-rotationOffset+4)%4]
 	}
 
@@ -27,10 +27,11 @@ func SetupHID(orientation int, hidEvent chan ui.HIDInputEvent) {
 		ui.HIDInputPower,  // Button 3
 	}
 
-	// Reverse auxilliary button order at 90 and 180 degree orientation
+	// Reverse auxiliary button order at 90 and 180 degree orientation
 	rotatedAuxMapping := make([]ui.HIDInputEvent, 3)
+
 	if rotationOffset == 1 || rotationOffset == 3 {
-		for i := 0; i < 3; i++ {
+		for i := range 3 {
 			rotatedAuxMapping[i] = baseAuxMapping[3-i]
 		}
 	}

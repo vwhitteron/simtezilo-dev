@@ -23,9 +23,10 @@ const (
 	autoRepeatMaxRate      = 50 * time.Millisecond  // Fastest auto-repeat rate
 )
 
-// Global auto-repeat management
+// Global auto-repeat management.
 var autoRepeatManager struct {
 	sync.Mutex
+
 	cancel context.CancelFunc
 	active bool
 }
@@ -35,7 +36,8 @@ func OnGPIOButtonPressed(n int, fn func()) {
 		// Prepare the GPIO pin for input
 		p := gpioreg.ByName(fmt.Sprintf("GPIO%d", n))
 
-		if err := p.In(gpio.PullUp, gpio.BothEdges); err != nil {
+		err := p.In(gpio.PullUp, gpio.BothEdges)
+		if err != nil {
 			log.Fatal(err)
 		}
 
@@ -80,11 +82,10 @@ func OnGPIOButtonPressed(n int, fn func()) {
 
 			ticker.Stop()
 		}
-
 	}()
 }
 
-// updateGPIOStates reads the pin and updates the GPIO state chronology value
+// updateGPIOStates reads the pin and updates the GPIO state chronology value.
 func updateGPIOStates(pin gpio.PinIO, buffer *uint8) {
 	pinLevel := pin.Read()
 
@@ -96,7 +97,7 @@ func updateGPIOStates(pin gpio.PinIO, buffer *uint8) {
 }
 
 // getStableGPIOState checks if the current GPIO state chronology represents a stable state
-// Returns the stable gpio.Level and true if stable, otherwise false
+// Returns the stable gpio.Level and true if stable, otherwise false.
 func getStableGPIOState(gpioStates uint8) (gpio.Level, bool) {
 	switch gpioStates {
 	case debouncedHigh:
@@ -108,7 +109,7 @@ func getStableGPIOState(gpioStates uint8) (gpio.Level, bool) {
 	}
 }
 
-// stopActiveAutoRepeat stops any active auto-repeat and marks the system as available
+// stopActiveAutoRepeat stops any active auto-repeat and marks the system as available.
 func stopActiveAutoRepeat() {
 	autoRepeatManager.Lock()
 	defer autoRepeatManager.Unlock()
@@ -121,12 +122,13 @@ func stopActiveAutoRepeat() {
 	autoRepeatManager.cancel = nil
 }
 
-// startAutoRepeat starts a new auto-repeat session, stopping any existing one
+// startAutoRepeat starts a new auto-repeat session, stopping any existing one.
 func startAutoRepeat(p gpio.PinIO, fn func()) {
 	stopActiveAutoRepeat()
 
 	// Start a new auto-repeat handler
 	ctx, cancel := context.WithCancel(context.Background())
+
 	autoRepeatManager.Lock()
 	autoRepeatManager.cancel = cancel
 	autoRepeatManager.active = true

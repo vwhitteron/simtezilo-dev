@@ -80,13 +80,13 @@ type viperConfig struct {
 	Telemetry   *Telemetry
 }
 
-// Viper structs are public by default so make them private and require methods to access them]
+// Viper structs are public by default so make them private and require methods to access them].
 type Config struct {
 	viper *viperConfig
 	mu    sync.RWMutex
 }
 
-// New creates a new Config instance loading configuration from the specified filename
+// New creates a new Config instance loading configuration from the specified filename.
 func New(filename string, log zerolog.Logger) *Config {
 	c := &Config{
 		viper: &defaultConfig,
@@ -100,6 +100,7 @@ func New(filename string, log zerolog.Logger) *Config {
 	viper.AddConfigPath("/boot/simtezilo/")
 	viper.AddConfigPath("/opt/simtezilo/")
 	viper.AddConfigPath(".")
+
 	err := viper.ReadInConfig()
 	if err != nil {
 		log.Error().Err(err).Msg("read config file")
@@ -122,7 +123,7 @@ func New(filename string, log zerolog.Logger) *Config {
 	return c
 }
 
-// NewFromJSON creates a new Config instance loading configuration from the provided JSON byte slice
+// NewFromJSON creates a new Config instance loading configuration from the provided JSON byte slice.
 func NewFromJSON(json []byte, log zerolog.Logger) *Config {
 	c := &Config{
 		// 	viper: &viperConfig{},
@@ -131,6 +132,7 @@ func NewFromJSON(json []byte, log zerolog.Logger) *Config {
 	}
 
 	viper.SetConfigType("json")
+
 	err := viper.ReadConfig(bytes.NewBuffer(json))
 	if err != nil {
 		log.Error().Err(err).Msg("read config file")
@@ -150,13 +152,13 @@ func NewFromJSON(json []byte, log zerolog.Logger) *Config {
 	return c
 }
 
-// finalise performs validation of the config and updates any derived configuration values
+// finalise performs validation of the config and updates any derived configuration values.
 func (c *Config) finalise() {
 	if len(c.viper.Synthesizer.Eq) != 40 {
 		log.Warn().Int("length", len(c.viper.Synthesizer.Eq)).Msg("invalid synthesizer EQ length")
 
 		c.viper.Synthesizer.Eq = make([]float64, 40)
-		for i := 0; i < 40; i++ {
+		for i := range 40 {
 			c.viper.Synthesizer.Eq[i] = 1
 		}
 	}
@@ -168,7 +170,7 @@ func (c *Config) finalise() {
 	c.UpdateSnapScale()
 }
 
-// App methods
+// App methods.
 func (c *Config) GetAppLanguage() *string {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -240,7 +242,7 @@ func (c *Config) GetAppReplayMode() bool {
 	return c.viper.App.ReplayMode
 }
 
-// Hardware methods
+// Hardware methods.
 func (c *Config) GetHardwareModel() string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -255,7 +257,7 @@ func (c *Config) GetDisplayOrientation() int {
 	return c.viper.Hardware.DisplayOrientation
 }
 
-// Haptics methods
+// Haptics methods.
 func (c *Config) DynamicTransmissionFeedbackEnabled() bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -782,7 +784,7 @@ func (c *Config) GetPulseMaxAmplitude() float64 {
 	return c.viper.Haptics.PulseMaxAmplitude
 }
 
-// PitRadio methods
+// PitRadio methods.
 func (c *Config) GetFuelPreWarnNotifyLaps() float64 {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -832,7 +834,7 @@ func (c *Config) GetDiscordChannelID() string {
 	return c.viper.PitRadio.DiscordChannelID
 }
 
-// Synthesizer methods
+// Synthesizer methods.
 func (c *Config) GetSynthesizer() *Synthesizer {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -1000,7 +1002,7 @@ func (c *Config) DecreaseEngineGain() float64 {
 	return c.viper.Synthesizer.EngineGain
 }
 
-// Telemetry methods
+// Telemetry methods.
 func (c *Config) GetTelemetrySource() string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()

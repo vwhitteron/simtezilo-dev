@@ -9,7 +9,7 @@ import (
 
 // no haptics when vehicle comes to a controlled stop
 // TODO: check angular velocity, etc to enable for uncontrolled stops
-// if vector.Magnitude(c.kinematics.Current.Velocity.Vector) >= 0.28 {
+// if vector.Magnitude(c.kinematics.Current.Velocity.Vector) >= 0.28 {.
 func (k *KinematicsTracker) VehicleIsInMotion() bool {
 	lastMag := vector.Magnitude(k.Last.SixDOFTranslationCalc.Velocity)
 	currentMag := vector.Magnitude(k.Current.SixDOFTranslationCalc.Velocity)

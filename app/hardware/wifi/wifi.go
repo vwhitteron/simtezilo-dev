@@ -28,6 +28,7 @@ type WifiNetwork struct {
 
 func Scan() []WifiNetwork {
 	cmd := exec.Command("nmcli", "-t", "-f", "SSID,SIGNAL", "dev", "wifi", "list")
+
 	output, err := cmd.Output()
 	if err != nil {
 		log.Fatal(err)
@@ -39,11 +40,14 @@ func Scan() []WifiNetwork {
 		if len(line) == 0 {
 			continue
 		}
+
 		fields := strings.Fields(line)
 		if len(fields) != 2 {
 			continue
 		}
+
 		SSID := fields[0]
+
 		signal, err := strconv.Atoi(fields[1])
 		if err != nil {
 			continue
@@ -57,6 +61,7 @@ func Scan() []WifiNetwork {
 
 func Connect(ssid string, password string) error {
 	cmd := exec.Command("nmcli", "dev", "wifi", "connect", ssid, "password", password)
+
 	err := cmd.Run()
 	if err != nil {
 		return err
