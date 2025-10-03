@@ -110,7 +110,9 @@ func (k *KinematicsTracker) Update(windowSeconds float64, gtclient *gttelemetry.
 	k.Current.SixDOFRotation.Delta = rotataionalenvelope.Delta(k.Current.SixDOFRotation.Velocity, k.Last.SixDOFRotation.Velocity)
 
 	// attenuate yaw jerk and snap as it causes vibration during heavy rotation (high G-force corners, spin out, etc)
-	biasedAttitudeDelta := rotataionalenvelope.Scale(k.Current.SixDOFRotation.Delta, 1.0, 0.25, 1.0)
+	// biasedAttitudeDelta := rotataionalenvelope.Scale(k.Current.SixDOFRotation.Delta, 1.0, 0.25, 1.0)
+	// TODO: remove above if non-biased version is acceptable
+	biasedAttitudeDelta := k.Current.SixDOFRotation.Delta
 
 	k.Current.SixDOFRotation.Acceleration = rotataionalenvelope.Magnitude(biasedAttitudeDelta) / windowSeconds
 	k.Current.SixDOFRotation.Jerk = (k.Current.SixDOFRotation.Acceleration - k.Last.SixDOFRotation.Acceleration) / windowSeconds
