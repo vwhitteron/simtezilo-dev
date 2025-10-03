@@ -89,7 +89,7 @@ type Config struct {
 // New creates a new Config instance loading configuration from the specified filename.
 func New(filename string, log zerolog.Logger) *Config {
 	c := &Config{
-		viper: &defaultConfig,
+		viper: defaultConfig(),
 	}
 
 	viper.SetEnvPrefix("SIMTEZILO")
@@ -126,9 +126,7 @@ func New(filename string, log zerolog.Logger) *Config {
 // NewFromJSON creates a new Config instance loading configuration from the provided JSON byte slice.
 func NewFromJSON(json []byte, log zerolog.Logger) *Config {
 	c := &Config{
-		// 	viper: &viperConfig{},
-		// }
-		viper: &defaultConfig,
+		viper: defaultConfig(),
 	}
 
 	viper.SetConfigType("json")

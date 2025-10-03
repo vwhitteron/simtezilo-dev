@@ -32,7 +32,7 @@ type engineCharacteristics struct {
 	haptics         *haptics.EngineProfile
 }
 
-// generateEngineHaptic creates a wavform to simulate engine vibrations
+// generateEngineHaptic creates a wavform to simulate engine vibrations.
 func (a *App) generateEngineHaptic() {
 	// Engine haptics are silenced
 	if a.config.GetEngineGain() <= config.MinimumGain {
@@ -107,7 +107,7 @@ func (a *App) generateEngineHaptic() {
 	a.synth.OverwriteBuffer("engine", engineBuffer, offset)
 }
 
-// getEngineCharacteristics retrieves engine characteristics based on a given engien geometry and speed
+// getEngineCharacteristics retrieves engine characteristics based on a given engien geometry and speed.
 func (a *App) getEngineCharacteristics(engineLayout string, cylinderAngle float32, crankPlaneAngle float32, revLimit uint16) (engineCharacteristics, error) {
 	if engineLayout == "" {
 		return engineCharacteristics{
@@ -175,7 +175,7 @@ func (a *App) getEngineCharacteristics(engineLayout string, cylinderAngle float3
 	return characteristics, nil
 }
 
-// getEngineFiringFrequency calculates the firing frequency based on engine geometry and chamber count
+// getEngineFiringFrequency calculates the firing frequency based on engine geometry and chamber count.
 func getEngineFiringFrequency(geometry string, chambers int) float64 {
 	switch geometry {
 	case "":
@@ -189,11 +189,11 @@ func getEngineFiringFrequency(geometry string, chambers int) float64 {
 	}
 }
 
-// calculatePulseOverlap calculates pulse overlap based on alignment between crank plane angle and cylinder bank angle
-// Returns overlap factor from 0.0 (no overlap/perfect alignment) to 1.0 (maximum overlap/misalignment)
+// calculatePulseOverlap calculates pulse overlap based on alignment between crank plane angle and cylinder bank angle.
+// Returns overlap factor from 0.0 (no overlap/perfect alignment) to 1.0 (maximum overlap/misalignment).
 // This value is currently used for pulse width overlap. Timing clustering is disabled pending better implementation.
-// - Low values (0.0-0.2): Well-aligned engines (e.g., 60° V6 with 120° crank)
-// - High values (0.3-0.8): Misaligned engines (e.g., 90° V6 with 120° crank)
+// - Low values (0.0-0.2): Well-aligned engines (e.g., 60° V6 with 120° crank).
+// - High values (0.3-0.8): Misaligned engines (e.g., 90° V6 with 120° crank).
 func calculatePulseOverlap(cylinderAngle, crankPlaneAngle float32, chambers int, geometry string) float64 {
 	// Wankel overlap based on rotor count and housing design
 	// Multiple rotors create natural overlap due to phase offset
@@ -304,7 +304,7 @@ func calculatePulseOverlap(cylinderAngle, crankPlaneAngle float32, chambers int,
 	return finalOverlap
 }
 
-// calculateEngineRoughness calculates a roughness value based on the engine geometry and a given RPM
+// calculateEngineRoughness calculates a roughness value based on the engine geometry and a given RPM.
 func (a *App) calculateEngineRoughness(rpm float64) float64 {
 	var engineRoughness float64
 
@@ -380,7 +380,7 @@ func (a *App) calculateEngineRoughness(rpm float64) float64 {
 	return engineRoughness
 }
 
-// generatePulseWaveform creates a vibration pulse waveform based on engine RPM and roughness characteristics
+// generatePulseWaveform creates a vibration pulse waveform based on engine RPM and roughness characteristics.
 func (a *App) generatePulseWaveform(rpm float64, engineRoughness float64, engineBuffer *[]float64) {
 	rpmPercent := rpm / float64(a.vehicle.revLimit)
 	rpmPercent, _ = signal.LimitWindow(rpmPercent, 0.0, 1.0)
@@ -477,7 +477,7 @@ func (a *App) generatePulseWaveform(rpm float64, engineRoughness float64, engine
 }
 
 // generatePulswWankel creates a single pulse value for a Wankel engine based on a given phase value
-// and engine geometry
+// and engine geometry.
 func generatePulseWankel(phase float64, engine *haptics.EngineProfile) (pulse float64) {
 	if phase < 0.3 {
 		// Quick attack (30% of pulse width)
@@ -511,7 +511,7 @@ func generatePulseWankel(phase float64, engine *haptics.EngineProfile) (pulse fl
 }
 
 // generatePulswTwoStroke creates a single pulse value for a 2-strok engine based on a given phase value
-// and engine geometry
+// and engine geometry.
 func generatePulseTwoStroke(phase float64, engine *haptics.EngineProfile) (pulse float64) {
 	if phase < 0.3 {
 		// Quick attack (30% of pulse width)
@@ -556,7 +556,7 @@ func generatePulseTwoStroke(phase float64, engine *haptics.EngineProfile) (pulse
 }
 
 // generatePulswFourStroke creates a single pulse value for a 4-stroke engine based on a given phase value
-// and engine geometry
+// and engine geometry.
 func generatePulseFourStroke(phase float64, engine *haptics.EngineProfile) (pulse float64) {
 	if phase < 0.3 {
 		// Quick attack (30% of pulse width)

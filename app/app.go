@@ -37,7 +37,7 @@ const (
 	gameStateOnCircuit
 )
 
-// vehicleRecord holds static vehicle data loaded from the GT vehicle database
+// vehicleRecord holds static vehicle data loaded from the GT vehicle database.
 type vehicleRecord struct {
 	ID          uint32                // Unique vehicle ID from telemetry
 	vehicleType string                // Vehicle type
@@ -45,7 +45,7 @@ type vehicleRecord struct {
 	revLimit    uint16                // Engine rev limit in RPM
 }
 
-// raceState holds transient race data for haptic generation and pit radio notifications
+// raceState holds transient race data for haptic generation and pit radio notifications.
 type raceState struct {
 	// Telemetry session information
 	sequenceNumber uint32        // Current telemetry sequence number
@@ -62,7 +62,7 @@ type raceState struct {
 	gameState   gameState
 }
 
-// appState holds the overall application state
+// appState holds the overall application state.
 type appState struct {
 	hapticsEnabled   bool          // Flag to indicate if haptics are enabled // TODO: move state to haptics?
 	telemetryActive  bool          // Flag to indicate if telemetry is active
@@ -72,7 +72,7 @@ type appState struct {
 	engine           engineState   // Engine state for haptic generation
 }
 
-// App is the main application struct holding all components and state
+// App is the main application struct holding all components and state.
 type App struct {
 	log    zerolog.Logger // Application logger
 	config *config.Config // Application configuration
@@ -106,7 +106,7 @@ type App struct {
 	lapStartEvents chan uint32 // Channel for notifying new lap starts
 }
 
-// AppOptions holds configuration options for initializing the App
+// AppOptions holds configuration options for initializing the App.
 type AppOptions struct {
 	VehicleDB  string          // Path to an external vehicle database file
 	Done       chan bool       // Channel to signal application shutdown
@@ -114,7 +114,7 @@ type AppOptions struct {
 	WebEnabled bool            // Flag to enable or disable the web UI
 }
 
-// New creates a new App instance and sets up all components based on the provided options
+// New creates a new App instance and sets up all components based on the provided options.
 func New(opts AppOptions) (*App, error) {
 	a := &App{
 		log:  opts.Logger.With().Str("package", "app").Logger(),
@@ -362,7 +362,7 @@ func New(opts AppOptions) (*App, error) {
 	return a, nil
 }
 
-// Run starts the main application loop and associated goroutines
+// Run starts the main application loop and associated goroutines.
 func (a *App) Run() {
 	a.startBackgroundTasks()
 
@@ -371,7 +371,7 @@ func (a *App) Run() {
 	a.mainLoop()
 }
 
-// Close performs cleanup and resource deallocation before application exit
+// Close performs cleanup and resource deallocation before application exit.
 func (a *App) Close() {
 	a.log.Info().Msg("Shutting down app")
 
@@ -407,7 +407,7 @@ func (a *App) Close() {
 	a.display.Close()
 }
 
-// startBackgroundTasks launches all necessary background goroutines for the application
+// startBackgroundTasks launches all necessary background goroutines for the application.
 func (a *App) startBackgroundTasks() {
 	go a.ui.HIDEventHandler()
 
@@ -490,7 +490,8 @@ func (a *App) startAudioOutput() {
 	go speaker.Play(hapticStreamer)
 }
 
-// mainLoop is the primary application loop handling telemetry updates, haptics, UI updates, and pit radio notifications
+// mainLoop is the primary application loop handling telemetry updates, haptics, UI updates, and pit radio
+// notifications.
 func (a *App) mainLoop() {
 	tickerHaptics := time.NewTicker((1000 / hapticFrameRate) * time.Millisecond)
 	tickerGeneral := time.NewTicker((1000 / telemetryFrameRate) * time.Millisecond)
@@ -560,7 +561,8 @@ func (a *App) newLapHandler() bool {
 			coordinate := a.gtClient.Telemetry.PositionalMapCoordinates()
 			odometerReading := a.odometer.Add(coordinate)
 
-			if didUpdate := a.circuit.UpdateCircuit(odometerReading, lap, coordinate, models.CoordinateTypeStartLine); didUpdate {
+			didUpdate := a.circuit.UpdateCircuit(odometerReading, lap, coordinate, models.CoordinateTypeStartLine)
+			if didUpdate {
 				a.odometer.Reset()
 				a.fuelRange.Reset()
 				a.state.last.lastLapTime = 0
@@ -575,7 +577,7 @@ func (a *App) newLapHandler() bool {
 }
 
 // sessionIsComplete checks if the session has completed.
-// Returns true if the session is complete
+// Returns true if the session is complete.
 func (a *App) sessionIsComplete() bool {
 	if a.gtClient.Finished {
 		a.log.Debug().Msg("session finished")
@@ -586,7 +588,7 @@ func (a *App) sessionIsComplete() bool {
 	return false
 }
 
-// resetAppState resets the application state
+// resetAppState resets the application state.
 func (a *App) resetAppState() {
 	a.state.last = raceState{
 		transmissionGear: kinematics.NullGear,
@@ -684,7 +686,7 @@ func (a *App) handleGameStateChange() {
 	}
 }
 
-// handleVehicleChange checks for changes in the vehicle and updates vehicle data accordingly
+// handleVehicleChange checks for changes in the vehicle and updates vehicle data accordingly.
 func (a *App) handleVehicleChange() {
 	if a.vehicleHasChanged() {
 		a.disableHaptics("vehicle changed")
@@ -693,7 +695,7 @@ func (a *App) handleVehicleChange() {
 	}
 }
 
-// updateVehicle updates the vehicle characteristics from the current telemetry vehicle ID
+// updateVehicle updates the vehicle characteristics from the current telemetry vehicle ID.
 func (a *App) updateVehicle() {
 	vehicleType := a.gtClient.Telemetry.VehicleType()
 	engineLayout := a.gtClient.Telemetry.VehicleEngineLayout()
@@ -780,7 +782,7 @@ func (a *App) gearHasChanged() bool {
 	return true
 }
 
-// raceComplete returns true 5 seconds after the race has completed
+// raceComplete returns true 5 seconds after the race has completed.
 func (a *App) raceHasFinished() bool {
 	currentTime := a.gtClient.Telemetry.TimeOfDay()
 

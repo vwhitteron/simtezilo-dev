@@ -38,13 +38,13 @@ func NewSineWave(sampleRate beep.SampleRate, frequency, volume float64) *SineWav
 
 // Stream generates the sine wave samples.
 func (s *SineWave) Stream(samples [][2]float64) (n int, ok bool) {
-	for i := range samples {
+	for index := range samples {
 		// Calculate the sine wave value
 		sample := volumeToGain(s.Volume) * math.Sin(s.phase)
 
 		// Output to both left and right channels (stereo)
-		samples[i][0] = sample
-		samples[i][1] = sample
+		samples[index][0] = sample
+		samples[index][1] = sample
 
 		// Increment phase for next sample
 		// phase increment = 2π * frequency / sample_rate
@@ -88,7 +88,7 @@ func (s *SineWave) SetVolume(vol float64) {
 
 func (s *SineWave) KeyboardInput(done chan bool) {
 	_ = keyboard.Listen(func(key keys.Key) (stop bool, err error) {
-		switch key.Code {
+		switch key.Code { //nolint:exhaustive
 		case keys.CtrlC, keys.Escape:
 			done <- true
 
@@ -107,6 +107,8 @@ func (s *SineWave) KeyboardInput(done chan bool) {
 			s.SetFrequency(s.Freq - 5)
 		case keys.Right:
 			s.SetFrequency(s.Freq + 5)
+		default:
+			// Ignore other keys
 		}
 
 		return false, nil // Return false to continue listening
@@ -117,7 +119,7 @@ func volumeToGain(volume float64) float64 {
 	return math.Pow(10, (volume / 10))
 }
 
-func main() {
+func main() { //nolint:cyclop // TODO: refactor
 	// Create a channel to receive OS signals
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)

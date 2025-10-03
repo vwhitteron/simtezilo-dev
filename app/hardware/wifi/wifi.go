@@ -1,6 +1,7 @@
 package wifi
 
 import (
+	"context"
 	"log"
 	"os/exec"
 	"strconv"
@@ -27,7 +28,7 @@ type WifiNetwork struct {
 }
 
 func Scan() []WifiNetwork {
-	cmd := exec.Command("nmcli", "-t", "-f", "SSID,SIGNAL", "dev", "wifi", "list")
+	cmd := exec.CommandContext(context.Background(), "nmcli", "-t", "-f", "SSID,SIGNAL", "dev", "wifi", "list")
 
 	output, err := cmd.Output()
 	if err != nil {
@@ -60,7 +61,7 @@ func Scan() []WifiNetwork {
 }
 
 func Connect(ssid string, password string) error {
-	cmd := exec.Command("nmcli", "dev", "wifi", "connect", ssid, "password", password)
+	cmd := exec.CommandContext(context.Background(), "nmcli", "dev", "wifi", "connect", ssid, "password", password)
 
 	err := cmd.Run()
 	if err != nil {

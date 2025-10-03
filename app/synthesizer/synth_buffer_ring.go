@@ -193,7 +193,7 @@ func (b *RingBuffer) mixIntoBuffer(samples []float64) {
 
 	// Apply peak limiting if necessary
 	if peak > 1.0 {
-		for i := range len(samples) {
+		for i := range samples {
 			pos := (b.readPos + i) % b.capacity
 			b.buffer[pos] /= peak
 		}

@@ -57,7 +57,7 @@ func LargestMagnitude(valueA float64, valueB float64) float64 {
 		valueB = -valueB
 	}
 
-	maxVal := 0.0
+	var maxVal float64
 
 	if valueA > valueB {
 		maxVal = valueA
@@ -77,8 +77,7 @@ func LargestMagnitude(valueA float64, valueB float64) float64 {
 }
 
 func LimitWindow(value float64, min float64, max float64) (float64, bool) {
-	cMin := false
-	cMax := false
+	var cMin, cMax bool
 
 	value, cMin = LimitMin(value, min)
 	value, cMax = LimitMax(value, max)

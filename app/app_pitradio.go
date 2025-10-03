@@ -240,7 +240,7 @@ func (a *App) notifyLapNumber() {
 	}
 
 	currentLap := a.state.current.lapNumber
-	raceLaps := int16(a.gtClient.Telemetry.RaceLaps())
+	raceLaps := a.gtClient.Telemetry.RaceLaps()
 
 	if a.pitRadioState.lastNotifiedLapNumber >= currentLap {
 		fmt.Printf("Lap already notified: last %d current %d\n", a.pitRadioState.lastNotifiedLapNumber, currentLap)
@@ -288,7 +288,7 @@ func (a *App) notifyLapProgress() {
 		return
 	}
 
-	raceLaps := int16(a.gtClient.Telemetry.RaceLaps())
+	raceLaps := a.gtClient.Telemetry.RaceLaps()
 	if raceLaps == 0 {
 		// TODO: handle endurance races
 		return
@@ -306,7 +306,7 @@ func (a *App) notifyLapProgress() {
 	raceProgressPercent := int8(100 * currentRaceDistanceMeters / totalRaceDistanceMeters)
 
 	// Calculate current progress interval based on progressInterval
-	currentProgressInterval := int8((raceProgressPercent / int8(progressInterval)) * int8(progressInterval))
+	currentProgressInterval := (raceProgressPercent / int8(progressInterval)) * int8(progressInterval)
 
 	// Skip notifications at 0%
 	if raceProgressPercent <= 0 {
@@ -395,7 +395,7 @@ func (a *App) notifyFuelWarnings() {
 	fuelCritical := fuelRangeLapsUntilBox <= 0.5
 	fuelEmptyNextLap := fuelRangeLapsUntilBox <= 1
 	fuelEmptySoon := fuelRangeLapsUntilBox <= a.config.GetFuelPreWarnNotifyLaps()+a.config.GetFuelRangeSafetyMarginLaps()
-	fuelStrategyUpdate := remainingLaps > fuelRangeLaps && int16(currentLap)%int16(a.config.GetFuelStrategyNotifyLaps()) == 0
+	fuelStrategyUpdate := remainingLaps > fuelRangeLaps && currentLap%int16(a.config.GetFuelStrategyNotifyLaps()) == 0
 
 	var (
 		message        string

@@ -84,7 +84,7 @@ func (r *Screen) renderBackgroundScreen(sprite sprites.SpriteName, value string)
 
 	fontDrawer := &font.Drawer{
 		Dst:  canvas,
-		Src:  image.NewUniform(footerColor),
+		Src:  image.NewUniform(footerColor()),
 		Face: fontFace,
 	}
 
@@ -125,7 +125,7 @@ func (r *Screen) RenderLiveScreen(value string) error {
 	canvas := r.newBlankCanvas()
 	fontDrawer := &font.Drawer{
 		Dst:  canvas,
-		Src:  image.NewUniform(valueColor),
+		Src:  image.NewUniform(valueColor()),
 		Face: fontFace,
 	}
 
@@ -166,7 +166,7 @@ func (r *Screen) RenderSettingScreen(header string, value string) error {
 	canvas := r.newBlankCanvas()
 	fontDrawer := &font.Drawer{
 		Dst:  canvas,
-		Src:  image.NewUniform(headerColor),
+		Src:  image.NewUniform(headerColor()),
 		Face: fontFace,
 	}
 
@@ -189,7 +189,7 @@ func (r *Screen) RenderSettingScreen(header string, value string) error {
 
 	fontDrawer = &font.Drawer{
 		Dst:  canvas,
-		Src:  image.NewUniform(valueColor),
+		Src:  image.NewUniform(valueColor()),
 		Face: fontFace,
 	}
 

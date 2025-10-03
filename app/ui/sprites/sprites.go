@@ -22,11 +22,6 @@ type SpriteSet struct {
 //go:embed sprites.png
 var spritesImage []byte
 
-var spriteMap = map[SpriteName]image.Rectangle{
-	SplashSprite: image.Rect(0*240, 0*240, 1*240, 1*240),
-	ErrorSprite:  image.Rect(1*240, 0*240, 2*240, 1*240),
-}
-
 func NewSpriteSet() (*SpriteSet, error) {
 	data := bytes.NewReader(spritesImage)
 
@@ -37,7 +32,7 @@ func NewSpriteSet() (*SpriteSet, error) {
 
 	return &SpriteSet{
 		image:  img.(*image.RGBA),
-		sprite: spriteMap,
+		sprite: spriteMap(),
 	}, nil
 }
 
@@ -53,11 +48,18 @@ func (s *SpriteSet) GetSprite(name SpriteName) image.Image {
 	repositionedImage := image.NewRGBA(image.Rect(0, 0, rect.Dx(), rect.Dy()))
 
 	// Copy the pixels from the subimage to the new image
-	for y := 0; y < rect.Dy(); y++ {
-		for x := 0; x < rect.Dx(); x++ {
+	for y := range rect.Dy() {
+		for x := range rect.Dx() {
 			repositionedImage.Set(x, y, subImage.At(rect.Min.X+x, rect.Min.Y+y))
 		}
 	}
 
 	return repositionedImage
+}
+
+func spriteMap() map[SpriteName]image.Rectangle {
+	return map[SpriteName]image.Rectangle{
+		SplashSprite: image.Rect(0*240, 0*240, 1*240, 1*240),
+		ErrorSprite:  image.Rect(1*240, 0*240, 2*240, 1*240),
+	}
 }

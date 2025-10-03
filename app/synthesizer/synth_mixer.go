@@ -160,7 +160,7 @@ func (m *Mixer) InspectChannelBuffer(name string, length int, offset int) []floa
 }
 
 func (m *Mixer) GetChannelNames() []string {
-	names := make([]string, len(m.channels))
+	names := []string{}
 
 	m.mu.RLock()
 	defer m.mu.RUnlock()

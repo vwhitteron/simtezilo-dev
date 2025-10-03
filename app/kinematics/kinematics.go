@@ -135,7 +135,7 @@ func (k *KinematicsTracker) Update(windowSeconds float64, gtclient *gttelemetry.
 }
 
 func (k *KinematicsTracker) GetSurgeGforce() float64 {
-	surge := float64(0)
+	var surge float64
 	if k.Current.Format == "~" || k.Current.Format == "B" {
 		surge = float64(k.Current.SixDOFTranslation.Velocity.Surge)
 	} else {

@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -97,12 +98,12 @@ func startPyroscope(endpoint string, logger *zerolog.Logger) (*profiler.Pyroscop
 		},
 	)
 	if err != nil {
-		logger.Fatal().Err(err).Str("Component", "pyroscope").Msg("create profiler")
+		return nil, fmt.Errorf("create profiler: %w", err)
 	}
 
 	err = profiler.Start()
 	if err != nil {
-		logger.Fatal().Err(err).Str("Component", "pyroscope").Msg("start profiler")
+		return nil, fmt.Errorf("start profiler: %w", err)
 	}
 
 	logger.Info().Str("Component", "pyroscope").Str("endpoint", profiler.Endpoint()).Msg("profiler started")

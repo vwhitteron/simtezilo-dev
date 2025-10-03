@@ -32,7 +32,7 @@ func (a *App) checkForNewLap() {
 func (a *App) checkRaceComplete() {
 	lastLap := a.state.last.lapNumber
 	currentLap := a.state.current.lapNumber
-	raceLaps := int16(a.gtClient.Telemetry.RaceLaps())
+	raceLaps := a.gtClient.Telemetry.RaceLaps()
 
 	// TODO: handle endurance races, time trials and free practice sessions
 	if raceLaps == 0 {

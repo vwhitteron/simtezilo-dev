@@ -196,38 +196,40 @@ func (b *AdaptiveBuffer) Write(samples []float64, offset int, overwrite bool) {
 				b.readPos = (b.readPos + 1) % b.capacity
 			}
 		}
-	} else {
-		// Mix mode: mix with existing buffer content starting from read position
-		peak := 0.0
 
-		for i, inputSample := range samples {
-			// Calculate position to mix at (starting from read position)
-			mixPos := (b.readPos + i) % b.capacity
+		return
+	}
 
-			// Only mix if we have existing content at this position
-			var mixedSample float64
+	// Mix mode: mix with existing buffer content starting from read position
+	peak := 0.0
 
-			if i < b.used {
-				existingSample := b.buffer[mixPos]
-				mixedSample = mixSampleSum(inputSample, existingSample, &peak)
-			} else {
-				mixedSample = inputSample
-			}
+	for i, inputSample := range samples {
+		// Calculate position to mix at (starting from read position)
+		mixPos := (b.readPos + i) % b.capacity
 
-			b.buffer[mixPos] = mixedSample
+		// Only mix if we have existing content at this position
+		var mixedSample float64
+
+		if i < b.used {
+			existingSample := b.buffer[mixPos]
+			mixedSample = mixSampleSum(inputSample, existingSample, &peak)
+		} else {
+			mixedSample = inputSample
 		}
 
-		// Update used count if we wrote beyond existing content
-		if len(samples) > b.used {
-			b.used = len(samples)
-		}
+		b.buffer[mixPos] = mixedSample
+	}
 
-		// Apply peak limiting if necessary
-		if peak > 1.0 {
-			for i := range len(samples) {
-				pos := (b.readPos + i) % b.capacity
-				b.buffer[pos] /= peak
-			}
+	// Update used count if we wrote beyond existing content
+	if len(samples) > b.used {
+		b.used = len(samples)
+	}
+
+	// Apply peak limiting if necessary
+	if peak > 1.0 {
+		for i := range samples {
+			pos := (b.readPos + i) % b.capacity
+			b.buffer[pos] /= peak
 		}
 	}
 }

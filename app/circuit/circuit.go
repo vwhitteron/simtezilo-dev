@@ -13,14 +13,6 @@ const (
 	minConfidenceThreshold      float64 = 0.3 // Minimum confidence threshold (30%) before choosing a circuit
 )
 
-// Initial unknown circuit info.
-var circuitInfoInit = circuits.CircuitInfo{
-	ID:        "unknown",
-	Name:      "unknown",
-	Length:    0,
-	StartLine: models.CoordinateNorm{X: 0, Y: 0, Z: 0},
-}
-
 // TODO: add godoc.
 type Circuit struct {
 	database                circuits.CircuitDB   // Circuit database for track identification
@@ -40,7 +32,7 @@ func New(db circuits.CircuitDB, logger zerolog.Logger) (*Circuit, error) {
 		log:                     logger.With().Str("package", "circuit").Logger(),
 		lapStartOdometerReading: 0,
 		lapProgressMeters:       0,
-		info:                    circuitInfoInit,
+		info:                    circuitInfoInit(),
 		lastCoordinate:          models.Coordinate{},
 		candidates:              make(CircuitCandidates),
 	}, nil
@@ -49,8 +41,8 @@ func New(db circuits.CircuitDB, logger zerolog.Logger) (*Circuit, error) {
 // Reset clears the current circuit information and lap start marker distance.
 func (c *Circuit) Reset() {
 	c.info = circuits.CircuitInfo{
-		ID:   circuitInfoInit.ID,
-		Name: circuitInfoInit.Name,
+		ID:   circuitInfoInit().ID,
+		Name: circuitInfoInit().Name,
 	}
 
 	c.candidates = make(CircuitCandidates)
@@ -202,7 +194,17 @@ func (c *Circuit) setCircuitLength() {
 	}
 }
 
+// Initial unknown circuit info.
+func circuitInfoInit() circuits.CircuitInfo {
+	return circuits.CircuitInfo{
+		ID:        "unknown",
+		Name:      "unknown",
+		Length:    0,
+		StartLine: models.CoordinateNorm{X: 0, Y: 0, Z: 0},
+	}
+}
+
 // circuitIsKnown returns true if the current circuit is known.
 func (c *Circuit) circuitIsKnown() bool {
-	return c.info.ID != circuitInfoInit.ID
+	return c.info.ID != circuitInfoInit().ID
 }

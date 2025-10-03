@@ -5,7 +5,7 @@ import "strconv"
 func (a *App) settingAction(setting string, action string) string {
 	switch setting {
 	case "cVol":
-		value := float64(0)
+		var value float64
 
 		switch action {
 		case "increase":
@@ -18,7 +18,7 @@ func (a *App) settingAction(setting string, action string) string {
 
 		return strconv.FormatFloat(value, 'f', 2, 64)
 	case "ePVol":
-		value := float64(0)
+		var value float64
 
 		switch action {
 		case "increase":
@@ -31,7 +31,7 @@ func (a *App) settingAction(setting string, action string) string {
 
 		return strconv.FormatFloat(value, 'f', 2, 64)
 	case "ePrimary":
-		value := float64(0)
+		var value float64
 
 		switch action {
 		case "increase":
@@ -44,7 +44,7 @@ func (a *App) settingAction(setting string, action string) string {
 
 		return strconv.FormatFloat(value, 'f', 2, 64)
 	case "ePScale":
-		value := float64(0)
+		var value float64
 
 		switch action {
 		case "increase":
@@ -57,7 +57,7 @@ func (a *App) settingAction(setting string, action string) string {
 
 		return strconv.FormatFloat(value, 'f', 2, 64)
 	case "eSecondary":
-		value := float64(0)
+		var value float64
 
 		switch action {
 		case "increase":
@@ -70,7 +70,7 @@ func (a *App) settingAction(setting string, action string) string {
 
 		return strconv.FormatFloat(value, 'f', 2, 64)
 	case "eVol":
-		value := float64(0)
+		var value float64
 
 		switch action {
 		case "increase":
@@ -83,7 +83,7 @@ func (a *App) settingAction(setting string, action string) string {
 
 		return strconv.FormatFloat(value, 'f', 2, 64)
 	case "fCurve":
-		value := 0
+		var value int
 
 		switch action {
 		case "increase":
@@ -96,7 +96,7 @@ func (a *App) settingAction(setting string, action string) string {
 
 		return strconv.Itoa(value)
 	case "fMax":
-		value := 0
+		var value int
 
 		switch action {
 		case "increase":
@@ -109,7 +109,7 @@ func (a *App) settingAction(setting string, action string) string {
 
 		return strconv.Itoa(value)
 	case "fMin":
-		value := 0
+		var value int
 
 		switch action {
 		case "increase":
@@ -122,7 +122,7 @@ func (a *App) settingAction(setting string, action string) string {
 
 		return strconv.Itoa(value)
 	case "fSat":
-		value := 0
+		var value int
 
 		switch action {
 		case "increase":
@@ -144,7 +144,7 @@ func (a *App) settingAction(setting string, action string) string {
 			return *a.config.GetAppLanguage()
 		}
 	case "tCurve":
-		value := 0
+		var value int
 
 		switch action {
 		case "increase":
@@ -157,7 +157,7 @@ func (a *App) settingAction(setting string, action string) string {
 
 		return strconv.Itoa(value)
 	case "tSat":
-		value := float64(0)
+		var value float64
 
 		switch action {
 		case "increase":
@@ -170,7 +170,7 @@ func (a *App) settingAction(setting string, action string) string {
 
 		return strconv.FormatFloat(value, 'f', 1, 64)
 	case "tVol":
-		value := float64(0)
+		var value float64
 
 		switch action {
 		case "increase":
@@ -183,7 +183,7 @@ func (a *App) settingAction(setting string, action string) string {
 
 		return strconv.FormatFloat(value, 'f', 2, 64)
 	case "vCurve":
-		value := 0
+		var value int
 
 		switch action {
 		case "increase":
@@ -196,7 +196,7 @@ func (a *App) settingAction(setting string, action string) string {
 
 		return strconv.Itoa(value)
 	case "vol":
-		value := float64(0)
+		var value float64
 
 		switch action {
 		case "increase":
@@ -209,7 +209,7 @@ func (a *App) settingAction(setting string, action string) string {
 
 		return strconv.FormatFloat(value, 'f', 2, 64) + " dB"
 	case "vSat":
-		value := 0
+		var value int
 
 		switch action {
 		case "increase":

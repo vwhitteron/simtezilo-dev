@@ -133,9 +133,18 @@ linters:
           allow:
             - $gostd
             - github.com/stretchr/testify
+            - github.com/spf13/viper
             - github.com/rs/zerolog
-            - golang.org/x/crypto/salsa20
-            - github.com/kaitai-io/kaitai_struct_go_runtime/kaitai
+            - periph.io/x/host/v3
+            - periph.io/x/conn/v3
+            - github.com/gopxl/beep
+            - atomicgo.dev/keyboard
+            - golang.org/x/image
+            - github.com/golang/freetype
+            - github.com/grafana/pyroscope-go
+            - github.com/bwmarrin/discordgo
+            - github.com/gorilla/websocket
+            - github.com/vwhitteron/simtezilo-dev
             - github.com/zetetos/gt-telemetry
     tagliatelle:
       case:

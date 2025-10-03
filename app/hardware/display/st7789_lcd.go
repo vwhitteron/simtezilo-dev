@@ -48,7 +48,7 @@ type Config struct {
 	I18n             *i18n.Language // TODO: move rendering outside of display package
 }
 
-var once sync.Once
+var once sync.Once //nolint:gochecknoglobals // idiomatic singleton
 
 func NewDisplay(config *Config) (*ST7789LCD, error) {
 	if config == nil {
@@ -200,9 +200,11 @@ func (l *ST7789LCD) GetOrientation() int {
 		return 180
 	case st7789.ROTATION_270:
 		return 270
-	default:
+	case st7789.ROTATION_NONE:
 		return 0
 	}
+
+	return 0
 }
 
 func (l *ST7789LCD) SetOrientation(degrees int) {
@@ -239,6 +241,8 @@ func (l *ST7789LCD) RotateCW() int {
 		l.SetOrientation(0)
 
 		return 0
+	case st7789.ROTATION_NONE:
+		fallthrough
 	default:
 		l.SetOrientation(90)
 
@@ -260,6 +264,8 @@ func (l *ST7789LCD) RotateCCW() int {
 		l.SetOrientation(180)
 
 		return 180
+	case st7789.ROTATION_NONE:
+		fallthrough
 	default:
 		l.SetOrientation(270)
 

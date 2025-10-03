@@ -7,7 +7,8 @@ import (
 )
 
 func Init() {
-	if _, err := host.Init(); err != nil {
+	_, err := host.Init()
+	if err != nil {
 		log.Fatal(err)
 	}
 }

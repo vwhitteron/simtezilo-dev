@@ -9,8 +9,14 @@ const (
 	valueSmallSize = 20
 )
 
-var (
-	headerColor = color.RGBA{255, 255, 255, 1}
-	footerColor = color.RGBA{128, 128, 128, 1}
-	valueColor  = color.RGBA{223, 223, 223, 1}
-)
+func headerColor() color.RGBA {
+	return color.RGBA{R: 255, G: 255, B: 255, A: 1}
+}
+
+func footerColor() color.RGBA {
+	return color.RGBA{R: 128, G: 128, B: 128, A: 1}
+}
+
+func valueColor() color.RGBA {
+	return color.RGBA{R: 223, G: 223, B: 223, A: 1}
+}

@@ -8,7 +8,7 @@ import (
 
 func SetupHID(hidEvent chan ui.HIDInputEvent) {
 	_ = keyboard.Listen(func(key keys.Key) (stop bool, err error) {
-		switch key.Code {
+		switch key.Code { //nolint:exhaustive // no need to handle all keys
 		case keys.CtrlC, keys.Escape:
 			hidEvent <- ui.HIDInputEscape
 

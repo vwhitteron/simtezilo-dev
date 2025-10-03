@@ -50,7 +50,8 @@ func NewSPI(config *SPIDeviceConfig) (*Device, error) {
 	}
 
 	// ensure successful access to the data comm pin
-	if err := config.DataCommPin.Out(gpio.Low); err != nil {
+	err = config.DataCommPin.Out(gpio.Low)
+	if err != nil {
 		return nil, fmt.Errorf("set data comm pin low: %w", err)
 	}
 
@@ -289,7 +290,8 @@ func (d *Device) Data(data uint8) {
 // ROTATION_NONE is at 12 o'clock relative to the natural top of the display
 // with higher values rotating as degress in a clockwise direction.
 func (d *Device) SetRotation(rotation Rotation) {
-	madctlData := uint8(0)
+	var madctlData uint8
+
 	vscsadData := verticalScrollOffset(0)
 
 	switch rotation % 4 {
@@ -307,6 +309,8 @@ func (d *Device) SetRotation(rotation Rotation) {
 		madctlData = MADCTL_MX_LR | MADCTL_MY_TB | MADCTL_MV_NORM
 		d.rowOffset = 0
 		d.columnOffset = 0
+	case ROTATION_NONE:
+		fallthrough
 	default:
 		madctlData = MADCTL_MX_RL | MADCTL_MY_TB | MADCTL_MV_REV
 		d.rowOffset = d.rowOffsetCfg
@@ -352,9 +356,11 @@ func RotationToDegrees(rotation Rotation) int {
 		return 180
 	case ROTATION_270:
 		return 270
-	default:
+	case ROTATION_NONE:
 		return 0
 	}
+
+	return 0
 }
 
 // getResolution returns the X/Y pixel resolution of the display based on its current rotation.

@@ -37,10 +37,6 @@ func SetupHID(orientation int, hidEvent chan ui.HIDInputEvent) {
 	})
 }
 
-func init() {
-	hardware.Init()
-}
-
 func OnButtonAPressed(fn func()) {
 	hardware.OnGPIOButtonPressed(5, fn)
 }

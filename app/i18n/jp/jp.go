@@ -1,3 +1,4 @@
+// //nolint:gosmopolitan // contains many string literals containing Japanese characters
 package jp
 
 import "github.com/vwhitteron/simtezilo-dev/app/i18n/translations"

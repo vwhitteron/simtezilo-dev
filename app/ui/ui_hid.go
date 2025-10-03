@@ -45,7 +45,7 @@ func (u *UserInterface) HIDEventHandler() {
 		menuPage := u.menuSystem.GetCurrentMenuPage()
 		value := ""
 
-		switch key {
+		switch key { //nolint:exhaustive // no need to handle all keys
 		case HIDInputUp:
 			menuPage = u.menuSystem.GetCurrentMenuPage()
 			value = u.SettingAction(menuPage, "increase")
