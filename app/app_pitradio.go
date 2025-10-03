@@ -321,15 +321,15 @@ func (a *App) notifyLapProgress() {
 
 	message := ""
 	switch {
-	case raceCompleted:
+	case raceCompleted: // TODO: move to notifyLapNumber
 		message = a.i18n.GetString(translations.RadioRaceFinish)
 
 		a.pitRadioState.lastNotifiedLapNumber = currentLap
-	case finalLap:
+	case finalLap: // TODO: move to notifyLapNumber
 		message = a.i18n.GetString(translations.RadioFinalLap)
 
 		a.pitRadioState.lastNotifiedLapNumber = currentLap
-	case LastFewLaps:
+	case LastFewLaps: // TODO: move to notifyLapNumber
 		format := a.i18n.GetString(translations.RadioLapsRemainingFmt)
 		message = fmt.Sprintf(format, lapsRemaining)
 
@@ -446,85 +446,100 @@ func (a *App) notifyFuelWarnings() {
 
 // fuelEmptyMessage generates a fuel empty message based on estimated fuel range
 func (a *App) fuelEmptyMessage(remainingLaps float64, currentLap int16) (message string, suppressNotify bool) {
+	if a.pitRadioState.fuelNotifyEmptyIssued {
+		message = ""
+		suppressNotify = true
+
+		return message, suppressNotify
+	}
+
 	if remainingLaps == 0 {
 		message = a.i18n.GetString(translations.RadioOutOfFuelLastLap)
 	} else {
 		message = a.i18n.GetString(translations.RadioOutOfFuelBox)
 	}
 
-	if !a.pitRadioState.fuelNotifyEmptyIssued {
-		suppressNotify = false
-		a.pitRadioState.fuelNotifyEmptyIssued = true
-		a.pitRadioState.lastNotifiedLapFuelWarning = currentLap
-	}
+	suppressNotify = false
+	a.pitRadioState.fuelNotifyEmptyIssued = true
+	a.pitRadioState.lastNotifiedLapFuelWarning = currentLap
 
 	return message, suppressNotify
 }
 
 // fuelCriticalMessage generates a critical fuel warning message based on estimated fuel range
 func (a *App) fuelCriticalMessage(remainingLaps float64, currentLap int16) (message string, suppressNotify bool) {
+	if a.pitRadioState.lastNotifiedLapFuelCritical != currentLap {
+		message = ""
+		suppressNotify = true
+
+		return message, suppressNotify
+	}
+
 	if remainingLaps == 0 {
 		message = a.i18n.GetString(translations.RadioFuelCritical)
 	} else {
 		message = a.i18n.GetString(translations.RadioFuelCriticalBox)
 	}
 
-	if a.pitRadioState.lastNotifiedLapFuelCritical != currentLap {
-		suppressNotify = false
-		a.pitRadioState.lastNotifiedLapFuelCritical = currentLap
-	}
+	suppressNotify = false
+	a.pitRadioState.lastNotifiedLapFuelCritical = currentLap
 
 	return message, suppressNotify
 }
 
 // fuelBoxThisLapMessage generates a message to box this lap based on estimated fuel range
 func (a *App) fuelBoxThisLapMessage(currentLap int16, remainingLaps float64) (message string, suppressNotify bool) {
+	if a.pitRadioState.lastNotifiedLapFuelWarning == currentLap {
+		message = ""
+		suppressNotify = true
+
+		return message, suppressNotify
+	}
+
 	message = a.i18n.GetString(translations.RadioBoxForFuel)
 
-	if a.pitRadioState.lastNotifiedLapFuelWarning != currentLap {
-		suppressNotify = false
-		a.pitRadioState.lastNotifiedLapFuelWarning = currentLap
-	}
-
-	if remainingLaps == 0 {
-		suppressNotify = true
-	}
+	suppressNotify = remainingLaps == 0
+	a.pitRadioState.lastNotifiedLapFuelWarning = currentLap
 
 	return message, suppressNotify
 }
 
 // fuelBoxSoonMessage generates a fuel pre-warn message based on estimated fuel range
 func (a *App) fuelBoxSoonMessage(fuelRangeLapsUntilBox float64, currentLap int16, remainingLaps float64) (message string, suppressNotify bool) {
+	if a.pitRadioState.fuelNotifyPrewarnIssued {
+		message = ""
+		suppressNotify = true
+
+		return message, suppressNotify
+	}
+
 	format := a.i18n.GetString(translations.RadioFuelPreWarnFmt)
 	message = fmt.Sprintf(format, int(fuelRangeLapsUntilBox))
 
-	if !a.pitRadioState.fuelNotifyPrewarnIssued {
-		suppressNotify = false
-		a.pitRadioState.fuelNotifyPrewarnIssued = true
-		a.pitRadioState.lastNotifiedLapFuelWarning = currentLap
-	}
-
-	if remainingLaps == 0 {
-		suppressNotify = true
-	}
+	suppressNotify = remainingLaps == 0
+	a.pitRadioState.fuelNotifyPrewarnIssued = true
+	a.pitRadioState.lastNotifiedLapFuelWarning = currentLap
 
 	return message, suppressNotify
 }
 
 // fuelStrategyMessage generates a fuel strategy message based on estimated fuel range and remaining laps
 func (a *App) fuelStrategyMessage(fuelRangeLaps float64, remainingLaps float64, currentLap int16) (message string, suppressNotify bool) {
+	if a.pitRadioState.lastNotifiedLapFuelStrategy == currentLap {
+		message = ""
+		suppressNotify = true
+
+		return message, suppressNotify
+	}
+
 	format := a.i18n.GetString(translations.RadioFuelRangeFmt)
 	message = fmt.Sprintf(format, int(fuelRangeLaps), int(remainingLaps))
 
+	suppressNotify = remainingLaps == 0
+	a.pitRadioState.lastNotifiedLapFuelStrategy = currentLap
+
 	if a.pitRadioState.lastNotifiedLapFuelWarning == currentLap {
 		suppressNotify = true
-	} else if a.pitRadioState.lastNotifiedLapFuelStrategy != currentLap {
-		suppressNotify = false
-		a.pitRadioState.lastNotifiedLapFuelStrategy = currentLap
-	}
-
-	if remainingLaps == 0 {
-		suppressNotify = remainingLaps == 0
 	}
 
 	return message, suppressNotify
