@@ -146,6 +146,7 @@ linters:
             - github.com/gorilla/websocket
             - github.com/vwhitteron/simtezilo-dev
             - github.com/zetetos/gt-telemetry
+            - layeh.com/gopus
     tagliatelle:
       case:
         rules:

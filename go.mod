@@ -15,6 +15,7 @@ require (
 	github.com/theojulienne/go-wireless v1.2.0
 	github.com/zetetos/gt-telemetry v1.10.1-0.20250925103106-4440553d3c29
 	golang.org/x/image v0.27.0
+	layeh.com/gopus v0.0.0-20210501142526-1ee02d434e32
 	periph.io/x/conn/v3 v3.7.2
 	periph.io/x/host/v3 v3.8.2
 )
@@ -27,6 +28,7 @@ require (
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
 	github.com/grafana/pyroscope-go/godeltaprof v0.1.8 // indirect
+	github.com/hajimehoshi/go-mp3 v0.3.4 // indirect
 	github.com/kaitai-io/kaitai_struct_go_runtime v0.10.0 // indirect
 	github.com/klauspost/compress v1.18.0 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
@@ -48,3 +50,5 @@ require (
 	golang.org/x/text v0.29.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
+
+replace github.com/bwmarrin/discordgo => github.com/ozraru/discordgo v0.26.2-0.20250917201847-e6ee88434661

@@ -8,6 +8,7 @@ import (
 	"github.com/gopxl/beep/speaker"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+	"github.com/vwhitteron/simtezilo-dev/app/cache"
 	"github.com/vwhitteron/simtezilo-dev/app/circuit"
 	"github.com/vwhitteron/simtezilo-dev/app/config"
 	"github.com/vwhitteron/simtezilo-dev/app/fuelrange"
@@ -78,13 +79,15 @@ type App struct {
 	config *config.Config // Application configuration
 	done   chan bool      // Channel to signal application shutdown
 
+	cache cache.Cache // Cache manager
+
 	ui *ui.UserInterface // User interface manager
 
 	i18n    *i18n.Language   // Language translations
 	display hardware.Display // Hardware display interface
 
 	gtClient   *gttelemetry.Client          // GT telemetry client
-	pitRadio   pitradio.PitRadioService     // Pit radio notification service
+	pitRadio   pitradio.PitRadio            // Pit radio notification service
 	kinematics kinematics.KinematicsTracker // Vehicle kinematics tracker
 	synth      *synthesizer.Synthesizer     // Audio synthesizer for haptic feedback
 
@@ -149,6 +152,8 @@ func New(opts AppOptions) (*App, error) {
 
 		a.log.Debug().Str("level", configLogLevel.String()).Str("source", "config").Msg("log level update")
 	}
+
+	a.cache = cache.New(a.config.GetAppCacheDir(), *opts.Logger)
 
 	// load language translations
 	a.i18n = i18n.NewLanguage(
@@ -343,7 +348,15 @@ func New(opts AppOptions) (*App, error) {
 			Msg("init")
 	}
 
-	a.pitRadio, err = pitradio.NewDiscordBot(a.config.GetDiscordToken(), a.config.GetDiscordChannelID())
+	discordBotConfig := pitradio.DiscordOptions{
+		Token:          a.config.GetDiscordToken(),
+		ChannelID:      a.config.GetDiscordChannelID(),
+		VoiceChannelID: a.config.GetDiscordVoiceChannelID(),
+		GuildID:        a.config.GetDiscordGuildID(),
+		Cache:          &a.cache,
+	}
+
+	a.pitRadio, err = pitradio.NewDiscordBot(discordBotConfig)
 	if err != nil {
 		a.log.Error().
 			Err(err).
@@ -427,12 +440,23 @@ func (a *App) startBackgroundTasks() {
 			return
 		}
 
+		err = a.pitRadio.Send(pitradio.Message{
+			Text:   a.i18n.GetString(translations.RadioOnline),
+			Lang:   a.i18n.GetCurrentLanguage(),
+			Accent: a.config.GetAppAccent(),
+		})
+		if err != nil {
+			a.log.Error().
+				Err(err).
+				Str("component", "discord").
+				Str("result", "failure").
+				Msg("send message")
+		}
+
 		a.log.Debug().
 			Str("component", "discord").
 			Str("result", "success").
 			Msg("init")
-
-		_ = a.pitRadio.Send(a.i18n.GetString(translations.RadioOnline))
 	}()
 
 	go func() {

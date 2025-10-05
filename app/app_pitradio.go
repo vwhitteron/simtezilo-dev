@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/vwhitteron/simtezilo-dev/app/i18n/translations"
+	"github.com/vwhitteron/simtezilo-dev/app/pitradio"
 )
 
 const (
@@ -96,7 +97,11 @@ func (a *App) notifyCircuitChange() {
 
 	message := "Circuit updated to " + circuitName
 	if a.pitRadio != nil {
-		err := a.pitRadio.Send(message)
+		err := a.pitRadio.Send(pitradio.Message{
+			Text:   message,
+			Lang:   a.i18n.GetCurrentLanguage(),
+			Accent: a.config.GetAppAccent(),
+		})
 		if err != nil {
 			a.log.Error().
 				Err(err).
@@ -162,7 +167,11 @@ func (a *App) notifyGridPositionChange() {
 	message := fmt.Sprintf("P%d", a.pitRadioState.currentGridPosition)
 
 	if a.pitRadio != nil {
-		err := a.pitRadio.Send(message)
+		err := a.pitRadio.Send(pitradio.Message{
+			Text:   message,
+			Lang:   a.i18n.GetCurrentLanguage(),
+			Accent: a.config.GetAppAccent(),
+		})
 		if err != nil {
 			a.log.Error().
 				Err(err).
@@ -215,7 +224,12 @@ func (a *App) notifyLapTime() {
 	}
 
 	// Send lap time message to Discord
-	err := a.pitRadio.Send(message)
+	err := a.pitRadio.Send(pitradio.Message{
+		Text:    message,
+		Lang:    a.i18n.GetCurrentLanguage(),
+		Accent:  a.config.GetAppAccent(),
+		NoCache: true,
+	})
 	if err != nil {
 		a.log.Error().
 			Err(err).
@@ -258,7 +272,11 @@ func (a *App) notifyLapNumber() {
 
 	message := fmt.Sprintf("Lap %d", a.state.current.lapNumber)
 
-	err := a.pitRadio.Send(message)
+	err := a.pitRadio.Send(pitradio.Message{
+		Text:   message,
+		Lang:   a.i18n.GetCurrentLanguage(),
+		Accent: a.config.GetAppAccent(),
+	})
 	if err != nil {
 		a.log.Error().
 			Err(err).
@@ -349,7 +367,11 @@ func (a *App) notifyLapProgress() {
 	}
 
 	if a.pitRadio != nil {
-		err := a.pitRadio.Send(message)
+		err := a.pitRadio.Send(pitradio.Message{
+			Text:   message,
+			Lang:   a.i18n.GetCurrentLanguage(),
+			Accent: a.config.GetAppAccent(),
+		})
 		if err != nil {
 			a.log.Error().
 				Err(err).
@@ -424,7 +446,11 @@ func (a *App) notifyFuelWarnings() {
 	}
 
 	if a.pitRadio != nil {
-		err := a.pitRadio.Send(message)
+		err := a.pitRadio.Send(pitradio.Message{
+			Text:   message,
+			Lang:   a.i18n.GetCurrentLanguage(),
+			Accent: a.config.GetAppAccent(),
+		})
 		if err != nil {
 			a.log.Error().
 				Err(err).

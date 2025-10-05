@@ -7,23 +7,26 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/suite"
 	"github.com/vwhitteron/simtezilo-dev/app/circuit"
+	"github.com/vwhitteron/simtezilo-dev/app/config"
 	"github.com/vwhitteron/simtezilo-dev/app/fuelrange"
 	"github.com/vwhitteron/simtezilo-dev/app/i18n"
 	"github.com/vwhitteron/simtezilo-dev/app/i18n/translations"
+	"github.com/vwhitteron/simtezilo-dev/app/pitradio"
 	gttelemetry "github.com/zetetos/gt-telemetry"
 )
 
 // --- Mocks and stubs ---
 
 type pitRadioMock struct {
-	messages []string
+	messages []pitradio.Message
 	failSend bool
 }
 
-func (m *pitRadioMock) Connect() error                          { return nil }
-func (m *pitRadioMock) Disconnect() error                       { return nil }
-func (m *pitRadioMock) MessageDispatcher(logger zerolog.Logger) {}
-func (m *pitRadioMock) Send(msg string) error {
+func (m *pitRadioMock) Connect() error                              { return nil }
+func (m *pitRadioMock) Disconnect() error                           { return nil }
+func (m *pitRadioMock) TextMessageDispatcher(logger zerolog.Logger) {}
+func (m *pitRadioMock) MessageDispatcher(logger zerolog.Logger)     {}
+func (m *pitRadioMock) Send(msg pitradio.Message) error {
 	m.messages = append(m.messages, msg)
 
 	if m.failSend {
@@ -32,6 +35,8 @@ func (m *pitRadioMock) Send(msg string) error {
 
 	return nil
 }
+func (m *pitRadioMock) PlayAudioFile(filePath string) error { return nil }
+func (m *pitRadioMock) PlayRadioCheck() error               { return nil }
 
 // --- Tests ---
 
@@ -53,7 +58,7 @@ func (suite *PitRadioTestSuite) SetupTest() {
 	}
 
 	suite.pitRadio = pitRadioMock{
-		messages: []string{},
+		messages: []pitradio.Message{},
 	}
 
 	suite.app = &App{
@@ -69,6 +74,57 @@ func (suite *PitRadioTestSuite) SetupTest() {
 		circuit:       &circuit.Circuit{},
 		fuelRange:     fuelrange.New(zerolog.Nop()),
 	}
+}
+
+func (suite *PitRadioTestSuite) TestAccentPopulatedInPitRadioMessage() {
+	// Arrange
+	configJSON := []byte(`{
+		"app": {
+			"language": "en",
+			"accent": "ie"
+		}
+	}`)
+
+	suite.app.config = config.NewFromJSON(configJSON, zerolog.Nop())
+
+	// Act - Test that the config returns the correct accent
+	accent := suite.app.config.GetAppAccent()
+
+	// Assert
+	suite.Equal("ie", accent, "Expected accent to be loaded from config")
+
+	// Act - Test sending a message with accent
+	err := suite.app.pitRadio.Send(pitradio.Message{
+		Text:   "Test message",
+		Lang:   "en",
+		Accent: accent,
+	})
+
+	// Assert
+	suite.NoError(err)
+	suite.Require().Equal(1, len(suite.pitRadio.messages), "Expected one message to be sent")
+
+	message := suite.pitRadio.messages[0]
+	suite.Equal("Test message", message.Text)
+	suite.Equal("en", message.Lang)
+	suite.Equal("ie", message.Accent, "Expected accent to be set in message")
+}
+
+func (suite *PitRadioTestSuite) TestDefaultAccentWhenNotConfigured() {
+	// Arrange - Config without accent field
+	configJSON := []byte(`{
+		"app": {
+			"language": "en"
+		}
+	}`)
+
+	suite.app.config = config.NewFromJSON(configJSON, zerolog.Nop())
+
+	// Act
+	accent := suite.app.config.GetAppAccent()
+
+	// Assert
+	suite.Equal("us", accent, "Expected default accent to be 'us' when not configured")
 }
 
 // func (suite *PitRadioTestSuite) TestNoNotifyOnRaceStart() {

@@ -17,3 +17,4 @@ __debug_*
 scichart/node_modules/
 data/persist/
 data/tmp/
+cache/

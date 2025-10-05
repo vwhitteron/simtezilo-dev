@@ -15,7 +15,9 @@ import (
 
 type app struct {
 	Language   string
+	Accent     string
 	LogLevel   string
+	CacheDir   string
 	ReplayMode bool
 }
 
@@ -50,7 +52,9 @@ type pitRadio struct {
 	FuelRangeSafetyMarginMeters float64
 	MessageSendIntervalMs       int
 	DiscordToken                string
+	DiscordGuildID              string
 	DiscordChannelID            string
+	DiscordVoiceChannelID       string
 }
 
 type Synthesizer struct {
@@ -180,6 +184,17 @@ func (c *Config) GetAppLanguage() *string {
 	return &c.viper.App.Language
 }
 
+func (c *Config) GetAppAccent() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if c.viper.App.Accent == "" {
+		return "us"
+	}
+
+	return c.viper.App.Accent
+}
+
 func (c *Config) NextLanguage() string {
 	languageCodes := i18n.GetLanguageCodes()
 
@@ -238,6 +253,17 @@ func (c *Config) GetAppReplayMode() bool {
 	defer c.mu.RUnlock()
 
 	return c.viper.App.ReplayMode
+}
+
+func (c *Config) GetAppCacheDir() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if c.viper.App.CacheDir == "" {
+		return "/tmp/simtezilo"
+	}
+
+	return c.viper.App.CacheDir
 }
 
 // Hardware methods.
@@ -825,11 +851,25 @@ func (c *Config) GetDiscordToken() string {
 	return c.viper.PitRadio.DiscordToken
 }
 
+func (c *Config) GetDiscordGuildID() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.PitRadio.DiscordGuildID
+}
+
 func (c *Config) GetDiscordChannelID() string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
 	return c.viper.PitRadio.DiscordChannelID
+}
+
+func (c *Config) GetDiscordVoiceChannelID() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.PitRadio.DiscordVoiceChannelID
 }
 
 // Synthesizer methods.

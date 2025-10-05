@@ -8,7 +8,9 @@ func defaultConfig() *viperConfig {
 	return &viperConfig{
 		App: &app{
 			Language: "en",
+			Accent:   "us",
 			LogLevel: "info",
+			CacheDir: "cache",
 		},
 		Hardware: &hardware{
 			Model:              "none",
@@ -74,7 +76,9 @@ func defaultConfig() *viperConfig {
 			FuelRangeSafetyMarginMeters: 2000,
 			MessageSendIntervalMs:       5000,
 			DiscordToken:                "",
+			DiscordGuildID:              "",
 			DiscordChannelID:            "",
+			DiscordVoiceChannelID:       "",
 		},
 
 		Synthesizer: &Synthesizer{
