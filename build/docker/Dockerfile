@@ -12,15 +12,15 @@ RUN --mount=type=cache,target=/go/pkg/mod/ \
 
 FROM base AS base-armhf
 RUN dpkg --add-architecture armhf
-RUN apt-get update && apt-get install -y libasound2-dev:armhf gcc-arm-linux-gnueabihf
+RUN apt-get update && apt-get install -y libasound2-dev:armhf gcc-arm-linux-gnueabihf libopus-dev
 
 FROM base AS base-armel
 RUN dpkg --add-architecture armel
-RUN apt-get update && apt-get install -y libasound2-dev:armel gcc-arm-linux-gnueabi
+RUN apt-get update && apt-get install -y libasound2-dev:armel gcc-arm-linux-gnueabi libopus-dev
 
 FROM base AS base-arm64
 RUN dpkg --add-architecture arm64
-RUN apt-get update && apt-get install -y libasound2-dev:arm64 gcc:arm64
+RUN apt-get update && apt-get install -y libasound2-dev:arm64 gcc:arm64 libopus-dev
 
 
 
