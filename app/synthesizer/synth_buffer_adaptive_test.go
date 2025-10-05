@@ -6,6 +6,8 @@ import (
 )
 
 func TestAdaptiveBufferBasicOperations(t *testing.T) {
+	t.Parallel()
+
 	// Create a buffer that holds approximately 96 samples (2ms at 48000 Hz)
 	buffer := NewAdaptiveBuffer(2*time.Millisecond, 48000)
 
@@ -29,6 +31,8 @@ func TestAdaptiveBufferBasicOperations(t *testing.T) {
 }
 
 func TestAdaptiveBufferWriteRead(t *testing.T) {
+	t.Parallel()
+
 	// Use a larger buffer to avoid readDelay issues (100ms at 1000 Hz = 100 samples)
 	buffer := NewAdaptiveBuffer(100*time.Millisecond, 1000)
 
@@ -58,6 +62,8 @@ func TestAdaptiveBufferWriteRead(t *testing.T) {
 }
 
 func TestAdaptiveBufferOverflow(t *testing.T) {
+	t.Parallel()
+
 	// Use a larger buffer to avoid readDelay overflow (100ms at 1000 Hz = 100 samples)
 	buffer := NewAdaptiveBuffer(100*time.Millisecond, 1000)
 
@@ -84,6 +90,8 @@ func TestAdaptiveBufferOverflow(t *testing.T) {
 }
 
 func TestAdaptiveBufferMixing(t *testing.T) {
+	t.Parallel()
+
 	// Use a larger buffer to avoid readDelay issues (100ms at 1000 Hz = 100 samples)
 	buffer := NewAdaptiveBuffer(100*time.Millisecond, 1000)
 
@@ -113,6 +121,8 @@ func TestAdaptiveBufferMixing(t *testing.T) {
 }
 
 func TestAdaptiveBufferUnderrun(t *testing.T) {
+	t.Parallel()
+
 	// Use a larger buffer to avoid readDelay issues (100ms at 1000 Hz = 100 samples)
 	buffer := NewAdaptiveBuffer(100*time.Millisecond, 1000)
 
@@ -140,6 +150,8 @@ func TestAdaptiveBufferUnderrun(t *testing.T) {
 }
 
 func TestAdaptiveBufferHealthMonitoring(t *testing.T) {
+	t.Parallel()
+
 	// Use a larger buffer to avoid readDelay issues (100ms at 1000 Hz = 100 samples)
 	buffer := NewAdaptiveBuffer(100*time.Millisecond, 1000)
 
@@ -178,11 +190,17 @@ func TestAdaptiveBufferHealthMonitoring(t *testing.T) {
 
 	if !buffer.IsOverfull() {
 		t.Log("Buffer not detected as overfull - checking buffer state")
-		t.Logf("Used: %d, Capacity: %d, Fill ratio: %f", buffer.Used(), buffer.Length(), float64(buffer.Used())/float64(buffer.Length()))
+		t.Logf("Used: %d, Capacity: %d, Fill ratio: %f",
+			buffer.Used(),
+			buffer.Length(),
+			float64(buffer.Used())/float64(buffer.Length()),
+		)
 	}
 }
 
 func TestAdaptiveBufferConcurrency(t *testing.T) {
+	t.Parallel()
+
 	// Use a larger buffer to avoid readDelay issues (100ms at 1000 Hz = 100 samples)
 	buffer := NewAdaptiveBuffer(100*time.Millisecond, 1000)
 

@@ -47,10 +47,6 @@ func NewScreen(config *Config) (*Screen, error) {
 	}, nil
 }
 
-func (r *Screen) newBlankCanvas() *image.RGBA {
-	return image.NewRGBA(image.Rect(0, 0, int(r.pixelColumns), int(r.pixelRows)))
-}
-
 func (r *Screen) RenderSplashScreen(value string) error {
 	return r.renderBackgroundScreen(sprites.SplashSprite, value)
 }
@@ -66,50 +62,6 @@ func (r *Screen) RenderBlankScreen() error {
 	if err != nil {
 		return fmt.Errorf("write blank canvas to display: %w", err)
 	}
-
-	return nil
-}
-
-func (r *Screen) renderBackgroundScreen(sprite sprites.SpriteName, value string) error {
-	// footer
-	fontFace := truetype.NewFace(r.i18n.FontRegular.Font, &truetype.Options{
-		Size:    r.i18n.FontRegular.Scale * footerSize,
-		DPI:     r.dpi,
-		Hinting: font.HintingFull,
-	})
-
-	img := r.sprites.GetSprite(sprite)
-	canvas := image.NewRGBA(img.Bounds())
-	draw.Draw(canvas, canvas.Bounds(), img, image.Point{0, 0}, draw.Src)
-
-	fontDrawer := &font.Drawer{
-		Dst:  canvas,
-		Src:  image.NewUniform(footerColor()),
-		Face: fontFace,
-	}
-
-	xPosition := (fixed.I(canvas.Rect.Max.X) - fontDrawer.MeasureString(value)) / 2
-	textBounds, _ := fontDrawer.BoundString(value)
-	textHeight := textBounds.Max.Y - textBounds.Min.Y
-	yPosition := fixed.I((canvas.Rect.Max.Y) - (textHeight.Ceil() / 2))
-	fontDrawer.Dot = fixed.Point26_6{
-		X: xPosition,
-		Y: yPosition,
-	}
-
-	fontDrawer.DrawString(value)
-
-	content := &display.Content{
-		Text:   "Splash: " + value,
-		Canvas: canvas,
-	}
-
-	err := r.displayDevice.Write(content)
-	if err != nil {
-		return fmt.Errorf("write splash canvas to display: %w", err)
-	}
-
-	r.displayDevice.Wakeup()
 
 	return nil
 }
@@ -211,6 +163,54 @@ func (r *Screen) RenderSettingScreen(header string, value string) error {
 	err := r.displayDevice.Write(content)
 	if err != nil {
 		return fmt.Errorf("write settings canvas to display: %w", err)
+	}
+
+	r.displayDevice.Wakeup()
+
+	return nil
+}
+
+func (r *Screen) newBlankCanvas() *image.RGBA {
+	return image.NewRGBA(image.Rect(0, 0, int(r.pixelColumns), int(r.pixelRows)))
+}
+
+func (r *Screen) renderBackgroundScreen(sprite sprites.SpriteName, value string) error {
+	// footer
+	fontFace := truetype.NewFace(r.i18n.FontRegular.Font, &truetype.Options{
+		Size:    r.i18n.FontRegular.Scale * footerSize,
+		DPI:     r.dpi,
+		Hinting: font.HintingFull,
+	})
+
+	img := r.sprites.GetSprite(sprite)
+	canvas := image.NewRGBA(img.Bounds())
+	draw.Draw(canvas, canvas.Bounds(), img, image.Point{0, 0}, draw.Src)
+
+	fontDrawer := &font.Drawer{
+		Dst:  canvas,
+		Src:  image.NewUniform(footerColor()),
+		Face: fontFace,
+	}
+
+	xPosition := (fixed.I(canvas.Rect.Max.X) - fontDrawer.MeasureString(value)) / 2
+	textBounds, _ := fontDrawer.BoundString(value)
+	textHeight := textBounds.Max.Y - textBounds.Min.Y
+	yPosition := fixed.I((canvas.Rect.Max.Y) - (textHeight.Ceil() / 2))
+	fontDrawer.Dot = fixed.Point26_6{
+		X: xPosition,
+		Y: yPosition,
+	}
+
+	fontDrawer.DrawString(value)
+
+	content := &display.Content{
+		Text:   "Splash: " + value,
+		Canvas: canvas,
+	}
+
+	err := r.displayDevice.Write(content)
+	if err != nil {
+		return fmt.Errorf("write splash canvas to display: %w", err)
 	}
 
 	r.displayDevice.Wakeup()

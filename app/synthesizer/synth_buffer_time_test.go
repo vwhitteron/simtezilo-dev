@@ -6,6 +6,8 @@ import (
 )
 
 func TestBufferTimeCalculation(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		name       string
 		duration   time.Duration
@@ -19,19 +21,23 @@ func TestBufferTimeCalculation(t *testing.T) {
 		{"1ms at 10kHz", time.Millisecond, 10000, 10},
 	}
 
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			buffer := NewAdaptiveBuffer(tc.duration, tc.sampleRate)
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			buffer := NewAdaptiveBuffer(testCase.duration, testCase.sampleRate)
 			actual := buffer.Length()
 
-			if actual != tc.expected {
-				t.Errorf("Expected %d samples, got %d samples for %s", tc.expected, actual, tc.name)
+			if actual != testCase.expected {
+				t.Errorf("Expected %d samples, got %d samples for %s", testCase.expected, actual, testCase.name)
 			}
 		})
 	}
 }
 
 func TestAllBufferTypesTimeCalculation(t *testing.T) {
+	t.Parallel()
+
 	duration := 500 * time.Millisecond
 	sampleRate := 8000
 	expected := 4000

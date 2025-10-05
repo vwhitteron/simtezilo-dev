@@ -92,7 +92,7 @@ type Config struct {
 
 // New creates a new Config instance loading configuration from the specified filename.
 func New(filename string, log zerolog.Logger) *Config {
-	c := &Config{
+	config := &Config{
 		viper: defaultConfig(),
 	}
 
@@ -109,7 +109,7 @@ func New(filename string, log zerolog.Logger) *Config {
 	if err != nil {
 		log.Error().Err(err).Msg("read config file")
 	} else {
-		err = viper.Unmarshal(c.viper)
+		err = viper.Unmarshal(config.viper)
 		if err != nil {
 			log.Error().Err(err).Msg("unmarshal config")
 		}
@@ -122,14 +122,14 @@ func New(filename string, log zerolog.Logger) *Config {
 
 	log.Debug().Str("source", configSource).Msg("config loaded")
 
-	c.finalise()
+	config.finalise()
 
-	return c
+	return config
 }
 
 // NewFromJSON creates a new Config instance loading configuration from the provided JSON byte slice.
 func NewFromJSON(json []byte, log zerolog.Logger) *Config {
-	c := &Config{
+	config := &Config{
 		viper: defaultConfig(),
 	}
 
@@ -139,7 +139,7 @@ func NewFromJSON(json []byte, log zerolog.Logger) *Config {
 	if err != nil {
 		log.Error().Err(err).Msg("read config file")
 	} else {
-		err = viper.Unmarshal(c.viper)
+		err = viper.Unmarshal(config.viper)
 		if err != nil {
 			log.Error().Err(err).Msg("unmarshal config")
 		}
@@ -149,27 +149,9 @@ func NewFromJSON(json []byte, log zerolog.Logger) *Config {
 
 	log.Debug().Str("source", configSource).Msg("config loaded")
 
-	c.finalise()
+	config.finalise()
 
-	return c
-}
-
-// finalise performs validation of the config and updates any derived configuration values.
-func (c *Config) finalise() {
-	if len(c.viper.Synthesizer.Eq) != 40 {
-		log.Warn().Int("length", len(c.viper.Synthesizer.Eq)).Msg("invalid synthesizer EQ length")
-
-		c.viper.Synthesizer.Eq = make([]float64, 40)
-		for i := range 40 {
-			c.viper.Synthesizer.Eq[i] = 1
-		}
-	}
-
-	c.viper.Haptics._pulseWidthMin = float64(c.viper.Synthesizer.InternalSampleRateHz) / (2 * c.viper.Haptics.PulseMaxFrequencyHz)
-	c.viper.Haptics._pulseWidthMax = float64(c.viper.Synthesizer.InternalSampleRateHz) / (2 * c.viper.Haptics.PulseMinFrequencyHz)
-
-	c.UpdateJerkScale()
-	c.UpdateSnapScale()
+	return config
 }
 
 // App methods.
@@ -735,7 +717,8 @@ func (c *Config) IncreaseMinHz() int {
 	c.mu.Lock()
 
 	c.viper.Haptics.PulseMinFrequencyHz = min(25, c.viper.Haptics.PulseMinFrequencyHz+1)
-	c.viper.Haptics._pulseWidthMax = float64(c.viper.Synthesizer.InternalSampleRateHz) / (2 * c.viper.Haptics.PulseMinFrequencyHz)
+
+	c.updatePulseWidthExtents()
 
 	c.mu.Unlock()
 
@@ -746,7 +729,8 @@ func (c *Config) DecreaseMinHz() int {
 	c.mu.Lock()
 
 	c.viper.Haptics.PulseMinFrequencyHz = max(5, c.viper.Haptics.PulseMinFrequencyHz-1)
-	c.viper.Haptics._pulseWidthMax = float64(c.viper.Synthesizer.InternalSampleRateHz) / (2 * c.viper.Haptics.PulseMinFrequencyHz)
+
+	c.updatePulseWidthExtents()
 
 	c.mu.Unlock()
 
@@ -765,7 +749,8 @@ func (c *Config) IncreaseMaxHz() int {
 	defer c.mu.Unlock()
 
 	c.viper.Haptics.PulseMaxFrequencyHz = min(100, c.viper.Haptics.PulseMaxFrequencyHz+1)
-	c.viper.Haptics._pulseWidthMin = float64(c.viper.Synthesizer.InternalSampleRateHz) / (2 * c.viper.Haptics.PulseMaxFrequencyHz)
+
+	c.updatePulseWidthExtents()
 
 	return int(c.viper.Haptics.PulseMaxFrequencyHz)
 }
@@ -775,7 +760,8 @@ func (c *Config) DecreaseMaxHz() int {
 	defer c.mu.Unlock()
 
 	c.viper.Haptics.PulseMaxFrequencyHz = max(26, c.viper.Haptics.PulseMaxFrequencyHz-1)
-	c.viper.Haptics._pulseWidthMin = float64(c.viper.Synthesizer.InternalSampleRateHz) / (2 * c.viper.Haptics.PulseMaxFrequencyHz)
+
+	c.updatePulseWidthExtents()
 
 	return int(c.viper.Haptics.PulseMaxFrequencyHz)
 }
@@ -1046,4 +1032,29 @@ func (c *Config) GetTelemetrySource() string {
 	defer c.mu.RUnlock()
 
 	return c.viper.Telemetry.Source
+}
+
+// finalise performs validation of the config and updates any derived configuration values.
+func (c *Config) finalise() {
+	if len(c.viper.Synthesizer.Eq) != 40 {
+		log.Warn().Int("length", len(c.viper.Synthesizer.Eq)).Msg("invalid synthesizer EQ length")
+
+		c.viper.Synthesizer.Eq = make([]float64, 40)
+		for i := range 40 {
+			c.viper.Synthesizer.Eq[i] = 1
+		}
+	}
+
+	c.updatePulseWidthExtents()
+
+	c.UpdateJerkScale()
+	c.UpdateSnapScale()
+}
+
+func (c *Config) updatePulseWidthExtents() {
+	c.viper.Haptics._pulseWidthMin = float64(c.viper.Synthesizer.InternalSampleRateHz) /
+		(2 * c.viper.Haptics.PulseMaxFrequencyHz)
+
+	c.viper.Haptics._pulseWidthMax = float64(c.viper.Synthesizer.InternalSampleRateHz) /
+		(2 * c.viper.Haptics.PulseMinFrequencyHz)
 }

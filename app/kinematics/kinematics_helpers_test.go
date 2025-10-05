@@ -12,6 +12,8 @@ type HelpersTestSuite struct {
 }
 
 func TestHelpersTestSuite(t *testing.T) {
+	t.Parallel()
+
 	suite.Run(t, new(HelpersTestSuite))
 }
 func (suite *HelpersTestSuite) TestGearNameReturnsCorrectNameForValidGear() {

@@ -93,7 +93,12 @@ func (c *Circuit) LapProgressRemaining() float64 {
 
 // UpdateCircuit updates the current circuit information by matching the provided coordinate with a circuit DB entry
 // The updateType flag indicates if the coordinate is from a start line crossing or general positional update.
-func (c *Circuit) UpdateCircuit(odometerReading float64, lap int16, coordinate models.Coordinate, coordinateType models.CoordinateType) (didUpdate bool) {
+func (c *Circuit) UpdateCircuit(
+	odometerReading float64,
+	lap int16,
+	coordinate models.Coordinate,
+	coordinateType models.CoordinateType,
+) (didUpdate bool) {
 	c.updateDistanceTravelled(odometerReading, lap, coordinateType)
 	c.setLapStartMarker()
 

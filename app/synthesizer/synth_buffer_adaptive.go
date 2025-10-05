@@ -203,14 +203,14 @@ func (b *AdaptiveBuffer) Write(samples []float64, offset int, overwrite bool) {
 	// Mix mode: mix with existing buffer content starting from read position
 	peak := 0.0
 
-	for i, inputSample := range samples {
+	for index, inputSample := range samples {
 		// Calculate position to mix at (starting from read position)
-		mixPos := (b.readPos + i) % b.capacity
+		mixPos := (b.readPos + index) % b.capacity
 
 		// Only mix if we have existing content at this position
 		var mixedSample float64
 
-		if i < b.used {
+		if index < b.used {
 			existingSample := b.buffer[mixPos]
 			mixedSample = mixSampleSum(inputSample, existingSample, &peak)
 		} else {
@@ -232,6 +232,41 @@ func (b *AdaptiveBuffer) Write(samples []float64, offset int, overwrite bool) {
 			b.buffer[pos] /= peak
 		}
 	}
+}
+
+// IsStarved returns true if buffer is running low.
+func (b *AdaptiveBuffer) IsStarved() bool {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+
+	return b.used <= b.readDelay
+}
+
+// IsOverfull returns true if buffer is too full.
+func (b *AdaptiveBuffer) IsOverfull() bool {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+
+	return b.used > (b.capacity * 3 / 4)
+}
+
+// GetOptimalReadSize suggests optimal read size based on current state.
+func (b *AdaptiveBuffer) GetOptimalReadSize(requestedSize int) int {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+
+	// If we're overfull, suggest reading more to drain buffer
+	if b.used > (b.capacity * 3 / 4) {
+		return min(requestedSize*2, b.used)
+	}
+
+	// If we're starved, suggest reading less to preserve buffer
+	if b.used < (b.readDelay / 2) {
+		return min(requestedSize/2, b.used)
+	}
+
+	// Normal case
+	return min(requestedSize, b.used)
 }
 
 // readFromBuffer internal implementation for reading.
@@ -304,39 +339,4 @@ func (b *AdaptiveBuffer) updateLastAccess() {
 	defer b.mu.Unlock()
 
 	b.lastAccess = time.Now()
-}
-
-// IsStarved returns true if buffer is running low.
-func (b *AdaptiveBuffer) IsStarved() bool {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-
-	return b.used <= b.readDelay
-}
-
-// IsOverfull returns true if buffer is too full.
-func (b *AdaptiveBuffer) IsOverfull() bool {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-
-	return b.used > (b.capacity * 3 / 4)
-}
-
-// GetOptimalReadSize suggests optimal read size based on current state.
-func (b *AdaptiveBuffer) GetOptimalReadSize(requestedSize int) int {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-
-	// If we're overfull, suggest reading more to drain buffer
-	if b.used > (b.capacity * 3 / 4) {
-		return min(requestedSize*2, b.used)
-	}
-
-	// If we're starved, suggest reading less to preserve buffer
-	if b.used < (b.readDelay / 2) {
-		return min(requestedSize/2, b.used)
-	}
-
-	// Normal case
-	return min(requestedSize, b.used)
 }

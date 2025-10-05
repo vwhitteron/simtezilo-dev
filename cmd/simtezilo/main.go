@@ -38,7 +38,7 @@ func main() {
 
 	flag.StringVar(&vehicleDB, "d", "", "Path to vehicle database file")
 	flag.StringVar(&logLevelArg, "l", "info", "Log level. Default is 'info'")
-	flag.StringVar(&profilerEndpoint, "p", "", "Send profiles to this Pyroscope endpoint (http://host:port). Default is off")
+	flag.StringVar(&profilerEndpoint, "p", "", "Send profiles to this Pyroscope endpoint (http://host:port). Default is off") //nolint:lll
 	flag.BoolVar(&webEnabled, "w", false, "Enable web server. Default is false")
 	flag.Parse()
 

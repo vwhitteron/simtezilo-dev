@@ -103,8 +103,8 @@ func (a *App) GenerateBalancedWaveform(rpm float64, engineRoughness float64, eng
 	throttleScale := 0.3 + (throttlePercent * 0.7) // 30% at idle, 100% at full throttle
 
 	// Generate waveform samples
-	for i := range *engineBuffer {
-		timeOffset := float64(i) / sampleRate
+	for index := range *engineBuffer {
+		timeOffset := float64(index) / sampleRate
 
 		var waveformValue float64
 
@@ -162,7 +162,7 @@ func (a *App) GenerateBalancedWaveform(rpm float64, engineRoughness float64, eng
 
 		// Add engine roughness similar to original implementation
 		if engineRoughness > 0.01 {
-			roughnessPhase := float64(a.state.current.sequenceNumber+uint32(i)) * 0.001
+			roughnessPhase := float64(a.state.current.sequenceNumber+uint32(index)) * 0.001
 			roughnessContribution := math.Sin(roughnessPhase) * engineRoughness * 0.1
 			waveformValue += roughnessContribution
 		}
@@ -173,6 +173,6 @@ func (a *App) GenerateBalancedWaveform(rpm float64, engineRoughness float64, eng
 		// Ensure the magnitude stays within bounds
 		waveformValue, _ = signal.LimitWindow(waveformValue, -1.0, 1.0)
 
-		(*engineBuffer)[i] = amplitude * waveformValue
+		(*engineBuffer)[index] = amplitude * waveformValue
 	}
 }

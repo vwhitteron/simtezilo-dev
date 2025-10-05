@@ -51,16 +51,16 @@ func FindSampleZeroCrossing(samples []float64) (offset int, polarity int) {
 	}
 
 	// Look for zero crossings in the current buffer content
-	for i := range searchRange - 1 {
-		currentSample := (samples)[i]
-		nextSample := (samples)[i+1]
+	for index := range searchRange - 1 {
+		currentSample := (samples)[index]
+		nextSample := (samples)[index+1]
 
 		// Check for exact zero
 		if currentSample == 0.0 {
-			offset = i
+			offset = index
 			// For exact zero, use polarity from previous sample if available
-			if i > 0 {
-				if samples[i-1] < 0 {
+			if index > 0 {
+				if samples[index-1] < 0 {
 					polarity = -1
 				} else {
 					polarity = 1
@@ -72,7 +72,7 @@ func FindSampleZeroCrossing(samples []float64) (offset int, polarity int) {
 
 		// Check for polarity change (zero crossing)
 		if (currentSample > 0 && nextSample < 0) || (currentSample < 0 && nextSample > 0) {
-			offset = i + 1
+			offset = index + 1
 			// Polarity before crossing is the polarity of current sample
 			if currentSample < 0 {
 				polarity = -1

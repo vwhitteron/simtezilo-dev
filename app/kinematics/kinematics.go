@@ -147,13 +147,13 @@ func (k *KinematicsTracker) GetSurgeGforce() float64 {
 	return gForce
 }
 
-func getTelemetryFormat(gt *gttelemetry.Client) string {
-	isAddendum2, _ := gt.Telemetry.RawTelemetry.Addendum2Format()
+func getTelemetryFormat(gtClient *gttelemetry.Client) string {
+	isAddendum2, _ := gtClient.Telemetry.RawTelemetry.Addendum2Format()
 	if isAddendum2 {
 		return "~"
 	}
 
-	isAddendum1, _ := gt.Telemetry.RawTelemetry.Addendum1Format()
+	isAddendum1, _ := gtClient.Telemetry.RawTelemetry.Addendum1Format()
 	if isAddendum1 {
 		return "B"
 	}

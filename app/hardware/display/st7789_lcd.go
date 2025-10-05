@@ -274,64 +274,64 @@ func (l *ST7789LCD) RotateCCW() int {
 }
 
 // setupDisplay initializes the display with the necessary commands and settings.
-func setupDisplayDefault(d *st7789.Device) {
-	d.Command(st7789.SWRESET)
+func setupDisplayDefault(dev *st7789.Device) {
+	dev.Command(st7789.SWRESET)
 	time.Sleep(150 * time.Millisecond)
 
 	// Porch Setting: Normal(Back Front), PSEN = disabled, Idle(Back, Front)
-	d.Command(st7789.PORCTRL)
-	_ = d.SendData(st7789.DefaultPORCTRL())
+	dev.Command(st7789.PORCTRL)
+	_ = dev.SendData(st7789.DefaultPORCTRL())
 
 	// Interface pixel format: 16bit/pixel non-RGB
-	d.Command(st7789.COLMOD)
-	d.Data(st7789.COLMOD_CTRL_65K)
+	dev.Command(st7789.COLMOD)
+	dev.Data(st7789.COLMOD_CTRL_65K)
 
 	// Gate Control: High = 12.54v, Low = -9.6v
-	d.Command(st7789.GCTRL)
-	_ = d.SendData(st7789.DefaultGCTRL())
+	dev.Command(st7789.GCTRL)
+	_ = dev.SendData(st7789.DefaultGCTRL())
 
 	// VCOM Setting: 0.575v
-	d.Command(st7789.VCOMS)
-	_ = d.SendData(st7789.DefaultVCOMS())
+	dev.Command(st7789.VCOMS)
+	_ = dev.SendData(st7789.DefaultVCOMS())
 
 	// LCM Control: XOR RGB/BGR order, XOR Display Latch Order, XOR Page/Column order
-	d.Command(st7789.LCMCTRL)
-	_ = d.SendData(st7789.DefaultLCMCTRL())
+	dev.Command(st7789.LCMCTRL)
+	_ = dev.SendData(st7789.DefaultLCMCTRL())
 
 	// VDVVRHEN: CMDEN = VDV and VRH register value comes from command write.
-	d.Command(st7789.VDVVRHEN)
-	_ = d.SendData(st7789.DefaultVDVVRHEN())
+	dev.Command(st7789.VDVVRHEN)
+	_ = dev.SendData(st7789.DefaultVDVVRHEN())
 
 	// VAP(GVDD) (V) = 4.45+(vcom+vcom offset+vdv)
-	d.Command(st7789.VRHS)
-	_ = d.SendData(st7789.DefaultVRHS())
+	dev.Command(st7789.VRHS)
+	_ = dev.SendData(st7789.DefaultVRHS())
 
 	// VDV Set: 0v
-	d.Command(st7789.VDVS)
-	_ = d.SendData(st7789.DefaultVDVS())
+	dev.Command(st7789.VDVS)
+	_ = dev.SendData(st7789.DefaultVDVS())
 
 	// Power Control 1: AVDD = 6.8v, AVCL = -4.6v, VDS = 2.3v
-	d.Command(st7789.PWCTRL1)
-	_ = d.SendData(st7789.DefaultPWCTRL1())
+	dev.Command(st7789.PWCTRL1)
+	_ = dev.SendData(st7789.DefaultPWCTRL1())
 
 	// Frame Rate Control (normal mode): 60Hz
-	d.Command(st7789.FRCTRL2)
-	_ = d.SendData(st7789.DefaultFRCTRL2())
+	dev.Command(st7789.FRCTRL2)
+	_ = dev.SendData(st7789.DefaultFRCTRL2())
 
 	// Positive Voltage Gamma Control
-	d.Command(st7789.PVGAMCTRL)
-	_ = d.SendData(st7789.DefaultPVGAMCTRL())
+	dev.Command(st7789.PVGAMCTRL)
+	_ = dev.SendData(st7789.DefaultPVGAMCTRL())
 
 	// Negative Voltage Gamma Control
-	d.Command(st7789.NVGAMCTRL)
-	_ = d.SendData(st7789.DefaultNVGAMCTRL())
+	dev.Command(st7789.NVGAMCTRL)
+	_ = dev.SendData(st7789.DefaultNVGAMCTRL())
 
 	// Display Inversion: on
-	d.Command(st7789.INVON)
+	dev.Command(st7789.INVON)
 
 	// Display On Recovery: off
-	d.Command(st7789.DISPOFF)
+	dev.Command(st7789.DISPOFF)
 
 	// Sleep Mode: off
-	d.Command(st7789.SLPOUT)
+	dev.Command(st7789.SLPOUT)
 }

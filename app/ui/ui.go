@@ -45,7 +45,7 @@ type UserInterface struct {
 }
 
 func NewUserInterface(config *Config) *UserInterface {
-	u := &UserInterface{
+	userInterface := &UserInterface{
 		i18n:             config.I18n,
 		display:          config.Display,
 		hidEvents:        config.HIDEvents,
@@ -61,19 +61,19 @@ func NewUserInterface(config *Config) *UserInterface {
 
 	var err error
 
-	u.Screen, err = gui.NewScreen(&gui.Config{
+	userInterface.Screen, err = gui.NewScreen(&gui.Config{
 		DisplayDevice: config.Display,
 		I18n:          config.I18n,
 	})
 	if err != nil {
-		u.log.Error().
+		userInterface.log.Error().
 			Err(err).
 			Str("sub-component", "screen").
 			Str("result", "failure").
 			Msg("init")
 	}
 
-	return u
+	return userInterface
 }
 
 func (u *UserInterface) RegisterActivity() {
@@ -150,18 +150,6 @@ func (u *UserInterface) DrawLiveDisplay(data LiveData) {
 	u.log.Debug().Str("state", "live").Msg("display update")
 }
 
-func (u *UserInterface) displayPowerOffTimeoutReached() bool {
-	return time.Since(u.lastActivity) > 30*time.Second
-}
-
-func (u *UserInterface) displayInactiveTimeoutReached() bool {
-	return time.Since(u.lastActivity) > 5*time.Second
-}
-
-func (u *UserInterface) displaySplashTimeoutReached() bool {
-	return time.Since(u.lastActivity) > 2*time.Second
-}
-
 func (u *UserInterface) SettingAction(setting string, action string) string {
 	u.RegisterActivity()
 	u.mode = ScreenModeSettings
@@ -214,4 +202,16 @@ func (u *UserInterface) UpdateDisplay(data LiveData) {
 	}
 
 	u.displayData = data
+}
+
+func (u *UserInterface) displayPowerOffTimeoutReached() bool {
+	return time.Since(u.lastActivity) > 30*time.Second
+}
+
+func (u *UserInterface) displayInactiveTimeoutReached() bool {
+	return time.Since(u.lastActivity) > 5*time.Second
+}
+
+func (u *UserInterface) displaySplashTimeoutReached() bool {
+	return time.Since(u.lastActivity) > 2*time.Second
 }

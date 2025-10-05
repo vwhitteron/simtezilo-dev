@@ -125,8 +125,8 @@ func (a *App) GenerateTorqueCurveWaveform(rpm float64, engineRoughness float64, 
 		(1.5 - a.vehicle.engine.haptics.SecondaryBalance) * rpmPowerRatio
 
 	// Generate torque curve waveform
-	for i := range *engineBuffer {
-		timePosition := float64(i) / sampleRate
+	for index := range *engineBuffer {
+		timePosition := float64(index) / sampleRate
 
 		// Primary torque component (fundamental firing frequency)
 		primaryPhase := 2.0 * math.Pi * primaryTorqueFreq * timePosition
@@ -144,7 +144,7 @@ func (a *App) GenerateTorqueCurveWaveform(rpm float64, engineRoughness float64, 
 		combinedTorque := primaryComponent + secondaryComponent + tertiaryComponent
 
 		// Add engine-specific roughness modulation
-		roughnessPhase := float64(a.state.current.sequenceNumber+uint32(i)) * 0.0003
+		roughnessPhase := float64(a.state.current.sequenceNumber+uint32(index)) * 0.0003
 		roughnessVariation := 1.0 + (engineRoughness * math.Sin(roughnessPhase) * 0.2)
 		combinedTorque *= roughnessVariation
 
@@ -175,6 +175,6 @@ func (a *App) GenerateTorqueCurveWaveform(rpm float64, engineRoughness float64, 
 		finalAmplitude := combinedTorque * adjust
 		finalAmplitude, _ = signal.LimitWindow(finalAmplitude, -1.0, 1.0)
 
-		(*engineBuffer)[i] = finalAmplitude
+		(*engineBuffer)[index] = finalAmplitude
 	}
 }

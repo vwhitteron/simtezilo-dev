@@ -5,6 +5,8 @@ import (
 )
 
 func TestCalculateEngineOverlap(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name            string
 		cylinderAngle   float32
@@ -88,13 +90,20 @@ func TestCalculateEngineOverlap(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := calculatePulseOverlap(tt.cylinderAngle, tt.crankPlaneAngle, tt.chambers, tt.geometry)
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
 
-			if result < tt.expectedRange[0] || result > tt.expectedRange[1] {
+			result := calculatePulseOverlap(
+				testCase.cylinderAngle,
+				testCase.crankPlaneAngle,
+				testCase.chambers,
+				testCase.geometry,
+			)
+
+			if result < testCase.expectedRange[0] || result > testCase.expectedRange[1] {
 				t.Errorf("calculateEngineOverlap() = %v, expected range [%v, %v] for %s",
-					result, tt.expectedRange[0], tt.expectedRange[1], tt.description)
+					result, testCase.expectedRange[0], testCase.expectedRange[1], testCase.description)
 			}
 
 			// Ensure result is always within valid bounds
@@ -103,12 +112,14 @@ func TestCalculateEngineOverlap(t *testing.T) {
 			}
 
 			t.Logf("%s: cylinder=%.1f°, crank=%.1f°, chambers=%d, geometry=%s -> overlap=%.3f",
-				tt.name, tt.cylinderAngle, tt.crankPlaneAngle, tt.chambers, tt.geometry, result)
+				testCase.name, testCase.cylinderAngle, testCase.crankPlaneAngle, testCase.chambers, testCase.geometry, result)
 		})
 	}
 }
 
 func TestCalculateEngineOverlapEdgeCases(t *testing.T) {
+	t.Parallel()
+
 	// Test angle wraparound (angles > 180 should be treated as 360-angle)
 	result1 := calculatePulseOverlap(0.0, 270.0, 8, "V") // 270° difference = 90° effective
 	result2 := calculatePulseOverlap(0.0, 90.0, 8, "V")  // 90° difference

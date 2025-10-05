@@ -119,7 +119,7 @@ type AppOptions struct {
 
 // New creates a new App instance and sets up all components based on the provided options.
 func New(opts AppOptions) (*App, error) {
-	a := &App{
+	app := &App{
 		log:  opts.Logger.With().Str("package", "app").Logger(),
 		done: opts.Done,
 		state: appState{
@@ -137,43 +137,43 @@ func New(opts AppOptions) (*App, error) {
 	}
 
 	// load config from file
-	a.config = config.New("simtezilo.conf", *opts.Logger)
+	app.config = config.New("simtezilo.conf", *opts.Logger)
 
 	zerolog.FloatingPointPrecision = 5
 
 	// update to configured log level when greater than current
-	configLogLevel, err := zerolog.ParseLevel(a.config.GetAppLogLevel())
+	configLogLevel, err := zerolog.ParseLevel(app.config.GetAppLogLevel())
 	if err != nil {
-		a.log.Error().Int("config value", int(configLogLevel)).Msg("invalid log level")
+		app.log.Error().Int("config value", int(configLogLevel)).Msg("invalid log level")
 	}
 
-	if configLogLevel < a.log.GetLevel() || configLogLevel >= zerolog.NoLevel {
-		a.log = a.log.Level(configLogLevel).With().Logger()
+	if configLogLevel < app.log.GetLevel() || configLogLevel >= zerolog.NoLevel {
+		app.log = app.log.Level(configLogLevel).With().Logger()
 
-		a.log.Debug().Str("level", configLogLevel.String()).Str("source", "config").Msg("log level update")
+		app.log.Debug().Str("level", configLogLevel.String()).Str("source", "config").Msg("log level update")
 	}
 
-	a.cache = cache.New(a.config.GetAppCacheDir(), *opts.Logger)
+	app.cache = cache.New(app.config.GetAppCacheDir(), *opts.Logger)
 
 	// load language translations
-	a.i18n = i18n.NewLanguage(
-		a.config.GetAppLanguage(),
+	app.i18n = i18n.NewLanguage(
+		app.config.GetAppLanguage(),
 		*opts.Logger,
 	)
-	a.log.Debug().Str("language", a.i18n.Code).Str("result", "success").Msg("init language")
+	app.log.Debug().Str("language", app.i18n.Code).Str("result", "success").Msg("init language")
 
 	hidEvents := make(chan ui.HIDInputEvent, 10)
 
 	// initialise display and button hardware
-	switch a.config.GetHardwareModel() {
+	switch app.config.GetHardwareModel() {
 	case "pirateaudio":
 		hardware.Init()
 
-		orientation := a.config.GetDisplayOrientation()
+		orientation := app.config.GetDisplayOrientation()
 
-		a.display, err = pirateaudio.NewDisplay(pirateaudio.DisplayOptions{
+		app.display, err = pirateaudio.NewDisplay(pirateaudio.DisplayOptions{
 			Orientation: orientation,
-			I18n:        a.i18n,
+			I18n:        app.i18n,
 		})
 		if err != nil {
 			log.Error().
@@ -186,26 +186,26 @@ func New(opts AppOptions) (*App, error) {
 			return nil, err
 		}
 
-		a.log.Debug().
+		app.log.Debug().
 			Str("component", "pirate audio").
 			Str("sub", "display").
 			Str("result", "success").
 			Msg("init")
 
 		pirateaudio.SetupHID(orientation, hidEvents)
-		a.log.Debug().
+		app.log.Debug().
 			Str("component", "pirate audio").
 			Str("sub", "hid").
 			Msg("init")
 	case "spotpear":
 		hardware.Init()
 
-		a.display, err = spotpear.NewDisplay(spotpear.DisplayOptions{
-			Orientation: a.config.GetDisplayOrientation(),
-			I18n:        a.i18n,
+		app.display, err = spotpear.NewDisplay(spotpear.DisplayOptions{
+			Orientation: app.config.GetDisplayOrientation(),
+			I18n:        app.i18n,
 		})
 		if err != nil {
-			a.log.Error().
+			app.log.Error().
 				Err(err).
 				Str("component", "spotpear game 1.3").
 				Str("sub", "display").
@@ -215,7 +215,7 @@ func New(opts AppOptions) (*App, error) {
 			return nil, err
 		}
 
-		a.log.Debug().
+		app.log.Debug().
 			Str("component", "spotpear game 1.3").
 			Str("sub", "display").
 			Str("result", "success").
@@ -229,14 +229,14 @@ func New(opts AppOptions) (*App, error) {
 	case "waveshare":
 		hardware.Init()
 
-		orientation := a.config.GetDisplayOrientation()
+		orientation := app.config.GetDisplayOrientation()
 
-		a.display, err = waveshare.NewDisplay(waveshare.DisplayOptions{
+		app.display, err = waveshare.NewDisplay(waveshare.DisplayOptions{
 			Orientation: orientation,
-			I18n:        a.i18n,
+			I18n:        app.i18n,
 		})
 		if err != nil {
-			a.log.Error().
+			app.log.Error().
 				Err(err).
 				Str("component", "waveshare 14972").
 				Str("sub", "display").
@@ -246,7 +246,7 @@ func New(opts AppOptions) (*App, error) {
 			return nil, err
 		}
 
-		a.log.Debug().
+		app.log.Debug().
 			Str("component", "waveshare 14972").
 			Str("sub", "display").
 			Str("result", "success").
@@ -258,8 +258,8 @@ func New(opts AppOptions) (*App, error) {
 			Str("sub", "hid").
 			Msg("init")
 	default:
-		a.display = console.NewDisplay()
-		a.log.Debug().
+		app.display = console.NewDisplay()
+		app.log.Debug().
 			Str("component", "console").
 			Str("sub", "display").
 			Str("result", "success").
@@ -267,25 +267,25 @@ func New(opts AppOptions) (*App, error) {
 
 		go console.SetupHID(hidEvents)
 
-		a.log.Debug().
+		app.log.Debug().
 			Str("component", "console").
 			Str("sub", "hid").
 			Msg("init")
 	}
 
-	a.ui = ui.NewUserInterface(&ui.Config{
-		I18n:             a.i18n,
+	app.ui = ui.NewUserInterface(&ui.Config{
+		I18n:             app.i18n,
 		HIDEvents:        hidEvents,
-		Display:          a.display,
+		Display:          app.display,
 		LiveData:         &ui.LiveData{Gear: kinematics.NullGear},
 		Log:              *opts.Logger,
-		SettingsCallback: a.settingAction,
-		Done:             a.done,
+		SettingsCallback: app.settingAction,
+		Done:             app.done,
 	})
 
-	err = a.ui.Screen.RenderSplashScreen(Version)
+	err = app.ui.Screen.RenderSplashScreen(Version)
 	if err != nil {
-		a.log.Error().
+		app.log.Error().
 			Err(err).
 			Str("component", "ui").
 			Str("sub", "screen").
@@ -296,19 +296,19 @@ func New(opts AppOptions) (*App, error) {
 	}
 
 	// initialise synthesizer
-	a.synth, err = synthesizer.New(&synthesizer.SynthOpts{
-		Config:     a.config.GetSynthesizer(),
+	app.synth, err = synthesizer.New(&synthesizer.SynthOpts{
+		Config:     app.config.GetSynthesizer(),
 		Logger:     *opts.Logger,
-		Kinematics: &a.kinematics,
+		Kinematics: &app.kinematics,
 	})
 	if err != nil {
-		a.log.Error().
+		app.log.Error().
 			Err(err).
 			Str("component", "synth").
 			Str("result", "failure").
 			Msg("init")
 
-		_ = a.ui.Screen.RenderErrorScreen("Synth init")
+		_ = app.ui.Screen.RenderErrorScreen("Synth init")
 
 		return nil, err
 	}
@@ -316,32 +316,32 @@ func New(opts AppOptions) (*App, error) {
 	// initialise GT telemetry client
 	gtClientLogger := opts.Logger.With().Str("component", "gt client").Logger()
 
-	a.gtClient, err = gttelemetry.New(gttelemetry.Options{
-		Source:    a.config.GetTelemetrySource(),
+	app.gtClient, err = gttelemetry.New(gttelemetry.Options{
+		Source:    app.config.GetTelemetrySource(),
 		Logger:    &gtClientLogger,
-		LogLevel:  a.config.GetAppLogLevel(),
+		LogLevel:  app.config.GetAppLogLevel(),
 		VehicleDB: opts.VehicleDB,
 	})
 	if err != nil {
-		a.log.Error().
+		app.log.Error().
 			Err(err).
 			Str("component", "gt client").
 			Str("result", "failure").
 			Msg("init")
 
-		_ = a.ui.Screen.RenderErrorScreen("GT client init")
+		_ = app.ui.Screen.RenderErrorScreen("GT client init")
 
 		return nil, err
 	}
 
-	a.odometer = odometer.New(*opts.Logger)
+	app.odometer = odometer.New(*opts.Logger)
 
-	a.fuelRange = fuelrange.New(*opts.Logger)
+	app.fuelRange = fuelrange.New(*opts.Logger)
 
-	a.circuit, err = circuit.New(*a.gtClient.CircuitDB, *opts.Logger)
+	app.circuit, err = circuit.New(*app.gtClient.CircuitDB, *opts.Logger)
 	if err != nil {
 		// TODO: fatal error?
-		a.log.Error().
+		app.log.Error().
 			Err(err).
 			Str("package", "circuit").
 			Str("result", "failure").
@@ -349,30 +349,30 @@ func New(opts AppOptions) (*App, error) {
 	}
 
 	discordBotConfig := pitradio.DiscordOptions{
-		Token:          a.config.GetDiscordToken(),
-		ChannelID:      a.config.GetDiscordChannelID(),
-		VoiceChannelID: a.config.GetDiscordVoiceChannelID(),
-		GuildID:        a.config.GetDiscordGuildID(),
-		Cache:          &a.cache,
+		Token:          app.config.GetDiscordToken(),
+		ChannelID:      app.config.GetDiscordChannelID(),
+		VoiceChannelID: app.config.GetDiscordVoiceChannelID(),
+		GuildID:        app.config.GetDiscordGuildID(),
+		Cache:          &app.cache,
 	}
 
-	a.pitRadio, err = pitradio.NewDiscordBot(discordBotConfig)
+	app.pitRadio, err = pitradio.NewDiscordBot(discordBotConfig)
 	if err != nil {
-		a.log.Error().
+		app.log.Error().
 			Err(err).
 			Str("component", "discord").
 			Str("result", "failure").
 			Msg("init")
 	}
 
-	a.resetPitRadioState()
+	app.resetPitRadioState()
 
-	a.log.Debug().
+	app.log.Debug().
 		Str("component", "app").
 		Str("result", "success").
 		Msg("init")
 
-	return a, nil
+	return app, nil
 }
 
 // Run starts the main application loop and associated goroutines.

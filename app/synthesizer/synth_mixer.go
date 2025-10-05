@@ -49,7 +49,7 @@ func NewMixer(mixerConfig MixerConfig) (*Mixer, error) {
 		return nil, errors.New("gain and gainIncrement must be valid pointers")
 	}
 
-	m := &Mixer{
+	mixer := &Mixer{
 		configGainIncrement: mixerConfig.GainIncrement,
 
 		bufferLength: mixerConfig.BufferLength,
@@ -65,14 +65,14 @@ func NewMixer(mixerConfig MixerConfig) (*Mixer, error) {
 		healthCheckInterval: 5 * time.Second,
 	}
 
-	err := m.AddChannel("_master", mixerConfig.MasterGain)
+	err := mixer.AddChannel("_master", mixerConfig.MasterGain)
 	if err != nil {
 		return nil, fmt.Errorf("add master channel: %w", err)
 	}
 
-	go m.watchForConfigChanges()
+	go mixer.watchForConfigChanges()
 
-	return m, nil
+	return mixer, nil
 }
 
 func (m *Mixer) Close() {
@@ -253,9 +253,14 @@ func (m *Mixer) FadeIn(period time.Duration) {
 		m.fadeInActive = true
 
 		fadeInInterval := 50 * time.Millisecond
-		fadeInIncrement := (*master.configGain - m.faderGain) / (float64(period.Milliseconds() / fadeInInterval.Milliseconds()))
+		incrementTime := float64(period.Milliseconds() / fadeInInterval.Milliseconds())
+		fadeInIncrement := (*master.configGain - m.faderGain) / incrementTime
 
-		m.log.Debug().Float64("current", m.faderGain).Float64("target", *master.configGain).Str("state", "begin").Msg("fade in")
+		m.log.Debug().
+			Float64("current", m.faderGain).
+			Float64("target", *master.configGain).
+			Str("state", "begin").
+			Msg("fade in")
 
 		for {
 			m.faderGain += fadeInIncrement
@@ -414,23 +419,23 @@ func (m *Mixer) MixToMaster2(length int) {
 			outSamplesWork := make([]float64, length)
 
 			// Perform direct mix and get the peak value
-			for i, engineSample := range engineSamples {
+			for index, engineSample := range engineSamples {
 				peak := 0.0
 
 				engineScaled := engineSample
 
-				engineMax := 1.0 - signal.Abs(outSamples[i])
+				engineMax := 1.0 - signal.Abs(outSamples[index])
 				if engineSample > engineMax || engineSample < -engineMax {
 					engineScaled = engineMax * engineSample
 				}
 
-				mixed := mixSampleSum(outSamples[i], engineScaled, &peak)
+				mixed := mixSampleSum(outSamples[index], engineScaled, &peak)
 
-				outSamplesWork[i] = mixed
+				outSamplesWork[index] = mixed
 
 				if mixed > 1.0 || mixed < -1.0 {
 					m.log.Warn().
-						Float64("sample", outSamples[i]).
+						Float64("sample", outSamples[index]).
 						Float64("engine", engineSample).
 						Float64("engineScaled", engineScaled).
 						Float64("mixed", mixed).

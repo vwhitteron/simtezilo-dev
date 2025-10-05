@@ -73,7 +73,7 @@ func (a *App) sendPitRadioMessage() {
 
 	a.notifyFuelWarnings()
 
-	a.notifyLapProgress()
+	a.notifyRaceProgress()
 
 	a.notifyGridPositionChange()
 }
@@ -268,9 +268,32 @@ func (a *App) notifyLapNumber() {
 		return
 	}
 
-	a.pitRadioState.lastNotifiedLapNumber = currentLap
+	message := ""
 
-	message := fmt.Sprintf("Lap %d", a.state.current.lapNumber)
+	longRace := raceLaps > 8
+	lapsRemaining := raceLaps - currentLap + 1
+
+	raceCompleted := lapsRemaining <= 0 && a.pitRadioState.lastNotifiedLapNumber != currentLap
+	finalLap := a.state.current.lapNumber == raceLaps && a.pitRadioState.lastNotifiedLapNumber != currentLap
+	LastFewLaps := lapsRemaining <= 3 && longRace && a.pitRadioState.lastNotifiedLapNumber != currentLap
+
+	switch {
+	case raceCompleted:
+		message = a.i18n.GetString(translations.RadioRaceFinish)
+
+		a.pitRadioState.lastNotifiedLapNumber = currentLap
+	case finalLap:
+		message = a.i18n.GetString(translations.RadioFinalLap)
+
+		a.pitRadioState.lastNotifiedLapNumber = currentLap
+	case LastFewLaps:
+		format := a.i18n.GetString(translations.RadioLapsRemainingFmt)
+		message = fmt.Sprintf(format, lapsRemaining)
+
+		a.pitRadioState.lastNotifiedLapNumber = currentLap
+	}
+
+	a.pitRadioState.lastNotifiedLapNumber = currentLap
 
 	err := a.pitRadio.Send(pitradio.Message{
 		Text:   message,
@@ -292,13 +315,13 @@ func (a *App) notifyLapNumber() {
 		Msg("Send lap number message")
 }
 
-// notifyLapProgress sends lap number notifications over the pit radio.
-func (a *App) notifyLapProgress() {
+// notifyRaceProgress sends lap number notifications based on race progress over the pit radio.
+func (a *App) notifyRaceProgress() {
 	if a.pitRadioState == nil {
 		return
 	}
 
-	progressInterval := 25 // Percentage interval for lap progress notifications
+	progressInterval := 25 // race percent TODO: make a config option
 
 	currentLap := a.state.current.lapNumber
 
@@ -308,7 +331,7 @@ func (a *App) notifyLapProgress() {
 
 	raceLaps := a.gtClient.Telemetry.RaceLaps()
 	if raceLaps == 0 {
-		// TODO: handle endurance races
+		// TODO: handle time based endurance races
 		return
 	}
 
@@ -331,40 +354,17 @@ func (a *App) notifyLapProgress() {
 		return
 	}
 
-	longRace := raceLaps > 8
-	lapsRemaining := raceLaps - currentLap + 1
+	NotifyInterval := currentProgressInterval > a.pitRadioState.lastNotifiedRaceProgressInterval &&
+		raceProgressPercent < 100
 
-	raceCompleted := lapsRemaining <= 0 && a.pitRadioState.lastNotifiedLapNumber != currentLap
-	finalLap := a.state.current.lapNumber == raceLaps && a.pitRadioState.lastNotifiedLapNumber != currentLap
-	LastFewLaps := lapsRemaining <= 3 && longRace && a.pitRadioState.lastNotifiedLapNumber != currentLap
-	NotifyInterval := currentProgressInterval > a.pitRadioState.lastNotifiedRaceProgressInterval && raceProgressPercent < 100
-
-	message := ""
-
-	switch {
-	case raceCompleted: // TODO: move to notifyLapNumber
-		message = a.i18n.GetString(translations.RadioRaceFinish)
-
-		a.pitRadioState.lastNotifiedLapNumber = currentLap
-	case finalLap: // TODO: move to notifyLapNumber
-		message = a.i18n.GetString(translations.RadioFinalLap)
-
-		a.pitRadioState.lastNotifiedLapNumber = currentLap
-	case LastFewLaps: // TODO: move to notifyLapNumber
-		format := a.i18n.GetString(translations.RadioLapsRemainingFmt)
-		message = fmt.Sprintf(format, lapsRemaining)
-
-		a.pitRadioState.lastNotifiedLapNumber = currentLap
-	case NotifyInterval:
-		format := a.i18n.GetString(translations.RadioRaceProgressFmt)
-		message = fmt.Sprintf(format, raceProgressPercent)
-
-		a.pitRadioState.lastNotifiedRaceProgressInterval = currentProgressInterval
-	}
-
-	if message == "" {
+	if !NotifyInterval {
 		return
 	}
+
+	format := a.i18n.GetString(translations.RadioRaceProgressFmt)
+	message := fmt.Sprintf(format, raceProgressPercent)
+
+	a.pitRadioState.lastNotifiedRaceProgressInterval = currentProgressInterval
 
 	if a.pitRadio != nil {
 		err := a.pitRadio.Send(pitradio.Message{
@@ -535,7 +535,11 @@ func (a *App) fuelBoxThisLapMessage(currentLap int16, remainingLaps float64) (me
 }
 
 // fuelBoxSoonMessage generates a fuel pre-warn message based on estimated fuel range.
-func (a *App) fuelBoxSoonMessage(fuelRangeLapsUntilBox float64, currentLap int16, remainingLaps float64) (message string, suppressNotify bool) {
+func (a *App) fuelBoxSoonMessage(
+	fuelRangeLapsUntilBox float64,
+	currentLap int16,
+	remainingLaps float64,
+) (message string, suppressNotify bool) {
 	if a.pitRadioState.fuelNotifyPrewarnIssued {
 		message = ""
 		suppressNotify = true
@@ -554,7 +558,11 @@ func (a *App) fuelBoxSoonMessage(fuelRangeLapsUntilBox float64, currentLap int16
 }
 
 // fuelStrategyMessage generates a fuel strategy message based on estimated fuel range and remaining laps.
-func (a *App) fuelStrategyMessage(fuelRangeLaps float64, remainingLaps float64, currentLap int16) (message string, suppressNotify bool) {
+func (a *App) fuelStrategyMessage(
+	fuelRangeLaps float64,
+	remainingLaps float64,
+	currentLap int16,
+) (message string, suppressNotify bool) {
 	if a.pitRadioState.lastNotifiedLapFuelStrategy == currentLap {
 		message = ""
 		suppressNotify = true
@@ -578,10 +586,10 @@ func (a *App) fuelStrategyMessage(fuelRangeLaps float64, remainingLaps float64, 
 // formatDuration formats a time.Duration value for text and speech output.
 func formatDuration(lapTime time.Duration) string {
 	minutes := int(lapTime.Minutes())
-	lapTime = lapTime - (time.Duration(minutes) * time.Minute)
+	lapTime -= time.Duration(minutes) * time.Minute
 
 	seconds := int(lapTime.Seconds())
-	lapTime = lapTime - (time.Duration(seconds) * time.Second)
+	lapTime -= time.Duration(seconds) * time.Second
 
 	milliseconds := int(lapTime.Milliseconds())
 

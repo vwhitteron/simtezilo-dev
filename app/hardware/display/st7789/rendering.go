@@ -8,7 +8,7 @@ import (
 )
 
 // FillRectangle fills a rectangle at a given coordinates with a color.
-func (d *Device) FillRectangle(x, y, width, height uint16, c color.RGBA) error {
+func (d *Device) FillRectangle(x, y, width, height uint16, colorRGBA color.RGBA) error {
 	k, i := d.Size()
 	if width == 0 || height == 0 ||
 		x >= k || (x+width) > k || y >= i || (y+height) > i {
@@ -17,25 +17,25 @@ func (d *Device) FillRectangle(x, y, width, height uint16, c color.RGBA) error {
 
 	d.SetWindow()
 
-	c565 := RGBAToRGB565(c)
+	c565 := RGBAToRGB565(colorRGBA)
 	c1 := uint8(c565)
 	c2 := uint8(c565 >> 8)
 
 	data := make([]uint8, d.PixelCount())
-	for i := range int32(d.pixelColumns) {
-		data[i*2] = c1
-		data[i*2+1] = c2
+	for rowPixel := range int32(d.pixelColumns) {
+		data[rowPixel*2] = c1
+		data[rowPixel*2+1] = c2
 	}
 
-	j := int32(width) * int32(height)
-	for j > 0 {
-		if j >= int32(d.pixelRows) {
+	column := int32(width) * int32(height)
+	for column > 0 {
+		if column >= int32(d.pixelRows) {
 			_ = d.SendData(data)
 		} else {
-			_ = d.SendData(data[:j*2])
+			_ = d.SendData(data[:column*2])
 		}
 
-		j -= int32(d.pixelRows)
+		column -= int32(d.pixelRows)
 	}
 
 	return nil
@@ -51,13 +51,13 @@ func RGBAToRGB565(c color.RGBA) uint16 {
 }
 
 // SetPixel sets a pixel in the screen.
-func (d *Device) SetPixel(x uint16, y uint16, c color.RGBA) {
+func (d *Device) SetPixel(xPos uint16, yPos uint16, colorRGBA color.RGBA) {
 	resX, resY := d.getResolution()
-	if x >= resX || y >= resY {
+	if xPos >= resX || yPos >= resY {
 		return
 	}
 
-	_ = d.FillRectangle(x, y, 1, 1, c)
+	_ = d.FillRectangle(xPos, yPos, 1, 1, colorRGBA)
 }
 
 // FillScreen fills the screen with a given color.

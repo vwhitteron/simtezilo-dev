@@ -52,14 +52,15 @@ func (a *App) generateEngineHaptic() {
 
 	// Cache last known RPM and timestamp for fallback when telemetry is unavailable
 	currentTime := time.Now()
-	if a.state.current.sequenceNumber > a.state.engine.lastSeq {
+	switch {
+	case a.state.current.sequenceNumber > a.state.engine.lastSeq:
 		a.state.engine.lastKnownRPM = rpm
 		a.state.engine.lastEventTime = currentTime
 		a.state.engine.lastSeq = a.state.current.sequenceNumber
-	} else if currentTime.Sub(a.state.engine.lastEventTime) > 1000*time.Millisecond {
+	case currentTime.Sub(a.state.engine.lastEventTime) > 1000*time.Millisecond:
 		// stop engine haptics of no telemetry received for 1 second or more
 		return
-	} else {
+	default:
 		// Use cached RPM if telemetry is unavailable
 		rpm = a.state.engine.lastKnownRPM
 	}
@@ -108,7 +109,12 @@ func (a *App) generateEngineHaptic() {
 }
 
 // getEngineCharacteristics retrieves engine characteristics based on a given engien geometry and speed.
-func (a *App) getEngineCharacteristics(engineLayout string, cylinderAngle float32, crankPlaneAngle float32, revLimit uint16) (engineCharacteristics, error) {
+func (a *App) getEngineCharacteristics(
+	engineLayout string,
+	cylinderAngle float32,
+	crankPlaneAngle float32,
+	revLimit uint16,
+) (engineCharacteristics, error) {
 	if engineLayout == "" {
 		return engineCharacteristics{
 			haptics: &haptics.EngineProfile{},
@@ -149,13 +155,16 @@ func (a *App) getEngineCharacteristics(engineLayout string, cylinderAngle float3
 		revRange = "low"
 	}
 
+	cylinderAngleStr := strconv.FormatFloat(float64(cylinderAngle), 'f', 0, 32)
+	crankPlaneAngleStr := strconv.FormatFloat(float64(crankPlaneAngle), 'f', 0, 32)
+
 	layoutVariations := []string{
-		engineLayout + "_b" + strconv.FormatFloat(float64(cylinderAngle), 'f', 0, 32) + "_c" + strconv.FormatFloat(float64(crankPlaneAngle), 'f', 0, 32) + "_r" + revRange,
-		engineLayout + "_b" + strconv.FormatFloat(float64(cylinderAngle), 'f', 0, 32) + "_c" + strconv.FormatFloat(float64(crankPlaneAngle), 'f', 0, 32),
-		engineLayout + "_c" + strconv.FormatFloat(float64(crankPlaneAngle), 'f', 0, 32) + "_r" + revRange,
-		engineLayout + "_c" + strconv.FormatFloat(float64(crankPlaneAngle), 'f', 0, 32),
-		engineLayout + "_b" + strconv.FormatFloat(float64(cylinderAngle), 'f', 0, 32) + "_r" + revRange,
-		engineLayout + "_b" + strconv.FormatFloat(float64(cylinderAngle), 'f', 0, 32),
+		engineLayout + "_b" + cylinderAngleStr + "_c" + crankPlaneAngleStr + "_r" + revRange,
+		engineLayout + "_b" + cylinderAngleStr + "_c" + crankPlaneAngleStr,
+		engineLayout + "_c" + crankPlaneAngleStr + "_r" + revRange,
+		engineLayout + "_c" + crankPlaneAngleStr,
+		engineLayout + "_b" + cylinderAngleStr + "_r" + revRange,
+		engineLayout + "_b" + cylinderAngleStr,
 		engineLayout + "_r" + revRange,
 		engineLayout,
 	}
@@ -415,24 +424,24 @@ func (a *App) generatePulseWaveform(rpm float64, engineRoughness float64, engine
 	pulseDutyCycle := a.vehicle.engine.pulseOverlap + (rpmPercent * a.vehicle.engine.pulseOverlap * 2)
 
 	// Normal engine pulse generation (rev limiter already checked above)
-	for i := range *engineBuffer {
+	for index := range *engineBuffer {
 		samplesPerPulse := sampleRate / pulseRate
-		pulsePosition := float64(i) / samplesPerPulse
+		pulsePosition := float64(index) / samplesPerPulse
 
 		// Detect pulse trigger point (beginning of each cycle)
 		currentPulseIndex := int(math.Floor(pulsePosition))
 
 		var lastPulseIndex int
 
-		if i > 0 {
-			lastPulsePosition := float64(i-1) / samplesPerPulse
+		if index > 0 {
+			lastPulsePosition := float64(index-1) / samplesPerPulse
 			lastPulseIndex = int(math.Floor(lastPulsePosition))
 		} else {
 			lastPulseIndex = -1
 		}
 
 		// Check if the wavedorm has crossed into a new pulse cycle
-		pulseTriggered := (i > 0) && (currentPulseIndex != lastPulseIndex)
+		pulseTriggered := (index > 0) && (currentPulseIndex != lastPulseIndex)
 
 		// Alternate polarity for each pulse
 		if pulseTriggered {
@@ -463,7 +472,7 @@ func (a *App) generatePulseWaveform(rpm float64, engineRoughness float64, engine
 			// Add per-pulse roughness variation based on engine characteristics
 			secondaryImbalance := 1.0 - a.vehicle.engine.haptics.SecondaryBalance
 			if rpm <= 2400.0 && secondaryImbalance > 0.02 {
-				roughnessPhase := float64(a.state.current.sequenceNumber+uint32(i)) * 0.0005
+				roughnessPhase := float64(a.state.current.sequenceNumber+uint32(index)) * 0.0005
 				roughnessVariation := 1.0 + (math.Sin(roughnessPhase) * secondaryImbalance * 0.3)
 				pulseValue *= roughnessVariation
 			}
@@ -472,7 +481,7 @@ func (a *App) generatePulseWaveform(rpm float64, engineRoughness float64, engine
 		// Ensure the magnitude stays within bounds
 		pulseValue, _ = signal.LimitWindow(pulseValue, -1.0, 1.0)
 
-		(*engineBuffer)[i] = amplitude * pulseValue
+		(*engineBuffer)[index] = amplitude * pulseValue
 	}
 }
 
@@ -573,7 +582,7 @@ func generatePulseFourStroke(phase float64, engine *haptics.EngineProfile) (puls
 			pulse = math.Pow(pulse, attackSharpness)
 		} else {
 			// Smoother attack for well-balanced engines
-			pulse = pulse * attackSharpness
+			pulse *= attackSharpness
 		}
 	} else {
 		// Quick decay (70% of pulse width)

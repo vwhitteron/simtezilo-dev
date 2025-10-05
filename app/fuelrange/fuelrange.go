@@ -1,19 +1,30 @@
 package fuelrange
 
 import (
-	"sort"
-
 	"github.com/rs/zerolog"
 )
 
 const (
-	initialFuelLevel       float64 = -1.0                    // Initial fuel level in percent
-	initialOdometerReading float64 = -1.0                    // Initial odometer reading in meters
-	rangeLapsUnknown       float64 = 10000                   // Default (very high) range in laps when unknown
-	rangeDistanceUnknown   float64 = rangeLapsUnknown * 1000 // Default (unknown) range in meters
-	fuelRatePercentile     int     = 50                      // Percentile fuel consumption rate to use for range estimation
-	fuelRangeMinSamples    int     = 1000                    // Minimum number of samples required to provide a reliable range estimate
-	fuelRangeMaxSamples    int     = 6000                    // Number of samples to store in the buffer
+	// Initial fuel level in percent
+	initialFuelLevel float64 = -1.0
+
+	// Initial odometer reading in meters
+	initialOdometerReading float64 = -1.0
+
+	// Default (very high) range in laps when unknown
+	rangeLapsUnknown float64 = 10000
+
+	// Default (unknown) range in meters
+	rangeDistanceUnknown float64 = rangeLapsUnknown * 1000
+
+	// Percentile fuel consumption rate to use for range estimation
+	fuelRatePercentile int = 50
+
+	// Minimum number of samples required to provide a reliable range estimate
+	fuelRangeMinSamples int = 1000
+
+	// Number of samples to store in the buffer
+	fuelRangeMaxSamples int = 6000
 )
 
 type FuelRange struct {
@@ -32,13 +43,13 @@ type FuelRange struct {
 
 // New creates a new fuel range estimator.
 func New(logger zerolog.Logger) *FuelRange {
-	r := FuelRange{
+	fuelRange := FuelRange{
 		log: logger.With().Str("package", "fuel").Logger(),
 	}
 
-	r.Reset()
+	fuelRange.Reset()
 
-	return &r
+	return &fuelRange
 }
 
 // Reset clears the internal state of the fuel range estimator.
@@ -208,20 +219,4 @@ func (r *FuelRange) fuelRateMA() float64 {
 	}
 
 	return sum / float64(len(r.fuelRateSamples))
-}
-
-// fuelRatePercentile returns the specified percentile fuel range in percent per km
-// TODO: remove or keep and make private. Public to stop linter error.
-func (r *FuelRange) FuelRatePercentile(percentile int) float64 {
-	if len(r.fuelRateSamples) == 0 {
-		return 0
-	}
-
-	percentileFraction := float64(percentile) / 100.0
-	index := int(float64(len(r.fuelRateSamples)) * percentileFraction)
-
-	// Calculate the 80th percentile fuel range
-	sort.Float64s(r.fuelRateSamples)
-
-	return r.fuelRateSamples[index]
 }

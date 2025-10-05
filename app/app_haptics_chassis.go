@@ -48,13 +48,13 @@ func (a *App) generateChassisHaptic() {
 
 	// Generate the complete pulse waveform
 	// for i := range int(pulseWidth * 2) {
-	for i := range bufferSize {
-		if i > pulseLength {
+	for index := range bufferSize {
+		if index > pulseLength {
 			break
 		}
 
-		phase := waveSamplePeriod * (float64(i) - waveOffset)
-		pulseBuffer[i] = ((pulseAmplitude * math.Sin(phase)) + pulseAmplitude) / 2
+		phase := waveSamplePeriod * (float64(index) - waveOffset)
+		pulseBuffer[index] = ((pulseAmplitude * math.Sin(phase)) + pulseAmplitude) / 2
 	}
 
 	a.synth.WriteBuffer("chassis", pulseBuffer, 0)
@@ -76,7 +76,11 @@ func (a *App) generateChassisHaptic() {
 }
 
 func (a *App) calculateChassisHapticPulseAmplitude() float64 {
-	sig := signal.LargestMagnitude(a.kinematics.Current.SixDOFTranslationCalc.Jerk, (a.kinematics.Current.SixDOFRotation.Jerk * snapMultiplier))
+	sig := signal.LargestMagnitude(
+		a.kinematics.Current.SixDOFTranslationCalc.Jerk,
+		(a.kinematics.Current.SixDOFRotation.Jerk * snapMultiplier),
+	)
+
 	pulseAmplitude := signal.Exponent(sig, a.config.GetJerkCurve())
 	pulseAmplitude = signal.Scale(pulseAmplitude, a.config.GetJerkScale())
 
@@ -94,7 +98,10 @@ func (a *App) calculateChassisHapticPulseAmplitude() float64 {
 }
 
 func (a *App) calculateChassisHapticPulseFrequency() float64 {
-	snap := signal.LargestMagnitude(a.kinematics.Current.SixDOFTranslationCalc.Snap, (a.kinematics.Current.SixDOFRotation.Snap * snapMultiplier))
+	snap := signal.LargestMagnitude(
+		a.kinematics.Current.SixDOFTranslationCalc.Snap,
+		(a.kinematics.Current.SixDOFRotation.Snap * snapMultiplier),
+	)
 
 	pulseFrequencyScaler := signal.Abs(signal.Exponent(snap, a.config.GetSnapCurve()))
 	pulseFrequencyScaler = signal.Scale(pulseFrequencyScaler, a.config.GetSnapScale())

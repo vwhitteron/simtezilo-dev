@@ -34,9 +34,9 @@ var autoRepeatManager struct {
 func OnGPIOButtonPressed(n int, fn func()) {
 	go func() {
 		// Prepare the GPIO pin for input
-		p := gpioreg.ByName(fmt.Sprintf("GPIO%d", n))
+		pin := gpioreg.ByName(fmt.Sprintf("GPIO%d", n))
 
-		err := p.In(gpio.PullUp, gpio.BothEdges)
+		err := pin.In(gpio.PullUp, gpio.BothEdges)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -48,7 +48,7 @@ func OnGPIOButtonPressed(n int, fn func()) {
 		// button edge detection and debounce
 		for {
 			// Wait for any edge (state change)
-			p.WaitForEdge(-1)
+			pin.WaitForEdge(-1)
 
 			// Start debounce sampling when edge is detected
 			ticker := time.NewTicker(gpioReadSampleRate)
@@ -57,7 +57,7 @@ func OnGPIOButtonPressed(n int, fn func()) {
 			for {
 				select {
 				case <-ticker.C:
-					updateGPIOStates(p, &gpioStates)
+					updateGPIOStates(pin, &gpioStates)
 
 					if stableLevel, isStable := getStableGPIOState(gpioStates); isStable {
 						if stableLevel != lastStableLevel {
@@ -66,7 +66,7 @@ func OnGPIOButtonPressed(n int, fn func()) {
 							// Trigger callback on stable transition to LOW (button pressed with pull-up)
 							if stableLevel == gpio.Low {
 								fn()
-								startAutoRepeat(p, fn)
+								startAutoRepeat(pin, fn)
 							}
 						}
 
@@ -74,7 +74,7 @@ func OnGPIOButtonPressed(n int, fn func()) {
 					}
 				default:
 					// Reset the debounce buffer if another edge occurred during debouncing
-					if p.WaitForEdge(0) { // Non-blocking
+					if pin.WaitForEdge(0) { // Non-blocking
 						gpioStates = 0x00
 					}
 				}
@@ -123,7 +123,7 @@ func stopActiveAutoRepeat() {
 }
 
 // startAutoRepeat starts a new auto-repeat session, stopping any existing one.
-func startAutoRepeat(p gpio.PinIO, fn func()) {
+func startAutoRepeat(pin gpio.PinIO, function func()) {
 	stopActiveAutoRepeat()
 
 	// Start a new auto-repeat handler
@@ -145,7 +145,7 @@ func startAutoRepeat(p gpio.PinIO, fn func()) {
 		}
 
 		// Check if button is still pressed after delay
-		if p.Read() == gpio.High {
+		if pin.Read() == gpio.High {
 			return
 		}
 
@@ -153,11 +153,11 @@ func startAutoRepeat(p gpio.PinIO, fn func()) {
 
 		for {
 			// Finish auto repeat if the button has been released
-			if p.Read() == gpio.High {
+			if pin.Read() == gpio.High {
 				return
 			}
 
-			fn()
+			function()
 
 			elapsed := time.Since(repeatStartTime)
 

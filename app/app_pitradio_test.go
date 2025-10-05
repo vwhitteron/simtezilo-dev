@@ -48,6 +48,8 @@ type PitRadioTestSuite struct {
 }
 
 func TestPitRadioTestSuite(t *testing.T) {
+	t.Parallel()
+
 	suite.Run(t, new(PitRadioTestSuite))
 }
 

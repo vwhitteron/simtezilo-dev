@@ -42,6 +42,25 @@ type SPIDeviceConfig struct {
 	log zerolog.Logger // Logger for logging messages and errors.
 }
 
+// Device represents an ST7789 LCD device with associated methods for interacting with the display.
+type Device struct {
+	conn      conn.Conn       // SPI connection to the device.
+	dataComm  gpio.PinOut     // GPIO pin for data/command selection.
+	reset     gpio.PinIO      // GPIO pin for resetting the display.
+	backlight gpio.PinIO      // GPIO pin for controlling the backlight.
+	rect      image.Rectangle // Rectangle defining the display area.
+
+	rotation                      Rotation // Current rotation of the display.
+	pixelColumns                  uint16   // Number of pixels in the horizontal direction.
+	pixelRows                     uint16   // Number of pixels in the vertical direction.
+	rowOffsetCfg, rowOffset       int16    // Row offset for the display, used for rotation adjustments.
+	columnOffset, columnOffsetCfg int16    // Column offset for the display, used for rotation adjustments.
+	isBGR                         bool     // Indicates if the display uses BGR color format.
+	batchLength                   int32    // Length of the batch for pixel data transfers.
+
+	log zerolog.Logger // Logger for logging messages and errors.
+}
+
 // NewSPI creates a new SPI connected ST7789 device and returns a handle to it.
 func NewSPI(config *SPIDeviceConfig) (*Device, error) {
 	err := validateConfig(config)
@@ -104,28 +123,9 @@ func validateConfig(config *SPIDeviceConfig) error {
 	return nil
 }
 
-// Device represents an ST7789 LCD device with associated methods for interacting with the display.
-type Device struct {
-	conn      conn.Conn       // SPI connection to the device.
-	dataComm  gpio.PinOut     // GPIO pin for data/command selection.
-	reset     gpio.PinIO      // GPIO pin for resetting the display.
-	backlight gpio.PinIO      // GPIO pin for controlling the backlight.
-	rect      image.Rectangle // Rectangle defining the display area.
-
-	rotation                      Rotation // Current rotation of the display.
-	pixelColumns                  uint16   // Number of pixels in the horizontal direction.
-	pixelRows                     uint16   // Number of pixels in the vertical direction.
-	rowOffsetCfg, rowOffset       int16    // Row offset for the display, used for rotation adjustments.
-	columnOffset, columnOffsetCfg int16    // Column offset for the display, used for rotation adjustments.
-	isBGR                         bool     // Indicates if the display uses BGR color format.
-	batchLength                   int32    // Length of the batch for pixel data transfers.
-
-	log zerolog.Logger // Logger for logging messages and errors.
-}
-
 // newST7789Device initializes a new ST7789 device with the provided configuration.
 func newST7789Device(config *SPIDeviceConfig) (*Device, error) {
-	d := &Device{
+	device := &Device{
 		conn:         config.spiConn,
 		dataComm:     config.DataCommPin,
 		rect:         image.Rect(0, 0, int(config.PixelColumns), int(config.PixelRows)),
@@ -138,9 +138,10 @@ func newST7789Device(config *SPIDeviceConfig) (*Device, error) {
 		isBGR:        config.ColorBGR,
 		log:          config.log.With().Str("component", "st7789").Logger(),
 	}
-	d.batchLength = d.batchLength & 1
 
-	return d, nil
+	device.batchLength &= 1
+
+	return device, nil
 }
 
 // String returns a string representation of the ST7789 device.
@@ -211,23 +212,23 @@ func (d *Device) Invert(blackOnWhite bool) {
 }
 
 // SendData sends a block of data to the ST7789 display device.
-func (d *Device) SendData(c []byte) error {
+func (d *Device) SendData(data []byte) error {
 	err := d.dataComm.Out(gpio.High)
 	if err != nil {
 		return err
 	}
 
-	return d.conn.Tx(c, nil)
+	return d.conn.Tx(data, nil)
 }
 
 // SendCommand sends a command to the ST7789 display device.
-func (d *Device) SendCommand(c []byte) error {
+func (d *Device) SendCommand(command []byte) error {
 	err := d.dataComm.Out(gpio.Low)
 	if err != nil {
 		return err
 	}
 
-	return d.conn.Tx(c, nil)
+	return d.conn.Tx(command, nil)
 }
 
 // Size returns the current pixel row and column sizes of the display.
@@ -246,22 +247,22 @@ func (d *Device) PixelCount() uint32 {
 
 // SetWindow sets the current window dimensions for drawing on the display.
 func (d *Device) SetWindow() {
-	x1 := d.pixelColumns - 1
-	y1 := d.pixelRows - 1
-	y0 := 0
-	x0 := 0
+	xMin := 0
+	yMin := 0
+	xMax := d.pixelColumns - 1
+	yMax := d.pixelRows - 1
 
 	d.Command(CASET)
-	d.Data(byte(x0 >> 8))
-	d.Data(byte(x0 & 0xFF))
-	d.Data(byte(x1 >> 8))
-	d.Data(byte(x1 & 0xFF))
+	d.Data(byte(xMin >> 8))
+	d.Data(byte(xMin & 0xFF))
+	d.Data(byte(xMax >> 8))
+	d.Data(byte(xMax & 0xFF))
 
 	d.Command(RASET)
-	d.Data(byte(y0 >> 8))
-	d.Data(byte(y0 & 0xFF))
-	d.Data(byte(y1 >> 8))
-	d.Data(byte(y1 & 0xFF))
+	d.Data(byte(yMin >> 8))
+	d.Data(byte(yMin & 0xFF))
+	d.Data(byte(yMax >> 8))
+	d.Data(byte(yMax & 0xFF))
 
 	d.Command(RAMWR)
 	d.Data(0x89)

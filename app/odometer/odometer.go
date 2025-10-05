@@ -18,13 +18,13 @@ type Odometer struct {
 }
 
 func New(logger zerolog.Logger) *Odometer {
-	m := Odometer{
+	odometer := Odometer{
 		log:            logger.With().Str("package", "odometer").Logger(),
 		distanceMeters: 0,
 		lastCoordinate: models.Coordinate{},
 	}
 
-	return &m
+	return &odometer
 }
 
 // Reset clears the odometer distance and last known coordinate.

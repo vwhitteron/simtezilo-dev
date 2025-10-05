@@ -73,7 +73,7 @@ linters:
     - nestif
     - nilerr
     - nilnesserr
-    - nilnil
+    # - nilnil # not bothered by nil val+err
     - nlreturn
     - noctx
     - noinlineerr

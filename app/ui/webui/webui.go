@@ -43,6 +43,10 @@ func (w *WebUI) Start() {
 	}
 }
 
+func (w *WebUI) HasActiveClients() bool {
+	return w.webSocketClients > 0
+}
+
 //go:embed html/index.html
 var indexHTML []byte
 
@@ -133,12 +137,8 @@ func (w *WebUI) sciChartJSHandlerFunc() func(w http.ResponseWriter, r *http.Requ
 	}
 }
 
-func (w *WebUI) HasActiveClients() bool {
-	return w.webSocketClients > 0
-}
-
 func (w *WebUI) handleWebSocketConnection(response http.ResponseWriter, request *http.Request) {
-	ws, err := Upgrader.Upgrade(response, request, nil)
+	webSocket, err := Upgrader.Upgrade(response, request, nil)
 	if err != nil {
 		w.log.Error().Err(err).Msg("error upgrading connection")
 
@@ -146,7 +146,7 @@ func (w *WebUI) handleWebSocketConnection(response http.ResponseWriter, request 
 	}
 
 	defer func() {
-		err := ws.Close()
+		err := webSocket.Close()
 		if err != nil {
 			w.log.Error().Err(err).Msg("closing websocket connection")
 		}
@@ -188,7 +188,7 @@ func (w *WebUI) handleWebSocketConnection(response http.ResponseWriter, request 
 			continue
 		}
 
-		err = ws.WriteMessage(websocket.TextMessage, encodedData)
+		err = webSocket.WriteMessage(websocket.TextMessage, encodedData)
 		if err != nil {
 			failCount++
 

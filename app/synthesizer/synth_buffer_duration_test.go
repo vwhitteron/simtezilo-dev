@@ -6,6 +6,8 @@ import (
 )
 
 func TestDurationCalculationExamples(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		name       string
 		duration   time.Duration
@@ -18,28 +20,30 @@ func TestDurationCalculationExamples(t *testing.T) {
 		{"Microsecond precision: 1ms at 1kHz", time.Millisecond, 1000, 1},
 	}
 
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
 			// Test all buffer types to ensure consistency
-			adaptiveBuffer := NewAdaptiveBuffer(tc.duration, tc.sampleRate)
-			ringBuffer := NewRingBuffer(tc.duration, tc.sampleRate)
-			linearBuffer := NewLinearBuffer(tc.duration, tc.sampleRate)
+			adaptiveBuffer := NewAdaptiveBuffer(testCase.duration, testCase.sampleRate)
+			ringBuffer := NewRingBuffer(testCase.duration, testCase.sampleRate)
+			linearBuffer := NewLinearBuffer(testCase.duration, testCase.sampleRate)
 
 			// All buffer types should produce the same size
-			if adaptiveBuffer.Length() != tc.expected {
-				t.Errorf("AdaptiveBuffer: expected %d samples, got %d", tc.expected, adaptiveBuffer.Length())
+			if adaptiveBuffer.Length() != testCase.expected {
+				t.Errorf("AdaptiveBuffer: expected %d samples, got %d", testCase.expected, adaptiveBuffer.Length())
 			}
 
-			if ringBuffer.Length() != tc.expected {
-				t.Errorf("RingBuffer: expected %d samples, got %d", tc.expected, ringBuffer.Length())
+			if ringBuffer.Length() != testCase.expected {
+				t.Errorf("RingBuffer: expected %d samples, got %d", testCase.expected, ringBuffer.Length())
 			}
 
-			if linearBuffer.Length() != tc.expected {
-				t.Errorf("LinearBuffer: expected %d samples, got %d", tc.expected, linearBuffer.Length())
+			if linearBuffer.Length() != testCase.expected {
+				t.Errorf("LinearBuffer: expected %d samples, got %d", testCase.expected, linearBuffer.Length())
 			}
 
 			// Verify the duration calculation is correct
-			expectedFromDuration := int(tc.duration.Seconds() * float64(tc.sampleRate))
+			expectedFromDuration := int(testCase.duration.Seconds() * float64(testCase.sampleRate))
 			if adaptiveBuffer.Length() != expectedFromDuration {
 				t.Errorf("Duration calculation mismatch: expected %d, got %d", expectedFromDuration, adaptiveBuffer.Length())
 			}

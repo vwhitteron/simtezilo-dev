@@ -15,6 +15,8 @@ type TelemetryTestSuite struct {
 }
 
 func TestTelemetryTestSuite(t *testing.T) {
+	t.Parallel()
+
 	suite.Run(t, new(TelemetryTestSuite))
 }
 

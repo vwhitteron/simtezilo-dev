@@ -57,6 +57,20 @@ func (b *LinearBuffer) Read(length int) []float64 {
 	return b.readFromBuffer(length, true)
 }
 
+// Write adds the given samples to the buffer
+// The overwrite parameter determines whether to overwrite or mix the samples with the existing buffer content.
+func (b *LinearBuffer) Write(samples []float64, overwrite bool) {
+	if len(samples) == 0 {
+		return
+	}
+
+	if !overwrite {
+		samples = b.mixSamples(samples)
+	}
+
+	copy(b.buffer, samples)
+}
+
 // readFromBuffer reads samples from the ring buffer
 // When scrub is true, the samples are zeroed out in the buffer.
 func (b *LinearBuffer) readFromBuffer(length int, scrub bool) []float64 {
@@ -73,20 +87,6 @@ func (b *LinearBuffer) readFromBuffer(length int, scrub bool) []float64 {
 	}
 
 	return samples
-}
-
-// Write adds the given samples to the buffer
-// The overwrite parameter determines whether to overwrite or mix the samples with the existing buffer content.
-func (b *LinearBuffer) Write(samples []float64, overwrite bool) {
-	if len(samples) == 0 {
-		return
-	}
-
-	if !overwrite {
-		samples = b.mixSamples(samples)
-	}
-
-	copy(b.buffer, samples)
 }
 
 // mixSamples mixes the input samples with the existing samples in the buffer.
