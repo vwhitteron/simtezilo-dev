@@ -1,20 +1,21 @@
 // //nolint:gosmopolitan // contains many string literals containing Japanese characters
-package jp
+package ja
 
 import "github.com/vwhitteron/simtezilo-dev/app/i18n/translations"
 
 const (
-	Code             = "jp"
-	Name             = "日本語"
-	RegularFont      = "LINESeedJP_TTF_Bd.ttf"
-	RegularFontScale = 0.8
-	ItalicFont       = "LINESeedJP_TTF_Bd.ttf"
-	ItalicFontScale  = 0.8
-	ValueFont        = "LeagueGothic-Regular.ttf"
-	ValueFontScale   = 1.0
+	Code             = "ja"                       // IETF BCP47 language tag
+	Name             = "日本語"                      // Language name in the target language
+	RegularFont      = "LINESeedJP_TTF_Bd.ttf"    // Font file for regular text
+	RegularFontScale = 0.8                        // Scale factor for regular font
+	ItalicFont       = "LINESeedJP_TTF_Bd.ttf"    // Font file for italic text
+	ItalicFontScale  = 0.8                        // Scale factor for italic font
+	ValueFont        = "LeagueGothic-Regular.ttf" // Font file for values
+	ValueFontScale   = 1.0                        // Scale factor for value font
 )
 
-var Translations = map[translations.Key]string{
+// Translations maps translation keys to their corresponding Japanese strings.
+var Translations = map[translations.Key]string{ //nolint:gochecknoglobals
 	translations.AppName:        "シムテジロ",
 	translations.AppDescription: "シンセサイザーのエミュレーション",
 	translations.AppVersion:     "バージョン",

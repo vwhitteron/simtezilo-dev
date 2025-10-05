@@ -7,7 +7,7 @@ import (
 	"github.com/golang/freetype/truetype"
 	"github.com/rs/zerolog"
 	"github.com/vwhitteron/simtezilo-dev/app/i18n/en"
-	"github.com/vwhitteron/simtezilo-dev/app/i18n/jp"
+	"github.com/vwhitteron/simtezilo-dev/app/i18n/ja"
 	translationkeys "github.com/vwhitteron/simtezilo-dev/app/i18n/translations"
 )
 
@@ -115,15 +115,15 @@ func (l *Language) watchForConfigChanges() {
 // getLanguage retrieves the language based on the provided country code.
 func getLanguage(langCode string, logger zerolog.Logger) *Language {
 	switch strings.ToLower(langCode) {
-	case "jp":
-		fontRegular, err := GetFont(jp.RegularFont)
+	case "ja":
+		fontRegular, err := GetFont(ja.RegularFont)
 		if err != nil {
 			logger.Error().Err(err).Msg("failed to load regular font")
 
 			fontRegular = nil
 		}
 
-		fontValue, err := GetFont(jp.ValueFont)
+		fontValue, err := GetFont(ja.ValueFont)
 		if err != nil {
 			logger.Error().Err(err).Msg("failed to load regular font")
 
@@ -131,16 +131,16 @@ func getLanguage(langCode string, logger zerolog.Logger) *Language {
 		}
 
 		return &Language{
-			Code: jp.Code,
-			Name: jp.Name,
-			Keys: jp.Translations,
+			Code: ja.Code,
+			Name: ja.Name,
+			Keys: ja.Translations,
 			FontRegular: Font{
 				Font:  fontRegular,
-				Scale: jp.RegularFontScale,
+				Scale: ja.RegularFontScale,
 			},
 			FontValue: Font{
 				Font:  fontValue,
-				Scale: jp.ValueFontScale,
+				Scale: ja.ValueFontScale,
 			},
 			fallback: getLanguage("en", logger),
 			log:      logger,

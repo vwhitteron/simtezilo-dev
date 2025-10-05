@@ -74,7 +74,7 @@ graph TD
     - i18n.go: Language manager
     - i18n_language.go: Language support
     - i18n_font.go: Font handling
-    - Language files (en/, jp/)`"]
+    - Language files (en/, ja/)`"]
 
     %% Kinematics Engine
     Kinematics["`**app/kinematics/**

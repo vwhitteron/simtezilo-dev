@@ -4,6 +4,6 @@ package i18n
 func GetLanguageCodes() []string {
 	return []string{
 		"en",
-		"jp",
+		"ja",
 	}
 }
