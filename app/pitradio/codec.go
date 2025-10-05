@@ -3,6 +3,7 @@ package pitradio
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 
@@ -11,11 +12,23 @@ import (
 	"layeh.com/gopus"
 )
 
-func mpegtoPCM(mpegData []byte) ([]byte, error) {
-	// mpegdata is mpeg container format with a single mp3 audio stream
+func transcodeMP3toDCA(mp3Data []byte) ([]byte, error) {
+	pcmData, err := decodeMP3ToPCM(mp3Data)
+	if err != nil {
+		return []byte{}, fmt.Errorf("convert MP3 to PCM: %w", err)
+	}
 
+	dcaData := encodePCMToDCA(pcmData)
+	if len(dcaData) == 0 {
+		return []byte{}, errors.New("failed to encode audio to DCA format")
+	}
+
+	return dcaData, nil
+}
+
+func decodeMP3ToPCM(mp3Data []byte) ([]byte, error) {
 	// Create a ReadCloser from the byte slice
-	reader := io.NopCloser(bytes.NewReader(mpegData))
+	reader := io.NopCloser(bytes.NewReader(mp3Data))
 
 	// Decode the MP3 data
 	streamer, format, err := mp3.Decode(reader)
@@ -26,8 +39,8 @@ func mpegtoPCM(mpegData []byte) ([]byte, error) {
 
 	// Resample to 48kHz if needed (Discord requirement)
 	var finalStreamer beep.Streamer = streamer
-	if format.SampleRate != discordSampleRate {
-		finalStreamer = newResampleStreamer(streamer, format.SampleRate, beep.SampleRate(discordSampleRate))
+	if format.SampleRate != discordOpusSampleRate {
+		finalStreamer = newResampleStreamer(streamer, format.SampleRate, beep.SampleRate(discordOpusSampleRate))
 	}
 
 	// Ensure stereo format (Discord requirement)
@@ -42,22 +55,26 @@ func mpegtoPCM(mpegData []byte) ([]byte, error) {
 	// Read all samples and convert to PCM bytes
 	samples := make([][2]float64, 512) // Buffer for stereo samples
 	for {
-		n, ok := finalStreamer.Stream(samples)
+		sampleCount, ok := finalStreamer.Stream(samples)
 		if !ok {
 			break
 		}
 
 		// Convert float64 samples to 16-bit PCM
-		for i := 0; i < n; i++ {
+		for index := range sampleCount {
 			// Convert left channel
-			left := int16(samples[i][0] * 32767)
-			if err := binary.Write(&pcmBuffer, binary.LittleEndian, left); err != nil {
+			left := int16(samples[index][0] * 32767)
+
+			err := binary.Write(&pcmBuffer, binary.LittleEndian, left)
+			if err != nil {
 				return nil, fmt.Errorf("failed to write left channel: %w", err)
 			}
 
 			// Convert right channel
-			right := int16(samples[i][1] * 32767)
-			if err := binary.Write(&pcmBuffer, binary.LittleEndian, right); err != nil {
+			right := int16(samples[index][1] * 32767)
+
+			err = binary.Write(&pcmBuffer, binary.LittleEndian, right)
+			if err != nil {
 				return nil, fmt.Errorf("failed to write right channel: %w", err)
 			}
 		}
@@ -66,7 +83,7 @@ func mpegtoPCM(mpegData []byte) ([]byte, error) {
 	return pcmBuffer.Bytes(), nil
 }
 
-func encodeToDCA(s16le []byte) []byte {
+func encodePCMToDCA(s16le []byte) []byte {
 	// Convert raw S16LE PCM data to DCA format for Discord
 	// The PCM file is already 48kHz stereo S16LE (created with: ffmpeg -i input.opus -f s16le -ar 48000 -ac 2 output.pcm)
 	samples := convertToSamples(s16le)
@@ -75,7 +92,7 @@ func encodeToDCA(s16le []byte) []byte {
 	finalSamples := samples
 
 	// Create stereo Opus encoder for Discord (48kHz, stereo)
-	encoder, err := gopus.NewEncoder(discordSampleRate, discordChannels, gopus.Voip)
+	encoder, err := gopus.NewEncoder(discordOpusSampleRate, discordOpusChannels, gopus.Voip)
 	if err != nil {
 		return []byte{}
 	}
@@ -101,7 +118,7 @@ func convertToSamples(audioData []byte) []int16 {
 func encodeFramesToDCA(encoder *gopus.Encoder, samples []int16, channels int) []byte {
 	var dcaBuffer bytes.Buffer
 
-	frameSamples := discordFrameSize * channels
+	frameSamples := discordOpusFrameSize * channels
 
 	// Process audio in frames
 	for index := 0; index < len(samples); index += frameSamples {
@@ -118,7 +135,7 @@ func encodeFramesToDCA(encoder *gopus.Encoder, samples []int16, channels int) []
 		}
 
 		// Encode the frame
-		opusData, err := encoder.Encode(frame, discordFrameSize, discordMaxFrameSize)
+		opusData, err := encoder.Encode(frame, discordOpusFrameSize, discordOpusMaxFrameSize)
 		if err == nil && len(opusData) > 0 {
 			// Write DCA format: length (2 bytes) + opus data
 			frameLen := len(opusData)
@@ -133,62 +150,30 @@ func encodeFramesToDCA(encoder *gopus.Encoder, samples []int16, channels int) []
 	return dcaBuffer.Bytes()
 }
 
-func monoToStereo(monoSamples []int16) []int16 {
-	stereoSamples := make([]int16, len(monoSamples)*2)
-	for i, sample := range monoSamples {
-		stereoSamples[i*2] = sample   // Left channel
-		stereoSamples[i*2+1] = sample // Right channel (duplicate)
-	}
-
-	return stereoSamples
-}
-
-func isProbablyMono(samples []int16) bool {
-	// Simple heuristic: if most consecutive stereo pairs (L,R) are identical, it's probably mono data stored as stereo
-	if len(samples) < 10 {
-		return false
-	}
-
-	identicalPairs := 0
-	totalPairs := len(samples) / 2
-
-	// Check consecutive pairs: samples[0,1], samples[2,3], samples[4,5], etc.
-	for i := 0; i < len(samples)-1; i += 2 {
-		if samples[i] == samples[i+1] {
-			identicalPairs++
-		}
-	}
-
-	// If more than 80% of pairs are identical, treat as mono
-	threshold := (totalPairs * 4) / 5
-
-	return identicalPairs > threshold
-}
-
-// monoToStereoStreamer converts mono audio to stereo by duplicating the channel
+// monoToStereoStreamer converts mono audio to stereo by duplicating the channel.
 type monoToStereoStreamer struct {
 	streamer beep.Streamer
 }
 
-func (m *monoToStereoStreamer) Stream(samples [][2]float64) (n int, ok bool) {
+func (m *monoToStereoStreamer) Stream(samples [][2]float64) (sampleCount int, ok bool) {
 	// Create a temporary buffer for mono samples
 	monoSamples := make([][2]float64, len(samples))
-	n, ok = m.streamer.Stream(monoSamples)
+	sampleCount, ok = m.streamer.Stream(monoSamples)
 
 	// Convert mono to stereo by duplicating the left channel to right
-	for i := 0; i < n; i++ {
+	for i := range sampleCount {
 		samples[i][0] = monoSamples[i][0] // Left channel
 		samples[i][1] = monoSamples[i][0] // Right channel (duplicate)
 	}
 
-	return n, ok
+	return sampleCount, ok
 }
 
 func (m *monoToStereoStreamer) Err() error {
 	return m.streamer.Err()
 }
 
-// resampleStreamer performs simple linear interpolation resampling
+// resampleStreamer performs simple linear interpolation resampling.
 type resampleStreamer struct {
 	streamer   beep.Streamer
 	ratio      float64
@@ -206,14 +191,16 @@ func newResampleStreamer(streamer beep.Streamer, oldRate, newRate beep.SampleRat
 }
 
 func (r *resampleStreamer) Stream(samples [][2]float64) (n int, ok bool) {
-	for i := range samples {
+	for index := range samples {
 		// Check if we need more data in buffer
 		for int(r.bufferPos)+1 >= r.bufferFill {
 			var bufOk bool
+
 			r.bufferFill, bufOk = r.streamer.Stream(r.buffer)
 			if !bufOk {
-				return i, i > 0
+				return index, index > 0
 			}
+
 			r.bufferPos = 0
 		}
 
@@ -223,12 +210,12 @@ func (r *resampleStreamer) Stream(samples [][2]float64) (n int, ok bool) {
 
 		if pos+1 < r.bufferFill {
 			// Interpolate left channel
-			samples[i][0] = r.buffer[pos][0]*(1-frac) + r.buffer[pos+1][0]*frac
+			samples[index][0] = r.buffer[pos][0]*(1-frac) + r.buffer[pos+1][0]*frac
 			// Interpolate right channel
-			samples[i][1] = r.buffer[pos][1]*(1-frac) + r.buffer[pos+1][1]*frac
+			samples[index][1] = r.buffer[pos][1]*(1-frac) + r.buffer[pos+1][1]*frac
 		} else {
 			// Use last sample if at end
-			samples[i] = r.buffer[pos]
+			samples[index] = r.buffer[pos]
 		}
 
 		r.bufferPos += r.ratio

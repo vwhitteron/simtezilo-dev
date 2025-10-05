@@ -10,9 +10,9 @@ import (
 	"strings"
 )
 
-// TextToSpeech converts a given text message into speech audio data using Google Translate TTS.
+// textToSpeech converts a given text message into speech audio data using Google Translate TTS.
 // It returns the audio data in MP3 format within an MPEG container.
-func TextToSpeech(message Message) ([]byte, error) {
+func textToSpeech(message Message) ([]byte, error) {
 	if message.Text == "" {
 		return nil, errors.New("text cannot be empty")
 	}

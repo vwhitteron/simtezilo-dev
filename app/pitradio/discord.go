@@ -17,18 +17,18 @@ import (
 )
 
 const (
-	discordSampleRate   = 48000 // Discord requires 48kHz sample rate
-	discordChannels     = 2     // Discord requires stereo audio
-	discordFrameSize    = 960   // 20ms frame size at 48kHz
-	discordMaxFrameSize = 3840  // Maximum bytes per frame (for Opus)
+	discordOpusSampleRate   = 48000 // Discord requires 48kHz sample rate
+	discordOpusChannels     = 2     // Discord requires stereo audio
+	discordOpusFrameSize    = 960   // 20ms frame size at 48kHz
+	discordOpusMaxFrameSize = 3840  // Maximum bytes per frame (for Opus)
 )
 
 // DiscordOptions holds the configuration for creating a new Discord bot.
 type DiscordOptions struct {
 	Token          string       // Discord bot token
-	ChannelID      string       // Discord channel ID for text messages
-	VoiceChannelID string       // Discord voice channel ID for audio
 	GuildID        string       // Discord guild ID
+	ChannelID      string       // Optional Discord channel ID for text messages
+	VoiceChannelID string       // Optional Discord voice channel ID for audio, requires GuildID
 	Cache          *cache.Cache // Cache manager for storing processed TTS audio
 }
 
@@ -48,6 +48,7 @@ func NewDiscordBot(config DiscordOptions) (*DiscordBot, error) {
 		return nil, errors.New("invalid token")
 	}
 
+	// TODO: if Discord not configured in Simtezilo this will error
 	if config.ChannelID+config.ChannelID+config.VoiceChannelID == "" {
 		return nil, errors.New("no guild or channel IDs provided")
 	}
@@ -61,8 +62,6 @@ func NewDiscordBot(config DiscordOptions) (*DiscordBot, error) {
 		return &DiscordBot{}, err
 	}
 
-	// session.LogLevel = discordgo.LogDebug
-
 	bot := DiscordBot{
 		channelID:      config.ChannelID,
 		voiceChannelID: config.VoiceChannelID,
@@ -70,6 +69,7 @@ func NewDiscordBot(config DiscordOptions) (*DiscordBot, error) {
 		cache:          config.Cache,
 		session:        session,
 		queue:          make(chan Message, 100),
+		// TODO: pass through log level for the discordgo logger
 	}
 
 	return &bot, nil
@@ -88,7 +88,6 @@ func (d *DiscordBot) Connect() error {
 
 	d.session.AddHandler(ready)
 
-	// Automatically join voice channel
 	err = d.joinVoiceChannel()
 	if err != nil {
 		return fmt.Errorf("join voice channel: %w", err)
@@ -212,38 +211,33 @@ func (d *DiscordBot) voiceMessageSend(message Message) error {
 		return errors.New("voice connection not ready")
 	}
 
-	// Generate cache filename
-	cacheID := fmt.Sprintf("%s_%s_%s", message.Lang, message.Accent, message.Text)
+	itemID := fmt.Sprintf("%s_%s_%s", message.Lang, message.Accent, message.Text)
 
 	// Try to read from cache first
-	dcaData, err := d.cache.Read(cacheID)
-	if err == nil && len(dcaData) > 0 {
-		return d.sendVoiceAudio(dcaData)
+	if !message.NoCache {
+		dcaData, err := d.cache.Read(itemID)
+		if err == nil && len(dcaData) > 0 {
+			return d.sendVoiceAudio(dcaData)
+		}
 	}
 
 	// Cache miss - generate TTS audio data using TextToSpeech
-	mp3Data, err := TextToSpeech(message)
+	mpegData, err := textToSpeech(message)
 	if err != nil {
 		return fmt.Errorf("generate TTS audio: %w", err)
 	}
 
-	// Convert MP3 data to PCM
-	pcmData, err := mpegtoPCM(mp3Data)
+	dcaData, err := transcodeMP3toDCA(mpegData)
 	if err != nil {
-		return fmt.Errorf("convert MP3 to PCM: %w", err)
-	}
-
-	// Convert PCM data to DCA format
-	dcaData = encodeToDCA(pcmData)
-	if len(dcaData) == 0 {
-		return errors.New("failed to encode audio to DCA format")
+		return fmt.Errorf("transcode MP3 to DCA: %w", err)
 	}
 
 	// Cache the DCA data for future use
-	err = d.cache.Write(cacheID, dcaData)
-	if err != nil {
-		// Log error but don't fail the operation
-		fmt.Printf("Warning: failed to cache DCA data: %v\n", err)
+	if !message.NoCache {
+		err = d.cache.Write(itemID, dcaData)
+		if err != nil {
+			fmt.Printf("Warning: failed to cache DCA data: %v\n", err)
+		}
 	}
 
 	// Send DCA to voice channel
