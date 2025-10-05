@@ -11,7 +11,12 @@ Software for processing sim racing telemetry signals and outputting the data to 
 
 ## Linux
 
-Install [Log2Ram](https://github.com/azlux/log2ram)
+1. Install [Log2Ram](https://github.com/azlux/log2ram)
+2. Install Opus libraries for pit radio voice comms to Discord
+   ```
+   apt-get update && apt-get install libopus0
+   ```
+
 
 ## Raspberry Pi
 
