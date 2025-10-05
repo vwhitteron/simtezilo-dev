@@ -3,17 +3,18 @@ package en
 import "github.com/vwhitteron/simtezilo-dev/app/i18n/translations"
 
 const (
-	Code             = "en"
-	Name             = "English"
-	RegularFont      = "LeagueGothic-Regular.ttf"
-	RegularFontScale = 1.0
-	ItalicFont       = "LeagueGothic-Italic.ttf"
-	ItalicFontScale  = 1.0
-	ValueFont        = "LeagueGothic-Regular.ttf"
-	ValueFontScale   = 1.0
+	Code             = "en"                       // IETF BCP47 language tag
+	Name             = "English"                  // Language name in the target language
+	RegularFont      = "LeagueGothic-Regular.ttf" // Font file for regular text
+	RegularFontScale = 1.0                        // Scale factor for regular font
+	ItalicFont       = "LeagueGothic-Italic.ttf"  // Font file for italic text
+	ItalicFontScale  = 1.0                        // Scale factor for italic font
+	ValueFont        = "LeagueGothic-Regular.ttf" // Font file for values
+	ValueFontScale   = 1.0                        // Scale factor for value font
 )
 
-var Translations = map[translations.Key]string{
+// Translations maps translation keys to their corresponding English strings.
+var Translations = map[translations.Key]string{ //nolint:gochecknoglobals
 	translations.AppName:        "Simtezilo",
 	translations.AppDescription: "Sim Racing Haptics Synthesizer",
 	translations.AppVersion:     "version",
