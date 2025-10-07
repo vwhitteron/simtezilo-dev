@@ -4,7 +4,8 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/display"
 )
 
-type Display interface {
+// Display is the interface for controlling a hardware display device.
+type Display interface { //nolint:interfacebloat // Interface is unlikely to grow much more
 	Clear()
 	Close()
 	Wakeup()
@@ -14,9 +15,9 @@ type Display interface {
 	IsSleeping() bool
 	GetResolution() (uint16, uint16)
 	GetDPI() float64
-	Write(*display.Content) error
+	Write(content *display.Content) error
 	GetOrientation() int
-	SetOrientation(int)
+	SetOrientation(degrees int)
 	RotateCW() int
 	RotateCCW() int
 }

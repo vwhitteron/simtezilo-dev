@@ -1,4 +1,4 @@
-package app
+package app //nolint:testpackage // white-box testing
 
 import (
 	"testing"
@@ -60,8 +60,8 @@ func (suite *TelemetryTestSuite) SetupTest() {
 
 func (suite *TelemetryTestSuite) TestSequenceHasAdvancedReturnsFalseWhenSequenceIDHasNotChanged() {
 	// Arramge
-	suite.app.state.last.sequenceNumber = 102
-	suite.app.state.current.sequenceNumber = 102
+	suite.app.state.current.sequenceNumber = 101
+	suite.app.state.current.sequenceDelta = 0
 
 	// Act
 	result := suite.app.sequenceHasAdvanced()
@@ -72,7 +72,7 @@ func (suite *TelemetryTestSuite) TestSequenceHasAdvancedReturnsFalseWhenSequence
 
 func (suite *TelemetryTestSuite) TestSequenceHasAdvancedReturnsTrueWhenSequenceIDIncreases() {
 	// Arrange
-	suite.app.state.current.sequenceNumber = 101
+	suite.app.state.current.sequenceNumber = 102
 	suite.app.state.current.sequenceDelta = 1
 
 	// Act

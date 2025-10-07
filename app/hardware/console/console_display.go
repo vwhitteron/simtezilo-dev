@@ -1,3 +1,4 @@
+// Package console provides a display and HID implementation that interfaces with the keyboard and a text console.
 package console
 
 import (
@@ -6,67 +7,82 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/display"
 )
 
-type ConsoleDisplay struct {
+// Console is a display implementation that outputs to a text console.
+type Console struct {
 	Orientation int
 	sleeping    bool
 }
 
-func NewDisplay() *ConsoleDisplay {
-	return &ConsoleDisplay{
+// New creates a new Console instance.
+func New() *Console {
+	return &Console{
 		Orientation: 0,
 		sleeping:    false,
 	}
 }
 
-func (d *ConsoleDisplay) Clear() {}
+// Clear clears the display (no-op for a text console).
+func (d *Console) Clear() {}
 
-func (d *ConsoleDisplay) Close() {}
+// Close closes the display (no-op for a text console).
+func (d *Console) Close() {}
 
-func (d *ConsoleDisplay) Wakeup() {
+// Wakeup wakes up the display from sleep mode.
+func (d *Console) Wakeup() {
 	d.sleeping = false
 }
 
-func (d *ConsoleDisplay) Sleep() {
+// Sleep puts the display into sleep mode.
+func (d *Console) Sleep() {
 	d.sleeping = true
 }
 
-func (d *ConsoleDisplay) ToggleSleep() bool {
+// ToggleSleep toggles the sleep state of the display and returns the new state.
+func (d *Console) ToggleSleep() bool {
 	d.sleeping = !d.sleeping
 
 	return d.sleeping
 }
 
-func (d *ConsoleDisplay) IsSleeping() bool {
+// IsSleeping returns true if the display is in sleep mode.
+func (d *Console) IsSleeping() bool {
 	return d.sleeping
 }
 
-func (d *ConsoleDisplay) IsAwake() bool {
+// IsAwake returns true if the display is awake.
+func (d *Console) IsAwake() bool {
 	return !d.sleeping
 }
 
-func (d *ConsoleDisplay) GetResolution() (uint16, uint16) {
+// GetResolution returns the display resolution (always 0, 0 for a text console).
+func (d *Console) GetResolution() (uint16, uint16) {
 	return 0, 0
 }
 
-func (d *ConsoleDisplay) GetDPI() float64 {
+// GetDPI returns the display DPI (always 0 for a text console).
+func (d *Console) GetDPI() float64 {
 	return 0
 }
 
-func (d *ConsoleDisplay) Write(content *display.Content) error {
-	fmt.Println(content.Text)
+// Write writes content to the text console.
+func (d *Console) Write(content *display.Content) error {
+	fmt.Println(content.Text) //nolint:forbidigo // expected console output
 
 	return nil
 }
 
-func (d *ConsoleDisplay) GetOrientation() int {
+// GetOrientation returns the current display orientation in degrees.
+func (d *Console) GetOrientation() int {
 	return d.Orientation
 }
 
-func (d *ConsoleDisplay) SetOrientation(o int) {
+// SetOrientation sets the display orientation to the specified degrees.
+func (d *Console) SetOrientation(o int) {
 	d.Orientation = o
 }
 
-func (d *ConsoleDisplay) RotateCW() int {
+// RotateCW rotates the display orientation 90 degrees clockwise and returns the new orientation.
+func (d *Console) RotateCW() int {
 	d.Orientation += 90
 	if d.Orientation >= 360 {
 		d.Orientation = 0
@@ -75,7 +91,8 @@ func (d *ConsoleDisplay) RotateCW() int {
 	return d.Orientation
 }
 
-func (d *ConsoleDisplay) RotateCCW() int {
+// RotateCCW rotates the display orientation 90 degrees counter-clockwise and returns the new orientation.
+func (d *Console) RotateCCW() int {
 	d.Orientation -= 90
 	if d.Orientation < 0 {
 		d.Orientation = 270

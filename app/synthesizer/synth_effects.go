@@ -4,10 +4,12 @@ import (
 	"math"
 )
 
+// EffectsSampleBank holds pre-generated audio samples for various sound effects.
 type EffectsSampleBank struct {
 	sample map[string][]float64
 }
 
+// NewEffectsSampleBank initializes and returns a new EffectsSampleBank with pre-generated samples.
 func NewEffectsSampleBank(sampleRateHz int) *EffectsSampleBank {
 	return &EffectsSampleBank{
 		sample: map[string][]float64{
@@ -16,6 +18,7 @@ func NewEffectsSampleBank(sampleRateHz int) *EffectsSampleBank {
 	}
 }
 
+// GetSample retrieves a pre-generated sample by name. If the sample does not exist, it returns an empty slice.
 func (s *EffectsSampleBank) GetSample(name string) []float64 {
 	if _, ok := s.sample[name]; !ok {
 		return []float64{}
@@ -24,6 +27,7 @@ func (s *EffectsSampleBank) GetSample(name string) []float64 {
 	return s.sample[name]
 }
 
+// generateGearShiftSample creates a sample representing a gear shift sound effect.
 func generateGearShiftSample(sampleRateHz int) []float64 {
 	sampleLengthSeconds := 0.1
 	pulseAmplitude := 2.0
@@ -42,7 +46,7 @@ func generateGearShiftSample(sampleRateHz int) []float64 {
 		angle := waveSamplePeriod * (float64(i) - waveOffset)
 		audioSample[i] = pulseAmplitude * math.Sin(angle)
 
-		pulseAmplitude = pulseAmplitude * (1 - decayRate)
+		pulseAmplitude *= (1 - decayRate)
 	}
 
 	return audioSample

@@ -14,11 +14,13 @@ import (
 	"golang.org/x/image/math/fixed"
 )
 
+// Config holds the configuration for creating a new Screen instance.
 type Config struct {
 	DisplayDevice hardware.Display
 	I18n          *i18n.Language
 }
 
+// Screen holds the state for rendering to a connected display.
 type Screen struct {
 	displayDevice hardware.Display
 	pixelColumns  uint16
@@ -28,6 +30,7 @@ type Screen struct {
 	i18n          *i18n.Language
 }
 
+// NewScreen creates a new Screen instance.
 func NewScreen(config *Config) (*Screen, error) {
 	pixelColumns, pixelRows := config.DisplayDevice.GetResolution()
 	dpi := config.DisplayDevice.GetDPI()
@@ -47,14 +50,17 @@ func NewScreen(config *Config) (*Screen, error) {
 	}, nil
 }
 
+// RenderSplashScreen renders the splash screen with the provided value.
 func (r *Screen) RenderSplashScreen(value string) error {
 	return r.renderBackgroundScreen(sprites.SplashSprite, value)
 }
 
+// RenderErrorScreen renders the error screen with the provided value.
 func (r *Screen) RenderErrorScreen(value string) error {
 	return r.renderBackgroundScreen(sprites.ErrorSprite, value)
 }
 
+// RenderBlankScreen renders a blank screen.
 func (r *Screen) RenderBlankScreen() error {
 	canvas := r.newBlankCanvas()
 
@@ -66,6 +72,7 @@ func (r *Screen) RenderBlankScreen() error {
 	return nil
 }
 
+// RenderLiveScreen renders the live screen with the provided value.
 func (r *Screen) RenderLiveScreen(value string) error {
 	// value
 	fontFace := truetype.NewFace(r.i18n.FontRegular.Font, &truetype.Options{
@@ -107,6 +114,7 @@ func (r *Screen) RenderLiveScreen(value string) error {
 	return nil
 }
 
+// RenderSettingScreen renders the setting screen with the provided header and value.
 func (r *Screen) RenderSettingScreen(header string, value string) error {
 	// header
 	fontFace := truetype.NewFace(r.i18n.FontRegular.Font, &truetype.Options{
@@ -170,10 +178,12 @@ func (r *Screen) RenderSettingScreen(header string, value string) error {
 	return nil
 }
 
+// newBlankCanvas creates a new blank RGBA canvas with the screen's resolution.
 func (r *Screen) newBlankCanvas() *image.RGBA {
 	return image.NewRGBA(image.Rect(0, 0, int(r.pixelColumns), int(r.pixelRows)))
 }
 
+// renderBackgroundScreen renders a background screen with a centered value.
 func (r *Screen) renderBackgroundScreen(sprite sprites.SpriteName, value string) error {
 	// footer
 	fontFace := truetype.NewFace(r.i18n.FontRegular.Font, &truetype.Options{

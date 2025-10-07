@@ -22,11 +22,11 @@ func (a *App) sendTelemetryChartData() {
 		return
 	}
 
-	if a.kinematics.Current.SequenceID == a.webSequenceId {
+	if a.kinematics.Current.SequenceID == a.webSequenceID {
 		return
 	}
 
-	a.webSequenceId = a.kinematics.Current.SequenceID
+	a.webSequenceID = a.kinematics.Current.SequenceID
 
 	go func() {
 		a.telemetryChartFeed <- map[string]float32{
@@ -56,9 +56,9 @@ func (a *App) sendTelemetryChartData() {
 			"engineVibrationEnabled": func() float32 {
 				if a.gtClient.Telemetry.EngineRPM() > 0 {
 					return 1
-				} else {
-					return 0
 				}
+
+				return 0
 			}(),
 		}
 	}()

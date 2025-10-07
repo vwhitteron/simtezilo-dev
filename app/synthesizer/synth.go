@@ -11,22 +11,25 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/kinematics"
 )
 
+// Synthesizer is the main synthesizer structure that holds the mixer, effects, and output device.
 type Synthesizer struct {
 	effects      *EffectsSampleBank
 	log          zerolog.Logger
 	mixer        *Mixer
 	outputDevice *OutputDevice
-	kinematics   *kinematics.KinematicsTracker
+	kinematics   *kinematics.State
 	sampleRate   int
 	outFile      *os.File
 }
 
+// SynthOpts holds the options for creating a new Synthesizer.
 type SynthOpts struct {
 	Config     *config.Synthesizer // FIXME: TODO: use base config pointer?
 	Logger     zerolog.Logger
-	Kinematics *kinematics.KinematicsTracker
+	Kinematics *kinematics.State
 }
 
+// New creates a new Synthesizer instance with the provided options.
 func New(opts *SynthOpts) (*Synthesizer, error) {
 	bufferLength := 2 * time.Second
 
@@ -75,25 +78,36 @@ func New(opts *SynthOpts) (*Synthesizer, error) {
 	}, nil
 }
 
+// Close gracefully shuts down the synthesizer, closing the mixer and output file if applicable.
+func (s *Synthesizer) Close() error {
+	s.mixer.Close()
+
+	return s.outFile.Close()
+}
+
+// GetSampleRate returns the internal sample rate of the synthesizer.
 func (s *Synthesizer) GetSampleRate() int {
 	return s.sampleRate
 }
 
+// GetBufferCapacity returns the buffer capacity of the mixer in samples.
 func (s *Synthesizer) GetBufferCapacity() int {
 	return s.mixer.GetBufferCapacity()
 }
 
-// Buffer accessor methods.
+// InspectChannelBuffer returns a copy of the specified channel buffer for inspection.
 func (s *Synthesizer) InspectChannelBuffer(name string, length int, offset int) []float64 {
 	return s.mixer.InspectChannelBuffer(name, length, offset)
 }
 
+// ReadBuffer mixes all channels to the master and returns the mixed sample data.
 func (s *Synthesizer) ReadBuffer(length int) []float64 {
-	s.mixer.MixToMaster2(length)
+	s.mixer.MixToMaster(length)
 
 	return s.mixer.ReadChannel("_master", length)
 }
 
+// WriteBuffer writes the provided sample data to the specified channel buffer at the given offset.
 func (s *Synthesizer) WriteBuffer(channel string, sample []float64, offset int) {
 	magnitude, err := s.mixer.GetChannelPowerRatio(channel)
 	if err != nil {
@@ -105,6 +119,7 @@ func (s *Synthesizer) WriteBuffer(channel string, sample []float64, offset int) 
 	_ = s.mixer.WriteChannel(channel, sample, magnitude, offset, false)
 }
 
+// OverwriteBuffer overwrites the specified channel buffer with the provided sample data at the given offset.
 func (s *Synthesizer) OverwriteBuffer(channel string, sample []float64, offset int) {
 	magnitude, err := s.mixer.GetChannelPowerRatio(channel)
 	if err != nil {
@@ -116,25 +131,24 @@ func (s *Synthesizer) OverwriteBuffer(channel string, sample []float64, offset i
 	_ = s.mixer.WriteChannel(channel, sample, magnitude, offset, true)
 }
 
-// TODO: remove if not required.
-func (s *Synthesizer) ClearBuffers() {
-	s.mixer.ClearBuffers()
-}
-
+// GetChannelMagnitude returns the current magnitude (gain) of the specified channel.
 func (s *Synthesizer) GetChannelMagnitude(name string) (float64, error) {
 	return s.mixer.GetChannelPowerRatio(name)
 }
 
+// FadeIn gradually increases the master gain from minimum to the configured level over the specified period.
 func (s *Synthesizer) FadeIn(period time.Duration) {
 	s.mixer.FadeIn(period)
 }
 
+// ApplyMasterGain applies the current master gain to the provided value and returns the adjusted value.
 func (s *Synthesizer) ApplyMasterGain(value float64) float64 {
 	outputGain, _ := s.mixer.GetChannelPowerRatio("_master")
 
 	return value * outputGain
 }
 
+// Silence immediately silences all mixeroutput and clears buffers.
 func (s *Synthesizer) Silence() {
 	s.mixer.SetFader(config.MinimumGain)
 	s.mixer.silenced = true
@@ -142,11 +156,12 @@ func (s *Synthesizer) Silence() {
 	s.mixer.ClearBuffers()
 }
 
-// Effect accessor methods.
+// GetEffectSample returns the raw sample data for the specified effect name.
 func (s *Synthesizer) GetEffectSample(name string) []float64 {
 	return s.effects.GetSample(name)
 }
 
+// PlayEffect plays the specified effect on its designated channel with the given magnitude.
 func (s *Synthesizer) PlayEffect(name string, magnitude float64) {
 	channelMagnitude, err := s.mixer.GetChannelPowerRatio(name)
 	if err != nil {
@@ -166,10 +181,4 @@ func (s *Synthesizer) PlayEffect(name string, magnitude float64) {
 	copy(tmpSample, sample)
 
 	_ = s.mixer.WriteChannel(name, tmpSample, magnitude, 0, false)
-}
-
-func (s *Synthesizer) Close() error {
-	s.mixer.Close()
-
-	return s.outFile.Close()
 }

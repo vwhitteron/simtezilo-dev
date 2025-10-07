@@ -1,3 +1,4 @@
+// Package webui implements a simple web server to serve a web-based user interface
 package webui
 
 import (
@@ -5,29 +6,33 @@ import (
 	"encoding/json"
 	"net/http"
 	"path/filepath"
+	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/rs/zerolog"
 )
 
-var Upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool { return true },
-}
-
+// WebUI defines the web user interface.
 type WebUI struct {
 	log                zerolog.Logger
 	webSocketClients   int
 	telemetryChartFeed chan map[string]float32
+	upgrader           websocket.Upgrader
 }
 
+// New creates a new instance of the WebUI.
 func New(log zerolog.Logger, telemetryChartFeed chan map[string]float32) *WebUI {
 	return &WebUI{
 		log:                log.With().Str("component", "web ui").Logger(),
 		webSocketClients:   0,
 		telemetryChartFeed: telemetryChartFeed,
+		upgrader: websocket.Upgrader{
+			CheckOrigin: func(_ *http.Request) bool { return true },
+		},
 	}
 }
 
+// Start sets up handlers and starts the web server.
 func (w *WebUI) Start() {
 	w.log.Info().Msg("Web UI started on port 8080\r\n")
 
@@ -37,12 +42,18 @@ func (w *WebUI) Start() {
 	http.HandleFunc("/telemetry", w.telemetryHandlerFunc())
 	http.HandleFunc("/ws", w.handleWebSocketConnection)
 
-	err := http.ListenAndServe(":8080", nil)
+	server := &http.Server{
+		Addr:              ":1234",
+		ReadHeaderTimeout: 3 * time.Second,
+	}
+
+	err := server.ListenAndServe()
 	if err != nil {
 		w.log.Error().Err(err).Msg("error starting web server")
 	}
 }
 
+// HasActiveClients returns true if there are active WebSocket clients connected.
 func (w *WebUI) HasActiveClients() bool {
 	return w.webSocketClients > 0
 }
@@ -50,8 +61,9 @@ func (w *WebUI) HasActiveClients() bool {
 //go:embed html/index.html
 var indexHTML []byte
 
+// rootHandlerFunc serves the main HTML page.
 func (w *WebUI) rootHandlerFunc() func(w http.ResponseWriter, r *http.Request) {
-	return func(response http.ResponseWriter, request *http.Request) {
+	return func(response http.ResponseWriter, _ *http.Request) {
 		length, err := response.Write(indexHTML)
 		if err != nil {
 			w.log.Error().Err(err).Int("bytes_written", length).Msg("writing index HTML")
@@ -64,8 +76,9 @@ func (w *WebUI) rootHandlerFunc() func(w http.ResponseWriter, r *http.Request) {
 //go:embed html/telemetry.html
 var telemetryHTML []byte
 
+// telemetryHandlerFunc serves the telemetry HTML page.
 func (w *WebUI) telemetryHandlerFunc() func(w http.ResponseWriter, r *http.Request) {
-	return func(response http.ResponseWriter, request *http.Request) {
+	return func(response http.ResponseWriter, _ *http.Request) {
 		length, err := response.Write(telemetryHTML)
 		if err != nil {
 			w.log.Error().Err(err).Int("bytes_written", length).Msg("writing telemetry HTML")
@@ -78,6 +91,7 @@ func (w *WebUI) telemetryHandlerFunc() func(w http.ResponseWriter, r *http.Reque
 //go:embed static/*
 var staticFiles embed.FS
 
+// imagesHandlerFunc serves static image files.
 func (w *WebUI) imagesHandlerFunc() func(w http.ResponseWriter, r *http.Request) {
 	return func(response http.ResponseWriter, request *http.Request) {
 		filename := "static" + request.URL.Path
@@ -113,6 +127,7 @@ func (w *WebUI) imagesHandlerFunc() func(w http.ResponseWriter, r *http.Request)
 	}
 }
 
+// sciChartJSHandlerFunc serves static JavaScript files.
 func (w *WebUI) sciChartJSHandlerFunc() func(w http.ResponseWriter, r *http.Request) {
 	return func(response http.ResponseWriter, request *http.Request) {
 		filename := "static" + request.URL.Path
@@ -137,8 +152,9 @@ func (w *WebUI) sciChartJSHandlerFunc() func(w http.ResponseWriter, r *http.Requ
 	}
 }
 
+// handleWebSocketConnection upgrades the HTTP connection to a WebSocket and streams telemetry data.
 func (w *WebUI) handleWebSocketConnection(response http.ResponseWriter, request *http.Request) {
-	webSocket, err := Upgrader.Upgrade(response, request, nil)
+	webSocket, err := w.upgrader.Upgrade(response, request, nil)
 	if err != nil {
 		w.log.Error().Err(err).Msg("error upgrading connection")
 

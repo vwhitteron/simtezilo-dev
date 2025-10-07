@@ -138,7 +138,7 @@ func main() { //nolint:cyclop // TODO: refactor
 		Orientation: 0,
 	})
 	if err != nil {
-		fmt.Printf("Failed to initialize display: %v\n", err)
+		fmt.Printf("Failed to initialize display: %v\n", err) //nolint:forbidigo
 
 		hasDisplay = false
 	}
@@ -165,14 +165,14 @@ func main() { //nolint:cyclop // TODO: refactor
 	// Initialize the speaker
 	err = speaker.Init(sampleRate, sampleRate.N(time.Second/10))
 	if err != nil {
-		fmt.Printf("Failed to initialize speaker: %v\n", err)
+		fmt.Printf("Failed to initialize speaker: %v\n", err) //nolint:forbidigo
 
 		return
 	}
 
-	fmt.Println("Sine Wave Generator")
-	fmt.Println("==================")
-	fmt.Println("Press Ctrl+C to stop")
+	fmt.Println("Sine Wave Generator")  //nolint:forbidigo
+	fmt.Println("==================")   //nolint:forbidigo
+	fmt.Println("Press Ctrl+C to stop") //nolint:forbidigo
 
 	// Create a sine wave generator
 	sineWave := NewSineWave(sampleRate, 30.0, -21.0)
@@ -193,7 +193,7 @@ func main() { //nolint:cyclop // TODO: refactor
 				return
 			default:
 				if lastFreq != int(sineWave.Freq) || lastVolume != sineWave.Volume {
-					fmt.Printf("%.0f Hz  %2.2f dB  %0.04f\n", sineWave.Freq, sineWave.Volume, volumeToGain(sineWave.Volume))
+					fmt.Printf("%.0f Hz  %2.2f dB  %0.04f\n", sineWave.Freq, sineWave.Volume, volumeToGain(sineWave.Volume)) //nolint:forbidigo
 
 					if hasDisplay {
 						value := fmt.Sprintf("%0.0f Hz\n%2.2f dB", sineWave.Freq, sineWave.Volume)

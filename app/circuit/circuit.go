@@ -1,3 +1,4 @@
+// Package circuit performs race circuit identification and lap tracking based on in-game 3D positional coordinates.
 package circuit
 
 import (
@@ -13,7 +14,7 @@ const (
 	minConfidenceThreshold      float64 = 0.3 // Minimum confidence threshold (30%) before choosing a circuit
 )
 
-// TODO: add godoc.
+// Circuit manages circuit identification and lap tracking.
 type Circuit struct {
 	database                circuits.CircuitDB   // Circuit database for track identification
 	log                     zerolog.Logger       // Logger instance
@@ -22,7 +23,7 @@ type Circuit struct {
 	lapStartOdometerReading float64              // Distance at which the current lap started
 	lapProgressMeters       float64              // Lap distance tracking for uknown circuits
 	lastCoordinate          models.Coordinate    // Last known coordinate for distance tracking
-	candidates              CircuitCandidates    // Circuit candidates with confidence tracking
+	candidates              Candidates           // Circuit candidates with confidence tracking
 }
 
 // New creates a new Circuit instance with the provided logger and initializes the circuit database.
@@ -34,7 +35,7 @@ func New(db circuits.CircuitDB, logger zerolog.Logger) (*Circuit, error) {
 		lapProgressMeters:       0,
 		info:                    circuitInfoInit(),
 		lastCoordinate:          models.Coordinate{},
-		candidates:              make(CircuitCandidates),
+		candidates:              make(Candidates),
 	}, nil
 }
 
@@ -45,7 +46,7 @@ func (c *Circuit) Reset() {
 		Name: circuitInfoInit().Name,
 	}
 
-	c.candidates = make(CircuitCandidates)
+	c.candidates = make(Candidates)
 
 	c.ResetLapProgress()
 
@@ -63,7 +64,7 @@ func (c *Circuit) ResetLapProgress() {
 		Msg("Circuit reset")
 }
 
-// CircuitName returns the name of the current circuit.
+// Name returns the name of the current circuit.
 func (c *Circuit) Name() string {
 	return c.info.Name
 }

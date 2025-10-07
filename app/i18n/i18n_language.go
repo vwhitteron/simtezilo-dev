@@ -11,13 +11,18 @@ import (
 	translationkeys "github.com/vwhitteron/simtezilo-dev/app/i18n/translations"
 )
 
-const InvalidKey = "invalidkey"
+const (
+	// InvalidKey is the value returned when a translation key is not found.
+	InvalidKey = "invalidkey"
+)
 
+// Font represents a font with its associated scale.
 type Font struct {
 	Font  *truetype.Font
 	Scale float64
 }
 
+// Language represents a language and its associated translations.
 type Language struct {
 	Code        string
 	Name        string
@@ -67,7 +72,7 @@ func (l *Language) GetString(key translationkeys.Key) string {
 	return l.getFallbackString(key)
 }
 
-// GetFallbackString retrieves the fallback translation for the given key.
+// getFallbackString retrieves the fallback translation for the given key.
 func (l *Language) getFallbackString(key translationkeys.Key) string {
 	key = key.ToLower()
 
@@ -89,6 +94,7 @@ func (l *Language) getFallbackString(key translationkeys.Key) string {
 }
 
 // TODO: is there a better way to integrate config changes?
+// watchForConfigChanges monitors for changes in the configuration language code.
 func (l *Language) watchForConfigChanges() {
 	l.log.Debug().Str("event", "start").Msg("config watch")
 

@@ -1,17 +1,32 @@
-// //nolint:gosmopolitan // contains many string literals containing Japanese characters
+// Package ja provides Japanese translations and font settings.
 package ja
 
 import "github.com/vwhitteron/simtezilo-dev/app/i18n/translations"
 
 const (
-	Code             = "ja"                       // IETF BCP47 language tag
-	Name             = "日本語"                      // Language name in the target language
-	RegularFont      = "LINESeedJP_TTF_Bd.ttf"    // Font file for regular text
-	RegularFontScale = 0.8                        // Scale factor for regular font
-	ItalicFont       = "LINESeedJP_TTF_Bd.ttf"    // Font file for italic text
-	ItalicFontScale  = 0.8                        // Scale factor for italic font
-	ValueFont        = "LeagueGothic-Regular.ttf" // Font file for values
-	ValueFontScale   = 1.0                        // Scale factor for value font
+	// Code is an IETF BCP47 language tag.
+	Code = "ja"
+
+	// Name is the name of the language expressed in the target language.
+	Name = "日本語"
+
+	// RegularFont is the font face file for rendering regular text.
+	RegularFont = "LINESeedJP_TTF_Bd.ttf"
+
+	// RegularFontScale is the relative size of the regular font.
+	RegularFontScale = 0.8
+
+	// ItalicFont is the font face file for rendering italic text.
+	ItalicFont = "LINESeedJP_TTF_Bd.ttf"
+
+	// ItalicFontScale is the relative size of the italic font.
+	ItalicFontScale = 0.8
+
+	// ValueFont is the font face file for rendering values.
+	ValueFont = "LeagueGothic-Regular.ttf"
+
+	// ValueFontScale is the relative size of the value font.
+	ValueFontScale = 1.0
 )
 
 // Translations maps translation keys to their corresponding Japanese strings.

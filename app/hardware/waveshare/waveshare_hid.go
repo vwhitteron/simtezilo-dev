@@ -5,6 +5,7 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/ui"
 )
 
+// SetupHID configures the HID input event mapping of the Waveshare device buttons based on the device orientation.
 func SetupHID(orientation int, hidEvent chan ui.HIDInputEvent) {
 	rotationOffset := (orientation / 90) % 4
 
@@ -36,67 +37,75 @@ func SetupHID(orientation int, hidEvent chan ui.HIDInputEvent) {
 		}
 	}
 
+	// OnButtonUpPressed registers a callback function to be called when the up button is pressed.
 	OnButtonUpPressed(func() {
 		hidEvent <- rotatedDpadMapping[0]
 	})
 
+	// OnButtonRightPressed registers a callback function to be called when the right button is pressed.
 	OnButtonRightPressed(func() {
 		hidEvent <- rotatedDpadMapping[1]
 	})
 
+	// OnButtonDownPressed registers a callback function to be called when the down button is pressed.
 	OnButtonDownPressed(func() {
 		hidEvent <- rotatedDpadMapping[2]
 	})
 
+	// OnButtonLeftPressed registers a callback function to be called when the left button is pressed.
 	OnButtonLeftPressed(func() {
 		hidEvent <- rotatedDpadMapping[3]
 	})
 
+	// OnButtonCenterPressed registers a callback function to be called when the center button is pressed.
 	OnButtonCenterPressed(func() {
 		hidEvent <- ui.HIDInputEnter
 	})
 
+	// OnButtonOnePressed registers a callback function to be called when button 1 is pressed.
 	OnButtonOnePressed(func() {
 		hidEvent <- rotatedAuxMapping[0]
 	})
 
+	// OnButtonTwoPressed registers a callback function to be called when button 2 is pressed.
 	OnButtonTwoPressed(func() {
 		hidEvent <- rotatedAuxMapping[1]
 	})
 
+	// OnButtonThreePressed registers a callback function to be called when button 3 is pressed.
 	OnButtonThreePressed(func() {
 		hidEvent <- rotatedAuxMapping[2]
 	})
 }
 
-func OnButtonUpPressed(fn func()) {
-	hardware.OnGPIOButtonPressed(6, fn)
+func OnButtonUpPressed(callback func()) {
+	hardware.OnGPIOButtonPressed(6, callback)
 }
 
-func OnButtonDownPressed(fn func()) {
-	hardware.OnGPIOButtonPressed(19, fn)
+func OnButtonDownPressed(callback func()) {
+	hardware.OnGPIOButtonPressed(19, callback)
 }
 
-func OnButtonLeftPressed(fn func()) {
-	hardware.OnGPIOButtonPressed(5, fn)
+func OnButtonLeftPressed(callback func()) {
+	hardware.OnGPIOButtonPressed(5, callback)
 }
 
-func OnButtonRightPressed(fn func()) {
-	hardware.OnGPIOButtonPressed(26, fn)
+func OnButtonRightPressed(callback func()) {
+	hardware.OnGPIOButtonPressed(26, callback)
 }
 
-func OnButtonCenterPressed(fn func()) {
-	hardware.OnGPIOButtonPressed(13, fn)
+func OnButtonCenterPressed(callback func()) {
+	hardware.OnGPIOButtonPressed(13, callback)
 }
 
-func OnButtonOnePressed(fn func()) {
-	hardware.OnGPIOButtonPressed(21, fn)
+func OnButtonOnePressed(callback func()) {
+	hardware.OnGPIOButtonPressed(21, callback)
 }
 
-func OnButtonTwoPressed(fn func()) {
-	hardware.OnGPIOButtonPressed(20, fn)
+func OnButtonTwoPressed(callback func()) {
+	hardware.OnGPIOButtonPressed(20, callback)
 }
 
-func OnButtonThreePressed(fn func()) {
-	hardware.OnGPIOButtonPressed(16, fn)
+func OnButtonThreePressed(callback func()) {
+	hardware.OnGPIOButtonPressed(16, callback)
 }

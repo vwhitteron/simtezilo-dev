@@ -8,9 +8,9 @@ func (a *App) settingAction(setting string, action string) string {
 		var value float64
 
 		switch action {
-		case "increase":
+		case "increase": //nolint:goconst // no value as a const
 			value = a.config.IncreaseChassisGain()
-		case "decrease":
+		case "decrease": //nolint:goconst // no value as a const
 			value = a.config.DecreaseChassisGain()
 		default:
 			value = a.config.GetChassisGain()

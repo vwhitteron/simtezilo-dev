@@ -1,16 +1,32 @@
+// Package en provides English translations and font settings.
 package en
 
 import "github.com/vwhitteron/simtezilo-dev/app/i18n/translations"
 
 const (
-	Code             = "en"                       // IETF BCP47 language tag
-	Name             = "English"                  // Language name in the target language
-	RegularFont      = "LeagueGothic-Regular.ttf" // Font file for regular text
-	RegularFontScale = 1.0                        // Scale factor for regular font
-	ItalicFont       = "LeagueGothic-Italic.ttf"  // Font file for italic text
-	ItalicFontScale  = 1.0                        // Scale factor for italic font
-	ValueFont        = "LeagueGothic-Regular.ttf" // Font file for values
-	ValueFontScale   = 1.0                        // Scale factor for value font
+	// Code is an IETF BCP47 language tag.
+	Code = "en"
+
+	// Name is the name of the language expressed in the target language.
+	Name = "English"
+
+	// RegularFont is the font face file for rendering regular text.
+	RegularFont = "LeagueGothic-Regular.ttf"
+
+	// RegularFontScale is the relative size of the regular font.
+	RegularFontScale = 1.0
+
+	// ItalicFont is the font face file for rendering italic text.
+	ItalicFont = "LeagueGothic-Italic.ttf"
+
+	// ItalicFontScale is the relative size of the italic font.
+	ItalicFontScale = 1.0
+
+	// ValueFont is the font face file for rendering values.
+	ValueFont = "LeagueGothic-Regular.ttf"
+
+	// ValueFontScale is the relative size of the value font.
+	ValueFontScale = 1.0
 )
 
 // Translations maps translation keys to their corresponding English strings.

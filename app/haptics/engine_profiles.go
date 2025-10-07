@@ -1,3 +1,4 @@
+// Package haptics provides definitions and profiles for simulating engine haptic feedback.
 package haptics
 
 // Profile names are structured as follows:

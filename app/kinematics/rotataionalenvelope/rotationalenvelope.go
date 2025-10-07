@@ -1,3 +1,4 @@
+// Package rotataionalenvelope provides utilities for 6DOF rotational envelope operations.
 package rotataionalenvelope
 
 import (
@@ -6,6 +7,7 @@ import (
 	"github.com/zetetos/gt-telemetry/pkg/models"
 )
 
+// Delta returns the difference between two rotational envelopes.
 func Delta(axis1 models.RotationalEnvelope, axis2 models.RotationalEnvelope) models.RotationalEnvelope {
 	return models.RotationalEnvelope{
 		Pitch: axis1.Pitch - axis2.Pitch,
@@ -14,10 +16,12 @@ func Delta(axis1 models.RotationalEnvelope, axis2 models.RotationalEnvelope) mod
 	}
 }
 
+// Magnitude returns the magnitude of a rotational envelope.
 func Magnitude(axis models.RotationalEnvelope) float64 {
 	return math.Sqrt(float64(axis.Pitch*axis.Pitch + axis.Yaw*axis.Yaw + axis.Roll*axis.Roll))
 }
 
+// Scale scales a rotational envelope by the given factors for each axis.
 func Scale(axis models.RotationalEnvelope, pitchScale float32, yawScale float32, rollScale float32) models.RotationalEnvelope {
 	return models.RotationalEnvelope{
 		Pitch: axis.Pitch * pitchScale,

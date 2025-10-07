@@ -44,13 +44,15 @@ func (a *App) GenerateBalancedWaveform(rpm float64, engineRoughness float64, eng
 	)
 
 	switch a.vehicle.vehicleType {
-	case "race":
+	case vehicleTypeRace:
 		gainOffset = 0.0
 		amplitudeScale = 0.3
-	case "tuned":
+	case vehicleTypeTuned:
 		gainOffset = -3.0
 		amplitudeScale = 0.2
-	default: // "street" or other types
+	case vehicleTypeStreet:
+		fallthrough
+	default:
 		gainOffset = -4.75
 		amplitudeScale = 0.01
 	}

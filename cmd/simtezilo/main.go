@@ -38,7 +38,7 @@ func main() {
 
 	flag.StringVar(&vehicleDB, "d", "", "Path to vehicle database file")
 	flag.StringVar(&logLevelArg, "l", "info", "Log level. Default is 'info'")
-	flag.StringVar(&profilerEndpoint, "p", "", "Send profiles to this Pyroscope endpoint (http://host:port). Default is off") //nolint:lll
+	flag.StringVar(&profilerEndpoint, "p", "", "Send profiles to this Pyroscope endpoint (http://host:port). Default is off")
 	flag.BoolVar(&webEnabled, "w", false, "Enable web server. Default is false")
 	flag.Parse()
 
@@ -60,7 +60,7 @@ func main() {
 		logger.Fatal().Err(err).Msg("Failed to setup Pyroscope profiler")
 	}
 
-	app, err := app.New(app.AppOptions{
+	app, err := app.New(app.Options{
 		VehicleDB:  vehicleDB,
 		Done:       done,
 		Logger:     &logger,

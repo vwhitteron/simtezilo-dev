@@ -11,14 +11,15 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/signal"
 )
 
+// Mixer handles multiple audio channels, mixing them into a master output channel.
 type Mixer struct {
 	configGainIncrement *float64
 
 	channels     map[string]*MixerChannel
-	bufferLength time.Duration // Duration of audio the buffer should hold
-	sampleRateHz int           // Sample rate in Hz
+	bufferLength time.Duration
+	sampleRateHz int
 	log          zerolog.Logger
-	faderGain    float64 // controls fade-in after pause or session reset
+	faderGain    float64
 	fadeInActive bool
 	silenced     bool
 
@@ -29,26 +30,29 @@ type Mixer struct {
 	mu sync.RWMutex
 }
 
+// MixerChannel represents an individual audio channel within the mixer.
 type MixerChannel struct {
 	activeGain float64
 	configGain *float64
 	buffer     Buffer
 }
 
+// MixerConfig holds configuration options for the Mixer.
 type MixerConfig struct {
-	MasterGain    *float64
-	GainIncrement *float64
-	BufferLength  time.Duration // Duration of audio the buffer should hold
-	SampleRateHz  int           // Sample rate in Hz
-	Log           zerolog.Logger
+	MasterGain    *float64       // Pointer to the configuration master gain value
+	GainIncrement *float64       // Pointer to the configuration gain increment value
+	BufferLength  time.Duration  // Duration of audio the buffer should hold
+	SampleRateHz  int            // Sample rate in Hz
+	Log           zerolog.Logger // Logger instance for logging
 }
 
-// TODO: set gain and gainIncrement to defaults and add setters instead.
+// NewMixer creates a new Mixer instance with the provided configuration.
 func NewMixer(mixerConfig MixerConfig) (*Mixer, error) {
 	if mixerConfig.MasterGain == nil || mixerConfig.GainIncrement == nil {
 		return nil, errors.New("gain and gainIncrement must be valid pointers")
 	}
 
+	// TODO: set gain and gainIncrement to defaults and add setters instead.
 	mixer := &Mixer{
 		configGainIncrement: mixerConfig.GainIncrement,
 
@@ -75,14 +79,17 @@ func NewMixer(mixerConfig MixerConfig) (*Mixer, error) {
 	return mixer, nil
 }
 
+// Close gracefully shuts down the mixer, silencing output.
 func (m *Mixer) Close() {
 	_ = m.SetChannelGain("_master", config.MinimumGain)
 }
 
+// GetBufferLength returns the configured buffer length duration.
 func (m *Mixer) GetBufferCapacity() int {
 	return int(m.bufferLength.Seconds() * float64(m.sampleRateHz))
 }
 
+// AddChannel adds a new channel to the mixer with the specified name and initial gain.
 func (m *Mixer) AddChannel(name string, gain *float64) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -102,25 +109,22 @@ func (m *Mixer) AddChannel(name string, gain *float64) error {
 	return nil
 }
 
+// Read reads the specified number of samples from the channel's buffer.
+// All samples read are removed from the buffer.
 func (m *MixerChannel) Read(length int) []float64 {
 	return m.buffer.Read(length)
 }
 
-// TODO: scaling slice in-place cause the gear shift wavform to be reduced every time it is played
-// is this the correct thing to do?
+// Write writes samples to the channel's buffer with the specified magnitude and offset.
 func (m *MixerChannel) Write(samples []float64, magnitude float64, offset int, overwrite bool) {
+	// TODO: scaling slice in-place cause the gear shift wavform to be reduced every time it is played
+	// is this the correct thing to do?
 	ScaleSamples(&samples, magnitude)
 
 	m.buffer.Write(samples, offset, overwrite)
 }
 
-// TODO: REMOVE
-// func (m *MixerChannel) WriteZeroCrossover(samples []float64, magnitude float64) {
-// 	scaleSamples(&samples, magnitude)
-
-// 	m.buffer.WriteAtZeroCrossover(samples)
-// }
-
+// WriteChannel writes the provided sample data to the specified channel buffer at the given offset.
 func (m *Mixer) WriteChannel(name string, samples []float64, magnitude float64, offset int, overwrite bool) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -134,6 +138,7 @@ func (m *Mixer) WriteChannel(name string, samples []float64, magnitude float64, 
 	return nil
 }
 
+// ReadChannel reads the specified number of samples from the channel's buffer.
 func (m *Mixer) ReadChannel(name string, length int) []float64 {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -148,6 +153,7 @@ func (m *Mixer) ReadChannel(name string, length int) []float64 {
 	return m.channels[name].Read(length)
 }
 
+// InspectChannelBuffer returns a copy of the specified channel buffer for inspection.
 func (m *Mixer) InspectChannelBuffer(name string, length int, offset int) []float64 {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -159,6 +165,7 @@ func (m *Mixer) InspectChannelBuffer(name string, length int, offset int) []floa
 	return nil
 }
 
+// GetChannelNames returns a list of all channel names configured in the mixer.
 func (m *Mixer) GetChannelNames() []string {
 	names := []string{}
 
@@ -176,6 +183,8 @@ func (m *Mixer) GetChannelNames() []string {
 
 	return names
 }
+
+// GetChannelGain returns the current gain of the specified channel.
 func (m *Mixer) GetChannelGain(name string) (float64, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -188,6 +197,7 @@ func (m *Mixer) GetChannelGain(name string) (float64, error) {
 	return channel.activeGain, nil
 }
 
+// SetChannelGain sets the gain of the specified channel.
 func (m *Mixer) SetChannelGain(name string, gain float64) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -207,6 +217,7 @@ func (m *Mixer) SetChannelGain(name string, gain float64) error {
 	return nil
 }
 
+// GetChannelPowerRatio returns the current power ratio of the specified channel.
 func (m *Mixer) GetChannelPowerRatio(name string) (float64, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -219,6 +230,7 @@ func (m *Mixer) GetChannelPowerRatio(name string) (float64, error) {
 	return GainToPowerRatio(channel.activeGain), nil
 }
 
+// GetChannelAmplitudeRatio returns the current amplitude ratio of the specified channel.
 func (m *Mixer) GetChannelAmplitudeRatio(name string) (float64, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -231,6 +243,7 @@ func (m *Mixer) GetChannelAmplitudeRatio(name string) (float64, error) {
 	return GainToAmplitudeRatio(channel.activeGain), nil
 }
 
+// SetFader sets the fader gain, which controls the overall output level.
 func (m *Mixer) SetFader(gain float64) {
 	m.mu.Lock()
 	m.faderGain = gain
@@ -239,6 +252,7 @@ func (m *Mixer) SetFader(gain float64) {
 	_ = m.SetChannelGain("_master", m.faderGain)
 }
 
+// FadeIn gradually increases the master gain from minimum to the configured level over the specified period.
 func (m *Mixer) FadeIn(period time.Duration) {
 	m.mu.RLock()
 	master := m.channels["_master"]
@@ -290,93 +304,12 @@ func (m *Mixer) FadeIn(period time.Duration) {
 	}()
 }
 
+// MixToMaster mixes all active channels into the master channel buffer using an alternative algorithm.
 func (m *Mixer) MixToMaster(length int) {
 	outSamples := make([]float64, length)
 
 	// mix in the chassis and transmission channels with equal priority
-	var peak float64 = 0
-
-	m.mu.RLock() // TODO: locking is too complicated, maybe have per channel locks
-
-	for _, name := range []string{"chassis", "transmission"} {
-		channel, ok := m.channels[name]
-		if !ok {
-			m.mu.RUnlock()
-			m.log.Error().Str("channel", name).Msg("channel not found in mixer")
-			m.mu.RLock()
-
-			continue
-		}
-
-		if *channel.configGain == config.MinimumGain {
-			continue
-		}
-
-		samples := channel.Read(length)
-
-		for i, sample := range samples {
-			outSamples[i] = mixSampleSum(outSamples[i], sample, &peak)
-		}
-	}
-
-	if peak > 1.0 {
-		scaleSamplesPeak(&outSamples, peak)
-	}
-
-	magnitude := 1.0
-	// mix in the engine channel with lower priority
-	channel, ok := m.channels["engine"]
-	if !ok {
-		m.mu.RUnlock()
-		m.log.Error().Str("channel", "engine").Msg("channel not found in mixer")
-		m.mu.RLock()
-	} else if *channel.configGain > config.MinimumGain {
-		outSamplesWork := make([]float64, length)
-		engineSamples := channel.Read(length)
-
-		remixed := false
-		done := false
-
-		for !done {
-			peak := 0.0
-
-			// Perform direct mix and get the peak value
-			for i, engineSample := range engineSamples {
-				outSamplesWork[i] = mixSampleSum(outSamples[i], engineSample, &peak)
-			}
-
-			if peak > 1.0 {
-				if !remixed {
-					// Re-mix with reduced engine scale when the peak would cause clipping
-					scaleSamplesPeak(&engineSamples, peak*2)
-
-					remixed = true
-				} else {
-					// Remix is still a little high (fp precision) so just reduce the whole signal
-					done = true
-					magnitude = 1.0 / peak
-				}
-
-				continue
-			}
-
-			done = true
-		}
-
-		copy(outSamples, outSamplesWork)
-	}
-
-	masterChannel := m.channels["_master"]
-	m.mu.RUnlock()
-
-	masterChannel.Write(outSamples, magnitude, 0, true)
-}
-
-func (m *Mixer) MixToMaster2(length int) {
-	outSamples := make([]float64, length)
-
-	// mix in the chassis and transmission channels with equal priority
-	var peak float64 = 0
+	var peak float64
 
 	m.mu.RLock()
 
@@ -454,6 +387,7 @@ func (m *Mixer) MixToMaster2(length int) {
 	masterChannel.Write(outSamples, magnitude, 0, true)
 }
 
+// ClearBuffers clears all channel buffers in the mixer.
 func (m *Mixer) ClearBuffers() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -499,6 +433,7 @@ func (m *Mixer) checkBufferHealth() {
 }
 
 // TODO: is there a better way to integrate config changes?
+// watchForConfigChanges monitors configuration changes and applies them to the mixer channels.
 func (m *Mixer) watchForConfigChanges() {
 	m.log.Debug().Str("event", "start").Msg("config watch")
 

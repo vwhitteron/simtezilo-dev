@@ -111,7 +111,7 @@ func InvertSamplePolarity(samples *[]float64) {
 // Adjusts the scale of the samples by the given magnitude.
 func ScaleSamples(samples *[]float64, magnitude float64) {
 	for i := range *samples {
-		(*samples)[i] = (*samples)[i] * magnitude
+		(*samples)[i] *= magnitude
 	}
 }
 

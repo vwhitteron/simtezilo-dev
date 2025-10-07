@@ -31,7 +31,8 @@ var autoRepeatManager struct {
 	active bool
 }
 
-func OnGPIOButtonPressed(n int, fn func()) {
+// OnGPIOButtonPressed sets up a GPIO pin to call the provided handler function when the button is pressed.
+func OnGPIOButtonPressed(n int, handler func()) {
 	go func() {
 		// Prepare the GPIO pin for input
 		pin := gpioreg.ByName(fmt.Sprintf("GPIO%d", n))
@@ -65,8 +66,8 @@ func OnGPIOButtonPressed(n int, fn func()) {
 
 							// Trigger callback on stable transition to LOW (button pressed with pull-up)
 							if stableLevel == gpio.Low {
-								fn()
-								startAutoRepeat(pin, fn)
+								handler()
+								startAutoRepeat(pin, handler)
 							}
 						}
 

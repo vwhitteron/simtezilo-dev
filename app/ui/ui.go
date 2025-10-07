@@ -1,3 +1,4 @@
+// Package ui provides the user interface management for the application.
 package ui
 
 import (
@@ -10,6 +11,7 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/ui/gui"
 )
 
+// Config holds the configuration for initializing the UserInterface.
 type Config struct {
 	I18n             *i18n.Language
 	HIDEvents        chan HIDInputEvent
@@ -20,12 +22,14 @@ type Config struct {
 	Log              zerolog.Logger
 }
 
+// LiveData holds the dynamic data that can currently be displayed on the UI.
 type LiveData struct {
 	Gear            int
 	TelemetryActive bool
 	forceRefresh    bool
 }
 
+// UserInterface manages the user interface components and state.
 type UserInterface struct {
 	i18n       *i18n.Language
 	display    hardware.Display
@@ -44,6 +48,7 @@ type UserInterface struct {
 	lastActivity time.Time
 }
 
+// NewUserInterface initializes and returns a new UserInterface instance.
 func NewUserInterface(config *Config) *UserInterface {
 	userInterface := &UserInterface{
 		i18n:             config.I18n,
@@ -76,10 +81,12 @@ func NewUserInterface(config *Config) *UserInterface {
 	return userInterface
 }
 
+// RegisterActivity updates the last activity timestamp to the current time.
 func (u *UserInterface) RegisterActivity() {
 	u.lastActivity = time.Now()
 }
 
+// DisplaySleep puts the display into sleep mode.
 func (u *UserInterface) DisplaySleep() {
 	if int(u.mode) == int(ScreenModeSleep) {
 		return
@@ -92,6 +99,7 @@ func (u *UserInterface) DisplaySleep() {
 	u.log.Debug().Str("state", "sleep").Msg("display update")
 }
 
+// DisplayOff turns the display off.
 func (u *UserInterface) DisplayOff() {
 	if int(u.mode) == int(ScreenModeOff) {
 		return
@@ -104,6 +112,7 @@ func (u *UserInterface) DisplayOff() {
 	u.log.Debug().Str("state", "off").Msg("display update")
 }
 
+// DisplayToggleOff toggles the display between off and wait modes.
 func (u *UserInterface) DisplayToggleOff() bool {
 	if int(u.mode) == int(ScreenModeOff) {
 		u.mode = ScreenModeWait
@@ -121,6 +130,7 @@ func (u *UserInterface) DisplayToggleOff() bool {
 	return false
 }
 
+// DrawReadyDisplay renders the ready screen on the display.
 // TODO: move it elsewhere or get rid of it entirely.
 func (u *UserInterface) DrawReadyDisplay() {
 	if int(u.mode) == int(ScreenModeWait) && !u.displayData.forceRefresh {
@@ -134,6 +144,7 @@ func (u *UserInterface) DrawReadyDisplay() {
 	u.log.Debug().Str("state", "wait").Msg("display update")
 }
 
+// DrawLiveDisplay renders the live data screen on the display.
 func (u *UserInterface) DrawLiveDisplay(data LiveData) {
 	if !u.displayData.forceRefresh {
 		if data.Gear == u.displayData.Gear || data.Gear == kinematics.NullGear {
@@ -150,6 +161,7 @@ func (u *UserInterface) DrawLiveDisplay(data LiveData) {
 	u.log.Debug().Str("state", "live").Msg("display update")
 }
 
+// SettingAction performs a settings action and returns the resulting setting value.
 func (u *UserInterface) SettingAction(setting string, action string) string {
 	u.RegisterActivity()
 	u.mode = ScreenModeSettings
@@ -157,6 +169,7 @@ func (u *UserInterface) SettingAction(setting string, action string) string {
 	return u.settingsCallback(setting, action)
 }
 
+// UpdateDisplay updates the display based on the current mode and live data.
 // TODO: clean up this logic and make it easier to understand.
 func (u *UserInterface) UpdateDisplay(data LiveData) {
 	switch u.mode {
@@ -204,14 +217,17 @@ func (u *UserInterface) UpdateDisplay(data LiveData) {
 	u.displayData = data
 }
 
+// displayPowerOffTimeoutReached checks if the power-off timeout has been reached.
 func (u *UserInterface) displayPowerOffTimeoutReached() bool {
 	return time.Since(u.lastActivity) > 30*time.Second
 }
 
+// displayInactiveTimeoutReached checks if the inactivity timeout has been reached.
 func (u *UserInterface) displayInactiveTimeoutReached() bool {
 	return time.Since(u.lastActivity) > 5*time.Second
 }
 
+// displaySplashTimeoutReached checks if the splash screen timeout has been reached.
 func (u *UserInterface) displaySplashTimeoutReached() bool {
 	return time.Since(u.lastActivity) > 2*time.Second
 }

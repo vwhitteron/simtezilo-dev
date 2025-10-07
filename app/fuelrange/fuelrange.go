@@ -1,3 +1,4 @@
+// Package fuelrange provides an estimator for the distance that can be travelled with the current fuel level.
 package fuelrange
 
 import (
@@ -5,28 +6,26 @@ import (
 )
 
 const (
-	// Initial fuel level in percent
+	// Initial fuel level in percent.
 	initialFuelLevel float64 = -1.0
 
-	// Initial odometer reading in meters
+	// Initial odometer reading in meters.
 	initialOdometerReading float64 = -1.0
 
-	// Default (very high) range in laps when unknown
+	// Default (very high) range in laps when unknown.
 	rangeLapsUnknown float64 = 10000
 
-	// Default (unknown) range in meters
+	// Default (unknown) range in meters.
 	rangeDistanceUnknown float64 = rangeLapsUnknown * 1000
 
-	// Percentile fuel consumption rate to use for range estimation
-	fuelRatePercentile int = 50
-
-	// Minimum number of samples required to provide a reliable range estimate
+	// Minimum number of samples required to provide a reliable range estimate.
 	fuelRangeMinSamples int = 1000
 
-	// Number of samples to store in the buffer
+	// Number of samples to store in the buffer.
 	fuelRangeMaxSamples int = 6000
 )
 
+// FuelRange estimates the distance that can be travelled with the current fuel level.
 type FuelRange struct {
 	log                     zerolog.Logger
 	lastOdometerReading     float64   // Last processed odometer reading in meters
@@ -65,8 +64,8 @@ func (r *FuelRange) Reset() {
 	maxSamples := fuelRangeMaxSamples
 
 	if !r.isLive {
-		minSamples = minSamples / 100
-		maxSamples = maxSamples / 100
+		minSamples /= 100
+		maxSamples /= 100
 	}
 
 	r.minSamples = minSamples
@@ -186,7 +185,7 @@ func (r *FuelRange) DistanceMeters() float64 {
 	return r.distanceMeters - r.distanceSinceLastUpdate
 }
 
-// RangeLaps returns the estimated number of laps that can be completed on a circuit of given length.
+// DistanceLaps returns the estimated number of laps that can be completed on a circuit of given length.
 func (r *FuelRange) DistanceLaps(lengthMeters float64) float64 {
 	// Invalid circuit length
 	if lengthMeters <= 0 {

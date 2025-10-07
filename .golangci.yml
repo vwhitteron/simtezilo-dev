@@ -116,11 +116,11 @@ linters:
   disable:
   exclusions:
     generated: lax
-    # presets:
-      # - comments
-      # - common-false-positives
-      # - legacy
-      # - std-error-handling
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
     paths:
       - internal/gttelemetry/gran_turismo_telemetry.go
       - third_party$
@@ -147,6 +147,11 @@ linters:
             - github.com/vwhitteron/simtezilo-dev
             - github.com/zetetos/gt-telemetry
             - layeh.com/gopus
+    lll:
+      line-length: 180
+    gomoddirectives:
+      replace-allow-list:
+        - github.com/bwmarrin/discordgo # temporary until voice fix is merged
     tagliatelle:
       case:
         rules:

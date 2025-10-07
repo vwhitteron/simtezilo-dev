@@ -1,3 +1,4 @@
+// TODO: this file is mostly LLM generated and needs heavy refactoring.
 package app
 
 import (
@@ -400,11 +401,13 @@ func (a *App) generatePulseWaveform(rpm float64, engineRoughness float64, engine
 	var vehicleTypeGain float64
 
 	switch a.vehicle.vehicleType {
-	case "race":
+	case vehicleTypeRace:
 		vehicleTypeGain = 0.0
-	case "tuned":
+	case vehicleTypeTuned:
 		vehicleTypeGain = -3.0
-	default: // "street" or other types
+	case vehicleTypeStreet:
+		fallthrough
+	default:
 		vehicleTypeGain = -4.75
 	}
 

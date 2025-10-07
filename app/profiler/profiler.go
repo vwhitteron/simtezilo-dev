@@ -1,3 +1,4 @@
+// Package profiler provides functionality to integrate with Pyroscope for application profiling.
 package profiler
 
 import (
@@ -8,12 +9,14 @@ import (
 	"github.com/grafana/pyroscope-go"
 )
 
+// PyroscopeProfiler represents a profiler that sends profiling data to a Pyroscope server.
 type PyroscopeProfiler struct {
 	endpoint string
 	tags     map[string]string
 	profiler *pyroscope.Profiler
 }
 
+// NewPyroscopeProfiler creates a new PyroscopeProfiler instance.
 func NewPyroscopeProfiler(endpoint string, tags map[string]string) (*PyroscopeProfiler, error) {
 	if endpoint == "" {
 		return nil, errors.New("profiler endpoint is required")
@@ -26,10 +29,12 @@ func NewPyroscopeProfiler(endpoint string, tags map[string]string) (*PyroscopePr
 	}, nil
 }
 
+// Endpoint returns the Pyroscope server endpoint.
 func (p *PyroscopeProfiler) Endpoint() string {
 	return p.endpoint
 }
 
+// Start initializes and starts the Pyroscope profiler.
 func (p *PyroscopeProfiler) Start() error {
 	runtime.SetMutexProfileFraction(5)
 	runtime.SetBlockProfileRate(5)
@@ -61,6 +66,7 @@ func (p *PyroscopeProfiler) Start() error {
 	return nil
 }
 
+// Shutdown stops the Pyroscope profiler and cleans up resources.
 func (p *PyroscopeProfiler) Shutdown() error {
 	if p.profiler == nil {
 		return nil

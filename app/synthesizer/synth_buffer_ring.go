@@ -53,7 +53,7 @@ func (b *RingBuffer) Clear() {
 	b.used = b.readDelay
 }
 
-// Used returns the total number of samples the buffer can hold.
+// Length returns the total number of samples the buffer can hold.
 func (b *RingBuffer) Length() int {
 	return b.capacity
 }

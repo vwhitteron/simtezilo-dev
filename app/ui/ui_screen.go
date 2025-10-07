@@ -1,5 +1,6 @@
 package ui
 
+// ScreenMode provides a limited set of modes for the screen.
 type ScreenMode int
 
 const (
@@ -11,11 +12,12 @@ const (
 	ScreenModeSettings
 )
 
+// Screen defines the interface for a screen to which a user interface can be rendered.
 type Screen interface {
-	SetMode(ScreenMode)
+	SetMode(mode ScreenMode)
 	GetMode() ScreenMode
-	RenderSplashScreen(string)
-	RenderErrorScreen(string)
-	RenderLiveScreen(int)
-	RenderSettingScreen(string, string)
+	RenderSplashScreen(value string)
+	RenderErrorScreen(value string)
+	RenderLiveScreen(gear int)
+	RenderSettingScreen(title string, value string)
 }

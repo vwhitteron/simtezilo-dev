@@ -90,13 +90,15 @@ func (a *App) GenerateTorqueCurveWaveform(rpm float64, engineRoughness float64, 
 	)
 
 	switch a.vehicle.vehicleType {
-	case "race":
+	case vehicleTypeRace:
 		gainOffset = 0.0
 		amplitudeScale = 0.4
-	case "tuned":
+	case vehicleTypeTuned:
 		gainOffset = -3.0
 		amplitudeScale = 0.25
-	default: // "street" or other types
+	case vehicleTypeStreet:
+		fallthrough
+	default:
 		gainOffset = -4.75
 		amplitudeScale = 0.02
 	}

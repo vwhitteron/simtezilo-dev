@@ -1,3 +1,4 @@
+// Package odometer provides functionality to track the distance travelled based on coordinate updates.
 package odometer
 
 import (
@@ -8,15 +9,17 @@ import (
 )
 
 const (
-	teleportDistanceMax float64 = 500 // Maximum distance in meters to consider between updates (filter out teleports)
+	teleportDistanceMax float64 = 500
 )
 
+// Odometer tracks the total distance travelled based on coordinate updates.
 type Odometer struct {
 	log            zerolog.Logger    // Logger instance
 	distanceMeters float64           // Total distance in meters
 	lastCoordinate models.Coordinate // Last known coordinate for distance tracking
 }
 
+// New creates a new Odometer instance.
 func New(logger zerolog.Logger) *Odometer {
 	odometer := Odometer{
 		log:            logger.With().Str("package", "odometer").Logger(),

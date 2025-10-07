@@ -1,4 +1,4 @@
-package app
+package app //nolint:testpackage // white-box testing
 
 import (
 	"testing"

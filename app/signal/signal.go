@@ -1,3 +1,4 @@
+// Package signal provides various signal processing functions.
 package signal
 
 import (
@@ -6,6 +7,7 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/config"
 )
 
+// Abs returns the absolute value of a float64.
 func Abs(value float64) float64 {
 	if value < 0 {
 		return -value
@@ -14,6 +16,7 @@ func Abs(value float64) float64 {
 	return value
 }
 
+// Equalize applies equalization based on pulse width and synthesizer settings.
 func Equalize(value float64, pulseWidth float64, synth *config.Synthesizer) float64 {
 	freq := int(math.Round(float64(synth.InternalSampleRateHz) / (2 * pulseWidth)))
 
@@ -21,11 +24,13 @@ func Equalize(value float64, pulseWidth float64, synth *config.Synthesizer) floa
 		return value
 	}
 
-	value = value * synth.Eq[freq-10]
+	value *= synth.Eq[freq-10]
 
 	return value
 }
 
+// Exponent raises a value to a given exponent.
+// If the value is negative, the exponentiation is applied to its absolute value, and the sign is restored.
 func Exponent(value float64, exponent float64) float64 {
 	isNeg := false
 
@@ -43,6 +48,7 @@ func Exponent(value float64, exponent float64) float64 {
 	return result
 }
 
+// LargestMagnitude returns the largest magnitude of two values, preserving their signs.
 func LargestMagnitude(valueA float64, valueB float64) float64 {
 	aIsNeg := false
 	bIsNeg := false
@@ -76,11 +82,13 @@ func LargestMagnitude(valueA float64, valueB float64) float64 {
 	return maxVal
 }
 
-func LimitWindow(value float64, min float64, max float64) (float64, bool) {
+// LimitWindow constrains a value within a specified minimum and maximum range.
+// If the value is negative, the constraints are applied to its absolute value, and the sign is restored.
+func LimitWindow(value float64, minValue float64, maxValue float64) (float64, bool) {
 	var cMin, cMax bool
 
-	value, cMin = LimitMin(value, min)
-	value, cMax = LimitMax(value, max)
+	value, cMin = LimitMin(value, minValue)
+	value, cMax = LimitMax(value, maxValue)
 
 	if cMin || cMax {
 		return value, true
@@ -89,17 +97,19 @@ func LimitWindow(value float64, min float64, max float64) (float64, bool) {
 	return value, false
 }
 
-func LimitMin(value float64, min float64) (float64, bool) {
+// LimitMin constrains a value to be no less than the specified minimum.
+// If the value is negative, the minimum constraint is applied to its absolute value, and the sign is restored.
+func LimitMin(value float64, minValue float64) (float64, bool) {
 	isNeg := false
 	if value < 0 {
 		isNeg = true
 		value = -value
 	}
 
-	value = max(value, min)
+	value = max(value, minValue)
 
-	if value < min {
-		value = min
+	if value < minValue {
+		value = minValue
 	}
 
 	if isNeg {
@@ -109,14 +119,16 @@ func LimitMin(value float64, min float64) (float64, bool) {
 	return value, false
 }
 
-func LimitMax(value float64, max float64) (float64, bool) {
+// LimitMax constrains a value to be no greater than the specified maximum.
+// If the value is negative, the maximum constraint is applied to its absolute value, and the sign is restored.
+func LimitMax(value float64, maxValue float64) (float64, bool) {
 	isNeg := false
 	if value < 0 {
 		isNeg = true
 		value = -value
 	}
 
-	value = min(value, max)
+	value = min(value, maxValue)
 
 	if isNeg {
 		value = -value
@@ -125,6 +137,8 @@ func LimitMax(value float64, max float64) (float64, bool) {
 	return value, false
 }
 
+// Log2 applies a base 2 logarithmic transformation to the given value.
+// If the value is negative, the transformation is applied to its absolute value, and the sign is restored.
 func Log2(value float64) float64 {
 	isNeg := false
 
@@ -142,6 +156,8 @@ func Log2(value float64) float64 {
 	return compressed
 }
 
+// Log10 applies a base 10 logarithmic transformation to the given value.
+// If the value is negative, the transformation is applied to its absolute value, and the sign is restored.
 func Log10(value float64) float64 {
 	isNeg := false
 
@@ -159,10 +175,12 @@ func Log10(value float64) float64 {
 	return compressed
 }
 
+// Scale multiplies the given value by the specified scale factor.
 func Scale(value float64, scale float64) float64 {
 	return value * scale
 }
 
+// Polarity returns -1.0 for negative values and +1.0 for zero or positive values.
 func Polarity(value float64) float64 {
 	if value < 0 {
 		return -1.0

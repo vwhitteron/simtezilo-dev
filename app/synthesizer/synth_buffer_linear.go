@@ -5,6 +5,7 @@ import (
 	"time"
 )
 
+// LinearBuffer is a simple linear buffer implementation for audio samples.
 type LinearBuffer struct {
 	buffer []float64
 	mu     sync.Mutex
@@ -35,7 +36,7 @@ func (b *LinearBuffer) Clear() {
 	}
 }
 
-// Used returns the total number of samples the buffer can hold.
+// Length returns the current length of the buffer in samples.
 func (b *LinearBuffer) Length() int {
 	return len(b.buffer)
 }

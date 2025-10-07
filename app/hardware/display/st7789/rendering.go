@@ -67,6 +67,7 @@ func (d *Device) FillScreen(c color.RGBA) {
 	_ = d.FillRectangle(0, 0, x, y, c)
 }
 
+// DrawRAW draws an image to the screen.
 func (d *Device) DrawRAW(img image.Image) {
 	d.SetWindow()
 
@@ -80,7 +81,12 @@ func (d *Device) DrawRAW(img image.Image) {
 		for row := range d.pixelRows {
 			x := rect.Min.X + int(d.pixelColumns) - int(column)
 			y := rect.Min.Y + int(row)
-			rgba := rgbaimg.At(x, y).(color.RGBA)
+
+			rgba, ok := rgbaimg.At(x, y).(color.RGBA)
+			if !ok {
+				rgba = color.RGBA{R: 252, G: 15, B: 192, A: 0} // strong pink to highlight bad pixel color
+			}
+
 			c565 := RGBAToRGB565(rgba)
 			data = append(data, uint8(c565), uint8(c565>>8))
 		}

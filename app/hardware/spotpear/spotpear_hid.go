@@ -5,6 +5,7 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/ui"
 )
 
+// SetupHID configures the Spotpear hardware buttons to send HID events to the provided channel.
 // TODO: implement button rotation logic.
 func SetupHID(hidEvent chan ui.HIDInputEvent) {
 	OnButtonUpPressed(func() {
@@ -56,50 +57,62 @@ func SetupHID(hidEvent chan ui.HIDInputEvent) {
 	})
 }
 
-func OnButtonUpPressed(fn func()) {
-	hardware.OnGPIOButtonPressed(5, fn)
+// OnButtonXPressed registers a callback function to be called when the up button is pressed.
+func OnButtonUpPressed(callback func()) {
+	hardware.OnGPIOButtonPressed(5, callback)
 }
 
-func OnButtonDownPressed(fn func()) {
-	hardware.OnGPIOButtonPressed(6, fn)
+// OnButtonYPressed registers a callback function to be called when the down button is pressed.
+func OnButtonDownPressed(callback func()) {
+	hardware.OnGPIOButtonPressed(6, callback)
 }
 
-func OnButtonLeftPressed(fn func()) {
-	hardware.OnGPIOButtonPressed(16, fn)
+// OnButtonAPressed registers a callback function to be called when the left button is pressed.
+func OnButtonLeftPressed(callback func()) {
+	hardware.OnGPIOButtonPressed(16, callback)
 }
 
-func OnButtonRightPressed(fn func()) {
-	hardware.OnGPIOButtonPressed(13, fn)
+// OnButtonBPressed registers a callback function to be called when the right button is pressed.
+func OnButtonRightPressed(callback func()) {
+	hardware.OnGPIOButtonPressed(13, callback)
 }
 
-func OnButtonAPressed(fn func()) {
-	hardware.OnGPIOButtonPressed(21, fn)
+// OnButtonXPressed registers a callback function to be called when the A button is pressed.
+func OnButtonAPressed(callback func()) {
+	hardware.OnGPIOButtonPressed(21, callback)
 }
 
-func OnButtonBPressed(fn func()) {
-	hardware.OnGPIOButtonPressed(20, fn)
+// OnButtonBPressed registers a callback function to be called when the B button is pressed.
+func OnButtonBPressed(callback func()) {
+	hardware.OnGPIOButtonPressed(20, callback)
 }
 
-func OnButtonXPressed(fn func()) {
-	hardware.OnGPIOButtonPressed(15, fn)
+// OnButtonXPressed registers a callback function to be called when the X button is pressed.
+func OnButtonXPressed(callback func()) {
+	hardware.OnGPIOButtonPressed(15, callback)
 }
 
-func OnButtonYPressed(fn func()) {
-	hardware.OnGPIOButtonPressed(12, fn)
+// OnButtonYPressed registers a callback function to be called when the Y button is pressed.
+func OnButtonYPressed(callback func()) {
+	hardware.OnGPIOButtonPressed(12, callback)
 }
 
-func OnButtonTriggerLeftPressed(fn func()) {
-	hardware.OnGPIOButtonPressed(23, fn)
+// OnButtonTriggerLeftPressed registers a callback function to be called when the left trigger button is pressed.
+func OnButtonTriggerLeftPressed(callback func()) {
+	hardware.OnGPIOButtonPressed(23, callback)
 }
 
-func OnButtonTriggerRightPressed(fn func()) {
-	hardware.OnGPIOButtonPressed(14, fn)
+// OnButtonTriggerRightPressed registers a callback function to be called when the right trigger button is pressed.
+func OnButtonTriggerRightPressed(callback func()) {
+	hardware.OnGPIOButtonPressed(14, callback)
 }
 
-func OnButtonStartPressed(fn func()) {
-	hardware.OnGPIOButtonPressed(26, fn)
+// OnButtonStartPressed registers a callback function to be called when the start button is pressed.
+func OnButtonStartPressed(callback func()) {
+	hardware.OnGPIOButtonPressed(26, callback)
 }
 
-func OnButtonSelectPressed(fn func()) {
-	hardware.OnGPIOButtonPressed(19, fn)
+// OnButtonSelectPressed registers a callback function to be called when the select button is pressed.
+func OnButtonSelectPressed(callback func()) {
+	hardware.OnGPIOButtonPressed(19, callback)
 }

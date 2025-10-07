@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	_ "image/png"
+	_ "image/png" // for loading sprite data
 
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/display/st7789"
 	"github.com/vwhitteron/simtezilo-dev/app/i18n"
@@ -19,6 +19,7 @@ import (
 	"periph.io/x/conn/v3/spi/spireg"
 )
 
+// ST7789LCD represents an ST7789-based LCD display.
 type ST7789LCD struct {
 	port   spi.PortCloser
 	device *st7789.Device
@@ -32,6 +33,7 @@ type ST7789LCD struct {
 	canvas  *image.RGBA
 }
 
+// Config holds the configuration parameters for initializing the ST7789LCD.
 type Config struct {
 	DataCommPin      gpio.PinOut
 	ResetPin         gpio.PinIO
@@ -50,7 +52,8 @@ type Config struct {
 
 var once sync.Once //nolint:gochecknoglobals // idiomatic singleton
 
-func NewDisplay(config *Config) (*ST7789LCD, error) {
+// NewST7789LCD initializes and returns a new ST7789 base LCD device instance based on the provided configuration.
+func NewST7789LCD(config *Config) (*ST7789LCD, error) {
 	if config == nil {
 		return nil, errors.New("no configuration provided")
 	}
@@ -67,11 +70,18 @@ func NewDisplay(config *Config) (*ST7789LCD, error) {
 			return
 		}
 
+		spiPort, ok := spiPortCloser.(spi.Port)
+		if !ok {
+			err = errors.New("SPI port does not implement spi.Port interface")
+
+			return
+		}
+
 		st7789Config := &st7789.SPIDeviceConfig{
 			DataCommPin:  config.DataCommPin,
 			ResetPin:     config.ResetPin,
 			BacklightPin: config.BacklightPin,
-			SPIPort:      spiPortCloser.(spi.Port),
+			SPIPort:      spiPort,
 			SPIMode:      config.SPIMode,
 			SPIFrequency: config.SPIFrequency,
 			SPIBits:      config.SPIBits,
@@ -127,10 +137,13 @@ func NewDisplay(config *Config) (*ST7789LCD, error) {
 
 	return lcd, nil
 }
+
+// Clear fills the display with black.
 func (l *ST7789LCD) Clear() {
 	l.device.FillScreen(color.RGBA{R: 0, G: 0, B: 0, A: 0})
 }
 
+// Close powers off the display and releases associated resources.
 func (l *ST7789LCD) Close() {
 	l.Clear()
 	time.Sleep(1 * time.Second)
@@ -139,11 +152,13 @@ func (l *ST7789LCD) Close() {
 	_ = l.port.Close()
 }
 
+// Wakeup powers on the display if it is currently sleeping.
 func (l *ST7789LCD) Wakeup() {
 	_ = l.device.PowerOn()
 	l.sleeping = false
 }
 
+// Sleep powers off the display if it is currently awake.
 func (l *ST7789LCD) Sleep() {
 	if l.sleeping {
 		return
@@ -153,6 +168,7 @@ func (l *ST7789LCD) Sleep() {
 	l.sleeping = true
 }
 
+// ToggleSleep switches the display between sleep and awake states, returning true if it is now sleeping.
 func (l *ST7789LCD) ToggleSleep() bool {
 	if l.sleeping {
 		l.Sleep()
@@ -165,22 +181,27 @@ func (l *ST7789LCD) ToggleSleep() bool {
 	return false
 }
 
+// IsSleeping returns true if the display is currently in a sleep state.
 func (l *ST7789LCD) IsSleeping() bool {
 	return l.sleeping
 }
 
+// IsAwake returns true if the display is currently awake.
 func (l *ST7789LCD) IsAwake() bool {
 	return !l.sleeping
 }
 
+// GetResolution returns the current pixel resolution of the display.
 func (l *ST7789LCD) GetResolution() (uint16, uint16) {
 	return l.device.Size()
 }
 
+// GetDPI returns the dots-per-inch (DPI) of the display.
 func (l *ST7789LCD) GetDPI() float64 {
 	return l.dpi
 }
 
+// Write renders the provided content onto the display.
 func (l *ST7789LCD) Write(content *Content) error {
 	if content.Canvas == nil {
 		return errors.New("canvas is nil")
@@ -192,33 +213,35 @@ func (l *ST7789LCD) Write(content *Content) error {
 	return nil
 }
 
+// GetOrientation returns the current orientation of the display in degrees.
 func (l *ST7789LCD) GetOrientation() int {
 	switch l.rotation {
-	case st7789.ROTATION_90:
+	case st7789.Rotation90:
 		return 90
-	case st7789.ROTATION_180:
+	case st7789.Rotation180:
 		return 180
-	case st7789.ROTATION_270:
+	case st7789.Rotation270:
 		return 270
-	case st7789.ROTATION_NONE:
+	case st7789.RotationNone:
 		return 0
 	}
 
 	return 0
 }
 
+// SetOrientation sets the display orientation to the specified degrees (0, 90, 180, or 270).
 func (l *ST7789LCD) SetOrientation(degrees int) {
 	var rotation st7789.Rotation
 
 	switch degrees {
 	case 90:
-		rotation = st7789.ROTATION_90
+		rotation = st7789.Rotation90
 	case 180:
-		rotation = st7789.ROTATION_180
+		rotation = st7789.Rotation180
 	case 270:
-		rotation = st7789.ROTATION_270
+		rotation = st7789.Rotation270
 	default:
-		rotation = st7789.ROTATION_NONE
+		rotation = st7789.RotationNone
 	}
 
 	l.device.SetRotation(rotation)
@@ -227,21 +250,22 @@ func (l *ST7789LCD) SetOrientation(degrees int) {
 	l.device.DrawRAW(l.canvas)
 }
 
+// RotateCW rotates the display orientation 90 degrees clockwise and returns the new orientation.
 func (l *ST7789LCD) RotateCW() int {
 	switch l.rotation {
-	case st7789.ROTATION_90:
+	case st7789.Rotation90:
 		l.SetOrientation(180)
 
 		return 180
-	case st7789.ROTATION_180:
+	case st7789.Rotation180:
 		l.SetOrientation(270)
 
 		return 270
-	case st7789.ROTATION_270:
+	case st7789.Rotation270:
 		l.SetOrientation(0)
 
 		return 0
-	case st7789.ROTATION_NONE:
+	case st7789.RotationNone:
 		fallthrough
 	default:
 		l.SetOrientation(90)
@@ -250,21 +274,22 @@ func (l *ST7789LCD) RotateCW() int {
 	}
 }
 
+// RotateCCW rotates the display orientation 90 degrees counter-clockwise and returns the new orientation.
 func (l *ST7789LCD) RotateCCW() int {
 	switch l.rotation {
-	case st7789.ROTATION_90:
+	case st7789.Rotation90:
 		l.SetOrientation(0)
 
 		return 0
-	case st7789.ROTATION_180:
+	case st7789.Rotation180:
 		l.SetOrientation(90)
 
 		return 90
-	case st7789.ROTATION_270:
+	case st7789.Rotation270:
 		l.SetOrientation(180)
 
 		return 180
-	case st7789.ROTATION_NONE:
+	case st7789.RotationNone:
 		fallthrough
 	default:
 		l.SetOrientation(270)
@@ -275,63 +300,63 @@ func (l *ST7789LCD) RotateCCW() int {
 
 // setupDisplay initializes the display with the necessary commands and settings.
 func setupDisplayDefault(dev *st7789.Device) {
-	dev.Command(st7789.SWRESET)
+	dev.Command(st7789.SwReset)
 	time.Sleep(150 * time.Millisecond)
 
 	// Porch Setting: Normal(Back Front), PSEN = disabled, Idle(Back, Front)
-	dev.Command(st7789.PORCTRL)
+	dev.Command(st7789.PorCtrl)
 	_ = dev.SendData(st7789.DefaultPORCTRL())
 
 	// Interface pixel format: 16bit/pixel non-RGB
-	dev.Command(st7789.COLMOD)
-	dev.Data(st7789.COLMOD_CTRL_65K)
+	dev.Command(st7789.ColMod)
+	dev.Data(st7789.ColModCtrl65K)
 
 	// Gate Control: High = 12.54v, Low = -9.6v
-	dev.Command(st7789.GCTRL)
+	dev.Command(st7789.GCtrl)
 	_ = dev.SendData(st7789.DefaultGCTRL())
 
 	// VCOM Setting: 0.575v
-	dev.Command(st7789.VCOMS)
+	dev.Command(st7789.VComs)
 	_ = dev.SendData(st7789.DefaultVCOMS())
 
 	// LCM Control: XOR RGB/BGR order, XOR Display Latch Order, XOR Page/Column order
-	dev.Command(st7789.LCMCTRL)
+	dev.Command(st7789.LcmCtrl)
 	_ = dev.SendData(st7789.DefaultLCMCTRL())
 
 	// VDVVRHEN: CMDEN = VDV and VRH register value comes from command write.
-	dev.Command(st7789.VDVVRHEN)
+	dev.Command(st7789.VdvvRhen)
 	_ = dev.SendData(st7789.DefaultVDVVRHEN())
 
 	// VAP(GVDD) (V) = 4.45+(vcom+vcom offset+vdv)
-	dev.Command(st7789.VRHS)
+	dev.Command(st7789.Vrhs)
 	_ = dev.SendData(st7789.DefaultVRHS())
 
 	// VDV Set: 0v
-	dev.Command(st7789.VDVS)
+	dev.Command(st7789.Vdvs)
 	_ = dev.SendData(st7789.DefaultVDVS())
 
 	// Power Control 1: AVDD = 6.8v, AVCL = -4.6v, VDS = 2.3v
-	dev.Command(st7789.PWCTRL1)
+	dev.Command(st7789.PwCtrl1)
 	_ = dev.SendData(st7789.DefaultPWCTRL1())
 
 	// Frame Rate Control (normal mode): 60Hz
-	dev.Command(st7789.FRCTRL2)
+	dev.Command(st7789.FrCtrl2)
 	_ = dev.SendData(st7789.DefaultFRCTRL2())
 
 	// Positive Voltage Gamma Control
-	dev.Command(st7789.PVGAMCTRL)
+	dev.Command(st7789.PVGAMCtrl)
 	_ = dev.SendData(st7789.DefaultPVGAMCTRL())
 
 	// Negative Voltage Gamma Control
-	dev.Command(st7789.NVGAMCTRL)
+	dev.Command(st7789.NVGAMCtrl)
 	_ = dev.SendData(st7789.DefaultNVGAMCTRL())
 
 	// Display Inversion: on
-	dev.Command(st7789.INVON)
+	dev.Command(st7789.InvOn)
 
 	// Display On Recovery: off
-	dev.Command(st7789.DISPOFF)
+	dev.Command(st7789.DispOff)
 
 	// Sleep Mode: off
-	dev.Command(st7789.SLPOUT)
+	dev.Command(st7789.SlpOut)
 }

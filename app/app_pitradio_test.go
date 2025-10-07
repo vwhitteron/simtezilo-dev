@@ -1,4 +1,4 @@
-package app
+package app //nolint:testpackage // white-box testing
 
 import (
 	"errors"
@@ -22,10 +22,10 @@ type pitRadioMock struct {
 	failSend bool
 }
 
-func (m *pitRadioMock) Connect() error                              { return nil }
-func (m *pitRadioMock) Disconnect() error                           { return nil }
-func (m *pitRadioMock) TextMessageDispatcher(logger zerolog.Logger) {}
-func (m *pitRadioMock) MessageDispatcher(logger zerolog.Logger)     {}
+func (m *pitRadioMock) Connect() error                         { return nil }
+func (m *pitRadioMock) Disconnect() error                      { return nil }
+func (m *pitRadioMock) TextMessageDispatcher(_ zerolog.Logger) {}
+func (m *pitRadioMock) MessageDispatcher(_ zerolog.Logger)     {}
 func (m *pitRadioMock) Send(msg pitradio.Message) error {
 	m.messages = append(m.messages, msg)
 
@@ -35,8 +35,8 @@ func (m *pitRadioMock) Send(msg pitradio.Message) error {
 
 	return nil
 }
-func (m *pitRadioMock) PlayAudioFile(filePath string) error { return nil }
-func (m *pitRadioMock) PlayRadioCheck() error               { return nil }
+func (m *pitRadioMock) PlayAudioFile(_ string) error { return nil }
+func (m *pitRadioMock) PlayRadioCheck() error        { return nil }
 
 // --- Tests ---
 
@@ -103,8 +103,8 @@ func (suite *PitRadioTestSuite) TestAccentPopulatedInPitRadioMessage() {
 	})
 
 	// Assert
-	suite.NoError(err)
-	suite.Require().Equal(1, len(suite.pitRadio.messages), "Expected one message to be sent")
+	suite.Require().NoError(err)
+	suite.Require().Len(suite.pitRadio.messages, 1, "Expected one message to be sent")
 
 	message := suite.pitRadio.messages[0]
 	suite.Equal("Test message", message.Text)

@@ -5,6 +5,7 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/ui"
 )
 
+// SetupHID configures the HID input event mapping of the Pirate Audio device buttons based on the device orientation.
 func SetupHID(orientation int, hidEvent chan ui.HIDInputEvent) {
 	rotationOffset := (orientation / 90) % 4
 
@@ -37,18 +38,22 @@ func SetupHID(orientation int, hidEvent chan ui.HIDInputEvent) {
 	})
 }
 
-func OnButtonAPressed(fn func()) {
-	hardware.OnGPIOButtonPressed(5, fn)
+// OnButtonAPressed registers a callback function to be called when the A button is pressed.
+func OnButtonAPressed(callback func()) {
+	hardware.OnGPIOButtonPressed(5, callback)
 }
 
-func OnButtonBPressed(fn func()) {
-	hardware.OnGPIOButtonPressed(6, fn)
+// OnButtonBPressed registers a callback function to be called when the B buttonis pressed.
+func OnButtonBPressed(callback func()) {
+	hardware.OnGPIOButtonPressed(6, callback)
 }
 
-func OnButtonXPressed(fn func()) {
-	hardware.OnGPIOButtonPressed(16, fn)
+// OnButtonXPressed registers a callback function to be called when the X button is pressed.
+func OnButtonXPressed(callback func()) {
+	hardware.OnGPIOButtonPressed(16, callback)
 }
 
-func OnButtonYPressed(fn func()) {
-	hardware.OnGPIOButtonPressed(24, fn)
+// OnButtonYPressed registers a callback function to be called when the Y button is pressed.
+func OnButtonYPressed(callback func()) {
+	hardware.OnGPIOButtonPressed(24, callback)
 }

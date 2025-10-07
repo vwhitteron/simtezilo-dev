@@ -2,7 +2,7 @@ package pitradio
 
 import (
 	"bytes"
-	_ "embed"
+	_ "embed" // for embedding static files
 	"encoding/binary"
 
 	"context"
@@ -20,18 +20,20 @@ const (
 	discordOpusSampleRate   = 48000 // Discord requires 48kHz sample rate
 	discordOpusChannels     = 2     // Discord requires stereo audio
 	discordOpusFrameSize    = 960   // 20ms frame size at 48kHz
-	discordOpusMaxFrameSize = 3840  // Maximum bytes per frame (for Opus)
+	discordOpusMaxFrameSize = 3840  // Maximum bytes per Opus frame
 )
 
 // DiscordOptions holds the configuration for creating a new Discord bot.
 type DiscordOptions struct {
-	Token          string       // Discord bot token
-	GuildID        string       // Discord guild ID
-	ChannelID      string       // Optional Discord channel ID for text messages
-	VoiceChannelID string       // Optional Discord voice channel ID for audio, requires GuildID
-	Cache          *cache.Cache // Cache manager for storing processed TTS audio
+	Token          string         // Discord bot token
+	GuildID        string         // Discord guild ID
+	ChannelID      string         // Optional Discord channel ID for text messages
+	VoiceChannelID string         // Optional Discord voice channel ID for audio, requires GuildID
+	Cache          *cache.Cache   // Cache manager for storing processed TTS audio
+	Logger         zerolog.Logger // Logger instance for logging
 }
 
+// DiscordBot represents a Discord bot instance.
 type DiscordBot struct {
 	channelID      string                     // Discord channel ID where messages will be sent
 	voiceChannelID string                     // Discord voice channel ID for audio
@@ -40,6 +42,7 @@ type DiscordBot struct {
 	session        *discordgo.Session         // Currently connected Discord session
 	voiceConn      *discordgo.VoiceConnection // Voice connection for audio
 	queue          chan Message               // Message queue for sending messages
+	log            zerolog.Logger             // Logger instance for logging
 }
 
 // NewDiscordBot creates a new Discord bot instance.
@@ -69,7 +72,7 @@ func NewDiscordBot(config DiscordOptions) (*DiscordBot, error) {
 		cache:          config.Cache,
 		session:        session,
 		queue:          make(chan Message, 100),
-		// TODO: pass through log level for the discordgo logger
+		log:            config.Logger.With().Str("component", "discord").Logger(),
 	}
 
 	return &bot, nil
@@ -236,7 +239,9 @@ func (d *DiscordBot) voiceMessageSend(message Message) error {
 	if !message.NoCache {
 		err = d.cache.Write(itemID, dcaData)
 		if err != nil {
-			fmt.Printf("Warning: failed to cache DCA data: %v\n", err)
+			d.log.Error().
+				Err(err).
+				Msgf("cache DCA data")
 		}
 	}
 
@@ -279,7 +284,9 @@ func (d *DiscordBot) sendVoiceAudio(dca []byte) error {
 		}
 
 		if err != nil {
-			fmt.Println("Error reading from dca file :", err)
+			d.log.Error().
+				Err(err).
+				Msg("read Opus frame length from DCA file")
 
 			return err
 		}
@@ -290,7 +297,9 @@ func (d *DiscordBot) sendVoiceAudio(dca []byte) error {
 
 		// Should not be any end of file errors
 		if err != nil {
-			fmt.Println("Error reading from dca file :", err)
+			d.log.Error().
+				Err(err).
+				Msg("read DCA file")
 
 			return err
 		}
@@ -300,6 +309,6 @@ func (d *DiscordBot) sendVoiceAudio(dca []byte) error {
 }
 
 // ready updates the watch status of the bot user.
-func ready(s *discordgo.Session, event *discordgo.Event) {
+func ready(s *discordgo.Session, _ *discordgo.Event) {
 	_ = s.UpdateWatchStatus(0, "Gran Turismo 7")
 }

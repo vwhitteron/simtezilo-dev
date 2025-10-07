@@ -1,3 +1,4 @@
+// Package i18n provides internationalization support for the application.
 package i18n
 
 // GetLanguageCodes returns a list of supported language codes.

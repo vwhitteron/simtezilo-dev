@@ -1,15 +1,19 @@
-package synthesizer
+package synthesizer_test
+
+// TODO: LLM generated code, needs review
 
 import (
 	"testing"
 	"time"
+
+	"github.com/vwhitteron/simtezilo-dev/app/synthesizer"
 )
 
 func TestAdaptiveBufferBasicOperations(t *testing.T) {
 	t.Parallel()
 
 	// Create a buffer that holds approximately 96 samples (2ms at 48000 Hz)
-	buffer := NewAdaptiveBuffer(2*time.Millisecond, 48000)
+	buffer := synthesizer.NewAdaptiveBuffer(2*time.Millisecond, 48000)
 
 	// Test basic properties
 	if buffer.Length() != 96 {
@@ -34,7 +38,7 @@ func TestAdaptiveBufferWriteRead(t *testing.T) {
 	t.Parallel()
 
 	// Use a larger buffer to avoid readDelay issues (100ms at 1000 Hz = 100 samples)
-	buffer := NewAdaptiveBuffer(100*time.Millisecond, 1000)
+	buffer := synthesizer.NewAdaptiveBuffer(100*time.Millisecond, 1000)
 
 	// Clear the buffer first to reset to known state
 	buffer.Clear()
@@ -65,7 +69,7 @@ func TestAdaptiveBufferOverflow(t *testing.T) {
 	t.Parallel()
 
 	// Use a larger buffer to avoid readDelay overflow (100ms at 1000 Hz = 100 samples)
-	buffer := NewAdaptiveBuffer(100*time.Millisecond, 1000)
+	buffer := synthesizer.NewAdaptiveBuffer(100*time.Millisecond, 1000)
 
 	// Clear buffer to start with known state
 	buffer.Clear()
@@ -93,7 +97,7 @@ func TestAdaptiveBufferMixing(t *testing.T) {
 	t.Parallel()
 
 	// Use a larger buffer to avoid readDelay issues (100ms at 1000 Hz = 100 samples)
-	buffer := NewAdaptiveBuffer(100*time.Millisecond, 1000)
+	buffer := synthesizer.NewAdaptiveBuffer(100*time.Millisecond, 1000)
 
 	// Clear buffer first to start with known state
 	buffer.Clear()
@@ -124,7 +128,7 @@ func TestAdaptiveBufferUnderrun(t *testing.T) {
 	t.Parallel()
 
 	// Use a larger buffer to avoid readDelay issues (100ms at 1000 Hz = 100 samples)
-	buffer := NewAdaptiveBuffer(100*time.Millisecond, 1000)
+	buffer := synthesizer.NewAdaptiveBuffer(100*time.Millisecond, 1000)
 
 	// Clear buffer to start with known state
 	buffer.Clear()
@@ -153,7 +157,7 @@ func TestAdaptiveBufferHealthMonitoring(t *testing.T) {
 	t.Parallel()
 
 	// Use a larger buffer to avoid readDelay issues (100ms at 1000 Hz = 100 samples)
-	buffer := NewAdaptiveBuffer(100*time.Millisecond, 1000)
+	buffer := synthesizer.NewAdaptiveBuffer(100*time.Millisecond, 1000)
 
 	// Clear buffer to start with known state
 	buffer.Clear()
@@ -202,7 +206,7 @@ func TestAdaptiveBufferConcurrency(t *testing.T) {
 	t.Parallel()
 
 	// Use a larger buffer to avoid readDelay issues (100ms at 1000 Hz = 100 samples)
-	buffer := NewAdaptiveBuffer(100*time.Millisecond, 1000)
+	buffer := synthesizer.NewAdaptiveBuffer(100*time.Millisecond, 1000)
 
 	// Test concurrent writes and reads
 	done := make(chan bool, 2)

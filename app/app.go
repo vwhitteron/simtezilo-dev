@@ -38,10 +38,18 @@ const (
 	gameStateOnCircuit
 )
 
+type vehicleTypeName string
+
+const (
+	vehicleTypeStreet vehicleTypeName = "street"
+	vehicleTypeTuned  vehicleTypeName = "tuned"
+	vehicleTypeRace   vehicleTypeName = "race"
+)
+
 // vehicleRecord holds static vehicle data loaded from the GT vehicle database.
 type vehicleRecord struct {
 	ID          uint32                // Unique vehicle ID from telemetry
-	vehicleType string                // Vehicle type
+	vehicleType vehicleTypeName       // Vehicle type
 	engine      engineCharacteristics // Engine characteristics
 	revLimit    uint16                // Engine rev limit in RPM
 }
@@ -86,10 +94,10 @@ type App struct {
 	i18n    *i18n.Language   // Language translations
 	display hardware.Display // Hardware display interface
 
-	gtClient   *gttelemetry.Client          // GT telemetry client
-	pitRadio   pitradio.PitRadio            // Pit radio notification service
-	kinematics kinematics.KinematicsTracker // Vehicle kinematics tracker
-	synth      *synthesizer.Synthesizer     // Audio synthesizer for haptic feedback
+	gtClient   *gttelemetry.Client      // GT telemetry client
+	pitRadio   pitradio.PitRadio        // Pit radio notification service
+	kinematics kinematics.State         // Vehicle kinematics tracker
+	synth      *synthesizer.Synthesizer // Audio synthesizer for haptic feedback
 
 	odometer  *odometer.Odometer   // Odometer for distance tracking
 	fuelRange *fuelrange.FuelRange // Fuel range estimator
@@ -104,13 +112,13 @@ type App struct {
 	telemetryChartFeed chan map[string]float32 // Channel for sending telemetry data to web UI
 	webEnabled         bool                    // Flag to enable or disable the web UI
 	webUI              *webui.WebUI            // Web UI server and handler
-	webSequenceId      uint32                  // Last sequence ID sent to the web UI
+	webSequenceID      uint32                  // Last sequence ID sent to the web UI
 
 	lapStartEvents chan uint32 // Channel for notifying new lap starts
 }
 
-// AppOptions holds configuration options for initializing the App.
-type AppOptions struct {
+// Options holds configuration options for initializing the App.
+type Options struct {
 	VehicleDB  string          // Path to an external vehicle database file
 	Done       chan bool       // Channel to signal application shutdown
 	Logger     *zerolog.Logger // Logger instance for application logging
@@ -118,7 +126,7 @@ type AppOptions struct {
 }
 
 // New creates a new App instance and sets up all components based on the provided options.
-func New(opts AppOptions) (*App, error) {
+func New(opts Options) (*App, error) {
 	app := &App{
 		log:  opts.Logger.With().Str("package", "app").Logger(),
 		done: opts.Done,
@@ -130,7 +138,7 @@ func New(opts AppOptions) (*App, error) {
 				transmissionGear: kinematics.NullGear,
 			},
 		},
-		kinematics:         kinematics.NewKinematicsTracker(),
+		kinematics:         kinematics.NewKinematicsState(),
 		telemetryChartFeed: make(chan map[string]float32, 600),
 		webEnabled:         opts.WebEnabled,
 		lapStartEvents:     make(chan uint32),
@@ -258,7 +266,7 @@ func New(opts AppOptions) (*App, error) {
 			Str("sub", "hid").
 			Msg("init")
 	default:
-		app.display = console.NewDisplay()
+		app.display = console.New()
 		app.log.Debug().
 			Str("component", "console").
 			Str("sub", "display").
@@ -354,6 +362,7 @@ func New(opts AppOptions) (*App, error) {
 		VoiceChannelID: app.config.GetDiscordVoiceChannelID(),
 		GuildID:        app.config.GetDiscordGuildID(),
 		Cache:          &app.cache,
+		Logger:         *opts.Logger,
 	}
 
 	app.pitRadio, err = pitradio.NewDiscordBot(discordBotConfig)
@@ -463,6 +472,8 @@ func (a *App) startBackgroundTasks() {
 		for {
 			err, recoverable := a.gtClient.Run()
 			if err != nil {
+				_ = a.ui.Screen.RenderSplashScreen("GT client error")
+
 				if recoverable {
 					a.log.Error().
 						Err(err).
@@ -470,18 +481,14 @@ func (a *App) startBackgroundTasks() {
 						Str("result", "failure").
 						Msg("run")
 
-					_ = a.ui.Screen.RenderSplashScreen("GT client error")
-
 					continue
-				} else {
-					_ = a.ui.Screen.RenderErrorScreen("GT client error")
-
-					a.log.Fatal().
-						Err(err).
-						Str("component", "gt client").
-						Str("result", "failure").
-						Msg("run")
 				}
+
+				a.log.Fatal().
+					Err(err).
+					Str("component", "gt client").
+					Str("result", "failure").
+					Msg("run")
 			}
 		}
 	}()
@@ -628,7 +635,7 @@ func (a *App) resetAppState() {
 
 	a.synth.Silence()
 
-	a.kinematics = kinematics.NewKinematicsTracker()
+	a.kinematics = kinematics.NewKinematicsState()
 
 	a.log.Info().Msg("App state reset")
 }
@@ -721,7 +728,19 @@ func (a *App) handleVehicleChange() {
 
 // updateVehicle updates the vehicle characteristics from the current telemetry vehicle ID.
 func (a *App) updateVehicle() {
-	vehicleType := a.gtClient.Telemetry.VehicleType()
+	var vehicleType vehicleTypeName
+
+	switch a.gtClient.Telemetry.VehicleType() {
+	case string(vehicleTypeStreet):
+		vehicleType = vehicleTypeStreet
+	case string(vehicleTypeTuned):
+		vehicleType = vehicleTypeTuned
+	case string(vehicleTypeRace):
+		vehicleType = vehicleTypeRace
+	default:
+		vehicleType = vehicleTypeStreet
+	}
+
 	engineLayout := a.gtClient.Telemetry.VehicleEngineLayout()
 	bankAngle := a.gtClient.Telemetry.VehicleEngineBankAngle()
 	crankPlaneAngle := a.gtClient.Telemetry.VehicleEngineCrankPlaneAngle()
@@ -759,8 +778,10 @@ func (a *App) updateVehicle() {
 	}
 
 	switch vehicleType {
-	case "race":
+	case vehicleTypeRace, vehicleTypeTuned:
 		a.transmissionGainMin = a.config.GetTransmissionGain() + a.config.GetTransmissionGainMinRace()
+	case vehicleTypeStreet:
+		fallthrough
 	default:
 		a.transmissionGainMin = a.config.GetTransmissionGain() + a.config.GetTransmissionGainMinStreet()
 	}
@@ -786,7 +807,7 @@ func (a *App) updateVehicle() {
 		Uint32("ID", a.vehicle.ID).
 		Str("manufacturer", a.gtClient.Telemetry.VehicleManufacturer()).
 		Str("model", a.gtClient.Telemetry.VehicleModel()).
-		Str("type", vehicleType).
+		Str("type", string(vehicleType)).
 		Str("engine", a.vehicle.engine.dbEntry).
 		Msg("vehicle update")
 }

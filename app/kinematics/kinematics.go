@@ -1,3 +1,4 @@
+// Package kinematics provides structures and methods for calculating and tracking vehicle kinematics.
 package kinematics
 
 import (
@@ -11,6 +12,7 @@ import (
 	"github.com/zetetos/gt-telemetry/pkg/models"
 )
 
+// PositionalDerivatives holds values for the 2nd to 5th derivatives of position.
 type PositionalDerivatives struct {
 	Acceleration float64
 	Jerk         float64
@@ -18,6 +20,7 @@ type PositionalDerivatives struct {
 	Crackle      float64
 }
 
+// CalculatedTranslationalDerivatives holds 6DOF translational derivatives calculated from the telemetry data.
 type CalculatedTranslationalDerivatives struct {
 	PositionalDerivatives
 
@@ -25,6 +28,7 @@ type CalculatedTranslationalDerivatives struct {
 	Velocity models.Vector
 }
 
+// RotationalDerivatives holds 6DOF rotational derivatives provided by the telemetry data.
 type RotationalDerivatives struct {
 	PositionalDerivatives
 
@@ -32,6 +36,7 @@ type RotationalDerivatives struct {
 	Velocity models.RotationalEnvelope
 }
 
+// TranslationalDerivatives holds 6DOF translational derivatives provided by the telemetry data.
 type TranslationalDerivatives struct {
 	PositionalDerivatives
 
@@ -39,6 +44,7 @@ type TranslationalDerivatives struct {
 	Velocity models.TranslationalEnvelope
 }
 
+// Kinematics holds the kinematic state of the vehicle.
 type Kinematics struct {
 	SequenceID  uint32 // TODO: probably should rely on a.state.current instead of tracking separately here
 	ComputeTime time.Duration
@@ -57,18 +63,21 @@ type Kinematics struct {
 	SynthOutputFrequency int
 }
 
-type KinematicsTracker struct {
+// State tracks the current and previous kinematic states of the vehicle.
+type State struct {
 	Last    Kinematics
 	Current Kinematics
 }
 
-func NewKinematicsTracker() KinematicsTracker {
-	return KinematicsTracker{
+// NewKinematicsState creates and initializes a new KinematicsTracker.
+func NewKinematicsState() State {
+	return State{
 		Last:    newKinematics(),
 		Current: newKinematics(),
 	}
 }
 
+// newKinematics initializes a new Kinematics struct with default values.
 func newKinematics() Kinematics {
 	return Kinematics{
 		SixDOFTranslationCalc: CalculatedTranslationalDerivatives{},
@@ -84,8 +93,9 @@ func newKinematics() Kinematics {
 	}
 }
 
+// Update updates the kinematic state based on the provided telemetry data and time window.
 // TODO: ideally this should not be given the gt client.
-func (k *KinematicsTracker) Update(windowSeconds float64, gtclient *gttelemetry.Client) {
+func (k *State) Update(windowSeconds float64, gtclient *gttelemetry.Client) {
 	k.Last = k.Current
 
 	k.Current.Format = getTelemetryFormat(gtclient)
@@ -134,7 +144,8 @@ func (k *KinematicsTracker) Update(windowSeconds float64, gtclient *gttelemetry.
 	k.Current.TransmissionGear = gtclient.Telemetry.CurrentGear()
 }
 
-func (k *KinematicsTracker) GetSurgeGforce() float64 {
+// GetSurgeGforce calculates and returns the translational envelope surge G-force based on the current kinematic state.
+func (k *State) GetSurgeGforce() float64 {
 	var surge float64
 	if k.Current.Format == "~" || k.Current.Format == "B" {
 		surge = float64(k.Current.SixDOFTranslation.Velocity.Surge)
@@ -147,6 +158,8 @@ func (k *KinematicsTracker) GetSurgeGforce() float64 {
 	return gForce
 }
 
+// getTelemetryFormat determines the telemetry format based on the telemetry client's raw telemetry data.
+// Currently supports formats "A", "B", and "~".
 func getTelemetryFormat(gtClient *gttelemetry.Client) string {
 	isAddendum2, _ := gtClient.Telemetry.RawTelemetry.Addendum2Format()
 	if isAddendum2 {

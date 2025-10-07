@@ -1,8 +1,10 @@
-package synthesizer
+package synthesizer_test
 
 import (
 	"testing"
 	"time"
+
+	"github.com/vwhitteron/simtezilo-dev/app/synthesizer"
 )
 
 func TestDurationCalculationExamples(t *testing.T) {
@@ -25,9 +27,9 @@ func TestDurationCalculationExamples(t *testing.T) {
 			t.Parallel()
 
 			// Test all buffer types to ensure consistency
-			adaptiveBuffer := NewAdaptiveBuffer(testCase.duration, testCase.sampleRate)
-			ringBuffer := NewRingBuffer(testCase.duration, testCase.sampleRate)
-			linearBuffer := NewLinearBuffer(testCase.duration, testCase.sampleRate)
+			adaptiveBuffer := synthesizer.NewAdaptiveBuffer(testCase.duration, testCase.sampleRate)
+			ringBuffer := synthesizer.NewRingBuffer(testCase.duration, testCase.sampleRate)
+			linearBuffer := synthesizer.NewLinearBuffer(testCase.duration, testCase.sampleRate)
 
 			// All buffer types should produce the same size
 			if adaptiveBuffer.Length() != testCase.expected {

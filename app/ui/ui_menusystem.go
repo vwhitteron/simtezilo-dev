@@ -43,7 +43,7 @@ func (m *MenuSystem) PreviousMenuPage() string {
 }
 
 func (m *MenuSystem) GetCurrentMenuPage() string {
-	m.currentPage = m.currentPage % len(m.pages)
+	m.currentPage %= len(m.pages)
 
 	return m.pages[m.currentPage]
 }

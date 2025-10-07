@@ -215,7 +215,6 @@ func (a *App) notifyLapTime() {
 			formatDuration(a.state.current.lastLapTime),
 		)
 	} else if a.state.current.lapNumber > 2 && a.state.current.lastLapTime > bestLapTime {
-		fmt.Printf("Last lap time: %s Best lap time: %s\n", a.state.current.lastLapTime, bestLapTime)
 		// TODO: either make this a translation or drop it
 		message = fmt.Sprintf("Down %s seconds",
 			formatDuration(a.state.current.lastLapTime-bestLapTime))
@@ -257,14 +256,10 @@ func (a *App) notifyLapNumber() {
 	raceLaps := a.gtClient.Telemetry.RaceLaps()
 
 	if a.pitRadioState.lastNotifiedLapNumber >= currentLap {
-		fmt.Printf("Lap already notified: last %d current %d\n", a.pitRadioState.lastNotifiedLapNumber, currentLap)
-
 		return
 	}
 
 	if currentLap <= 0 || currentLap > raceLaps {
-		fmt.Printf("Invalid lap number: %d of %d\n", currentLap, raceLaps)
-
 		return
 	}
 
@@ -629,13 +624,13 @@ func pronounceTime(minutes string, seconds string, milliseconds string, includeU
 	// }
 
 	for _, r := range milliseconds {
-		rune := string(r)
+		char := string(r)
 
-		if rune == "0" {
-			rune = "oh"
+		if char == "0" {
+			char = "oh"
 		}
 
-		announce = append(announce, rune)
+		announce = append(announce, char)
 	}
 
 	return strings.Join(announce, " ")

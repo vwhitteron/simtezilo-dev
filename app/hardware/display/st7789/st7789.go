@@ -1,12 +1,10 @@
+// Package st7789 provides a driver for the ST7789 LCD display controller.
 package st7789
 
 import (
 	"errors"
 	"fmt"
 	"image"
-	_ "image/gif"
-	_ "image/jpeg"
-	_ "image/png"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -191,7 +189,7 @@ func (d *Device) PowerOff() error {
 	return d.backlight.Out(gpio.Low)
 }
 
-// PowerOff enables the backlight of the ST7789 display device.
+// PowerOn enables the backlight of the ST7789 display device.
 // When the backlight pin is not provided, this method does nothing.
 func (d *Device) PowerOn() error {
 	if d.backlight == gpio.INVALID {
@@ -233,7 +231,7 @@ func (d *Device) SendCommand(command []byte) error {
 
 // Size returns the current pixel row and column sizes of the display.
 func (d *Device) Size() (uint16, uint16) {
-	if d.rotation == ROTATION_NONE || d.rotation == ROTATION_180 {
+	if d.rotation == RotationNone || d.rotation == Rotation180 {
 		return d.pixelColumns, d.pixelRows
 	}
 
@@ -252,28 +250,28 @@ func (d *Device) SetWindow() {
 	xMax := d.pixelColumns - 1
 	yMax := d.pixelRows - 1
 
-	d.Command(CASET)
+	d.Command(CaSet)
 	d.Data(byte(xMin >> 8))
 	d.Data(byte(xMin & 0xFF))
 	d.Data(byte(xMax >> 8))
 	d.Data(byte(xMax & 0xFF))
 
-	d.Command(RASET)
+	d.Command(RaSet)
 	d.Data(byte(yMin >> 8))
 	d.Data(byte(yMin & 0xFF))
 	d.Data(byte(yMax >> 8))
 	d.Data(byte(yMax & 0xFF))
 
-	d.Command(RAMWR)
+	d.Command(Ramwr)
 	d.Data(0x89)
 }
 
-// InverColors sends and invert color command to the display device.
+// InvertColors sends and invert color command to the display device.
 func (d *Device) InvertColors(invert bool) {
 	if invert {
-		d.Command(INVON)
+		d.Command(InvOn)
 	} else {
-		d.Command(INVOFF)
+		d.Command(InvOff)
 	}
 }
 
@@ -296,38 +294,38 @@ func (d *Device) SetRotation(rotation Rotation) {
 	vscsadData := verticalScrollOffset(0)
 
 	switch rotation % 4 {
-	case ROTATION_90:
-		madctlData = MADCTL_MX_RL | MADCTL_MY_BT | MADCTL_MV_NORM
+	case Rotation90:
+		madctlData = MadCtrlMxRL | MadCtrlMyBT | MadCtrlMvNorm
 		vscsadData = verticalScrollOffset(320 - int(d.pixelColumns))
 		d.rowOffset = d.columnOffsetCfg
 		d.columnOffset = d.rowOffsetCfg
-	case ROTATION_180:
-		madctlData = MADCTL_MX_LR | MADCTL_MY_BT | MADCTL_MV_REV
+	case Rotation180:
+		madctlData = MadCtrlMxLR | MadCtrlMyBT | MadCtrlMvRev
 		vscsadData = verticalScrollOffset(320 - int(d.pixelColumns))
 		d.rowOffset = 0
 		d.columnOffset = 0
-	case ROTATION_270:
-		madctlData = MADCTL_MX_LR | MADCTL_MY_TB | MADCTL_MV_NORM
+	case Rotation270:
+		madctlData = MadCtrlMxLR | MadCtrlMyTB | MadCtrlMvNorm
 		d.rowOffset = 0
 		d.columnOffset = 0
-	case ROTATION_NONE:
+	case RotationNone:
 		fallthrough
 	default:
-		madctlData = MADCTL_MX_RL | MADCTL_MY_TB | MADCTL_MV_REV
+		madctlData = MadCtrlMxRL | MadCtrlMyTB | MadCtrlMvRev
 		d.rowOffset = d.rowOffsetCfg
 		d.columnOffset = d.columnOffsetCfg
 	}
 
 	if d.isBGR {
-		madctlData |= MADCTL_BGR
+		madctlData |= MadCtrlBGR
 	}
 
 	// Set the display orientation
-	d.Command(MADCTL)
+	d.Command(MadCtl)
 	d.Data(madctlData)
 
 	// Set vertical scroll offset so that images are located correctly on 240 pixel row displays
-	d.Command(VSCSAD)
+	d.Command(VscsAD)
 	_ = d.SendData(vscsadData)
 }
 
@@ -338,26 +336,26 @@ func (d *Device) SetRotation(rotation Rotation) {
 func DegreesToRotation(orientation int) Rotation {
 	switch orientation {
 	case 90:
-		return ROTATION_90
+		return Rotation90
 	case 180:
-		return ROTATION_180
+		return Rotation180
 	case 270:
-		return ROTATION_270
+		return Rotation270
 	default:
-		return ROTATION_NONE
+		return RotationNone
 	}
 }
 
 // RotationToDegrees converts a Rotation type to its corresponding degree value.
 func RotationToDegrees(rotation Rotation) int {
 	switch rotation {
-	case ROTATION_90:
+	case Rotation90:
 		return 90
-	case ROTATION_180:
+	case Rotation180:
 		return 180
-	case ROTATION_270:
+	case Rotation270:
 		return 270
-	case ROTATION_NONE:
+	case RotationNone:
 		return 0
 	}
 
@@ -366,7 +364,7 @@ func RotationToDegrees(rotation Rotation) int {
 
 // getResolution returns the X/Y pixel resolution of the display based on its current rotation.
 func (d *Device) getResolution() (uint16, uint16) {
-	if d.rotation%ROTATION_180 == 0 {
+	if d.rotation%Rotation180 == 0 {
 		return d.pixelColumns, d.pixelRows
 	}
 

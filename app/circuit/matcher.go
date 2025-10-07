@@ -6,18 +6,19 @@ import (
 	"github.com/zetetos/gt-telemetry/pkg/circuits"
 )
 
-// CircuitCandidate represents a potential circuit match with confidence tracking.
-type CircuitCandidate struct {
+// Candidate represents a potential circuit match with confidence tracking.
+type Candidate struct {
 	info          circuits.CircuitInfo // Circuit information
 	matchedCoords map[string]bool      // Set of matched coordinates (as string keys)
 	confidence    float64              // Confidence level (0.0 to 1.0)
 }
 
-type CircuitCandidates map[string]*CircuitCandidate
+// Candidates represents a collection of matching circuit candidates.
+type Candidates map[string]*Candidate
 
 // updateCandidateConfidence updates the match confidence for a circuit name based on a given coordinate key.
-func (c *Circuit) updateCandidateConfidence(circuitId string, coordinateKey string) {
-	candidate := c.getCandidate(circuitId)
+func (c *Circuit) updateCandidateConfidence(circuitID string, coordinateKey string) {
+	candidate := c.getCandidate(circuitID)
 	if candidate == nil {
 		return
 	}
@@ -44,7 +45,7 @@ func (c *Circuit) updateCandidateConfidence(circuitId string, coordinateKey stri
 }
 
 // getCandidate gets an existing candidate or creates a new one.
-func (c *Circuit) getCandidate(circuitID string) *CircuitCandidate {
+func (c *Circuit) getCandidate(circuitID string) *Candidate {
 	if candidate, exists := c.candidates[circuitID]; exists {
 		return candidate
 	}
@@ -58,7 +59,7 @@ func (c *Circuit) getCandidate(circuitID string) *CircuitCandidate {
 		return nil
 	}
 
-	candidate := &CircuitCandidate{
+	candidate := &Candidate{
 		info:          circuitInfo,
 		matchedCoords: make(map[string]bool),
 		confidence:    0.0,
@@ -70,8 +71,8 @@ func (c *Circuit) getCandidate(circuitID string) *CircuitCandidate {
 }
 
 // bestCandidate returns the circuit candidate with the highest confidence above threshold.
-func (c *Circuit) bestCandidate() *CircuitCandidate {
-	var bestCandidate *CircuitCandidate
+func (c *Circuit) bestCandidate() *Candidate {
+	var bestCandidate *Candidate
 
 	highestConfidence := float64(0.0)
 

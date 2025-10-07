@@ -1,3 +1,4 @@
+// Package wifi provides functionality to scan for and connect to WiFi networks using native linux tools.
 package wifi
 
 import (
@@ -22,12 +23,15 @@ import (
 // Existing wifi entry
 // sudo nmcli dev wifi connect <SSID>
 
-type WifiNetwork struct {
+// Network represents a WiFi network with its SSID and signal strength.
+type Network struct {
 	SSID   string
 	Signal int
 }
 
-func Scan() []WifiNetwork {
+// Scan performs scanning of available WiFi networks.
+// It returns a slice of WifiNetwork.
+func Scan() []Network {
 	cmd := exec.CommandContext(context.Background(), "nmcli", "-t", "-f", "SSID,SIGNAL", "dev", "wifi", "list")
 
 	output, err := cmd.Output()
@@ -35,7 +39,7 @@ func Scan() []WifiNetwork {
 		log.Fatal(err)
 	}
 
-	wifiNetworks := []WifiNetwork{}
+	wifiNetworks := []Network{}
 
 	for _, line := range strings.Split(string(output), "\n") {
 		if len(line) == 0 {
@@ -54,12 +58,13 @@ func Scan() []WifiNetwork {
 			continue
 		}
 
-		wifiNetworks = append(wifiNetworks, WifiNetwork{SSID: SSID, Signal: signal})
+		wifiNetworks = append(wifiNetworks, Network{SSID: SSID, Signal: signal})
 	}
 
 	return wifiNetworks
 }
 
+// Connect attempts to connect to a WiFi network with the given SSID and password.
 func Connect(ssid string, password string) error {
 	cmd := exec.CommandContext(context.Background(), "nmcli", "dev", "wifi", "connect", ssid, "password", password)
 

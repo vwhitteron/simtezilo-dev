@@ -1,3 +1,4 @@
+// Package vector provides utility functions for 3D vector operations.
 package vector
 
 import (
@@ -6,6 +7,7 @@ import (
 	"github.com/zetetos/gt-telemetry/pkg/models"
 )
 
+// Delta returns the difference between two vectors.
 func Delta(vector1 models.Vector, vector2 models.Vector) models.Vector {
 	return models.Vector{
 		X: vector1.X - vector2.X,
@@ -14,10 +16,12 @@ func Delta(vector1 models.Vector, vector2 models.Vector) models.Vector {
 	}
 }
 
+// Magnitude returns the magnitude of a vector.
 func Magnitude(vector models.Vector) float64 {
 	return math.Sqrt(float64(vector.X*vector.X + vector.Y*vector.Y + vector.Z*vector.Z))
 }
 
+// Scale scales a vector by the given factors.
 func Scale(vector models.Vector, xScale float32, yScale float32, zScale float32) models.Vector {
 	return models.Vector{
 		X: vector.X * xScale,

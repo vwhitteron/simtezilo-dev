@@ -1,3 +1,4 @@
+// Package translations provides type-safe translation keys and methods for internationalization.
 package translations
 
 import (
@@ -5,6 +6,7 @@ import (
 	"strings"
 )
 
+// Key provides a type-safe way to reference translation keys.
 type Key string
 
 const (
@@ -56,14 +58,17 @@ const (
 	RadioFinalLap         Key = "radio.finallap"
 )
 
+// String returns the string representation of the translation key.
 func (tk Key) String() string {
 	return string(tk)
 }
 
+// ToLower returns a new Key with all characters converted to lowercase.
 func (tk Key) ToLower() Key {
 	return Key(strings.ToLower(string(tk)))
 }
 
+// StringToKey converts a string to a Key, returning an error if the string is empty.
 func StringToKey(str string) (Key, error) {
 	key := Key(str)
 

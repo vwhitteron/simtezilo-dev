@@ -11,6 +11,7 @@ import (
 //go:embed fonts/*
 var staticFiles embed.FS
 
+// GetFont retrieves and parses a TrueType font by name from the embedded filesystem.
 func GetFont(name string) (*truetype.Font, error) {
 	filename := "fonts/" + name
 
@@ -22,6 +23,7 @@ func GetFont(name string) (*truetype.Font, error) {
 	return parseFontData(fontData)
 }
 
+// parseFontData parses the provided byte slice into a TrueType font.
 func parseFontData(fontBytes []byte) (*truetype.Font, error) {
 	freetypeFont, err := freetype.ParseFont(fontBytes)
 	if err != nil {
