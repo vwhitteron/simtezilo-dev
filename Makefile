@@ -27,15 +27,20 @@ audit: test
 ## test: run all tests
 .PHONY: test
 test:
-	go test -v -race -buildvcs ./...
-
+	@go run gotest.tools/gotestsum@latest \
+		--format testname  \
+		--format-hide-empty-pkg \
+		-- -race -buildvcs ./...
+	
 ## test/watch: run all tests re-run when any files change
 .PHONY: test/watch
 test/watch:
-	go run github.com/mitranim/gow@latest \
-	-c \
-	-e=go,mod,html,js,svg,png \
-	test -v -race -buildvcs ./...
+	@go run gotest.tools/gotestsum@latest \
+		--format pkgname-and-test-fails \
+		--format-icons hivis \
+		--format-hide-empty-pkg \
+		--watch \
+	 	-- -v -race -buildvcs ./...
 
 ## test/cover: run all tests and display coverage
 .PHONY: test/cover
