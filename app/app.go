@@ -438,18 +438,23 @@ func (a *App) startBackgroundTasks() {
 	go a.newLapHandler()
 
 	go func() {
-		err := a.pitRadio.Connect()
-		if err != nil {
+		// retry pit radio connection for up to 5 minutes while network comes up at boot time
+		for count := 0; count < 60; count++ {
+			err := a.pitRadio.Connect()
+			if err == nil {
+				break
+			}
+
 			a.log.Error().
 				Err(err).
 				Str("component", "discord").
 				Str("result", "failure").
 				Msg("init")
 
-			return
+			time.Sleep(5 * time.Second)
 		}
 
-		err = a.pitRadio.Send(pitradio.Message{
+		err := a.pitRadio.Send(pitradio.Message{
 			Text:   a.i18n.GetString(translations.RadioOnline),
 			Lang:   a.i18n.GetCurrentLanguage(),
 			Accent: a.config.GetAppAccent(),
