@@ -176,12 +176,5 @@ func (s *Synthesizer) PlayEffect(name string, magnitude float64) {
 
 	effectSample := s.Effects.GetSample(name, s.sampleRate)
 
-	// TODO: copying to a new sample as the slice is scaled by magnitude in-place which
-	// causes the effect volume to be reduced every time it is played
-	// tmpSample := make([]float64, len(effectSample))
-	// copy(tmpSample, effectSample)
-
-	// _ = s.mixer.WriteChannel(name, tmpSample, magnitude, 0, false)
-
 	_ = s.mixer.WriteChannel(name, effectSample.Samples(), magnitude, 0, false)
 }

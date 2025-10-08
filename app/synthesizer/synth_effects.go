@@ -51,17 +51,27 @@ func (s *EffectsSampleBank) GetSample(name string, sampleRate int) codec.PCMFloa
 
 	effect := s.samples[name]
 
-	// Return cached sample when it exists
+	// Use the cached sample when it exists
 	sample, ok := effect.Sample[sampleRate]
-	if ok {
-		return sample
+	if !ok {
+		// Resample and cache the new sample rate when it doesn't exist
+		baseSample := effect.Sample[effectsSampleRateHz]
+		sample := baseSample.Resample(sampleRate)
+		effect.Sample[sampleRate] = sample
 	}
 
-	// Resample and cache the new sample rate
-	baseSample := effect.Sample[effectsSampleRateHz]
-	effect.Sample[sampleRate] = baseSample.Resample(sampleRate)
+	// TODO: copying to a new sample as the slice is scaled by magnitude in-place which
+	// causes the effect volume to be reduced every time it is played
+	copied := make([]float64, sample.Len())
+	copy(copied, sample.Samples())
 
-	return effect.Sample[sampleRate]
+	sampleCopy := *codec.NewPCMFloat64(
+		copied,
+		sample.SampleRate(),
+		sample.Channels(),
+	)
+
+	return sampleCopy
 }
 
 // generateGearShiftSample creates a sample for the gear shift sound effect.
@@ -69,7 +79,7 @@ func generateGearShiftSample() codec.PCMFloat64 {
 	sampleLengthSeconds := 0.1
 	pulseAmplitude := 2.0
 	pulseHz := 30
-	decayRate := 0.005
+	decayRate := 1 - (5 / (float64(effectsSampleRateHz) * sampleLengthSeconds))
 
 	sampleCount := int(sampleLengthSeconds * float64(effectsSampleRateHz))
 
@@ -83,7 +93,7 @@ func generateGearShiftSample() codec.PCMFloat64 {
 		angle := waveSamplePeriod * (float64(i) - waveOffset)
 		samples[i] = pulseAmplitude * math.Sin(angle)
 
-		pulseAmplitude *= (1 - decayRate)
+		pulseAmplitude *= decayRate
 	}
 
 	return *codec.NewPCMFloat64(samples, effectsSampleRateHz, 1)
