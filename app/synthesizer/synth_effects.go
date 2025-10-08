@@ -2,51 +2,175 @@ package synthesizer
 
 import (
 	"math"
+	"time"
+
+	"github.com/vwhitteron/simtezilo-dev/app/codec"
 )
+
+const (
+	effectsSampleRateHz = 32000
+)
+
+type EffectSample struct {
+	Name   string
+	Sample map[int]codec.PCMFloat64
+}
 
 // EffectsSampleBank holds pre-generated audio samples for various sound effects.
 type EffectsSampleBank struct {
-	sample map[string][]float64
+	samples map[string]EffectSample
 }
 
 // NewEffectsSampleBank initializes and returns a new EffectsSampleBank with pre-generated samples.
-func NewEffectsSampleBank(sampleRateHz int) *EffectsSampleBank {
+func NewEffectsSampleBank() *EffectsSampleBank {
 	return &EffectsSampleBank{
-		sample: map[string][]float64{
-			"transmission": generateGearShiftSample(sampleRateHz),
+		samples: map[string]EffectSample{
+			"transmission": {
+				Name: "transmission",
+				Sample: map[int]codec.PCMFloat64{
+					effectsSampleRateHz: generateGearShiftSample(),
+				},
+			},
+			"talkPermitTone": {
+				Name: "talkPermitTone",
+				Sample: map[int]codec.PCMFloat64{
+					effectsSampleRateHz: generateTalkPermitToneSample(),
+				},
+			},
 		},
 	}
 }
 
-// GetSample retrieves a pre-generated sample by name. If the sample does not exist, it returns an empty slice.
-func (s *EffectsSampleBank) GetSample(name string) []float64 {
-	if _, ok := s.sample[name]; !ok {
-		return []float64{}
+// GetSample retrieves a pre-generated sample with the given name and sample rate.
+// If the sample does not exist, it returns an empty slice.
+// The effect is resampled to the requested sample rate if necessary.
+func (s *EffectsSampleBank) GetSample(name string, sampleRate int) codec.PCMFloat64 {
+	if _, ok := s.samples[name]; !ok {
+		return codec.PCMFloat64{}
 	}
 
-	return s.sample[name]
+	effect := s.samples[name]
+
+	// Return cached sample when it exists
+	sample, ok := effect.Sample[sampleRate]
+	if ok {
+		return sample
+	}
+
+	// Resample and cache the new sample rate
+	baseSample := effect.Sample[effectsSampleRateHz]
+	effect.Sample[sampleRate] = baseSample.Resample(sampleRate)
+
+	return effect.Sample[sampleRate]
 }
 
-// generateGearShiftSample creates a sample representing a gear shift sound effect.
-func generateGearShiftSample(sampleRateHz int) []float64 {
+// generateGearShiftSample creates a sample for the gear shift sound effect.
+func generateGearShiftSample() codec.PCMFloat64 {
 	sampleLengthSeconds := 0.1
 	pulseAmplitude := 2.0
 	pulseHz := 30
 	decayRate := 0.005
 
-	sampleCount := int(sampleLengthSeconds * float64(sampleRateHz))
+	sampleCount := int(sampleLengthSeconds * float64(effectsSampleRateHz))
 
-	pulseWidth := sampleRateHz / (2 * pulseHz)
+	pulseWidth := effectsSampleRateHz / (2 * pulseHz)
 	waveSamplePeriod := math.Pi / float64(pulseWidth)
 	waveOffset := float64(pulseWidth)
 
-	audioSample := make([]float64, sampleCount)
+	samples := make([]float64, sampleCount)
 
-	for i := range audioSample {
+	for i := range samples {
 		angle := waveSamplePeriod * (float64(i) - waveOffset)
-		audioSample[i] = pulseAmplitude * math.Sin(angle)
+		samples[i] = pulseAmplitude * math.Sin(angle)
 
 		pulseAmplitude *= (1 - decayRate)
+	}
+
+	return *codec.NewPCMFloat64(samples, effectsSampleRateHz, 1)
+}
+
+// generateTalkPermitToneSample creates a sample for the talk permit tone sequence.
+func generateTalkPermitToneSample() codec.PCMFloat64 {
+	toneSequence := "2373705"
+	toneLength := 27 * time.Millisecond
+	silenceLength := 2 * time.Millisecond
+
+	tones := [][]float64{}
+
+	samples := make([]float64, 0)
+
+	// Generate tones for each character in the value
+	for _, char := range toneSequence {
+		tone := generateDTMFTone(string(char), toneLength)
+		tones = append(tones, tone)
+	}
+
+	// Append tones with silence in between
+	for i, tone := range tones {
+		samples = append(samples, tone...)
+
+		// Add silence between tones
+		if i < len(tones)-1 {
+			silenceSampleCount := int(float64(silenceLength.Milliseconds()) * float64(effectsSampleRateHz) / 1000.0)
+			silence := make([]float64, silenceSampleCount)
+			samples = append(samples, silence...)
+		}
+	}
+
+	return *codec.NewPCMFloat64(samples, effectsSampleRateHz, 1)
+}
+
+// generateDTMFTone generates a DTMF tone for a given character and duration.
+func generateDTMFTone(value string, length time.Duration) []float64 {
+	tones := map[rune][2]float64{
+		'1': {697, 1209},
+		'2': {697, 1336},
+		'3': {697, 1477},
+		'A': {697, 1633},
+		'4': {770, 1209},
+		'5': {770, 1336},
+		'6': {770, 1477},
+		'B': {770, 1633},
+		'7': {852, 1209},
+		'8': {852, 1336},
+		'9': {852, 1477},
+		'C': {852, 1633},
+		'*': {941, 1209},
+		'0': {941, 1336},
+		'#': {941, 1477},
+		'D': {941, 1633},
+	}
+
+	sampleCount := int(length.Seconds() * float64(effectsSampleRateHz))
+	audioSample := make([]float64, sampleCount)
+
+	if len(value) != 1 {
+		return audioSample
+	}
+
+	frequencies, ok := tones[rune(value[0])]
+	if !ok {
+		return audioSample
+	}
+
+	fadeLength := int(float64(sampleCount) * 0.15)
+
+	for index := range audioSample {
+		phase := float64(index) / float64(effectsSampleRateHz)
+
+		// Generate the base DTMF tone
+		sample := 0.5 * (math.Sin(2*math.Pi*frequencies[0]*phase) + math.Sin(2*math.Pi*frequencies[1]*phase))
+
+		// Apply fade in/out envelope
+		envelope := float64(1.0)
+
+		if index < fadeLength {
+			envelope = float64(index) / float64(fadeLength)
+		} else if index >= sampleCount-fadeLength {
+			envelope = float64(sampleCount-index-1) / float64(fadeLength)
+		}
+
+		audioSample[index] = sample * envelope
 	}
 
 	return audioSample

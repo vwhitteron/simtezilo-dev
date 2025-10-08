@@ -1,4 +1,4 @@
-package pitradio
+package tts
 
 import (
 	"context"
@@ -8,13 +8,16 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/vwhitteron/simtezilo-dev/app/codec"
+	"github.com/vwhitteron/simtezilo-dev/app/pitradio"
 )
 
-// textToSpeech converts a given text message into speech audio data using Google Translate TTS.
+// TextToSpeech converts a given text message into speech audio data using Google Translate TTS.
 // It returns the audio data in MP3 format within an MPEG container.
-func textToSpeech(message Message) ([]byte, error) {
+func TextToSpeech(message pitradio.Message) (codec.MP3, error) {
 	if message.Text == "" {
-		return nil, errors.New("text cannot be empty")
+		return codec.MP3{}, errors.New("text cannot be empty")
 	}
 
 	if message.Lang == "" {
@@ -38,25 +41,25 @@ func textToSpeech(message Message) ([]byte, error) {
 
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create TTS request: %w", err)
+		return codec.MP3{}, fmt.Errorf("failed to create TTS request: %w", err)
 	}
 
 	client := &http.Client{}
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to make TTS request: %w", err)
+		return codec.MP3{}, fmt.Errorf("failed to make TTS request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("TTS request failed with status: %d", resp.StatusCode)
+		return codec.MP3{}, fmt.Errorf("TTS request failed with status: %d", resp.StatusCode)
 	}
 
-	audioData, err := io.ReadAll(resp.Body)
+	mp3Data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read audio data: %w", err)
+		return codec.MP3{}, fmt.Errorf("failed to read audio data: %w", err)
 	}
 
-	return audioData, nil
+	return *codec.NewMP3(mp3Data), nil
 }

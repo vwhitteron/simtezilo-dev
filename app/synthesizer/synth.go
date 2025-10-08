@@ -7,13 +7,14 @@ import (
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+	"github.com/vwhitteron/simtezilo-dev/app/codec"
 	"github.com/vwhitteron/simtezilo-dev/app/config"
 	"github.com/vwhitteron/simtezilo-dev/app/kinematics"
 )
 
 // Synthesizer is the main synthesizer structure that holds the mixer, effects, and output device.
 type Synthesizer struct {
-	effects      *EffectsSampleBank
+	Effects      *EffectsSampleBank
 	log          zerolog.Logger
 	mixer        *Mixer
 	outputDevice *OutputDevice
@@ -24,16 +25,25 @@ type Synthesizer struct {
 
 // SynthOpts holds the options for creating a new Synthesizer.
 type SynthOpts struct {
-	Config     *config.Synthesizer // FIXME: TODO: use base config pointer?
+	Config     *config.Synthesizer // TODO: use base config pointer?
 	Logger     zerolog.Logger
 	Kinematics *kinematics.State
 }
 
 // New creates a new Synthesizer instance with the provided options.
 func New(opts *SynthOpts) (*Synthesizer, error) {
+	synthesizer := &Synthesizer{
+		Effects:    NewEffectsSampleBank(),
+		kinematics: opts.Kinematics,
+		sampleRate: opts.Config.InternalSampleRateHz,
+		log:        opts.Logger.With().Str("package", "synth").Logger(),
+	}
+
+	var err error
+
 	bufferLength := 2 * time.Second
 
-	mixer, err := NewMixer(MixerConfig{
+	synthesizer.mixer, err = NewMixer(MixerConfig{
 		MasterGain:    &opts.Config.MasterGain,
 		GainIncrement: &opts.Config.GainIncrement,
 		BufferLength:  bufferLength,
@@ -44,20 +54,19 @@ func New(opts *SynthOpts) (*Synthesizer, error) {
 		return nil, fmt.Errorf("create mixer: %w", err)
 	}
 
-	_ = mixer.AddChannel("transmission", &opts.Config.TransmissionGain)
-	_ = mixer.AddChannel("chassis", &opts.Config.ChassisGain)
-	_ = mixer.AddChannel("engine", &opts.Config.EngineGain)
+	_ = synthesizer.mixer.AddChannel("transmission", &opts.Config.TransmissionGain)
+	_ = synthesizer.mixer.AddChannel("chassis", &opts.Config.ChassisGain)
+	_ = synthesizer.mixer.AddChannel("engine", &opts.Config.EngineGain)
 
-	outputDevice, err := NewOutputDevice(SynthOutDeviceOpts{
+	synthesizer.outputDevice, err = NewOutputDevice(SynthOutDeviceOpts{
 		Log: opts.Logger.With().Str("package", "synth output device").Logger(),
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	var outFile *os.File
 	if opts.Config.OutputFile != "" {
-		outFile, err = os.Create(opts.Config.OutputFile)
+		synthesizer.outFile, err = os.Create(opts.Config.OutputFile)
 		if err != nil {
 			return nil, fmt.Errorf("create output wav file: %w", err)
 		}
@@ -65,17 +74,7 @@ func New(opts *SynthOpts) (*Synthesizer, error) {
 		log.Info().Str("file", opts.Config.OutputFile).Msg("saving audio output")
 	}
 
-	effects := NewEffectsSampleBank(opts.Config.InternalSampleRateHz)
-
-	return &Synthesizer{
-		effects:      effects,
-		log:          opts.Logger.With().Str("package", "synth").Logger(),
-		mixer:        mixer,
-		outputDevice: outputDevice,
-		kinematics:   opts.Kinematics,
-		sampleRate:   opts.Config.InternalSampleRateHz,
-		outFile:      outFile,
-	}, nil
+	return synthesizer, nil
 }
 
 // Close gracefully shuts down the synthesizer, closing the mixer and output file if applicable.
@@ -157,8 +156,11 @@ func (s *Synthesizer) Silence() {
 }
 
 // GetEffectSample returns the raw sample data for the specified effect name.
-func (s *Synthesizer) GetEffectSample(name string) []float64 {
-	return s.effects.GetSample(name)
+// TODO: unused, remove
+func (s *Synthesizer) GetEffectSample(name string, sampleRate int) codec.PCMFloat64 {
+	effectSample := s.Effects.GetSample(name, sampleRate)
+
+	return effectSample
 }
 
 // PlayEffect plays the specified effect on its designated channel with the given magnitude.
@@ -172,13 +174,14 @@ func (s *Synthesizer) PlayEffect(name string, magnitude float64) {
 
 	magnitude *= channelMagnitude
 
-	// TODO: handle invalid effect name
-	sample := s.effects.GetSample(name)
+	effectSample := s.Effects.GetSample(name, s.sampleRate)
 
 	// TODO: copying to a new sample as the slice is scaled by magnitude in-place which
 	// causes the effect volume to be reduced every time it is played
-	tmpSample := make([]float64, len(sample))
-	copy(tmpSample, sample)
+	// tmpSample := make([]float64, len(effectSample))
+	// copy(tmpSample, effectSample)
 
-	_ = s.mixer.WriteChannel(name, tmpSample, magnitude, 0, false)
+	// _ = s.mixer.WriteChannel(name, tmpSample, magnitude, 0, false)
+
+	_ = s.mixer.WriteChannel(name, effectSample.Samples(), magnitude, 0, false)
 }

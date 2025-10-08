@@ -18,10 +18,10 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/spotpear"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/waveshare"
 	"github.com/vwhitteron/simtezilo-dev/app/i18n"
-	"github.com/vwhitteron/simtezilo-dev/app/i18n/translations"
 	"github.com/vwhitteron/simtezilo-dev/app/kinematics"
 	"github.com/vwhitteron/simtezilo-dev/app/odometer"
 	"github.com/vwhitteron/simtezilo-dev/app/pitradio"
+	"github.com/vwhitteron/simtezilo-dev/app/pitradio/discord"
 	"github.com/vwhitteron/simtezilo-dev/app/synthesizer"
 	"github.com/vwhitteron/simtezilo-dev/app/ui"
 	"github.com/vwhitteron/simtezilo-dev/app/ui/webui"
@@ -356,16 +356,18 @@ func New(opts Options) (*App, error) {
 			Msg("init")
 	}
 
-	discordBotConfig := pitradio.DiscordOptions{
+	discordBotConfig := discord.Config{
 		Token:          app.config.GetDiscordToken(),
 		ChannelID:      app.config.GetDiscordChannelID(),
 		VoiceChannelID: app.config.GetDiscordVoiceChannelID(),
 		GuildID:        app.config.GetDiscordGuildID(),
+		MessageGap:     time.Duration(app.config.GetMessageSendIntervalMs()) * time.Millisecond,
 		Cache:          &app.cache,
+		SampleBank:     app.synth.Effects,
 		Logger:         *opts.Logger,
 	}
 
-	app.pitRadio, err = pitradio.NewDiscordBot(discordBotConfig)
+	app.pitRadio, err = discord.New(discordBotConfig)
 	if err != nil {
 		app.log.Error().
 			Err(err).
@@ -406,7 +408,7 @@ func (a *App) Close() {
 			Msg("close")
 	}
 
-	err = a.pitRadio.Disconnect()
+	err = a.pitRadio.Close()
 	if err != nil {
 		a.log.Error().
 			Err(err).
@@ -433,45 +435,9 @@ func (a *App) Close() {
 func (a *App) startBackgroundTasks() {
 	go a.ui.HIDEventHandler()
 
-	go a.pitRadio.MessageDispatcher(a.log)
-
 	go a.newLapHandler()
 
-	go func() {
-		// retry pit radio connection for up to 5 minutes while network comes up at boot time
-		for count := 0; count < 60; count++ {
-			err := a.pitRadio.Connect()
-			if err == nil {
-				break
-			}
-
-			a.log.Error().
-				Err(err).
-				Str("component", "discord").
-				Str("result", "failure").
-				Msg("init")
-
-			time.Sleep(5 * time.Second)
-		}
-
-		err := a.pitRadio.Send(pitradio.Message{
-			Text:   a.i18n.GetString(translations.RadioOnline),
-			Lang:   a.i18n.GetCurrentLanguage(),
-			Accent: a.config.GetAppAccent(),
-		})
-		if err != nil {
-			a.log.Error().
-				Err(err).
-				Str("component", "discord").
-				Str("result", "failure").
-				Msg("send message")
-		}
-
-		a.log.Debug().
-			Str("component", "discord").
-			Str("result", "success").
-			Msg("init")
-	}()
+	go a.pitRadio.BackgroundTask()
 
 	go func() {
 		for {
@@ -538,6 +504,13 @@ func (a *App) mainLoop() {
 	a.log.Debug().Str("component", "app").Str("result", "success").Msg("main loop started")
 
 	for {
+		// wait for the GT telemetry client to start receiveing telemetry
+		if a.gtClient.Telemetry.SequenceID() == 0 {
+			time.Sleep(8 * time.Millisecond)
+
+			continue
+		}
+
 		select {
 		case <-a.done:
 			return
@@ -662,7 +635,7 @@ func (a *App) getGameState() gameState {
 }
 
 func (a *App) handleGameStateChange() {
-	if a.state.current.gameState == a.state.last.gameState {
+	if a.state.current.gameState == a.state.last.gameState || a.state.current.gameState == gameStateUnknown {
 		return
 	}
 

@@ -22,10 +22,8 @@ type pitRadioMock struct {
 	failSend bool
 }
 
-func (m *pitRadioMock) Connect() error                         { return nil }
-func (m *pitRadioMock) Disconnect() error                      { return nil }
-func (m *pitRadioMock) TextMessageDispatcher(_ zerolog.Logger) {}
-func (m *pitRadioMock) MessageDispatcher(_ zerolog.Logger)     {}
+func (m *pitRadioMock) BackgroundTask() {}
+func (m *pitRadioMock) Close() error    { return nil }
 func (m *pitRadioMock) Send(msg pitradio.Message) error {
 	m.messages = append(m.messages, msg)
 
@@ -35,8 +33,6 @@ func (m *pitRadioMock) Send(msg pitradio.Message) error {
 
 	return nil
 }
-func (m *pitRadioMock) PlayAudioFile(_ string) error { return nil }
-func (m *pitRadioMock) PlayRadioCheck() error        { return nil }
 
 // --- Tests ---
 
