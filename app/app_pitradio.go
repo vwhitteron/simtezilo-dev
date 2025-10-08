@@ -410,10 +410,11 @@ func (a *App) notifyFuelWarnings() {
 	fuelRangeLapsSafe := fuelRangeLaps - a.config.GetFuelRangeSafetyMarginLaps()
 	fuelRangeMeters := a.fuelRange.DistanceMeters()
 	lapProgress := a.circuit.LapProgress()
-	fuelRangeLapsUntilBox := fuelRangeLapsSafe + lapProgress
+	lapProgressRemaining := a.circuit.LapProgressRemaining()
+	fuelRangeLapsUntilBox := fuelRangeLapsSafe - lapProgressRemaining
 
 	fuelEmpty := a.gtClient.Telemetry.FuelLevelPercent() <= 0
-	fuelCritical := fuelRangeLapsUntilBox <= 0.5
+	fuelCritical := fuelRangeLapsUntilBox <= 0
 	fuelEmptyNextLap := fuelRangeLapsUntilBox <= 1
 	fuelEmptySoon := fuelRangeLapsUntilBox <= a.config.GetFuelPreWarnNotifyLaps()+a.config.GetFuelRangeSafetyMarginLaps()
 	fuelStrategyUpdate := remainingLaps > fuelRangeLaps && currentLap%int16(a.config.GetFuelStrategyNotifyLaps()) == 0
