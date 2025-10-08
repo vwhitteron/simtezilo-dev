@@ -128,6 +128,10 @@ func (a *App) positionHasChanged() bool {
 		return false
 	}
 
+	if a.gtClient.Telemetry.RaceEntrants() <= 1 {
+		return false
+	}
+
 	position := a.gtClient.Telemetry.GridPosition()
 
 	if position <= 0 {
@@ -209,7 +213,7 @@ func (a *App) notifyLapTime() {
 	bestLapTime := a.gtClient.Telemetry.BestLaptime()
 
 	// TODO: add config option to notify all laps or best lap only
-	if bestLapTime > 0 && a.state.current.lastLapTime <= bestLapTime {
+	if bestLapTime > 0 && a.state.current.lastLapTime <= bestLapTime && a.state.current.lapNumber > 2 {
 		message = fmt.Sprintf("%s. %s",
 			a.i18n.GetString(translations.RadioLapRecord),
 			formatDuration(a.state.current.lastLapTime),
