@@ -14,7 +14,19 @@ const (
 	minConfidenceThreshold      float64 = 0.3 // Minimum confidence threshold (30%) before choosing a circuit
 )
 
-// Circuit manages circuit identification and lap tracking.
+// Manager defines the interface for circuit management and lap tracking.
+type Manager interface {
+	Reset()
+	ResetLapProgress()
+	Name() string
+	LengthMeters() float64
+	LapProgress() float64
+	LapProgressRemaining() float64
+	UpdateCircuit(odometerReading float64, lap int16, coordinate models.Coordinate, coordinateType models.CoordinateType) (didUpdate bool)
+}
+
+// Circuit provides circuit identification and lap tracking facilities.
+// Conforms with the circuit.Manager interface.
 type Circuit struct {
 	database                circuits.CircuitDB   // Circuit database for track identification
 	log                     zerolog.Logger       // Logger instance

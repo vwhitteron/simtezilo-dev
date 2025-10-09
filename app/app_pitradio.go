@@ -98,9 +98,10 @@ func (a *App) notifyCircuitChange() {
 	message := "Circuit updated to " + circuitName
 	if a.pitRadio != nil {
 		err := a.pitRadio.Send(pitradio.Message{
-			Text:   message,
-			Lang:   a.i18n.LanguageCode(),
-			Accent: a.config.GetAppAccent(),
+			MessageType: pitradio.TextMessage,
+			Text:        message,
+			Lang:        a.i18n.LanguageCode(),
+			Accent:      a.config.GetAppAccent(),
 		})
 		if err != nil {
 			a.log.Error().
@@ -172,9 +173,10 @@ func (a *App) notifyGridPositionChange() {
 
 	if a.pitRadio != nil {
 		err := a.pitRadio.Send(pitradio.Message{
-			Text:   message,
-			Lang:   a.i18n.LanguageCode(),
-			Accent: a.config.GetAppAccent(),
+			MessageType: pitradio.TextMessage,
+			Text:        message,
+			Lang:        a.i18n.LanguageCode(),
+			Accent:      a.config.GetAppAccent(),
 		})
 		if err != nil {
 			a.log.Error().
@@ -228,10 +230,11 @@ func (a *App) notifyLapTime() {
 
 	// Send lap time message to Discord
 	err := a.pitRadio.Send(pitradio.Message{
-		Text:    message,
-		Lang:    a.i18n.LanguageCode(),
-		Accent:  a.config.GetAppAccent(),
-		NoCache: true,
+		MessageType: pitradio.TextMessage,
+		Text:        message,
+		Lang:        a.i18n.LanguageCode(),
+		Accent:      a.config.GetAppAccent(),
+		NoCache:     true,
 	})
 	if err != nil {
 		a.log.Error().
@@ -295,9 +298,10 @@ func (a *App) notifyLapNumber() {
 	a.pitRadioState.lastNotifiedLapNumber = currentLap
 
 	err := a.pitRadio.Send(pitradio.Message{
-		Text:   message,
-		Lang:   a.i18n.LanguageCode(),
-		Accent: a.config.GetAppAccent(),
+		MessageType: pitradio.TextMessage,
+		Text:        message,
+		Lang:        a.i18n.LanguageCode(),
+		Accent:      a.config.GetAppAccent(),
 	})
 	if err != nil {
 		a.log.Error().
@@ -367,9 +371,10 @@ func (a *App) notifyRaceProgress() {
 
 	if a.pitRadio != nil {
 		err := a.pitRadio.Send(pitradio.Message{
-			Text:   message,
-			Lang:   a.i18n.LanguageCode(),
-			Accent: a.config.GetAppAccent(),
+			MessageType: pitradio.TextMessage,
+			Text:        message,
+			Lang:        a.i18n.LanguageCode(),
+			Accent:      a.config.GetAppAccent(),
 		})
 		if err != nil {
 			a.log.Error().
@@ -447,9 +452,10 @@ func (a *App) notifyFuelWarnings() {
 
 	if a.pitRadio != nil {
 		err := a.pitRadio.Send(pitradio.Message{
-			Text:   message,
-			Lang:   a.i18n.LanguageCode(),
-			Accent: a.config.GetAppAccent(),
+			MessageType: pitradio.TextMessage,
+			Text:        message,
+			Lang:        a.i18n.LanguageCode(),
+			Accent:      a.config.GetAppAccent(),
 		})
 		if err != nil {
 			a.log.Error().
@@ -498,7 +504,7 @@ func (a *App) fuelEmptyMessage(remainingLaps float64, currentLap int16) (message
 
 // fuelCriticalMessage generates a critical fuel warning message based on estimated fuel range.
 func (a *App) fuelCriticalMessage(remainingLaps float64, currentLap int16) (message string, suppressNotify bool) {
-	if a.pitRadioState.lastNotifiedLapFuelCritical != currentLap {
+	if a.pitRadioState.lastNotifiedLapFuelCritical == currentLap {
 		message = ""
 		suppressNotify = true
 

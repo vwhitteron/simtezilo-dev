@@ -6,11 +6,13 @@ import (
 
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/suite"
+	"github.com/vwhitteron/simtezilo-dev/app/circuit"
 	"github.com/vwhitteron/simtezilo-dev/app/config"
 	"github.com/vwhitteron/simtezilo-dev/app/fuelrange"
 	"github.com/vwhitteron/simtezilo-dev/app/i18n"
 	"github.com/vwhitteron/simtezilo-dev/app/pitradio"
 	gttelemetry "github.com/zetetos/gt-telemetry"
+	"github.com/zetetos/gt-telemetry/pkg/models"
 )
 
 // --- Mocks and stubs ---
@@ -46,11 +48,15 @@ func createTestI18n() *i18n.I18n {
 	return testI18n
 }
 
+// fuelRangeMock implements fuelrange.Estimator interface for testing.
 type fuelRangeMock struct {
 	distanceMeters float64
 	distanceLaps   float64
 	usageRate      float64
 }
+
+// Ensure fuelRangeMock implements fuelrange.Estimator interface.
+var _ fuelrange.Estimator = (*fuelRangeMock)(nil)
 
 func (m *fuelRangeMock) Reset()                      {}
 func (m *fuelRangeMock) ResetEstimate()              {}
@@ -77,19 +83,23 @@ func (m *fuelRangeMock) UsageRatePerKm() float64 {
 	return m.usageRate
 }
 
-// SetFuelRange allows tests to configure fuel range values
+// SetFuelRange allows tests to configure fuel range values.
 func (m *fuelRangeMock) SetFuelRange(distanceMeters, distanceLaps, usageRatePerKm float64) {
 	m.distanceMeters = distanceMeters
 	m.distanceLaps = distanceLaps
 	m.usageRate = usageRatePerKm
 }
 
+// circuitMock implements circuit.Manager interface for testing.
 type circuitMock struct {
 	name                 string
 	lengthMeters         float64
 	lapProgress          float64
 	lapProgressRemaining float64
 }
+
+// Ensure circuitMock implements circuit.Manager interface.
+var _ circuit.Manager = (*circuitMock)(nil)
 
 func (m *circuitMock) Reset()                {}
 func (m *circuitMock) ResetLapProgress()     {}
@@ -100,12 +110,36 @@ func (m *circuitMock) LapProgress() float64 {
 	return m.lapProgress
 }
 
+// UpdateCircuit implements the circuit.Manager interface.
+func (m *circuitMock) UpdateCircuit(_ float64, _ int16, _ models.Coordinate, _ models.CoordinateType) bool {
+	// Mock implementation - just return false for simplicity
+	return false
+}
+
 func (m *circuitMock) LapProgressRemaining() float64 {
 	if m.lapProgressRemaining > 0 {
 		return m.lapProgressRemaining
 	}
 
 	return 1.0 - m.lapProgress
+}
+
+// --- Helper Functions ---
+
+func createBasicConfig() *config.Config {
+	configJSON := []byte(`{
+		"app": {
+			"language": "en",
+			"accent": "us"
+		},
+		"pitRadio": {
+			"fuelRangeSafetyMarginLaps": 0.3,
+			"fuelPreWarnNotifyLaps": 2.0,
+			"fuelStrategyNotifyLaps": 5.0
+		}
+	}`)
+
+	return config.NewFromJSON(configJSON, zerolog.Nop())
 }
 
 // --- Tests ---
@@ -144,13 +178,13 @@ func (suite *PitRadioTestSuite) SetupTest() {
 	}
 
 	suite.circuit = circuitMock{
-		name:                 "Test Circuit",
+		name:                 "Mock Circuit",
 		lengthMeters:         1000,
 		lapProgress:          0.0,
 		lapProgressRemaining: 1.0,
 	}
 
-	// For now, keep using nil for concrete types and update specific tests with real implementations
+	// Use interface types with proper mock implementations
 	suite.app = &App{
 		config:   nil,
 		gtClient: gtClient,
@@ -161,370 +195,337 @@ func (suite *PitRadioTestSuite) SetupTest() {
 		pitRadio:      &suite.pitRadio,
 		pitRadioState: &pitRadioState{},
 		i18n:          suite.i18n,
-		circuit:       nil, // Will be set to real implementation in specific tests
-		fuelRange:     nil, // Will be set to real implementation in specific tests
+		circuit:       &suite.circuit,   // Use circuit mock
+		fuelRange:     &suite.fuelRange, // Use fuelRange mock
 	}
 }
 
 func (suite *PitRadioTestSuite) TestAccentPopulatedInPitRadioMessage() {
 	// Arrange
-	configJSON := []byte(`{
-		"app": {
-			"language": "en",
-			"accent": "ie"
-		}
-	}`)
-
+	configJSON := []byte(`{"app": {"language": "en", "accent": "ie"}}`)
 	suite.app.config = config.NewFromJSON(configJSON, zerolog.Nop())
 
 	// Act
-	accent := suite.app.config.GetAppAccent()
-
-	// Assert
-	suite.Equal("ie", accent, "Expected accent to be loaded from config")
-
-	// Act1
 	err := suite.app.pitRadio.Send(pitradio.Message{
-		MessageType: pitradio.AudioMessage,
+		MessageType: pitradio.TextMessage,
 		Text:        "Test message",
 		Lang:        "en",
-		Accent:      accent,
+		Accent:      suite.app.config.GetAppAccent(),
 	})
 
 	// Assert
 	suite.Require().NoError(err)
-	suite.Require().Len(suite.pitRadio.messages, 1, "Expected one message to be sent")
+	suite.Require().Len(suite.pitRadio.messages, 1)
 
 	message := suite.pitRadio.messages[0]
 	suite.Equal("Test message", message.Text)
 	suite.Equal("en", message.Lang)
-	suite.Equal("ie", message.Accent, "Expected accent to be set in message")
+	suite.Equal("ie", message.Accent)
 }
 
 func (suite *PitRadioTestSuite) TestDefaultAccentWhenNotConfigured() {
 	// Arrange
-	configJSON := []byte(`{
-		"app": {
-			"language": "en"
-		}
-	}`)
-
+	configJSON := []byte(`{"app": {"language": "en"}}`)
 	suite.app.config = config.NewFromJSON(configJSON, zerolog.Nop())
 
 	// Act
 	accent := suite.app.config.GetAppAccent()
 
 	// Assert
-	suite.Equal("us", accent, "Expected default accent to be 'us' when not configured")
+	suite.Equal("us", accent)
 }
 
 func (suite *PitRadioTestSuite) TestNoNotifyOnRaceStart() {
 	// Arrange
-	suite.app.pitRadioState.fuelNotifyPrewarnIssued = false
-	suite.app.gtClient.Telemetry.RawTelemetry.FuelLevel = 99.9
-	suite.app.gtClient.Telemetry.RawTelemetry.FuelCapacity = 100
+	suite.setupBasicRace(1, 10)
+	suite.setupCircuit(0.1)
+	suite.setupFuelRange(15.0) // Plenty of fuel
+	suite.clearPitRadioState()
 
 	// Act
 	suite.app.notifyFuelWarnings()
-	got := len(suite.pitRadio.messages)
 
 	// Assert
-	suite.Equal(0, got, "Expected no messages when circuit/fuelRange are nil")
+	suite.Empty(suite.pitRadio.messages)
 }
 
 func (suite *PitRadioTestSuite) TestNotifyOutOfFuel() {
 	// Arrange
-	suite.app.pitRadioState.fuelNotifyPrewarnIssued = false
-	suite.app.gtClient.Telemetry.RawTelemetry.FuelLevel = 0
-	suite.app.gtClient.Telemetry.RawTelemetry.FuelCapacity = 1
+	suite.setupBasicRace(8, 10)
+	suite.setupCircuit(0.5)
+	suite.setupFuelRange(0.0) // No fuel left
+	suite.clearPitRadioState()
+	suite.app.gtClient.Telemetry.RawTelemetry.FuelLevel = 0 // Empty tank
 
 	// Act
 	suite.app.notifyFuelWarnings()
-	got := len(suite.pitRadio.messages)
 
 	// Assert
-	suite.Equal(0, got, "Expected no messages when circuit/fuelRange are nil")
+	suite.Len(suite.pitRadio.messages, 1)
+	message := suite.pitRadio.messages[0]
+	suite.Equal(pitradio.TextMessage, message.MessageType)
+	suite.NotEmpty(message.Text)
+	suite.Equal("en", message.Lang)
+	suite.True(suite.app.pitRadioState.fuelNotifyEmptyIssued)
 }
 
 func (suite *PitRadioTestSuite) TestNotifyFuelCritical() {
 	// Arrange
-	configJSON := []byte(`{
-		"pitRadio": {
-			"fuelRangeSafetyMarginLaps": 0.3
-		}
-	}`)
-
-	suite.app.config = config.NewFromJSON(configJSON, zerolog.Nop())
-	suite.app.gtClient.Telemetry.RawTelemetry.CurrentLap = 2
-	suite.app.gtClient.Telemetry.RawTelemetry.RaceLaps = 10 // 8 laps remaining
-	suite.app.pitRadioState.lastNotifiedLapFuelWarning = 1
-
-	// Set up real fuel range with critical fuel situation
-	// Circuit is 5000m, fuel range is only 0.5 laps (2500m) - critical!
-	fuelRangeMeters := 2500.0                             // Only 0.5 laps remaining
-	suite.setupRealFuelRangeForTest(fuelRangeMeters, 5.0) // 5% fuel remaining
+	suite.setupBasicRace(8, 10)
+	suite.setupCircuit(0.5)
+	suite.setupFuelRange(0.4) // Critical fuel level
+	suite.clearPitRadioState()
 
 	// Act
 	suite.app.notifyFuelWarnings()
-	got := len(suite.pitRadio.messages)
 
-	// Since circuit is still nil, this will skip for now
-	// But the fuel range now has real data that would trigger warnings if circuit was present
-	suite.Equal(0, got, "Expected no messages when circuit is nil (but fuel range has real data)")
-
-	// Verify that fuel range data is properly set up
-	if suite.app.fuelRange != nil {
-		actualRange := suite.app.fuelRange.DistanceMeters()
-		suite.InDelta(fuelRangeMeters, actualRange, fuelRangeMeters*0.15, "Fuel range should be approximately set")
-	}
+	// Assert
+	suite.Len(suite.pitRadio.messages, 1)
+	message := suite.pitRadio.messages[0]
+	suite.Equal(pitradio.TextMessage, message.MessageType)
+	suite.NotEmpty(message.Text)
+	suite.Equal("en", message.Lang)
+	suite.Equal("us", message.Accent)
+	suite.Equal(int16(8), suite.app.pitRadioState.lastNotifiedLapFuelCritical)
 }
 
 func (suite *PitRadioTestSuite) TestNotifyBoxForFuel() {
 	// Arrange
-	configJSON := []byte(`{
-		"pitRadio": {
-			"fuelRangeSafetyMarginLaps": 0.3
-		}
-	}`)
+	suite.setupBasicRace(8, 10)
+	suite.setupCircuit(0.7)
+	suite.setupFuelRange(1.5) // Just enough to trigger box warning
+	suite.clearPitRadioState()
+	suite.app.pitRadioState.lastNotifiedLapFuelWarning = 7 // Ensure warning not sent this lap
 
-	suite.app.config = config.NewFromJSON(configJSON, zerolog.Nop())
-	suite.app.gtClient.Telemetry.RawTelemetry.CurrentLap = 2
-	suite.app.pitRadioState.lastNotifiedLapFuelWarning = 1
-
-	// Act - This test will likely skip due to nil circuit/fuelRange, which is expected
+	// Act
 	suite.app.notifyFuelWarnings()
-	got := len(suite.pitRadio.messages)
 
-	// Since circuit and fuelRange are nil, the method should return early
-	suite.Equal(0, got, "Expected no messages when circuit/fuelRange are nil")
+	// Assert
+	suite.Len(suite.pitRadio.messages, 1)
+	message := suite.pitRadio.messages[0]
+	suite.Equal(pitradio.TextMessage, message.MessageType)
+	suite.NotEmpty(message.Text)
+	suite.Equal("en", message.Lang)
 }
 
 func (suite *PitRadioTestSuite) TestNotifyFuelPreWarn() {
 	// Arrange
-	configJSON := []byte(`{
-		"pitRadio": {
-			"fuelPreWarnNotifyLaps": 4.0,
-			"fuelRangeSafetyMarginLaps": 0.3
-		}
-	}`)
+	suite.setupBasicRace(5, 10)
+	suite.setupCircuit(0.5)
+	suite.setupFuelRange(3.0) // Triggers pre-warning condition
+	suite.clearPitRadioState()
 
-	suite.app.config = config.NewFromJSON(configJSON, zerolog.Nop())
-	suite.app.gtClient.Telemetry.RawTelemetry.CurrentLap = 2
-	suite.app.pitRadioState.lastNotifiedLapFuelWarning = 1
-
-	// Act - This test will likely skip due to nil circuit/fuelRange, which is expected
+	// Act
 	suite.app.notifyFuelWarnings()
-	got := len(suite.pitRadio.messages)
 
-	// Since circuit and fuelRange are nil, the method should return early
-	suite.Equal(0, got, "Expected no messages when circuit/fuelRange are nil")
+	// Assert
+	suite.Len(suite.pitRadio.messages, 1)
+	message := suite.pitRadio.messages[0]
+	suite.Equal(pitradio.TextMessage, message.MessageType)
+	suite.NotEmpty(message.Text)
+	suite.Equal("en", message.Lang)
+	suite.True(suite.app.pitRadioState.fuelNotifyPrewarnIssued)
 }
 
 func (suite *PitRadioTestSuite) TestNotifyFuelStrategyUpdateSentOnNotifyLaps() {
 	// Arrange
-	configJSON := []byte(`{
-		"pitRadio": {
-			"fuelStrategyNotifyLaps": 5.0,
-			"fuelRangeSafetyMarginLaps": 0.3
-		}
-	}`)
-
-	suite.app.config = config.NewFromJSON(configJSON, zerolog.Nop())
-	suite.app.gtClient.Telemetry.RawTelemetry.CurrentLap = 10
-	suite.app.gtClient.Telemetry.RawTelemetry.RaceLaps = 20 // 10 laps remaining
+	suite.setupBasicRace(10, 25) // Lap 10 is divisible by 5
+	suite.setupCircuit(0.0)
+	suite.setupFuelRange(12.0) // Less fuel than remaining laps
+	suite.clearPitRadioState()
 	suite.app.pitRadioState.lastNotifiedLapFuelStrategy = 5
 
-	// Act - This test will likely skip due to nil circuit/fuelRange, which is expected
+	// Act
 	suite.app.notifyFuelWarnings()
-	got := len(suite.pitRadio.messages)
 
-	// Since circuit and fuelRange are nil, the method should return early
-	suite.Equal(0, got, "Expected no messages when circuit/fuelRange are nil")
+	// Assert
+	suite.Len(suite.pitRadio.messages, 1)
+	message := suite.pitRadio.messages[0]
+	suite.Equal(pitradio.TextMessage, message.MessageType)
+	suite.NotEmpty(message.Text)
+	suite.Equal("en", message.Lang)
+	suite.Equal(int16(10), suite.app.pitRadioState.lastNotifiedLapFuelStrategy)
 }
 
 func (suite *PitRadioTestSuite) TestNotifyFuelStrategyUpdateNotSentOnNonNotifyLaps() {
 	// Arrange
-	want := 0
+	suite.setupBasicRace(13, 25) // Lap 13 is NOT divisible by 5
+	suite.setupCircuit(0.0)
+	suite.setupFuelRange(10.0) // Less fuel than remaining laps
+	suite.clearPitRadioState()
+	suite.app.pitRadioState.lastNotifiedLapFuelStrategy = 12
 
-	configJSON := []byte(`{
-		"pitRadio": {
-			"fuelStrategyNotifyLaps": 6.0,
-			"fuelRangeSafetyMarginLaps": 0.3
-		}
-	}`)
-
-	suite.app.config = config.NewFromJSON(configJSON, zerolog.Nop())
-	suite.app.gtClient.Telemetry.RawTelemetry.CurrentLap = 13
-	suite.app.gtClient.Telemetry.RawTelemetry.RaceLaps = 20 // 8 laps remaining
-	suite.app.pitRadioState.lastNotifiedLapFuelStrategy = 6
-
-	// Act - This test will likely skip due to nil circuit/fuelRange, which is expected
+	// Act
 	suite.app.notifyFuelWarnings()
-	got := len(suite.pitRadio.messages)
 
-	// Since circuit and fuelRange are nil, the method should return early
-	suite.Equal(want, got, "Expected no messages to be sent")
+	// Assert
+	suite.Empty(suite.pitRadio.messages)
+	suite.Equal(int16(12), suite.app.pitRadioState.lastNotifiedLapFuelStrategy)
 }
 
-func (suite *PitRadioTestSuite) setupOutOfFuelStrategyNotification(raceLaps uint16, currentLap uint16, fuelRange float64) {
-	configJSON := []byte(`{
-		"pitRadio": {
-			"fuelStrategyNotifyLaps": 6.0,
-			"fuelRangeSafetyMarginLaps": 0.3
-		}
-	}`)
-
-	suite.app.config = config.NewFromJSON(configJSON, zerolog.Nop())
-
-	suite.app.gtClient.Telemetry.RawTelemetry.CurrentLap = int16(currentLap) //nolint:gosec // Test code, values are controlled
-	suite.app.gtClient.Telemetry.RawTelemetry.RaceLaps = int16(raceLaps)     //nolint:gosec // Test code, values are controlled
-	suite.app.pitRadioState.lastNotifiedLapFuelStrategy = 6
-	// Note: fuelRange and circuit are nil in our setup, so these calls would be skipped anyway
-}
-
-// setupRealFuelRangeForTest creates a real fuel range with populated data for testing
-func (suite *PitRadioTestSuite) setupRealFuelRangeForTest(desiredRangeInMeters float64, currentFuelPercent float64) {
-	logger := zerolog.Nop()
-	suite.app.fuelRange = fuelrange.New(logger)
-	suite.app.fuelRange.SetLive(false) // Use replay settings for faster testing
-
-	// Calculate consumption rate needed to achieve desired range with current fuel
-	// desiredRange = currentFuel / consumptionRate
-	// consumptionRate = currentFuel / desiredRange
-	targetConsumptionRate := currentFuelPercent / desiredRangeInMeters // percent per meter
-
-	// To establish this consumption rate, we need to simulate fuel consumption
-	// Let's say we've traveled some distance and consumed some fuel at this rate
-	simulatedDistance := 10000.0 // 10km traveled to establish the rate
-	simulatedFuelConsumed := targetConsumptionRate * simulatedDistance
-
-	initialOdometer := 0.0
-	initialFuel := float32(currentFuelPercent + simulatedFuelConsumed) // Start with more fuel
-
-	// Initialize
-	suite.app.fuelRange.Update(initialOdometer, initialFuel)
-
-	// Add enough samples to establish the consumption rate
-	samplesNeeded := 60 // Use replay mode minimum samples
-	for i := 0; i < samplesNeeded; i++ {
-		progress := float64(i+1) / float64(samplesNeeded)
-		sampleOdometer := initialOdometer + simulatedDistance*progress
-		sampleFuel := initialFuel - float32(simulatedFuelConsumed*progress)
-
-		suite.app.fuelRange.Update(sampleOdometer, sampleFuel)
-	}
-}
-
-// setupRealCircuitForTest sets up a mock circuit with proper data
-func (suite *PitRadioTestSuite) setupRealCircuitForTest(circuitName string, lengthMeters float64, lapProgress float64) {
-	// For now, we'll continue using the circuitMock but with realistic data
-	suite.circuit.name = circuitName
-	suite.circuit.lengthMeters = lengthMeters
-	suite.circuit.lapProgress = lapProgress
-	suite.circuit.lapProgressRemaining = 1.0 - lapProgress
-
-	// We can't directly assign the mock due to type constraints, so we'll enhance individual tests
-}
-
-// TestFuelRangeDataIsPopulated tests that fuel range can be properly populated with realistic data
+// TestFuelRangeDataIsPopulated tests that fuel range interface can be properly configured with mock data.
 func (suite *PitRadioTestSuite) TestFuelRangeDataIsPopulated() {
-	// Arrange - Set up realistic fuel range scenario
-	expectedRangeMeters := 15000.0 // 15km range
-	currentFuelPercent := 25.0     // 25% fuel remaining
-
-	// Act - Set up fuel range with real data
-	suite.setupRealFuelRangeForTest(expectedRangeMeters, currentFuelPercent)
-
-	// Assert - Verify fuel range is properly populated
-	suite.NotNil(suite.app.fuelRange, "Fuel range should be created")
-
-	actualRange := suite.app.fuelRange.DistanceMeters()
-	suite.Greater(actualRange, 0.0, "Fuel range should be positive")
-	suite.InDelta(expectedRangeMeters, actualRange, expectedRangeMeters*0.15, "Fuel range should be approximately correct")
-
-	// Test lap calculations
-	circuitLength := 5000.0                             // 5km circuit
-	expectedLaps := expectedRangeMeters / circuitLength // 3 laps
-	actualLaps := suite.app.fuelRange.DistanceLaps(circuitLength)
-	suite.InDelta(expectedLaps, actualLaps, 0.5, "Lap range should be approximately correct")
-
-	// Test fuel usage rate
-	usageRate := suite.app.fuelRange.UsageRatePerKm()
-	suite.Greater(usageRate, 0.0, "Usage rate should be positive")
-
-	suite.T().Logf("Fuel range test results:")
-	suite.T().Logf("  Expected range: %.0f meters", expectedRangeMeters)
-	suite.T().Logf("  Actual range: %.0f meters", actualRange)
-	suite.T().Logf("  Expected laps: %.1f", expectedLaps)
-	suite.T().Logf("  Actual laps: %.1f", actualLaps)
-	suite.T().Logf("  Usage rate: %.2f%% per km", usageRate)
-}
-
-// TestFuelWarningsWithRealData tests fuel warning logic with properly populated fuel range data
-func (suite *PitRadioTestSuite) TestFuelWarningsWithRealData() {
-	// This test demonstrates how the fuel warning system would work with real data
-	// Note: Due to type constraints with the circuit mock, this shows the approach
-
-	// Arrange - Critical fuel scenario
-	configJSON := []byte(`{
-		"pitRadio": {
-			"fuelRangeSafetyMarginLaps": 0.5,
-			"fuelPreWarnNotifyLaps": 2.0
-		}
-	}`)
-
-	suite.app.config = config.NewFromJSON(configJSON, zerolog.Nop())
-
-	// Race scenario: 10 lap race, currently on lap 8 (2 laps remaining)
-	suite.app.gtClient.Telemetry.RawTelemetry.CurrentLap = 8
-	suite.app.gtClient.Telemetry.RawTelemetry.RaceLaps = 10
-	suite.app.pitRadioState.lastNotifiedLapFuelWarning = 0
-
-	// Circuit: 5km track
+	// Arrange - Set up test data for fuel range validation
+	expectedRangeMeters := 15000.0
+	expectedUsageRate := 1.67
 	circuitLength := 5000.0
 
-	// Critical fuel scenario: Only 1.2 laps of fuel remaining (6km range)
-	// With safety margin of 0.5 laps, this should trigger critical fuel warning
-	criticalFuelRange := 6000.0 // 6km = 1.2 laps
-	currentFuel := 8.0          // 8% fuel remaining
+	// Act - Configure fuel range with test data
+	suite.fuelRange.SetFuelRange(expectedRangeMeters, 0, expectedUsageRate)
 
-	suite.setupRealFuelRangeForTest(criticalFuelRange, currentFuel)
+	// Assert - Verify fuel range data is correct
+	suite.NotNil(suite.app.fuelRange, "Fuel range should be available")
+	suite.InEpsilon(expectedRangeMeters, suite.app.fuelRange.DistanceMeters(), 0.001, "Distance should match")
+	suite.InEpsilon(expectedRangeMeters/circuitLength, suite.app.fuelRange.DistanceLaps(circuitLength), 0.001, "Laps should be calculated correctly")
+	suite.InEpsilon(expectedUsageRate, suite.app.fuelRange.UsageRatePerKm(), 0.001, "Usage rate should match")
+}
 
-	// Verify fuel range setup
-	actualRange := suite.app.fuelRange.DistanceMeters()
-	actualLaps := suite.app.fuelRange.DistanceLaps(circuitLength)
+func (suite *PitRadioTestSuite) TestFuelWarningsWithRealData() {
+	// Arrange - Set up critical fuel scenario with mocks
+	configJSON := []byte(`{"pitRadio": {"fuelRangeSafetyMarginLaps": 0.5}}`)
+	suite.app.config = config.NewFromJSON(configJSON, zerolog.Nop())
+	suite.setupBasicRace(8, 10) // Lap 8 of 10
+	suite.setupCircuit(0.5)
+	suite.setupFuelRange(1.2) // 1.2 laps remaining
 
-	suite.T().Logf("Critical fuel scenario:")
-	suite.T().Logf("  Circuit length: %.0f meters", circuitLength)
-	suite.T().Logf("  Current lap: %d", suite.app.gtClient.Telemetry.RawTelemetry.CurrentLap)
-	suite.T().Logf("  Total laps: %d", suite.app.gtClient.Telemetry.RawTelemetry.RaceLaps)
-	suite.T().Logf("  Fuel range: %.0f meters (%.1f laps)", actualRange, actualLaps)
-	suite.T().Logf("  Safety margin: %.1f laps", suite.app.config.GetFuelRangeSafetyMarginLaps())
-	suite.T().Logf("  Safe range: %.1f laps", actualLaps-suite.app.config.GetFuelRangeSafetyMarginLaps())
+	// Act - Check for fuel warnings
+	suite.app.notifyFuelWarnings()
 
-	// In a real scenario with circuit support, this would generate warnings
-	// Act - Note: This will panic due to nil circuit, demonstrating the testing limitation
-	// suite.app.notifyFuelWarnings() // Currently panics due to nil circuit
+	// Assert - Should generate critical fuel warning
+	suite.NotEmpty(suite.pitRadio.messages, "Should generate critical fuel warning")
 
-	// Instead, let's verify the fuel range is properly set up for when circuit support is added
-
-	// Assert - No messages yet due to missing circuit integration
-	messages := len(suite.pitRadio.messages)
-	suite.Equal(0, messages, "No messages sent due to missing circuit (but fuel data is ready)")
-
-	// Document what would happen with proper circuit integration:
-	safeRangeLaps := actualLaps - suite.app.config.GetFuelRangeSafetyMarginLaps()
-	remainingLaps := 2.0 // 10 - 8 = 2 laps remaining
-
-	suite.T().Logf("Analysis with real data:")
-	suite.T().Logf("  Remaining laps in race: %.0f", remainingLaps)
-	suite.T().Logf("  Safe fuel range: %.1f laps", safeRangeLaps)
-
-	if safeRangeLaps < remainingLaps {
-		suite.T().Logf("  Result: CRITICAL FUEL - would trigger pit warning")
-	} else if actualLaps < remainingLaps+suite.app.config.GetFuelPreWarnNotifyLaps() {
-		suite.T().Logf("  Result: LOW FUEL - would trigger pre-warning")
-	} else {
-		suite.T().Logf("  Result: SUFFICIENT FUEL - no warning needed")
+	if len(suite.pitRadio.messages) > 0 {
+		message := suite.pitRadio.messages[0]
+		suite.Equal(pitradio.TextMessage, message.MessageType)
+		suite.NotEmpty(message.Text, "Message should have text")
 	}
+}
+
+func (suite *PitRadioTestSuite) TestNotifyCircuitChange() {
+	// Arrange - Set up circuit change scenario
+	configJSON := []byte(`{"app": {"language": "en", "accent": "us"}}`)
+	suite.app.config = config.NewFromJSON(configJSON, zerolog.Nop())
+	suite.app.pitRadioState.circuitName = "Old Circuit"
+	suite.circuit.name = "New Circuit"
+
+	// Act - Notify of circuit change
+	suite.app.notifyCircuitChange()
+
+	// Assert - Should send notification and update state
+	suite.Len(suite.pitRadio.messages, 1, "Should send circuit change notification")
+	suite.Equal("New Circuit", suite.app.pitRadioState.circuitName, "Should update stored circuit name")
+
+	if len(suite.pitRadio.messages) > 0 {
+		suite.Contains(suite.pitRadio.messages[0].Text, "New Circuit", "Should mention new circuit")
+	}
+}
+
+func (suite *PitRadioTestSuite) TestNotifyCircuitChangeNotSentForSameCircuit() {
+	// Arrange - Same circuit name
+	suite.app.pitRadioState.circuitName = "Same Circuit"
+	suite.circuit.name = "Same Circuit"
+
+	// Act - Try to notify circuit change
+	suite.app.notifyCircuitChange()
+
+	// Assert - Should not send notification
+	suite.Empty(suite.pitRadio.messages, "Should not send notification for same circuit")
+}
+
+func (suite *PitRadioTestSuite) TestPitRadioSendError() {
+	// Arrange - Set up send failure scenario
+	suite.pitRadio.failSend = true
+	configJSON := []byte(`{"pitRadio": {"fuelRangeSafetyMarginLaps": 0.3}}`)
+	suite.app.config = config.NewFromJSON(configJSON, zerolog.Nop())
+	suite.setupBasicRace(8, 10)
+	suite.setupCircuit(0.5)
+	suite.setupFuelRange(0.2) // Very low fuel
+
+	// Act - Try to send fuel warning (will fail)
+	suite.app.notifyFuelWarnings()
+
+	// Assert - Should handle error gracefully
+	suite.Len(suite.pitRadio.messages, 1, "Should attempt to send message despite error")
+}
+
+func (suite *PitRadioTestSuite) TestDuplicateWarningsSuppressed() {
+	// Arrange - Set up critical fuel scenario
+	configJSON := []byte(`{"pitRadio": {"fuelRangeSafetyMarginLaps": 0.3}}`)
+	suite.app.config = config.NewFromJSON(configJSON, zerolog.Nop())
+	suite.setupBasicRace(8, 10)
+	suite.setupCircuit(0.5)
+	suite.setupFuelRange(0.2) // Very low fuel
+
+	// Act - Send warning twice on same lap
+	suite.app.notifyFuelWarnings()
+	firstMessageCount := len(suite.pitRadio.messages)
+	suite.app.notifyFuelWarnings()
+
+	// Assert - Should not send duplicate
+	suite.Len(suite.pitRadio.messages, firstMessageCount, "Should not send duplicate warnings on same lap")
+}
+
+func (suite *PitRadioTestSuite) TestPitRadioStateReset() {
+	// Arrange - Set up existing state
+	suite.app.pitRadioState.fuelNotifyEmptyIssued = true
+	suite.app.pitRadioState.fuelNotifyPrewarnIssued = true
+	suite.app.pitRadioState.lastNotifiedLapFuelCritical = 5
+	suite.setupBasicRace(10, 20)
+	suite.app.gtClient.Telemetry.RawTelemetry.GridPosition = 3
+
+	// Act - Reset pit radio state
+	suite.app.resetPitRadioState()
+
+	// Assert - All state should be reset
+	suite.False(suite.app.pitRadioState.fuelNotifyEmptyIssued, "Empty fuel flag should be reset")
+	suite.False(suite.app.pitRadioState.fuelNotifyPrewarnIssued, "Pre-warn flag should be reset")
+	suite.Equal(int16(0), suite.app.pitRadioState.lastNotifiedLapFuelCritical, "Critical lap counter should be reset")
+	suite.Equal(int16(10), suite.app.pitRadioState.lastNotifiedLapNumber, "Should update lap number")
+	suite.Equal(int16(3), suite.app.pitRadioState.lastNotifiedGridPosition, "Should update grid position")
+}
+
+func (suite *PitRadioTestSuite) TestFuelWarningPriority() {
+	// Arrange - Set up multiple warning conditions (empty fuel wins)
+	configJSON := []byte(`{"pitRadio": {"fuelRangeSafetyMarginLaps": 0.3, "fuelPreWarnNotifyLaps": 2.0, "fuelStrategyNotifyLaps": 5.0}}`)
+	suite.app.config = config.NewFromJSON(configJSON, zerolog.Nop())
+	suite.setupBasicRace(10, 20) // Lap 10 (divisible by 5 = strategy lap)
+	suite.setupCircuit(0.5)
+	suite.setupFuelRange(0.2)                                 // Critical fuel
+	suite.app.gtClient.Telemetry.RawTelemetry.FuelLevel = 0.0 // Empty - highest priority
+
+	// Act - Check fuel warnings
+	suite.app.notifyFuelWarnings()
+
+	// Assert - Should prioritize empty fuel over other warnings
+	suite.Len(suite.pitRadio.messages, 1, "Should send exactly one message")
+	suite.True(suite.app.pitRadioState.fuelNotifyEmptyIssued, "Should mark empty fuel as notified")
+}
+
+// setupBasicRace configures a standard race scenario.
+func (suite *PitRadioTestSuite) setupBasicRace(currentLap, totalLaps int16) {
+	suite.app.config = createBasicConfig()
+	suite.app.gtClient.Telemetry.RawTelemetry.CurrentLap = currentLap
+	suite.app.gtClient.Telemetry.RawTelemetry.RaceLaps = totalLaps
+	suite.app.gtClient.Telemetry.RawTelemetry.FuelLevel = 50.0
+	suite.app.gtClient.Telemetry.RawTelemetry.FuelCapacity = 100.0
+}
+
+// setupCircuit configures the circuit mock with given parameters.
+func (suite *PitRadioTestSuite) setupCircuit(lapProgress float64) {
+	suite.circuit.name = "Test Circuit"
+	suite.circuit.lengthMeters = 5000.0
+	suite.circuit.lapProgress = lapProgress
+	suite.circuit.lapProgressRemaining = 1.0 - lapProgress
+}
+
+// setupFuelRange configures the fuel range mock with given parameters.
+func (suite *PitRadioTestSuite) setupFuelRange(rangeLaps float64) {
+	rangeMeters := rangeLaps * suite.circuit.lengthMeters
+	suite.fuelRange.SetFuelRange(rangeMeters, rangeLaps, 2.0)
+}
+
+// clearPitRadioState resets all pit radio notification flags.
+func (suite *PitRadioTestSuite) clearPitRadioState() {
+	suite.app.pitRadioState = &pitRadioState{}
+	suite.pitRadio.messages = []pitradio.Message{}
 }

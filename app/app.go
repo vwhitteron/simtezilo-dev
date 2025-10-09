@@ -102,7 +102,7 @@ type App struct {
 
 	odometer  *odometer.Odometer  // Odometer for distance tracking
 	fuelRange fuelrange.Estimator // Fuel range estimator
-	circuit   *circuit.Circuit    // Circuit information and tracking
+	circuit   circuit.Manager     // Circuit information and tracking
 
 	transmissionGainMin float64 // Minimum transmission gain based on vehicle type
 
