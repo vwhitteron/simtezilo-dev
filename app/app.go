@@ -100,9 +100,9 @@ type App struct {
 	kinematics kinematics.State         // Vehicle kinematics tracker
 	synth      *synthesizer.Synthesizer // Audio synthesizer for haptic feedback
 
-	odometer  *odometer.Odometer   // Odometer for distance tracking
-	fuelRange *fuelrange.FuelRange // Fuel range estimator
-	circuit   *circuit.Circuit     // Circuit information and tracking
+	odometer  *odometer.Odometer  // Odometer for distance tracking
+	fuelRange fuelrange.Estimator // Fuel range estimator
+	circuit   *circuit.Circuit    // Circuit information and tracking
 
 	transmissionGainMin float64 // Minimum transmission gain based on vehicle type
 

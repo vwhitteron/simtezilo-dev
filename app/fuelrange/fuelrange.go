@@ -25,7 +25,19 @@ const (
 	fuelRangeMaxSamples int = 6000
 )
 
+// Estimator defines the interface for fuel range calculations.
+type Estimator interface {
+	Reset()
+	ResetEstimate()
+	SetLive(isLive bool)
+	Update(odometerReading float64, fuelLevel float32)
+	DistanceMeters() float64
+	DistanceLaps(lengthMeters float64) float64
+	UsageRatePerKm() float64
+}
+
 // FuelRange estimates the distance that can be travelled with the current fuel level.
+// Conforms to the fuelrange.Estimator interface.
 type FuelRange struct {
 	log                     zerolog.Logger
 	lastOdometerReading     float64   // Last processed odometer reading in meters
