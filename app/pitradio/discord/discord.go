@@ -175,7 +175,7 @@ func (d *Discord) BackgroundTask() {
 }
 
 // Close terminates the connection to the Discord WebSocket.
-// TODO: ensure speaking is stopped before closing session
+// TODO: ensure speaking is stopped before closing session.
 func (d *Discord) Close() error {
 	if d.session == nil {
 		return errors.New("discord session not initialized")
