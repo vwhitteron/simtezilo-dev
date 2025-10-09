@@ -13,7 +13,7 @@ import (
 
 // Config holds the configuration for initializing the UserInterface.
 type Config struct {
-	I18n             *i18n.Language
+	I18n             *i18n.I18n
 	HIDEvents        chan HIDInputEvent
 	Display          hardware.Display
 	LiveData         *LiveData
@@ -31,7 +31,7 @@ type LiveData struct {
 
 // UserInterface manages the user interface components and state.
 type UserInterface struct {
-	i18n       *i18n.Language
+	i18n       *i18n.I18n
 	display    hardware.Display
 	Screen     *gui.Screen
 	hidEvents  chan HIDInputEvent

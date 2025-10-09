@@ -92,7 +92,7 @@ type App struct {
 
 	ui *ui.UserInterface // User interface manager
 
-	i18n    *i18n.Language   // Language translations
+	i18n    *i18n.I18n       // Language translations
 	display hardware.Display // Hardware display interface
 
 	gtClient   *gttelemetry.Client      // GT telemetry client
@@ -165,11 +165,19 @@ func New(opts Options) (*App, error) {
 	app.cache = cache.New(app.config.GetAppCacheDir(), *opts.Logger)
 
 	// load language translations
-	app.i18n = i18n.NewLanguage(
+	app.i18n, err = i18n.New(
 		app.config.GetAppLanguage(),
 		*opts.Logger,
 	)
-	app.log.Debug().Str("language", app.i18n.Code).Str("result", "success").Msg("init language")
+	if err != nil {
+		app.log.Error().Err(err).Str("component", "i18n").Str("result", "failure").Msg("init")
+
+		return nil, err
+	}
+
+	app.config.SetI18n(app.i18n)
+
+	app.log.Debug().Str("language", app.i18n.LanguageCode()).Str("result", "success").Msg("init language")
 
 	hidEvents := make(chan ui.HIDInputEvent, 10)
 

@@ -1,5 +1,4 @@
-// Package translations provides type-safe translation keys and methods for internationalization.
-package translations
+package languagedb
 
 import (
 	"fmt"
@@ -48,27 +47,28 @@ const (
 	RadioFuelRangeFmt     Key = "radio.fuelrangefmt"
 	RadioFuelPreWarnFmt   Key = "radio.fuelprewarnfmt"
 	RadioBoxForFuel       Key = "radio.boxforfuel"
-	RadioFuelCritical     Key = "radio.fuelcriticallastlap"
-	RadioFuelCriticalBox  Key = "radio.fuelcritical"
+	RadioFuelCritical     Key = "radio.fuelcritical"
+	RadioFuelCriticalBox  Key = "radio.fuelcriticalbox"
 	RadioOutOfFuelLastLap Key = "radio.outoffuellastlap"
 	RadioOutOfFuelBox     Key = "radio.outoffuel"
 	RadioLapsRemainingFmt Key = "radio.lapsremainingfmt"
-	RadioRaceProgressFmt  Key = "radio.racerogessfmt"
+	RadioRaceProgressFmt  Key = "radio.raceprogressfmt"
 	RadioRaceFinish       Key = "radio.racefinish"
 	RadioFinalLap         Key = "radio.finallap"
 )
 
 // String returns the string representation of the translation key.
-func (tk Key) String() string {
-	return string(tk)
+func (k Key) String() string {
+	return string(k)
 }
 
-// ToLower returns a new Key with all characters converted to lowercase.
-func (tk Key) ToLower() Key {
-	return Key(strings.ToLower(string(tk)))
+// ToLower returns a new translation key with all characters converted to lowercase.
+func (k Key) ToLower() Key {
+	return Key(strings.ToLower(string(k)))
 }
 
-// StringToKey converts a string to a Key, returning an error if the string is empty.
+// StringToKey converts a string to a Key type.
+// It returns an error if the string does not correspond to a valid Key.
 func StringToKey(str string) (Key, error) {
 	key := Key(str)
 

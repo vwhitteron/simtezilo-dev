@@ -4,7 +4,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/vwhitteron/simtezilo-dev/app/i18n/translations"
+	"github.com/vwhitteron/simtezilo-dev/app/i18n/languagedb"
 )
 
 type HIDInputEvent int
@@ -129,7 +129,7 @@ func (u *UserInterface) HIDEventHandler() {
 
 		title := "???"
 
-		key, err := translations.StringToKey("ui.menu." + menuPage)
+		key, err := languagedb.StringToKey("ui.menu." + menuPage)
 		if err != nil {
 			u.log.Error().
 				Err(err).

@@ -25,7 +25,7 @@ const spiBits uint8 = 8
 
 type DisplayOptions struct {
 	Orientation int
-	I18n        *i18n.Language
+	I18n        *i18n.I18n
 }
 
 func NewDisplay(opts DisplayOptions) (*display.ST7789LCD, error) {

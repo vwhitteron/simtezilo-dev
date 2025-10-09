@@ -90,6 +90,7 @@ type viperConfig struct {
 // Config holds the application configuration and provides methods for accessing and modifying the data.
 type Config struct {
 	viper *viperConfig
+	i18n  *i18n.I18n
 	mu    sync.RWMutex
 }
 
@@ -157,6 +158,11 @@ func NewFromJSON(json []byte, log zerolog.Logger) *Config {
 	return config
 }
 
+// SetI18n sets the i18n instance for the Config which is required for interaction with language settings.
+func (c *Config) SetI18n(i18n *i18n.I18n) {
+	c.i18n = i18n
+}
+
 // ****************************************************************************
 // App methods.
 // ****************************************************************************
@@ -190,9 +196,16 @@ func (c *Config) GetAppAccent() string {
 // NextLanguage cycles to the next available language.
 // It returns the language code of the selected language.
 func (c *Config) NextLanguage() string {
-	languageCodes := i18n.GetLanguageCodes()
+	if c.i18n == nil {
+		log.Warn().Msg("i18n instance not set in config")
 
-	language := languageCodes[0]
+		return c.viper.App.Language
+	}
+
+	languageCodes := c.i18n.LanguageCodes()
+
+	var language string
+
 	for i, lang := range languageCodes {
 		if lang == c.viper.App.Language {
 			nextIndex := (i + 1) % len(languageCodes)
@@ -205,7 +218,11 @@ func (c *Config) NextLanguage() string {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.viper.App.Language = language
+	if language != "" {
+		c.viper.App.Language = language
+	} else {
+		c.viper.App.Language = "en"
+	}
 
 	return c.viper.App.Language
 }
@@ -213,9 +230,16 @@ func (c *Config) NextLanguage() string {
 // PreviousLanguage cycles to the previous available language.
 // It returns the language code of the selected language.
 func (c *Config) PreviousLanguage() string {
-	languageCodes := i18n.GetLanguageCodes()
+	if c.i18n == nil {
+		log.Warn().Msg("i18n instance not set in config")
 
-	language := languageCodes[0]
+		return c.viper.App.Language
+	}
+
+	languageCodes := c.i18n.LanguageCodes()
+
+	var language string
+
 	for i, lang := range languageCodes {
 		if lang == c.viper.App.Language {
 			prevIndex := (i - 1 + len(languageCodes)) % len(languageCodes)
@@ -228,7 +252,11 @@ func (c *Config) PreviousLanguage() string {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.viper.App.Language = language
+	if language != "" {
+		c.viper.App.Language = language
+	} else {
+		c.viper.App.Language = "en"
+	}
 
 	return c.viper.App.Language
 }

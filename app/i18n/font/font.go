@@ -1,4 +1,4 @@
-package i18n
+package font
 
 import (
 	"embed"
@@ -7,6 +7,12 @@ import (
 	"github.com/golang/freetype"
 	"github.com/golang/freetype/truetype"
 )
+
+// Font represents a font with its associated scale.
+type Font struct {
+	Font  *truetype.Font
+	Scale float64
+}
 
 //go:embed fonts/*
 var staticFiles embed.FS
@@ -17,14 +23,14 @@ func GetFont(name string) (*truetype.Font, error) {
 
 	fontData, err := staticFiles.ReadFile(filename)
 	if err != nil {
-		return nil, fmt.Errorf("get font regular %q: %w", filename, err)
+		return nil, fmt.Errorf("read font file %q: %w", filename, err)
 	}
 
-	return parseFontData(fontData)
+	return parseTrueTypeFont(fontData)
 }
 
-// parseFontData parses the provided byte slice into a TrueType font.
-func parseFontData(fontBytes []byte) (*truetype.Font, error) {
+// parseTrueTypeFont parses the provided byte slice into a TrueType font.
+func parseTrueTypeFont(fontBytes []byte) (*truetype.Font, error) {
 	freetypeFont, err := freetype.ParseFont(fontBytes)
 	if err != nil {
 		return nil, fmt.Errorf("parsing font: %w", err)

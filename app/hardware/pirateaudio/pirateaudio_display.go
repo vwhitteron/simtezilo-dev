@@ -29,7 +29,7 @@ const (
 // DisplayOptions is the configuration for the display.
 type DisplayOptions struct {
 	Orientation int
-	I18n        *i18n.Language
+	I18n        *i18n.I18n
 }
 
 // NewDisplay creates a new Pirate Audio display instance.

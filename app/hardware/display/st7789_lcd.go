@@ -28,7 +28,7 @@ type ST7789LCD struct {
 	rotation st7789.Rotation
 	sleeping bool
 
-	i18n    *i18n.Language
+	i18n    *i18n.I18n
 	sprites *sprites.SpriteSet
 	canvas  *image.RGBA
 }
@@ -47,7 +47,7 @@ type Config struct {
 	DPI              float64
 	Rotation         st7789.Rotation
 	SetupDisplayFunc func(*st7789.Device)
-	I18n             *i18n.Language // TODO: move rendering outside of display package
+	I18n             *i18n.I18n // TODO: move rendering outside of display package
 }
 
 var once sync.Once //nolint:gochecknoglobals // idiomatic singleton

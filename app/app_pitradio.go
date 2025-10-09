@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/vwhitteron/simtezilo-dev/app/i18n/translations"
+	"github.com/vwhitteron/simtezilo-dev/app/i18n/languagedb"
 	"github.com/vwhitteron/simtezilo-dev/app/pitradio"
 )
 
@@ -99,7 +99,7 @@ func (a *App) notifyCircuitChange() {
 	if a.pitRadio != nil {
 		err := a.pitRadio.Send(pitradio.Message{
 			Text:   message,
-			Lang:   a.i18n.GetCurrentLanguage(),
+			Lang:   a.i18n.LanguageCode(),
 			Accent: a.config.GetAppAccent(),
 		})
 		if err != nil {
@@ -173,7 +173,7 @@ func (a *App) notifyGridPositionChange() {
 	if a.pitRadio != nil {
 		err := a.pitRadio.Send(pitradio.Message{
 			Text:   message,
-			Lang:   a.i18n.GetCurrentLanguage(),
+			Lang:   a.i18n.LanguageCode(),
 			Accent: a.config.GetAppAccent(),
 		})
 		if err != nil {
@@ -215,7 +215,7 @@ func (a *App) notifyLapTime() {
 	// TODO: add config option to notify all laps or best lap only
 	if bestLapTime > 0 && a.state.current.lastLapTime <= bestLapTime && a.state.current.lapNumber > 2 {
 		message = fmt.Sprintf("%s. %s",
-			a.i18n.GetString(translations.RadioLapRecord),
+			a.i18n.GetString(languagedb.RadioLapRecord),
 			formatDuration(a.state.current.lastLapTime),
 		)
 	} else if a.state.current.lapNumber > 2 && a.state.current.lastLapTime > bestLapTime {
@@ -229,7 +229,7 @@ func (a *App) notifyLapTime() {
 	// Send lap time message to Discord
 	err := a.pitRadio.Send(pitradio.Message{
 		Text:    message,
-		Lang:    a.i18n.GetCurrentLanguage(),
+		Lang:    a.i18n.LanguageCode(),
 		Accent:  a.config.GetAppAccent(),
 		NoCache: true,
 	})
@@ -278,15 +278,15 @@ func (a *App) notifyLapNumber() {
 
 	switch {
 	case raceCompleted:
-		message = a.i18n.GetString(translations.RadioRaceFinish)
+		message = a.i18n.GetString(languagedb.RadioRaceFinish)
 
 		a.pitRadioState.lastNotifiedLapNumber = currentLap
 	case finalLap:
-		message = a.i18n.GetString(translations.RadioFinalLap)
+		message = a.i18n.GetString(languagedb.RadioFinalLap)
 
 		a.pitRadioState.lastNotifiedLapNumber = currentLap
 	case LastFewLaps:
-		format := a.i18n.GetString(translations.RadioLapsRemainingFmt)
+		format := a.i18n.GetString(languagedb.RadioLapsRemainingFmt)
 		message = fmt.Sprintf(format, lapsRemaining)
 
 		a.pitRadioState.lastNotifiedLapNumber = currentLap
@@ -296,7 +296,7 @@ func (a *App) notifyLapNumber() {
 
 	err := a.pitRadio.Send(pitradio.Message{
 		Text:   message,
-		Lang:   a.i18n.GetCurrentLanguage(),
+		Lang:   a.i18n.LanguageCode(),
 		Accent: a.config.GetAppAccent(),
 	})
 	if err != nil {
@@ -360,7 +360,7 @@ func (a *App) notifyRaceProgress() {
 		return
 	}
 
-	format := a.i18n.GetString(translations.RadioRaceProgressFmt)
+	format := a.i18n.GetString(languagedb.RadioRaceProgressFmt)
 	message := fmt.Sprintf(format, raceProgressPercent)
 
 	a.pitRadioState.lastNotifiedRaceProgressInterval = currentProgressInterval
@@ -368,7 +368,7 @@ func (a *App) notifyRaceProgress() {
 	if a.pitRadio != nil {
 		err := a.pitRadio.Send(pitradio.Message{
 			Text:   message,
-			Lang:   a.i18n.GetCurrentLanguage(),
+			Lang:   a.i18n.LanguageCode(),
 			Accent: a.config.GetAppAccent(),
 		})
 		if err != nil {
@@ -448,7 +448,7 @@ func (a *App) notifyFuelWarnings() {
 	if a.pitRadio != nil {
 		err := a.pitRadio.Send(pitradio.Message{
 			Text:   message,
-			Lang:   a.i18n.GetCurrentLanguage(),
+			Lang:   a.i18n.LanguageCode(),
 			Accent: a.config.GetAppAccent(),
 		})
 		if err != nil {
@@ -484,9 +484,9 @@ func (a *App) fuelEmptyMessage(remainingLaps float64, currentLap int16) (message
 	}
 
 	if remainingLaps == 0 {
-		message = a.i18n.GetString(translations.RadioOutOfFuelLastLap)
+		message = a.i18n.GetString(languagedb.RadioOutOfFuelLastLap)
 	} else {
-		message = a.i18n.GetString(translations.RadioOutOfFuelBox)
+		message = a.i18n.GetString(languagedb.RadioOutOfFuelBox)
 	}
 
 	suppressNotify = false
@@ -506,9 +506,9 @@ func (a *App) fuelCriticalMessage(remainingLaps float64, currentLap int16) (mess
 	}
 
 	if remainingLaps == 0 {
-		message = a.i18n.GetString(translations.RadioFuelCritical)
+		message = a.i18n.GetString(languagedb.RadioFuelCritical)
 	} else {
-		message = a.i18n.GetString(translations.RadioFuelCriticalBox)
+		message = a.i18n.GetString(languagedb.RadioFuelCriticalBox)
 	}
 
 	suppressNotify = false
@@ -526,7 +526,7 @@ func (a *App) fuelBoxThisLapMessage(currentLap int16, remainingLaps float64) (me
 		return message, suppressNotify
 	}
 
-	message = a.i18n.GetString(translations.RadioBoxForFuel)
+	message = a.i18n.GetString(languagedb.RadioBoxForFuel)
 
 	suppressNotify = remainingLaps == 0
 	a.pitRadioState.lastNotifiedLapFuelWarning = currentLap
@@ -547,7 +547,7 @@ func (a *App) fuelBoxSoonMessage(
 		return message, suppressNotify
 	}
 
-	format := a.i18n.GetString(translations.RadioFuelPreWarnFmt)
+	format := a.i18n.GetString(languagedb.RadioFuelPreWarnFmt)
 	message = fmt.Sprintf(format, int(fuelRangeLapsUntilBox))
 
 	suppressNotify = remainingLaps == 0
@@ -570,7 +570,7 @@ func (a *App) fuelStrategyMessage(
 		return message, suppressNotify
 	}
 
-	format := a.i18n.GetString(translations.RadioFuelRangeFmt)
+	format := a.i18n.GetString(languagedb.RadioFuelRangeFmt)
 	message = fmt.Sprintf(format, int(fuelRangeLaps), int(remainingLaps))
 
 	suppressNotify = remainingLaps == 0

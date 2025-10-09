@@ -17,7 +17,7 @@ import (
 // Config holds the configuration for creating a new Screen instance.
 type Config struct {
 	DisplayDevice hardware.Display
-	I18n          *i18n.Language
+	I18n          *i18n.I18n
 }
 
 // Screen holds the state for rendering to a connected display.
@@ -27,7 +27,7 @@ type Screen struct {
 	pixelRows     uint16
 	dpi           float64
 	sprites       *sprites.SpriteSet
-	i18n          *i18n.Language
+	i18n          *i18n.I18n
 }
 
 // NewScreen creates a new Screen instance.
@@ -75,8 +75,8 @@ func (r *Screen) RenderBlankScreen() error {
 // RenderLiveScreen renders the live screen with the provided value.
 func (r *Screen) RenderLiveScreen(value string) error {
 	// value
-	fontFace := truetype.NewFace(r.i18n.FontRegular.Font, &truetype.Options{
-		Size:    r.i18n.FontRegular.Scale * valueLargeSize,
+	fontFace := truetype.NewFace(r.i18n.RegularFont().Font, &truetype.Options{
+		Size:    r.i18n.RegularFont().Scale * valueLargeSize,
 		DPI:     r.dpi,
 		Hinting: font.HintingFull,
 	})
@@ -117,8 +117,8 @@ func (r *Screen) RenderLiveScreen(value string) error {
 // RenderSettingScreen renders the setting screen with the provided header and value.
 func (r *Screen) RenderSettingScreen(header string, value string) error {
 	// header
-	fontFace := truetype.NewFace(r.i18n.FontRegular.Font, &truetype.Options{
-		Size:    r.i18n.FontRegular.Scale * headerSize,
+	fontFace := truetype.NewFace(r.i18n.RegularFont().Font, &truetype.Options{
+		Size:    r.i18n.RegularFont().Scale * headerSize,
 		DPI:     r.dpi,
 		Hinting: font.HintingFull,
 	})
@@ -141,8 +141,8 @@ func (r *Screen) RenderSettingScreen(header string, value string) error {
 	fontDrawer.DrawString(header)
 
 	// value
-	fontFace = truetype.NewFace(r.i18n.FontValue.Font, &truetype.Options{
-		Size:    r.i18n.FontValue.Scale * valueSmallSize,
+	fontFace = truetype.NewFace(r.i18n.ValueFont().Font, &truetype.Options{
+		Size:    r.i18n.ValueFont().Scale * valueSmallSize,
 		DPI:     r.dpi,
 		Hinting: font.HintingFull,
 	})
@@ -186,8 +186,8 @@ func (r *Screen) newBlankCanvas() *image.RGBA {
 // renderBackgroundScreen renders a background screen with a centered value.
 func (r *Screen) renderBackgroundScreen(sprite sprites.SpriteName, value string) error {
 	// footer
-	fontFace := truetype.NewFace(r.i18n.FontRegular.Font, &truetype.Options{
-		Size:    r.i18n.FontRegular.Scale * footerSize,
+	fontFace := truetype.NewFace(r.i18n.RegularFont().Font, &truetype.Options{
+		Size:    r.i18n.RegularFont().Scale * footerSize,
 		DPI:     r.dpi,
 		Hinting: font.HintingFull,
 	})

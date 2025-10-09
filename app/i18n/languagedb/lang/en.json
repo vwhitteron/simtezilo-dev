@@ -1,0 +1,68 @@
+{
+    "Metadata": {
+        "Code": "en",
+        "Name": "English"
+    },
+    "Fonts": {
+        "Regular": {
+            "File": "LeagueGothic-Regular.ttf",
+            "Size": 1
+        },
+        "Italic": {
+            "File": "LeagueGothic-Italic.ttf",
+            "Size": 1
+        },
+        "Value": {
+            "File": "LeagueGothic-Regular.ttf",
+            "Size": 1
+        }
+    },
+    "Translations": {
+        "app.name": "Simtezilo",
+        "app.description": "Sim Racing Haptics Synthesizer",
+        "app.version": "version",
+
+        "ui.error": "error",
+        "ui.success": "success",
+        "ui.quit": "goodbye",
+        "ui.starting": "starting",
+        "ui.stopping": "stopping",
+        "ui.loading": "loading",
+        "ui.waiting": "waiting",
+        "ui.ready": "ready",
+        "ui.settings": "settings",
+
+        "ui.menu.vol": "Master Gain",
+        "ui.menu.cvol": "Chassis Gain",
+        "ui.menu.tvol": "Trans Gain",
+        "ui.menu.evol": "Engine Gain",
+        "ui.menu.eprimary": "Engine Bal 1",
+        "ui.menu.esecondary": "Engine Bal 2",
+        "ui.menu.epvol": "Engine Pul Gain",
+        "ui.menu.epscale": "Engine Pul Scale",
+        "ui.menu.vcurve": "FFB Curve",
+        "ui.menu.vsat": "FFB Saturation",
+        "ui.menu.fcurve": "Freq Curve",
+        "ui.menu.fsat": "Freq Saturation",
+        "ui.menu.fmin": "Freq Min",
+        "ui.menu.fmax": "Freq Max",
+        "ui.menu.tcurve": "Trans Curve",
+        "ui.menu.tsat": "Trans Saturation",
+        "ui.menu.mix": "Mix Algo",
+        "ui.menu.lang": "Language",
+
+        "radio.online": "Radio check",
+        "radio.laprecord": "Lap record",
+        "radio.fuelrangefmt": "Fuel range %d laps. %d laps remaining",
+        "radio.fuelprewarnfmt": "Refuel in %d laps",
+        "radio.boxforfuel": "Box this lap for fuel",
+        "radio.fuelcritical": "Fuel critical, map 6",
+        "radio.fuelcriticalbox": "Fuel critical, map 6 boxboxbox",
+        "radio.outoffuellastlap": "Out of fuel, switch to reserve and limp to finish",
+        "radio.outoffuel": "Out of fuel, switch to reserve and box immediately",
+        "radio.lapsremainingfmt": "%d laps remaining",
+        "radio.finalLap": "Final lap",
+        "radio.raceprogressfmt": "Race progress %d%%",
+        "radio.racefinish": "Race complete"
+    }
+}

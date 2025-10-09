@@ -144,10 +144,16 @@ func main() { //nolint:cyclop // TODO: refactor
 	}
 
 	langCode := "en"
-	i18n := i18n.NewLanguage(
+
+	i18n, err := i18n.New(
 		&langCode,
 		logger.With().Str("component", "i18n").Logger(),
 	)
+	if err != nil {
+		fmt.Printf("Failed to initialize i18n: %v\n", err) //nolint:forbidigo
+
+		return
+	}
 
 	renderer, err := gui.NewScreen(&gui.Config{
 		DisplayDevice: display,
