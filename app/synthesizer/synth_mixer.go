@@ -117,8 +117,6 @@ func (m *MixerChannel) Read(length int) []float64 {
 
 // Write writes samples to the channel's buffer with the specified magnitude and offset.
 func (m *MixerChannel) Write(samples []float64, magnitude float64, offset int, overwrite bool) {
-	// TODO: scaling slice in-place cause the gear shift wavform to be reduced every time it is played
-	// is this the correct thing to do?
 	ScaleSamples(&samples, magnitude)
 
 	m.buffer.Write(samples, offset, overwrite)

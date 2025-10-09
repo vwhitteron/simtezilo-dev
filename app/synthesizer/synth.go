@@ -14,7 +14,7 @@ import (
 
 // Synthesizer is the main synthesizer structure that holds the mixer, effects, and output device.
 type Synthesizer struct {
-	Effects      *EffectsSampleBank
+	effects      *EffectsSampleBank
 	log          zerolog.Logger
 	mixer        *Mixer
 	outputDevice *OutputDevice
@@ -33,7 +33,7 @@ type SynthOpts struct {
 // New creates a new Synthesizer instance with the provided options.
 func New(opts *SynthOpts) (*Synthesizer, error) {
 	synthesizer := &Synthesizer{
-		Effects:    NewEffectsSampleBank(),
+		effects:    NewEffectsSampleBank(),
 		kinematics: opts.Kinematics,
 		sampleRate: opts.Config.InternalSampleRateHz,
 		log:        opts.Logger.With().Str("package", "synth").Logger(),
@@ -155,10 +155,14 @@ func (s *Synthesizer) Silence() {
 	s.mixer.ClearBuffers()
 }
 
+// EffectSampleBank returns the effects sample bank.
+func (s *Synthesizer) EffectSampleBank() *EffectsSampleBank {
+	return s.effects
+}
+
 // GetEffectSample returns the raw sample data for the specified effect name.
-// TODO: unused, remove
 func (s *Synthesizer) GetEffectSample(name string, sampleRate int) codec.PCMFloat64 {
-	effectSample := s.Effects.GetSample(name, sampleRate)
+	effectSample := s.effects.GetSample(name, sampleRate)
 
 	return effectSample
 }
@@ -174,7 +178,7 @@ func (s *Synthesizer) PlayEffect(name string, magnitude float64) {
 
 	magnitude *= channelMagnitude
 
-	effectSample := s.Effects.GetSample(name, s.sampleRate)
+	effectSample := s.effects.GetSample(name, s.sampleRate)
 
 	_ = s.mixer.WriteChannel(name, effectSample.Samples(), magnitude, 0, false)
 }

@@ -171,20 +171,18 @@ func (b *AdaptiveBuffer) Write(samples []float64, offset int, overwrite bool) {
 		b.writePos = (b.writePos + offset) % b.capacity
 	}
 
-	// Check for potential overflow
+	// Drop oldest samples if necessary to prevent overflow
 	if len(samples) > (b.capacity-b.used) && overwrite {
 		b.overflows++
 
-		// If overwrite is false and we're mixing, we need to be more careful
 		if !overwrite {
-			// Drop oldest samples to make room, but try to preserve audio continuity
 			samplesToDrop := len(samples) - (b.capacity - b.used)
 			b.dropOldestSamples(samplesToDrop)
 		}
 	}
 
+	// Overwrite any existing content in the buffer
 	if overwrite {
-		// Overwrite mode: just write samples to buffer
 		for _, sample := range samples {
 			b.buffer[b.writePos] = sample
 			b.writePos = (b.writePos + 1) % b.capacity
@@ -192,7 +190,6 @@ func (b *AdaptiveBuffer) Write(samples []float64, offset int, overwrite bool) {
 			if b.used < b.capacity {
 				b.used++
 			} else {
-				// Buffer full, advance read pointer (circular overwrite)
 				b.readPos = (b.readPos + 1) % b.capacity
 			}
 		}
@@ -200,14 +197,11 @@ func (b *AdaptiveBuffer) Write(samples []float64, offset int, overwrite bool) {
 		return
 	}
 
-	// Mix mode: mix with existing buffer content starting from read position
 	peak := 0.0
 
 	for index, inputSample := range samples {
-		// Calculate position to mix at (starting from read position)
 		mixPos := (b.readPos + index) % b.capacity
 
-		// Only mix if we have existing content at this position
 		var mixedSample float64
 
 		if index < b.used {

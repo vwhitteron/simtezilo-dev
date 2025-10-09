@@ -1,3 +1,4 @@
+// Package discord provides a Discord bot implementation for sending text and audio messages to a Discord server.
 package discord
 
 import (
@@ -266,7 +267,6 @@ func (d *Discord) dispatchMessages() {
 				return
 			}
 		} else {
-			fmt.Printf("Audio message with %d bytes\n", len(message.Audio))
 			dcaData = message.Audio
 		}
 

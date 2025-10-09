@@ -7,6 +7,7 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/synthesizer"
 )
 
+// playGearShiftHaptic outputs a haptic effect simulating forces during a gear change.
 func (a *App) playGearShiftHaptic() {
 	magnitude := a.determineGearShiftMagnitude()
 
@@ -20,6 +21,10 @@ func (a *App) playGearShiftHaptic() {
 		Msg("gear change")
 }
 
+// determineGearShiftMagnitude calculates the magnitude of the gear shift haptic effect.
+// A fixed magnitude simulates only the forces of the gear change mechanism itself.
+// A dynamic magnitude simulates the forces of the gear change mechanism combined with
+// the longitudinal g-force experienced during the gear change.
 func (a *App) determineGearShiftMagnitude() float64 {
 	synthMagnitude, _ := a.synth.GetChannelMagnitude("transmission")
 

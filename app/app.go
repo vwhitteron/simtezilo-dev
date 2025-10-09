@@ -1,3 +1,4 @@
+// Package app implements the main application logic for Simtezilo, a racing simulator telemetry and haptics engine.
 package app
 
 import (
@@ -363,7 +364,7 @@ func New(opts Options) (*App, error) {
 		GuildID:        app.config.GetDiscordGuildID(),
 		MessageGap:     time.Duration(app.config.GetMessageSendIntervalMs()) * time.Millisecond,
 		Cache:          &app.cache,
-		SampleBank:     app.synth.Effects,
+		SampleBank:     app.synth.EffectSampleBank(),
 		Logger:         *opts.Logger,
 	}
 

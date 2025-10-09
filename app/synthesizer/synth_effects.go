@@ -8,9 +8,10 @@ import (
 )
 
 const (
-	effectsSampleRateHz = 32000
+	effectsSampleRateHz = 32000 // Base sample rate at which sound effects are rendered
 )
 
+// EffectSample represents a pre-generated audio sample for a sound effect.
 type EffectSample struct {
 	Name   string
 	Sample map[int]codec.PCMFloat64

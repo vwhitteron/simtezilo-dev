@@ -1,5 +1,7 @@
+// Package pitradio provides an interface for sending text and voice messages as a pit radio analog.
 package pitradio
 
+// MessageType defines the type of message to be sent.
 type MessageType int
 
 const (
