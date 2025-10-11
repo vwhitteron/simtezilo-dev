@@ -270,7 +270,7 @@ func (a *App) notifyLapNumber() {
 		return
 	}
 
-	message := ""
+	var message string
 
 	longRace := raceLaps > 8
 	lapsRemaining := raceLaps - currentLap + 1
@@ -293,6 +293,10 @@ func (a *App) notifyLapNumber() {
 		message = fmt.Sprintf(format, lapsRemaining)
 
 		a.pitRadioState.lastNotifiedLapNumber = currentLap
+	case currentLap <= 1:
+		return
+	default:
+		message = fmt.Sprintf("Lap %d", currentLap)
 	}
 
 	a.pitRadioState.lastNotifiedLapNumber = currentLap
@@ -411,25 +415,25 @@ func (a *App) notifyFuelWarnings() {
 		return
 	}
 
-	fuelRangeLaps := a.fuelRange.DistanceLaps(circuitLengthMeters)
-	fuelRangeLapsSafe := fuelRangeLaps - a.config.GetFuelRangeSafetyMarginLaps()
 	fuelRangeMeters := a.fuelRange.DistanceMeters()
-	lapProgress := a.circuit.LapProgress()
+	fuelRangeMetersWithSafetyMargin := fuelRangeMeters - (a.config.GetFuelRangeSafetyMarginLaps() * circuitLengthMeters)
+	fuelRangeLapsSafe := fuelRangeMetersWithSafetyMargin / circuitLengthMeters
+
 	lapProgressRemaining := a.circuit.LapProgressRemaining()
-	fuelRangeLapsUntilBox := fuelRangeLapsSafe - lapProgressRemaining
+	distanceToPitBox := lapProgressRemaining * circuitLengthMeters
 
 	fuelEmpty := a.gtClient.Telemetry.FuelLevelPercent() <= 0
-	fuelCritical := fuelRangeLapsUntilBox <= 0
-	fuelEmptyNextLap := fuelRangeLapsUntilBox <= 1
-	fuelEmptySoon := fuelRangeLapsUntilBox <= a.config.GetFuelPreWarnNotifyLaps()+a.config.GetFuelRangeSafetyMarginLaps()
+	fuelCritical := fuelRangeMeters <= distanceToPitBox
+	fuelEmptyNextLap := fuelRangeMetersWithSafetyMargin <= (distanceToPitBox + circuitLengthMeters)
+	fuelEmptyPreWarn := fuelRangeMetersWithSafetyMargin <= (distanceToPitBox + (a.config.GetFuelPreWarnNotifyLaps() * circuitLengthMeters))
+
+	fuelRangeLaps := a.fuelRange.DistanceLaps(circuitLengthMeters)
 	fuelStrategyUpdate := remainingLaps > fuelRangeLaps && currentLap%int16(a.config.GetFuelStrategyNotifyLaps()) == 0
 
 	var (
 		message        string
 		suppressNotify bool
 	)
-
-	// Fuel warnings based on estimated range
 
 	switch {
 	case fuelEmpty:
@@ -438,8 +442,8 @@ func (a *App) notifyFuelWarnings() {
 		message, suppressNotify = a.fuelCriticalMessage(remainingLaps, currentLap)
 	case fuelEmptyNextLap:
 		message, suppressNotify = a.fuelBoxThisLapMessage(currentLap, remainingLaps)
-	case fuelEmptySoon:
-		message, suppressNotify = a.fuelBoxSoonMessage(fuelRangeLapsUntilBox, currentLap, remainingLaps)
+	case fuelEmptyPreWarn:
+		message, suppressNotify = a.fuelBoxPreWarnMessage(fuelRangeLapsSafe, currentLap, remainingLaps)
 	case fuelStrategyUpdate:
 		message, suppressNotify = a.fuelStrategyMessage(fuelRangeLaps, remainingLaps, currentLap)
 	default:
@@ -472,10 +476,9 @@ func (a *App) notifyFuelWarnings() {
 			Float32("fuel_percent", a.gtClient.Telemetry.FuelLevelPercent()).
 			Float64("lap_meters", circuitLengthMeters).
 			Float64("range_meters", fuelRangeMeters).
-			Float64("range_laps", fuelRangeLaps).
-			Float64("range_laps_safe", fuelRangeLapsSafe).
-			Float64("range_laps_to_box", fuelRangeLapsUntilBox).
-			Float64("lap_progress", lapProgress).
+			Float64("range_meters_safe", fuelRangeMetersWithSafetyMargin).
+			Float64("distance_to_pit", distanceToPitBox).
+			Float64("lap_progress_remaining", lapProgressRemaining).
 			Msg("Send fuel message")
 	}
 }
@@ -540,9 +543,9 @@ func (a *App) fuelBoxThisLapMessage(currentLap int16, remainingLaps float64) (me
 	return message, suppressNotify
 }
 
-// fuelBoxSoonMessage generates a fuel pre-warn message based on estimated fuel range.
-func (a *App) fuelBoxSoonMessage(
-	fuelRangeLapsUntilBox float64,
+// fuelBoxPreWarnMessage generates a fuel pre-warn message based on estimated fuel range.
+func (a *App) fuelBoxPreWarnMessage(
+	fuelRangeLapsSafe float64,
 	currentLap int16,
 	remainingLaps float64,
 ) (message string, suppressNotify bool) {
@@ -554,7 +557,7 @@ func (a *App) fuelBoxSoonMessage(
 	}
 
 	format := a.i18n.GetString(languagedb.RadioFuelPreWarnFmt)
-	message = fmt.Sprintf(format, int(fuelRangeLapsUntilBox))
+	message = fmt.Sprintf(format, int(fuelRangeLapsSafe))
 
 	suppressNotify = remainingLaps == 0
 	a.pitRadioState.fuelNotifyPrewarnIssued = true
