@@ -18,11 +18,11 @@ const (
 	// Default (unknown) range in meters.
 	rangeDistanceUnknown float64 = rangeLapsUnknown * 1000
 
-	// Minimum number of samples required to provide a reliable range estimate.
-	fuelRangeMinSamples int = 1000
+	// Minimum number of samples required to provide a reliable range estimate (~30s).
+	fuelRangeMinSamples int = 1800
 
-	// Number of samples to store in the buffer.
-	fuelRangeMaxSamples int = 6000
+	// Number of samples to store in the buffer (~120s).
+	fuelRangeMaxSamples int = 7200
 )
 
 // Estimator defines the interface for fuel range calculations.
@@ -71,10 +71,10 @@ func (r *FuelRange) Reset() {
 	r.distanceMeters = 0
 	r.refueling = false
 
-	// Replays reduce fuel samples by ~100x compared to a live session
 	minSamples := fuelRangeMinSamples
 	maxSamples := fuelRangeMaxSamples
 
+	// Replays reduce fuel samples by ~100x compared to a live session
 	if !r.isLive {
 		minSamples /= 100
 		maxSamples /= 100
@@ -151,7 +151,6 @@ func (r *FuelRange) Update(odometerReading float64, fuelLevel float32) {
 
 		r.fuelRateSamples = append(r.fuelRateSamples, fuelPerMeter)
 
-		// r.fuelRate = r.fuelRatePercentile(fuelRatePercentile)
 		r.fuelRate = r.fuelRateMA()
 
 		r.distanceMeters = float64(fuelLevel) / r.fuelRate
