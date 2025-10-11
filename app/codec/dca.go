@@ -43,7 +43,11 @@ func encodeDCA(pcm PCMInt16) ([]byte, error) {
 
 		// Encode the frame
 		opusData, err := encoder.Encode(frame, OpusFrameSize, OpusMaxFrameSize)
-		if err == nil && len(opusData) > 0 {
+		if err != nil {
+			return nil, fmt.Errorf("encode Opus frame: %w", err)
+		}
+
+		if len(opusData) > 0 {
 			// Write DCA format: length (2 bytes) + opus data
 			frameLen := len(opusData)
 			if frameLen <= 65535 { // max int16 value

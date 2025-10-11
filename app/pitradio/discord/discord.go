@@ -130,7 +130,7 @@ func (d *Discord) BackgroundTask() {
 				continue
 			}
 
-			effectSample := d.sampleBank.GetSample("talkPermitTone", codec.OpusSampleRate)
+			effectSample := d.sampleBank.GetSample("talkPermitTone", codec.OpusSampleRate/2)
 
 			dcaData, err := effectSample.ToDCA()
 			if err != nil {
@@ -138,19 +138,19 @@ func (d *Discord) BackgroundTask() {
 					Err(err).
 					Str("result", "failure").
 					Msg("generate talk permit tone")
-			}
-
-			err = d.Send(pitradio.Message{
-				MessageType: pitradio.AudioMessage,
-				Text:        "talk permit tone",
-				Audio:       dcaData,
-				NoCache:     true,
-			})
-			if err != nil {
-				d.log.Error().
-					Err(err).
-					Str("result", "failure").
-					Msg("send message")
+			} else {
+				err = d.Send(pitradio.Message{
+					MessageType: pitradio.AudioMessage,
+					Text:        "talk permit tone",
+					Audio:       dcaData,
+					NoCache:     false,
+				})
+				if err != nil {
+					d.log.Error().
+						Err(err).
+						Str("result", "failure").
+						Msg("send message")
+				}
 			}
 
 			d.log.Info().
@@ -250,6 +250,12 @@ func (d *Discord) dispatchMessages() {
 					Str("package", "discord").
 					Msg("send message to Discord channel")
 			}
+
+			d.log.Info().
+				Str("text", message.Text).
+				Str("type", "text").
+				Str("channel_id", d.channelID).
+				Msg("Discord send message")
 		}
 
 		var dcaData []byte
@@ -274,9 +280,16 @@ func (d *Discord) dispatchMessages() {
 		if err != nil {
 			d.log.Error().
 				Err(err).
-				Str("package", "discord").
 				Msg("send DCA audio message to Discord channel")
+
+			return
 		}
+
+		d.log.Info().
+			Str("text", message.Text).
+			Str("type", "audio").
+			Str("channel_id", d.voiceChannelID).
+			Msg("Discord send message")
 	default:
 		return
 	}
@@ -289,7 +302,20 @@ func (d *Discord) isConnected() bool {
 
 // isDead returns true if the voice connection is in a dead state.
 func (d *Discord) isDead() bool {
-	return d.voiceConn != nil && d.voiceConn.Status == discordgo.VoiceConnectionStatusDead
+	if d.voiceConn == nil {
+		return true
+	}
+
+	if d.voiceConn.Err != nil {
+		d.log.Error().
+			Err(d.voiceConn.Err).
+			Int("status", int(d.voiceConn.Status)).
+			Msg("voice connection")
+
+		return true
+	}
+
+	return false
 }
 
 // joinVoiceChannel joins the configured voice channel for audio streaming.
@@ -362,7 +388,7 @@ func (d *Discord) messageToDCA(message pitradio.Message) (dcaData []byte, err er
 	if !message.NoCache {
 		dcaData, err = d.cache.Read(itemID)
 		if err == nil && len(dcaData) > 0 {
-			return []byte{}, d.sendVoiceAudio(dcaData)
+			return dcaData, nil
 		}
 	}
 
@@ -418,11 +444,18 @@ func (d *Discord) sendVoiceAudio(dca []byte) error {
 		return errors.New("voice connection not ready")
 	}
 
+	if len(dca) == 0 {
+		return errors.New("no audio data to send")
+	}
+
 	// Send speaking packet
 	err := d.voiceConn.Speaking(true)
 	if err != nil {
 		return fmt.Errorf("start speaking: %w", err)
 	}
+
+	// Small delay to ensure Discord processes the speaking state
+	time.Sleep(50 * time.Millisecond)
 
 	defer func() {
 		// Always stop speaking when done

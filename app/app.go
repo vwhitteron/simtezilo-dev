@@ -846,20 +846,23 @@ func (a *App) detectRecordingTrigger() {
 	currentTriggerState := a.gtClient.Telemetry.Flags().HighBeamActive
 	currentSequenceID := a.state.current.sequenceNumber
 
-	// Only count toggles when the trigger input is high/on/true
-	if !currentTriggerState {
-		return
-	}
-
+	// Check if the trigger state has changed
 	if currentTriggerState == a.state.recordingTrigger.lastTriggerState {
 		return
 	}
 
+	// Update the last state to current state
 	a.state.recordingTrigger.lastTriggerState = currentTriggerState
+
+	// Only count toggles when the trigger transitions to high/on/true (OFF->ON)
+	if !currentTriggerState {
+		return
+	}
+
 	a.state.recordingTrigger.lastToggleSequenceID = currentSequenceID
 	a.state.recordingTrigger.toggleSequenceIDs = append(a.state.recordingTrigger.toggleSequenceIDs, currentSequenceID)
 
-	toggleWindowSeconds := uint32(1) // Remove toggles older than 1 second
+	toggleWindowSeconds := uint32(1) // Remove toggles older than 2 seconds
 	cutoffSequenceID := currentSequenceID - (toggleWindowSeconds * frameRate)
 	validToggles := []uint32{}
 
@@ -875,6 +878,7 @@ func (a *App) detectRecordingTrigger() {
 	a.log.Debug().
 		Int("toggle_count", a.state.recordingTrigger.toggleCount).
 		Uint32("sequence_id", currentSequenceID).
+		Bool("high_beam_active", currentTriggerState).
 		Msg("Recording trigger toggle detected")
 
 	if a.state.recordingTrigger.toggleCount >= 3 {
@@ -992,18 +996,19 @@ func (a *App) notifyRecordingEvent(event string) {
 		a.log.Error().
 			Err(err).
 			Msg("generate talk permit tone")
-	}
-
-	err = a.pitRadio.Send(pitradio.Message{
-		MessageType: pitradio.AudioMessage,
-		Text:        "recording start",
-		Audio:       dcaData,
-		NoCache:     true,
-	})
-	if err != nil {
-		a.log.Error().
-			Err(err).
-			Msg("send message")
+	} else {
+		err := a.pitRadio.Send(pitradio.Message{
+			MessageType: pitradio.AudioMessage,
+			Text:        "recording " + event,
+			// Accent:      a.config.GetAppAccent(),
+			Audio:   dcaData,
+			NoCache: false,
+		})
+		if err != nil {
+			a.log.Error().
+				Err(err).
+				Msg("send message")
+		}
 	}
 }
 

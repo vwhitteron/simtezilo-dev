@@ -16,5 +16,6 @@ __debug_*
 # Other app specific data
 scichart/node_modules/
 data/persist/
+data/replays/
 data/tmp/
 cache/

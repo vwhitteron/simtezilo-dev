@@ -75,8 +75,18 @@ func (s *EffectsSampleBank) GetSample(name string, sampleRate int) codec.PCMFloa
 	if !ok {
 		// Resample and cache the new sample rate when it doesn't exist
 		baseSample := effect.Sample[effectsSampleRateHz]
-		sample := baseSample.Resample(sampleRate)
-		effect.Sample[sampleRate] = sample
+		if baseSample.Len() == 0 {
+			return codec.PCMFloat64{}
+		}
+
+		sample = baseSample.Resample(sampleRate)
+		// Update the cache by modifying the original map entry
+		s.samples[name].Sample[sampleRate] = sample
+	}
+
+	// Check if sample is empty after potential resampling
+	if sample.Len() == 0 {
+		return codec.PCMFloat64{}
 	}
 
 	// TODO: copying to a new sample as the slice is scaled by magnitude in-place which
@@ -155,6 +165,11 @@ func generateDTMFSequence(toneSequence string, toneLength time.Duration, silence
 	// Generate tones for each character in the value
 	for _, char := range toneSequence {
 		tone := generateDTMFTone(string(char), toneLength)
+		if len(tone) == 0 {
+			// Skip empty tones but continue processing
+			continue
+		}
+
 		tones = append(tones, tone)
 	}
 
