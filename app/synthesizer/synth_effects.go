@@ -38,6 +38,24 @@ func NewEffectsSampleBank() *EffectsSampleBank {
 					effectsSampleRateHz: generateTalkPermitToneSample(),
 				},
 			},
+			"recordingStartTone": {
+				Name: "recordingStartTone",
+				Sample: map[int]codec.PCMFloat64{
+					effectsSampleRateHz: generateRecordingStartToneSample(),
+				},
+			},
+			"recordingStopTone": {
+				Name: "recordingStopTone",
+				Sample: map[int]codec.PCMFloat64{
+					effectsSampleRateHz: generateRecordingStopToneSample(),
+				},
+			},
+			"errorTone": {
+				Name: "errorTone",
+				Sample: map[int]codec.PCMFloat64{
+					effectsSampleRateHz: generateErrorToneSample(),
+				},
+			},
 		},
 	}
 }
@@ -102,10 +120,34 @@ func generateGearShiftSample() codec.PCMFloat64 {
 
 // generateTalkPermitToneSample creates a sample for the talk permit tone sequence.
 func generateTalkPermitToneSample() codec.PCMFloat64 {
-	toneSequence := "2373705"
-	toneLength := 27 * time.Millisecond
-	silenceLength := 2 * time.Millisecond
+	toneSequence := "746839456"
 
+	return generateDTMFSequence(toneSequence, 27*time.Millisecond, 2*time.Millisecond)
+}
+
+// generateRecordingStartToneSample creates a sample for the recording start tone sequence.
+func generateRecordingStartToneSample() codec.PCMFloat64 {
+	toneSequence := "79"
+
+	return generateDTMFSequence(toneSequence, 48*time.Millisecond, 2*time.Millisecond)
+}
+
+// generateRecordingStopToneSample creates a sample for the recording stop tone sequence.
+func generateRecordingStopToneSample() codec.PCMFloat64 {
+	toneSequence := "97"
+
+	return generateDTMFSequence(toneSequence, 48*time.Millisecond, 2*time.Millisecond)
+}
+
+// generateErrorToneSample creates a sample for the error tone sequence.
+func generateErrorToneSample() codec.PCMFloat64 {
+	toneSequence := "1111"
+
+	return generateDTMFSequence(toneSequence, 24*time.Millisecond, 2*time.Millisecond)
+}
+
+// generateTalkPermitToneSample creates a sample for the talk permit tone sequence.
+func generateDTMFSequence(toneSequence string, toneLength time.Duration, silenceLength time.Duration) codec.PCMFloat64 {
 	tones := [][]float64{}
 
 	samples := make([]float64, 0)

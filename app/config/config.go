@@ -19,6 +19,7 @@ type app struct {
 	Accent     string
 	LogLevel   string
 	CacheDir   string
+	CaptureDir string
 	ReplayMode bool
 }
 
@@ -293,6 +294,19 @@ func (c *Config) GetAppCacheDir() string {
 	}
 
 	return c.viper.App.CacheDir
+}
+
+// GetAppCaptureDir returns the configured capture directory for telemetry recordings.
+// If not set, it defaults to "data/replays".
+func (c *Config) GetAppCaptureDir() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if c.viper.App.CaptureDir == "" {
+		return "data/replays"
+	}
+
+	return c.viper.App.CaptureDir
 }
 
 // ****************************************************************************

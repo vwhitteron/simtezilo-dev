@@ -9,11 +9,12 @@ require (
 	github.com/gopxl/beep v1.4.1
 	github.com/gorilla/websocket v1.5.3
 	github.com/grafana/pyroscope-go v1.2.2
+	github.com/kennygrant/sanitize v1.2.4
 	github.com/rs/zerolog v1.34.0
 	github.com/spf13/viper v1.20.1
 	github.com/stretchr/testify v1.11.1
 	github.com/theojulienne/go-wireless v1.2.0
-	github.com/zetetos/gt-telemetry v1.10.1-0.20250925103106-4440553d3c29
+	github.com/zetetos/gt-telemetry v1.11.1-0.20251011040402-015499d2f789
 	golang.org/x/image v0.27.0
 	layeh.com/gopus v0.0.0-20210501142526-1ee02d434e32
 	periph.io/x/conn/v3 v3.7.2
@@ -45,9 +46,10 @@ require (
 	github.com/spf13/pflag v1.0.6 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	golang.org/x/crypto v0.42.0 // indirect
-	golang.org/x/sys v0.36.0 // indirect
-	golang.org/x/text v0.29.0 // indirect
+	golang.org/x/crypto v0.43.0 // indirect
+	golang.org/x/net v0.45.0 // indirect
+	golang.org/x/sys v0.37.0 // indirect
+	golang.org/x/text v0.30.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 

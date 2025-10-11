@@ -3,14 +3,17 @@ package app
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/gopxl/beep"
 	"github.com/gopxl/beep/speaker"
+	"github.com/kennygrant/sanitize"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/vwhitteron/simtezilo-dev/app/cache"
 	"github.com/vwhitteron/simtezilo-dev/app/circuit"
+	"github.com/vwhitteron/simtezilo-dev/app/codec"
 	"github.com/vwhitteron/simtezilo-dev/app/config"
 	"github.com/vwhitteron/simtezilo-dev/app/fuelrange"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware"
@@ -72,14 +75,30 @@ type raceState struct {
 	gameState   gameState
 }
 
+// recordingTriggerState tracks high beam toggles for recording trigger.
+type recordingTriggerState struct {
+	lastTriggerState     bool     // Previous state of the triggering input
+	toggleSequenceIDs    []uint32 // Sequence IDs of recent toggles
+	toggleCount          int      // Number of toggles in detection window
+	lastToggleSequenceID uint32   // Sequence ID of last toggle
+}
+
+// recordingState tracks telemetry recording state.
+type recordingState struct {
+	startTime time.Time // When recording started
+	filepath  string    // Current recording file path and name
+}
+
 // appState holds the overall application state.
 type appState struct {
-	hapticsEnabled   bool          // Flag to indicate if haptics are enabled // TODO: move state to haptics?
-	telemetryActive  bool          // Flag to indicate if telemetry is active
-	raceCompleteTime time.Duration // Time of day when the race was completed
-	current          raceState     // Race state at the current telemetry sequence
-	last             raceState     // Race state at the last telemetry sequence
-	engine           engineState   // Engine state for haptic generation
+	hapticsEnabled   bool                  // Flag to indicate if haptics are enabled // TODO: move state to haptics?
+	telemetryActive  bool                  // Flag to indicate if telemetry is active
+	raceCompleteTime time.Duration         // Time of day when the race was completed
+	current          raceState             // Race state at the current telemetry sequence
+	last             raceState             // Race state at the last telemetry sequence
+	engine           engineState           // Engine state for haptic generation
+	recordingTrigger recordingTriggerState // High beam toggle tracking for recording trigger
+	recording        recordingState        // Telemetry recording state
 }
 
 // App is the main application struct holding all components and state.
@@ -535,6 +554,7 @@ func (a *App) mainLoop() {
 			if stateChanged {
 				a.handleVehicleChange()
 				a.generateForceHaptics()
+				a.detectRecordingTrigger()
 			}
 
 			a.checkRaceComplete()
@@ -819,4 +839,210 @@ func (a *App) raceHasFinished() bool {
 	currentTime := a.gtClient.Telemetry.TimeOfDay()
 
 	return a.state.raceCompleteTime > currentTime+5*time.Second
+}
+
+// detectRecordingTrigger processes high beam state changes and triggers recording when toggled 3 times quickly.
+func (a *App) detectRecordingTrigger() {
+	currentTriggerState := a.gtClient.Telemetry.Flags().HighBeamActive
+	currentSequenceID := a.state.current.sequenceNumber
+
+	// Only count toggles when the trigger input is high/on/true
+	if !currentTriggerState {
+		return
+	}
+
+	if currentTriggerState == a.state.recordingTrigger.lastTriggerState {
+		return
+	}
+
+	a.state.recordingTrigger.lastTriggerState = currentTriggerState
+	a.state.recordingTrigger.lastToggleSequenceID = currentSequenceID
+	a.state.recordingTrigger.toggleSequenceIDs = append(a.state.recordingTrigger.toggleSequenceIDs, currentSequenceID)
+
+	toggleWindowSeconds := uint32(1) // Remove toggles older than 1 second
+	cutoffSequenceID := currentSequenceID - (toggleWindowSeconds * frameRate)
+	validToggles := []uint32{}
+
+	for _, toggleSequenceID := range a.state.recordingTrigger.toggleSequenceIDs {
+		if toggleSequenceID > cutoffSequenceID {
+			validToggles = append(validToggles, toggleSequenceID)
+		}
+	}
+
+	a.state.recordingTrigger.toggleSequenceIDs = validToggles
+	a.state.recordingTrigger.toggleCount = len(validToggles)
+
+	a.log.Debug().
+		Int("toggle_count", a.state.recordingTrigger.toggleCount).
+		Uint32("sequence_id", currentSequenceID).
+		Msg("Recording trigger toggle detected")
+
+	if a.state.recordingTrigger.toggleCount >= 3 {
+		a.toggleRecording()
+	}
+}
+
+// toggleRecording starts or stops telemetry recording.
+func (a *App) toggleRecording() {
+	if a.gtClient.IsRecording() {
+		a.stopRecording()
+	} else {
+		a.startRecording()
+	}
+}
+
+// startRecording begins telemetry capture.
+func (a *App) startRecording() {
+	if a.gtClient.IsRecording() {
+		a.notifyRecordingEvent("error")
+
+		a.log.Warn().Msg("Recording already in progress")
+
+		return
+	}
+
+	timestamp := time.Now()
+	a.state.recording.startTime = timestamp
+
+	filepath := fmt.Sprintf("%s/%s",
+		a.config.GetAppCaptureDir(),
+		a.generateRecordingFilename(timestamp),
+	)
+
+	a.state.recording.filepath = filepath
+
+	err := a.gtClient.StartRecording(filepath)
+	if err != nil {
+		a.state.recording.filepath = ""
+
+		a.notifyRecordingEvent("error")
+
+		a.log.Error().
+			Err(err).
+			Str("file", filepath).
+			Msg("Start recording")
+
+		return
+	}
+
+	a.notifyRecordingEvent("start")
+
+	a.log.Info().
+		Str("file", filepath).
+		Msg("Start recording")
+}
+
+// stopRecording ends telemetry capture.
+func (a *App) stopRecording() {
+	a.state.recordingTrigger.toggleSequenceIDs = []uint32{}
+	a.state.recordingTrigger.toggleCount = 0
+
+	if !a.gtClient.IsRecording() {
+		a.notifyRecordingEvent("error")
+
+		a.log.Warn().
+			Str("fault", "no recording in progress").
+			Msg("Stop recording")
+
+		return
+	}
+
+	err := a.gtClient.StopRecording()
+	if err != nil {
+		a.notifyRecordingEvent("error")
+
+		a.log.Error().
+			Err(err).
+			Str("file", a.state.recording.filepath).
+			Msg("Stop recording")
+	}
+
+	duration := time.Since(a.state.recording.startTime)
+	filepath := a.state.recording.filepath
+
+	a.state.recording.filepath = ""
+
+	a.notifyRecordingEvent("stop")
+
+	a.log.Info().
+		Str("file", filepath).
+		Dur("duration", duration).
+		Msg("Stop recording")
+}
+
+// notifyRecordingEvent sends a pitRadio notification for recording events.
+func (a *App) notifyRecordingEvent(event string) {
+	var sample string
+
+	switch event {
+	case "start":
+		sample = "recordingStartTone"
+	case "stop":
+		sample = "recordingStopTone"
+	case "error":
+		sample = "errorTone"
+	default:
+		return
+	}
+
+	effectSample := a.synth.EffectSampleBank().GetSample(sample, codec.OpusSampleRate)
+
+	dcaData, err := effectSample.ToDCA()
+	if err != nil {
+		a.log.Error().
+			Err(err).
+			Msg("generate talk permit tone")
+	}
+
+	err = a.pitRadio.Send(pitradio.Message{
+		MessageType: pitradio.AudioMessage,
+		Text:        "recording start",
+		Audio:       dcaData,
+		NoCache:     true,
+	})
+	if err != nil {
+		a.log.Error().
+			Err(err).
+			Msg("send message")
+	}
+}
+
+// generateRecordingFilename creates a filename for the telemetry recording.
+func (a *App) generateRecordingFilename(timestampe time.Time) string {
+	trackName := a.sanitizeFilename(a.circuit.Name())
+	if trackName == "" {
+		trackName = "unknown_track"
+	}
+
+	vehicleManufacturer := a.sanitizeFilename(a.gtClient.Telemetry.VehicleManufacturer())
+	if vehicleManufacturer == "" {
+		vehicleManufacturer = "unknown_manufacturer"
+	}
+
+	vehicleModel := a.sanitizeFilename(a.gtClient.Telemetry.VehicleModel())
+	if vehicleModel == "" {
+		vehicleModel = "unknown_model"
+	}
+
+	// format: yymmdd.hhmmss-track_name-vehicle_manufacturer_vehicle_model.gtz
+	filename := fmt.Sprintf("%s-%s-%s-%s.gtz",
+		timestampe.Format("060102.150405"),
+		trackName,
+		vehicleManufacturer,
+		vehicleModel,
+	)
+
+	return filename
+}
+
+// sanitizeFilename cleans a string to be safe for use as a filename.
+func (a *App) sanitizeFilename(input string) string {
+	if input == "" {
+		return input
+	}
+
+	result := sanitize.Name(input)
+	result = strings.ReplaceAll(result, " ", "_")
+
+	return result
 }
