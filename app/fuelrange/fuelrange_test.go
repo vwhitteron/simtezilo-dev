@@ -83,8 +83,8 @@ func (suite *FuelRangeTestSuite) TestNormalFuelConsumptionPreservesRange() {
 }
 
 func (suite *FuelRangeTestSuite) TestInsufficientSamples() {
-	// Arrange & Act - Provide insufficient samples (5 < 10 minimum for replay mode)
-	for i := range 5 {
+	// Arrange & Act - Provide insufficient samples (10 < 18 minimum for replay mode)
+	for i := range 10 {
 		suite.fuelRange.Update(1000.0+float64(i)*10.0, 100.0-float32(i)*0.1)
 	}
 
@@ -224,7 +224,7 @@ func (suite *FuelRangeTestSuite) TestUsageRatePerKmWithNoData() {
 
 // simulateConsumption simulates fuel consumption over distance.
 func (suite *FuelRangeTestSuite) simulateConsumption(initialOdometer, distance float64, initialFuel, consumedFuel float32) {
-	samples := 15 // enough for replay mode requirements
+	samples := 20 // enough samples for replay mode requirements (18 minimum)
 
 	for i := range samples {
 		progress := float64(i+1) / float64(samples)

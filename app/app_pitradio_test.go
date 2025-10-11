@@ -236,11 +236,8 @@ func (suite *PitRadioTestSuite) TestDefaultAccentWhenNotConfigured() {
 }
 
 func (suite *PitRadioTestSuite) TestNoNotifyOnRaceStart() {
-	// Arrange
-	suite.setupBasicRace(1, 10)
-	suite.setupCircuit(0.1)
-	suite.setupFuelRange(15.0) // Plenty of fuel
-	suite.clearPitRadioState()
+	// Arrange - plenty of fuel, early in race
+	suite.setupDistanceBasedScenario(1, 10, 0.1, 75000.0, 5000.0) // 15 laps worth of fuel
 
 	// Act
 	suite.app.notifyFuelWarnings()
@@ -250,11 +247,8 @@ func (suite *PitRadioTestSuite) TestNoNotifyOnRaceStart() {
 }
 
 func (suite *PitRadioTestSuite) TestNotifyOutOfFuel() {
-	// Arrange
-	suite.setupBasicRace(8, 10)
-	suite.setupCircuit(0.5)
-	suite.setupFuelRange(0.0) // No fuel left
-	suite.clearPitRadioState()
+	// Arrange - no fuel left scenario
+	suite.setupDistanceBasedScenario(8, 10, 0.5, 0.0, 5000.0)
 	suite.app.gtClient.Telemetry.RawTelemetry.FuelLevel = 0 // Empty tank
 
 	// Act
@@ -270,11 +264,11 @@ func (suite *PitRadioTestSuite) TestNotifyOutOfFuel() {
 }
 
 func (suite *PitRadioTestSuite) TestNotifyFuelCritical() {
-	// Arrange
-	suite.setupBasicRace(8, 10)
-	suite.setupCircuit(0.5)
-	suite.setupFuelRange(0.4) // Critical fuel level
-	suite.clearPitRadioState()
+	// Arrange - critical fuel scenario: fuel range <= distance to pit box
+	// For critical: fuelRangeMeters <= distanceToPitBox
+	// distanceToPitBox = (1.0 - 0.5) * 5000 = 2500m
+	// We need fuel range to be <= 2500m to trigger critical
+	suite.setupDistanceBasedScenario(8, 10, 0.5, 2000.0, 5000.0) // 2000m < 2500m distance to pit
 
 	// Act
 	suite.app.notifyFuelWarnings()
@@ -290,12 +284,10 @@ func (suite *PitRadioTestSuite) TestNotifyFuelCritical() {
 }
 
 func (suite *PitRadioTestSuite) TestNotifyBoxForFuel() {
-	// Arrange
-	suite.setupBasicRace(8, 10)
-	suite.setupCircuit(0.7)
-	suite.setupFuelRange(1.5) // Just enough to trigger box warning
-	suite.clearPitRadioState()
-	suite.app.pitRadioState.lastNotifiedLapFuelWarning = 7 // Ensure warning not sent this lap
+	// Arrange - box this lap scenario: enough fuel to complete current lap but not next
+	_, boxThisLap, _ := suite.calculateWarningDistances(0.7, 5000.0, 0.3, 2.0)
+	suite.setupDistanceBasedScenario(8, 10, 0.7, boxThisLap-100, 5000.0) // Just below box threshold
+	suite.app.pitRadioState.lastNotifiedLapFuelWarning = 7               // Ensure warning not sent this lap
 
 	// Act
 	suite.app.notifyFuelWarnings()
@@ -309,11 +301,15 @@ func (suite *PitRadioTestSuite) TestNotifyBoxForFuel() {
 }
 
 func (suite *PitRadioTestSuite) TestNotifyFuelPreWarn() {
-	// Arrange
-	suite.setupBasicRace(5, 10)
-	suite.setupCircuit(0.5)
-	suite.setupFuelRange(3.0) // Triggers pre-warning condition
-	suite.clearPitRadioState()
+	// Arrange - Use distance-based calculation helpers for clarity
+	lapProgress := 0.5
+	circuitLength := 5000.0
+	_, _, preWarnThreshold := suite.calculateWarningDistances(lapProgress, circuitLength, 0.3, 2.0)
+
+	// Set fuel range just below the pre-warning threshold to trigger the warning
+	fuelRangeMeters := preWarnThreshold - 100.0 // 100m below threshold
+
+	suite.setupDistanceBasedScenario(5, 10, lapProgress, fuelRangeMeters, circuitLength)
 
 	// Act
 	suite.app.notifyFuelWarnings()
@@ -328,11 +324,8 @@ func (suite *PitRadioTestSuite) TestNotifyFuelPreWarn() {
 }
 
 func (suite *PitRadioTestSuite) TestNotifyFuelStrategyUpdateSentOnNotifyLaps() {
-	// Arrange
-	suite.setupBasicRace(10, 25) // Lap 10 is divisible by 5
-	suite.setupCircuit(0.0)
-	suite.setupFuelRange(12.0) // Less fuel than remaining laps
-	suite.clearPitRadioState()
+	// Arrange - strategy notification on divisible-by-5 laps, less fuel than remaining laps
+	suite.setupDistanceBasedScenario(10, 25, 0.0, 60000.0, 5000.0) // 12 laps of fuel vs 15 remaining
 	suite.app.pitRadioState.lastNotifiedLapFuelStrategy = 5
 
 	// Act
@@ -348,11 +341,8 @@ func (suite *PitRadioTestSuite) TestNotifyFuelStrategyUpdateSentOnNotifyLaps() {
 }
 
 func (suite *PitRadioTestSuite) TestNotifyFuelStrategyUpdateNotSentOnNonNotifyLaps() {
-	// Arrange
-	suite.setupBasicRace(13, 25) // Lap 13 is NOT divisible by 5
-	suite.setupCircuit(0.0)
-	suite.setupFuelRange(10.0) // Less fuel than remaining laps
-	suite.clearPitRadioState()
+	// Arrange - non-strategy lap (13 is not divisible by 5), less fuel than remaining laps
+	suite.setupDistanceBasedScenario(13, 25, 0.0, 50000.0, 5000.0) // 10 laps of fuel vs 12 remaining
 	suite.app.pitRadioState.lastNotifiedLapFuelStrategy = 12
 
 	// Act
@@ -381,12 +371,13 @@ func (suite *PitRadioTestSuite) TestFuelRangeDataIsPopulated() {
 }
 
 func (suite *PitRadioTestSuite) TestFuelWarningsWithRealData() {
-	// Arrange - Set up critical fuel scenario with mocks
+	// Arrange - Set up critical fuel scenario with custom safety margin
 	configJSON := []byte(`{"pitRadio": {"fuelRangeSafetyMarginLaps": 0.5}}`)
 	suite.app.config = config.NewFromJSON(configJSON, zerolog.Nop())
-	suite.setupBasicRace(8, 10) // Lap 8 of 10
-	suite.setupCircuit(0.5)
-	suite.setupFuelRange(1.2) // 1.2 laps remaining
+
+	// Calculate critical threshold with custom safety margin
+	critical, _, _ := suite.calculateWarningDistances(0.5, 5000.0, 0.5, 2.0)
+	suite.setupDistanceBasedScenario(8, 10, 0.5, critical-100, 5000.0) // Just below critical
 
 	// Act - Check for fuel warnings
 	suite.app.notifyFuelWarnings()
@@ -433,13 +424,14 @@ func (suite *PitRadioTestSuite) TestNotifyCircuitChangeNotSentForSameCircuit() {
 }
 
 func (suite *PitRadioTestSuite) TestPitRadioSendError() {
-	// Arrange - Set up send failure scenario
+	// Arrange - Set up send failure scenario with very low fuel
 	suite.pitRadio.failSend = true
 	configJSON := []byte(`{"pitRadio": {"fuelRangeSafetyMarginLaps": 0.3}}`)
 	suite.app.config = config.NewFromJSON(configJSON, zerolog.Nop())
-	suite.setupBasicRace(8, 10)
-	suite.setupCircuit(0.5)
-	suite.setupFuelRange(0.2) // Very low fuel
+
+	// Very low fuel range to trigger critical warning
+	critical, _, _ := suite.calculateWarningDistances(0.5, 5000.0, 0.3, 2.0)
+	suite.setupDistanceBasedScenario(8, 10, 0.5, critical-500, 5000.0) // Well below critical
 
 	// Act - Try to send fuel warning (will fail)
 	suite.app.notifyFuelWarnings()
@@ -452,9 +444,10 @@ func (suite *PitRadioTestSuite) TestDuplicateWarningsSuppressed() {
 	// Arrange - Set up critical fuel scenario
 	configJSON := []byte(`{"pitRadio": {"fuelRangeSafetyMarginLaps": 0.3}}`)
 	suite.app.config = config.NewFromJSON(configJSON, zerolog.Nop())
-	suite.setupBasicRace(8, 10)
-	suite.setupCircuit(0.5)
-	suite.setupFuelRange(0.2) // Very low fuel
+
+	// Critical fuel level to trigger warning
+	critical, _, _ := suite.calculateWarningDistances(0.5, 5000.0, 0.3, 2.0)
+	suite.setupDistanceBasedScenario(8, 10, 0.5, critical-500, 5000.0) // Well below critical
 
 	// Act - Send warning twice on same lap
 	suite.app.notifyFuelWarnings()
@@ -466,11 +459,11 @@ func (suite *PitRadioTestSuite) TestDuplicateWarningsSuppressed() {
 }
 
 func (suite *PitRadioTestSuite) TestPitRadioStateReset() {
-	// Arrange - Set up existing state
+	// Arrange - Set up existing state and basic scenario
 	suite.app.pitRadioState.fuelNotifyEmptyIssued = true
 	suite.app.pitRadioState.fuelNotifyPrewarnIssued = true
 	suite.app.pitRadioState.lastNotifiedLapFuelCritical = 5
-	suite.setupBasicRace(10, 20)
+	suite.setupDistanceBasedScenario(10, 20, 0.0, 50000.0, 5000.0) // Basic scenario
 	suite.app.gtClient.Telemetry.RawTelemetry.GridPosition = 3
 
 	// Act - Reset pit radio state
@@ -488,10 +481,11 @@ func (suite *PitRadioTestSuite) TestFuelWarningPriority() {
 	// Arrange - Set up multiple warning conditions (empty fuel wins)
 	configJSON := []byte(`{"pitRadio": {"fuelRangeSafetyMarginLaps": 0.3, "fuelPreWarnNotifyLaps": 2.0, "fuelStrategyNotifyLaps": 5.0}}`)
 	suite.app.config = config.NewFromJSON(configJSON, zerolog.Nop())
-	suite.setupBasicRace(10, 20) // Lap 10 (divisible by 5 = strategy lap)
-	suite.setupCircuit(0.5)
-	suite.setupFuelRange(0.2)                                 // Critical fuel
-	suite.app.gtClient.Telemetry.RawTelemetry.FuelLevel = 0.0 // Empty - highest priority
+
+	// Set up scenario that would trigger multiple warnings, but empty fuel should win
+	critical, _, _ := suite.calculateWarningDistances(0.5, 5000.0, 0.3, 2.0)
+	suite.setupDistanceBasedScenario(10, 20, 0.5, critical-500, 5000.0) // Critical fuel level
+	suite.app.gtClient.Telemetry.RawTelemetry.FuelLevel = 0.0           // Empty - highest priority
 
 	// Act - Check fuel warnings
 	suite.app.notifyFuelWarnings()
@@ -501,27 +495,59 @@ func (suite *PitRadioTestSuite) TestFuelWarningPriority() {
 	suite.True(suite.app.pitRadioState.fuelNotifyEmptyIssued, "Should mark empty fuel as notified")
 }
 
-// setupBasicRace configures a standard race scenario.
-func (suite *PitRadioTestSuite) setupBasicRace(currentLap, totalLaps int16) {
+// setupFuelRangeMeters configures the fuel range mock with distance in meters.
+func (suite *PitRadioTestSuite) setupFuelRangeMeters(rangeMeters float64) {
+	rangeLaps := rangeMeters / suite.circuit.lengthMeters
+	suite.fuelRange.SetFuelRange(rangeMeters, rangeLaps, 2.0)
+}
+
+// setupDistanceBasedScenario configures a complete test scenario with distance-based parameters.
+// This is the recommended helper for new tests as it provides clear distance-based setup.
+func (suite *PitRadioTestSuite) setupDistanceBasedScenario(
+	currentLap, totalLaps int16,
+	lapProgress float64,
+	fuelRangeMeters float64,
+	circuitLengthMeters float64,
+) {
+	// Set up basic race configuration and telemetry
 	suite.app.config = createBasicConfig()
 	suite.app.gtClient.Telemetry.RawTelemetry.CurrentLap = currentLap
 	suite.app.gtClient.Telemetry.RawTelemetry.RaceLaps = totalLaps
 	suite.app.gtClient.Telemetry.RawTelemetry.FuelLevel = 50.0
 	suite.app.gtClient.Telemetry.RawTelemetry.FuelCapacity = 100.0
-}
 
-// setupCircuit configures the circuit mock with given parameters.
-func (suite *PitRadioTestSuite) setupCircuit(lapProgress float64) {
+	// Set up circuit with specified parameters
 	suite.circuit.name = "Test Circuit"
-	suite.circuit.lengthMeters = 5000.0
+	suite.circuit.lengthMeters = circuitLengthMeters
 	suite.circuit.lapProgress = lapProgress
 	suite.circuit.lapProgressRemaining = 1.0 - lapProgress
+
+	// Set up fuel range
+	suite.setupFuelRangeMeters(fuelRangeMeters)
+	suite.clearPitRadioState()
 }
 
-// setupFuelRange configures the fuel range mock with given parameters.
-func (suite *PitRadioTestSuite) setupFuelRange(rangeLaps float64) {
-	rangeMeters := rangeLaps * suite.circuit.lengthMeters
-	suite.fuelRange.SetFuelRange(rangeMeters, rangeLaps, 2.0)
+// calculateWarningDistances helps calculate the distances at which different warnings should trigger.
+// Returns distances in meters for: critical, boxThisLap, preWarn thresholds based on current position and config.
+func (suite *PitRadioTestSuite) calculateWarningDistances(
+	lapProgress float64,
+	circuitLengthMeters float64,
+	safetyMarginLaps float64,
+	preWarnNotifyLaps float64,
+) (critical, boxThisLap, preWarn float64) {
+	distanceToPitBox := (1.0 - lapProgress) * circuitLengthMeters
+	safetyMarginMeters := safetyMarginLaps * circuitLengthMeters
+
+	// Critical: fuel range (with safety margin) <= distance to pit box
+	critical = distanceToPitBox + safetyMarginMeters
+
+	// Box this lap: fuel range (with safety margin) <= distance to pit box + one full lap
+	boxThisLap = distanceToPitBox + circuitLengthMeters + safetyMarginMeters
+
+	// Pre-warning: fuel range (with safety margin) <= distance to pit box + preWarnNotifyLaps
+	preWarn = distanceToPitBox + (preWarnNotifyLaps * circuitLengthMeters) + safetyMarginMeters
+
+	return critical, boxThisLap, preWarn
 }
 
 // clearPitRadioState resets all pit radio notification flags.
