@@ -227,7 +227,7 @@ func generateDTMFTone(value string, length time.Duration) []float64 {
 		phase := float64(index) / float64(effectsSampleRateHz)
 
 		// Generate the base DTMF tone
-		sample := 0.5 * (math.Sin(2*math.Pi*frequencies[0]*phase) + math.Sin(2*math.Pi*frequencies[1]*phase))
+		sample := 0.25 * (math.Sin(2*math.Pi*frequencies[0]*phase) + math.Sin(2*math.Pi*frequencies[1]*phase))
 
 		// Apply fade in/out envelope
 		envelope := float64(1.0)
