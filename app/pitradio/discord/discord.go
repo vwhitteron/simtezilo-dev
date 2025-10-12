@@ -157,9 +157,6 @@ func (d *Discord) BackgroundTask() {
 				Str("result", "success").
 				Msg("voice channel connect")
 
-			// Dispatch the start sound immediately
-			d.dispatchMessages()
-
 			// connect anti-spam just in case
 			if d.messageGap < 1*time.Second {
 				time.Sleep(1 * time.Second)
@@ -251,7 +248,7 @@ func (d *Discord) dispatchMessages() {
 					Msg("send message to Discord channel")
 			}
 
-			d.log.Info().
+			d.log.Debug().
 				Str("text", message.Text).
 				Str("type", "text").
 				Str("channel_id", d.channelID).
@@ -285,7 +282,7 @@ func (d *Discord) dispatchMessages() {
 			return
 		}
 
-		d.log.Info().
+		d.log.Debug().
 			Str("text", message.Text).
 			Str("type", "audio").
 			Str("channel_id", d.voiceChannelID).
