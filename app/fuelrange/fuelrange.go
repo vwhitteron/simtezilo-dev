@@ -18,8 +18,8 @@ const (
 	// Default (unknown) range in meters.
 	rangeDistanceUnknown float64 = rangeLapsUnknown * 1000
 
-	// Minimum number of samples required to provide a reliable range estimate (~30s).
-	fuelRangeMinSamples int = 1800
+	// Minimum number of samples required to provide a reliable range estimate (~120s).
+	fuelRangeMinSamples int = 7200
 
 	// Number of samples to store in the buffer (~120s).
 	fuelRangeMaxSamples int = 7200
@@ -29,6 +29,7 @@ const (
 type Estimator interface {
 	Reset()
 	ResetEstimate()
+	IsReady() bool
 	SetLive(isLive bool)
 	Update(odometerReading float64, fuelLevel float32)
 	DistanceMeters() float64
@@ -68,7 +69,7 @@ func (r *FuelRange) Reset() {
 	r.fuelLevelAtLastUpdate = initialFuelLevel
 	r.distanceSinceLastUpdate = 0
 	r.fuelRate = 0
-	r.distanceMeters = 0
+	r.distanceMeters = rangeDistanceUnknown
 	r.refueling = false
 
 	minSamples := fuelRangeMinSamples
@@ -92,6 +93,7 @@ func (r *FuelRange) Reset() {
 func (r *FuelRange) ResetEstimate() {
 	r.distanceMeters = rangeDistanceUnknown
 	r.distanceSinceLastUpdate = 0
+	r.lastOdometerReading = initialOdometerReading
 	r.fuelRate = 0
 
 	r.log.Info().
@@ -113,6 +115,11 @@ func (r *FuelRange) SetLive(isLive bool) {
 	r.Reset()
 }
 
+// IsReady returns true if enough samples have been collected to provide a reliable range estimate.
+func (r *FuelRange) IsReady() bool {
+	return len(r.fuelRateSamples) >= r.minSamples
+}
+
 // Update updates fuel consumption based on the current coordinate and fuel level.
 func (r *FuelRange) Update(odometerReading float64, fuelLevel float32) {
 	// Initialise Range after init/reset
@@ -130,7 +137,7 @@ func (r *FuelRange) Update(odometerReading float64, fuelLevel float32) {
 			Float64("current_odometer", odometerReading).
 			Msg("Odometer reset detected")
 
-		r.Reset()
+		r.ResetEstimate()
 
 		return
 	}

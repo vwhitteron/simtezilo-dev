@@ -428,7 +428,7 @@ func (a *App) notifyFuelWarnings() {
 	fuelEmptyPreWarn := fuelRangeMetersWithSafetyMargin <= (distanceToPitBox + (a.config.GetFuelPreWarnNotifyLaps() * circuitLengthMeters))
 
 	fuelRangeLaps := a.fuelRange.DistanceLaps(circuitLengthMeters)
-	fuelStrategyUpdate := remainingLaps > fuelRangeLaps && currentLap%int16(a.config.GetFuelStrategyNotifyLaps()) == 0
+	fuelStrategyUpdate := a.fuelRange.IsReady() && remainingLaps > fuelRangeLaps && currentLap%int16(a.config.GetFuelStrategyNotifyLaps()) == 0
 
 	var (
 		message        string

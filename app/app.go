@@ -596,13 +596,13 @@ func (a *App) newLapHandler() bool {
 		select {
 		case <-a.lapStartEvents:
 			lap := a.state.current.lapNumber
+			lapTime := a.state.current.lastLapTime
 			coordinate := a.gtClient.Telemetry.PositionalMapCoordinates()
 			odometerReading := a.odometer.Add(coordinate)
 
-			didUpdate := a.circuit.UpdateCircuit(odometerReading, lap, coordinate, models.CoordinateTypeStartLine)
+			didUpdate := a.circuit.UpdateCircuit(odometerReading, lap, lapTime, coordinate, models.CoordinateTypeStartLine)
 			if didUpdate {
-				a.odometer.Reset()
-				a.fuelRange.Reset()
+				a.fuelRange.ResetEstimate()
 				a.state.last.lastLapTime = 0
 			}
 
@@ -695,8 +695,7 @@ func (a *App) handleGameStateChange() {
 	case a.liveFlagHasChanged():
 		a.resetPitRadioState()
 		a.vehicle = vehicleRecord{}
-		a.odometer.Reset()
-		a.fuelRange.Reset()
+		a.fuelRange.ResetEstimate()
 		a.fuelRange.SetLive(a.state.current.isLive)
 		a.circuit.Reset()
 		a.resetAppState()
@@ -706,8 +705,7 @@ func (a *App) handleGameStateChange() {
 	case a.timeOfDayHasReset():
 		a.disableHaptics("time of day reset")
 		a.resetPitRadioState()
-		a.odometer.Reset()
-		a.fuelRange.Reset()
+		a.fuelRange.ResetEstimate()
 		a.circuit.ResetLapProgress()
 
 		a.log.Info().Msg("Time of day reset")

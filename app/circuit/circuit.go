@@ -3,6 +3,7 @@ package circuit
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/rs/zerolog"
 	"github.com/zetetos/gt-telemetry/pkg/circuits"
@@ -10,8 +11,9 @@ import (
 )
 
 const (
-	shortestCircuitLengthMeters int     = 900 // Minimum length in meters (Northern Isle Speedway)
-	minConfidenceThreshold      float64 = 0.3 // Minimum confidence threshold (30%) before choosing a circuit
+	shortestCircuitLengthMeters int           = 900 // Minimum length in meters (Northern Isle Speedway)
+	shortestLapTime             time.Duration = 10 * time.Second
+	minConfidenceThreshold      float64       = 0.3 // Minimum confidence threshold (30%) before choosing a circuit
 )
 
 // Manager defines the interface for circuit management and lap tracking.
@@ -22,7 +24,13 @@ type Manager interface {
 	LengthMeters() float64
 	LapProgress() float64
 	LapProgressRemaining() float64
-	UpdateCircuit(odometerReading float64, lap int16, coordinate models.Coordinate, coordinateType models.CoordinateType) (didUpdate bool)
+	UpdateCircuit(
+		odometerReading float64,
+		lap int16,
+		lapTime time.Duration,
+		coordinate models.Coordinate,
+		coordinateType models.CoordinateType,
+	) (didUpdate bool)
 }
 
 // Circuit provides circuit identification and lap tracking facilities.
@@ -34,6 +42,8 @@ type Circuit struct {
 	lap                     int16                // Current lap number being tracked
 	lapStartOdometerReading float64              // Distance at which the current lap started
 	lapProgressMeters       float64              // Lap distance tracking for uknown circuits
+	bestLapTime             time.Duration        // Time taken to complete the last lap
+	observedLength          int                  // Observed circuit length of the circuit
 	lastCoordinate          models.Coordinate    // Last known coordinate for distance tracking
 	candidates              Candidates           // Circuit candidates with confidence tracking
 }
@@ -45,6 +55,7 @@ func New(db circuits.CircuitDB, logger zerolog.Logger) (*Circuit, error) {
 		log:                     logger.With().Str("package", "circuit").Logger(),
 		lapStartOdometerReading: 0,
 		lapProgressMeters:       0,
+		bestLapTime:             100 * time.Hour,
 		info:                    circuitInfoInit(),
 		lastCoordinate:          models.Coordinate{},
 		candidates:              make(Candidates),
@@ -70,6 +81,7 @@ func (c *Circuit) Reset() {
 func (c *Circuit) ResetLapProgress() {
 	c.lapStartOdometerReading = 0
 	c.lapProgressMeters = 0
+	c.bestLapTime = 100 * time.Hour
 	c.lastCoordinate = models.Coordinate{}
 
 	c.log.Info().
@@ -83,18 +95,18 @@ func (c *Circuit) Name() string {
 
 // LengthMeters returns the length of the current circuit in meters.
 func (c *Circuit) LengthMeters() float64 {
+	if c.observedLength > shortestCircuitLengthMeters {
+		return float64(c.observedLength)
+	}
+
 	return float64(c.info.Length)
 }
 
 // LapProgress returns the progress through the current lap as a value between 0 and 1.
 func (c *Circuit) LapProgress() float64 {
-	lapDistance := c.lapProgressMeters - c.lapStartOdometerReading
+	progress := c.lapProgressMeters / float64(c.info.Length)
 
-	if lapDistance < 0 || int(lapDistance) > c.info.Length {
-		return 0
-	}
-
-	return lapDistance / float64(c.info.Length)
+	return max(min(progress, 1), 0)
 }
 
 // LapProgressRemaining returns the remaining progress through the current lap as a value between 0 and 1.
@@ -109,11 +121,16 @@ func (c *Circuit) LapProgressRemaining() float64 {
 func (c *Circuit) UpdateCircuit(
 	odometerReading float64,
 	lap int16,
+	lapTime time.Duration,
 	coordinate models.Coordinate,
 	coordinateType models.CoordinateType,
 ) (didUpdate bool) {
 	c.updateDistanceTravelled(odometerReading, lap, coordinateType)
-	c.setLapStartMarker()
+
+	if coordinateType == models.CoordinateTypeStartLine {
+		c.setCircuitLength(lapTime)
+		c.setLapStartMarker(odometerReading)
+	}
 
 	var matchingCircuits []string
 
@@ -153,6 +170,7 @@ func (c *Circuit) UpdateCircuit(
 			Str("track", c.info.Variation).
 			Str("confidence", fmt.Sprintf("%.0f%%", bestCandidate.confidence*100)).
 			Int("matches", len(bestCandidate.matchedCoords)).
+			Int("length_meters", c.info.Length).
 			Msg("Circuit updated")
 
 		return true
@@ -189,27 +207,39 @@ func (c *Circuit) updateDistanceTravelled(odometerReading float64, lap int16, co
 }
 
 // setLapStartMarker sets the distance at which the current lap started.
-func (c *Circuit) setLapStartMarker() {
-	c.lapStartOdometerReading = c.lapProgressMeters
+func (c *Circuit) setLapStartMarker(odomoterReading float64) {
+	c.lapStartOdometerReading = odomoterReading
 
 	if c.circuitIsKnown() {
 		return
 	}
 
-	c.setCircuitLength()
+	c.lapProgressMeters = 0
+
+	c.log.Info().
+		Float64("odometer", odomoterReading).
+		Msg("Lap start marker set")
 }
 
 // setCircuitLength sets the circuit length if it can be determined from the distance travelled.
-func (c *Circuit) setCircuitLength() {
-	if c.lapProgressMeters <= 0 {
+func (c *Circuit) setCircuitLength(lapTime time.Duration) {
+	if lapTime < shortestLapTime || lapTime >= c.bestLapTime {
 		return
 	}
 
-	circuitLength := int(c.lapProgressMeters - c.lapStartOdometerReading)
+	circuitLength := int(c.lapProgressMeters)
 
-	if circuitLength > shortestCircuitLengthMeters {
-		c.info.Length = circuitLength
+	if circuitLength <= shortestCircuitLengthMeters {
+		return
 	}
+
+	c.observedLength = circuitLength
+	c.bestLapTime = lapTime
+
+	c.log.Info().
+		Int("length_meters", circuitLength).
+		Str("lap_time", lapTime.String()).
+		Msg("Observed circuit length updated")
 }
 
 // Initial unknown circuit info.

@@ -3,6 +3,7 @@ package app //nolint:testpackage // white-box testing
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/suite"
@@ -60,6 +61,7 @@ var _ fuelrange.Estimator = (*fuelRangeMock)(nil)
 
 func (m *fuelRangeMock) Reset()                      {}
 func (m *fuelRangeMock) ResetEstimate()              {}
+func (m *fuelRangeMock) IsReady() bool               { return true }
 func (m *fuelRangeMock) SetLive(_ bool)              {}
 func (m *fuelRangeMock) Update(_ float64, _ float32) {}
 
@@ -111,7 +113,7 @@ func (m *circuitMock) LapProgress() float64 {
 }
 
 // UpdateCircuit implements the circuit.Manager interface.
-func (m *circuitMock) UpdateCircuit(_ float64, _ int16, _ models.Coordinate, _ models.CoordinateType) bool {
+func (m *circuitMock) UpdateCircuit(_ float64, _ int16, _ time.Duration, _ models.Coordinate, _ models.CoordinateType) bool {
 	// Mock implementation - just return false for simplicity
 	return false
 }
