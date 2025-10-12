@@ -163,7 +163,8 @@ func New(opts Options) (*App, error) {
 		app.log.Debug().Str("level", configLogLevel.String()).Str("source", "config").Msg("log level update")
 	}
 
-	app.cache = cache.New(app.config.GetAppCacheDir(), *opts.Logger)
+	cacheDir := app.config.GetAppDataDir() + "/cache"
+	app.cache = cache.New(cacheDir, *opts.Logger)
 
 	// load language translations
 	app.i18n, err = i18n.New(

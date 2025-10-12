@@ -10,7 +10,7 @@ func defaultConfig() *viperConfig {
 			Language: "en",
 			Accent:   "us",
 			LogLevel: "info",
-			CacheDir: "cache",
+			DataDir:  "data",
 		},
 		Hardware: &hardware{
 			Model:              "none",

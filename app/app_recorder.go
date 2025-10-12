@@ -92,8 +92,8 @@ func (a *App) startRecording() {
 	timestamp := time.Now()
 	a.state.recorder.startTime = timestamp
 
-	filepath := fmt.Sprintf("%s/%s",
-		a.config.GetAppCaptureDir(),
+	filepath := fmt.Sprintf("%s/replays/%s",
+		a.config.GetAppDataDir(),
 		a.generateRecordingFilename(timestamp),
 	)
 
