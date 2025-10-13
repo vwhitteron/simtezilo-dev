@@ -63,6 +63,15 @@
         "radio.lapsremainingfmt": "%d laps remaining",
         "radio.finallap": "Final lap",
         "radio.raceprogressfmt": "Race progress %d%%",
-        "radio.racefinish": "Race complete"
+        "radio.racefinish": "Race complete",
+        "radio.tyresundertemp": "Tyres under temp",
+        "radio.tyresoptimaltemp": "Tyres optimal",
+        "radio.tyresovertemp": "Tyres over temp",
+        "radio.tyresovertempfront": "Front tyres over temp",
+        "radio.tyresovertemprear": "Rear tyres over temp",
+        "radio.tyreovertempfl": "Front left tyre over temp",
+        "radio.tyreovertempfr": "Front right tyre over temp",
+        "radio.tyreovertemprl": "Rear left tyre over temp",
+        "radio.tyreovertemprr": "Rear right tyre over temp"
     }
 }

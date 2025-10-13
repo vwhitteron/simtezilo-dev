@@ -70,15 +70,22 @@ func defaultConfig() *viperConfig {
 			},
 		},
 		PitRadio: &pitRadio{
+			MessageSendIntervalMs: 5000,
+
 			FuelPreWarnNotifyLaps:       3.0,
 			FuelStrategyNotifyLaps:      5.0,
 			FuelRangeSafetyMarginLaps:   0.2,
 			FuelRangeSafetyMarginMeters: 2000,
-			MessageSendIntervalMs:       5000,
-			DiscordToken:                "",
-			DiscordGuildID:              "",
-			DiscordChannelID:            "",
-			DiscordVoiceChannelID:       "",
+
+			TyreTemperatureMonitoring:      true,
+			TyreTemperatureOptimalCelsius:  81,
+			TyreTemperatureOperatingWindow: 6,
+			TyreTemperatureMarginCelsius:   3,
+
+			DiscordToken:          "",
+			DiscordGuildID:        "",
+			DiscordChannelID:      "",
+			DiscordVoiceChannelID: "",
 		},
 
 		Synthesizer: &Synthesizer{

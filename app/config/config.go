@@ -47,15 +47,19 @@ type hardware struct {
 }
 
 type pitRadio struct {
-	FuelPreWarnNotifyLaps       float64
-	FuelStrategyNotifyLaps      float64
-	FuelRangeSafetyMarginLaps   float64
-	FuelRangeSafetyMarginMeters float64
-	MessageSendIntervalMs       int
-	DiscordToken                string
-	DiscordGuildID              string
-	DiscordChannelID            string
-	DiscordVoiceChannelID       string
+	FuelPreWarnNotifyLaps          float64
+	FuelStrategyNotifyLaps         float64
+	FuelRangeSafetyMarginLaps      float64
+	FuelRangeSafetyMarginMeters    float64
+	MessageSendIntervalMs          int
+	TyreTemperatureMonitoring      bool
+	TyreTemperatureOptimalCelsius  float32
+	TyreTemperatureOperatingWindow float32
+	TyreTemperatureMarginCelsius   float32
+	DiscordToken                   string
+	DiscordGuildID                 string
+	DiscordChannelID               string
+	DiscordVoiceChannelID          string
 }
 
 // Synthesizer represents an audio synthesizer used for haptic feedback.
@@ -137,13 +141,15 @@ func NewFromJSON(json []byte, log zerolog.Logger) *Config {
 		viper: defaultConfig(),
 	}
 
-	viper.SetConfigType("json")
+	// Create a new Viper instance to avoid race conditions in tests
+	v := viper.New()
+	v.SetConfigType("json")
 
-	err := viper.ReadConfig(bytes.NewBuffer(json))
+	err := v.ReadConfig(bytes.NewBuffer(json))
 	if err != nil {
 		log.Error().Err(err).Msg("read config file")
 	} else {
-		err = viper.Unmarshal(config.viper)
+		err = v.Unmarshal(config.viper)
 		if err != nil {
 			log.Error().Err(err).Msg("unmarshal config")
 		}
@@ -970,6 +976,59 @@ func (c *Config) GetMessageSendIntervalMs() int {
 	defer c.mu.RUnlock()
 
 	return c.viper.PitRadio.MessageSendIntervalMs
+}
+
+// GetTyreTemperatureMonitoring returns whether tyre temperature monitoring is enabled.
+func (c *Config) GetTyreTemperatureMonitoring() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.PitRadio.TyreTemperatureMonitoring
+}
+
+// GetTyreTemperatureOptimalCelsius returns the optimal (center) tyre temperature in Celsius.
+func (c *Config) GetTyreTemperatureOptimalCelsius() float32 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.PitRadio.TyreTemperatureOptimalCelsius
+}
+
+// GetTyreTemperatureOperatingWindow returns the total operating window width around optimal temperature in Celsius.
+// The ideal temperature range is calculated as optimal ± (window/2).
+func (c *Config) GetTyreTemperatureOperatingWindow() float32 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.PitRadio.TyreTemperatureOperatingWindow
+}
+
+// GetTyreTemperatureMarginCelsius returns the margin beyond operating window for hot/cold thresholds in Celsius.
+func (c *Config) GetTyreTemperatureMarginCelsius() float32 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.PitRadio.TyreTemperatureMarginCelsius
+}
+
+// GetTyreTemperatureIdealMin returns the minimum ideal tyre temperature in Celsius (calculated from optimal and window).
+func (c *Config) GetTyreTemperatureIdealMin() float32 {
+	return c.GetTyreTemperatureOptimalCelsius() - (c.GetTyreTemperatureOperatingWindow() / 2.0)
+}
+
+// GetTyreTemperatureIdealMax returns the maximum ideal tyre temperature in Celsius (calculated from optimal and window).
+func (c *Config) GetTyreTemperatureIdealMax() float32 {
+	return c.GetTyreTemperatureOptimalCelsius() + (c.GetTyreTemperatureOperatingWindow() / 2.0)
+}
+
+// GetTyreTemperatureColdThreshold returns the threshold below which tyres are considered cold (calculated from optimal, window, and margin).
+func (c *Config) GetTyreTemperatureColdThreshold() float32 {
+	return c.GetTyreTemperatureOptimalCelsius() - (c.GetTyreTemperatureOperatingWindow() / 2.0) - c.GetTyreTemperatureMarginCelsius()
+}
+
+// GetTyreTemperatureHotThreshold returns the threshold above which tyres are considered hot (calculated from optimal, window, and margin).
+func (c *Config) GetTyreTemperatureHotThreshold() float32 {
+	return c.GetTyreTemperatureOptimalCelsius() + (c.GetTyreTemperatureOperatingWindow() / 2.0) + c.GetTyreTemperatureMarginCelsius()
 }
 
 // GetDiscordToken returns the Discord API token.

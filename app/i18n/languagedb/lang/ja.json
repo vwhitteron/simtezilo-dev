@@ -63,6 +63,15 @@
         "radio.lapsremainingfmt": "%dラップ残り",
         "radio.finallap": "最終ラップ",
         "radio.raceprogressfmt": "レース進行状況 %d%%",
-        "radio.racefinish": "レース終了"
+        "radio.racefinish": "レース終了",
+        "radio.tyresundertemp": "タイヤの温度が低い",
+        "radio.tyresoptimaltemp": "タイヤは最適",
+        "radio.tyresovertemp": "タイヤが過熱している",
+        "radio.tyresovertempfront": "前タイヤが熱い",
+        "radio.tyresovertemprear": "後タイヤが熱い",
+        "radio.tyreovertempfl": "前左タイヤ%s",
+        "radio.tyreovertempfr": "前右タイヤ%s",
+        "radio.tyreovertemprl": "後左タイヤ%s",
+        "radio.tyreovertemprr": "後右タイヤ%s"
     }
 }

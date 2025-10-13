@@ -33,6 +33,9 @@ type pitRadioState struct {
 
 	// Circuit tracking
 	circuitName string // Current circuit name
+
+	// Tyre temperature tracking
+	tyreState tyreState ``
 }
 
 // resetPitRadioState resets the pit radio state to initial values.
@@ -74,6 +77,8 @@ func (a *App) sendPitRadioMessage() {
 	a.notifyFuelWarnings()
 
 	a.notifyRaceProgress()
+
+	a.notifyTyreTemperature()
 
 	a.notifyGridPositionChange()
 }
