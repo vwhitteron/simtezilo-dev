@@ -46,7 +46,7 @@ const (
 	RadioLapRecord        Key = "radio.laprecord"
 	RadioFuelRangeFmt     Key = "radio.fuelrangefmt"
 	RadioFuelPreWarnFmt   Key = "radio.fuelprewarnfmt"
-	RadioBoxForFuel       Key = "radio.boxforfuel"
+	RadioBoxThisLap       Key = "radio.boxthislap"
 	RadioFuelCritical     Key = "radio.fuelcritical"
 	RadioFuelCriticalBox  Key = "radio.fuelcriticalbox"
 	RadioOutOfFuelLastLap Key = "radio.outoffuellastlap"

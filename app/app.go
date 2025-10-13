@@ -585,7 +585,6 @@ func (a *App) newLapHandler() bool {
 
 			didUpdate := a.circuit.UpdateCircuit(odometerReading, lap, lapTime, coordinate, models.CoordinateTypeStartLine)
 			if didUpdate {
-				a.fuelRange.ResetEstimate()
 				a.state.last.lastLapTime = 0
 			}
 

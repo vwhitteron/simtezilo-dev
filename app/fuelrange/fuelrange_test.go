@@ -134,8 +134,8 @@ func (suite *FuelRangeTestSuite) TestSmallFuelIncreasePreservesRange() {
 	initialRange := suite.fuelRange.DistanceMeters()
 	suite.NotEqual(rangeDistanceUnknown, initialRange)
 
-	// Act - Simulate small fuel increase (≤1% - should not trigger refuel detection)
-	suite.fuelRange.Update(22000.0, 21.0) // Only 1% increase
+	// Act - Simulate small fuel increase (≤0.04% - should not trigger refuel detection)
+	suite.fuelRange.Update(22000.0, 20.04) // Only 0.04% increase
 
 	// Assert - Range should NOT reset (small increase is not considered refueling)
 	newRange := suite.fuelRange.DistanceMeters()
@@ -224,7 +224,7 @@ func (suite *FuelRangeTestSuite) TestUsageRatePerKmWithNoData() {
 
 // simulateConsumption simulates fuel consumption over distance.
 func (suite *FuelRangeTestSuite) simulateConsumption(initialOdometer, distance float64, initialFuel, consumedFuel float32) {
-	samples := 20 // enough samples for replay mode requirements (18 minimum)
+	samples := 80 // enough samples for replay mode requirements (72 minimum)
 
 	for i := range samples {
 		progress := float64(i+1) / float64(samples)

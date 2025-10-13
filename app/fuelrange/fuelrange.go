@@ -37,20 +37,25 @@ type Estimator interface {
 	UsageRatePerKm() float64
 }
 
+type fuelRangeSample struct {
+	fuelPercent float32 // Fuel consumption sample in percent per km
+	odometer    float64 // Odometer reading at the time of the sample
+}
+
 // FuelRange estimates the distance that can be travelled with the current fuel level.
 // Conforms to the fuelrange.Estimator interface.
 type FuelRange struct {
 	log                     zerolog.Logger
-	lastOdometerReading     float64   // Last processed odometer reading in meters
-	fuelLevelAtLastUpdate   float64   // Last processed fuel level in percent
-	distanceSinceLastUpdate float64   // Distance in meters travelled since last fuel range update
-	fuelRateSamples         []float64 // Buffer of fuel consumption samples in percent per km
-	fuelRate                float64   // Moving average fuel consumption rate in percent per km
-	distanceMeters          float64   // Estimated distance in meters that can be travelled with current fuel level
-	refueling               bool      // Flag to indicate if refuelling is in progress
-	isLive                  bool      // Flag to indicate if a session is live or a replay
-	maxSamples              int       // Maximum number of samples to store in the buffer
-	minSamples              int       // Minimum number of samples required to provide a reliable range estimate
+	lastOdometerReading     float64           // Last processed odometer reading in meters
+	fuelLevelAtLastUpdate   float64           // Last processed fuel level in percent
+	distanceSinceLastUpdate float64           // Distance in meters travelled since last fuel range update
+	fuelRateSamples         []fuelRangeSample // Buffer of fuel consumption samples
+	fuelRate                float64           // Moving average fuel consumption rate in percent per km
+	distanceMeters          float64           // Estimated distance in meters that can be travelled with current fuel level
+	refueling               bool              // Flag to indicate if refuelling is in progress
+	isLive                  bool              // Flag to indicate if a session is live or a replay
+	maxSamples              int               // Maximum number of samples to store in the buffer
+	minSamples              int               // Minimum number of samples required to provide a reliable range estimate
 }
 
 // New creates a new fuel range estimator.
@@ -83,7 +88,7 @@ func (r *FuelRange) Reset() {
 
 	r.minSamples = minSamples
 	r.maxSamples = maxSamples
-	r.fuelRateSamples = make([]float64, 0, r.maxSamples)
+	r.fuelRateSamples = make([]fuelRangeSample, 0, r.maxSamples)
 
 	r.log.Info().
 		Msg("Fuel range reset")
@@ -92,9 +97,11 @@ func (r *FuelRange) Reset() {
 // ResetEstimate resets only the fuel range estimate but retains odometer and samples.
 func (r *FuelRange) ResetEstimate() {
 	r.distanceMeters = rangeDistanceUnknown
-	r.distanceSinceLastUpdate = 0
+	r.fuelLevelAtLastUpdate = initialFuelLevel
 	r.lastOdometerReading = initialOdometerReading
+	r.distanceSinceLastUpdate = 0
 	r.fuelRate = 0
+	r.fuelRateSamples = make([]fuelRangeSample, 0, r.maxSamples)
 
 	r.log.Info().
 		Msg("Fuel range estimate reset")
@@ -154,17 +161,17 @@ func (r *FuelRange) Update(odometerReading float64, fuelLevel float32) {
 			r.fuelRateSamples = r.fuelRateSamples[1:]
 		}
 
-		fuelPerMeter := consumed / r.distanceSinceLastUpdate
-
-		r.fuelRateSamples = append(r.fuelRateSamples, fuelPerMeter)
+		r.fuelRateSamples = append(r.fuelRateSamples, fuelRangeSample{
+			fuelPercent: fuelLevel,
+			odometer:    odometerReading,
+		})
 
 		r.fuelRate = r.fuelRateMA()
 
 		r.distanceMeters = float64(fuelLevel) / r.fuelRate
 
 		r.log.Debug().
-			Float64("fuel_rate_ma", r.fuelRateMA()).
-			Float64("fuel_rate_p80", r.fuelRate).
+			Float64("fuel_rate", r.fuelRate).
 			Float64("consumed", consumed).
 			Float64("distance_m", r.distanceSinceLastUpdate).
 			Float64("range_m", r.distanceMeters).
@@ -173,16 +180,32 @@ func (r *FuelRange) Update(odometerReading float64, fuelLevel float32) {
 
 		r.distanceSinceLastUpdate = 0
 		r.fuelLevelAtLastUpdate = float64(fuelLevel)
+	}
+
+	// Check for refuel completion when fuel consumption resumes (regardless of distance)
+	if r.refueling && consumed > 0 {
+		r.log.Info().
+			Float32("fuel_level", fuelLevel).
+			Float64("last_consumed", consumed).
+			Msg("Refuel complete")
+
 		r.refueling = false
-	} else if consumed < -1 {
-		// Detect refuelling (-1 gives small margin to avoid occasional noise)
+	}
+
+	// Update fuel level tracking for subsequent calculations
+	if !(consumed > 0 && r.distanceSinceLastUpdate > 0) {
+		r.fuelLevelAtLastUpdate = float64(fuelLevel)
+	}
+
+	if consumed < -0.05 {
+		// Detect refuelling (-0.05 gives margin to avoid occasional noise)
 		if !r.refueling {
 			r.ResetEstimate()
 			r.refueling = true
 
-			r.log.Debug().
+			r.log.Info().
 				Float32("fuel_level", fuelLevel).
-				Float64("last_fuel_level", r.fuelLevelAtLastUpdate).
+				Float64("fuel_consumed", consumed).
 				Msg("Refuel detected")
 		}
 	}
@@ -227,13 +250,22 @@ func (r *FuelRange) fuelConsumed(currentFuelLevel float64) float64 {
 	return consumed
 }
 
-// fuelRateMA returns the moving average fuel consumption rate in percent per km.
+// fuelRateMA returns the moving average fuel consumption rate in percent per meter.
 func (r *FuelRange) fuelRateMA() float64 {
-	var sum float64
-
-	for _, sample := range r.fuelRateSamples {
-		sum += sample
+	if len(r.fuelRateSamples) < 2 {
+		return 0
 	}
 
-	return sum / float64(len(r.fuelRateSamples))
+	first := r.fuelRateSamples[0]
+	last := r.fuelRateSamples[len(r.fuelRateSamples)-1]
+
+	distance := last.odometer - first.odometer
+
+	if distance <= 0 {
+		return 0
+	}
+
+	consumed := first.fuelPercent - last.fuelPercent
+
+	return float64(consumed) / distance
 }

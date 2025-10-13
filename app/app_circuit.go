@@ -12,7 +12,6 @@ func (a *App) updateCircuit() {
 	coordinates := a.gtClient.Telemetry.PositionalMapCoordinates()
 
 	if didUpdate := a.circuit.UpdateCircuit(odometer, lap, lapTime, coordinates, models.CoordinateTypeCircuit); didUpdate {
-		a.fuelRange.ResetEstimate()
 		a.state.last.lastLapTime = 0
 	}
 }

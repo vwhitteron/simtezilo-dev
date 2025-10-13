@@ -285,7 +285,7 @@ func (suite *PitRadioTestSuite) TestNotifyFuelCritical() {
 	suite.Equal(int16(8), suite.app.pitRadioState.lastNotifiedLapFuelCritical)
 }
 
-func (suite *PitRadioTestSuite) TestNotifyBoxForFuel() {
+func (suite *PitRadioTestSuite) TestNotifyBoxThisLap() {
 	// Arrange - box this lap scenario: enough fuel to complete current lap but not next
 	_, boxThisLap, _ := suite.calculateWarningDistances(0.7, 5000.0, 0.3, 2.0)
 	suite.setupDistanceBasedScenario(8, 10, 0.7, boxThisLap-100, 5000.0) // Just below box threshold

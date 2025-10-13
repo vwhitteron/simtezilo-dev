@@ -217,8 +217,8 @@ func (a *App) notifyLapTime() {
 	// TODO: add config option to notify all laps or best lap only
 	if bestLapTime > 0 && a.state.current.lastLapTime <= bestLapTime && a.state.current.lapNumber > 2 {
 		message = fmt.Sprintf("%s. %s",
-			a.i18n.GetString(languagedb.RadioLapRecord),
 			formatDuration(a.state.current.lastLapTime),
+			a.i18n.GetString(languagedb.RadioLapRecord),
 		)
 	} else if a.state.current.lapNumber > 2 && a.state.current.lastLapTime > bestLapTime {
 		// TODO: either make this a translation or drop it
@@ -415,20 +415,25 @@ func (a *App) notifyFuelWarnings() {
 		return
 	}
 
+	fuelRangeLaps := a.fuelRange.DistanceLaps(circuitLengthMeters)
 	fuelRangeMeters := a.fuelRange.DistanceMeters()
-	fuelRangeMetersWithSafetyMargin := fuelRangeMeters - (a.config.GetFuelRangeSafetyMarginLaps() * circuitLengthMeters)
-	fuelRangeLapsSafe := fuelRangeMetersWithSafetyMargin / circuitLengthMeters
+	safetyMarginMeters := a.config.GetFuelRangeSafetyMarginLaps() * circuitLengthMeters
+	FuelRangeMetersSafe := fuelRangeMeters - safetyMarginMeters
 
 	lapProgressRemaining := a.circuit.LapProgressRemaining()
 	distanceToPitBox := lapProgressRemaining * circuitLengthMeters
+	distanceToPitBoxNextLap := distanceToPitBox + circuitLengthMeters
+	preWarnNotifyDistance := distanceToPitBox + ((a.config.GetFuelPreWarnNotifyLaps() + 1) * circuitLengthMeters)
+	preWarnNotifyLap := float64(currentLap) + a.config.GetFuelPreWarnNotifyLaps()
+	boxNotifyDistance := min(2000, circuitLengthMeters*0.2)
 
 	fuelEmpty := a.gtClient.Telemetry.FuelLevelPercent() <= 0
 	fuelCritical := fuelRangeMeters <= distanceToPitBox
-	fuelEmptyNextLap := fuelRangeMetersWithSafetyMargin <= (distanceToPitBox + circuitLengthMeters)
-	fuelEmptyPreWarn := fuelRangeMetersWithSafetyMargin <= (distanceToPitBox + (a.config.GetFuelPreWarnNotifyLaps() * circuitLengthMeters))
-
-	fuelRangeLaps := a.fuelRange.DistanceLaps(circuitLengthMeters)
-	fuelStrategyUpdate := a.fuelRange.IsReady() && remainingLaps > fuelRangeLaps && currentLap%int16(a.config.GetFuelStrategyNotifyLaps()) == 0
+	boxthislap := FuelRangeMetersSafe <= distanceToPitBoxNextLap && distanceToPitBox <= boxNotifyDistance
+	refuelPreWarn := FuelRangeMetersSafe <= preWarnNotifyDistance
+	fuelStrategyUpdate := a.fuelRange.IsReady() &&
+		remainingLaps > fuelRangeLaps &&
+		currentLap%int16(a.config.GetFuelStrategyNotifyLaps()) == 0
 
 	var (
 		message        string
@@ -440,12 +445,12 @@ func (a *App) notifyFuelWarnings() {
 		message, suppressNotify = a.fuelEmptyMessage(remainingLaps, currentLap)
 	case fuelCritical:
 		message, suppressNotify = a.fuelCriticalMessage(remainingLaps, currentLap)
-	case fuelEmptyNextLap:
+	case boxthislap:
 		message, suppressNotify = a.fuelBoxThisLapMessage(currentLap, remainingLaps)
-	case fuelEmptyPreWarn:
-		message, suppressNotify = a.fuelBoxPreWarnMessage(fuelRangeLapsSafe, currentLap, remainingLaps)
+	case refuelPreWarn:
+		message, suppressNotify = a.fuelBoxPreWarnMessage(preWarnNotifyLap, currentLap, remainingLaps)
 	case fuelStrategyUpdate:
-		message, suppressNotify = a.fuelStrategyMessage(fuelRangeLaps, remainingLaps, currentLap)
+		message, suppressNotify = a.fuelStrategyMessage(fuelRangeLaps, currentLap, remainingLaps)
 	default:
 		return
 	}
@@ -474,11 +479,12 @@ func (a *App) notifyFuelWarnings() {
 			Str("message", message).
 			Int16("lap", a.state.current.lapNumber).
 			Float32("fuel_percent", a.gtClient.Telemetry.FuelLevelPercent()).
+			Float32("fuel_rate", float32(a.fuelRange.UsageRatePerKm())).
 			Float64("lap_meters", circuitLengthMeters).
 			Float64("range_meters", fuelRangeMeters).
-			Float64("range_meters_safe", fuelRangeMetersWithSafetyMargin).
+			Float64("range_meters_safe", FuelRangeMetersSafe).
 			Float64("distance_to_pit", distanceToPitBox).
-			Float64("lap_progress_remaining", lapProgressRemaining).
+			Int("lap_progress_remaining", int(lapProgressRemaining*100)).
 			Msg("Send fuel message")
 	}
 }
@@ -535,7 +541,7 @@ func (a *App) fuelBoxThisLapMessage(currentLap int16, remainingLaps float64) (me
 		return message, suppressNotify
 	}
 
-	message = a.i18n.GetString(languagedb.RadioBoxForFuel)
+	message = a.i18n.GetString(languagedb.RadioBoxThisLap)
 
 	suppressNotify = remainingLaps == 0
 	a.pitRadioState.lastNotifiedLapFuelWarning = currentLap
@@ -569,8 +575,8 @@ func (a *App) fuelBoxPreWarnMessage(
 // fuelStrategyMessage generates a fuel strategy message based on estimated fuel range and remaining laps.
 func (a *App) fuelStrategyMessage(
 	fuelRangeLaps float64,
-	remainingLaps float64,
 	currentLap int16,
+	remainingLaps float64,
 ) (message string, suppressNotify bool) {
 	if a.pitRadioState.lastNotifiedLapFuelStrategy == currentLap {
 		message = ""
