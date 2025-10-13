@@ -70,12 +70,12 @@ func defaultConfig() *viperConfig {
 			},
 		},
 		PitRadio: &pitRadio{
-			MessageSendIntervalMs: 5000,
+			MessageSendIntervalMs: 2000,
 
-			FuelPreWarnNotifyLaps:       3.0,
+			FuelPreWarnNotifyLaps:       2.0,
 			FuelStrategyNotifyLaps:      5.0,
 			FuelRangeSafetyMarginLaps:   0.2,
-			FuelRangeSafetyMarginMeters: 2000,
+			FuelRangeSafetyMarginMeters: 750,
 
 			TyreTemperatureMonitoring:      true,
 			TyreTemperatureOptimalCelsius:  81,
