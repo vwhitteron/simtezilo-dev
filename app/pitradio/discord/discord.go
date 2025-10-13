@@ -255,6 +255,10 @@ func (d *Discord) dispatchMessages() {
 				Msg("Discord send message")
 		}
 
+		if !d.isReady() {
+			return
+		}
+
 		var dcaData []byte
 
 		if message.MessageType == pitradio.TextMessage {
@@ -295,6 +299,11 @@ func (d *Discord) dispatchMessages() {
 // isConnected returns true if the bot is connected to Discord.
 func (d *Discord) isConnected() bool {
 	return d.session != nil && d.session.DataReady
+}
+
+// isReady returns true if the voice connection is ready to send audio.
+func (d *Discord) isReady() bool {
+	return d.voiceConn != nil && d.voiceConn.Status == discordgo.VoiceConnectionStatusReady
 }
 
 // isDead returns true if the voice connection is in a dead state.
