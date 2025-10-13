@@ -132,7 +132,7 @@ func generateGearShiftSample() codec.PCMFloat64 {
 func generateTalkPermitToneSample() codec.PCMFloat64 {
 	toneSequence := "746839456"
 
-	return generateDTMFSequence(toneSequence, 27*time.Millisecond, 2*time.Millisecond)
+	return generateDTMFSequence(toneSequence, 20*time.Millisecond, 0*time.Millisecond)
 }
 
 // generateRecordingStartToneSample creates a sample for the recording start tone sequence.
