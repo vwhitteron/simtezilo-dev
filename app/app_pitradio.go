@@ -35,7 +35,7 @@ type pitRadioState struct {
 	circuitName string // Current circuit name
 
 	// Tyre temperature tracking
-	tyreState tyreState ``
+	tyreState tyreState
 }
 
 // resetPitRadioState resets the pit radio state to initial values.

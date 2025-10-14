@@ -1011,26 +1011,6 @@ func (c *Config) GetTyreTemperatureMarginCelsius() float32 {
 	return c.viper.PitRadio.TyreTemperatureMarginCelsius
 }
 
-// GetTyreTemperatureIdealMin returns the minimum ideal tyre temperature in Celsius (calculated from optimal and window).
-func (c *Config) GetTyreTemperatureIdealMin() float32 {
-	return c.GetTyreTemperatureOptimalCelsius() - (c.GetTyreTemperatureOperatingWindow() / 2.0)
-}
-
-// GetTyreTemperatureIdealMax returns the maximum ideal tyre temperature in Celsius (calculated from optimal and window).
-func (c *Config) GetTyreTemperatureIdealMax() float32 {
-	return c.GetTyreTemperatureOptimalCelsius() + (c.GetTyreTemperatureOperatingWindow() / 2.0)
-}
-
-// GetTyreTemperatureColdThreshold returns the threshold below which tyres are considered cold (calculated from optimal, window, and margin).
-func (c *Config) GetTyreTemperatureColdThreshold() float32 {
-	return c.GetTyreTemperatureOptimalCelsius() - (c.GetTyreTemperatureOperatingWindow() / 2.0) - c.GetTyreTemperatureMarginCelsius()
-}
-
-// GetTyreTemperatureHotThreshold returns the threshold above which tyres are considered hot (calculated from optimal, window, and margin).
-func (c *Config) GetTyreTemperatureHotThreshold() float32 {
-	return c.GetTyreTemperatureOptimalCelsius() + (c.GetTyreTemperatureOperatingWindow() / 2.0) + c.GetTyreTemperatureMarginCelsius()
-}
-
 // GetDiscordToken returns the Discord API token.
 func (c *Config) GetDiscordToken() string {
 	c.mu.RLock()
