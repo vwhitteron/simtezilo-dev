@@ -19,7 +19,7 @@ linters:
     - depguard
     - dogsled
     - dupl
-    - dupword
+    # - dupword # too noisy, little value
     - durationcheck
     - embeddedstructfieldcheck
     # - err113
