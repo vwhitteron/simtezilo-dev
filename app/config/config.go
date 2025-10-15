@@ -22,6 +22,21 @@ type app struct {
 	ReplayMode bool
 }
 
+type discord struct {
+	Enabled        bool
+	Token          string
+	GuildID        string
+	ChannelID      string
+	VoiceChannelID string
+}
+
+type fuel struct {
+	MonitoringEnabled       bool
+	PreWarnNotifyLaps       float64
+	StrategyNotifyLaps      float64
+	RangeSafetyMarginLaps   float64
+	RangeSafetyMarginMeters float64
+}
 type haptics struct {
 	DynamicTransmissionFeedback  bool
 	DynamicTransmissionCurve     int
@@ -47,19 +62,8 @@ type hardware struct {
 }
 
 type pitRadio struct {
-	FuelPreWarnNotifyLaps          float64
-	FuelStrategyNotifyLaps         float64
-	FuelRangeSafetyMarginLaps      float64
-	FuelRangeSafetyMarginMeters    float64
-	MessageSendIntervalMs          int
-	TyreTemperatureMonitoring      bool
-	TyreTemperatureOptimalCelsius  float32
-	TyreTemperatureOperatingWindow float32
-	TyreTemperatureMarginCelsius   float32
-	DiscordToken                   string
-	DiscordGuildID                 string
-	DiscordChannelID               string
-	DiscordVoiceChannelID          string
+	Enabled               bool
+	MessageSendIntervalMs int
 }
 
 // Synthesizer represents an audio synthesizer used for haptic feedback.
@@ -82,13 +86,23 @@ type Telemetry struct {
 	Source string
 }
 
+type tyres struct {
+	MonitoringEnabled          bool
+	TemperatureOptimalCelsius  float32
+	TemperatureOperatingWindow float32
+	TemperatureMarginCelsius   float32
+}
+
 type viperConfig struct {
 	App         *app
+	Discord     *discord
+	Fuel        *fuel
 	Hardware    *hardware
 	Haptics     *haptics
 	PitRadio    *pitRadio
 	Synthesizer *Synthesizer
 	Telemetry   *Telemetry
+	Tyres       *tyres
 }
 
 // Config holds the application configuration and provides methods for accessing and modifying the data.
@@ -170,7 +184,7 @@ func (c *Config) SetI18n(i18n *i18n.I18n) {
 }
 
 // ****************************************************************************
-// App methods.
+// App section methods.
 // ****************************************************************************
 
 // GetAppLanguage returns the configured application language.
@@ -302,7 +316,95 @@ func (c *Config) GetAppDataDir() string {
 }
 
 // ****************************************************************************
-// Hardware methods.
+// Discord section methods.
+// ****************************************************************************
+
+// GetDiscordEnabled returns true if Discord integration is enabled.
+func (c *Config) GetDiscordEnabled() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.Discord.Enabled
+}
+
+// GetDiscordToken returns the Discord API token.
+func (c *Config) GetDiscordToken() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.Discord.Token
+}
+
+// GetDiscordGuildID returns the Discord guild (server) ID.
+func (c *Config) GetDiscordGuildID() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.Discord.GuildID
+}
+
+// GetDiscordChannelID returns the Discord text channel ID.
+func (c *Config) GetDiscordChannelID() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.Discord.ChannelID
+}
+
+// GetDiscordVoiceChannelID returns the Discord voice channel ID.
+func (c *Config) GetDiscordVoiceChannelID() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.Discord.VoiceChannelID
+}
+
+// ****************************************************************************
+// Fuel section methods.
+// ****************************************************************************
+
+// GetFuelMonitoringEnabled returns true if fuel monitoring is enabled.
+func (c *Config) GetFuelMonitoringEnabled() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.Fuel.MonitoringEnabled
+}
+
+// GetFuelPreWarnNotifyLaps returns the number of laps remaining before a fuel pre-warning is triggered.
+func (c *Config) GetFuelPreWarnNotifyLaps() float64 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.Fuel.PreWarnNotifyLaps
+}
+
+// GetFuelStrategyNotifyLaps returns the number of laps remaining before a fuel strategy notification is triggered.
+func (c *Config) GetFuelStrategyNotifyLaps() float64 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.Fuel.StrategyNotifyLaps
+}
+
+// GetFuelRangeSafetyMarginLaps returns the safety margin in laps to apply when calculating fuel range.
+func (c *Config) GetFuelRangeSafetyMarginLaps() float64 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.Fuel.RangeSafetyMarginLaps
+}
+
+// GetFuelRangeSafetyMarginMeters returns the safety margin in meters to apply when calculating fuel range.
+func (c *Config) GetFuelRangeSafetyMarginMeters() float64 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.Fuel.RangeSafetyMarginMeters
+}
+
+// ****************************************************************************
+// Hardware section methods.
 // ****************************************************************************
 
 // GetHardwareModel returns the configured hardware model.
@@ -323,7 +425,7 @@ func (c *Config) GetDisplayOrientation() int {
 }
 
 // ****************************************************************************
-// Haptics methods.
+// Haptics section methods.
 // ****************************************************************************
 
 // DynamicTransmissionFeedbackEnabled returns true if dynamic transmission feedback is enabled.
@@ -935,39 +1037,15 @@ func (c *Config) GetPulseMaxAmplitude() float64 {
 }
 
 // ****************************************************************************
-// PitRadio methods.
+// Pit Radio section methods.
 // ****************************************************************************
 
-// GetFuelPreWarnNotifyLaps returns the number of laps remaining before a fuel pre-warning is triggered.
-func (c *Config) GetFuelPreWarnNotifyLaps() float64 {
+// PitRadioEnabled returns true if pit radio integration is enabled.
+func (c *Config) PitRadioEnabled() bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	return c.viper.PitRadio.FuelPreWarnNotifyLaps
-}
-
-// GetFuelStrategyNotifyLaps returns the number of laps remaining before a fuel strategy notification is triggered.
-func (c *Config) GetFuelStrategyNotifyLaps() float64 {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.PitRadio.FuelStrategyNotifyLaps
-}
-
-// GetFuelRangeSafetyMarginLaps returns the safety margin in laps to apply when calculating fuel range.
-func (c *Config) GetFuelRangeSafetyMarginLaps() float64 {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.PitRadio.FuelRangeSafetyMarginLaps
-}
-
-// GetFuelRangeSafetyMarginMeters returns the safety margin in meters to apply when calculating fuel range.
-func (c *Config) GetFuelRangeSafetyMarginMeters() float64 {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.PitRadio.FuelRangeSafetyMarginMeters
+	return c.viper.PitRadio.Enabled
 }
 
 // GetMessageSendIntervalMs returns the interval in milliseconds between sending of pit radio messages.
@@ -976,71 +1054,6 @@ func (c *Config) GetMessageSendIntervalMs() int {
 	defer c.mu.RUnlock()
 
 	return c.viper.PitRadio.MessageSendIntervalMs
-}
-
-// GetTyreTemperatureMonitoring returns whether tyre temperature monitoring is enabled.
-func (c *Config) GetTyreTemperatureMonitoring() bool {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.PitRadio.TyreTemperatureMonitoring
-}
-
-// GetTyreTemperatureOptimalCelsius returns the optimal (center) tyre temperature in Celsius.
-func (c *Config) GetTyreTemperatureOptimalCelsius() float32 {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.PitRadio.TyreTemperatureOptimalCelsius
-}
-
-// GetTyreTemperatureOperatingWindow returns the total operating window width around optimal temperature in Celsius.
-// The ideal temperature range is calculated as optimal ± (window/2).
-func (c *Config) GetTyreTemperatureOperatingWindow() float32 {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.PitRadio.TyreTemperatureOperatingWindow
-}
-
-// GetTyreTemperatureMarginCelsius returns the margin beyond operating window for hot/cold thresholds in Celsius.
-func (c *Config) GetTyreTemperatureMarginCelsius() float32 {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.PitRadio.TyreTemperatureMarginCelsius
-}
-
-// GetDiscordToken returns the Discord API token.
-func (c *Config) GetDiscordToken() string {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.PitRadio.DiscordToken
-}
-
-// GetDiscordGuildID returns the Discord guild (server) ID.
-func (c *Config) GetDiscordGuildID() string {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.PitRadio.DiscordGuildID
-}
-
-// GetDiscordChannelID returns the Discord text channel ID.
-func (c *Config) GetDiscordChannelID() string {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.PitRadio.DiscordChannelID
-}
-
-// GetDiscordVoiceChannelID returns the Discord voice channel ID.
-func (c *Config) GetDiscordVoiceChannelID() string {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.PitRadio.DiscordVoiceChannelID
 }
 
 // ****************************************************************************
@@ -1254,6 +1267,47 @@ func (c *Config) GetTelemetrySource() string {
 
 	return c.viper.Telemetry.Source
 }
+
+// ****************************************************************************
+// Tyres section methods.
+// ****************************************************************************
+
+// GetTyreMonitoringEnabled returns whether tyre monitoring is enabled.
+func (c *Config) GetTyreMonitoringEnabled() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.Tyres.MonitoringEnabled
+}
+
+// GetTyreTemperatureOptimalCelsius returns the optimal (center) tyre temperature in Celsius.
+func (c *Config) GetTyreTemperatureOptimalCelsius() float32 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.Tyres.TemperatureOptimalCelsius
+}
+
+// GetTyreTemperatureOperatingWindow returns the total operating window width around optimal temperature in Celsius.
+// The ideal temperature range is calculated as optimal ± (window/2).
+func (c *Config) GetTyreTemperatureOperatingWindow() float32 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.Tyres.TemperatureOperatingWindow
+}
+
+// GetTyreTemperatureMarginCelsius returns the margin beyond operating window for hot/cold thresholds in Celsius.
+func (c *Config) GetTyreTemperatureMarginCelsius() float32 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.Tyres.TemperatureMarginCelsius
+}
+
+// ****************************************************************************
+// Helper methods.
+// ****************************************************************************
 
 // finalise performs validation of the config and updates any derived configuration values.
 func (c *Config) finalise() {

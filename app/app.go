@@ -367,27 +367,29 @@ func New(opts Options) (*App, error) {
 			Msg("init")
 	}
 
-	discordBotConfig := discord.Config{
-		Token:          app.config.GetDiscordToken(),
-		ChannelID:      app.config.GetDiscordChannelID(),
-		VoiceChannelID: app.config.GetDiscordVoiceChannelID(),
-		GuildID:        app.config.GetDiscordGuildID(),
-		MessageGap:     time.Duration(app.config.GetMessageSendIntervalMs()) * time.Millisecond,
-		Cache:          &app.cache,
-		SampleBank:     app.synth.EffectSampleBank(),
-		Logger:         *opts.Logger,
-	}
+	if app.config.GetDiscordEnabled() {
+		discordBotConfig := discord.Config{
+			Token:          app.config.GetDiscordToken(),
+			ChannelID:      app.config.GetDiscordChannelID(),
+			VoiceChannelID: app.config.GetDiscordVoiceChannelID(),
+			GuildID:        app.config.GetDiscordGuildID(),
+			MessageGap:     time.Duration(app.config.GetMessageSendIntervalMs()) * time.Millisecond,
+			Cache:          &app.cache,
+			SampleBank:     app.synth.EffectSampleBank(),
+			Logger:         *opts.Logger,
+		}
 
-	app.pitRadio, err = discord.New(discordBotConfig)
-	if err != nil {
-		app.log.Error().
-			Err(err).
-			Str("component", "discord").
-			Str("result", "failure").
-			Msg("init")
-	}
+		app.pitRadio, err = discord.New(discordBotConfig)
+		if err != nil {
+			app.log.Error().
+				Err(err).
+				Str("component", "discord").
+				Str("result", "failure").
+				Msg("init")
+		}
 
-	app.resetPitRadioState()
+		app.resetPitRadioState()
+	}
 
 	app.log.Debug().
 		Str("component", "app").

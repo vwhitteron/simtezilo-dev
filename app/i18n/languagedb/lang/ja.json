@@ -67,11 +67,11 @@
         "radio.tyresundertemp": "タイヤの温度が低い",
         "radio.tyresoptimaltemp": "タイヤは最適",
         "radio.tyresovertemp": "タイヤが過熱している",
-        "radio.tyresovertempfront": "前タイヤが熱い",
-        "radio.tyresovertemprear": "後タイヤが熱い",
-        "radio.tyreovertempfl": "前左タイヤ%s",
-        "radio.tyreovertempfr": "前右タイヤ%s",
-        "radio.tyreovertemprl": "後左タイヤ%s",
-        "radio.tyreovertemprr": "後右タイヤ%s"
+        "radio.front": "前",
+        "radio.rear": "前",
+        "radio.frontleft": "前左",
+        "radio.frontright": "前右",
+        "radio.rearleft": "後左",
+        "radio.rearright": "後右"
     }
 }

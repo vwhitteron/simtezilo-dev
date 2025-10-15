@@ -403,6 +403,10 @@ func (a *App) notifyRaceProgress() {
 
 // notifyFuelWarnings sends fuel warning notifications over the pit radio.
 func (a *App) notifyFuelWarnings() {
+	if !a.config.GetFuelMonitoringEnabled() {
+		return
+	}
+
 	if a.fuelRange == nil {
 		return
 	}

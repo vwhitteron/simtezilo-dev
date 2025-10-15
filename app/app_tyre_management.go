@@ -2,7 +2,6 @@ package app
 
 import (
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/vwhitteron/simtezilo-dev/app/i18n/languagedb"
@@ -11,14 +10,14 @@ import (
 )
 
 type tyreState struct {
-	lastTempNotifyState tyres.Tyre // Last notified tyre temperature state
-	lastTempNotifyTime  time.Time  // Last time tyre temperature notification was sent
+	lastTempNotifyCondition tyres.Condition // Last notified tyre temperature condition
+	lastTempNotifyTime      time.Time       // Last time tyre temperature notification was sent
 }
 
 // notifyTyreTemperature sends tyre temperature notifications over the pit radio.
 // Reports: all-tyres conditions (optimal/hot/cold) or individual/axle hot tyres only.
 func (a *App) notifyTyreTemperature() {
-	if !a.config.GetTyreTemperatureMonitoring() {
+	if !a.config.GetTyreMonitoringEnabled() {
 		return
 	}
 
@@ -39,18 +38,20 @@ func (a *App) notifyTyreTemperature() {
 		tyreTemps,
 	)
 
-	if tyreAttrs.ContainsCondition(tyres.ConditionInvalid) {
+	if len(tyreAttrs.PositionsInCondition(tyres.ConditionInvalid)) > 0 {
+		return
+	}
+
+	tyreCondition := tyreAttrs.GeneralCondition()
+
+	// Only send notification if the state has changed
+	if tyreCondition == a.pitRadioState.tyreState.lastTempNotifyCondition {
 		return
 	}
 
 	message := a.generateTyreConditionMessage(tyreAttrs)
 	if message == "" {
 		return // No notification needed
-	}
-
-	// Only send notification if the state has changed
-	if tyreAttrs.Equal(a.pitRadioState.tyreState.lastTempNotifyState) {
-		return
 	}
 
 	if a.pitRadio != nil {
@@ -69,110 +70,126 @@ func (a *App) notifyTyreTemperature() {
 			return
 		}
 
-		a.pitRadioState.tyreState.lastTempNotifyState = tyreAttrs
+		a.pitRadioState.tyreState.lastTempNotifyCondition = tyreCondition
 		a.pitRadioState.tyreState.lastTempNotifyTime = time.Now()
 
 		a.log.Info().
 			Str("message", message).
 			Int16("lap", a.state.current.lapNumber).
-			Str("state_fl", tyreAttrs.Condition(tyres.PositionFrontLeft)).
-			Str("state_fr", tyreAttrs.Condition(tyres.PositionFrontRight)).
-			Str("state_rl", tyreAttrs.Condition(tyres.PositionRearLeft)).
-			Str("state_rr", tyreAttrs.Condition(tyres.PositionRearRight)).
+			Str("condition", tyreCondition.String()).
+			Str("cond_fl", tyreAttrs.ConditionAtPosition(tyres.PositionFrontLeft).String()).
+			Str("cond_fr", tyreAttrs.ConditionAtPosition(tyres.PositionFrontRight).String()).
+			Str("cond_rl", tyreAttrs.ConditionAtPosition(tyres.PositionRearLeft).String()).
+			Str("cond_rr", tyreAttrs.ConditionAtPosition(tyres.PositionRearRight).String()).
 			Float32("temp_avg", (tyreTemps.FrontLeft+tyreTemps.FrontRight+tyreTemps.RearLeft+tyreTemps.RearRight)/4).
-			Float32("temp_fl", tyreAttrs.Temperature(tyres.PositionFrontLeft)).
-			Float32("temp_fr", tyreAttrs.Temperature(tyres.PositionFrontRight)).
-			Float32("temp_rl", tyreAttrs.Temperature(tyres.PositionRearLeft)).
-			Float32("temp_rr", tyreAttrs.Temperature(tyres.PositionRearRight)).
+			Float32("temp_fl", tyreAttrs.TemperatureAtPosition(tyres.PositionFrontLeft)).
+			Float32("temp_fr", tyreAttrs.TemperatureAtPosition(tyres.PositionFrontRight)).
+			Float32("temp_rl", tyreAttrs.TemperatureAtPosition(tyres.PositionRearLeft)).
+			Float32("temp_rr", tyreAttrs.TemperatureAtPosition(tyres.PositionRearRight)).
 			Msg("Send tyre temp message")
 	}
 }
 
-// generateTyreConditionMessage generates tyre condition messages based on various compbinations of tyre state.
+// generateTyreConditionMessage generates tyre condition messages based on various combinations of tyre state.
 func (a *App) generateTyreConditionMessage(states tyres.Tyre) string {
-	if states.ConditionOptimal() {
-		return a.i18n.GetString(languagedb.RadioTyresOptimalTemp)
+	condition := states.GeneralCondition()
+
+	if message := a.getSimpleConditionMessage(condition); message != "" {
+		return message
 	}
 
-	conditionMap := states.Conditions()
-
-	// Check if all 4 tyres share the same condition
-	for condition, position := range conditionMap {
-		if len(position) == 4 {
-			switch condition { //nolint:exhaustive // Ignore optimal/invalid cases
-			case tyres.ConditionHot:
-				return a.i18n.GetString(languagedb.RadioTyresOverTemp)
-			case tyres.ConditionCold:
-				return a.i18n.GetString(languagedb.RadioTyresUnderTemp)
-			}
-		}
+	if condition == tyres.ConditionHot {
+		return a.generateHotTyreMessage(states)
 	}
 
-	// Report individual/axle hot tyres only
-	messages := a.collectHotTyreMessages(conditionMap)
-	if len(messages) == 0 {
+	return ""
+}
+
+// getSimpleConditionMessage returns messages for simple tyre conditions that don't require detailed reporting.
+func (a *App) getSimpleConditionMessage(condition tyres.Condition) string {
+	switch condition { //nolint:exhaustive // Only handling simple cases
+	case tyres.ConditionInvalid, tyres.ConditionMarginal:
 		return ""
-	}
-
-	return strings.Join(messages, ", ")
-}
-
-// collectHotTyreMessages collects messages for hot tyres (individual or axle-level).
-func (a *App) collectHotTyreMessages(conditionMap tyres.ConditionMap) []string {
-	var messages []string
-
-	hotTyres, hasHotTyres := conditionMap[tyres.ConditionHot]
-	if !hasHotTyres || len(hotTyres) == 0 {
-		return messages
-	}
-
-	// Check for axle-level hot conditions first using the new constants for cleaner logic
-	frontAxleHot := slices.Contains(hotTyres, tyres.PositionFrontLeft) && slices.Contains(hotTyres, tyres.PositionFrontRight)
-	rearAxleHot := slices.Contains(hotTyres, tyres.PositionRearLeft) && slices.Contains(hotTyres, tyres.PositionRearRight)
-
-	// Track which tyres we've already handled in axle messages
-	handledTyres := make(map[tyres.Position]bool)
-
-	if frontAxleHot {
-		messages = append(messages, a.getHotTyreMessage(tyres.PositionFront))
-		handledTyres[tyres.PositionFrontLeft] = true
-		handledTyres[tyres.PositionFrontRight] = true
-	} else if rearAxleHot {
-		messages = append(messages, a.getHotTyreMessage(tyres.PositionRear))
-		handledTyres[tyres.PositionRearLeft] = true
-		handledTyres[tyres.PositionRearRight] = true
-	}
-
-	// Handle individual hot tyres that weren't part of an axle message
-	for _, position := range hotTyres {
-		if !handledTyres[position] {
-			messages = append(messages, a.getHotTyreMessage(position))
-		}
-	}
-
-	return messages
-}
-
-// getHotTyreMessage generates a message for a specific hot tyre.
-func (a *App) getHotTyreMessage(position tyres.Position) string {
-	var formatKey languagedb.Key
-
-	switch position {
-	case tyres.PositionFront:
-		formatKey = languagedb.RadioTyresOverTempFront
-	case tyres.PositionRear:
-		formatKey = languagedb.RadioTyresOverTempRear
-	case tyres.PositionFrontLeft:
-		formatKey = languagedb.RadioTyreOverTempFL
-	case tyres.PositionFrontRight:
-		formatKey = languagedb.RadioTyreOverTempFR
-	case tyres.PositionRearLeft:
-		formatKey = languagedb.RadioTyreOverTempRL
-	case tyres.PositionRearRight:
-		formatKey = languagedb.RadioTyreOverTempRR
+	case tyres.ConditionOptimal:
+		return a.i18n.GetString(languagedb.RadioTyresOptimalTemp)
+	case tyres.ConditionCold:
+		return a.i18n.GetString(languagedb.RadioTyresUnderTemp)
 	default:
 		return ""
 	}
+}
 
-	return a.i18n.GetString(formatKey)
+// generateHotTyreMessage generates detailed messages for hot tyre conditions.
+func (a *App) generateHotTyreMessage(states tyres.Tyre) string {
+	hotTyres := states.PositionsInCondition(tyres.ConditionHot)
+	baseMessage := a.i18n.GetString(languagedb.RadioTyresOverTemp)
+
+	// Report general tyres overheating if 3+ tyres are hot
+	if len(hotTyres) >= 3 {
+		return baseMessage
+	}
+
+	// Generate detailed message for specific hot tyres
+	return a.buildDetailedHotTyreMessage(states, hotTyres, baseMessage)
+}
+
+// buildDetailedHotTyreMessage builds a detailed message for specific hot tyre positions.
+func (a *App) buildDetailedHotTyreMessage(states tyres.Tyre, hotTyres []tyres.Position, baseMessage string) string {
+	message := baseMessage + ": "
+	positionsCalled := a.addAxleGroupsToMessage(&message, states)
+	a.addIndividualTyresToMessage(&message, hotTyres, positionsCalled)
+
+	return message
+}
+
+// addAxleGroupsToMessage adds front/rear axle groups to the message and returns positions already called.
+func (a *App) addAxleGroupsToMessage(message *string, states tyres.Tyre) []tyres.Position {
+	frontAxle := states.ConditionAtPosition(tyres.PositionFront)
+	rearAxle := states.ConditionAtPosition(tyres.PositionRear)
+
+	if frontAxle == tyres.ConditionHot {
+		*message += a.i18n.GetString(languagedb.RadioFront)
+
+		return []tyres.Position{tyres.PositionFrontLeft, tyres.PositionFrontRight}
+	}
+
+	if rearAxle == tyres.ConditionHot {
+		*message += a.i18n.GetString(languagedb.RadioRear)
+
+		return []tyres.Position{tyres.PositionRearLeft, tyres.PositionRearRight}
+	}
+
+	return []tyres.Position{}
+}
+
+// addIndividualTyresToMessage adds individual hot tyres not already reported as part of an axle group.
+func (a *App) addIndividualTyresToMessage(message *string, hotTyres []tyres.Position, positionsCalled []tyres.Position) {
+	for _, position := range hotTyres {
+		if slices.Contains(positionsCalled, position) {
+			continue
+		}
+
+		if len(positionsCalled) > 0 {
+			*message += ", "
+		}
+
+		*message += a.getPositionName(position)
+		positionsCalled = append(positionsCalled, position)
+	}
+}
+
+// getPositionName returns the localized name for a tyre position.
+func (a *App) getPositionName(position tyres.Position) string {
+	switch position { //nolint:exhaustive // front/rear handled above
+	case tyres.PositionFrontLeft:
+		return a.i18n.GetString(languagedb.RadioFrontLeft)
+	case tyres.PositionFrontRight:
+		return a.i18n.GetString(languagedb.RadioFrontRight)
+	case tyres.PositionRearLeft:
+		return a.i18n.GetString(languagedb.RadioRearLeft)
+	case tyres.PositionRearRight:
+		return a.i18n.GetString(languagedb.RadioRearRight)
+	default:
+		return ""
+	}
 }

@@ -67,11 +67,11 @@
         "radio.tyresundertemp": "Tyres under temp",
         "radio.tyresoptimaltemp": "Tyres optimal",
         "radio.tyresovertemp": "Tyres over temp",
-        "radio.tyresovertempfront": "Front tyres over temp",
-        "radio.tyresovertemprear": "Rear tyres over temp",
-        "radio.tyreovertempfl": "Front left tyre over temp",
-        "radio.tyreovertempfr": "Front right tyre over temp",
-        "radio.tyreovertemprl": "Rear left tyre over temp",
-        "radio.tyreovertemprr": "Rear right tyre over temp"
+        "radio.front": "Front",
+        "radio.rear": "Rear",
+        "radio.frontleft": "Front Left",
+        "radio.frontright": "Front Right",
+        "radio.rearleft": "Rear Left",
+        "radio.rearright": "Rear Right"
     }
 }

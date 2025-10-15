@@ -12,6 +12,20 @@ func defaultConfig() *viperConfig {
 			LogLevel: "info",
 			DataDir:  "data",
 		},
+		Discord: &discord{
+			Enabled:        false,
+			Token:          "",
+			GuildID:        "",
+			ChannelID:      "",
+			VoiceChannelID: "",
+		},
+		Fuel: &fuel{
+			MonitoringEnabled:       true,
+			PreWarnNotifyLaps:       2.0,
+			StrategyNotifyLaps:      5.0,
+			RangeSafetyMarginLaps:   0.2,
+			RangeSafetyMarginMeters: 750,
+		},
 		Hardware: &hardware{
 			Model:              "none",
 			DisplayOrientation: 0,
@@ -70,24 +84,9 @@ func defaultConfig() *viperConfig {
 			},
 		},
 		PitRadio: &pitRadio{
+			Enabled:               false,
 			MessageSendIntervalMs: 2000,
-
-			FuelPreWarnNotifyLaps:       2.0,
-			FuelStrategyNotifyLaps:      5.0,
-			FuelRangeSafetyMarginLaps:   0.2,
-			FuelRangeSafetyMarginMeters: 750,
-
-			TyreTemperatureMonitoring:      true,
-			TyreTemperatureOptimalCelsius:  81,
-			TyreTemperatureOperatingWindow: 6,
-			TyreTemperatureMarginCelsius:   3,
-
-			DiscordToken:          "",
-			DiscordGuildID:        "",
-			DiscordChannelID:      "",
-			DiscordVoiceChannelID: "",
 		},
-
 		Synthesizer: &Synthesizer{
 			InternalSampleRateHz:      8000,
 			OutputSampleRateHz:        32000,
@@ -108,6 +107,12 @@ func defaultConfig() *viperConfig {
 		},
 		Telemetry: &Telemetry{
 			Source: "udp://255.255.255.255:33739",
+		},
+		Tyres: &tyres{
+			MonitoringEnabled:          true,
+			TemperatureOptimalCelsius:  81,
+			TemperatureOperatingWindow: 6,
+			TemperatureMarginCelsius:   3,
 		},
 	}
 }

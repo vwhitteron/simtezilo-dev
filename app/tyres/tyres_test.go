@@ -37,16 +37,16 @@ func (suite *TyreTestSuite) TestNewTyreAttributes() {
 	// Note: Internal thresholds are not directly accessible, which is fine for encapsulation
 
 	// Check individual tyre conditions
-	suite.Equal(tyres.ConditionOptimal.String(), attributes.Condition(tyres.PositionFrontLeft))
-	suite.Equal(tyres.ConditionHot.String(), attributes.Condition(tyres.PositionFrontRight))
-	suite.Equal(tyres.ConditionCold.String(), attributes.Condition(tyres.PositionRearLeft))
-	suite.Equal(tyres.ConditionInvalid.String(), attributes.Condition(tyres.PositionRearRight))
+	suite.Equal(tyres.ConditionOptimal, attributes.ConditionAtPosition(tyres.PositionFrontLeft))
+	suite.Equal(tyres.ConditionHot, attributes.ConditionAtPosition(tyres.PositionFrontRight))
+	suite.Equal(tyres.ConditionCold, attributes.ConditionAtPosition(tyres.PositionRearLeft))
+	suite.Equal(tyres.ConditionInvalid, attributes.ConditionAtPosition(tyres.PositionRearRight))
 
 	// Check individual tyre temperatures
-	suite.InDelta(float32(75.0), attributes.Temperature(tyres.PositionFrontLeft), 0.001)
-	suite.InDelta(float32(95.0), attributes.Temperature(tyres.PositionFrontRight), 0.001)
-	suite.InDelta(float32(65.0), attributes.Temperature(tyres.PositionRearLeft), 0.001)
-	suite.InDelta(float32(0.0), attributes.Temperature(tyres.PositionRearRight), 0.001)
+	suite.InDelta(float32(75.0), attributes.TemperatureAtPosition(tyres.PositionFrontLeft), 0.001)
+	suite.InDelta(float32(95.0), attributes.TemperatureAtPosition(tyres.PositionFrontRight), 0.001)
+	suite.InDelta(float32(65.0), attributes.TemperatureAtPosition(tyres.PositionRearLeft), 0.001)
+	suite.InDelta(float32(0.0), attributes.TemperatureAtPosition(tyres.PositionRearRight), 0.001)
 }
 
 func (suite *TyreTestSuite) TestIndividualTyreConditionCalculations() {
@@ -90,8 +90,8 @@ func (suite *TyreTestSuite) TestIndividualTyreConditionCalculations() {
 			attributes := tyres.New(optimalCenter, optimalWindow, margin, tyreTemps)
 
 			// Assert
-			result := attributes.Condition(tyres.PositionFrontLeft)
-			suite.Equal(testCase.expected.String(), result, "Temperature %.2f°C should be %s", testCase.temperature, testCase.expected)
+			result := attributes.ConditionAtPosition(tyres.PositionFrontLeft)
+			suite.Equal(testCase.expected, result, "Temperature %.2f°C should be %s", testCase.temperature, testCase.expected)
 		})
 	}
 }
@@ -107,46 +107,13 @@ func (suite *TyreTestSuite) TestAverageTemperature() {
 	attributes := tyres.New(80.0, 10.0, 5.0, tyreTemps)
 
 	// Act
-	average := attributes.AverageTemperature()
+	average := attributes.GeneralTemperature()
 
 	// Assert
 	expected := (70.0 + 80.0 + 90.0 + 100.0) / 4.0
 	suite.InEpsilon(float32(expected), average, 0.001)
 }
-
-func (suite *TyreTestSuite) TestConditions() {
-	// Arrange
-	tyreTemps := models.CornerSet{
-		FrontLeft:  65.0, // Cold
-		FrontRight: 80.0, // Optimal
-		RearLeft:   95.0, // Hot
-		RearRight:  0.0,  // Invalid
-	}
-	attributes := tyres.New(80.0, 10.0, 5.0, tyreTemps)
-
-	// Act
-	conditionMap := attributes.Conditions()
-
-	// Assert
-	// Check that we have the expected conditions
-	coldTyres, hasCold := conditionMap[tyres.ConditionCold]
-	suite.True(hasCold)
-	suite.Contains(coldTyres, tyres.PositionFrontLeft)
-
-	optimalTyres, hasOptimal := conditionMap[tyres.ConditionOptimal]
-	suite.True(hasOptimal)
-	suite.Contains(optimalTyres, tyres.PositionFrontRight)
-
-	hotTyres, hasHot := conditionMap[tyres.ConditionHot]
-	suite.True(hasHot)
-	suite.Contains(hotTyres, tyres.PositionRearLeft)
-
-	invalidTyres, hasInvalid := conditionMap[tyres.ConditionInvalid]
-	suite.True(hasInvalid)
-	suite.Contains(invalidTyres, tyres.PositionRearRight)
-}
-
-func (suite *TyreTestSuite) TestContainsCondition() {
+func (suite *TyreTestSuite) TestPositionsInCondition() {
 	// Arrange
 	tyreTemps := models.CornerSet{
 		FrontLeft:  65.0, // Cold
@@ -157,10 +124,10 @@ func (suite *TyreTestSuite) TestContainsCondition() {
 	attributes := tyres.New(80.0, 10.0, 5.0, tyreTemps)
 
 	// Act & Assert
-	suite.True(attributes.ContainsCondition(tyres.ConditionCold))
-	suite.True(attributes.ContainsCondition(tyres.ConditionOptimal))
-	suite.True(attributes.ContainsCondition(tyres.ConditionHot))
-	suite.True(attributes.ContainsCondition(tyres.ConditionInvalid))
+	suite.Len(attributes.PositionsInCondition(tyres.ConditionCold), 1)
+	suite.Len(attributes.PositionsInCondition(tyres.ConditionOptimal), 1)
+	suite.Len(attributes.PositionsInCondition(tyres.ConditionHot), 1)
+	suite.Len(attributes.PositionsInCondition(tyres.ConditionInvalid), 1)
 }
 
 func (suite *TyreTestSuite) TestConditionOptimal() {
@@ -220,36 +187,6 @@ func (suite *TyreTestSuite) TestConditionOptimal() {
 			suite.Equal(testCase.expected, attributes.ConditionOptimal())
 		})
 	}
-}
-
-func (suite *TyreTestSuite) TestEqual() {
-	// Arrange
-	temps1 := models.CornerSet{
-		FrontLeft:  70.0,
-		FrontRight: 80.0,
-		RearLeft:   90.0,
-		RearRight:  100.0,
-	}
-	temps2 := models.CornerSet{
-		FrontLeft:  70.0,
-		FrontRight: 80.0,
-		RearLeft:   90.0,
-		RearRight:  100.0,
-	}
-	temps3 := models.CornerSet{
-		FrontLeft:  75.0, // Different
-		FrontRight: 80.0,
-		RearLeft:   90.0,
-		RearRight:  100.0,
-	}
-
-	attributes1 := tyres.New(80.0, 10.0, 5.0, temps1)
-	attributes2 := tyres.New(80.0, 10.0, 5.0, temps2)
-	attributes3 := tyres.New(80.0, 10.0, 5.0, temps3)
-
-	// Act & Assert
-	suite.True(attributes1.Equal(attributes2), "Identical attributes should be equal")
-	suite.False(attributes1.Equal(attributes3), "Different attributes should not be equal")
 }
 
 func (suite *TyreTestSuite) TestPositionString() {

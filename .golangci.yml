@@ -132,21 +132,22 @@ linters:
         main:
           allow:
             - $gostd
-            - github.com/stretchr/testify
-            - github.com/spf13/viper
-            - github.com/rs/zerolog
-            - periph.io/x/host/v3
-            - periph.io/x/conn/v3
-            - github.com/gopxl/beep
             - atomicgo.dev/keyboard
-            - golang.org/x/image
-            - github.com/golang/freetype
-            - github.com/grafana/pyroscope-go
             - github.com/bwmarrin/discordgo
+            - github.com/golang/freetype
+            - github.com/gopxl/beep
             - github.com/gorilla/websocket
+            - github.com/grafana/pyroscope-go
+            - github.com/kennygrant/sanitize
+            - github.com/rs/zerolog
+            - github.com/spf13/viper
+            - github.com/stretchr/testify
             - github.com/vwhitteron/simtezilo-dev
             - github.com/zetetos/gt-telemetry
+            - golang.org/x/image
             - layeh.com/gopus
+            - periph.io/x/conn/v3
+            - periph.io/x/host/v3
     lll:
       line-length: 180
     gomoddirectives:
