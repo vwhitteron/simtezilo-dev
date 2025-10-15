@@ -14,6 +14,16 @@ type tyreState struct {
 	lastTempNotifyTime      time.Time       // Last time tyre temperature notification was sent
 }
 
+func (a *App) updateTyreTemperature() {
+	if !a.config.GetTyreMonitoringEnabled() {
+		return
+	}
+
+	a.tyres.SetTemperatures(
+		a.gtClient.Telemetry.TyreTemperatureCelsius(),
+	)
+}
+
 // notifyTyreTemperature sends tyre temperature notifications over the pit radio.
 // Reports: all-tyres conditions (optimal/hot/cold) or individual/axle hot tyres only.
 func (a *App) notifyTyreTemperature() {
@@ -31,25 +41,22 @@ func (a *App) notifyTyreTemperature() {
 	}
 
 	tyreTemps := a.gtClient.Telemetry.TyreTemperatureCelsius()
-	tyreAttrs := tyres.New(
-		a.config.GetTyreTemperatureOptimalCelsius(),
-		a.config.GetTyreTemperatureOperatingWindow(),
-		a.config.GetTyreTemperatureMarginCelsius(),
-		tyreTemps,
-	)
-
-	if len(tyreAttrs.PositionsInCondition(tyres.ConditionInvalid)) > 0 {
+	if a.tyres == nil {
 		return
 	}
 
-	tyreCondition := tyreAttrs.GeneralCondition()
+	if len(a.tyres.PositionsInCondition(tyres.ConditionInvalid)) > 0 {
+		return
+	}
+
+	tyreCondition := a.tyres.GeneralCondition()
 
 	// Only send notification if the state has changed
 	if tyreCondition == a.pitRadioState.tyreState.lastTempNotifyCondition {
 		return
 	}
 
-	message := a.generateTyreConditionMessage(tyreAttrs)
+	message := a.generateTyreConditionMessage(a.tyres)
 	if message == "" {
 		return // No notification needed
 	}
@@ -77,29 +84,29 @@ func (a *App) notifyTyreTemperature() {
 			Str("message", message).
 			Int16("lap", a.state.current.lapNumber).
 			Str("condition", tyreCondition.String()).
-			Str("cond_fl", tyreAttrs.ConditionAtPosition(tyres.PositionFrontLeft).String()).
-			Str("cond_fr", tyreAttrs.ConditionAtPosition(tyres.PositionFrontRight).String()).
-			Str("cond_rl", tyreAttrs.ConditionAtPosition(tyres.PositionRearLeft).String()).
-			Str("cond_rr", tyreAttrs.ConditionAtPosition(tyres.PositionRearRight).String()).
+			Str("cond_fl", a.tyres.ConditionAtPosition(tyres.PositionFrontLeft).String()).
+			Str("cond_fr", a.tyres.ConditionAtPosition(tyres.PositionFrontRight).String()).
+			Str("cond_rl", a.tyres.ConditionAtPosition(tyres.PositionRearLeft).String()).
+			Str("cond_rr", a.tyres.ConditionAtPosition(tyres.PositionRearRight).String()).
 			Float32("temp_avg", (tyreTemps.FrontLeft+tyreTemps.FrontRight+tyreTemps.RearLeft+tyreTemps.RearRight)/4).
-			Float32("temp_fl", tyreAttrs.TemperatureAtPosition(tyres.PositionFrontLeft)).
-			Float32("temp_fr", tyreAttrs.TemperatureAtPosition(tyres.PositionFrontRight)).
-			Float32("temp_rl", tyreAttrs.TemperatureAtPosition(tyres.PositionRearLeft)).
-			Float32("temp_rr", tyreAttrs.TemperatureAtPosition(tyres.PositionRearRight)).
+			Float32("temp_fl", a.tyres.TemperatureAtPosition(tyres.PositionFrontLeft)).
+			Float32("temp_fr", a.tyres.TemperatureAtPosition(tyres.PositionFrontRight)).
+			Float32("temp_rl", a.tyres.TemperatureAtPosition(tyres.PositionRearLeft)).
+			Float32("temp_rr", a.tyres.TemperatureAtPosition(tyres.PositionRearRight)).
 			Msg("Send tyre temp message")
 	}
 }
 
 // generateTyreConditionMessage generates tyre condition messages based on various combinations of tyre state.
-func (a *App) generateTyreConditionMessage(states tyres.Tyre) string {
-	condition := states.GeneralCondition()
+func (a *App) generateTyreConditionMessage(tyreState *tyres.Tyre) string {
+	condition := tyreState.GeneralCondition()
 
 	if message := a.getSimpleConditionMessage(condition); message != "" {
 		return message
 	}
 
 	if condition == tyres.ConditionHot {
-		return a.generateHotTyreMessage(states)
+		return a.generateHotTyreMessage(tyreState)
 	}
 
 	return ""
@@ -120,8 +127,8 @@ func (a *App) getSimpleConditionMessage(condition tyres.Condition) string {
 }
 
 // generateHotTyreMessage generates detailed messages for hot tyre conditions.
-func (a *App) generateHotTyreMessage(states tyres.Tyre) string {
-	hotTyres := states.PositionsInCondition(tyres.ConditionHot)
+func (a *App) generateHotTyreMessage(tyreState *tyres.Tyre) string {
+	hotTyres := tyreState.PositionsInCondition(tyres.ConditionHot)
 	baseMessage := a.i18n.GetString(languagedb.RadioTyresOverTemp)
 
 	// Report general tyres overheating if 3+ tyres are hot
@@ -130,20 +137,20 @@ func (a *App) generateHotTyreMessage(states tyres.Tyre) string {
 	}
 
 	// Generate detailed message for specific hot tyres
-	return a.buildDetailedHotTyreMessage(states, hotTyres, baseMessage)
+	return a.buildDetailedHotTyreMessage(tyreState, hotTyres, baseMessage)
 }
 
 // buildDetailedHotTyreMessage builds a detailed message for specific hot tyre positions.
-func (a *App) buildDetailedHotTyreMessage(states tyres.Tyre, hotTyres []tyres.Position, baseMessage string) string {
+func (a *App) buildDetailedHotTyreMessage(tyreState *tyres.Tyre, hotTyres []tyres.Position, baseMessage string) string {
 	message := baseMessage + ": "
-	positionsCalled := a.addAxleGroupsToMessage(&message, states)
+	positionsCalled := a.addAxleGroupsToMessage(&message, tyreState)
 	a.addIndividualTyresToMessage(&message, hotTyres, positionsCalled)
 
 	return message
 }
 
 // addAxleGroupsToMessage adds front/rear axle groups to the message and returns positions already called.
-func (a *App) addAxleGroupsToMessage(message *string, states tyres.Tyre) []tyres.Position {
+func (a *App) addAxleGroupsToMessage(message *string, states *tyres.Tyre) []tyres.Position {
 	frontAxle := states.ConditionAtPosition(tyres.PositionFront)
 	rearAxle := states.ConditionAtPosition(tyres.PositionRear)
 

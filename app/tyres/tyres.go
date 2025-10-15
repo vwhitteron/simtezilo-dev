@@ -72,7 +72,7 @@ func (p *Position) String() string {
 }
 
 // New creates a tyreAttributes struct from the given tyre temperatures.
-func New(optimalCenter float32, optimalWindow float32, margin float32, tyreTemps models.CornerSet) Tyre {
+func New(optimalCenter float32, optimalWindow float32, margin float32, tyreTemps models.CornerSet) *Tyre {
 	optimalMin := optimalCenter - (optimalWindow / 2)
 	optimalMax := optimalCenter + (optimalWindow / 2)
 
@@ -81,23 +81,20 @@ func New(optimalCenter float32, optimalWindow float32, margin float32, tyreTemps
 		optimalUpper:  optimalMax,
 		coldThreshold: optimalMin - margin,
 		hotThreshold:  optimalMax + margin,
-		frontLeft: attribute{
-			temperature: tyreTemps.FrontLeft,
-		},
-		frontRight: attribute{
-			temperature: tyreTemps.FrontRight,
-		},
-		rearLeft: attribute{
-			temperature: tyreTemps.RearLeft,
-		},
-		rearRight: attribute{
-			temperature: tyreTemps.RearRight,
-		},
 	}
 
-	attributes.assessTyreConditions()
+	attributes.SetTemperatures(tyreTemps)
 
-	return attributes
+	return &attributes
+}
+
+func (a *Tyre) SetTemperatures(tyreTemps models.CornerSet) {
+	a.frontLeft.temperature = tyreTemps.FrontLeft
+	a.frontRight.temperature = tyreTemps.FrontRight
+	a.rearLeft.temperature = tyreTemps.RearLeft
+	a.rearRight.temperature = tyreTemps.RearRight
+
+	a.assessTyreConditions()
 }
 
 // ConditionAtPosition returns the temperature of the tyre at the given position.
