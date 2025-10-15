@@ -3,7 +3,6 @@ function connect() {
 }
 
 async function initSciChart() {
-    // const ws = new WebSocket('ws://' + location.host + '/ws');
     var ws = connect()
 
     ws.onclose = function (e) {
@@ -39,7 +38,7 @@ async function initSciChart() {
         const yAxisRPM = new SciChart.NumericAxis(
             wasmContextRPMSpeed,
             {
-                id: "ID_Y_AXIS_1",
+                id: "ID_Y_AXIS_RPM",
                 axisAlignment: SciChart.EAxisAlignment.Left,
                 visibleRange: new SciChart.NumberRange(0, 10000),
                 labelPrecision: 0,
@@ -51,7 +50,7 @@ async function initSciChart() {
         const yAxisSpeed = new SciChart.NumericAxis(
             wasmContextRPMSpeed,
             {
-                id: "ID_Y_AXIS_2",
+                id: "ID_Y_AXIS_SPEED",
                 axisAlignment: SciChart.EAxisAlignment.Right,
                 visibleRange: new SciChart.NumberRange(0, 350),
                 labelPrecision: 0,
@@ -80,7 +79,7 @@ async function initSciChart() {
         sciChartSurfaceRPMSpeed.renderableSeries.add(
             new SciChart.FastLineRenderableSeries(wasmContextRPMSpeed, {
                 dataSeries: xyDataSeriesRPM,
-                yAxisId: "ID_Y_AXIS_1",
+                yAxisId: "ID_Y_AXIS_RPM",
                 strokeThickness: 3,
                 stroke: "#50C7E0"
             })
@@ -88,7 +87,7 @@ async function initSciChart() {
         sciChartSurfaceRPMSpeed.renderableSeries.add(
             new SciChart.FastLineRenderableSeries(wasmContextRPMSpeed, {
                 dataSeries: xyDataSeriesSpeed,
-                yAxisId: "ID_Y_AXIS_2",
+                yAxisId: "ID_Y_AXIS_SPEED",
                 strokeThickness: 3,
                 stroke: "#C750E0"
             })
@@ -154,68 +153,126 @@ async function initSciChart() {
 
 
 
-        // Transmission gear
+        // Tyre temperature
         const {
-            sciChartSurface: sciChartSurfaceGear,
-            wasmContext: wasmContextGear
-        } = await SciChart.SciChartSurface.create("scichart-root-3", { title: "Transmission Gear", titleStyle: { fontSize: "16" } });
+            sciChartSurface: TyreTemp,
+            wasmContext: wasmContextTyreTemp
+        } = await SciChart.SciChartSurface.create("scichart-root-3", { title: "Tyre Temperature", titleStyle: { fontSize: "16" } });
 
         // Add an X and a Y Axis
-        const xAxisGear = new SciChart.NumericAxis(wasmContextGear, { autoRange: SciChart.EAutoRange.Always });
-        const yAxisGear = new SciChart.NumericAxis(wasmContextGear, { autoRange: SciChart.EAutoRange.Always });
-        sciChartSurfaceGear.xAxes.add(xAxisGear);
-        sciChartSurfaceGear.yAxes.add(yAxisGear);
+        const xAxisTyreTemp = new SciChart.NumericAxis(wasmContextTyreTemp, { autoRange: SciChart.EAutoRange.Always });
+        const yAxisTyreTemp = new SciChart.NumericAxis(wasmContextTyreTemp, { autoRange: SciChart.EAutoRange.Always });
+        TyreTemp.xAxes.add(xAxisTyreTemp);
+        TyreTemp.yAxes.add(yAxisTyreTemp);
 
         // Create a DataSeries
-        const xyDataSeriesGear = new SciChart.XyDataSeries(wasmContextGear, {
+        const xyDataSeriesTyreTempFL = new SciChart.XyDataSeries(wasmContextTyreTemp, {
+            fifoCapacity: fifoCapacity,
+            isSorted: true,
+            containsNaN: false
+        });
+        const xyDataSeriesTyreTempFR = new SciChart.XyDataSeries(wasmContextTyreTemp, {
+            fifoCapacity: fifoCapacity,
+            isSorted: true,
+            containsNaN: false
+        });
+        const xyDataSeriesTyreTempRL = new SciChart.XyDataSeries(wasmContextTyreTemp, {
+            fifoCapacity: fifoCapacity,
+            isSorted: true,
+            containsNaN: false
+        });
+        const xyDataSeriesTyreTempRR = new SciChart.XyDataSeries(wasmContextTyreTemp, {
             fifoCapacity: fifoCapacity,
             isSorted: true,
             containsNaN: false
         });
 
         // Create a renderableSeries and assign the dataSeries
-        sciChartSurfaceGear.renderableSeries.add(new SciChart.FastLineRenderableSeries(wasmContextGear, {
-            dataSeries: xyDataSeriesGear,
+        TyreTemp.renderableSeries.add(new SciChart.FastLineRenderableSeries(wasmContextTyreTemp, {
+            dataSeries: xyDataSeriesTyreTempFL,
             strokeThickness: 3,
-            stroke: "#50C7E0"
+            stroke: "#7072fdff"
+        }));
+        TyreTemp.renderableSeries.add(new SciChart.FastLineRenderableSeries(wasmContextTyreTemp, {
+            dataSeries: xyDataSeriesTyreTempFR,
+            strokeThickness: 3,
+            stroke: "#fa6a6aff"
+        }));
+        TyreTemp.renderableSeries.add(new SciChart.FastLineRenderableSeries(wasmContextTyreTemp, {
+            dataSeries: xyDataSeriesTyreTempRL,
+            strokeThickness: 3,
+            stroke: "#0043fcff"
+        }));
+        TyreTemp.renderableSeries.add(new SciChart.FastLineRenderableSeries(wasmContextTyreTemp, {
+            dataSeries: xyDataSeriesTyreTempRR,
+            strokeThickness: 3,
+            stroke: "#ff0000ff"
         }));
 
 
 
-        // 6DOF Translational envelope surge gforce
+        // Fuel range
         const {
-            sciChartSurface: sciChartSurfaceGforce,
-            wasmContext: wasmContextGforce
-        } = await SciChart.SciChartSurface.create("scichart-root-4", { title: "Surge G-Force", titleStyle: { fontSize: "16" } });
+            sciChartSurface: sciChartSurfaceFuel,
+            wasmContext: wasmContextFuel
+        } = await SciChart.SciChartSurface.create("scichart-root-4", { title: "Fuel Range/Rate", titleStyle: { fontSize: "16" } });
 
         // Add an X and a Y Axis
-        const xAxisGforce = new SciChart.NumericAxis(wasmContextGforce, { autoRange: SciChart.EAutoRange.Always });
-        const yAxisGforce = new SciChart.NumericAxis(wasmContextGforce, { autoRange: SciChart.EAutoRange.Always });
-        sciChartSurfaceGforce.xAxes.add(xAxisGforce);
-        sciChartSurfaceGforce.yAxes.add(yAxisGforce);
+        const xAxisFuel = new SciChart.NumericAxis(wasmContextFuel, { autoRange: SciChart.EAutoRange.Always });
+        const yAxisFuelRate = new SciChart.NumericAxis(
+            wasmContextFuel,
+            {
+                id: "ID_Y_AXIS_RATE",
+                axisAlignment: SciChart.EAxisAlignment.Left,
+                autoRange: SciChart.EAutoRange.Always,
+                labelPrecision: 2,
+                labelStyle: {
+                    color: "#f9b73dff"
+                }
+
+            }
+        );
+        const yAxisFuelRange = new SciChart.NumericAxis(
+            wasmContextFuel,
+            {
+                id: "ID_Y_AXIS_RANGE",
+                axisAlignment: SciChart.EAxisAlignment.Right,
+                autoRange: SciChart.EAutoRange.Always,
+                labelPrecision: 1,
+                labelStyle: {
+                    color: "#5072e0ff"
+                }
+
+            }
+        );
+        sciChartSurfaceFuel.xAxes.add(xAxisFuel);
+        sciChartSurfaceFuel.yAxes.add(yAxisFuelRate);
+        sciChartSurfaceFuel.yAxes.add(yAxisFuelRange);
 
         // Create a DataSeries
-        const xyDataSeriesSurgeGforce = new SciChart.XyDataSeries(wasmContextGforce, {
+        const xyDataSeriesFuelRange = new SciChart.XyDataSeries(wasmContextFuel, {
             fifoCapacity: fifoCapacity,
             isSorted: true,
             containsNaN: false
         });
-        const xyDataSeriesSurgeGforceCalc = new SciChart.XyDataSeries(wasmContextGforce, {
+        const xyDataSeriesFuelRate = new SciChart.XyDataSeries(wasmContextFuel, {
             fifoCapacity: fifoCapacity,
             isSorted: true,
             containsNaN: false
         });
 
         // Create a renderableSeries and assign the dataSeries
-        sciChartSurfaceGforce.renderableSeries.add(new SciChart.FastLineRenderableSeries(wasmContextGforce, {
-            dataSeries: xyDataSeriesSurgeGforceCalc,
+        sciChartSurfaceFuel.renderableSeries.add(new SciChart.FastLineRenderableSeries(wasmContextFuel, {
+            dataSeries: xyDataSeriesFuelRate,
+            yAxisId: "ID_Y_AXIS_RATE",
             strokeThickness: 2,
-            stroke: "#50C7E0"
+            stroke: "#f9b73dff"
         }));
-        sciChartSurfaceGforce.renderableSeries.add(new SciChart.FastLineRenderableSeries(wasmContextGforce, {
-            dataSeries: xyDataSeriesSurgeGforce,
+        sciChartSurfaceFuel.renderableSeries.add(new SciChart.FastLineRenderableSeries(wasmContextFuel, {
+            dataSeries: xyDataSeriesFuelRange,
+            yAxisId: "ID_Y_AXIS_RANGE",
             strokeThickness: 2,
-            stroke: "#C750E0"
+            stroke: "#5072e0ff"
         }));
 
 
@@ -352,7 +409,7 @@ async function initSciChart() {
 
 
 
-        // Synthesizer output ampliture and frequency
+        // Synthesizer output amplitude and frequency
         const {
             sciChartSurface: sciChartSurfaceSynthOutput,
             wasmContext: wasmContextSynthOutput
@@ -363,7 +420,7 @@ async function initSciChart() {
         const yAxisSynthOutputAmplitude = new SciChart.NumericAxis(
             wasmContextSynthOutput,
             {
-                id: "ID_Y_AXIS_1",
+                id: "ID_Y_AXIS_AMPLITUDE",
                 axisAlignment: SciChart.EAxisAlignment.Left,
                 visibleRange: new SciChart.NumberRange(0, 1),
                 labelPrecision: 3,
@@ -375,7 +432,7 @@ async function initSciChart() {
         const yAxisSynthOutputFrequency = new SciChart.NumericAxis(
             wasmContextSynthOutput,
             {
-                id: "ID_Y_AXIS_2",
+                id: "ID_Y_AXIS_FREQUENCY",
                 axisAlignment: SciChart.EAxisAlignment.Right,
                 visibleRange: new SciChart.NumberRange(0, 60),
                 labelPrecision: 0,
@@ -403,13 +460,13 @@ async function initSciChart() {
         // Create a renderableSeries and assign the dataSeries
         sciChartSurfaceSynthOutput.renderableSeries.add(new SciChart.FastLineRenderableSeries(wasmContextSynthOutput, {
             dataSeries: xyDataSeriesSynthOutputAmplitude,
-            yAxisId: "ID_Y_AXIS_1",
+            yAxisId: "ID_Y_AXIS_AMPLITUDE",
             strokeThickness: 3,
             stroke: "#50C7E0"
         }));
         sciChartSurfaceSynthOutput.renderableSeries.add(new SciChart.FastLineRenderableSeries(wasmContextSynthOutput, {
             dataSeries: xyDataSeriesSynthOutputFrequency,
-            yAxisId: "ID_Y_AXIS_2",
+            yAxisId: "ID_Y_AXIS_FREQUENCY",
             strokeThickness: 3,
             stroke: "#C750E0"
         }));
@@ -457,10 +514,13 @@ async function initSciChart() {
                 xyDataSeriesThrottleOutput.clear();
                 xyDataSeriesBrakeInput.clear();
                 xyDataSeriesBrakeOutput.clear();
-                xyDataSeriesGear.clear();
+                xyDataSeriesTyreTempFL.clear();
+                xyDataSeriesTyreTempFR.clear();
+                xyDataSeriesTyreTempRL.clear();
+                xyDataSeriesTyreTempRR.clear();
+                xyDataSeriesFuelRange.clear();
+                xyDataSeriesFuelRate.clear();
                 xyDataSeriesComputeTime.clear();
-                xyDataSeriesSurgeGforce.clear();
-                xyDataSeriesSurgeGforceCalc.clear();
                 xyDataSeries6DOFTranslationalJerkCalc.clear();
                 xyDataSeries6DOFTranslationalJerk.clear();
                 xyDataSeries6DOFTranslationalSnapCalc.clear();
@@ -479,10 +539,13 @@ async function initSciChart() {
             xyDataSeriesThrottleOutput.appendRange([i], [data.throttleOutput]);
             xyDataSeriesBrakeInput.appendRange([i], [data.brakeInput]);
             xyDataSeriesBrakeOutput.appendRange([i], [data.brakeOutput]);
-            xyDataSeriesGear.appendRange([i], [data.gear]);
+            xyDataSeriesTyreTempFL.appendRange([i], [data.tyreTempFL]);
+            xyDataSeriesTyreTempFR.appendRange([i], [data.tyreTempFR]);
+            xyDataSeriesTyreTempRL.appendRange([i], [data.tyreTempRL]);
+            xyDataSeriesTyreTempRR.appendRange([i], [data.tyreTempRR]);
+            xyDataSeriesFuelRange.appendRange([i], [data.fuelRangeKm]);
+            xyDataSeriesFuelRate.appendRange([i], [data.fuelUsagePerKm]);
             xyDataSeriesComputeTime.appendRange([i], [data.computeTime]);
-            xyDataSeriesSurgeGforce.appendRange([i], [data.surgeGforce]);
-            xyDataSeriesSurgeGforceCalc.appendRange([i], [data.surgeGforceCalc]);
             xyDataSeries6DOFTranslationalJerk.appendRange([i], [data.SixDOFTranslationalJerk]);
             xyDataSeries6DOFTranslationalSnap.appendRange([i], [data.SixDOFTranslationalSnap]);
             xyDataSeries6DOFTranslationalJerkCalc.appendRange([i], [data.SixDOFTranslationalJerkCalc]);
