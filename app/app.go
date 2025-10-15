@@ -450,7 +450,9 @@ func (a *App) startBackgroundTasks() {
 
 	go a.newLapHandler()
 
-	go a.pitRadio.BackgroundTask()
+	if a.pitRadio != nil {
+		go a.pitRadio.BackgroundTask()
+	}
 
 	go func() {
 		for {
