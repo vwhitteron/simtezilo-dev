@@ -34,8 +34,6 @@ func New(log zerolog.Logger, telemetryChartFeed chan map[string]float32) *WebUI 
 
 // Start sets up handlers and starts the web server.
 func (w *WebUI) Start() {
-	w.log.Info().Msg("Web UI started on port 8080\r\n")
-
 	http.HandleFunc("/", w.rootHandlerFunc())
 	http.HandleFunc("/images/", w.imagesHandlerFunc())
 	http.HandleFunc("/js/", w.sciChartJSHandlerFunc())
@@ -43,14 +41,18 @@ func (w *WebUI) Start() {
 	http.HandleFunc("/ws", w.handleWebSocketConnection)
 
 	server := &http.Server{
-		Addr:              ":1234",
+		Addr:              ":8080",
 		ReadHeaderTimeout: 3 * time.Second,
 	}
 
 	err := server.ListenAndServe()
 	if err != nil {
 		w.log.Error().Err(err).Msg("error starting web server")
+
+		return
 	}
+
+	w.log.Info().Msg("Web UI started on port 8080\r\n")
 }
 
 // HasActiveClients returns true if there are active WebSocket clients connected.
