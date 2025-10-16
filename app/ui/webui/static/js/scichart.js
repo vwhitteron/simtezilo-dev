@@ -5,19 +5,62 @@ const CONFIG = {
     WEBSOCKET_URL: `ws://${location.host}/ws`
 };
 
-// Chart registry - define which charts to create and their order
-const CHART_REGISTRY = [
-    { id: 'rpm-speed', containerId: 'scichart-root-1', enabled: true },
-    { id: 'throttle-brake', containerId: 'scichart-root-2', enabled: true },
-    { id: 'tyre-temperature', containerId: 'scichart-root-3', enabled: true },
-    { id: 'fuel-range', containerId: 'scichart-root-4', enabled: true },
-    { id: 'translational-jerk', containerId: 'scichart-root-5', enabled: true },
-    { id: 'rotational-jerk', containerId: 'scichart-root-6', enabled: true },
-    { id: 'translational-snap', containerId: 'scichart-root-7', enabled: true },
-    { id: 'rotational-snap', containerId: 'scichart-root-8', enabled: true },
-    { id: 'synthesizer-output', containerId: 'scichart-root-9', enabled: true },
-    { id: 'compute-time', containerId: 'scichart-root-10', enabled: true }
-];
+// Chart configurations for different pages
+const CHART_CONFIGURATIONS = {
+    // Telemetry page - driver-focused charts
+    'telemetry': [
+        { id: 'rpm-speed', containerId: 'scichart-root-1', enabled: true },
+        { id: 'throttle-brake', containerId: 'scichart-root-2', enabled: true },
+        { id: 'tyre-temperature', containerId: 'scichart-root-3', enabled: true },
+        { id: 'fuel-range', containerId: 'scichart-root-4', enabled: true }
+    ],
+
+    // Dev page - developer-focused charts
+    'dev': [
+        { id: 'translational-jerk', containerId: 'scichart-root-1', enabled: true },
+        { id: 'rotational-jerk', containerId: 'scichart-root-2', enabled: true },
+        { id: 'translational-snap', containerId: 'scichart-root-3', enabled: true },
+        { id: 'rotational-snap', containerId: 'scichart-root-4', enabled: true },
+        { id: 'synthesizer-output', containerId: 'scichart-root-5', enabled: true },
+        { id: 'compute-time', containerId: 'scichart-root-6', enabled: true }
+    ],
+
+    // Default/fallback - all charts enabled
+    'default': [
+        { id: 'rpm-speed', containerId: 'scichart-root-1', enabled: true },
+        { id: 'throttle-brake', containerId: 'scichart-root-2', enabled: true },
+        { id: 'tyre-temperature', containerId: 'scichart-root-3', enabled: true },
+        { id: 'fuel-range', containerId: 'scichart-root-4', enabled: true },
+        { id: 'translational-jerk', containerId: 'scichart-root-5', enabled: true },
+        { id: 'rotational-jerk', containerId: 'scichart-root-6', enabled: true },
+        { id: 'translational-snap', containerId: 'scichart-root-7', enabled: true },
+        { id: 'rotational-snap', containerId: 'scichart-root-8', enabled: true },
+        { id: 'synthesizer-output', containerId: 'scichart-root-9', enabled: true },
+        { id: 'compute-time', containerId: 'scichart-root-10', enabled: true }
+    ]
+};
+
+// Function to get chart configuration from script tag data attribute
+function getChartRegistry() {
+    // Find the current script tag
+    const currentScript = document.currentScript ||
+        document.querySelector('script[src*="scichart.js"]') ||
+        document.querySelector('script[data-chart-config]');
+
+    if (currentScript) {
+        const configType = currentScript.getAttribute('data-chart-config');
+        if (configType && CHART_CONFIGURATIONS[configType]) {
+            console.log(`Loading chart configuration: ${configType}`);
+            return CHART_CONFIGURATIONS[configType];
+        }
+    }
+
+    console.log('No chart configuration specified, using default');
+    return CHART_CONFIGURATIONS.default;
+}
+
+// Get the appropriate chart registry based on script tag parameter
+const CHART_REGISTRY = getChartRegistry();
 
 // WebSocket connection management
 function createWebSocketConnection() {

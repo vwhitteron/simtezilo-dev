@@ -38,6 +38,7 @@ func (w *WebUI) Start() {
 	http.HandleFunc("/images/", w.imagesHandlerFunc())
 	http.HandleFunc("/js/", w.sciChartJSHandlerFunc())
 	http.HandleFunc("/telemetry", w.telemetryHandlerFunc())
+	http.HandleFunc("/dev", w.devHandlerFunc())
 	http.HandleFunc("/ws", w.handleWebSocketConnection)
 
 	server := &http.Server{
@@ -84,6 +85,21 @@ func (w *WebUI) telemetryHandlerFunc() func(w http.ResponseWriter, r *http.Reque
 		length, err := response.Write(telemetryHTML)
 		if err != nil {
 			w.log.Error().Err(err).Int("bytes_written", length).Msg("writing telemetry HTML")
+
+			return
+		}
+	}
+}
+
+//go:embed html/dev.html
+var devHTML []byte
+
+// telemetryHandlerFunc serves the developer HTML page.
+func (w *WebUI) devHandlerFunc() func(w http.ResponseWriter, r *http.Request) {
+	return func(response http.ResponseWriter, _ *http.Request) {
+		length, err := response.Write(devHTML)
+		if err != nil {
+			w.log.Error().Err(err).Int("bytes_written", length).Msg("writing dev HTML")
 
 			return
 		}
