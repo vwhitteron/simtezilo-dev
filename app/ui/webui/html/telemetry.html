@@ -5,55 +5,38 @@
   <!-- Required meta tags -->
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <style>
-    body {
-      font-family: Arial, Helvetica, sans-serif;
-      color: #f9e67f;
-      background-color: #000000;
-    }
-
-    #connection-status {
-      padding: 5px 10px;
-      border-radius: 15px;
-      background-color: rgba(255, 255, 255, 0.1);
-      backdrop-filter: blur(5px);
-      transition: all 0.3s ease;
-    }
-
-    #status-indicator {
-      transition: background-color 0.3s ease;
-      box-shadow: 0 0 5px rgba(255, 255, 255, 0.3);
-    }
-
-    #status-text {
-      font-weight: 500;
-      transition: color 0.3s ease;
-    }
-  </style>
+  <link rel="stylesheet" href="/css/common.css">
+  <link rel="stylesheet" href="/css/telemetry.css">
   <!-- Include SciChart.js v4 -->
   <script src="https://cdn.jsdelivr.net/npm/scichart@4/_wasm/scichart.browser.js" crossorigin="anonymous"></script>
+  <script>
+    const currentPageId = 'telemetry';
+    const connectionStatusHTML = `
+      <div id="connection-status" style="display: flex; align-items: center; font-size: 14px;">
+        <div id="status-indicator"
+          style="width: 12px; height: 12px; border-radius: 50%; margin-right: 8px; background-color: #ff6b6b;"></div>
+        <span id="status-text">Connecting...</span>
+        <button id="reconnect-btn"
+          style="margin-left: 10px; padding: 2px 8px; background: rgba(81, 207, 102, 0.2); border: 1px solid #51cf66; color: #51cf66; border-radius: 4px; cursor: pointer; font-size: 12px; display: none;">Reconnect</button>
+      </div>`;
+  </script>
+  <script src="/js/navigation.js"></script>
   <title>Simtezilo</title>
 </head>
 
 <body>
-  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-    <a href="/"><img src="/images/simtezilo-logo-dark.svg" alt="Simtezilo" height="32" width="160"></a>
-    <div id="connection-status" style="display: flex; align-items: center; font-size: 14px;">
-      <div id="status-indicator"
-        style="width: 12px; height: 12px; border-radius: 50%; margin-right: 8px; background-color: #ff6b6b;"></div>
-      <span id="status-text">Connecting...</span>
-      <button id="reconnect-btn"
-        style="margin-left: 10px; padding: 2px 8px; background: rgba(81, 207, 102, 0.2); border: 1px solid #51cf66; color: #51cf66; border-radius: 4px; cursor: pointer; font-size: 12px; display: none;">Reconnect</button>
+  <div id="navigation"></div>
+
+  <div class="content-container">
+    <!-- Create the Div to host the SciChartSurface -->
+    <div style="width: 100%; overflow: hidden;">
+      <div id="scichart-root-1" style="width: 49%; height: 300px; float: left;"></div>
+      <div id="scichart-root-2" style="width: 49%; height: 300px; margin-left: 50%;"></div>
     </div>
-  </div>
-  <!-- Create the Div to host the SciChartSurface -->
-  <div style="width: 100%; overflow: hidden;">
-    <div id="scichart-root-1" style="width: 49%; height: 300px; float: left;"></div>
-    <div id="scichart-root-2" style="width: 49%; height: 300px; margin-left: 50%;"></div>
-  </div>
-  <div style="width: 100%; overflow: hidden; margin-top: 10px">
-    <div id="scichart-root-3" style="width: 49%; height: 300px; float: left;"></div>
-    <div id="scichart-root-4" style="width: 49%; height: 300px; margin-left: 50%;"></div>
+    <div style="width: 100%; overflow: hidden; margin-top: 10px">
+      <div id="scichart-root-3" style="width: 49%; height: 300px; float: left;"></div>
+      <div id="scichart-root-4" style="width: 49%; height: 300px; margin-left: 50%;"></div>
+    </div>
   </div>
   <!-- The JavaScript to create a SciChartSurface -->
   <script src="/js/scichart.js" data-chart-config="telemetry"></script>

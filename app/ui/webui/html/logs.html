@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <!-- Required meta tags -->
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="/css/common.css">
+    <link rel="stylesheet" href="/css/logs.css">
+    <script>
+        const currentPageId = 'logs';
+
+        // Sample log data for demonstration
+        const sampleLogs = [
+            { timestamp: '2024-10-16 14:30:15.123', level: 'info', message: 'Application started successfully' },
+            { timestamp: '2024-10-16 14:30:16.456', level: 'info', message: 'WebSocket server listening on port 8080' },
+            { timestamp: '2024-10-16 14:30:17.789', level: 'debug', message: 'Telemetry data collection initialized' },
+            { timestamp: '2024-10-16 14:30:20.321', level: 'info', message: 'Client connected from 192.168.1.100' },
+            { timestamp: '2024-10-16 14:30:25.654', level: 'warn', message: 'High CPU usage detected: 85%' },
+            { timestamp: '2024-10-16 14:30:30.987', level: 'info', message: 'Telemetry data streaming active' },
+            { timestamp: '2024-10-16 14:30:35.234', level: 'debug', message: 'Processing 120 data points per second' },
+            { timestamp: '2024-10-16 14:30:40.567', level: 'error', message: 'Failed to connect to simulation: Connection timeout' },
+            { timestamp: '2024-10-16 14:30:42.890', level: 'info', message: 'Retrying connection to simulation...' },
+            { timestamp: '2024-10-16 14:30:45.123', level: 'info', message: 'Connection to simulation established' }
+        ];
+
+        function renderLogs() {
+            const logsContainer = document.getElementById('logs-container');
+            logsContainer.innerHTML = sampleLogs.map(log => `
+                <div class="log-entry">
+                    <span class="log-timestamp">${log.timestamp}</span>
+                    <span class="log-level ${log.level}">${log.level}</span>
+                    <span class="log-message">${log.message}</span>
+                </div>
+            `).join('');
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            renderLogs();
+        });
+    </script>
+    <script src="/js/navigation.js"></script>
+    <title>Logs - Simtezilo</title>
+</head>
+
+<body>
+    <div id="navigation"></div>
+
+    <div class="content-container">
+        <div class="logs-section">
+            <div class="stats-grid">
+                <div class="stat-item">
+                    <div class="stat-value">10</div>
+                    <div class="stat-label">Total Entries</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">1</div>
+                    <div class="stat-label">Errors</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">1</div>
+                    <div class="stat-label">Warnings</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">6</div>
+                    <div class="stat-label">Info Messages</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="logs-section">
+            <div class="logs-header">
+                <h2>📋 System Logs</h2>
+                <div class="logs-controls">
+                    <select>
+                        <option>All Levels</option>
+                        <option>Error</option>
+                        <option>Warning</option>
+                        <option>Info</option>
+                        <option>Debug</option>
+                    </select>
+                    <button onclick="renderLogs()">Refresh</button>
+                    <button>Clear</button>
+                    <button>Export</button>
+                </div>
+            </div>
+
+            <div id="logs-container">
+                <!-- Logs will be populated by JavaScript -->
+            </div>
+        </div>
+
+        <div class="logs-section">
+            <p class="coming-soon">🚧 Real-time log streaming and advanced filtering coming soon...</p>
+        </div>
+    </div>
+</body>
+
+</html>

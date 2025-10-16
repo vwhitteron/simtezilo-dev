@@ -37,8 +37,11 @@ func (w *WebUI) Start() {
 	http.HandleFunc("/", w.rootHandlerFunc())
 	http.HandleFunc("/images/", w.imagesHandlerFunc())
 	http.HandleFunc("/js/", w.sciChartJSHandlerFunc())
+	http.HandleFunc("/css/", w.cssHandlerFunc())
 	http.HandleFunc("/telemetry", w.telemetryHandlerFunc())
 	http.HandleFunc("/dev", w.devHandlerFunc())
+	http.HandleFunc("/settings", w.settingsHandlerFunc())
+	http.HandleFunc("/logs", w.logsHandlerFunc())
 	http.HandleFunc("/ws", w.handleWebSocketConnection)
 
 	server := &http.Server{
@@ -94,12 +97,42 @@ func (w *WebUI) telemetryHandlerFunc() func(w http.ResponseWriter, r *http.Reque
 //go:embed html/dev.html
 var devHTML []byte
 
-// telemetryHandlerFunc serves the developer HTML page.
+// devHandlerFunc serves the developer HTML page.
 func (w *WebUI) devHandlerFunc() func(w http.ResponseWriter, r *http.Request) {
 	return func(response http.ResponseWriter, _ *http.Request) {
 		length, err := response.Write(devHTML)
 		if err != nil {
 			w.log.Error().Err(err).Int("bytes_written", length).Msg("writing dev HTML")
+
+			return
+		}
+	}
+}
+
+//go:embed html/settings.html
+var settingsHTML []byte
+
+// settingsHandlerFunc serves the settings HTML page.
+func (w *WebUI) settingsHandlerFunc() func(w http.ResponseWriter, r *http.Request) {
+	return func(response http.ResponseWriter, _ *http.Request) {
+		length, err := response.Write(settingsHTML)
+		if err != nil {
+			w.log.Error().Err(err).Int("bytes_written", length).Msg("writing settings HTML")
+
+			return
+		}
+	}
+}
+
+//go:embed html/logs.html
+var logsHTML []byte
+
+// logsHandlerFunc serves the logs HTML page.
+func (w *WebUI) logsHandlerFunc() func(w http.ResponseWriter, r *http.Request) {
+	return func(response http.ResponseWriter, _ *http.Request) {
+		length, err := response.Write(logsHTML)
+		if err != nil {
+			w.log.Error().Err(err).Int("bytes_written", length).Msg("writing logs HTML")
 
 			return
 		}
@@ -164,6 +197,31 @@ func (w *WebUI) sciChartJSHandlerFunc() func(w http.ResponseWriter, r *http.Requ
 		length, err := response.Write(content)
 		if err != nil {
 			w.log.Error().Err(err).Int("bytes_written", length).Msg("writing javascript file")
+		}
+
+		w.log.Debug().Str("file", filename).Str("mime-type", contentType).Msg("returned file")
+	}
+}
+
+// cssHandlerFunc serves static CSS files.
+func (w *WebUI) cssHandlerFunc() func(w http.ResponseWriter, r *http.Request) {
+	return func(response http.ResponseWriter, request *http.Request) {
+		filename := "static" + request.URL.Path
+
+		content, err := staticFiles.ReadFile(filename)
+		if err != nil {
+			response.WriteHeader(http.StatusNotFound)
+
+			w.log.Error().Err(err).Msg("Invalid CSS file")
+		}
+
+		contentType := "text/css"
+
+		response.Header().Add("Content-Type", contentType)
+
+		length, err := response.Write(content)
+		if err != nil {
+			w.log.Error().Err(err).Int("bytes_written", length).Msg("writing CSS file")
 		}
 
 		w.log.Debug().Str("file", filename).Str("mime-type", contentType).Msg("returned file")

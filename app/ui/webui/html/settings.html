@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <!-- Required meta tags -->
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="/css/common.css">
+    <link rel="stylesheet" href="/css/settings.css">
+    <script>
+        const currentPageId = 'settings';
+    </script>
+    <script src="/js/navigation.js"></script>
+    <title>Settings - Simtezilo</title>
+</head>
+
+<body>
+    <div id="navigation"></div>
+
+    <div class="content-container">
+        <div class="settings-section">
+            <h2>⚙️ Application Settings</h2>
+            <div class="setting-item">
+                <span class="setting-label">Theme</span>
+                <div class="setting-control">
+                    <select>
+                        <option>Dark (Default)</option>
+                        <option>Light</option>
+                        <option>Auto</option>
+                    </select>
+                </div>
+            </div>
+            <div class="setting-item">
+                <span class="setting-label">Auto-refresh Rate</span>
+                <div class="setting-control">
+                    <select>
+                        <option>30 FPS</option>
+                        <option>60 FPS</option>
+                        <option>120 FPS</option>
+                    </select>
+                </div>
+            </div>
+            <div class="setting-item">
+                <span class="setting-label">Language</span>
+                <div class="setting-control">
+                    <select>
+                        <option>English</option>
+                        <option>French</option>
+                        <option>German</option>
+                        <option>Spanish</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <div class="settings-section">
+            <h2>🏎️ Telemetry Settings</h2>
+            <div class="setting-item">
+                <span class="setting-label">Data Collection Rate</span>
+                <div class="setting-control">
+                    <select>
+                        <option>High (100Hz)</option>
+                        <option>Medium (50Hz)</option>
+                        <option>Low (25Hz)</option>
+                    </select>
+                </div>
+            </div>
+            <div class="setting-item">
+                <span class="setting-label">Chart History Length</span>
+                <div class="setting-control">
+                    <input type="number" value="60" min="10" max="300"> seconds
+                </div>
+            </div>
+            <div class="setting-item">
+                <span class="setting-label">Auto-save Data</span>
+                <div class="setting-control">
+                    <select>
+                        <option>Enabled</option>
+                        <option>Disabled</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <div class="settings-section">
+            <h2>🔊 Audio Settings</h2>
+            <div class="setting-item">
+                <span class="setting-label">Pit Radio Volume</span>
+                <div class="setting-control">
+                    <input type="range" min="0" max="100" value="75">
+                </div>
+            </div>
+            <div class="setting-item">
+                <span class="setting-label">Warning Sounds</span>
+                <div class="setting-control">
+                    <select>
+                        <option>Enabled</option>
+                        <option>Disabled</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <div class="settings-section">
+            <p class="coming-soon">🚧 Additional settings panels coming soon...</p>
+        </div>
+    </div>
+</body>
+
+</html>

@@ -5,26 +5,46 @@
     <!-- Required meta tags -->
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <style>
-        body {
-            font-family: Arial, Helvetica, sans-serif;
-            color: #f9e67f;
-            background-color: #000000;
-        }
-    </style>
+    <link rel="stylesheet" href="/css/common.css">
+    <link rel="stylesheet" href="/css/home.css">
+    <script>
+        const currentPageId = 'home';
+    </script>
+    <script src="/js/navigation.js"></script>
     <title>Simtezilo</title>
 </head>
 
 <body>
-    <div>
-        <img src="/images/simtezilo-logo-dark.svg" alt="Simtezilo" height="32" width="160">
+    <div id="navigation"></div>
+
+    <div class="content-container">
+        <div class="welcome-section">
+            <h1>Welcome to Simtezilo</h1>
+            <p>Advanced racing simulation telemetry and analysis platform</p>
+        </div>
+
+        <div class="page-grid">
+            <a href="/telemetry" class="page-card">
+                <h3>📊 Telemetry</h3>
+                <p>View real-time telemetry data, charts, and performance metrics from your racing simulation.</p>
+            </a>
+
+            <a href="/dev" class="page-card">
+                <h3>🔧 Developer</h3>
+                <p>Access development tools, debug information, and advanced configuration options.</p>
+            </a>
+
+            <a href="/settings" class="page-card">
+                <h3>⚙️ Settings</h3>
+                <p>Configure application settings, preferences, and system parameters.</p>
+            </a>
+
+            <a href="/logs" class="page-card">
+                <h3>📋 Logs</h3>
+                <p>View system logs, error reports, and diagnostic information.</p>
+            </a>
+        </div>
     </div>
-    <ol>
-        <li><a href="/telemetry">View Telemetry</a></li>
-        <li><a href="/dev">View Dev</a></li>
-        <li><a href="/settings">Settings</a></li>
-        <li><a href="/logs">View Logs</a></li>
-    </ol>
 </body>
 
 </html>
