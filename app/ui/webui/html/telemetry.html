@@ -5,6 +5,7 @@
   <!-- Required meta tags -->
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link rel="stylesheet" href="/css/common.css">
   <link rel="stylesheet" href="/css/telemetry.css">
   <!-- Include SciChart.js v4 -->
@@ -13,10 +14,11 @@
     const currentPageId = 'telemetry';
     const connectionStatusHTML = `
       <div id="connection-status" style="display: flex; align-items: center; font-size: 14px;">
-        <div id="status-indicator"
-          style="width: 12px; height: 12px; border-radius: 50%; margin-right: 8px; background-color: #ff6b6b;"></div>
-        <span id="status-text">Connecting...</span>
-        <button id="reconnect-btn"
+        <div id="status-indicator" style="margin-right: 8px;">
+          <i class="fa-solid fa-rotate-right fa-spin" style="color: #ffd43b; font-size: 16px;"></i>
+        </div>
+        <span id="status-text" style="display: none;"></span>
+        <button id="reconnect-btn" title="Manually reconnect to telemetry server"
           style="margin-left: 10px; padding: 2px 8px; background: rgba(81, 207, 102, 0.2); border: 1px solid #51cf66; color: #51cf66; border-radius: 4px; cursor: pointer; font-size: 12px; display: none;">Reconnect</button>
       </div>`;
   </script>

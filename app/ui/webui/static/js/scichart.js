@@ -19,31 +19,46 @@ function updateConnectionStatus(status, message) {
     const statusText = document.getElementById('status-text');
     const reconnectBtn = document.getElementById('reconnect-btn');
 
-    if (!statusIndicator || !statusText) return;
+    if (!statusIndicator) return;
+
+    // Clear existing classes and content
+    statusIndicator.className = '';
+    statusIndicator.style.backgroundColor = '';
+    statusIndicator.style.width = '';
+    statusIndicator.style.height = '';
+    statusIndicator.style.borderRadius = '';
 
     switch (status) {
         case 'connected':
-            statusIndicator.style.backgroundColor = '#51cf66';
-            statusText.textContent = 'Connected';
-            statusText.style.color = '#51cf66';
+            statusIndicator.innerHTML = '<i class="fa-solid fa-circle-check" style="color: #51cf66; font-size: 16px;" title="Connected to telemetry server"></i>';
+            if (statusText) {
+                statusText.textContent = '';
+                statusText.style.display = 'none';
+            }
             if (reconnectBtn) reconnectBtn.style.display = 'none';
             break;
         case 'connecting':
-            statusIndicator.style.backgroundColor = '#ffd43b';
-            statusText.textContent = message || 'Connecting...';
-            statusText.style.color = '#ffd43b';
+            statusIndicator.innerHTML = '<i class="fa-solid fa-rotate-right fa-spin" style="color: #ffd43b; font-size: 16px;" title="Connecting to telemetry server..."></i>';
+            if (statusText) {
+                statusText.textContent = '';
+                statusText.style.display = 'none';
+            }
             if (reconnectBtn) reconnectBtn.style.display = 'none';
             break;
         case 'disconnected':
-            statusIndicator.style.backgroundColor = '#ff6b6b';
-            statusText.textContent = message || 'Disconnected';
-            statusText.style.color = '#ff6b6b';
+            statusIndicator.innerHTML = '<i class="fa-solid fa-circle-xmark" style="color: #ff6b6b; font-size: 16px;" title="Disconnected from telemetry server"></i>';
+            if (statusText) {
+                statusText.textContent = '';
+                statusText.style.display = 'none';
+            }
             if (reconnectBtn) reconnectBtn.style.display = 'inline-block';
             break;
         case 'error':
-            statusIndicator.style.backgroundColor = '#ff6b6b';
-            statusText.textContent = message || 'Connection Error';
-            statusText.style.color = '#ff6b6b';
+            statusIndicator.innerHTML = '<i class="fa-solid fa-triangle-exclamation" style="color: #ff6b6b; font-size: 16px;" title="Connection error - unable to connect to telemetry server"></i>';
+            if (statusText) {
+                statusText.textContent = '';
+                statusText.style.display = 'none';
+            }
             if (reconnectBtn) reconnectBtn.style.display = 'inline-block';
             break;
     }
