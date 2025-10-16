@@ -2,8 +2,70 @@
 const CONFIG = {
     FIFO_CAPACITY: 200,
     RECONNECT_DELAY: 1000,
+    MAX_RECONNECT_DELAY: 30000,
     WEBSOCKET_URL: `ws://${location.host}/ws`
 };
+
+// Connection state management
+let connectionState = {
+    isConnected: false,
+    reconnectAttempts: 0,
+    reconnectDelay: CONFIG.RECONNECT_DELAY
+};
+
+// UI status update functions
+function updateConnectionStatus(status, message) {
+    const statusIndicator = document.getElementById('status-indicator');
+    const statusText = document.getElementById('status-text');
+    const reconnectBtn = document.getElementById('reconnect-btn');
+
+    if (!statusIndicator || !statusText) return;
+
+    switch (status) {
+        case 'connected':
+            statusIndicator.style.backgroundColor = '#51cf66';
+            statusText.textContent = 'Connected';
+            statusText.style.color = '#51cf66';
+            if (reconnectBtn) reconnectBtn.style.display = 'none';
+            break;
+        case 'connecting':
+            statusIndicator.style.backgroundColor = '#ffd43b';
+            statusText.textContent = message || 'Connecting...';
+            statusText.style.color = '#ffd43b';
+            if (reconnectBtn) reconnectBtn.style.display = 'none';
+            break;
+        case 'disconnected':
+            statusIndicator.style.backgroundColor = '#ff6b6b';
+            statusText.textContent = message || 'Disconnected';
+            statusText.style.color = '#ff6b6b';
+            if (reconnectBtn) reconnectBtn.style.display = 'inline-block';
+            break;
+        case 'error':
+            statusIndicator.style.backgroundColor = '#ff6b6b';
+            statusText.textContent = message || 'Connection Error';
+            statusText.style.color = '#ff6b6b';
+            if (reconnectBtn) reconnectBtn.style.display = 'inline-block';
+            break;
+    }
+}
+
+// Manual reconnect function
+function forceReconnect() {
+    console.log('Manual reconnect requested');
+    connectionState.reconnectAttempts = 0;
+    connectionState.reconnectDelay = CONFIG.RECONNECT_DELAY;
+
+    if (globalWebSocket) {
+        globalWebSocket.close();
+    }
+
+    setTimeout(() => {
+        globalWebSocket = createWebSocketConnection();
+        if (globalHandleWebSocketMessage) {
+            globalWebSocket.addEventListener('message', globalHandleWebSocketMessage);
+        }
+    }, 100);
+}
 
 // Chart configurations for different pages
 const CHART_CONFIGURATIONS = {
@@ -62,28 +124,75 @@ function getChartRegistry() {
 // Get the appropriate chart registry based on script tag parameter
 const CHART_REGISTRY = getChartRegistry();
 
+// Global variables for WebSocket management
+let globalWebSocket = null;
+let globalCharts = {};
+let globalAllDataSeries = {};
+let globalHandleWebSocketMessage = null;
+
 // WebSocket connection management
 function createWebSocketConnection() {
+    updateConnectionStatus('connecting');
+
     const ws = new WebSocket(CONFIG.WEBSOCKET_URL);
 
+    // Handle connection timeouts
+    const connectionTimeout = setTimeout(() => {
+        if (ws.readyState === WebSocket.CONNECTING) {
+            console.warn('WebSocket connection timeout');
+            ws.close();
+        }
+    }, 5000);
+
+    ws.onopen = (event) => {
+        clearTimeout(connectionTimeout);
+        console.log('WebSocket connected');
+        connectionState.isConnected = true;
+        connectionState.reconnectAttempts = 0;
+        connectionState.reconnectDelay = CONFIG.RECONNECT_DELAY;
+        updateConnectionStatus('connected');
+
+        // Attach message handler if available
+        if (globalHandleWebSocketMessage) {
+            ws.addEventListener('message', globalHandleWebSocketMessage);
+        }
+    };
+
     ws.onclose = (event) => {
-        console.log('WebSocket connection closed. Reconnecting in 1 second...', event.reason);
+        connectionState.isConnected = false;
+        const reason = event.reason || 'Unknown reason';
+        console.log(`WebSocket connection closed: ${reason}. Attempting to reconnect...`);
+
+        connectionState.reconnectAttempts++;
+
+        // Exponential backoff with jitter
+        const backoffDelay = Math.min(
+            connectionState.reconnectDelay * Math.pow(1.5, connectionState.reconnectAttempts - 1),
+            CONFIG.MAX_RECONNECT_DELAY
+        );
+        const jitteredDelay = backoffDelay + (Math.random() * 1000);
+
+        updateConnectionStatus('connecting', 'Reconnecting...');
+
         setTimeout(() => {
-            // Note: In a production app, you might want to implement exponential backoff
-            createWebSocketConnection();
-        }, CONFIG.RECONNECT_DELAY);
+            if (!connectionState.isConnected) {
+                globalWebSocket = createWebSocketConnection();
+            }
+        }, jitteredDelay);
     };
 
     ws.onerror = (error) => {
         console.error('WebSocket error:', error);
+        connectionState.isConnected = false;
+        updateConnectionStatus('error', 'Connection failed');
     };
 
     return ws;
 }
 
 async function initSciChart() {
-    // Initialize WebSocket connection
-    let ws = createWebSocketConnection();
+    // We'll initialize WebSocket connection after creating charts
+    let ws;
 
     // Configure SciChart v4 - no need for data file configuration in v4
     // For community license, no action needed. For commercial, use:
@@ -636,7 +745,20 @@ async function initSciChart() {
         lastSeq = data.seq;
     };
 
-    ws.addEventListener('message', handleWebSocketMessage);
+    // Store references globally for reconnection handling
+    globalCharts = charts;
+    globalAllDataSeries = allDataSeries;
+    globalHandleWebSocketMessage = handleWebSocketMessage;
+
+    // Initialize WebSocket connection
+    globalWebSocket = createWebSocketConnection();
+    globalWebSocket.addEventListener('message', handleWebSocketMessage);
+
+    // Set up manual reconnect button
+    const reconnectBtn = document.getElementById('reconnect-btn');
+    if (reconnectBtn) {
+        reconnectBtn.addEventListener('click', forceReconnect);
+    }
 }
 
 // Initialize the application

@@ -11,6 +11,24 @@
       color: #f9e67f;
       background-color: #000000;
     }
+
+    #connection-status {
+      padding: 5px 10px;
+      border-radius: 15px;
+      background-color: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(5px);
+      transition: all 0.3s ease;
+    }
+
+    #status-indicator {
+      transition: background-color 0.3s ease;
+      box-shadow: 0 0 5px rgba(255, 255, 255, 0.3);
+    }
+
+    #status-text {
+      font-weight: 500;
+      transition: color 0.3s ease;
+    }
   </style>
   <!-- Include SciChart.js v4 -->
   <script src="https://cdn.jsdelivr.net/npm/scichart@4/_wasm/scichart.browser.js" crossorigin="anonymous"></script>
@@ -18,8 +36,15 @@
 </head>
 
 <body>
-  <div>
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
     <a href="/"><img src="/images/simtezilo-logo-dark.svg" alt="Simtezilo" height="32" width="160"></a>
+    <div id="connection-status" style="display: flex; align-items: center; font-size: 14px;">
+      <div id="status-indicator"
+        style="width: 12px; height: 12px; border-radius: 50%; margin-right: 8px; background-color: #ff6b6b;"></div>
+      <span id="status-text">Connecting...</span>
+      <button id="reconnect-btn"
+        style="margin-left: 10px; padding: 2px 8px; background: rgba(81, 207, 102, 0.2); border: 1px solid #51cf66; color: #51cf66; border-radius: 4px; cursor: pointer; font-size: 12px; display: none;">Reconnect</button>
+    </div>
   </div>
   <!-- Create the Div to host the SciChartSurface -->
   <div style="width: 100%; overflow: hidden;">
