@@ -4,6 +4,8 @@ package webui
 import (
 	"embed"
 	"encoding/json"
+	"fmt"
+	"mime"
 	"net/http"
 	"path/filepath"
 	"time"
@@ -36,18 +38,14 @@ func New(log zerolog.Logger, port int, telemetryChartFeed chan map[string]float3
 
 // Start sets up handlers and starts the web server.
 func (w *WebUI) Start() {
-	http.HandleFunc("/", w.rootHandlerFunc())
+	http.HandleFunc("/", w.htmlRouterHandlerFunc())
+	http.HandleFunc("/css/", w.cssHandlerFunc())
 	http.HandleFunc("/images/", w.imagesHandlerFunc())
 	http.HandleFunc("/js/", w.sciChartJSHandlerFunc())
-	http.HandleFunc("/css/", w.cssHandlerFunc())
-	http.HandleFunc("/telemetry", w.telemetryHandlerFunc())
-	http.HandleFunc("/dev", w.devHandlerFunc())
-	http.HandleFunc("/settings", w.settingsHandlerFunc())
-	http.HandleFunc("/logs", w.logsHandlerFunc())
 	http.HandleFunc("/ws", w.handleWebSocketConnection)
 
 	server := &http.Server{
-		Addr:              ":8080",
+		Addr:              fmt.Sprintf(":%d", w.port),
 		ReadHeaderTimeout: 3 * time.Second,
 	}
 
@@ -66,168 +64,85 @@ func (w *WebUI) HasActiveClients() bool {
 	return w.webSocketClients > 0
 }
 
-//go:embed html/index.html
-var indexHTML []byte
+//go:embed html/*
+var htmlFiles embed.FS
 
-// rootHandlerFunc serves the main HTML page.
-func (w *WebUI) rootHandlerFunc() func(w http.ResponseWriter, r *http.Request) {
-	return func(response http.ResponseWriter, _ *http.Request) {
-		length, err := response.Write(indexHTML)
+// htmlRouterHandlerFunc serves HTML pages based on the request path.
+func (w *WebUI) htmlRouterHandlerFunc() func(w http.ResponseWriter, r *http.Request) {
+	return func(response http.ResponseWriter, request *http.Request) {
+		path := request.URL.Path
+
+		var filename string
+		if path == "/" {
+			filename = "index.html"
+		} else {
+			filename = path[1:] + ".html"
+		}
+
+		content, err := htmlFiles.ReadFile("html/" + filename)
 		if err != nil {
-			w.log.Error().Err(err).Int("bytes_written", length).Msg("writing index HTML")
+			response.WriteHeader(http.StatusNotFound)
+			w.log.Error().Err(err).Str("file", filename).Str("path", path).Msg("HTML file not found")
 
 			return
 		}
-	}
-}
 
-//go:embed html/telemetry.html
-var telemetryHTML []byte
+		response.Header().Set("Content-Type", "text/html; charset=utf-8")
 
-// telemetryHandlerFunc serves the telemetry HTML page.
-func (w *WebUI) telemetryHandlerFunc() func(w http.ResponseWriter, r *http.Request) {
-	return func(response http.ResponseWriter, _ *http.Request) {
-		length, err := response.Write(telemetryHTML)
+		length, err := response.Write(content)
 		if err != nil {
-			w.log.Error().Err(err).Int("bytes_written", length).Msg("writing telemetry HTML")
+			w.log.Error().Err(err).Int("bytes_written", length).Str("file", filename).Str("path", path).Msg("writing HTML response")
 
 			return
 		}
-	}
-}
 
-//go:embed html/dev.html
-var devHTML []byte
-
-// devHandlerFunc serves the developer HTML page.
-func (w *WebUI) devHandlerFunc() func(w http.ResponseWriter, r *http.Request) {
-	return func(response http.ResponseWriter, _ *http.Request) {
-		length, err := response.Write(devHTML)
-		if err != nil {
-			w.log.Error().Err(err).Int("bytes_written", length).Msg("writing dev HTML")
-
-			return
-		}
-	}
-}
-
-//go:embed html/settings.html
-var settingsHTML []byte
-
-// settingsHandlerFunc serves the settings HTML page.
-func (w *WebUI) settingsHandlerFunc() func(w http.ResponseWriter, r *http.Request) {
-	return func(response http.ResponseWriter, _ *http.Request) {
-		length, err := response.Write(settingsHTML)
-		if err != nil {
-			w.log.Error().Err(err).Int("bytes_written", length).Msg("writing settings HTML")
-
-			return
-		}
-	}
-}
-
-//go:embed html/logs.html
-var logsHTML []byte
-
-// logsHandlerFunc serves the logs HTML page.
-func (w *WebUI) logsHandlerFunc() func(w http.ResponseWriter, r *http.Request) {
-	return func(response http.ResponseWriter, _ *http.Request) {
-		length, err := response.Write(logsHTML)
-		if err != nil {
-			w.log.Error().Err(err).Int("bytes_written", length).Msg("writing logs HTML")
-
-			return
-		}
+		w.log.Debug().Str("file", filename).Str("path", path).Int("bytes_written", length).Msg("served HTML page")
 	}
 }
 
 //go:embed static/*
 var staticFiles embed.FS
 
-// imagesHandlerFunc serves static image files.
-func (w *WebUI) imagesHandlerFunc() func(w http.ResponseWriter, r *http.Request) {
+// staticFileHandlerFunc serves static files with automatic content type detection.
+func (w *WebUI) staticFileHandlerFunc(fileType string) func(w http.ResponseWriter, r *http.Request) {
 	return func(response http.ResponseWriter, request *http.Request) {
 		filename := "static" + request.URL.Path
 
 		content, err := staticFiles.ReadFile(filename)
 		if err != nil {
 			response.WriteHeader(http.StatusNotFound)
-			w.log.Error().Err(err).Msg("Invalid image file")
-		}
-
-		var contentType string
-
-		suffix := filepath.Ext(filename)
-		switch suffix {
-		case ".png":
-			contentType = "image/png"
-		case ".svg":
-			contentType = "image/svg+xml"
-		default:
-			contentType = "image/jpeg"
-		}
-
-		response.Header().Add("Content-Type", contentType)
-
-		bytes, err := response.Write(content)
-		if err != nil {
-			w.log.Error().Err(err).Str("file", filename).Int("bytes_written", bytes).Msg("write image response")
+			w.log.Error().Err(err).Str("type", fileType).Msg("Invalid file")
 
 			return
 		}
 
-		w.log.Debug().Str("file", filename).Str("mime-type", contentType).Str("suffix", suffix).Msg("returned file")
+		contentType := getContentType(filename)
+		response.Header().Set("Content-Type", contentType)
+
+		length, err := response.Write(content)
+		if err != nil {
+			w.log.Error().Err(err).Int("bytes_written", length).Str("type", fileType).Msg("writing file")
+
+			return
+		}
+
+		w.log.Debug().Str("file", filename).Str("mime-type", contentType).Msg("returned file")
 	}
+}
+
+// imagesHandlerFunc serves static image files.
+func (w *WebUI) imagesHandlerFunc() func(w http.ResponseWriter, r *http.Request) {
+	return w.staticFileHandlerFunc("image")
 }
 
 // sciChartJSHandlerFunc serves static JavaScript files.
 func (w *WebUI) sciChartJSHandlerFunc() func(w http.ResponseWriter, r *http.Request) {
-	return func(response http.ResponseWriter, request *http.Request) {
-		filename := "static" + request.URL.Path
-
-		content, err := staticFiles.ReadFile(filename)
-		if err != nil {
-			response.WriteHeader(http.StatusNotFound)
-
-			w.log.Error().Err(err).Msg("Invalid javascript file")
-		}
-
-		contentType := "application/javascript"
-
-		response.Header().Add("Content-Type", contentType)
-
-		length, err := response.Write(content)
-		if err != nil {
-			w.log.Error().Err(err).Int("bytes_written", length).Msg("writing javascript file")
-		}
-
-		w.log.Debug().Str("file", filename).Str("mime-type", contentType).Msg("returned file")
-	}
+	return w.staticFileHandlerFunc("javascript")
 }
 
 // cssHandlerFunc serves static CSS files.
 func (w *WebUI) cssHandlerFunc() func(w http.ResponseWriter, r *http.Request) {
-	return func(response http.ResponseWriter, request *http.Request) {
-		filename := "static" + request.URL.Path
-
-		content, err := staticFiles.ReadFile(filename)
-		if err != nil {
-			response.WriteHeader(http.StatusNotFound)
-
-			w.log.Error().Err(err).Msg("Invalid CSS file")
-		}
-
-		contentType := "text/css"
-
-		response.Header().Add("Content-Type", contentType)
-
-		length, err := response.Write(content)
-		if err != nil {
-			w.log.Error().Err(err).Int("bytes_written", length).Msg("writing CSS file")
-		}
-
-		w.log.Debug().Str("file", filename).Str("mime-type", contentType).Msg("returned file")
-	}
+	return w.staticFileHandlerFunc("CSS")
 }
 
 // handleWebSocketConnection upgrades the HTTP connection to a WebSocket and streams telemetry data.
@@ -293,4 +208,16 @@ func (w *WebUI) handleWebSocketConnection(response http.ResponseWriter, request 
 
 		failCount = 0
 	}
+}
+
+// getContentType returns the appropriate MIME type based on file extension using the standard library.
+func getContentType(filename string) string {
+	ext := filepath.Ext(filename)
+	contentType := mime.TypeByExtension(ext)
+
+	if contentType == "" {
+		return "application/octet-stream"
+	}
+
+	return contentType
 }
