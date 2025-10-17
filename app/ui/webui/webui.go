@@ -15,15 +15,17 @@ import (
 // WebUI defines the web user interface.
 type WebUI struct {
 	log                zerolog.Logger
+	port               int
 	webSocketClients   int
 	telemetryChartFeed chan map[string]float32
 	upgrader           websocket.Upgrader
 }
 
 // New creates a new instance of the WebUI.
-func New(log zerolog.Logger, telemetryChartFeed chan map[string]float32) *WebUI {
+func New(log zerolog.Logger, port int, telemetryChartFeed chan map[string]float32) *WebUI {
 	return &WebUI{
 		log:                log.With().Str("component", "web ui").Logger(),
+		port:               port,
 		webSocketClients:   0,
 		telemetryChartFeed: telemetryChartFeed,
 		upgrader: websocket.Upgrader{

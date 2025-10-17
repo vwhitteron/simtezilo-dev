@@ -33,13 +33,11 @@ func main() {
 		vehicleDB        string
 		logLevelArg      string
 		profilerEndpoint string
-		webEnabled       bool
 	)
 
 	flag.StringVar(&vehicleDB, "d", "", "Path to vehicle database file")
 	flag.StringVar(&logLevelArg, "l", "info", "Log level. Default is 'info'")
 	flag.StringVar(&profilerEndpoint, "p", "", "Send profiles to this Pyroscope endpoint (http://host:port). Default is off")
-	flag.BoolVar(&webEnabled, "w", false, "Enable web server. Default is false")
 	flag.Parse()
 
 	logLevel, err := zerolog.ParseLevel(logLevelArg)
@@ -61,10 +59,9 @@ func main() {
 	}
 
 	app, err := app.New(app.Options{
-		VehicleDB:  vehicleDB,
-		Done:       done,
-		Logger:     &logger,
-		WebEnabled: webEnabled,
+		VehicleDB: vehicleDB,
+		Done:      done,
+		Logger:    &logger,
 	})
 	if err != nil {
 		logger.Fatal().Err(err).Msg("Error creating app")

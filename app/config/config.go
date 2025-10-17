@@ -15,11 +15,13 @@ import (
 )
 
 type app struct {
-	Language   string
-	Accent     string
-	LogLevel   string
-	DataDir    string
-	ReplayMode bool
+	Language     string
+	Accent       string
+	LogLevel     string
+	DataDir      string
+	ReplayMode   bool
+	WebUIEnabled bool
+	WebUIPort    int
 }
 
 type discord struct {
@@ -313,6 +315,27 @@ func (c *Config) GetAppDataDir() string {
 	}
 
 	return c.viper.App.DataDir
+}
+
+// GetAppWebUIEnabled returns true if the web UI is enabled.
+func (c *Config) GetAppWebUIEnabled() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.App.WebUIEnabled
+}
+
+// GetAppWebUIPort returns the configured web UI port.
+// If not set, it defaults to 8080.
+func (c *Config) GetAppWebUIPort() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if c.viper.App.WebUIPort == 0 {
+		return 8080
+	}
+
+	return c.viper.App.WebUIPort
 }
 
 // ****************************************************************************

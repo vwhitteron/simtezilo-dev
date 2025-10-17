@@ -150,7 +150,7 @@ build/rpi/v8/64:
 ## run: run the application locally
 .PHONY: run
 run:
-	@go run cmd/simtezilo/main.go -l info -w=true
+	@go run cmd/simtezilo/main.go -l info
 
 ## run: run the application locally with denug logging enabled
 .PHONY: run/debug

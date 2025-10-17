@@ -7,10 +7,13 @@ import appHaptics "github.com/vwhitteron/simtezilo-dev/app/haptics"
 func defaultConfig() *viperConfig {
 	return &viperConfig{
 		App: &app{
-			Language: "en",
-			Accent:   "us",
-			LogLevel: "info",
-			DataDir:  "data",
+			Language:     "en",
+			Accent:       "us",
+			LogLevel:     "info",
+			DataDir:      "data",
+			ReplayMode:   false,
+			WebUIEnabled: true,
+			WebUIPort:    80,
 		},
 		Discord: &discord{
 			Enabled:        false,

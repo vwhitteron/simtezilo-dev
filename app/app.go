@@ -114,7 +114,6 @@ type App struct {
 	tyres         *tyres.Tyre    // Tyre monitoring
 
 	telemetryChartFeed chan map[string]float32 // Channel for sending telemetry data to web UI
-	webEnabled         bool                    // Flag to enable or disable the web UI
 	webUI              *webui.WebUI            // Web UI server and handler
 	webSequenceID      uint32                  // Last sequence ID sent to the web UI
 
@@ -123,10 +122,9 @@ type App struct {
 
 // Options holds configuration options for initializing the App.
 type Options struct {
-	VehicleDB  string          // Path to an external vehicle database file
-	Done       chan bool       // Channel to signal application shutdown
-	Logger     *zerolog.Logger // Logger instance for application logging
-	WebEnabled bool            // Flag to enable or disable the web UI
+	VehicleDB string          // Path to an external vehicle database file
+	Done      chan bool       // Channel to signal application shutdown
+	Logger    *zerolog.Logger // Logger instance for application logging
 }
 
 // New creates a new App instance and sets up all components based on the provided options.
@@ -144,7 +142,6 @@ func New(opts Options) (*App, error) {
 		},
 		kinematics:         kinematics.NewKinematicsState(),
 		telemetryChartFeed: make(chan map[string]float32, 600),
-		webEnabled:         opts.WebEnabled,
 		lapStartEvents:     make(chan uint32),
 	}
 
@@ -488,8 +485,8 @@ func (a *App) startBackgroundTasks() {
 		}
 	}()
 
-	if a.webEnabled {
-		a.webUI = webui.New(a.log, a.telemetryChartFeed)
+	if a.config.GetAppWebUIEnabled() {
+		a.webUI = webui.New(a.log, a.config.GetAppWebUIPort(), a.telemetryChartFeed)
 		go a.webUI.Start()
 	}
 }
