@@ -124,7 +124,7 @@ func (suite *TyreIntegrationTestSuite) TestTyreOptimalConditionNotificationMessa
 	}
 }
 
-func (suite *TyreIntegrationTestSuite) TestTyreColdConditionNotificationMessages() {
+func (suite *TyreIntegrationTestSuite) TestTyreColdConditionNotificationMessages() { //nolint:dupl // Similar code for hot and cold tests
 	// Arrange
 	testCases := []struct {
 		name            string
@@ -318,7 +318,7 @@ func (suite *TyreIntegrationTestSuite) TestTyreColdConditionNotificationMessages
 	}
 }
 
-func (suite *TyreIntegrationTestSuite) TestTyreHotConditionNotificationMessages() {
+func (suite *TyreIntegrationTestSuite) TestTyreHotConditionNotificationMessages() { //nolint:dupl // Similar code for hot and cold tests
 	// Arrange
 	testCases := []struct {
 		name            string

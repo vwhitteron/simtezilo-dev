@@ -157,15 +157,14 @@ func NewFromJSON(json []byte, log zerolog.Logger) *Config {
 		viper: defaultConfig(),
 	}
 
-	// Create a new Viper instance to avoid race conditions in tests
-	v := viper.New()
-	v.SetConfigType("json")
+	vConf := viper.New()
+	vConf.SetConfigType("json")
 
-	err := v.ReadConfig(bytes.NewBuffer(json))
+	err := vConf.ReadConfig(bytes.NewBuffer(json))
 	if err != nil {
 		log.Error().Err(err).Msg("read config file")
 	} else {
-		err = v.Unmarshal(config.viper)
+		err = vConf.Unmarshal(config.viper)
 		if err != nil {
 			log.Error().Err(err).Msg("unmarshal config")
 		}

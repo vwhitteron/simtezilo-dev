@@ -509,7 +509,7 @@ func (suite *PitRadioTestSuite) setupDistanceBasedScenario(
 	currentLap, totalLaps int16,
 	lapProgress float64,
 	fuelRangeMeters float64,
-	circuitLengthMeters float64,
+	circuitLengthMeters float64, //nolint:unparam // Keep for clarity in tests
 ) {
 	// Set up basic race configuration and telemetry
 	suite.app.config = createBasicConfig()
@@ -533,9 +533,9 @@ func (suite *PitRadioTestSuite) setupDistanceBasedScenario(
 // Returns distances in meters for: critical, boxThisLap, preWarn thresholds based on current position and config.
 func (suite *PitRadioTestSuite) calculateWarningDistances(
 	lapProgress float64,
-	circuitLengthMeters float64,
+	circuitLengthMeters float64, //nolint:unparam // Keep for clarity in tests
 	safetyMarginLaps float64,
-	preWarnNotifyLaps float64,
+	preWarnNotifyLaps float64, //nolint:unparam // Keep for clarity in tests
 ) (critical, boxThisLap, preWarn float64) {
 	distanceToPitBox := (1.0 - lapProgress) * circuitLengthMeters
 	safetyMarginMeters := safetyMarginLaps * circuitLengthMeters

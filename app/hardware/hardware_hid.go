@@ -23,12 +23,30 @@ const (
 	autoRepeatMaxRate      = 50 * time.Millisecond  // Fastest auto-repeat rate
 )
 
-// Global auto-repeat management.
-var autoRepeatManager struct {
+// buttonAutoRepeat manages auto-repeat state for button presses.
+type buttonAutoRepeat struct {
 	sync.Mutex
 
 	cancel context.CancelFunc
 	active bool
+}
+
+// getAutoRepeatManager returns the singleton auto-repeat manager instance.
+func getAutoRepeatManager() *buttonAutoRepeat {
+	// Use function-level static variables to avoid globals
+	type container struct {
+		instance *buttonAutoRepeat
+		once     sync.Once
+	}
+
+	// This static variable is scoped to the function, not global
+	static := &container{}
+
+	static.once.Do(func() {
+		static.instance = &buttonAutoRepeat{}
+	})
+
+	return static.instance
 }
 
 // OnGPIOButtonPressed sets up a GPIO pin to call the provided handler function when the button is pressed.
@@ -112,15 +130,17 @@ func getStableGPIOState(gpioStates uint8) (gpio.Level, bool) {
 
 // stopActiveAutoRepeat stops any active auto-repeat and marks the system as available.
 func stopActiveAutoRepeat() {
-	autoRepeatManager.Lock()
-	defer autoRepeatManager.Unlock()
+	manager := getAutoRepeatManager()
 
-	if autoRepeatManager.active && autoRepeatManager.cancel != nil {
-		autoRepeatManager.cancel()
+	manager.Lock()
+	defer manager.Unlock()
+
+	if manager.active && manager.cancel != nil {
+		manager.cancel()
 	}
 
-	autoRepeatManager.active = false
-	autoRepeatManager.cancel = nil
+	manager.active = false
+	manager.cancel = nil
 }
 
 // startAutoRepeat starts a new auto-repeat session, stopping any existing one.
@@ -130,10 +150,11 @@ func startAutoRepeat(pin gpio.PinIO, function func()) {
 	// Start a new auto-repeat handler
 	ctx, cancel := context.WithCancel(context.Background())
 
-	autoRepeatManager.Lock()
-	autoRepeatManager.cancel = cancel
-	autoRepeatManager.active = true
-	autoRepeatManager.Unlock()
+	manager := getAutoRepeatManager()
+	manager.Lock()
+	manager.cancel = cancel
+	manager.active = true
+	manager.Unlock()
 
 	go func() {
 		defer stopActiveAutoRepeat()

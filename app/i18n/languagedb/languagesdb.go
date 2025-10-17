@@ -152,7 +152,7 @@ func (l *LanguageDB) getFont(variation string, code string) font.Font {
 	if language, ok := l.db[code]; ok {
 		var err error
 
-		fontName := ""
+		var fontName string
 
 		switch strings.ToLower(variation) {
 		case "regular":
