@@ -139,6 +139,7 @@ linters:
             - github.com/gorilla/websocket
             - github.com/grafana/pyroscope-go
             - github.com/kennygrant/sanitize
+            - github.com/pelletier/go-toml/v2
             - github.com/rs/zerolog
             - github.com/spf13/viper
             - github.com/stretchr/testify

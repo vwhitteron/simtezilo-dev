@@ -3,10 +3,16 @@ package config
 
 import (
 	"bytes"
+	"fmt"
+	"io"
 	"math"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
+	"github.com/pelletier/go-toml/v2"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
@@ -15,109 +21,111 @@ import (
 )
 
 type app struct {
-	Language     string
-	Accent       string
-	LogLevel     string
-	DataDir      string
-	ReplayMode   bool
-	WebUIEnabled bool
-	WebUIPort    int
+	Language     string `toml:"language"`
+	Accent       string `toml:"accent"`
+	LogLevel     string `toml:"logLevel"`
+	DataDir      string `toml:"dataDir"`
+	ReplayMode   bool   `toml:"replayMode"`
+	WebUIEnabled bool   `toml:"webUIEnabled"`
+	WebUIPort    int    `toml:"webUIPort"`
 }
 
 type discord struct {
-	Enabled        bool
-	Token          string
-	GuildID        string
-	ChannelID      string
-	VoiceChannelID string
+	Enabled        bool   `toml:"enabled"`
+	Token          string `toml:"token"`
+	GuildID        string `toml:"guildID"`
+	ChannelID      string `toml:"channelID"`
+	VoiceChannelID string `toml:"voiceChannelID"`
 }
 
 type fuel struct {
-	MonitoringEnabled       bool
-	PreWarnNotifyLaps       float64
-	StrategyNotifyLaps      float64
-	RangeSafetyMarginLaps   float64
-	RangeSafetyMarginMeters float64
+	MonitoringEnabled       bool    `toml:"monitoringEnabled"`
+	PreWarnNotifyLaps       float64 `toml:"preWarnNotifyLaps"`
+	StrategyNotifyLaps      float64 `toml:"strategyNotifyLaps"`
+	RangeSafetyMarginLaps   float64 `toml:"rangeSafetyMarginLaps"`
+	RangeSafetyMarginMeters float64 `toml:"rangeSafetyMarginMeters"`
 }
 type haptics struct {
-	DynamicTransmissionFeedback  bool
-	DynamicTransmissionCurve     int
-	DynamicTransmissionGforceMax float64
-	JerkCurve                    int
-	JerkMax                      int
-	JerkScale                    float64
-	SnapCurve                    int
-	SnapMax                      int
-	_snapScale                   float64
-	PulseMaxAmplitude            float64
-	PulseMaxFrequencyHz          float64
-	PulseMinFrequencyHz          float64
-	_pulseWidthMax               float64
-	_pulseWidthMin               float64
-	EngineProfiles               map[string]appHaptics.EngineProfile
-	_engineProfile               *appHaptics.EngineProfile
+	DynamicTransmissionFeedback  bool                                `toml:"dynamicTransmissionFeedback"`
+	DynamicTransmissionCurve     int                                 `toml:"dynamicTransmissionCurve"`
+	DynamicTransmissionGforceMax float64                             `toml:"dynamicTransmissionGforceMax"`
+	JerkCurve                    int                                 `toml:"jerkCurve"`
+	JerkMax                      int                                 `toml:"jerkMax"`
+	JerkScale                    float64                             `toml:"jerkScale"`
+	SnapCurve                    int                                 `toml:"snapCurve"`
+	SnapMax                      int                                 `toml:"snapMax"`
+	_snapScale                   float64                             `toml:"-"`
+	PulseMaxAmplitude            float64                             `toml:"pulseMaxAmplitude"`
+	PulseMaxFrequencyHz          float64                             `toml:"pulseMaxFrequencyHz"`
+	PulseMinFrequencyHz          float64                             `toml:"pulseMinFrequencyHz"`
+	_pulseWidthMax               float64                             `toml:"-"`
+	_pulseWidthMin               float64                             `toml:"-"`
+	EngineProfiles               map[string]appHaptics.EngineProfile `toml:"engineProfiles"`
+	_engineProfile               *appHaptics.EngineProfile           `toml:"-"`
 }
 
 type hardware struct {
-	Model              string
-	DisplayOrientation int
+	Model              string `toml:"model"`
+	DisplayOrientation int    `toml:"displayOrientation"`
 }
 
 type pitRadio struct {
-	Enabled               bool
-	MessageSendIntervalMs int
+	Enabled               bool `toml:"enabled"`
+	MessageSendIntervalMs int  `toml:"messageSendIntervalMs"`
 }
 
 // Synthesizer represents an audio synthesizer used for haptic feedback.
 type Synthesizer struct {
-	InternalSampleRateHz      int
-	OutputSampleRateHz        int
-	OutputFile                string
-	MasterGain                float64
-	ChassisGain               float64
-	TransmissionGain          float64
-	TransmissionGainMinRace   float64
-	TransmissionGainMinStreet float64
-	EngineGain                float64
-	GainIncrement             float64
-	Eq                        []float64
+	InternalSampleRateHz      int       `toml:"internalSampleRateHz"`
+	OutputSampleRateHz        int       `toml:"outputSampleRateHz"`
+	OutputFile                string    `toml:"outputFile"`
+	MasterGain                float64   `toml:"masterGain"`
+	ChassisGain               float64   `toml:"chassisGain"`
+	TransmissionGain          float64   `toml:"transmissionGain"`
+	TransmissionGainMinRace   float64   `toml:"transmissionGainMinRace"`
+	TransmissionGainMinStreet float64   `toml:"transmissionGainMinStreet"`
+	EngineGain                float64   `toml:"engineGain"`
+	GainIncrement             float64   `toml:"gainIncrement"`
+	Eq                        []float64 `toml:"eq"`
 }
 
 // Telemetry represents the telemetry data source configuration.
 type Telemetry struct {
-	Source string
+	Source string `toml:"source"`
 }
 
 type tyres struct {
-	MonitoringEnabled          bool
-	TemperatureOptimalCelsius  float32
-	TemperatureOperatingWindow float32
-	TemperatureMarginCelsius   float32
+	MonitoringEnabled          bool    `toml:"monitoringEnabled"`
+	TemperatureOptimalCelsius  float32 `toml:"temperatureOptimalCelsius"`
+	TemperatureOperatingWindow float32 `toml:"temperatureOperatingWindow"`
+	TemperatureMarginCelsius   float32 `toml:"temperatureMarginCelsius"`
 }
 
 type viperConfig struct {
-	App         *app
-	Discord     *discord
-	Fuel        *fuel
-	Hardware    *hardware
-	Haptics     *haptics
-	PitRadio    *pitRadio
-	Synthesizer *Synthesizer
-	Telemetry   *Telemetry
-	Tyres       *tyres
+	App         *app         `toml:"app"`
+	Discord     *discord     `toml:"discord"`
+	Fuel        *fuel        `toml:"fuel"`
+	Hardware    *hardware    `toml:"hardware"`
+	Haptics     *haptics     `toml:"haptics"`
+	PitRadio    *pitRadio    `toml:"pitRadio"`
+	Synthesizer *Synthesizer `toml:"synthesizer"`
+	Telemetry   *Telemetry   `toml:"telemetry"`
+	Tyres       *tyres       `toml:"tyres"`
 }
 
 // Config holds the application configuration and provides methods for accessing and modifying the data.
 type Config struct {
-	viper *viperConfig
-	i18n  *i18n.I18n
-	mu    sync.RWMutex
+	viper    *viperConfig
+	i18n     *i18n.I18n
+	filename string
+	mu       sync.RWMutex
 }
 
 // New creates a new Config instance loading configuration from the specified filename.
 func New(filename string, log zerolog.Logger) *Config {
 	config := &Config{
-		viper: defaultConfig(),
+		viper:    defaultConfig(),
+		filename: filename,
 	}
 
 	viper.SetEnvPrefix("SIMTEZILO")
@@ -179,9 +187,26 @@ func NewFromJSON(json []byte, log zerolog.Logger) *Config {
 	return config
 }
 
+// SetDefault resets the configuration to the default values.
+func (c *Config) SetDefault() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper = defaultConfig()
+	c.finalise()
+}
+
 // SetI18n sets the i18n instance for the Config which is required for interaction with language settings.
 func (c *Config) SetI18n(i18n *i18n.I18n) {
 	c.i18n = i18n
+}
+
+// GetOutputFile returns the synthesizer output file path.
+func (c *Config) GetOutputFile() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.Synthesizer.OutputFile
 }
 
 // ****************************************************************************
@@ -199,6 +224,16 @@ func (c *Config) GetAppLanguage() *string {
 	}
 
 	return &c.viper.App.Language
+}
+
+// SetAppLanguage sets the application language.
+func (c *Config) SetAppLanguage(value string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// TODO: validate language code
+
+	c.viper.App.Language = value
 }
 
 // GetAppAccent returns the configured accent.
@@ -293,6 +328,16 @@ func (c *Config) GetAppLogLevel() string {
 	}
 
 	return c.viper.App.LogLevel
+}
+
+// SetAppLogLevel sets the application log level.
+func (c *Config) SetAppLogLevel(value string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// TODO: validate log level
+
+	c.viper.App.LogLevel = value
 }
 
 // GetAppReplayMode returns true if replay mode is enabled.
@@ -393,6 +438,14 @@ func (c *Config) GetFuelMonitoringEnabled() bool {
 	return c.viper.Fuel.MonitoringEnabled
 }
 
+// SetFuelMonitoringEnabled sets whether fuel monitoring is enabled.
+func (c *Config) SetFuelMonitoringEnabled(value bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.Fuel.MonitoringEnabled = value
+}
+
 // GetFuelPreWarnNotifyLaps returns the number of laps remaining before a fuel pre-warning is triggered.
 func (c *Config) GetFuelPreWarnNotifyLaps() float64 {
 	c.mu.RLock()
@@ -465,7 +518,20 @@ func (c *Config) GetJerkCurve() float64 {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	return float64(c.viper.Haptics.JerkCurve) / 1000.0
+	return float64(c.viper.Haptics.JerkCurve)
+}
+
+// SetJerkCurve sets the jerk curve value.
+// Values closer to 0 produce a more linear response.
+// Values closer to 1 produce a more exponential response.
+func (c *Config) SetJerkCurve(value int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	value = min(value, 955)
+	value = max(value, 5)
+
+	c.viper.Haptics.JerkCurve = value
 }
 
 // IncreaseJerkCurve increases the jerk curve value in increments of 5.
@@ -501,8 +567,6 @@ func (c *Config) DecreaseJerkCurve() int {
 }
 
 // GetJerkScale returns the current jerk scale factor.
-// Values closer to 0 compress the response range.
-// Values closer to 1 provide greater dynamic range.
 func (c *Config) GetJerkScale() float64 {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -530,6 +594,19 @@ func (c *Config) GetJerkMax() int {
 	defer c.mu.RUnlock()
 
 	return c.viper.Haptics.JerkMax
+}
+
+// SetJerkMax sets the maximum jerk value.
+// The jerk curve is applied over the range from 0 to this maximum value.
+// Any jerk vakues above this value are clamped to this maximum.
+func (c *Config) SetJerkMax(value int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	value = min(value, 200)
+	value = max(value, 1)
+
+	c.viper.Haptics.JerkMax = value
 }
 
 // IncreaseJerkMax increases the maximum jerk value in increments of 1.
@@ -565,13 +642,24 @@ func (c *Config) DecreaseJerkMax() int {
 }
 
 // GetSnapCurve returns the snap curve value.
-// Values closer to 0 produce a more linear response.
-// Values closer to 1 produce a more exponential response.
 func (c *Config) GetSnapCurve() float64 {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	return float64(c.viper.Haptics.SnapCurve) / 1000.0
+	return float64(c.viper.Haptics.SnapCurve)
+}
+
+// SetSnapCurve sets the snap curve value.
+// Values closer to 0 produce a more linear response.
+// Values closer to 1 produce a more exponential response.
+func (c *Config) SetSnapCurve(value int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	value = min(value, 955)
+	value = max(value, 5)
+
+	c.viper.Haptics.SnapCurve = value
 }
 
 // IncreaseSnapCurve increases the snap curve value in increments of 5.
@@ -628,13 +716,25 @@ func (c *Config) UpdateSnapScale() {
 }
 
 // GetSnapMax returns the maximum snap value.
-// The snap curve is applied over the range from 0 to this maximum value.
-// Any snap values above this value are clamped to this maximum.
 func (c *Config) GetSnapMax() int {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
 	return c.viper.Haptics.SnapMax
+}
+
+// SetSnapMax sets the maximum snap value.
+// The snap curve is applied over the range from 0 to this maximum value.
+// Any snap values above this value are clamped to this maximum.
+// Allowed range is 1 to 200.
+func (c *Config) SetSnapMax(value int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	value = min(value, 200)
+	value = max(value, 1)
+
+	c.viper.Haptics.SnapMax = value
 }
 
 // IncreaseSnapMax increases the maximum snap value in increments of 1.
@@ -675,7 +775,19 @@ func (c *Config) GetTransmissionCurve() float64 {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	return float64(c.viper.Haptics.DynamicTransmissionCurve) / 1000
+	return float64(c.viper.Haptics.DynamicTransmissionCurve)
+}
+
+// SetTransmissionCurve sets the transmission curve value.
+// This curve is applied to the dynamic transmission feedback bsaed on the longitudinal vehicle g-force.
+func (c *Config) SetTransmissionCurve(value int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	value = min(value, 955)
+	value = max(value, 5)
+
+	c.viper.Haptics.DynamicTransmissionCurve = value
 }
 
 // IncreaseTransmissionCurve increases the transmission curve value in increments of 5.
@@ -711,6 +823,18 @@ func (c *Config) GetTransmissionGforceMax() float64 {
 	defer c.mu.RUnlock()
 
 	return c.viper.Haptics.DynamicTransmissionGforceMax
+}
+
+// SetTransmissionGforceMax sets the maximum transmission G-force value.
+// Any longitudinal g-force values above this are clamped to this maximum.
+func (c *Config) SetTransmissionGforceMax(value float64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	value = math.Min(10, value)
+	value = math.Max(0, value)
+
+	c.viper.Haptics.DynamicTransmissionGforceMax = value
 }
 
 // IncreaseTransmissionGforceMax increases the maximum g-force for dynamic transmission feedback in increments of 0.1g.
@@ -1110,6 +1234,25 @@ func (c *Config) GetOutputSampleRateHz() int {
 	return c.viper.Synthesizer.OutputSampleRateHz
 }
 
+// GetGainIncrement returns the gain increment value.
+func (c *Config) GetGainIncrement() float64 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.Synthesizer.GainIncrement
+}
+
+// SetGainIncrement sets the gain increment value.
+func (c *Config) SetGainIncrement(value float64) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	value = max(0.01, value)
+	value = min(10, value)
+
+	c.viper.Synthesizer.GainIncrement = value
+}
+
 // GetMasterGain returns the master gain of the synthesizer (i.e. the overall volume level).
 // This is a global gain applied to all haptic feedback.
 // 0.0 is maximum gain and -60.0 will mute haptic output.
@@ -1118,6 +1261,16 @@ func (c *Config) GetMasterGain() float64 {
 	defer c.mu.RUnlock()
 
 	return c.viper.Synthesizer.MasterGain
+}
+
+// SetMasterGain sets the master gain of the synthesizer.
+// This is a global gain applied to all haptic feedback.
+// 0.0 is maximum gain and -60.0 will mute haptic output.
+func (c *Config) SetMasterGain(value float64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.Synthesizer.MasterGain = max(MinimumGain, min(MaximumGain, value))
 }
 
 // IncreaseMasterGain increases the master gain by the configured gain increment.
@@ -1157,6 +1310,15 @@ func (c *Config) GetChassisGain() float64 {
 	return c.viper.Synthesizer.ChassisGain
 }
 
+// SetChassisGain sets the chassis gain of the synthesizer.
+// 0.0 is maximum gain and -60.0 will mute chassis bump haptic output.
+func (c *Config) SetChassisGain(value float64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.Synthesizer.ChassisGain = max(MinimumGain, min(MaximumGain, value))
+}
+
 // IncreaseChassisGain increases the chassis gain by the configured gain increment.
 func (c *Config) IncreaseChassisGain() float64 {
 	c.mu.Lock()
@@ -1193,6 +1355,15 @@ func (c *Config) GetTransmissionGain() float64 {
 	defer c.mu.RUnlock()
 
 	return c.viper.Synthesizer.TransmissionGain
+}
+
+// SetTransmissionGain sets the transmission gain of the synthesizer.
+// 0.0 is maximum gain and -60.0 will mute transmission haptic output.
+func (c *Config) SetTransmissionGain(value float64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.Synthesizer.TransmissionGain = max(MinimumGain, min(MaximumGain, value))
 }
 
 // IncreaseTransmissionGain increases the transmission gain by the configured gain increment.
@@ -1250,6 +1421,15 @@ func (c *Config) GetEngineGain() float64 {
 	return c.viper.Synthesizer.EngineGain
 }
 
+// SetEngineGain sets the engine gain of the synthesizer.
+// 0.0 is maximum gain and -60.0 will mute engine haptic output.
+func (c *Config) SetEngineGain(gain float64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.Synthesizer.EngineGain = max(MinimumGain, min(MaximumGain, gain))
+}
+
 // IncreaseEngineGain increases the gain of the currently selected engine by the configured gain increment.
 func (c *Config) IncreaseEngineGain() float64 {
 	c.mu.Lock()
@@ -1290,6 +1470,16 @@ func (c *Config) GetTelemetrySource() string {
 	return c.viper.Telemetry.Source
 }
 
+// SetTelemetrySource sets the telemetry source.
+func (c *Config) SetTelemetrySource(value string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// TODO: validate value
+
+	c.viper.Telemetry.Source = value
+}
+
 // ****************************************************************************
 // Tyres section methods.
 // ****************************************************************************
@@ -1328,6 +1518,84 @@ func (c *Config) GetTyreTemperatureMarginCelsius() float32 {
 }
 
 // ****************************************************************************
+// Configuration file management methods.
+// ****************************************************************************
+
+// BackupConfigFile creates a backup of the current configuration file.
+// Returns the backup filename and any error encountered.
+func (c *Config) BackupConfigFile() (string, error) {
+	configPath := c.resolveConfigFilePath()
+
+	// If the file doesn't exist, nothing to back up
+	_, err := os.Stat(configPath)
+	if err != nil {
+		return "", fmt.Errorf("configuration file %s not found", configPath)
+	}
+
+	timestamp := time.Now().Format("20060102_150405")
+	backupPath := fmt.Sprintf("%s.backup.%s", configPath, timestamp)
+
+	source, err := os.Open(configPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to open source file: %w", err)
+	}
+	defer source.Close()
+
+	destination, err := os.Create(backupPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to create backup file: %w", err)
+	}
+	defer destination.Close()
+
+	_, err = io.Copy(destination, source)
+	if err != nil {
+		return "", fmt.Errorf("failed to copy file: %w", err)
+	}
+
+	return backupPath, nil
+}
+
+// SaveConfigToFile saves the current configuration to the configuration file.
+// It creates a backup before saving and returns both the backup filename and any error.
+func (c *Config) SaveConfigToFile() (string, error) {
+	c.mu.RLock()
+	config := c.viper
+	c.mu.RUnlock()
+
+	configPath := c.resolveConfigFilePath()
+
+	// Create backup first
+	backupPath, err := c.BackupConfigFile()
+	if err != nil {
+		return "", fmt.Errorf("failed to create backup: %w", err)
+	}
+
+	// Marshal the configuration to TOML
+	tomlData, err := toml.Marshal(config)
+	if err != nil {
+		return backupPath, fmt.Errorf("failed to marshal configuration to TOML: %w", err)
+	}
+
+	// Write to temporary file first
+	tempPath := configPath + ".tmp"
+
+	err = os.WriteFile(tempPath, tomlData, 0600)
+	if err != nil {
+		return backupPath, fmt.Errorf("failed to write temporary file: %w", err)
+	}
+
+	// Atomic rename to replace the original file
+	err = os.Rename(tempPath, configPath)
+	if err != nil {
+		os.Remove(tempPath)
+
+		return backupPath, fmt.Errorf("failed to replace configuration file: %w", err)
+	}
+
+	return backupPath, nil
+}
+
+// ****************************************************************************
 // Helper methods.
 // ****************************************************************************
 
@@ -1355,4 +1623,27 @@ func (c *Config) updatePulseWidthExtents() {
 
 	c.viper.Haptics._pulseWidthMax = float64(c.viper.Synthesizer.InternalSampleRateHz) /
 		(2 * c.viper.Haptics.PulseMinFrequencyHz)
+}
+
+// resolveConfigFilePath finds the config file in standard locations or returns a default path for writing.
+func (c *Config) resolveConfigFilePath() string {
+	c.mu.RLock()
+	filename := c.filename
+	c.mu.RUnlock()
+
+	searchPaths := []string{
+		filepath.Join("/boot/simtezilo/", filename),
+		filepath.Join("/opt/simtezilo/", filename),
+		filepath.Join(".", filename),
+	}
+
+	for _, path := range searchPaths {
+		_, err := os.Stat(path)
+		if err != nil {
+			return path
+		}
+	}
+
+	// If not found, return default path in current directory (for writing new file)
+	return filepath.Join(".", filename)
 }

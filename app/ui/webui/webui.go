@@ -12,6 +12,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/rs/zerolog"
+	"github.com/vwhitteron/simtezilo-dev/app/config"
 )
 
 // WebUI defines the web user interface.
@@ -20,16 +21,18 @@ type WebUI struct {
 	port               int
 	webSocketClients   int
 	telemetryChartFeed chan map[string]float32
+	config             *config.Config
 	upgrader           websocket.Upgrader
 }
 
 // New creates a new instance of the WebUI.
-func New(log zerolog.Logger, port int, telemetryChartFeed chan map[string]float32) *WebUI {
+func New(log zerolog.Logger, port int, telemetryChartFeed chan map[string]float32, config *config.Config) *WebUI {
 	return &WebUI{
 		log:                log.With().Str("component", "web ui").Logger(),
 		port:               port,
 		webSocketClients:   0,
 		telemetryChartFeed: telemetryChartFeed,
+		config:             config,
 		upgrader: websocket.Upgrader{
 			CheckOrigin: func(_ *http.Request) bool { return true },
 		},
@@ -43,6 +46,11 @@ func (w *WebUI) Start() {
 	http.HandleFunc("/images/", w.imagesHandlerFunc())
 	http.HandleFunc("/js/", w.sciChartJSHandlerFunc())
 	http.HandleFunc("/ws", w.handleWebSocketConnection)
+	http.HandleFunc("/api/config", w.handleConfigAPI)
+	http.HandleFunc("/api/config/save", w.handleConfigSave)
+	http.HandleFunc("/api/config/reset", w.handleConfigReset)
+
+	w.log.Info().Int("port", w.port).Msg("Starting Web UI server")
 
 	server := &http.Server{
 		Addr:              fmt.Sprintf(":%d", w.port),
@@ -56,7 +64,7 @@ func (w *WebUI) Start() {
 		return
 	}
 
-	w.log.Info().Msg("Web UI started on port 8080\r\n")
+	w.log.Info().Int("port", w.port).Msg("Web UI started")
 }
 
 // HasActiveClients returns true if there are active WebSocket clients connected.
@@ -220,4 +228,366 @@ func getContentType(filename string) string {
 	}
 
 	return contentType
+}
+
+// handleConfigAPI handles GET and POST requests for configuration management.
+func (w *WebUI) handleConfigAPI(response http.ResponseWriter, request *http.Request) {
+	response.Header().Set("Content-Type", "application/json")
+
+	switch request.Method {
+	case http.MethodGet:
+		w.handleGetConfig(response, request)
+	case http.MethodPost:
+		w.handleSetConfig(response, request)
+	default:
+		response.WriteHeader(http.StatusMethodNotAllowed)
+		_ = json.NewEncoder(response).Encode(map[string]string{"error": "Method not allowed"})
+	}
+}
+
+// handleGetConfig returns the current configuration as JSON.
+func (w *WebUI) handleGetConfig(response http.ResponseWriter, _ *http.Request) {
+	configData := map[string]any{
+		"app": map[string]any{
+			"language":     *w.config.GetAppLanguage(),
+			"accent":       w.config.GetAppAccent(),
+			"logLevel":     w.config.GetAppLogLevel(),
+			"dataDir":      w.config.GetAppDataDir(),
+			"replayMode":   w.config.GetAppReplayMode(),
+			"webUIEnabled": w.config.GetAppWebUIEnabled(),
+			"webUIPort":    w.config.GetAppWebUIPort(),
+		},
+		"discord": map[string]any{
+			"enabled":        w.config.GetDiscordEnabled(),
+			"token":          w.config.GetDiscordToken(),
+			"guildID":        w.config.GetDiscordGuildID(),
+			"channelID":      w.config.GetDiscordChannelID(),
+			"voiceChannelID": w.config.GetDiscordVoiceChannelID(),
+		},
+		"fuel": map[string]any{
+			"monitoringEnabled":       w.config.GetFuelMonitoringEnabled(),
+			"preWarnNotifyLaps":       w.config.GetFuelPreWarnNotifyLaps(),
+			"strategyNotifyLaps":      w.config.GetFuelStrategyNotifyLaps(),
+			"rangeSafetyMarginLaps":   w.config.GetFuelRangeSafetyMarginLaps(),
+			"rangeSafetyMarginMeters": w.config.GetFuelRangeSafetyMarginMeters(),
+		},
+		"hardware": map[string]any{
+			"model":              w.config.GetHardwareModel(),
+			"displayOrientation": w.config.GetDisplayOrientation(),
+		},
+		"haptics": map[string]any{
+			"dynamicTransmissionFeedback":  w.config.DynamicTransmissionFeedbackEnabled(),
+			"dynamicTransmissionCurve":     w.config.GetTransmissionCurve(),
+			"dynamicTransmissionGforceMax": w.config.GetTransmissionGforceMax(),
+			"jerkCurve":                    w.config.GetJerkCurve(),
+			"jerkMax":                      w.config.GetJerkMax(),
+			"snapCurve":                    w.config.GetSnapCurve(),
+			"snapMax":                      w.config.GetSnapMax(),
+			"pulseMaxAmplitude":            w.config.GetPulseMaxAmplitude(),
+			"pulseMaxFrequencyHz":          w.config.GetMaxHz(),
+			"pulseMinFrequencyHz":          w.config.GetMinHz(),
+		},
+		"pitRadio": map[string]any{
+			"enabled":               w.config.PitRadioEnabled(),
+			"messageSendIntervalMs": w.config.GetMessageSendIntervalMs(),
+		},
+		"synthesizer": map[string]any{
+			"internalSampleRateHz":      w.config.GetInternalSampleRateHz(),
+			"outputSampleRateHz":        w.config.GetOutputSampleRateHz(),
+			"outputFile":                w.config.GetOutputFile(),
+			"masterGain":                w.config.GetMasterGain(),
+			"chassisGain":               w.config.GetChassisGain(),
+			"transmissionGain":          w.config.GetTransmissionGain(),
+			"transmissionGainMinRace":   w.config.GetTransmissionGainMinRace(),
+			"transmissionGainMinStreet": w.config.GetTransmissionGainMinStreet(),
+			"engineGain":                w.config.GetEngineGain(),
+			"gainIncrement":             w.config.GetGainIncrement(),
+		},
+		"telemetry": map[string]any{
+			"source": w.config.GetTelemetrySource(),
+		},
+		"tyres": map[string]any{
+			"monitoringEnabled":          w.config.GetTyreMonitoringEnabled(),
+			"temperatureOptimalCelsius":  w.config.GetTyreTemperatureOptimalCelsius(),
+			"temperatureOperatingWindow": w.config.GetTyreTemperatureOperatingWindow(),
+			"temperatureMarginCelsius":   w.config.GetTyreTemperatureMarginCelsius(),
+		},
+	}
+
+	err := json.NewEncoder(response).Encode(configData)
+	if err != nil {
+		w.log.Error().Err(err).Msg("failed to encode config JSON")
+		response.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(response).Encode(map[string]string{"error": "Failed to encode configuration"})
+	}
+}
+
+// handleSetConfig updates the configuration from JSON data.
+func (w *WebUI) handleSetConfig(response http.ResponseWriter, request *http.Request) {
+	var configData map[string]any
+
+	err := json.NewDecoder(request.Body).Decode(&configData)
+	if err != nil {
+		w.log.Error().Err(err).Msg("failed to decode config JSON")
+		response.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(response).Encode(map[string]string{"error": "Invalid JSON data"})
+
+		return
+	}
+
+	// Apply configuration changes using setter methods
+	errors := w.applyConfigChanges(configData)
+
+	if len(errors) > 0 {
+		w.log.Error().Strs("errors", errors).Msg("failed to apply some configuration changes")
+		response.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(response).Encode(map[string]any{ //nolint:errchkjson // simple encoding
+			"status":  "partial_success",
+			"message": "Some configuration changes failed",
+			"errors":  errors,
+		})
+
+		return
+	}
+
+	w.log.Info().Interface("config", configData).Msg("configuration updated successfully")
+
+	// Return success response
+	_ = json.NewEncoder(response).Encode(map[string]string{
+		"status":  "success",
+		"message": "Configuration updated successfully",
+	})
+}
+
+// applyConfigChanges applies the configuration changes using appropriate setter methods.
+func (w *WebUI) applyConfigChanges(configData map[string]any) []string {
+	var errors []string
+
+	// Process each section of the configuration
+	for section, sectionData := range configData {
+		sectionMap, ok := sectionData.(map[string]any)
+		if !ok {
+			errors = append(errors, "invalid data for section "+section)
+
+			continue
+		}
+
+		switch section {
+		case "app":
+			errors = append(errors, w.applyAppConfig(sectionMap)...)
+		case "synthesizer":
+			errors = append(errors, w.applySynthesizerConfig(sectionMap)...)
+		case "haptics":
+			errors = append(errors, w.applyHapticsConfig(sectionMap)...)
+		case "fuel":
+			errors = append(errors, w.applyFuelConfig(sectionMap)...)
+		case "telemetry":
+			errors = append(errors, w.applyTelemetryConfig(sectionMap)...)
+		// Add more sections as needed
+		default:
+			w.log.Debug().Str("section", section).Msg("configuration section not implemented for updates")
+		}
+	}
+
+	return errors
+}
+
+// applyAppConfig applies application configuration changes.
+func (w *WebUI) applyAppConfig(config map[string]any) []string {
+	var errors []string
+
+	if language, ok := config["language"]; ok {
+		if langStr, ok := language.(string); ok {
+			w.config.SetAppLanguage(langStr)
+		} else {
+			errors = append(errors, "invalid language value")
+		}
+	}
+
+	if logLevel, ok := config["logLevel"]; ok {
+		if levelStr, ok := logLevel.(string); ok {
+			w.config.SetAppLogLevel(levelStr)
+		} else {
+			errors = append(errors, "invalid log level value")
+		}
+	}
+
+	return errors
+}
+
+// applySynthesizerConfig applies synthesizer configuration changes.
+func (w *WebUI) applySynthesizerConfig(config map[string]any) []string {
+	var errors []string
+
+	if masterGain, ok := config["masterGain"]; ok {
+		if gainFloat, ok := masterGain.(float64); ok {
+			w.config.SetMasterGain(gainFloat)
+		} else {
+			errors = append(errors, "invalid master gain value")
+		}
+	}
+
+	if chassisGain, ok := config["chassisGain"]; ok {
+		if gainFloat, ok := chassisGain.(float64); ok {
+			w.config.SetChassisGain(gainFloat)
+		} else {
+			errors = append(errors, "invalid chassis gain value")
+		}
+	}
+
+	if transmissionGain, ok := config["transmissionGain"]; ok {
+		if gainFloat, ok := transmissionGain.(float64); ok {
+			w.config.SetTransmissionGain(gainFloat)
+		} else {
+			errors = append(errors, "invalid transmission gain value")
+		}
+	}
+
+	if engineGain, ok := config["engineGain"]; ok {
+		if gainFloat, ok := engineGain.(float64); ok {
+			w.config.SetEngineGain(gainFloat)
+		} else {
+			errors = append(errors, "invalid engine gain value")
+		}
+	}
+
+	return errors
+}
+
+// applyHapticsConfig applies haptics configuration changes.
+//
+//nolint:cyclop // functio is easy to understand
+func (w *WebUI) applyHapticsConfig(config map[string]any) []string {
+	var errors []string
+
+	// Helper for float64 conversion and error append
+	parseFloat := func(val any, key string) (float64, bool) {
+		f, ok := val.(float64)
+		if !ok {
+			errors = append(errors, "invalid "+key+" value")
+		}
+
+		return f, ok
+	}
+
+	if jerkCurve, ok := config["jerkCurve"]; ok {
+		if curveFloat, ok := parseFloat(jerkCurve, "jerk curve"); ok {
+			w.config.SetJerkCurve(int(curveFloat * 1000.0))
+		}
+	}
+
+	if jerkMax, ok := config["jerkMax"]; ok {
+		if maxFloat, ok := parseFloat(jerkMax, "jerk max"); ok {
+			w.config.SetJerkMax(int(maxFloat))
+		}
+	}
+
+	if snapCurve, ok := config["snapCurve"]; ok {
+		if curveFloat, ok := parseFloat(snapCurve, "snap curve"); ok {
+			w.config.SetSnapCurve(int(curveFloat * 1000.0))
+		}
+	}
+
+	if snapMax, ok := config["snapMax"]; ok {
+		if maxFloat, ok := parseFloat(snapMax, "snap max"); ok {
+			w.config.SetSnapMax(int(maxFloat))
+		}
+	}
+
+	if transmissionCurve, ok := config["dynamicTransmissionCurve"]; ok {
+		if curveFloat, ok := parseFloat(transmissionCurve, "transmission curve"); ok {
+			w.config.SetTransmissionCurve(int(curveFloat * 1000.0))
+		}
+	}
+
+	if transmissionGforceMax, ok := config["dynamicTransmissionGforceMax"]; ok {
+		if gforceFloat, ok := parseFloat(transmissionGforceMax, "transmission G-force max"); ok {
+			w.config.SetTransmissionGforceMax(gforceFloat)
+		}
+	}
+
+	return errors
+}
+
+// applyFuelConfig applies fuel management configuration changes.
+func (w *WebUI) applyFuelConfig(config map[string]any) []string {
+	var errors []string
+
+	if monitoringEnabled, ok := config["monitoringEnabled"]; ok {
+		if enabledBool, ok := monitoringEnabled.(bool); ok {
+			w.config.SetFuelMonitoringEnabled(enabledBool)
+		} else {
+			errors = append(errors, "invalid fuel monitoring enabled value")
+		}
+	}
+
+	return errors
+}
+
+// applyTelemetryConfig applies telemetry configuration changes.
+func (w *WebUI) applyTelemetryConfig(config map[string]any) []string {
+	var errors []string
+
+	if source, ok := config["source"]; ok {
+		if sourceStr, ok := source.(string); ok {
+			w.config.SetTelemetrySource(sourceStr)
+		} else {
+			errors = append(errors, "invalid telemetry source value")
+		}
+	}
+
+	return errors
+}
+
+// handleConfigReset resets the configuration to default values.
+func (w *WebUI) handleConfigReset(response http.ResponseWriter, request *http.Request) {
+	response.Header().Set("Content-Type", "application/json")
+
+	if request.Method != http.MethodPost {
+		response.WriteHeader(http.StatusMethodNotAllowed)
+		_ = json.NewEncoder(response).Encode(map[string]string{"error": "Method not allowed"})
+
+		return
+	}
+
+	w.log.Info().Msg("configuration reset requested")
+
+	w.config.SetDefault()
+
+	w.handleGetConfig(response, request)
+}
+
+// handleConfigSave saves the current configuration to the file with backup.
+func (w *WebUI) handleConfigSave(response http.ResponseWriter, request *http.Request) {
+	response.Header().Set("Content-Type", "application/json")
+
+	if request.Method != http.MethodPost {
+		response.WriteHeader(http.StatusMethodNotAllowed)
+		_ = json.NewEncoder(response).Encode(map[string]string{"error": "Method not allowed"})
+
+		return
+	}
+
+	w.log.Info().Msg("configuration save requested")
+
+	// Save configuration to file with backup
+	backupPath, err := w.config.SaveConfigToFile()
+	if err != nil {
+		w.log.Error().Err(err).Msg("failed to save configuration")
+		response.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(response).Encode(map[string]string{
+			"error": "Failed to save configuration: " + err.Error(),
+		})
+
+		return
+	}
+
+	w.log.Info().Str("backup", backupPath).Msg("configuration saved successfully")
+
+	// Return success response with backup information
+	_ = json.NewEncoder(response).Encode(map[string]string{
+		"status":     "success",
+		"message":    "Configuration saved",
+		"backupPath": backupPath,
+	})
 }

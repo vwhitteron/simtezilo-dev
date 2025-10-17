@@ -29,6 +29,14 @@
 
 .setting-label {
     font-weight: 500;
+    flex: 1;
+    margin-right: 20px;
+}
+
+.setting-control {
+    flex: 0 0 auto;
+    min-width: 200px;
+    text-align: right;
 }
 
 .setting-control input,
@@ -38,10 +46,170 @@
     color: #dddddd;
     padding: 8px 12px;
     border-radius: 6px;
+    width: 100%;
+    max-width: 200px;
+}
+
+.setting-control input[type="checkbox"] {
+    width: auto;
+    max-width: none;
+    transform: scale(1.2);
+}
+
+.setting-control input[type="range"] {
+    width: 150px;
+    max-width: 150px;
 }
 
 .setting-control input:focus,
 .setting-control select:focus {
     border-color: #dddddd;
     outline: none;
+}
+
+.setting-control input:invalid {
+    border-color: #ff6b6b;
+}
+
+.setting-control input[type="password"] {
+    font-family: monospace;
+    letter-spacing: 2px;
+}
+
+/* Action buttons */
+.setting-actions {
+    display: flex;
+    gap: 15px;
+    flex-wrap: wrap;
+    padding: 20px 0;
+}
+
+.action-button {
+    background: linear-gradient(135deg, #4a4a4a, #3a3a3a);
+    border: 1px solid #666;
+    color: #dddddd;
+    padding: 12px 20px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.action-button:hover {
+    background: linear-gradient(135deg, #5a5a5a, #4a4a4a);
+    border-color: #777;
+    transform: translateY(-2px);
+}
+
+.action-button.primary {
+    background: linear-gradient(135deg, #3ad77f, #2ecc71);
+    color: #242424;
+    border-color: #27ae60;
+}
+
+.action-button.primary:hover {
+    background: linear-gradient(135deg, #88e0ac, #27ae60);
+    color: #242424;
+    border-color: #2ecc71;
+}
+
+.action-button.danger {
+    background: linear-gradient(135deg, #e74c3c, #c0392b);
+    border-color: #c0392b;
+}
+
+.action-button.danger:hover {
+    background: linear-gradient(135deg, #ec7063, #e74c3c);
+    border-color: #e74c3c;
+}
+
+.action-button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* Status messages */
+.config-status {
+    margin-top: 15px;
+    padding: 10px 15px;
+    border-radius: 6px;
+    font-size: 14px;
+    display: none;
+}
+
+.config-status.success {
+    background: rgba(46, 204, 113, 0.2);
+    border: 1px solid #27ae60;
+    color: #2ecc71;
+    display: block;
+}
+
+.config-status.error {
+    background: rgba(231, 76, 60, 0.2);
+    border: 1px solid #c0392b;
+    color: #e74c3c;
+    display: block;
+}
+
+.config-status.info {
+    background: rgba(52, 152, 219, 0.2);
+    border: 1px solid #3498db;
+    color: #5dade2;
+    display: block;
+}
+
+/* Loading state */
+.settings-section.loading {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+.settings-section.loading::after {
+    content: "Loading...";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0, 0, 0, 0.8);
+    color: #dddddd;
+    padding: 10px 20px;
+    border-radius: 6px;
+    font-size: 14px;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .setting-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
+
+    .setting-label {
+        margin-right: 0;
+    }
+
+    .setting-control {
+        min-width: 100%;
+        text-align: left;
+    }
+
+    .setting-control input,
+    .setting-control select {
+        max-width: 100%;
+    }
+
+    .setting-actions {
+        flex-direction: column;
+    }
+
+    .action-button {
+        justify-content: center;
+    }
 }

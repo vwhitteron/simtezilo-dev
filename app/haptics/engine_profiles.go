@@ -20,8 +20,8 @@ package haptics
 // and/or very high RPM the pulse rate results in haptic feedback at too high a frequency which
 // falls outside of the tactile range.
 type EngineProfile struct {
-	PrimaryBalance   float64 // 0.0 (unbalanced) to 1.0 (perfectly balanced)
-	SecondaryBalance float64 // 0.0 (unbalanced) to 1.0 (perfectly balanced)
-	Gain             float64 // additional gain offset to apply to the haptic feedback
-	PulseScale       float64 // 1.0 for no scaling, <1.0 for reduced pulse rate
+	PrimaryBalance   float64 `toml:"PrimaryBalance"`   // 0.0 (unbalanced) to 1.0 (perfectly balanced)
+	SecondaryBalance float64 `toml:"SecondaryBalance"` // 0.0 (unbalanced) to 1.0 (perfectly balanced)
+	Gain             float64 `toml:"Gain"`             // additional gain offset to apply to the haptic feedback
+	PulseScale       float64 `toml:"PulseScale"`       // 1.0 for no scaling, <1.0 for reduced pulse rate
 }

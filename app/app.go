@@ -575,7 +575,7 @@ func (a *App) startBackgroundTasks() {
 	}()
 
 	if a.config.GetAppWebUIEnabled() {
-		a.webUI = webui.New(a.log, a.config.GetAppWebUIPort(), a.telemetryChartFeed)
+		a.webUI = webui.New(a.log, a.config.GetAppWebUIPort(), a.telemetryChartFeed, a.config)
 		go a.webUI.Start()
 	}
 }
