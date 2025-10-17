@@ -13,170 +13,224 @@ import (
 // realistic engine torque output variations.
 // TODO: remove or keep and make private. Public to stop linter error.
 func (a *App) GenerateTorqueCurveWaveform(rpm float64, engineRoughness float64, engineBuffer *[]float64) {
+	params := a.calculateTorqueWaveformParams(rpm)
+	a.generateTorqueWaveformSamples(params, engineRoughness, engineBuffer)
+}
+
+// torqueWaveformParams holds all calculated parameters for torque waveform generation.
+type torqueWaveformParams struct {
+	sampleRate          float64
+	rpmPercent          float64
+	rpmNormalized       float64
+	primaryTorqueFreq   float64
+	secondaryTorqueFreq float64
+	tertiaryTorqueFreq  float64
+	baseAmplitude       float64
+	primaryAmplitude    float64
+	secondaryAmplitude  float64
+	tertiaryAmplitude   float64
+	adjust              float64
+	rpmPowerRatio       float64
+}
+
+// calculateTorqueWaveformParams calculates all parameters needed for torque waveform generation.
+func (a *App) calculateTorqueWaveformParams(rpm float64) *torqueWaveformParams {
 	sampleRate := float64(a.synth.GetSampleRate())
 	rpmPercent := rpm / float64(a.vehicle.revLimit)
+	rpmNormalized, _ := signal.LimitWindow(rpmPercent, 0.0, 1.0)
 
 	// Base firing frequency from engine characteristics
 	baseFiringRate := rpm * a.vehicle.engine.firingFrequency * a.vehicle.engine.haptics.PulseScale
 
-	// Calculate engine-specific torque curve characteristics
-	// Primary balance affects fundamental torque ripple (main firing order)
-	primaryTorqueFreq := baseFiringRate
+	frequencies := a.calculateTorqueFrequencies(baseFiringRate)
+	amplitudes := a.calculateTorqueAmplitudes(rpmNormalized)
 
-	// Secondary balance affects higher-order torque variations
-	// These occur at different multiples based on engine configuration
-	var (
-		secondaryTorqueFreq float64
-		tertiaryTorqueFreq  float64
-	)
+	return &torqueWaveformParams{
+		sampleRate:          sampleRate,
+		rpmPercent:          rpmPercent,
+		rpmNormalized:       rpmNormalized,
+		primaryTorqueFreq:   frequencies.primary,
+		secondaryTorqueFreq: frequencies.secondary,
+		tertiaryTorqueFreq:  frequencies.tertiary,
+		baseAmplitude:       amplitudes.base,
+		primaryAmplitude:    amplitudes.primary,
+		secondaryAmplitude:  amplitudes.secondary,
+		tertiaryAmplitude:   amplitudes.tertiary,
+		adjust:              amplitudes.adjust,
+		rpmPowerRatio:       amplitudes.rpmPowerRatio,
+	}
+}
 
-	// Engine-specific torque curve harmonics based on layout and balance
+// torqueFrequencies holds the calculated frequency components.
+type torqueFrequencies struct {
+	primary   float64
+	secondary float64
+	tertiary  float64
+}
+
+// calculateTorqueFrequencies calculates the torque frequency components based on engine layout.
+func (a *App) calculateTorqueFrequencies(baseFiringRate float64) torqueFrequencies {
+	var secondary, tertiary float64
 
 	switch a.vehicle.engine.layout {
 	case "I":
 		// Inline engines: Secondary balance affects reciprocating mass imbalance
-		// Creates torque variations at 2x crankshaft frequency
-		secondaryTorqueFreq = primaryTorqueFreq * 2.0
-		tertiaryTorqueFreq = primaryTorqueFreq * 4.0
+		secondary = baseFiringRate * 2.0
+		tertiary = baseFiringRate * 4.0
 	case "V":
 		// V engines: Balance depends on bank angle and crank configuration
-		// Secondary balance creates variations at different harmonics
-		switch a.vehicle.engine.chambers {
-		case 8:
-			// V8 with typical 90° bank angle
-			secondaryTorqueFreq = primaryTorqueFreq * 1.5
-			tertiaryTorqueFreq = primaryTorqueFreq * 3.0
-		case 6:
-			// V6 configurations vary widely
-			secondaryTorqueFreq = primaryTorqueFreq * 1.33
-			tertiaryTorqueFreq = primaryTorqueFreq * 2.67
-		default:
-			// Other V configurations
-			secondaryTorqueFreq = primaryTorqueFreq * 1.25
-			tertiaryTorqueFreq = primaryTorqueFreq * 2.5
-		}
+		secondary, tertiary = a.calculateVEngineFrequencies(baseFiringRate)
 	case "H":
 		// Horizontally opposed: Generally well-balanced
-		secondaryTorqueFreq = primaryTorqueFreq * 2.0
-		tertiaryTorqueFreq = primaryTorqueFreq * 4.0
+		secondary = baseFiringRate * 2.0
+		tertiary = baseFiringRate * 4.0
 	default:
 		// Default case for other engine types
-		secondaryTorqueFreq = primaryTorqueFreq * 1.5
-		tertiaryTorqueFreq = primaryTorqueFreq * 3.0
+		secondary = baseFiringRate * 1.5
+		tertiary = baseFiringRate * 3.0
 	}
 
 	// Limit frequencies to usable range (160Hz low-pass filter)
 	maxUsableFreq := 160.0
-	if primaryTorqueFreq > maxUsableFreq {
-		primaryTorqueFreq = maxUsableFreq
+
+	primary := baseFiringRate
+
+	if primary > maxUsableFreq {
+		primary = maxUsableFreq
 	}
 
-	if secondaryTorqueFreq > maxUsableFreq {
-		secondaryTorqueFreq = maxUsableFreq * 0.8
+	if secondary > maxUsableFreq {
+		secondary = maxUsableFreq * 0.8
 	}
 
-	if tertiaryTorqueFreq > maxUsableFreq {
-		tertiaryTorqueFreq = maxUsableFreq * 0.6
+	if tertiary > maxUsableFreq {
+		tertiary = maxUsableFreq * 0.6
 	}
 
-	// Calculate amplitude components based on engine balance
+	return torqueFrequencies{primary, secondary, tertiary}
+}
+
+// calculateVEngineFrequencies calculates frequency components for V engines.
+func (a *App) calculateVEngineFrequencies(baseFiringRate float64) (float64, float64) {
+	switch a.vehicle.engine.chambers {
+	case 8:
+		// V8 with typical 90° bank angle
+		return baseFiringRate * 1.5, baseFiringRate * 3.0
+	case 6:
+		// V6 configurations vary widely
+		return baseFiringRate * 1.33, baseFiringRate * 2.67
+	default:
+		// Other V configurations
+		return baseFiringRate * 1.25, baseFiringRate * 2.5
+	}
+}
+
+// torqueAmplitudes holds the calculated amplitude components.
+type torqueAmplitudes struct {
+	base          float64
+	primary       float64
+	secondary     float64
+	tertiary      float64
+	adjust        float64
+	rpmPowerRatio float64
+}
+
+// calculateTorqueAmplitudes calculates the amplitude components for torque waveform.
+func (a *App) calculateTorqueAmplitudes(rpmNormalized float64) torqueAmplitudes {
 	throttlePercent := float64(a.gtClient.Telemetry.ThrottleOutputPercent()) / 100
 	throttlePercent, _ = signal.LimitWindow(throttlePercent, 0.0, 1.0)
 
-	// Vehicle type adjustments
-	var (
-		gainOffset     float64
-		amplitudeScale float64
-	)
-
-	switch a.vehicle.vehicleType {
-	case vehicleTypeRace:
-		gainOffset = 0.0
-		amplitudeScale = 0.4
-	case vehicleTypeTuned:
-		gainOffset = -3.0
-		amplitudeScale = 0.25
-	case vehicleTypeStreet:
-		fallthrough
-	default:
-		gainOffset = -4.75
-		amplitudeScale = 0.02
-	}
-
-	// Base amplitude with torque curve characteristics
+	gainOffset, amplitudeScale := a.getVehicleTypeAdjustments()
 	baseAmplitude := 0.6 + (throttlePercent * amplitudeScale)
 
-	// Apply overall gain adjustment with -1dB power ratio scaling for RPM
-	rpmNormalized, _ := signal.LimitWindow(rpmPercent, 0.0, 1.0)
-
-	// Apply -1dB power ratio scaling based on RPM
 	rpmPowerRatio := synthesizer.GainToPowerRatio(-1.0 * rpmNormalized)
-
 	adjust := synthesizer.GainToPowerRatio(a.vehicle.engine.haptics.Gain + gainOffset)
 
-	// Primary torque component - fundamental firing frequency
-	// Affected by primary balance (crankshaft and main bearing design)
+	// Calculate component amplitudes
 	primaryAmplitude := baseAmplitude * (2.0 - a.vehicle.engine.haptics.PrimaryBalance) * rpmPowerRatio
-
-	// Secondary torque component - reciprocating mass and secondary forces
-	// Affected by secondary balance (counterweight design, balance shafts)
 	secondaryAmplitude := baseAmplitude * 0.6 * (1.5 - a.vehicle.engine.haptics.SecondaryBalance) * rpmPowerRatio
-
-	// Tertiary component - higher order harmonics from valve train, etc.
 	tertiaryAmplitude := baseAmplitude * 0.3 * (2.0 - a.vehicle.engine.haptics.PrimaryBalance) *
 		(1.5 - a.vehicle.engine.haptics.SecondaryBalance) * rpmPowerRatio
 
-	// Generate torque curve waveform
+	return torqueAmplitudes{
+		base:          baseAmplitude,
+		primary:       primaryAmplitude,
+		secondary:     secondaryAmplitude,
+		tertiary:      tertiaryAmplitude,
+		adjust:        adjust,
+		rpmPowerRatio: rpmPowerRatio,
+	}
+}
+
+// getVehicleTypeAdjustments returns gain offset and amplitude scale based on vehicle type.
+func (a *App) getVehicleTypeAdjustments() (float64, float64) {
+	switch a.vehicle.vehicleType {
+	case vehicleTypeRace:
+		return 0.0, 0.4
+	case vehicleTypeTuned:
+		return -3.0, 0.25
+	case vehicleTypeStreet:
+		fallthrough
+	default:
+		return -4.75, 0.02
+	}
+}
+
+// generateTorqueWaveformSamples generates the actual waveform samples.
+func (a *App) generateTorqueWaveformSamples(params *torqueWaveformParams, engineRoughness float64, engineBuffer *[]float64) {
 	for index := range *engineBuffer {
-		timePosition := float64(index) / sampleRate
+		timePosition := float64(index) / params.sampleRate
 
-		// Primary torque component (fundamental firing frequency)
-		primaryPhase := 2.0 * math.Pi * primaryTorqueFreq * timePosition
-		primaryComponent := primaryAmplitude * math.Sin(primaryPhase)
+		// Calculate phase components
+		primaryComponent := params.primaryAmplitude * math.Sin(2.0*math.Pi*params.primaryTorqueFreq*timePosition)
+		secondaryComponent := params.secondaryAmplitude * math.Sin(2.0*math.Pi*params.secondaryTorqueFreq*timePosition)
+		tertiaryComponent := params.tertiaryAmplitude * math.Sin(2.0*math.Pi*params.tertiaryTorqueFreq*timePosition)
 
-		// Secondary torque component (reciprocating mass imbalance)
-		secondaryPhase := 2.0 * math.Pi * secondaryTorqueFreq * timePosition
-		secondaryComponent := secondaryAmplitude * math.Sin(secondaryPhase)
-
-		// Tertiary component (higher order harmonics)
-		tertiaryPhase := 2.0 * math.Pi * tertiaryTorqueFreq * timePosition
-		tertiaryComponent := tertiaryAmplitude * math.Sin(tertiaryPhase)
-
-		// Combine components with phase relationships
+		// Combine components
 		combinedTorque := primaryComponent + secondaryComponent + tertiaryComponent
 
-		// Add engine-specific roughness modulation
-		roughnessPhase := (float64(a.state.current.sequenceNumber) + float64(index)) * 0.0003
-		roughnessVariation := 1.0 + (engineRoughness * math.Sin(roughnessPhase) * 0.2)
-		combinedTorque *= roughnessVariation
-
-		// Apply RPM-dependent torque curve shaping
-		// High RPM engines tend to have more pronounced torque variations
-		rpmTorqueScaling := 1.0 + (rpmNormalized * 0.3)
-		combinedTorque *= rpmTorqueScaling
-
-		// Engine-specific torque curve modifications
-		switch a.vehicle.engine.geometry {
-		case "K":
-			// Wankel rotary: Smoother torque curve with unique characteristics
-			// Reduce sharp peaks and add eccentric rotor modulation
-			combinedTorque *= 0.8
-			eccentricPhase := 2.0 * math.Pi * primaryTorqueFreq * timePosition * 0.33
-			eccentricModulation := 1.0 + (0.1 * math.Sin(eccentricPhase))
-			combinedTorque *= eccentricModulation
-		case "S":
-			// 2-stroke: More aggressive torque pulses with port effects
-			combinedTorque *= 1.2
-			// Add port timing effects
-			portPhase := 2.0 * math.Pi * primaryTorqueFreq * timePosition * 2.0
-			portModulation := 1.0 + (0.15 * math.Sin(portPhase))
-			combinedTorque *= portModulation
-		}
+		// Apply modulations
+		combinedTorque = a.applyTorqueModulations(combinedTorque, engineRoughness, params, timePosition, index)
 
 		// Apply final amplitude scaling and limits
-		finalAmplitude := combinedTorque * adjust
+		finalAmplitude := combinedTorque * params.adjust
 		finalAmplitude, _ = signal.LimitWindow(finalAmplitude, -1.0, 1.0)
 
 		(*engineBuffer)[index] = finalAmplitude
 	}
+}
+
+// applyTorqueModulations applies various modulations to the combined torque signal.
+func (a *App) applyTorqueModulations(combinedTorque, engineRoughness float64, params *torqueWaveformParams, timePosition float64, index int) float64 {
+	// Add engine-specific roughness modulation
+	roughnessPhase := (float64(a.state.current.sequenceNumber) + float64(index)) * 0.0003
+	roughnessVariation := 1.0 + (engineRoughness * math.Sin(roughnessPhase) * 0.2)
+	combinedTorque *= roughnessVariation
+
+	// Apply RPM-dependent torque curve shaping
+	rpmTorqueScaling := 1.0 + (params.rpmNormalized * 0.3)
+	combinedTorque *= rpmTorqueScaling
+
+	// Engine-specific torque curve modifications
+	return a.applyEngineSpecificModulations(combinedTorque, params, timePosition)
+}
+
+// applyEngineSpecificModulations applies engine geometry-specific modulations.
+func (a *App) applyEngineSpecificModulations(combinedTorque float64, params *torqueWaveformParams, timePosition float64) float64 {
+	switch a.vehicle.engine.geometry {
+	case "K":
+		// Wankel rotary: Smoother torque curve with unique characteristics
+		combinedTorque *= 0.8
+		eccentricPhase := 2.0 * math.Pi * params.primaryTorqueFreq * timePosition * 0.33
+		eccentricModulation := 1.0 + (0.1 * math.Sin(eccentricPhase))
+		combinedTorque *= eccentricModulation
+	case "S":
+		// 2-stroke: More aggressive torque pulses with port effects
+		combinedTorque *= 1.2
+		portPhase := 2.0 * math.Pi * params.primaryTorqueFreq * timePosition * 2.0
+		portModulation := 1.0 + (0.15 * math.Sin(portPhase))
+		combinedTorque *= portModulation
+	}
+
+	return combinedTorque
 }

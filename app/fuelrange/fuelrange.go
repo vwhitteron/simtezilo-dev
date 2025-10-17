@@ -129,86 +129,21 @@ func (r *FuelRange) IsReady() bool {
 
 // Update updates fuel consumption based on the current coordinate and fuel level.
 func (r *FuelRange) Update(odometerReading float64, fuelLevel float32) {
-	// Initialise Range after init/reset
-	if r.fuelLevelAtLastUpdate == initialFuelLevel || r.lastOdometerReading == initialOdometerReading {
-		r.fuelLevelAtLastUpdate = float64(fuelLevel)
-		r.lastOdometerReading = odometerReading
-
+	if r.shouldInitialize(odometerReading, fuelLevel) {
 		return
 	}
 
-	// Reset fuel range when odometer is rolled back or reset
-	if odometerReading < r.lastOdometerReading {
-		r.log.Info().
-			Float64("last_odometer", r.lastOdometerReading).
-			Float64("current_odometer", odometerReading).
-			Msg("Odometer reset detected")
-
-		r.ResetEstimate()
-
+	if r.shouldResetOnOdometerRollback(odometerReading) {
 		return
 	}
 
-	r.distanceSinceLastUpdate += odometerReading - r.lastOdometerReading
-	r.lastOdometerReading = odometerReading
-
+	r.updateDistance(odometerReading)
 	consumed := r.fuelConsumed(float64(fuelLevel))
 
-	samples := len(r.fuelRateSamples)
-
-	if consumed > 0 && r.distanceSinceLastUpdate > 0 {
-		if samples >= fuelRangeMaxSamples {
-			r.fuelRateSamples = r.fuelRateSamples[1:]
-		}
-
-		r.fuelRateSamples = append(r.fuelRateSamples, fuelRangeSample{
-			fuelPercent: fuelLevel,
-			odometer:    odometerReading,
-		})
-
-		r.fuelRate = r.fuelRateMA()
-
-		r.distanceMeters = float64(fuelLevel) / r.fuelRate
-
-		r.log.Debug().
-			Float64("fuel_rate", r.fuelRate).
-			Float64("consumed", consumed).
-			Float64("distance_m", r.distanceSinceLastUpdate).
-			Float64("range_m", r.distanceMeters).
-			Int("samples", len(r.fuelRateSamples)).
-			Msg("Update estimated fuel range")
-
-		r.distanceSinceLastUpdate = 0
-		r.fuelLevelAtLastUpdate = float64(fuelLevel)
-	}
-
-	// Check for refuel completion when fuel consumption resumes (regardless of distance)
-	if r.refueling && consumed > 0 {
-		r.log.Info().
-			Float32("fuel_level", fuelLevel).
-			Float64("last_consumed", consumed).
-			Msg("Refuel complete")
-
-		r.refueling = false
-	}
-
-	// Update fuel level tracking for subsequent calculations
-	if !(consumed > 0 && r.distanceSinceLastUpdate > 0) {
-		r.fuelLevelAtLastUpdate = float64(fuelLevel)
-	}
-
-	if consumed < -0.05 {
-		// Detect refuelling (-0.05 gives margin to avoid occasional noise)
-		if !r.refueling {
-			r.ResetEstimate()
-			r.refueling = true
-
-			r.log.Info().
-				Float32("fuel_level", fuelLevel).
-				Float64("fuel_consumed", consumed).
-				Msg("Refuel detected")
-		}
-	}
+	r.updateFuelRateIfConsuming(consumed, fuelLevel, odometerReading)
+	r.checkRefuelCompletion(consumed, fuelLevel)
+	r.updateFuelLevelTracking(consumed, fuelLevel)
+	r.detectRefueling(consumed, fuelLevel)
 }
 
 // DistanceMeters returns the estimated distance in meters that can be travelled with current fuel level.
@@ -268,4 +203,112 @@ func (r *FuelRange) fuelRateMA() float64 {
 	consumed := first.fuelPercent - last.fuelPercent
 
 	return float64(consumed) / distance
+}
+
+// shouldInitialize checks if this is the first update and initializes if needed.
+func (r *FuelRange) shouldInitialize(odometerReading float64, fuelLevel float32) bool {
+	if r.fuelLevelAtLastUpdate == initialFuelLevel || r.lastOdometerReading == initialOdometerReading {
+		r.fuelLevelAtLastUpdate = float64(fuelLevel)
+		r.lastOdometerReading = odometerReading
+
+		return true
+	}
+
+	return false
+}
+
+// shouldResetOnOdometerRollback checks if odometer has rolled back and resets if needed.
+func (r *FuelRange) shouldResetOnOdometerRollback(odometerReading float64) bool {
+	if odometerReading < r.lastOdometerReading {
+		r.log.Info().
+			Float64("last_odometer", r.lastOdometerReading).
+			Float64("current_odometer", odometerReading).
+			Msg("Odometer reset detected")
+		r.ResetEstimate()
+
+		return true
+	}
+
+	return false
+}
+
+// updateDistance updates the distance tracking.
+func (r *FuelRange) updateDistance(odometerReading float64) {
+	r.distanceSinceLastUpdate += odometerReading - r.lastOdometerReading
+	r.lastOdometerReading = odometerReading
+}
+
+// updateFuelRateIfConsuming updates fuel rate calculations if fuel is being consumed.
+func (r *FuelRange) updateFuelRateIfConsuming(consumed float64, fuelLevel float32, odometerReading float64) {
+	if !(consumed > 0 && r.distanceSinceLastUpdate > 0) {
+		return
+	}
+
+	r.addFuelRateSample(fuelLevel, odometerReading)
+	r.calculateNewFuelRate(consumed)
+	r.resetDistanceAndFuelLevel(fuelLevel)
+}
+
+// addFuelRateSample adds a new fuel rate sample, removing oldest if at capacity.
+func (r *FuelRange) addFuelRateSample(fuelLevel float32, odometerReading float64) {
+	if len(r.fuelRateSamples) >= fuelRangeMaxSamples {
+		r.fuelRateSamples = r.fuelRateSamples[1:]
+	}
+
+	r.fuelRateSamples = append(r.fuelRateSamples, fuelRangeSample{
+		fuelPercent: fuelLevel,
+		odometer:    odometerReading,
+	})
+}
+
+// calculateNewFuelRate calculates the new fuel rate and distance estimates.
+func (r *FuelRange) calculateNewFuelRate(consumed float64) {
+	r.fuelRate = r.fuelRateMA()
+	r.distanceMeters = float64(r.fuelRateSamples[len(r.fuelRateSamples)-1].fuelPercent) / r.fuelRate
+
+	r.log.Debug().
+		Float64("fuel_rate", r.fuelRate).
+		Float64("consumed", consumed).
+		Float64("distance_m", r.distanceSinceLastUpdate).
+		Float64("range_m", r.distanceMeters).
+		Int("samples", len(r.fuelRateSamples)).
+		Msg("Update estimated fuel range")
+}
+
+// resetDistanceAndFuelLevel resets tracking variables after successful update.
+func (r *FuelRange) resetDistanceAndFuelLevel(fuelLevel float32) {
+	r.distanceSinceLastUpdate = 0
+	r.fuelLevelAtLastUpdate = float64(fuelLevel)
+}
+
+// checkRefuelCompletion checks if refueling has completed.
+func (r *FuelRange) checkRefuelCompletion(consumed float64, fuelLevel float32) {
+	if r.refueling && consumed > 0 {
+		r.log.Info().
+			Float32("fuel_level", fuelLevel).
+			Float64("last_consumed", consumed).
+			Msg("Refuel complete")
+		r.refueling = false
+	}
+}
+
+// updateFuelLevelTracking updates fuel level tracking for subsequent calculations.
+func (r *FuelRange) updateFuelLevelTracking(consumed float64, fuelLevel float32) {
+	if !(consumed > 0 && r.distanceSinceLastUpdate > 0) {
+		r.fuelLevelAtLastUpdate = float64(fuelLevel)
+	}
+}
+
+// detectRefueling detects if refueling is occurring.
+func (r *FuelRange) detectRefueling(consumed float64, fuelLevel float32) {
+	if consumed < -0.05 && !r.refueling {
+		// Detect refuelling (-0.05 gives margin to avoid occasional noise)
+		r.ResetEstimate()
+		r.refueling = true
+
+		r.log.Info().
+			Float32("fuel_level", fuelLevel).
+			Float64("fuel_consumed", consumed).
+			Msg("Refuel detected")
+	}
 }

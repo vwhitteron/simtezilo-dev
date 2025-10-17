@@ -167,65 +167,15 @@ func (b *AdaptiveBuffer) Write(samples []float64, offset int, overwrite bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	if offset != 0 {
-		b.writePos = (b.writePos + offset) % b.capacity
-	}
+	b.applyOffset(offset)
 
-	// Drop oldest samples if necessary to prevent overflow
-	if len(samples) > (b.capacity-b.used) && overwrite {
-		b.overflows++
-
-		if !overwrite {
-			samplesToDrop := len(samples) - (b.capacity - b.used)
-			b.dropOldestSamples(samplesToDrop)
-		}
-	}
-
-	// Overwrite any existing content in the buffer
 	if overwrite {
-		for _, sample := range samples {
-			b.buffer[b.writePos] = sample
-			b.writePos = (b.writePos + 1) % b.capacity
-
-			if b.used < b.capacity {
-				b.used++
-			} else {
-				b.readPos = (b.readPos + 1) % b.capacity
-			}
-		}
+		b.writeOverwriteMode(samples)
 
 		return
 	}
 
-	peak := 0.0
-
-	for index, inputSample := range samples {
-		mixPos := (b.readPos + index) % b.capacity
-
-		var mixedSample float64
-
-		if index < b.used {
-			existingSample := b.buffer[mixPos]
-			mixedSample = mixSampleSum(inputSample, existingSample, &peak)
-		} else {
-			mixedSample = inputSample
-		}
-
-		b.buffer[mixPos] = mixedSample
-	}
-
-	// Update used count if we wrote beyond existing content
-	if len(samples) > b.used {
-		b.used = len(samples)
-	}
-
-	// Apply peak limiting if necessary
-	if peak > 1.0 {
-		for i := range samples {
-			pos := (b.readPos + i) % b.capacity
-			b.buffer[pos] /= peak
-		}
-	}
+	b.writeMixMode(samples)
 }
 
 // IsStarved returns true if buffer is running low.
@@ -261,6 +211,84 @@ func (b *AdaptiveBuffer) GetOptimalReadSize(requestedSize int) int {
 
 	// Normal case
 	return min(requestedSize, b.used)
+}
+
+// applyOffset applies the write position offset if specified.
+func (b *AdaptiveBuffer) applyOffset(offset int) {
+	if offset != 0 {
+		b.writePos = (b.writePos + offset) % b.capacity
+	}
+}
+
+// writeOverwriteMode writes samples in overwrite mode, replacing existing content.
+func (b *AdaptiveBuffer) writeOverwriteMode(samples []float64) {
+	b.handleOverflow(samples, true)
+
+	for _, sample := range samples {
+		b.buffer[b.writePos] = sample
+		b.writePos = (b.writePos + 1) % b.capacity
+
+		if b.used < b.capacity {
+			b.used++
+		} else {
+			b.readPos = (b.readPos + 1) % b.capacity
+		}
+	}
+}
+
+// writeMixMode writes samples in mix mode, combining with existing content.
+func (b *AdaptiveBuffer) writeMixMode(samples []float64) {
+	peak := 0.0
+
+	for index, inputSample := range samples {
+		mixedSample := b.mixSampleAtIndex(index, inputSample, &peak)
+		mixPos := (b.readPos + index) % b.capacity
+		b.buffer[mixPos] = mixedSample
+	}
+
+	b.updateUsedCount(len(samples))
+	b.applyPeakLimiting(samples, peak)
+}
+
+// mixSampleAtIndex mixes an input sample with existing content at the given index.
+func (b *AdaptiveBuffer) mixSampleAtIndex(index int, inputSample float64, peak *float64) float64 {
+	if index < b.used {
+		mixPos := (b.readPos + index) % b.capacity
+		existingSample := b.buffer[mixPos]
+
+		return mixSampleSum(inputSample, existingSample, peak)
+	}
+
+	return inputSample
+}
+
+// updateUsedCount updates the used sample count if we wrote beyond existing content.
+func (b *AdaptiveBuffer) updateUsedCount(samplesWritten int) {
+	if samplesWritten > b.used {
+		b.used = samplesWritten
+	}
+}
+
+// applyPeakLimiting applies peak limiting if the peak exceeds 1.0.
+func (b *AdaptiveBuffer) applyPeakLimiting(samples []float64, peak float64) {
+	if peak > 1.0 {
+		for i := range samples {
+			pos := (b.readPos + i) % b.capacity
+			b.buffer[pos] /= peak
+		}
+	}
+}
+
+// handleOverflow handles buffer overflow situations.
+func (b *AdaptiveBuffer) handleOverflow(samples []float64, overwrite bool) {
+	if len(samples) > (b.capacity-b.used) && overwrite {
+		b.overflows++
+
+		if !overwrite {
+			samplesToDrop := len(samples) - (b.capacity - b.used)
+			b.dropOldestSamples(samplesToDrop)
+		}
+	}
 }
 
 // readFromBuffer internal implementation for reading.

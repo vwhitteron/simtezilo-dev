@@ -22,7 +22,7 @@ linters:
     # - dupword # too noisy, little value
     - durationcheck
     - embeddedstructfieldcheck
-    # - err113
+    # - err113 # TODO: enable and fix
     - errcheck
     - errchkjson
     - errname
@@ -34,18 +34,18 @@ linters:
     - forbidigo
     - forcetypeassert
     - funcorder
-    # - funlen
+    # - funlen # TODO: enable and fix
     - ginkgolinter
     - gocheckcompilerdirectives
     - gochecknoglobals
     - gochecknoinits
     - gochecksumtype
-    # - gocognit
+    - gocognit
     - goconst
     - gocritic
     # - gocyclo # use cyclop instead
     - godot
-    - godox
+    # - godox # TODO: enable and fix
     - goheader
     - gomoddirectives
     - gomodguard
@@ -67,7 +67,7 @@ linters:
     - makezero
     - mirror
     - misspell
-    # - mnd
+    # - mnd # TODO: enable and fix
     - musttag
     - nakedret
     - nestif
@@ -109,7 +109,7 @@ linters:
     - varnamelen
     - wastedassign
     - whitespace
-    # - wrapcheck
+    # - wrapcheck # TODO: enable and fix or user err113 instead
     # - wsl # use wsl_v5 instead
     - wsl_v5
     - zerologlint

@@ -72,50 +72,83 @@ func (a *App) notifyLapTime() {
 
 // notifyLapNumber sends lap number notifications over the pit radio.
 func (a *App) notifyLapNumber() {
-	if a.pitRadioState == nil {
+	if !a.shouldSendLapNotification() {
 		return
+	}
+
+	lapInfo := a.getLapNotificationInfo()
+
+	message := a.determineLapMessage(lapInfo)
+	if message == "" {
+		return
+	}
+
+	a.sendLapNotification(message, lapInfo.currentLap)
+}
+
+// shouldSendLapNotification checks if a lap notification should be sent.
+func (a *App) shouldSendLapNotification() bool {
+	if a.pitRadioState == nil {
+		return false
 	}
 
 	currentLap := a.state.current.lapNumber
+
+	return a.pitRadioState.lastNotifiedLapNumber < currentLap &&
+		currentLap > 0 &&
+		currentLap <= a.gtClient.Telemetry.RaceLaps()
+}
+
+// lapNotificationInfo holds information needed for lap notifications.
+type lapNotificationInfo struct {
+	currentLap      int16
+	raceLaps        int16
+	lapsRemaining   int16
+	longRace        bool
+	alreadyNotified bool
+}
+
+// getLapNotificationInfo gathers lap information for notifications.
+func (a *App) getLapNotificationInfo() lapNotificationInfo {
+	currentLap := a.state.current.lapNumber
 	raceLaps := a.gtClient.Telemetry.RaceLaps()
-
-	if a.pitRadioState.lastNotifiedLapNumber >= currentLap {
-		return
-	}
-
-	if currentLap <= 0 || currentLap > raceLaps {
-		return
-	}
-
-	var message string
-
-	longRace := raceLaps > 8
 	lapsRemaining := raceLaps - currentLap + 1
+	longRace := raceLaps > 8
+	alreadyNotified := a.pitRadioState.lastNotifiedLapNumber == currentLap
 
-	raceCompleted := lapsRemaining <= 0 && a.pitRadioState.lastNotifiedLapNumber != currentLap
-	finalLap := a.state.current.lapNumber == raceLaps && a.pitRadioState.lastNotifiedLapNumber != currentLap
-	LastFewLaps := lapsRemaining <= 3 && longRace && a.pitRadioState.lastNotifiedLapNumber != currentLap
+	return lapNotificationInfo{
+		currentLap:      currentLap,
+		raceLaps:        raceLaps,
+		lapsRemaining:   lapsRemaining,
+		longRace:        longRace,
+		alreadyNotified: alreadyNotified,
+	}
+}
+
+// determineLapMessage determines what lap message to send based on race conditions.
+func (a *App) determineLapMessage(info lapNotificationInfo) string {
+	raceCompleted := info.lapsRemaining <= 0 && !info.alreadyNotified
+	finalLap := info.currentLap == info.raceLaps && !info.alreadyNotified
+	lastFewLaps := info.lapsRemaining <= 3 && info.longRace && !info.alreadyNotified
 
 	switch {
 	case raceCompleted:
-		message = a.i18n.GetString(languagedb.RadioRaceFinish)
-
-		a.pitRadioState.lastNotifiedLapNumber = currentLap
+		return a.i18n.GetString(languagedb.RadioRaceFinish)
 	case finalLap:
-		message = a.i18n.GetString(languagedb.RadioFinalLap)
-
-		a.pitRadioState.lastNotifiedLapNumber = currentLap
-	case LastFewLaps:
+		return a.i18n.GetString(languagedb.RadioFinalLap)
+	case lastFewLaps:
 		format := a.i18n.GetString(languagedb.RadioLapsRemainingFmt)
-		message = fmt.Sprintf(format, lapsRemaining)
 
-		a.pitRadioState.lastNotifiedLapNumber = currentLap
-	case currentLap <= 1:
-		return
+		return fmt.Sprintf(format, info.lapsRemaining)
+	case info.currentLap <= 1:
+		return ""
 	default:
-		message = fmt.Sprintf("Lap %d", currentLap)
+		return fmt.Sprintf("Lap %d", info.currentLap)
 	}
+}
 
+// sendLapNotification sends the lap notification message via pit radio.
+func (a *App) sendLapNotification(message string, currentLap int16) {
 	a.pitRadioState.lastNotifiedLapNumber = currentLap
 
 	err := a.pitRadio.Send(pitradio.Message{

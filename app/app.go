@@ -145,257 +145,31 @@ func New(opts Options) (*App, error) {
 		lapStartEvents:     make(chan uint32),
 	}
 
-	// load config from file
-	newApp.config = config.New("simtezilo.conf", *opts.Logger)
+	newApp.initializeConfig(opts)
 
-	zerolog.FloatingPointPrecision = 5
-
-	// update to configured log level when greater than current
-	configLogLevel, err := zerolog.ParseLevel(newApp.config.GetAppLogLevel())
+	err := newApp.initializeI18n(opts)
 	if err != nil {
-		newApp.log.Error().Int("config value", int(configLogLevel)).Msg("invalid log level")
-	}
-
-	if configLogLevel < newApp.log.GetLevel() || configLogLevel >= zerolog.NoLevel {
-		newApp.log = newApp.log.Level(configLogLevel).With().Logger()
-
-		newApp.log.Debug().Str("level", configLogLevel.String()).Str("source", "config").Msg("log level update")
-	}
-
-	cacheDir := newApp.config.GetAppDataDir() + "/cache"
-	newApp.cache = cache.New(cacheDir, *opts.Logger)
-
-	// load language translations
-	newApp.i18n, err = i18n.New(
-		newApp.config.GetAppLanguage(),
-		*opts.Logger,
-	)
-	if err != nil {
-		newApp.log.Error().Err(err).Str("component", "i18n").Str("result", "failure").Msg("init")
-
 		return nil, err
 	}
-
-	newApp.config.SetI18n(newApp.i18n)
-
-	newApp.log.Debug().Str("language", newApp.i18n.LanguageCode()).Str("result", "success").Msg("init language")
 
 	hidEvents := make(chan ui.HIDInputEvent, 10)
 
-	// initialise display and button hardware
-	switch newApp.config.GetHardwareModel() {
-	case "pirateaudio":
-		hardware.Init()
-
-		orientation := newApp.config.GetDisplayOrientation()
-
-		newApp.display, err = pirateaudio.NewDisplay(pirateaudio.DisplayOptions{
-			Orientation: orientation,
-			I18n:        newApp.i18n,
-		})
-		if err != nil {
-			log.Error().
-				Err(err).
-				Str("component", "pirate audio").
-				Str("sub", "display").
-				Str("result", "failure").
-				Msg("init")
-
-			return nil, err
-		}
-
-		newApp.log.Debug().
-			Str("component", "pirate audio").
-			Str("sub", "display").
-			Str("result", "success").
-			Msg("init")
-
-		pirateaudio.SetupHID(orientation, hidEvents)
-		newApp.log.Debug().
-			Str("component", "pirate audio").
-			Str("sub", "hid").
-			Msg("init")
-	case "spotpear":
-		hardware.Init()
-
-		newApp.display, err = spotpear.NewDisplay(spotpear.DisplayOptions{
-			Orientation: newApp.config.GetDisplayOrientation(),
-			I18n:        newApp.i18n,
-		})
-		if err != nil {
-			newApp.log.Error().
-				Err(err).
-				Str("component", "spotpear game 1.3").
-				Str("sub", "display").
-				Str("result", "failure").
-				Msg("init")
-
-			return nil, err
-		}
-
-		newApp.log.Debug().
-			Str("component", "spotpear game 1.3").
-			Str("sub", "display").
-			Str("result", "success").
-			Msg("init")
-
-		spotpear.SetupHID(hidEvents)
-		log.Debug().
-			Str("component", "spotpear game 1.3").
-			Str("sub", "hid").
-			Msg("init")
-	case "waveshare":
-		hardware.Init()
-
-		orientation := newApp.config.GetDisplayOrientation()
-
-		newApp.display, err = waveshare.NewDisplay(waveshare.DisplayOptions{
-			Orientation: orientation,
-			I18n:        newApp.i18n,
-		})
-		if err != nil {
-			newApp.log.Error().
-				Err(err).
-				Str("component", "waveshare 14972").
-				Str("sub", "display").
-				Str("result", "failure").
-				Msg("init")
-
-			return nil, err
-		}
-
-		newApp.log.Debug().
-			Str("component", "waveshare 14972").
-			Str("sub", "display").
-			Str("result", "success").
-			Msg("init")
-
-		waveshare.SetupHID(orientation, hidEvents)
-		log.Debug().
-			Str("component", "waveshare 14972").
-			Str("sub", "hid").
-			Msg("init")
-	default:
-		newApp.display = console.New()
-		newApp.log.Debug().
-			Str("component", "console").
-			Str("sub", "display").
-			Str("result", "success").
-			Msg("init")
-
-		go console.SetupHID(hidEvents)
-
-		newApp.log.Debug().
-			Str("component", "console").
-			Str("sub", "hid").
-			Msg("init")
-	}
-
-	newApp.ui = ui.NewUserInterface(&ui.Config{
-		I18n:             newApp.i18n,
-		HIDEvents:        hidEvents,
-		Display:          newApp.display,
-		LiveData:         &ui.LiveData{Gear: kinematics.NullGear},
-		Log:              *opts.Logger,
-		SettingsCallback: newApp.settingAction,
-		Done:             newApp.done,
-	})
-
-	err = newApp.ui.Screen.RenderSplashScreen(Version)
+	err = newApp.initializeHardware(hidEvents)
 	if err != nil {
-		newApp.log.Error().
-			Err(err).
-			Str("component", "ui").
-			Str("sub", "screen").
-			Str("result", "failure").
-			Msg("render splash screen")
-
-		return nil, fmt.Errorf("render splash screen: %w", err)
-	}
-
-	// initialise synthesizer
-	newApp.synth, err = synthesizer.New(&synthesizer.SynthOpts{
-		Config:     newApp.config.GetSynthesizer(),
-		Logger:     *opts.Logger,
-		Kinematics: &newApp.kinematics,
-	})
-	if err != nil {
-		newApp.log.Error().
-			Err(err).
-			Str("component", "synth").
-			Str("result", "failure").
-			Msg("init")
-
-		_ = newApp.ui.Screen.RenderErrorScreen("Synth init")
-
 		return nil, err
 	}
 
-	// initialise GT telemetry client
-	gtClientLogger := opts.Logger.With().Str("component", "gt client").Logger()
-
-	newApp.gtClient, err = gttelemetry.New(gttelemetry.Options{
-		Source:    newApp.config.GetTelemetrySource(),
-		Logger:    &gtClientLogger,
-		LogLevel:  newApp.config.GetAppLogLevel(),
-		VehicleDB: opts.VehicleDB,
-	})
+	err = newApp.initializeUI(opts, hidEvents)
 	if err != nil {
-		newApp.log.Error().
-			Err(err).
-			Str("component", "gt client").
-			Str("result", "failure").
-			Msg("init")
-
-		_ = newApp.ui.Screen.RenderErrorScreen("GT client init")
-
 		return nil, err
 	}
 
-	newApp.odometer = odometer.New(*opts.Logger)
-
-	newApp.fuelRange = fuelrange.New(*opts.Logger)
-
-	newApp.tyres = tyres.New(
-		newApp.config.GetTyreTemperatureOptimalCelsius(),
-		newApp.config.GetTyreTemperatureOperatingWindow(),
-		newApp.config.GetTyreTemperatureMarginCelsius(),
-		models.CornerSet{},
-	)
-
-	newApp.circuit, err = circuit.New(*newApp.gtClient.CircuitDB, *opts.Logger)
+	err = newApp.initializeComponents(opts)
 	if err != nil {
-		// TODO: fatal error?
-		newApp.log.Error().
-			Err(err).
-			Str("package", "circuit").
-			Str("result", "failure").
-			Msg("init")
+		return nil, err
 	}
 
-	if newApp.config.GetDiscordEnabled() {
-		discordBotConfig := discord.Config{
-			Token:          newApp.config.GetDiscordToken(),
-			ChannelID:      newApp.config.GetDiscordChannelID(),
-			VoiceChannelID: newApp.config.GetDiscordVoiceChannelID(),
-			GuildID:        newApp.config.GetDiscordGuildID(),
-			MessageGap:     time.Duration(newApp.config.GetMessageSendIntervalMs()) * time.Millisecond,
-			Cache:          &newApp.cache,
-			SampleBank:     newApp.synth.EffectSampleBank(),
-			Logger:         *opts.Logger,
-		}
-
-		newApp.pitRadio, err = discord.New(discordBotConfig)
-		if err != nil {
-			newApp.log.Error().
-				Err(err).
-				Str("component", "discord").
-				Str("result", "failure").
-				Msg("init")
-		}
-
-		newApp.resetPitRadioState()
-	}
+	newApp.initializeDiscord(opts)
 
 	newApp.log.Debug().
 		Str("component", "app").
@@ -448,6 +222,321 @@ func (a *App) Close() {
 
 	time.Sleep(1 * time.Second)
 	a.display.Close()
+}
+
+// initializeConfig sets up configuration and logging.
+func (a *App) initializeConfig(opts Options) {
+	// load config from file
+	a.config = config.New("simtezilo.conf", *opts.Logger)
+
+	zerolog.FloatingPointPrecision = 5
+
+	// update to configured log level when greater than current
+	configLogLevel, err := zerolog.ParseLevel(a.config.GetAppLogLevel())
+	if err != nil {
+		a.log.Error().Int("config value", int(configLogLevel)).Msg("invalid log level")
+	}
+
+	if configLogLevel < a.log.GetLevel() || configLogLevel >= zerolog.NoLevel {
+		a.log = a.log.Level(configLogLevel).With().Logger()
+		a.log.Debug().Str("level", configLogLevel.String()).Str("source", "config").Msg("log level update")
+	}
+
+	cacheDir := a.config.GetAppDataDir() + "/cache"
+	a.cache = cache.New(cacheDir, *opts.Logger)
+}
+
+// initializeI18n sets up language translations.
+func (a *App) initializeI18n(opts Options) error {
+	var err error
+
+	a.i18n, err = i18n.New(
+		a.config.GetAppLanguage(),
+		*opts.Logger,
+	)
+	if err != nil {
+		a.log.Error().Err(err).Str("component", "i18n").Str("result", "failure").Msg("init")
+
+		return err
+	}
+
+	a.config.SetI18n(a.i18n)
+	a.log.Debug().Str("language", a.i18n.LanguageCode()).Str("result", "success").Msg("init language")
+
+	return nil
+}
+
+// initializeHardware sets up display and HID hardware based on configuration.
+func (a *App) initializeHardware(hidEvents chan ui.HIDInputEvent) error {
+	var err error
+
+	// initialise display and button hardware
+	switch a.config.GetHardwareModel() {
+	case "pirateaudio":
+		err = a.initializePirateAudio(hidEvents)
+	case "spotpear":
+		err = a.initializeSpotpear(hidEvents)
+	case "waveshare":
+		err = a.initializeWaveshare(hidEvents)
+	default:
+		a.initializeConsole(hidEvents)
+	}
+
+	return err
+}
+
+// initializePirateAudio sets up Pirate Audio hardware.
+func (a *App) initializePirateAudio(hidEvents chan ui.HIDInputEvent) error {
+	hardware.Init()
+
+	orientation := a.config.GetDisplayOrientation()
+
+	var err error
+
+	a.display, err = pirateaudio.NewDisplay(pirateaudio.DisplayOptions{
+		Orientation: orientation,
+		I18n:        a.i18n,
+	})
+	if err != nil {
+		log.Error().
+			Err(err).
+			Str("component", "pirate audio").
+			Str("sub", "display").
+			Str("result", "failure").
+			Msg("init")
+
+		return err
+	}
+
+	a.log.Debug().
+		Str("component", "pirate audio").
+		Str("sub", "display").
+		Str("result", "success").
+		Msg("init")
+
+	pirateaudio.SetupHID(orientation, hidEvents)
+	a.log.Debug().
+		Str("component", "pirate audio").
+		Str("sub", "hid").
+		Msg("init")
+
+	return nil
+}
+
+// initializeSpotpear sets up Spotpear hardware.
+func (a *App) initializeSpotpear(hidEvents chan ui.HIDInputEvent) error {
+	hardware.Init()
+
+	var err error
+
+	a.display, err = spotpear.NewDisplay(spotpear.DisplayOptions{
+		Orientation: a.config.GetDisplayOrientation(),
+		I18n:        a.i18n,
+	})
+	if err != nil {
+		a.log.Error().
+			Err(err).
+			Str("component", "spotpear game 1.3").
+			Str("sub", "display").
+			Str("result", "failure").
+			Msg("init")
+
+		return err
+	}
+
+	a.log.Debug().
+		Str("component", "spotpear game 1.3").
+		Str("sub", "display").
+		Str("result", "success").
+		Msg("init")
+
+	spotpear.SetupHID(hidEvents)
+	log.Debug().
+		Str("component", "spotpear game 1.3").
+		Str("sub", "hid").
+		Msg("init")
+
+	return nil
+}
+
+// initializeWaveshare sets up Waveshare hardware.
+func (a *App) initializeWaveshare(hidEvents chan ui.HIDInputEvent) error {
+	hardware.Init()
+
+	orientation := a.config.GetDisplayOrientation()
+
+	var err error
+
+	a.display, err = waveshare.NewDisplay(waveshare.DisplayOptions{
+		Orientation: orientation,
+		I18n:        a.i18n,
+	})
+	if err != nil {
+		a.log.Error().
+			Err(err).
+			Str("component", "waveshare 14972").
+			Str("sub", "display").
+			Str("result", "failure").
+			Msg("init")
+
+		return err
+	}
+
+	a.log.Debug().
+		Str("component", "waveshare 14972").
+		Str("sub", "display").
+		Str("result", "success").
+		Msg("init")
+
+	waveshare.SetupHID(orientation, hidEvents)
+	log.Debug().
+		Str("component", "waveshare 14972").
+		Str("sub", "hid").
+		Msg("init")
+
+	return nil
+}
+
+// initializeConsole sets up console display.
+func (a *App) initializeConsole(hidEvents chan ui.HIDInputEvent) {
+	a.display = console.New()
+	a.log.Debug().
+		Str("component", "console").
+		Str("sub", "display").
+		Str("result", "success").
+		Msg("init")
+
+	go console.SetupHID(hidEvents)
+
+	a.log.Debug().
+		Str("component", "console").
+		Str("sub", "hid").
+		Msg("init")
+}
+
+// initializeUI sets up the user interface.
+func (a *App) initializeUI(opts Options, hidEvents chan ui.HIDInputEvent) error {
+	a.ui = ui.NewUserInterface(&ui.Config{
+		I18n:             a.i18n,
+		HIDEvents:        hidEvents,
+		Display:          a.display,
+		LiveData:         &ui.LiveData{Gear: kinematics.NullGear},
+		Log:              *opts.Logger,
+		SettingsCallback: a.settingAction,
+		Done:             a.done,
+	})
+
+	err := a.ui.Screen.RenderSplashScreen(Version)
+	if err != nil {
+		a.log.Error().
+			Err(err).
+			Str("component", "ui").
+			Str("sub", "screen").
+			Str("result", "failure").
+			Msg("render splash screen")
+
+		return fmt.Errorf("render splash screen: %w", err)
+	}
+
+	return nil
+}
+
+// initializeComponents sets up synthesizer, GT client, and other core components.
+func (a *App) initializeComponents(opts Options) error {
+	var err error
+
+	// initialise synthesizer
+	a.synth, err = synthesizer.New(&synthesizer.SynthOpts{
+		Config:     a.config.GetSynthesizer(),
+		Logger:     *opts.Logger,
+		Kinematics: &a.kinematics,
+	})
+	if err != nil {
+		a.log.Error().
+			Err(err).
+			Str("component", "synth").
+			Str("result", "failure").
+			Msg("init")
+
+		_ = a.ui.Screen.RenderErrorScreen("Synth init")
+
+		return err
+	}
+
+	// initialise GT telemetry client
+	gtClientLogger := opts.Logger.With().Str("component", "gt client").Logger()
+
+	a.gtClient, err = gttelemetry.New(gttelemetry.Options{
+		Source:    a.config.GetTelemetrySource(),
+		Logger:    &gtClientLogger,
+		LogLevel:  a.config.GetAppLogLevel(),
+		VehicleDB: opts.VehicleDB,
+	})
+	if err != nil {
+		a.log.Error().
+			Err(err).
+			Str("component", "gt client").
+			Str("result", "failure").
+			Msg("init")
+
+		_ = a.ui.Screen.RenderErrorScreen("GT client init")
+
+		return err
+	}
+
+	a.odometer = odometer.New(*opts.Logger)
+
+	a.fuelRange = fuelrange.New(*opts.Logger)
+
+	a.tyres = tyres.New(
+		a.config.GetTyreTemperatureOptimalCelsius(),
+		a.config.GetTyreTemperatureOperatingWindow(),
+		a.config.GetTyreTemperatureMarginCelsius(),
+		models.CornerSet{},
+	)
+
+	a.circuit, err = circuit.New(*a.gtClient.CircuitDB, *opts.Logger)
+	if err != nil {
+		// TODO: fatal error?
+		a.log.Error().
+			Err(err).
+			Str("package", "circuit").
+			Str("result", "failure").
+			Msg("init")
+	}
+
+	return nil
+}
+
+// initializeDiscord sets up Discord pit radio if enabled.
+func (a *App) initializeDiscord(opts Options) {
+	if !a.config.GetDiscordEnabled() {
+		return
+	}
+
+	discordBotConfig := discord.Config{
+		Token:          a.config.GetDiscordToken(),
+		ChannelID:      a.config.GetDiscordChannelID(),
+		VoiceChannelID: a.config.GetDiscordVoiceChannelID(),
+		GuildID:        a.config.GetDiscordGuildID(),
+		MessageGap:     time.Duration(a.config.GetMessageSendIntervalMs()) * time.Millisecond,
+		Cache:          &a.cache,
+		SampleBank:     a.synth.EffectSampleBank(),
+		Logger:         *opts.Logger,
+	}
+
+	var err error
+
+	a.pitRadio, err = discord.New(discordBotConfig)
+	if err != nil {
+		a.log.Error().
+			Err(err).
+			Str("component", "discord").
+			Str("result", "failure").
+			Msg("init")
+	}
+
+	a.resetPitRadioState()
 }
 
 // startBackgroundTasks launches all necessary background goroutines for the application.
@@ -537,77 +626,102 @@ func (a *App) mainLoop() {
 		case <-a.done:
 			return
 		case <-tickerHaptics.C:
-			a.handleGameStateChange()
-
-			stateChanged := a.updateState()
-
-			if a.gtClient.Telemetry.IsInMainMenu() {
-				continue
-			}
-
-			if stateChanged {
-				a.handleVehicleChange()
-				a.generateForceHaptics()
-				a.detectRecordingTrigger()
-			}
-
-			a.checkRaceComplete()
-			a.checkForNewLap()
-
+			a.handleHapticsTick()
 		case <-tickerGeneral.C:
-			if a.gtClient.Telemetry.IsOnCircuit() {
-				a.updateFuelRange()
-				a.updateTyreTemperature()
-			}
-
-			a.updateCircuit()
-			a.sendTelemetryChartData()
-
+			a.handleGeneralTick()
 		case <-tickerEngineHaptics.C:
-			if a.gtClient.Telemetry.IsOnCircuit() {
-				a.generateEngineHaptic()
-			}
-
+			a.handleEngineHapticsTick()
 		case <-tickerDisplay.C:
-			a.ui.UpdateDisplay(ui.LiveData{
-				Gear:            a.kinematics.Current.TransmissionGear,
-				TelemetryActive: a.state.telemetryActive,
-			})
-
+			a.handleDisplayTick()
 		case <-tickerPitRadio.C:
-			if a.gtClient.Telemetry.IsOnCircuit() {
-				a.sendPitRadioMessage()
-			}
-
+			a.handlePitRadioTick()
 		case <-tickerDebug.C:
-			if !a.gtClient.Telemetry.IsOnCircuit() {
-				continue
-			}
-
-			a.log.Info().
-				Int("lap", int(a.state.current.lapNumber)).
-				Float32("percent", a.gtClient.Telemetry.FuelLevelPercent()).
-				Int("odometer", int(a.odometer.Read())).
-				Float64("rate", a.fuelRange.UsageRatePerKm()).
-				Int("range_meters", int(a.fuelRange.DistanceMeters())).
-				Int("lap_remaining_pc", int(a.circuit.LapProgressRemaining()*100)).
-				Int("circuit_length", int(a.circuit.LengthMeters())).
-				Msg("debug fuel range")
-
-			averageTemp := (a.gtClient.Telemetry.TyreTemperatureCelsius().FrontLeft +
-				a.gtClient.Telemetry.TyreTemperatureCelsius().FrontRight +
-				a.gtClient.Telemetry.TyreTemperatureCelsius().RearLeft +
-				a.gtClient.Telemetry.TyreTemperatureCelsius().RearRight) / 4
-
-			a.log.Info().
-				Float32("temp_avg", averageTemp).
-				Float32("temp_fl", a.gtClient.Telemetry.TyreTemperatureCelsius().FrontLeft).
-				Float32("temp_fr", a.gtClient.Telemetry.TyreTemperatureCelsius().FrontRight).
-				Float32("temp_rl", a.gtClient.Telemetry.TyreTemperatureCelsius().RearLeft).
-				Float32("temp_rr", a.gtClient.Telemetry.TyreTemperatureCelsius().RearRight).
-				Msg("debug tyre temp")
+			a.handleDebugTick()
 		}
 	}
+}
+
+// handleHapticsTick processes haptics-related updates.
+func (a *App) handleHapticsTick() {
+	a.handleGameStateChange()
+
+	stateChanged := a.updateState()
+
+	if a.gtClient.Telemetry.IsInMainMenu() {
+		return
+	}
+
+	if stateChanged {
+		a.handleVehicleChange()
+		a.generateForceHaptics()
+		a.detectRecordingTrigger()
+	}
+
+	a.checkRaceComplete()
+	a.checkForNewLap()
+}
+
+// handleGeneralTick processes general telemetry updates.
+func (a *App) handleGeneralTick() {
+	if a.gtClient.Telemetry.IsOnCircuit() {
+		a.updateFuelRange()
+		a.updateTyreTemperature()
+	}
+
+	a.updateCircuit()
+	a.sendTelemetryChartData()
+}
+
+// handleEngineHapticsTick processes engine haptics updates.
+func (a *App) handleEngineHapticsTick() {
+	if a.gtClient.Telemetry.IsOnCircuit() {
+		a.generateEngineHaptic()
+	}
+}
+
+// handleDisplayTick processes display updates.
+func (a *App) handleDisplayTick() {
+	a.ui.UpdateDisplay(ui.LiveData{
+		Gear:            a.kinematics.Current.TransmissionGear,
+		TelemetryActive: a.state.telemetryActive,
+	})
+}
+
+// handlePitRadioTick processes pit radio updates.
+func (a *App) handlePitRadioTick() {
+	if a.gtClient.Telemetry.IsOnCircuit() {
+		a.sendPitRadioMessage()
+	}
+}
+
+// handleDebugTick processes debug logging.
+func (a *App) handleDebugTick() {
+	if !a.gtClient.Telemetry.IsOnCircuit() {
+		return
+	}
+
+	a.log.Info().
+		Int("lap", int(a.state.current.lapNumber)).
+		Float32("percent", a.gtClient.Telemetry.FuelLevelPercent()).
+		Int("odometer", int(a.odometer.Read())).
+		Float64("rate", a.fuelRange.UsageRatePerKm()).
+		Int("range_meters", int(a.fuelRange.DistanceMeters())).
+		Int("lap_remaining_pc", int(a.circuit.LapProgressRemaining()*100)).
+		Int("circuit_length", int(a.circuit.LengthMeters())).
+		Msg("debug fuel range")
+
+	averageTemp := (a.gtClient.Telemetry.TyreTemperatureCelsius().FrontLeft +
+		a.gtClient.Telemetry.TyreTemperatureCelsius().FrontRight +
+		a.gtClient.Telemetry.TyreTemperatureCelsius().RearLeft +
+		a.gtClient.Telemetry.TyreTemperatureCelsius().RearRight) / 4
+
+	a.log.Info().
+		Float32("temp_avg", averageTemp).
+		Float32("temp_fl", a.gtClient.Telemetry.TyreTemperatureCelsius().FrontLeft).
+		Float32("temp_fr", a.gtClient.Telemetry.TyreTemperatureCelsius().FrontRight).
+		Float32("temp_rl", a.gtClient.Telemetry.TyreTemperatureCelsius().RearLeft).
+		Float32("temp_rr", a.gtClient.Telemetry.TyreTemperatureCelsius().RearRight).
+		Msg("debug tyre temp")
 }
 
 func (a *App) newLapHandler() bool {
@@ -757,19 +871,40 @@ func (a *App) handleVehicleChange() {
 
 // updateVehicle updates the vehicle characteristics from the current telemetry vehicle ID.
 func (a *App) updateVehicle() {
-	var vehicleType vehicleTypeName
+	vehicleType := a.determineVehicleType()
+	engine := a.getEngineData()
+	revLimit := a.gtClient.Telemetry.EngineRPMLight().Max
 
-	switch a.gtClient.Telemetry.VehicleType() {
-	case string(vehicleTypeStreet):
-		vehicleType = vehicleTypeStreet
-	case string(vehicleTypeTuned):
-		vehicleType = vehicleTypeTuned
-	case string(vehicleTypeRace):
-		vehicleType = vehicleTypeRace
-	default:
-		vehicleType = vehicleTypeStreet
+	a.adjustEngineHaptics(&engine, revLimit)
+
+	a.vehicle = vehicleRecord{
+		ID:          a.gtClient.Telemetry.VehicleID(),
+		vehicleType: vehicleType,
+		engine:      engine,
+		revLimit:    a.normalizeRevLimit(revLimit),
 	}
 
+	a.setTransmissionGain(vehicleType)
+	a.resetVehicleState()
+	a.logVehicleUpdate(engine, revLimit)
+}
+
+// determineVehicleType determines the vehicle type from telemetry data.
+func (a *App) determineVehicleType() vehicleTypeName {
+	switch a.gtClient.Telemetry.VehicleType() {
+	case string(vehicleTypeStreet):
+		return vehicleTypeStreet
+	case string(vehicleTypeTuned):
+		return vehicleTypeTuned
+	case string(vehicleTypeRace):
+		return vehicleTypeRace
+	default:
+		return vehicleTypeStreet
+	}
+}
+
+// getEngineData retrieves and processes engine characteristics.
+func (a *App) getEngineData() engineCharacteristics {
 	engineLayout := a.gtClient.Telemetry.VehicleEngineLayout()
 	bankAngle := a.gtClient.Telemetry.VehicleEngineBankAngle()
 	crankPlaneAngle := a.gtClient.Telemetry.VehicleEngineCrankPlaneAngle()
@@ -785,27 +920,30 @@ func (a *App) updateVehicle() {
 			Msg("failed to get engine characteristics")
 	}
 
-	peakNaturalPulseRate := float64(revLimit) * engine.firingFrequency
+	return engine
+}
 
-	// Heavy pulse rate adjustment for high rev limit engines
+// adjustEngineHaptics adjusts engine haptics based on pulse rate limits.
+func (a *App) adjustEngineHaptics(engine *engineCharacteristics, revLimit uint16) {
+	peakNaturalPulseRate := float64(revLimit) * engine.firingFrequency
 	peakPulseRate := peakNaturalPulseRate * engine.haptics.PulseScale
+
 	if peakPulseRate > maxPulseRate {
 		engine.haptics.PulseScale = (maxPulseRate / peakPulseRate) * engine.haptics.PulseScale
-		peakPulseRate *= engine.haptics.PulseScale
+	}
+}
+
+// normalizeRevLimit sets a default rev limit if not available.
+func (a *App) normalizeRevLimit(revLimit uint16) uint16 {
+	if revLimit == 0 {
+		return 8000
 	}
 
-	a.vehicle = vehicleRecord{
-		ID:          a.gtClient.Telemetry.VehicleID(),
-		vehicleType: vehicleType,
-		engine:      engine,
-		revLimit:    revLimit,
-	}
+	return revLimit
+}
 
-	// Set default rev limit if not available
-	if a.vehicle.revLimit == 0 {
-		a.vehicle.revLimit = 8000
-	}
-
+// setTransmissionGain sets the transmission gain based on vehicle type.
+func (a *App) setTransmissionGain(vehicleType vehicleTypeName) {
 	switch vehicleType {
 	case vehicleTypeRace, vehicleTypeTuned:
 		a.transmissionGainMin = a.config.GetTransmissionGain() + a.config.GetTransmissionGainMinRace()
@@ -814,11 +952,21 @@ func (a *App) updateVehicle() {
 	default:
 		a.transmissionGainMin = a.config.GetTransmissionGain() + a.config.GetTransmissionGainMinStreet()
 	}
+}
 
+// resetVehicleState resets vehicle-related state.
+func (a *App) resetVehicleState() {
 	a.state.last.transmissionGear = a.state.current.transmissionGear
-
 	a.odometer.Reset()
 	a.fuelRange.Reset()
+}
+
+// logVehicleUpdate logs vehicle update information.
+func (a *App) logVehicleUpdate(engine engineCharacteristics, revLimit uint16) {
+	bankAngle := a.gtClient.Telemetry.VehicleEngineBankAngle()
+	crankPlaneAngle := a.gtClient.Telemetry.VehicleEngineCrankPlaneAngle()
+	peakNaturalPulseRate := float64(revLimit) * engine.firingFrequency
+	peakPulseRate := peakNaturalPulseRate * engine.haptics.PulseScale
 
 	a.log.Debug().
 		Str("engine_layout", a.vehicle.engine.layout).
@@ -836,7 +984,7 @@ func (a *App) updateVehicle() {
 		Uint32("ID", a.vehicle.ID).
 		Str("manufacturer", a.gtClient.Telemetry.VehicleManufacturer()).
 		Str("model", a.gtClient.Telemetry.VehicleModel()).
-		Str("type", string(vehicleType)).
+		Str("type", string(a.vehicle.vehicleType)).
 		Str("engine", a.vehicle.engine.dbEntry).
 		Msg("vehicle update")
 }

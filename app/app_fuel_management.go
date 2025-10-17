@@ -22,31 +22,69 @@ func (a *App) updateFuelRange() {
 
 // notifyFuelWarnings sends fuel warning notifications over the pit radio.
 func (a *App) notifyFuelWarnings() {
-	if !a.config.GetFuelMonitoringEnabled() {
+	if !a.shouldProcessFuelWarnings() {
 		return
 	}
 
-	if a.fuelRange == nil {
+	context := a.buildFuelWarningContext()
+	if context == nil {
 		return
+	}
+
+	message, suppressNotify := a.determineFuelWarningMessage(context)
+	if suppressNotify || message == "" {
+		return
+	}
+
+	a.sendFuelWarningMessage(message, context)
+}
+
+// shouldProcessFuelWarnings checks if fuel warnings should be processed.
+func (a *App) shouldProcessFuelWarnings() bool {
+	if !a.config.GetFuelMonitoringEnabled() {
+		return false
+	}
+
+	if a.fuelRange == nil {
+		return false
 	}
 
 	circuitLengthMeters := a.circuit.LengthMeters()
 	if circuitLengthMeters <= 0 {
-		return
+		return false
 	}
 
+	remainingLaps := float64(a.gtClient.Telemetry.RaceLaps()) - float64(a.gtClient.Telemetry.CurrentLap())
+
+	return remainingLaps >= 0
+}
+
+// fuelWarningContext holds all the calculated values needed for fuel warnings.
+type fuelWarningContext struct {
+	currentLap              int16
+	remainingLaps           float64
+	circuitLengthMeters     float64
+	fuelRangeLaps           float64
+	fuelRangeMeters         float64
+	fuelRangeMetersSafe     float64
+	distanceToPitBox        float64
+	distanceToPitBoxNextLap float64
+	preWarnNotifyDistance   float64
+	preWarnNotifyLap        float64
+	boxNotifyDistance       float64
+	lapProgressRemaining    float64
+}
+
+// buildFuelWarningContext creates a context with all calculated fuel warning values.
+func (a *App) buildFuelWarningContext() *fuelWarningContext {
+	circuitLengthMeters := a.circuit.LengthMeters()
 	currentLap := a.gtClient.Telemetry.CurrentLap()
-
 	remainingLaps := float64(a.gtClient.Telemetry.RaceLaps()) - float64(currentLap)
-
-	if remainingLaps < 0 {
-		return
-	}
 
 	fuelRangeLaps := a.fuelRange.DistanceLaps(circuitLengthMeters)
 	fuelRangeMeters := a.fuelRange.DistanceMeters()
 	safetyMarginMeters := a.config.GetFuelRangeSafetyMarginLaps() * circuitLengthMeters
-	FuelRangeMetersSafe := fuelRangeMeters - safetyMarginMeters
+	fuelRangeMetersSafe := fuelRangeMeters - safetyMarginMeters
 
 	lapProgressRemaining := a.circuit.LapProgressRemaining()
 	distanceToPitBox := lapProgressRemaining * circuitLengthMeters
@@ -55,66 +93,80 @@ func (a *App) notifyFuelWarnings() {
 	preWarnNotifyLap := float64(currentLap) + a.config.GetFuelPreWarnNotifyLaps()
 	boxNotifyDistance := min(2000, circuitLengthMeters*0.2)
 
-	fuelEmpty := a.gtClient.Telemetry.FuelLevelPercent() <= 0
-	fuelCritical := fuelRangeMeters <= distanceToPitBox
-	boxthislap := FuelRangeMetersSafe <= distanceToPitBoxNextLap && distanceToPitBox <= boxNotifyDistance
-	refuelPreWarn := FuelRangeMetersSafe <= preWarnNotifyDistance
-	fuelStrategyUpdate := a.fuelRange.IsReady() &&
-		remainingLaps > fuelRangeLaps &&
-		currentLap%int16(a.config.GetFuelStrategyNotifyLaps()) == 0
+	return &fuelWarningContext{
+		currentLap:              currentLap,
+		remainingLaps:           remainingLaps,
+		circuitLengthMeters:     circuitLengthMeters,
+		fuelRangeLaps:           fuelRangeLaps,
+		fuelRangeMeters:         fuelRangeMeters,
+		fuelRangeMetersSafe:     fuelRangeMetersSafe,
+		distanceToPitBox:        distanceToPitBox,
+		distanceToPitBoxNextLap: distanceToPitBoxNextLap,
+		preWarnNotifyDistance:   preWarnNotifyDistance,
+		preWarnNotifyLap:        preWarnNotifyLap,
+		boxNotifyDistance:       boxNotifyDistance,
+		lapProgressRemaining:    lapProgressRemaining,
+	}
+}
 
-	var (
-		message        string
-		suppressNotify bool
-	)
+// determineFuelWarningMessage determines what fuel warning message to send based on current conditions.
+func (a *App) determineFuelWarningMessage(context *fuelWarningContext) (string, bool) {
+	fuelEmpty := a.gtClient.Telemetry.FuelLevelPercent() <= 0
+	fuelCritical := context.fuelRangeMeters <= context.distanceToPitBox
+	boxthislap := context.fuelRangeMetersSafe <= context.distanceToPitBoxNextLap && context.distanceToPitBox <= context.boxNotifyDistance
+	refuelPreWarn := context.fuelRangeMetersSafe <= context.preWarnNotifyDistance
+	fuelStrategyUpdate := a.fuelRange.IsReady() &&
+		context.remainingLaps > context.fuelRangeLaps &&
+		context.currentLap%int16(a.config.GetFuelStrategyNotifyLaps()) == 0
 
 	switch {
 	case fuelEmpty:
-		message, suppressNotify = a.fuelEmptyMessage(remainingLaps, currentLap)
+		return a.fuelEmptyMessage(context.remainingLaps, context.currentLap)
 	case fuelCritical:
-		message, suppressNotify = a.fuelCriticalMessage(remainingLaps, currentLap)
+		return a.fuelCriticalMessage(context.remainingLaps, context.currentLap)
 	case boxthislap:
-		message, suppressNotify = a.fuelBoxThisLapMessage(currentLap, remainingLaps)
+		return a.fuelBoxThisLapMessage(context.currentLap, context.remainingLaps)
 	case refuelPreWarn:
-		message, suppressNotify = a.fuelBoxPreWarnMessage(preWarnNotifyLap, currentLap, remainingLaps)
+		return a.fuelBoxPreWarnMessage(context.preWarnNotifyLap, context.currentLap, context.remainingLaps)
 	case fuelStrategyUpdate:
-		message, suppressNotify = a.fuelStrategyMessage(fuelRangeLaps, currentLap, remainingLaps)
+		return a.fuelStrategyMessage(context.fuelRangeLaps, context.currentLap, context.remainingLaps)
 	default:
+		return "", true
+	}
+}
+
+// sendFuelWarningMessage sends the fuel warning message via pit radio.
+func (a *App) sendFuelWarningMessage(message string, context *fuelWarningContext) {
+	if a.pitRadio == nil {
 		return
 	}
 
-	if suppressNotify {
-		return
-	}
-
-	if a.pitRadio != nil {
-		err := a.pitRadio.Send(pitradio.Message{
-			MessageType: pitradio.TextMessage,
-			Text:        message,
-			Lang:        a.i18n.LanguageCode(),
-			Accent:      a.config.GetAppAccent(),
-		})
-		if err != nil {
-			a.log.Error().
-				Err(err).
-				Str("message", message).
-				Msg("Send fuel message")
-
-			return
-		}
-
-		a.log.Info().
+	err := a.pitRadio.Send(pitradio.Message{
+		MessageType: pitradio.TextMessage,
+		Text:        message,
+		Lang:        a.i18n.LanguageCode(),
+		Accent:      a.config.GetAppAccent(),
+	})
+	if err != nil {
+		a.log.Error().
+			Err(err).
 			Str("message", message).
-			Int16("lap", a.state.current.lapNumber).
-			Float32("fuel_percent", a.gtClient.Telemetry.FuelLevelPercent()).
-			Float32("fuel_rate", float32(a.fuelRange.UsageRatePerKm())).
-			Float64("lap_meters", circuitLengthMeters).
-			Float64("range_meters", fuelRangeMeters).
-			Float64("range_meters_safe", FuelRangeMetersSafe).
-			Float64("distance_to_pit", distanceToPitBox).
-			Int("lap_progress_remaining", int(lapProgressRemaining*100)).
 			Msg("Send fuel message")
+
+		return
 	}
+
+	a.log.Info().
+		Str("message", message).
+		Int16("lap", a.state.current.lapNumber).
+		Float32("fuel_percent", a.gtClient.Telemetry.FuelLevelPercent()).
+		Float32("fuel_rate", float32(a.fuelRange.UsageRatePerKm())).
+		Float64("lap_meters", context.circuitLengthMeters).
+		Float64("range_meters", context.fuelRangeMeters).
+		Float64("range_meters_safe", context.fuelRangeMetersSafe).
+		Float64("distance_to_pit", context.distanceToPitBox).
+		Int("lap_progress_remaining", int(context.lapProgressRemaining*100)).
+		Msg("Send fuel message")
 }
 
 // fuelEmptyMessage generates a fuel empty message based on estimated fuel range.

@@ -33,13 +33,11 @@ type buttonAutoRepeat struct {
 
 // getAutoRepeatManager returns the singleton auto-repeat manager instance.
 func getAutoRepeatManager() *buttonAutoRepeat {
-	// Use function-level static variables to avoid globals
 	type container struct {
 		instance *buttonAutoRepeat
 		once     sync.Once
 	}
 
-	// This static variable is scoped to the function, not global
 	static := &container{}
 
 	static.once.Do(func() {
@@ -52,56 +50,65 @@ func getAutoRepeatManager() *buttonAutoRepeat {
 // OnGPIOButtonPressed sets up a GPIO pin to call the provided handler function when the button is pressed.
 func OnGPIOButtonPressed(n int, handler func()) {
 	go func() {
-		// Prepare the GPIO pin for input
-		pin := gpioreg.ByName(fmt.Sprintf("GPIO%d", n))
+		pin := setupGPIOPin(n)
+		monitorGPIOButton(pin, handler)
+	}()
+}
 
-		err := pin.In(gpio.PullUp, gpio.BothEdges)
-		if err != nil {
-			log.Fatal(err)
-		}
+// setupGPIOPin prepares a GPIO pin for input with pull-up resistor.
+func setupGPIOPin(n int) gpio.PinIO { //nolint:ireturn // Returning gpio.PinIO interface is appropriate here
+	pin := gpioreg.ByName(fmt.Sprintf("GPIO%d", n))
 
-		// Initialise the stable state and debounce buffer to a button up state
-		lastStableLevel := gpio.High
-		gpioStates := debouncedHigh
+	err := pin.In(gpio.PullUp, gpio.BothEdges)
+	if err != nil {
+		log.Fatal(err)
+	}
 
-		// button edge detection and debounce
-		for {
-			// Wait for any edge (state change)
-			pin.WaitForEdge(-1)
+	return pin
+}
 
-			// Start debounce sampling when edge is detected
-			ticker := time.NewTicker(gpioReadSampleRate)
+// monitorGPIOButton continuously monitors a GPIO pin for button presses with debouncing.
+func monitorGPIOButton(pin gpio.PinIO, handler func()) {
+	lastStableLevel := gpio.High
+	gpioStates := debouncedHigh
 
-		debouncer:
-			for {
-				select {
-				case <-ticker.C:
-					updateGPIOStates(pin, &gpioStates)
+	for {
+		pin.WaitForEdge(-1)
+		processDebounce(pin, &gpioStates, &lastStableLevel, handler)
+	}
+}
 
-					if stableLevel, isStable := getStableGPIOState(gpioStates); isStable {
-						if stableLevel != lastStableLevel {
-							lastStableLevel = stableLevel
+// processDebounce handles the debouncing logic and state transitions.
+func processDebounce(pin gpio.PinIO, gpioStates *uint8, lastStableLevel *gpio.Level, handler func()) {
+	// Start debounce sampling when edge is detected
+	ticker := time.NewTicker(gpioReadSampleRate)
+	defer ticker.Stop()
 
-							// Trigger callback on stable transition to LOW (button pressed with pull-up)
-							if stableLevel == gpio.Low {
-								handler()
-								startAutoRepeat(pin, handler)
-							}
-						}
+	for {
+		select {
+		case <-ticker.C:
+			updateGPIOStates(pin, gpioStates)
 
-						break debouncer
-					}
-				default:
-					// Reset the debounce buffer if another edge occurred during debouncing
-					if pin.WaitForEdge(0) { // Non-blocking
-						gpioStates = 0x00
+			if stableLevel, isStable := getStableGPIOState(*gpioStates); isStable {
+				if stableLevel != *lastStableLevel {
+					*lastStableLevel = stableLevel
+
+					// Trigger callback on stable transition to LOW (button pressed with pull-up)
+					if stableLevel == gpio.Low {
+						handler()
+						startAutoRepeat(pin, handler)
 					}
 				}
-			}
 
-			ticker.Stop()
+				return // Continue monitoring
+			}
+		default:
+			// Reset the debounce buffer if another edge occurred during debouncing
+			if pin.WaitForEdge(0) { // Non-blocking
+				*gpioStates = 0x00
+			}
 		}
-	}()
+	}
 }
 
 // updateGPIOStates reads the pin and updates the GPIO state chronology value.

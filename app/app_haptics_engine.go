@@ -35,37 +35,79 @@ type engineCharacteristics struct {
 
 // generateEngineHaptic creates a wavform to simulate engine vibrations.
 func (a *App) generateEngineHaptic() {
+	if !a.shouldGenerateEngineHaptic() {
+		return
+	}
+
+	rpm := a.getCurrentRPM()
+	if rpm < 0 {
+		return // RPM unavailable due to telemetry timeout
+	}
+
+	engineBuffer, offset, lastPolarity := a.prepareEngineBuffer()
+
+	// No haptics when engine is not running
+	if rpm == 0 {
+		a.synth.OverwriteBuffer("engine", engineBuffer, offset)
+
+		return
+	}
+
+	engineRoughness := a.calculateEngineRoughness(rpm)
+	a.generatePulseWaveform(rpm, engineRoughness, &engineBuffer)
+
+	// Alternative experimental waveform generation - comment out above line and uncomment below to test
+	// a.generateBalancedWaveform(rpm, engineRoughness, &engineBuffer)
+
+	// Engine-specific torque curve waveform - uncomment below to use torque curve based haptics
+	// a.generateTorqueCurveWaveform(rpm, engineRoughness, &engineBuffer)
+
+	a.adjustEngineBufferPolarity(engineBuffer, lastPolarity)
+	a.synth.OverwriteBuffer("engine", engineBuffer, offset)
+}
+
+// shouldGenerateEngineHaptic checks if engine haptic generation should proceed.
+func (a *App) shouldGenerateEngineHaptic() bool {
 	// Engine haptics are silenced
 	if a.config.GetEngineGain() <= config.MinimumGain {
-		return
+		return false
 	}
 
 	// No engine haptics configured
 	if a.vehicle.engine.firingFrequency == 0 {
-		return
+		return false
 	}
 
 	if !a.state.telemetryActive {
-		return
+		return false
 	}
 
-	rpm := float64(a.gtClient.Telemetry.EngineRPM())
+	return true
+}
 
-	// Cache last known RPM and timestamp for fallback when telemetry is unavailable
+// getCurrentRPM gets the current RPM, managing cache for telemetry fallback.
+func (a *App) getCurrentRPM() float64 {
+	rpm := float64(a.gtClient.Telemetry.EngineRPM())
 	currentTime := time.Now()
+
 	switch {
 	case a.state.current.sequenceNumber > a.state.engine.lastSeq:
 		a.state.engine.lastKnownRPM = rpm
 		a.state.engine.lastEventTime = currentTime
 		a.state.engine.lastSeq = a.state.current.sequenceNumber
+
+		return rpm
 	case currentTime.Sub(a.state.engine.lastEventTime) > 1000*time.Millisecond:
-		// stop engine haptics of no telemetry received for 1 second or more
-		return
+		// stop engine haptics if no telemetry received for 1 second or more
+		return -1
 	default:
 		// Use cached RPM if telemetry is unavailable
-		rpm = a.state.engine.lastKnownRPM
+		return a.state.engine.lastKnownRPM
 	}
+}
 
+// prepareEngineBuffer prepares the engine buffer for waveform generation.
+func (a *App) prepareEngineBuffer() ([]float64, int, int) {
 	// Generate engine vibration waveform for 2 frames worth of samples
 	// This provides a small buffer to prevent underruns while keeping latency low
 	sampleRate := float64(a.synth.GetSampleRate())
@@ -83,30 +125,20 @@ func (a *App) generateEngineHaptic() {
 		offset, lastPolarity = synthesizer.FindSampleZeroCrossing(inspectBuffer[lookback:samplesPerFrame])
 	}
 
-	// No haptics when engine is not running
-	if rpm == 0 {
-		a.synth.OverwriteBuffer("engine", engineBuffer, offset)
+	return engineBuffer, offset, lastPolarity
+}
 
+// adjustEngineBufferPolarity adjusts engine buffer polarity to be the inverse of the last pulse.
+func (a *App) adjustEngineBufferPolarity(engineBuffer []float64, lastPolarity int) {
+	lookback := 20
+	if len(engineBuffer) < lookback {
 		return
 	}
 
-	engineRoughness := a.calculateEngineRoughness(rpm)
-
-	a.generatePulseWaveform(rpm, engineRoughness, &engineBuffer)
-
-	// Alternative experimental waveform generation - comment out above line and uncomment below to test
-	// a.generateBalancedWaveform(rpm, engineRoughness, &engineBuffer)
-
-	// Engine-specific torque curve waveform - uncomment below to use torque curve based haptics
-	// a.generateTorqueCurveWaveform(rpm, engineRoughness, &engineBuffer)
-
-	// Adjust engine buffer polarity to be the inverse of the last pulse
 	currentPolarity := synthesizer.SamplePolarity(engineBuffer[0:lookback])
 	if currentPolarity == float64(lastPolarity) {
 		synthesizer.InvertSamplePolarity(&engineBuffer)
 	}
-
-	a.synth.OverwriteBuffer("engine", engineBuffer, offset)
 }
 
 // getEngineCharacteristics retrieves engine characteristics based on a given engien geometry and speed.
@@ -447,26 +479,61 @@ func (a *App) calculateEngineRoughness(rpm float64) float64 {
 
 // generatePulseWaveform creates a vibration pulse waveform based on engine RPM and roughness characteristics.
 func (a *App) generatePulseWaveform(rpm float64, engineRoughness float64, engineBuffer *[]float64) {
+	params := a.calculatePulseWaveformParams(rpm, engineRoughness)
+	a.generatePulseWaveformSamples(params, engineBuffer)
+}
+
+// pulseWaveformParams holds all calculated parameters for pulse waveform generation.
+type pulseWaveformParams struct {
+	rpmPercent      float64
+	throttlePercent float64
+	amplitude       float64
+	sampleRate      float64
+	pulseRate       float64
+	pulseDutyCycle  float64
+}
+
+// calculatePulseWaveformParams calculates all parameters needed for pulse waveform generation.
+func (a *App) calculatePulseWaveformParams(rpm, engineRoughness float64) *pulseWaveformParams {
 	rpmPercent := rpm / float64(a.vehicle.revLimit)
 	rpmPercent, _ = signal.LimitWindow(rpmPercent, 0.0, 1.0)
 
 	throttlePercent := float64(a.gtClient.Telemetry.ThrottleOutputPercent()) / 100
 	throttlePercent, _ = signal.LimitWindow(throttlePercent, 0.0, 1.0)
 
-	var vehicleTypeGain float64
+	vehicleTypeGain := a.getVehicleTypeGainOffset()
+	amplitude := a.calculatePulseAmplitude(throttlePercent, engineRoughness, rpmPercent, vehicleTypeGain)
 
+	sampleRate := float64(a.synth.GetSampleRate())
+	pulseRate := rpm * a.vehicle.engine.firingFrequency * a.vehicle.engine.haptics.PulseScale
+	pulseDutyCycle := a.vehicle.engine.pulseOverlap + (rpmPercent * a.vehicle.engine.pulseOverlap * 2)
+
+	return &pulseWaveformParams{
+		rpmPercent:      rpmPercent,
+		throttlePercent: throttlePercent,
+		amplitude:       amplitude,
+		sampleRate:      sampleRate,
+		pulseRate:       pulseRate,
+		pulseDutyCycle:  pulseDutyCycle,
+	}
+}
+
+// getVehicleTypeGainOffset returns the gain offset based on vehicle type.
+func (a *App) getVehicleTypeGainOffset() float64 {
 	switch a.vehicle.vehicleType {
 	case vehicleTypeRace:
-		vehicleTypeGain = 0.0
+		return 0.0
 	case vehicleTypeTuned:
-		vehicleTypeGain = -3.0
+		return -3.0
 	case vehicleTypeStreet:
 		fallthrough
 	default:
-		vehicleTypeGain = -4.75
+		return -4.75
 	}
+}
 
-	// Determine amplitude by engine type and load characteristics
+// calculatePulseAmplitude calculates the pulse amplitude based on engine characteristics.
+func (a *App) calculatePulseAmplitude(throttlePercent, engineRoughness, rpmPercent, vehicleTypeGain float64) float64 {
 	engineLoadGainIncrease := 1.0
 	engineLoadGain := (1 - throttlePercent) * engineLoadGainIncrease
 	roughness := 1.0 - (engineRoughness * rpmPercent * 0.1)
@@ -474,73 +541,93 @@ func (a *App) generatePulseWaveform(rpm float64, engineRoughness float64, engine
 	amplitude := synthesizer.GainToPowerRatio(gain) * roughness
 	amplitude, _ = signal.LimitWindow(amplitude, 0, 1)
 
-	sampleRate := float64(a.synth.GetSampleRate())
-	pulseRate := rpm * a.vehicle.engine.firingFrequency * a.vehicle.engine.haptics.PulseScale
+	return amplitude
+}
 
-	// Create pulses with increasing width and overlap at higher RPM
-	// Base overlap at idle, up to 2x overlap at high RPM
-	pulseDutyCycle := a.vehicle.engine.pulseOverlap + (rpmPercent * a.vehicle.engine.pulseOverlap * 2)
-
-	// Normal engine pulse generation (rev limiter already checked above)
+// generatePulseWaveformSamples generates the actual pulse waveform samples.
+func (a *App) generatePulseWaveformSamples(params *pulseWaveformParams, engineBuffer *[]float64) {
 	for index := range *engineBuffer {
-		samplesPerPulse := sampleRate / pulseRate
-		pulsePosition := float64(index) / samplesPerPulse
-
-		// Detect pulse trigger point (beginning of each cycle)
-		currentPulseIndex := int(math.Floor(pulsePosition))
-
-		var lastPulseIndex int
-
-		if index > 0 {
-			lastPulsePosition := float64(index-1) / samplesPerPulse
-			lastPulseIndex = int(math.Floor(lastPulsePosition))
-		} else {
-			lastPulseIndex = -1
-		}
-
-		// Check if the wavedorm has crossed into a new pulse cycle
-		pulseTriggered := (index > 0) && (currentPulseIndex != lastPulseIndex)
-
-		// Alternate polarity for each pulse
-		if pulseTriggered {
-			a.state.engine.pulsePolarity = !a.state.engine.pulsePolarity
-		}
-
-		pulseValue := 0.0
-
-		pulsePhase := pulsePosition - math.Floor(pulsePosition) // 0.0 to 1.0 within each pulse cycle
-		if pulsePhase < pulseDutyCycle {
-			// Inside the pulse - create a sharp, distinct pulse
-			pulsePhaseNormalized := pulsePhase / pulseDutyCycle // 0.0 to 1.0 within pulse width
-
-			switch a.vehicle.engine.geometry {
-			case "K":
-				pulseValue = generatePulseWankel(pulsePhaseNormalized, a.vehicle.engine.haptics)
-			case "S":
-				pulseValue = generatePulseTwoStroke(pulsePhaseNormalized, a.vehicle.engine.haptics)
-			default:
-				pulseValue = generatePulseFourStroke(pulsePhaseNormalized, a.vehicle.engine.haptics)
-			}
-
-			// Apply polarity - alternating positive and negative pulses
-			if !a.state.engine.pulsePolarity {
-				pulseValue = -pulseValue
-			}
-
-			// Add per-pulse roughness variation based on engine characteristics
-			secondaryImbalance := 1.0 - a.vehicle.engine.haptics.SecondaryBalance
-			if rpm <= 2400.0 && secondaryImbalance > 0.02 {
-				roughnessPhase := (float64(a.state.current.sequenceNumber) + float64(index)) * 0.0005
-				roughnessVariation := 1.0 + (math.Sin(roughnessPhase) * secondaryImbalance * 0.3)
-				pulseValue *= roughnessVariation
-			}
-		}
-
-		// Ensure the magnitude stays within bounds
-		pulseValue, _ = signal.LimitWindow(pulseValue, -1.0, 1.0)
-
-		(*engineBuffer)[index] = amplitude * pulseValue
+		pulseValue := a.calculatePulseValueAtIndex(index, params)
+		(*engineBuffer)[index] = params.amplitude * pulseValue
 	}
+}
+
+// calculatePulseValueAtIndex calculates the pulse value at a specific sample index.
+func (a *App) calculatePulseValueAtIndex(index int, params *pulseWaveformParams) float64 {
+	samplesPerPulse := params.sampleRate / params.pulseRate
+	pulsePosition := float64(index) / samplesPerPulse
+
+	// Detect pulse trigger point and manage polarity
+	a.updatePulsePolarityIfNeeded(index, samplesPerPulse)
+
+	pulsePhase := pulsePosition - math.Floor(pulsePosition) // 0.0 to 1.0 within each pulse cycle
+	if pulsePhase >= params.pulseDutyCycle {
+		return 0.0 // Outside the pulse
+	}
+
+	// Inside the pulse - create a sharp, distinct pulse
+	pulsePhaseNormalized := pulsePhase / params.pulseDutyCycle // 0.0 to 1.0 within pulse width
+	pulseValue := a.generatePulseValueByGeometry(pulsePhaseNormalized)
+
+	// Apply polarity - alternating positive and negative pulses
+	if !a.state.engine.pulsePolarity {
+		pulseValue = -pulseValue
+	}
+
+	// Add roughness variation
+	pulseValue = a.applyPulseRoughnessVariation(pulseValue, index, params.rpmPercent)
+
+	// Ensure the magnitude stays within bounds
+	pulseValue, _ = signal.LimitWindow(pulseValue, -1.0, 1.0)
+
+	return pulseValue
+}
+
+// updatePulsePolarityIfNeeded updates the pulse polarity when crossing into a new pulse cycle.
+func (a *App) updatePulsePolarityIfNeeded(index int, samplesPerPulse float64) {
+	pulsePosition := float64(index) / samplesPerPulse
+	currentPulseIndex := int(math.Floor(pulsePosition))
+
+	var lastPulseIndex int
+
+	if index > 0 {
+		lastPulsePosition := float64(index-1) / samplesPerPulse
+		lastPulseIndex = int(math.Floor(lastPulsePosition))
+	} else {
+		lastPulseIndex = -1
+	}
+
+	// Check if the waveform has crossed into a new pulse cycle
+	pulseTriggered := (index > 0) && (currentPulseIndex != lastPulseIndex)
+	if pulseTriggered {
+		a.state.engine.pulsePolarity = !a.state.engine.pulsePolarity
+	}
+}
+
+// generatePulseValueByGeometry generates pulse value based on engine geometry.
+func (a *App) generatePulseValueByGeometry(pulsePhaseNormalized float64) float64 {
+	switch a.vehicle.engine.geometry {
+	case "K":
+		return generatePulseWankel(pulsePhaseNormalized, a.vehicle.engine.haptics)
+	case "S":
+		return generatePulseTwoStroke(pulsePhaseNormalized, a.vehicle.engine.haptics)
+	default:
+		return generatePulseFourStroke(pulsePhaseNormalized, a.vehicle.engine.haptics)
+	}
+}
+
+// applyPulseRoughnessVariation applies roughness variation to the pulse value.
+func (a *App) applyPulseRoughnessVariation(pulseValue float64, index int, rpmPercent float64) float64 {
+	secondaryImbalance := 1.0 - a.vehicle.engine.haptics.SecondaryBalance
+	rpm := rpmPercent * float64(a.vehicle.revLimit)
+
+	if rpm <= 2400.0 && secondaryImbalance > 0.02 {
+		roughnessPhase := (float64(a.state.current.sequenceNumber) + float64(index)) * 0.0005
+		roughnessVariation := 1.0 + (math.Sin(roughnessPhase) * secondaryImbalance * 0.3)
+		pulseValue *= roughnessVariation
+	}
+
+	return pulseValue
 }
 
 // generatePulswWankel creates a single pulse value for a Wankel engine based on a given phase value

@@ -170,51 +170,80 @@ func (u *UserInterface) SettingAction(setting string, action string) string {
 }
 
 // UpdateDisplay updates the display based on the current mode and live data.
-// TODO: clean up this logic and make it easier to understand.
 func (u *UserInterface) UpdateDisplay(data LiveData) {
 	switch u.mode {
 	case ScreenModeSettings:
-		if u.displayInactiveTimeoutReached() {
-			if data.TelemetryActive {
-				u.DrawLiveDisplay(data)
-			} else {
-				u.DrawReadyDisplay()
-			}
-		}
+		u.handleSettingsMode(data)
 	case ScreenModeLive:
-		if data.TelemetryActive {
-			u.DrawLiveDisplay(data)
-		} else {
-			u.DrawReadyDisplay()
-		}
+		u.handleLiveMode(data)
 	case ScreenModeStartup:
-		if u.displaySplashTimeoutReached() {
-			if data.TelemetryActive {
-				u.DrawLiveDisplay(data)
-			} else {
-				u.DrawReadyDisplay()
-				u.RegisterActivity()
-			}
-		}
+		u.handleStartupMode(data)
 	case ScreenModeWait:
-		if data.TelemetryActive {
-			u.DrawLiveDisplay(data)
-		} else if u.displayPowerOffTimeoutReached() {
-			u.mode = ScreenModeSleep
-			u.display.Sleep()
-		}
+		u.handleWaitMode(data)
 	case ScreenModeSleep:
-		if data.TelemetryActive {
-			u.DrawLiveDisplay(data)
-		}
+		u.handleSleepMode(data)
 	case ScreenModeOff:
-		u.display.Clear()
-		u.display.Sleep()
+		u.handleOffMode()
 	default:
 		u.log.Warn().Str("state", "invalid").Int("mode", int(u.mode)).Msg("display update")
 	}
 
 	u.displayData = data
+}
+
+// handleSettingsMode handles display updates in settings mode.
+func (u *UserInterface) handleSettingsMode(data LiveData) {
+	if u.displayInactiveTimeoutReached() {
+		u.showActiveOrReadyDisplay(data)
+	}
+}
+
+// handleLiveMode handles display updates in live mode.
+func (u *UserInterface) handleLiveMode(data LiveData) {
+	u.showActiveOrReadyDisplay(data)
+}
+
+// handleStartupMode handles display updates in startup mode.
+func (u *UserInterface) handleStartupMode(data LiveData) {
+	if u.displaySplashTimeoutReached() {
+		u.showActiveOrReadyDisplay(data)
+
+		if !data.TelemetryActive {
+			u.RegisterActivity()
+		}
+	}
+}
+
+// handleWaitMode handles display updates in wait mode.
+func (u *UserInterface) handleWaitMode(data LiveData) {
+	if data.TelemetryActive {
+		u.DrawLiveDisplay(data)
+	} else if u.displayPowerOffTimeoutReached() {
+		u.mode = ScreenModeSleep
+		u.display.Sleep()
+	}
+}
+
+// handleSleepMode handles display updates in sleep mode.
+func (u *UserInterface) handleSleepMode(data LiveData) {
+	if data.TelemetryActive {
+		u.DrawLiveDisplay(data)
+	}
+}
+
+// handleOffMode handles display updates in off mode.
+func (u *UserInterface) handleOffMode() {
+	u.display.Clear()
+	u.display.Sleep()
+}
+
+// showActiveOrReadyDisplay shows live display if telemetry is active, otherwise ready display.
+func (u *UserInterface) showActiveOrReadyDisplay(data LiveData) {
+	if data.TelemetryActive {
+		u.DrawLiveDisplay(data)
+	} else {
+		u.DrawReadyDisplay()
+	}
 }
 
 // displayPowerOffTimeoutReached checks if the power-off timeout has been reached.

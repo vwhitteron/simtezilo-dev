@@ -30,61 +30,74 @@ func GainToAmplitudeRatio(gain float64) float64 {
 // Returns the position of the zero crossing and the polarity just before the crossing (-1 or 1)
 // If no zero point or crossing is found then it returns the first index and polarity of first sample.
 func FindSampleZeroCrossing(samples []float64) (offset int, polarity int) {
-	// Find zero crossing or polarity change within the current buffer content
-	offset = 0
-	polarity = 1
-
-	searchRange := len(samples)
-	if searchRange <= 1 {
-		if searchRange == 1 {
-			if samples[0] < 0 {
-				polarity = -1
-			}
-		}
-
-		return offset, polarity
+	if len(samples) <= 1 {
+		return handleShortSampleArray(samples)
 	}
 
-	// Determine initial polarity from first sample
-	if samples[0] < 0 {
+	polarity = getInitialPolarity(samples[0])
+	offset = searchForZeroCrossing(samples)
+
+	return offset, polarity
+}
+
+// handleShortSampleArray handles arrays with 0 or 1 samples.
+func handleShortSampleArray(samples []float64) (int, int) {
+	offset := 0
+	polarity := 1
+
+	if len(samples) == 1 && samples[0] < 0 {
 		polarity = -1
 	}
 
-	// Look for zero crossings in the current buffer content
+	return offset, polarity
+}
+
+// getInitialPolarity determines the initial polarity from the first sample.
+func getInitialPolarity(firstSample float64) int {
+	if firstSample < 0 {
+		return -1
+	}
+
+	return 1
+}
+
+// searchForZeroCrossing searches for zero crossings in the sample array.
+func searchForZeroCrossing(samples []float64) int {
+	searchRange := len(samples)
+
 	for index := range searchRange - 1 {
-		currentSample := (samples)[index]
-		nextSample := (samples)[index+1]
+		currentSample := samples[index]
+		nextSample := samples[index+1]
 
-		// Check for exact zero
-		if currentSample == 0.0 {
-			offset = index
-			// For exact zero, use polarity from previous sample if available
-			if index > 0 {
-				if samples[index-1] < 0 {
-					polarity = -1
-				} else {
-					polarity = 1
-				}
-			}
-
-			break
+		if offset, found := checkExactZero(samples, index); found {
+			return offset
 		}
 
-		// Check for polarity change (zero crossing)
-		if (currentSample > 0 && nextSample < 0) || (currentSample < 0 && nextSample > 0) {
-			offset = index + 1
-			// Polarity before crossing is the polarity of current sample
-			if currentSample < 0 {
-				polarity = -1
-			} else {
-				polarity = 1
-			}
-
-			break
+		if offset, found := checkPolarityChange(currentSample, nextSample, index); found {
+			return offset
 		}
 	}
 
-	return offset, polarity
+	return 0 // No zero crossing found, return first index
+}
+
+// checkExactZero checks if the current sample is exactly zero.
+func checkExactZero(samples []float64, index int) (int, bool) {
+	if samples[index] == 0.0 {
+		return index, true
+	}
+
+	return 0, false
+}
+
+// checkPolarityChange checks if there's a polarity change between current and next sample.
+func checkPolarityChange(currentSample, nextSample float64, index int) (int, bool) {
+	polarityChanged := (currentSample > 0 && nextSample < 0) || (currentSample < 0 && nextSample > 0)
+	if polarityChanged {
+		return index + 1, true
+	}
+
+	return 0, false
 }
 
 // SamplePolarity returns the polarity of the given samples (-1 negative, 1 positive).
