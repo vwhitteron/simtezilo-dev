@@ -81,7 +81,7 @@ func (a *App) calculateChassisHapticPulseAmplitude() float64 {
 		(a.kinematics.Current.SixDOFRotation.Jerk * snapMultiplier),
 	)
 
-	pulseAmplitude := signal.Exponent(sig, a.config.GetJerkCurve())
+	pulseAmplitude := signal.Exponent(sig, a.config.GetJerkCurve()/1000)
 	pulseAmplitude = signal.Scale(pulseAmplitude, a.config.GetJerkScale())
 
 	p1 := pulseAmplitude
@@ -103,7 +103,7 @@ func (a *App) calculateChassisHapticPulseFrequency() float64 {
 		(a.kinematics.Current.SixDOFRotation.Snap * snapMultiplier),
 	)
 
-	pulseFrequencyScaler := signal.Abs(signal.Exponent(snap, a.config.GetSnapCurve()))
+	pulseFrequencyScaler := signal.Abs(signal.Exponent(snap, a.config.GetSnapCurve()/1000))
 	pulseFrequencyScaler = signal.Scale(pulseFrequencyScaler, a.config.GetSnapScale())
 	pulseFrequencyHz := a.config.GetFrequencyHzRange() * pulseFrequencyScaler
 

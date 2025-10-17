@@ -34,7 +34,7 @@ func (a *App) determineGearShiftMagnitude() float64 {
 
 	gForce := a.kinematics.GetSurgeGforce()
 	gforceMax := a.config.GetTransmissionGforceMax()
-	volumeCurve := a.config.GetTransmissionCurve()
+	volumeCurve := a.config.GetTransmissionCurve() / 1000
 
 	magnitudeMin := synthesizer.GainToPowerRatio(a.transmissionGainMin)
 

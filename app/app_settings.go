@@ -129,7 +129,7 @@ func (a *App) handleForceCurveSetting(action string) string {
 	case "decrease":
 		value = a.config.DecreaseSnapCurve()
 	default:
-		value = int(a.config.GetSnapCurve() * 1000)
+		value = int(a.config.GetSnapCurve())
 	}
 
 	return strconv.Itoa(value)
@@ -200,7 +200,7 @@ func (a *App) handleTransmissionCurveSetting(action string) string {
 	case "decrease":
 		value = a.config.DecreaseTransmissionCurve()
 	default:
-		value = int(a.config.GetTransmissionCurve() * 1000)
+		value = int(a.config.GetTransmissionCurve())
 	}
 
 	return strconv.Itoa(value)
@@ -245,7 +245,7 @@ func (a *App) handleVibrationCurveSetting(action string) string {
 	case "decrease":
 		value = a.config.DecreaseJerkCurve()
 	default:
-		value = int(a.config.GetJerkCurve() * 1000)
+		value = int(a.config.GetJerkCurve())
 	}
 
 	return strconv.Itoa(value)

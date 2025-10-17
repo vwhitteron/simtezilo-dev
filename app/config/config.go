@@ -512,7 +512,7 @@ func (c *Config) GetJerkScale() float64 {
 
 // UpdateJerkScale recalculates the jerk scale factor based on the current jerk curve, scale and maximum.
 func (c *Config) UpdateJerkScale() {
-	exponent := c.GetJerkCurve()
+	exponent := c.GetJerkCurve() / 1000
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -617,7 +617,7 @@ func (c *Config) GetSnapScale() float64 {
 
 // UpdateSnapScale recalculates the snap scale factor based on the current snap curve, scale and maximum.
 func (c *Config) UpdateSnapScale() {
-	exponent := c.GetSnapCurve()
+	exponent := c.GetSnapCurve() / 1000
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
