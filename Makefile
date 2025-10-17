@@ -72,6 +72,11 @@ lint:
 lint/fix:
 	@golangci-lint run --fix
 
+## dist: create a distribution archive
+.PHONY: dist
+dist: build/rpi/v8/64 build/windows/64 build/darwin/silicon
+	@./build/scripts/gen_dist.sh
+
 ## build: build the application for the current platform
 .PHONY: build
 build:
@@ -88,8 +93,8 @@ build/darwin/silicon:
 ## build/darwin/silicon: build the application for Apple Silicon
 .PHONY: build/windows/64
 build/windows/64:
-	GOOS=windows GOARCH=amd64 \
-	go build -ldflags "-X '$(buildmodule)/app.Version=$(buildversion)' -X '$(buildmodule)/app.BuildTime=$(buildtime)'" \
+	GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc \
+	go build -ldflags "-X '$(buildmodule)/app.Version=$(buildversion)' -X '$(buildmodule)/app.BuildTime=$(buildtime)' -s" \
 	-o ./out/simtezilo.exe ./cmd/simtezilo/main.go
 
 ## build/rpi: build the application for Raspberry Pi using ARMHF (any version)
@@ -194,11 +199,6 @@ stop-pyroscope:
 clean:
 	@rm -rf out
 	@go clean -cache
-
-## dist: create a distribution archive
-.PHONY: dist
-dist: build/rpi/v6 build/rpi/v8/64 build/windows/64 build/darwin/silicon
-	@./build/scripts/gen_dist.sh
 
 ## clean: clean up project and return to a pristine state
 .PHONY: distclean

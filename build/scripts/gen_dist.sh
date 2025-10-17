@@ -6,21 +6,22 @@ appname=Simtezilo
 distdir=dist
 appdir=${distdir}/${appname}
 
+rm -rf ./${appdir}
+
 mkdir -p ./${appdir}
 
 ./build/scripts/gen_ver_file.sh
 
-cp out/simtezilo* ${appdir}/ 
-
-cp support/README.md ${appdir}/
-
-cp assets/replay/trial-mountain-porsche-911-rsr-991-17.gtz ${appdir}/replay.gtz
-
-mkdir -p ${appdir}/assets/html
-
-cp assets/html/index.html ${appdir}/assets/html/
-cp assets/html/scichart.js ${appdir}/assets/html/
-
 version=$(awk -F '=' '/BUILDVERSION/{print $2}' ${appdir}/VERSION)
 
-cd ./${distdir} && zip -r ${appname}-${version}.zip ${appname}
+cp out/simtezilo-linux-arm64-8 \
+   out/simtezilo-macos \
+   out/simtezilo.exe \
+   support/README.md \
+   ${appdir}/ 
+
+cp data/replays/trial-mountain-porsche-911-rsr-991-17.gtz ${appdir}/replay.gtz
+
+zipname=$(echo "${appname}-${version}.zip" | tr '[A-Z]' '[a-z]')
+
+cd ./${distdir} && zip -r ${zipname} ${appname}

@@ -16,11 +16,11 @@ RUN apt-get update && apt-get install -y libasound2-dev:armhf gcc-arm-linux-gnue
 
 FROM base AS base-armel
 RUN dpkg --add-architecture armel
-RUN apt-get update && apt-get install -y libasound2-dev:armel gcc-arm-linux-gnueabi libopus-dev
+RUN apt-get update && apt-get install -y libasound2-dev:armel gcc-arm-linux-gnueabi libopus-dev:armel
 
 FROM base AS base-arm64
 RUN dpkg --add-architecture arm64
-RUN apt-get update && apt-get install -y libasound2-dev:arm64 gcc:arm64 libopus-dev
+RUN apt-get update && apt-get install -y libasound2-dev:arm64 gcc:arm64 libopus-dev:arm64
 
 
 
