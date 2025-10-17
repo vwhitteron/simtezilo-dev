@@ -31,6 +31,7 @@ func (a *App) notifyLapTime() {
 	bestLapTime := a.gtClient.Telemetry.BestLaptime()
 
 	// TODO: add config option to notify all laps or best lap only
+	//nolint:gocritic // if-else chain is clearer here
 	if bestLapTime > 0 && a.state.current.lastLapTime <= bestLapTime && a.state.current.lapNumber > 2 {
 		message = fmt.Sprintf("%s. %s",
 			formatDuration(a.state.current.lastLapTime),

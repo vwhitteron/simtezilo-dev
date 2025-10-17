@@ -118,49 +118,7 @@ func New(config Config) (*Discord, error) {
 func (d *Discord) BackgroundTask() {
 	for d.enabled {
 		if !d.isConnected() || d.isDead() {
-			err := d.connect()
-			if err != nil {
-				d.log.Error().
-					Err(err).
-					Str("result", "failure").
-					Msg("voice channel connect")
-
-				time.Sleep(5 * time.Second)
-
-				continue
-			}
-
-			effectSample := d.sampleBank.GetSample("talkPermitTone", codec.OpusSampleRate/2)
-
-			dcaData, err := effectSample.ToDCA()
-			if err != nil {
-				d.log.Error().
-					Err(err).
-					Str("result", "failure").
-					Msg("generate talk permit tone")
-			} else {
-				err = d.Send(pitradio.Message{
-					MessageType: pitradio.AudioMessage,
-					Text:        "talk permit tone",
-					Audio:       dcaData,
-					NoCache:     false,
-				})
-				if err != nil {
-					d.log.Error().
-						Err(err).
-						Str("result", "failure").
-						Msg("send message")
-				}
-			}
-
-			d.log.Info().
-				Str("result", "success").
-				Msg("voice channel connect")
-
-			// connect anti-spam just in case
-			if d.messageGap < 1*time.Second {
-				time.Sleep(1 * time.Second)
-			}
+			d.handleReconnection()
 
 			continue
 		}
@@ -233,6 +191,60 @@ func (d *Discord) connect() error {
 	}
 
 	return nil
+}
+
+// handleReconnection handles the reconnection logic.
+func (d *Discord) handleReconnection() {
+	err := d.connect()
+	if err != nil {
+		d.log.Error().
+			Err(err).
+			Str("result", "failure").
+			Msg("voice channel connect")
+
+		time.Sleep(5 * time.Second)
+
+		return
+	}
+
+	d.sendTalkPermitTone()
+
+	d.log.Info().
+		Str("result", "success").
+		Msg("voice channel connect")
+
+	// connect anti-spam just in case
+	if d.messageGap < 1*time.Second {
+		time.Sleep(1 * time.Second)
+	}
+}
+
+// sendTalkPermitTone sends a talk permit tone after successful connection.
+func (d *Discord) sendTalkPermitTone() {
+	effectSample := d.sampleBank.GetSample("talkPermitTone", codec.OpusSampleRate/2)
+
+	dcaData, err := effectSample.ToDCA()
+	if err != nil {
+		d.log.Error().
+			Err(err).
+			Str("result", "failure").
+			Msg("generate talk permit tone")
+
+		return
+	}
+
+	err = d.Send(pitradio.Message{
+		MessageType: pitradio.AudioMessage,
+		Text:        "talk permit tone",
+		Audio:       dcaData,
+		NoCache:     false,
+	})
+	if err != nil {
+		d.log.Error().
+			Err(err).
+			Str("result", "failure").
+			Msg("send message")
+	}
 }
 
 // MessageDispatcher processes the message queue and sends voice messages to Discord.
@@ -385,48 +397,6 @@ func (d *Discord) voiceChannelIsConnected() bool {
 	return d.voiceConn != nil && d.voiceConn.Status == discordgo.VoiceConnectionStatusReady
 }
 
-// messageToDCA generates DCA audio data for a message.
-// If the audio data is cached, it retrieves it from the cache instead of generating it again.
-func (d *Discord) messageToDCA(message pitradio.Message) (dcaData []byte, err error) {
-	itemID := fmt.Sprintf("%s_%s_%s", message.Lang, message.Accent, message.Text)
-
-	// Try to read from cache first
-	if !message.NoCache {
-		dcaData, err = d.cache.Read(itemID)
-		if err == nil && len(dcaData) > 0 {
-			return dcaData, nil
-		}
-	}
-
-	// Cache miss - generate TTS audio data using TextToSpeech
-	if message.MessageType == pitradio.TextMessage {
-		mp3Data, err := tts.TextToSpeech(message)
-		if err != nil {
-			return []byte{}, fmt.Errorf("generate TTS audio: %w", err)
-		}
-
-		// dcaData, err = TranscodeMP3toDCA(mpegData)
-		dcaData, err = mp3Data.ToDCA()
-		if err != nil {
-			return []byte{}, fmt.Errorf("transcode MP3 to DCA: %w", err)
-		}
-	} else {
-		dcaData = message.Audio
-	}
-
-	// Cache the DCA data for future use
-	if !message.NoCache {
-		err = d.cache.Write(itemID, dcaData)
-		if err != nil {
-			d.log.Error().
-				Err(err).
-				Msgf("cache DCA data")
-		}
-	}
-
-	return dcaData, nil
-}
-
 // voiceMessageSend sends the given DCA audio data to the voice channel.
 func (d *Discord) voiceMessageSend(dcaData []byte) error {
 	if d.voiceConn == nil {
@@ -504,6 +474,48 @@ func (d *Discord) sendVoiceAudio(dca []byte) error {
 
 		d.voiceConn.OpusSend <- buf
 	}
+}
+
+// messageToDCA generates DCA audio data for a message.
+// If the audio data is cached, it retrieves it from the cache instead of generating it again.
+func (d *Discord) messageToDCA(message pitradio.Message) (dcaData []byte, err error) {
+	itemID := fmt.Sprintf("%s_%s_%s", message.Lang, message.Accent, message.Text)
+
+	// Try to read from cache first
+	if !message.NoCache {
+		dcaData, err = d.cache.Read(itemID)
+		if err == nil && len(dcaData) > 0 {
+			return dcaData, nil
+		}
+	}
+
+	// Cache miss - generate TTS audio data using TextToSpeech
+	if message.MessageType == pitradio.TextMessage {
+		mp3Data, err := tts.TextToSpeech(message)
+		if err != nil {
+			return []byte{}, fmt.Errorf("generate TTS audio: %w", err)
+		}
+
+		// dcaData, err = TranscodeMP3toDCA(mpegData)
+		dcaData, err = mp3Data.ToDCA()
+		if err != nil {
+			return []byte{}, fmt.Errorf("transcode MP3 to DCA: %w", err)
+		}
+	} else {
+		dcaData = message.Audio
+	}
+
+	// Cache the DCA data for future use
+	if !message.NoCache {
+		err = d.cache.Write(itemID, dcaData)
+		if err != nil {
+			d.log.Error().
+				Err(err).
+				Msgf("cache DCA data")
+		}
+	}
+
+	return dcaData, nil
 }
 
 // ready updates the watch status of the bot user.

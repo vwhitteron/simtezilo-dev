@@ -336,51 +336,13 @@ func (m *Mixer) MixToMaster(length int) {
 		scaleSamplesPeak(&outSamples, peak)
 	}
 
-	magnitude := 1.0
 	// mix in the engine channel with lower priority
-	channel, ok := m.channels["engine"]
-	if !ok {
-		m.mu.RUnlock()
-		m.log.Error().Str("channel", "engine").Msg("channel not found in mixer")
-		m.mu.RLock()
-	} else if *channel.configGain > config.MinimumGain {
-		engineSamples := channel.Read(length)
-
-		if len(engineSamples) > 0 {
-			outSamplesWork := make([]float64, length)
-
-			// Perform direct mix and get the peak value
-			for index, engineSample := range engineSamples {
-				peak := 0.0
-
-				engineScaled := engineSample
-
-				engineMax := 1.0 - signal.Abs(outSamples[index])
-				if engineSample > engineMax || engineSample < -engineMax {
-					engineScaled = engineMax * engineSample
-				}
-
-				mixed := mixSampleSum(outSamples[index], engineScaled, &peak)
-
-				outSamplesWork[index] = mixed
-
-				if mixed > 1.0 || mixed < -1.0 {
-					m.log.Warn().
-						Float64("sample", outSamples[index]).
-						Float64("engine", engineSample).
-						Float64("engineScaled", engineScaled).
-						Float64("mixed", mixed).
-						Float64("peak", peak).
-						Msg("clipping")
-				}
-			}
-
-			copy(outSamples, outSamplesWork)
-		}
-	}
+	m.mixEngineChannel(outSamples, length)
 
 	masterChannel := m.channels["_master"]
 	m.mu.RUnlock()
+
+	magnitude := 1.0
 
 	masterChannel.Write(outSamples, magnitude, 0, true)
 }
@@ -393,6 +355,62 @@ func (m *Mixer) ClearBuffers() {
 	for _, channel := range m.channels {
 		channel.buffer.Clear()
 	}
+}
+
+// mixEngineChannel mixes the engine channel into the output samples with lower priority.
+func (m *Mixer) mixEngineChannel(outSamples []float64, length int) {
+	channel, ok := m.channels["engine"]
+	if !ok {
+		m.mu.RUnlock()
+		m.log.Error().Str("channel", "engine").Msg("channel not found in mixer")
+		m.mu.RLock()
+
+		return
+	}
+
+	if *channel.configGain <= config.MinimumGain {
+		return
+	}
+
+	engineSamples := channel.Read(length)
+	if len(engineSamples) == 0 {
+		return
+	}
+
+	m.processEngineSamples(outSamples, engineSamples)
+}
+
+// processEngineSamples processes and mixes engine samples into the output.
+func (m *Mixer) processEngineSamples(outSamples, engineSamples []float64) {
+	outSamplesWork := make([]float64, len(outSamples))
+
+	// Perform direct mix and get the peak value
+	for index, engineSample := range engineSamples {
+		peak := 0.0
+
+		engineScaled := engineSample
+
+		engineMax := 1.0 - signal.Abs(outSamples[index])
+		if engineSample > engineMax || engineSample < -engineMax {
+			engineScaled = engineMax * engineSample
+		}
+
+		mixed := mixSampleSum(outSamples[index], engineScaled, &peak)
+
+		outSamplesWork[index] = mixed
+
+		if mixed > 1.0 || mixed < -1.0 {
+			m.log.Warn().
+				Float64("sample", outSamples[index]).
+				Float64("engine", engineSample).
+				Float64("engineScaled", engineScaled).
+				Float64("mixed", mixed).
+				Float64("peak", peak).
+				Msg("clipping")
+		}
+	}
+
+	copy(outSamples, outSamplesWork)
 }
 
 // checkBufferHealth monitors buffer health and logs issues.

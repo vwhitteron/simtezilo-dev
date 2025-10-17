@@ -205,8 +205,30 @@ func getEngineFiringFrequency(geometry string, chambers int) float64 {
 // - Low values (0.0-0.2): Well-aligned engines (e.g., 60° V6 with 120° crank).
 // - High values (0.3-0.8): Misaligned engines (e.g., 90° V6 with 120° crank).
 func calculatePulseOverlap(cylinderAngle, crankPlaneAngle float32, chambers int, geometry string) float64 {
+	// Handle special cases first
+	if overlap := getSpecialCaseOverlap(geometry, chambers); overlap >= 0 {
+		return overlap
+	}
+
+	// Calculate firing offset and normalize it
+	firingOffset := normalizeFiringOffset(cylinderAngle, crankPlaneAngle)
+
+	// Calculate base overlap and alignment factor based on geometry
+	baseOverlap, alignmentFactor := calculateGeometryBasedOverlap(geometry, chambers, firingOffset)
+
+	// Apply chamber count scaling
+	chamberScale := calculateChamberScale(chambers, geometry)
+
+	// Calculate final overlap and clamp to valid range
+	finalOverlap := baseOverlap * alignmentFactor * chamberScale
+
+	return clampOverlap(finalOverlap)
+}
+
+// getSpecialCaseOverlap handles special cases that don't require complex calculations.
+// Returns -1 if not a special case, otherwise returns the overlap value.
+func getSpecialCaseOverlap(geometry string, chambers int) float64 {
 	// Wankel overlap based on rotor count and housing design
-	// Multiple rotors create natural overlap due to phase offset
 	if geometry == "K" {
 		if chambers > 1 {
 			return 0.15 + (float64(chambers-1) * 0.05) // 15-25% overlap for multi-rotor
@@ -220,98 +242,131 @@ func calculatePulseOverlap(cylinderAngle, crankPlaneAngle float32, chambers int,
 		return 0.0
 	}
 
-	// Calculate angle difference between cylinder bank and crank plane
+	return -1
+}
+
+// normalizeFiringOffset calculates and normalizes the firing offset angle.
+func normalizeFiringOffset(cylinderAngle, crankPlaneAngle float32) float64 {
 	firingOffset := math.Abs(float64(cylinderAngle - crankPlaneAngle))
 
-	// Normalize to 0-180 degree range (angles are symmetric)
-	if firingOffset > 180.0 {
-		firingOffset = 360.0 - firingOffset
-	}
+	// Normalize to 0-180 degree range using modulus (angles are symmetric)
+	return math.Mod(firingOffset, 180.0)
+}
 
-	var (
-		baseOverlap     float64
-		alignmentFactor float64
-	)
-
+// calculateGeometryBasedOverlap calculates base overlap and alignment factor based on engine geometry.
+func calculateGeometryBasedOverlap(geometry string, chambers int, firingOffset float64) (baseOverlap, alignmentFactor float64) {
 	switch geometry {
 	case "K": // Wankel engines have unique firing characteristics
-		baseOverlap = 0.2 // Lower base overlap due to rotor design
-
-		// Cylinder count affects overlap potential
-		cylinderFactor := math.Min(float64(chambers)/4.0, 1.0)
-		baseOverlap *= (0.5 + cylinderFactor*0.5)
+		return calculateWankelOverlap(chambers)
 	case "S": // 2-strokes fire every revolution, creating more natural overlap
-		baseOverlap = 0.3 // Higher base overlap due to rapid firing
-
-		// Perfect alignment (0°) or perpendicular (90°) affects overlap differently
-		if firingOffset <= 15.0 {
-			// Near-perfect alignment: minimal overlap due to synchronized firing
-			alignmentFactor = 0.3
-		} else if firingOffset >= 75.0 && firingOffset <= 105.0 {
-			// Perpendicular arrangement: maximum overlap
-			alignmentFactor = 1.0
-		} else {
-			// Progressive alignment: interpolate between min and max
-			if firingOffset < 45.0 {
-				alignmentFactor = 0.3 + ((firingOffset-15.0)/30.0)*0.4 // 0.3 to 0.7
-			} else {
-				alignmentFactor = 0.7 + ((75.0-firingOffset)/30.0)*0.3 // 0.7 to 1.0
-			}
-		}
+		return calculateTwoStrokeOverlap(firingOffset)
 	default: // 4-strokes fire every other revolution, creating different overlap characteristics
-		baseOverlap = 0.2 // Lower base overlap due to spaced firing intervals
-
-		// Cylinder count affects overlap potential
-		cylinderFactor := math.Min(float64(chambers)/8.0, 1.0) // Normalize to 8-cylinder reference
-		baseOverlap *= (0.5 + cylinderFactor*0.5)              // Scale: 50% to 100% of base
-
-		if firingOffset <= 10.0 {
-			// Near-perfect alignment: synchronized banks, minimal overlap
-			alignmentFactor = 0.2
-		} else if firingOffset >= 80.0 && firingOffset <= 100.0 {
-			// Near-perpendicular: optimal staggered firing, maximum overlap
-			alignmentFactor = 1.0
-		} else if firingOffset >= 170.0 {
-			// Near-opposite: boxer-style layout, minimal overlap
-			alignmentFactor = 0.1
-		} else {
-			// Progressive alignment based on angle
-			if firingOffset < 45.0 {
-				// Moving away from alignment toward staggered
-				alignmentFactor = 0.2 + ((firingOffset-10.0)/35.0)*0.5 // 0.2 to 0.7
-			} else if firingOffset < 90.0 {
-				// Approaching optimal stagger
-				alignmentFactor = 0.7 + ((firingOffset-45.0)/35.0)*0.3 // 0.7 to 1.0
-			} else if firingOffset < 135.0 {
-				// Moving past optimal toward opposite
-				alignmentFactor = 1.0 - ((firingOffset-90.0)/45.0)*0.6 // 1.0 to 0.4
-			} else {
-				// Approaching opposite layout
-				alignmentFactor = 0.4 - ((firingOffset-135.0)/35.0)*0.3 // 0.4 to 0.1
-			}
-		}
+		return calculateFourStrokeOverlap(chambers, firingOffset)
 	}
+}
 
-	// Apply chamber count scaling for engines with many cylinders
-	chamberScale := 1.0
-	if chambers >= 8 {
+// calculateWankelOverlap calculates overlap for Wankel engines.
+func calculateWankelOverlap(chambers int) (baseOverlap, alignmentFactor float64) {
+	baseOverlap = 0.2 // Lower base overlap due to rotor design
+
+	// Cylinder count affects overlap potential
+	cylinderFactor := math.Min(float64(chambers)/4.0, 1.0)
+	baseOverlap *= (0.5 + cylinderFactor*0.5)
+	alignmentFactor = 1.0 // Wankels don't use alignment factor in current logic
+
+	return baseOverlap, alignmentFactor
+}
+
+// calculateTwoStrokeOverlap calculates overlap for 2-stroke engines.
+func calculateTwoStrokeOverlap(firingOffset float64) (baseOverlap, alignmentFactor float64) {
+	baseOverlap = 0.3 // Higher base overlap due to rapid firing
+
+	alignmentFactor = getTwoStrokeAlignmentFactor(firingOffset)
+
+	return baseOverlap, alignmentFactor
+}
+
+// getTwoStrokeAlignmentFactor calculates alignment factor for 2-stroke engines based on firing offset.
+func getTwoStrokeAlignmentFactor(firingOffset float64) float64 {
+	switch {
+	case firingOffset <= 15.0:
+		// Near-perfect alignment: minimal overlap due to synchronized firing
+		return 0.3
+	case firingOffset >= 75.0 && firingOffset <= 105.0:
+		// Perpendicular arrangement: maximum overlap
+		return 1.0
+	case firingOffset < 45.0:
+		// Progressive alignment: interpolate between min and max
+		return 0.3 + ((firingOffset-15.0)/30.0)*0.4 // 0.3 to 0.7
+	default:
+		return 0.7 + ((75.0-firingOffset)/30.0)*0.3 // 0.7 to 1.0
+	}
+}
+
+// calculateFourStrokeOverlap calculates overlap for 4-stroke engines.
+func calculateFourStrokeOverlap(chambers int, firingOffset float64) (baseOverlap, alignmentFactor float64) {
+	baseOverlap = 0.2 // Lower base overlap due to spaced firing intervals
+
+	// Cylinder count affects overlap potential
+	cylinderFactor := math.Min(float64(chambers)/8.0, 1.0) // Normalize to 8-cylinder reference
+	baseOverlap *= (0.5 + cylinderFactor*0.5)              // Scale: 50% to 100% of base
+
+	alignmentFactor = getFourStrokeAlignmentFactor(firingOffset)
+
+	return baseOverlap, alignmentFactor
+}
+
+// getFourStrokeAlignmentFactor calculates alignment factor for 4-stroke engines based on firing offset.
+func getFourStrokeAlignmentFactor(firingOffset float64) float64 {
+	switch {
+	case firingOffset <= 10.0:
+		// Near-perfect alignment: synchronized banks, minimal overlap
+		return 0.2
+	case firingOffset >= 80.0 && firingOffset <= 100.0:
+		// Near-perpendicular: optimal staggered firing, maximum overlap
+		return 1.0
+	case firingOffset >= 170.0:
+		// Near-opposite: boxer-style layout, minimal overlap
+		return 0.1
+	case firingOffset < 45.0:
+		// Moving away from alignment toward staggered
+		return 0.2 + ((firingOffset-10.0)/35.0)*0.5 // 0.2 to 0.7
+	case firingOffset < 90.0:
+		// Approaching optimal stagger
+		return 0.7 + ((firingOffset-45.0)/35.0)*0.3 // 0.7 to 1.0
+	case firingOffset < 135.0:
+		// Moving past optimal toward opposite
+		return 1.0 - ((firingOffset-90.0)/45.0)*0.6 // 1.0 to 0.4
+	default:
+		// Approaching opposite layout
+		return 0.4 - ((firingOffset-135.0)/35.0)*0.3 // 0.4 to 0.1
+	}
+}
+
+// calculateChamberScale applies chamber count scaling for engines with many cylinders.
+func calculateChamberScale(chambers int, geometry string) float64 {
+	switch {
+	case chambers >= 8:
 		// More cylinders = more potential for overlap
-		chamberScale = 1.0 + (float64(chambers-8) * 0.05) // +5% per cylinder above 8
-	} else if chambers <= 4 && geometry != "S" {
+		return 1.0 + (float64(chambers-8) * 0.05) // +5% per cylinder above 8
+	case chambers <= 4 && geometry != "S":
 		// Fewer cylinders = less overlap potential (except 2-strokes)
-		chamberScale = 0.6 + (float64(chambers-2) * 0.2) // 60% for 2-cyl, 80% for 3-cyl, 100% for 4-cyl
+		return 0.6 + (float64(chambers-2) * 0.2) // 60% for 2-cyl, 80% for 3-cyl, 100% for 4-cyl
+	default:
+		return 1.0
 	}
+}
 
-	finalOverlap := baseOverlap * alignmentFactor * chamberScale
-
-	// Ensure overlap stays within reasonable bounds
-	if finalOverlap > 0.8 {
-		finalOverlap = 0.8 // Maximum 80% overlap
-	} else if finalOverlap < 0.0 {
-		finalOverlap = 0.0 // No negative overlap
+// clampOverlap ensures overlap stays within reasonable bounds.
+func clampOverlap(overlap float64) float64 {
+	switch {
+	case overlap > 0.8:
+		return 0.8 // Maximum 80% overlap
+	case overlap < 0.0:
+		return 0.0 // No negative overlap
+	default:
+		return overlap
 	}
-
-	return finalOverlap
 }
 
 // calculateEngineRoughness calculates a roughness value based on the engine geometry and a given RPM.

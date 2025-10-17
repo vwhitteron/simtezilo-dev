@@ -6,6 +6,7 @@ func (a *App) checkForNewLap() {
 	last := a.state.last.lapNumber
 	lapDelta := current - last
 
+	//nolint:gocritic // if-else chain is clearer here
 	if lapDelta == 1 {
 		a.lapStartEvents <- a.state.current.sequenceNumber
 
