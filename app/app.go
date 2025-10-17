@@ -521,6 +521,7 @@ func (a *App) mainLoop() {
 	tickerEngineHaptics := time.NewTicker((1000 / engineHapticFrameRate) * time.Millisecond)
 	tickerDisplay := time.NewTicker((1000 / displayFrameRate) * time.Millisecond)
 	tickerPitRadio := time.NewTicker((1000 / pitRadioFrameRate) * time.Millisecond)
+	tickerDebug := time.NewTicker(30 * time.Second)
 
 	a.log.Debug().Str("component", "app").Str("result", "success").Msg("main loop started")
 
@@ -577,6 +578,34 @@ func (a *App) mainLoop() {
 			if a.gtClient.Telemetry.IsOnCircuit() {
 				a.sendPitRadioMessage()
 			}
+
+		case <-tickerDebug.C:
+			if !a.gtClient.Telemetry.IsOnCircuit() {
+				continue
+			}
+
+			a.log.Info().
+				Int("lap", int(a.state.current.lapNumber)).
+				Float32("percent", a.gtClient.Telemetry.FuelLevelPercent()).
+				Int("odometer", int(a.odometer.Read())).
+				Float64("rate", a.fuelRange.UsageRatePerKm()).
+				Int("range_meters", int(a.fuelRange.DistanceMeters())).
+				Int("lap_remaining_pc", int(a.circuit.LapProgressRemaining()*100)).
+				Int("circuit_length", int(a.circuit.LengthMeters())).
+				Msg("debug fuel range")
+
+			averageTemp := (a.gtClient.Telemetry.TyreTemperatureCelsius().FrontLeft +
+				a.gtClient.Telemetry.TyreTemperatureCelsius().FrontRight +
+				a.gtClient.Telemetry.TyreTemperatureCelsius().RearLeft +
+				a.gtClient.Telemetry.TyreTemperatureCelsius().RearRight) / 4
+
+			a.log.Info().
+				Float32("temp_avg", averageTemp).
+				Float32("temp_fl", a.gtClient.Telemetry.TyreTemperatureCelsius().FrontLeft).
+				Float32("temp_fr", a.gtClient.Telemetry.TyreTemperatureCelsius().FrontRight).
+				Float32("temp_rl", a.gtClient.Telemetry.TyreTemperatureCelsius().RearLeft).
+				Float32("temp_rr", a.gtClient.Telemetry.TyreTemperatureCelsius().RearRight).
+				Msg("debug tyre temp")
 		}
 	}
 }

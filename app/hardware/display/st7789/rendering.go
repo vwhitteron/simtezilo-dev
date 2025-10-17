@@ -18,8 +18,9 @@ func (d *Device) FillRectangle(x, y, width, height uint16, colorRGBA color.RGBA)
 	d.SetWindow()
 
 	c565 := RGBAToRGB565(colorRGBA)
-	c1 := uint8(c565)
-	c2 := uint8(c565 >> 8)
+	// Safe conversion from uint16 to uint8 - RGB565 values fit in uint8 when split
+	c1 := byte(c565)      // Low byte
+	c2 := byte(c565 >> 8) // High byte
 
 	data := make([]uint8, d.PixelCount())
 	for rowPixel := range int32(d.pixelColumns) {
@@ -88,7 +89,8 @@ func (d *Device) DrawRAW(img image.Image) {
 			}
 
 			c565 := RGBAToRGB565(rgba)
-			data = append(data, uint8(c565), uint8(c565>>8))
+			// Safe conversion from uint16 to uint8 - RGB565 values fit in uint8 when split
+			data = append(data, byte(c565), byte(c565>>8))
 		}
 	}
 

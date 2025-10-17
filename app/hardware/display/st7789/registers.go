@@ -569,5 +569,7 @@ func DefaultVRHS() []byte {
 
 // verticalScrollOffset returns the parameters for the VSCAD register to set.
 func verticalScrollOffset(offset int) []byte {
-	return []byte{0x00, uint8(offset)}
+	safeOffset := min(max(offset, 0), MaxVsyncScanLines)
+
+	return []byte{0x00, uint8(safeOffset)} //nolint:gosec // offset is limited to max scan lines
 }

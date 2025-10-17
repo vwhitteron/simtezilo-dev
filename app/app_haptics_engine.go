@@ -475,7 +475,7 @@ func (a *App) generatePulseWaveform(rpm float64, engineRoughness float64, engine
 			// Add per-pulse roughness variation based on engine characteristics
 			secondaryImbalance := 1.0 - a.vehicle.engine.haptics.SecondaryBalance
 			if rpm <= 2400.0 && secondaryImbalance > 0.02 {
-				roughnessPhase := float64(a.state.current.sequenceNumber+uint32(index)) * 0.0005
+				roughnessPhase := (float64(a.state.current.sequenceNumber) + float64(index)) * 0.0005
 				roughnessVariation := 1.0 + (math.Sin(roughnessPhase) * secondaryImbalance * 0.3)
 				pulseValue *= roughnessVariation
 			}
