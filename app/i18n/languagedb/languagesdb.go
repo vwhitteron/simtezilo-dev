@@ -148,6 +148,8 @@ func (l *LanguageDB) ValueFont(code string) font.Font {
 func (l *LanguageDB) getFont(variation string, code string) font.Font {
 	var truetypeFont *truetype.Font
 
+	var fontSize float64
+
 	// Attempt to load the requested font
 	if language, ok := l.db[code]; ok {
 		var err error
@@ -157,12 +159,16 @@ func (l *LanguageDB) getFont(variation string, code string) font.Font {
 		switch strings.ToLower(variation) {
 		case "regular":
 			fontName = language.Fonts["Regular"].File
+			fontSize = language.Fonts["Regular"].Size
 		case "italic":
 			fontName = language.Fonts["Italic"].File
+			fontSize = language.Fonts["Italic"].Size
 		case "value":
 			fontName = language.Fonts["Value"].File
+			fontSize = language.Fonts["Value"].Size
 		default:
 			fontName = language.Fonts["Regular"].File
+			fontSize = language.Fonts["Regular"].Size
 
 			l.log.Warn().
 				Str("variation", variation).
@@ -186,7 +192,7 @@ func (l *LanguageDB) getFont(variation string, code string) font.Font {
 
 	return font.Font{
 		Font:  truetypeFont,
-		Scale: 1.0,
+		Scale: fontSize,
 	}
 }
 
