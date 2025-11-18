@@ -12,6 +12,8 @@ import (
 type tyreState struct {
 	lastTempNotifyCondition tyres.Condition // Last notified tyre temperature condition
 	lastTempNotifyTime      time.Time       // Last time tyre temperature notification was sent
+	pendingCondition        tyres.Condition // Pending condition that hasn't been stabilized yet
+	conditionChangeTime     time.Time       // Time when the condition first changed to pendingCondition
 }
 
 func (a *App) updateTyreTemperature() {
@@ -27,74 +29,116 @@ func (a *App) updateTyreTemperature() {
 // notifyTyreTemperature sends tyre temperature notifications over the pit radio.
 // Reports: all-tyres conditions (optimal/hot/cold) or individual/axle hot tyres only.
 func (a *App) notifyTyreTemperature() {
-	if !a.config.GetTyreMonitoringEnabled() {
-		return
-	}
-
-	if a.pitRadioState == nil {
-		return
-	}
-
-	// Don't send tyre temp notifications too frequently (minimum 30 seconds between notifications)
-	if time.Since(a.pitRadioState.tyreState.lastTempNotifyTime) < 30*time.Second {
-		return
-	}
-
-	tyreTemps := a.gtClient.Telemetry.TyreTemperatureCelsius()
-	if a.tyres == nil {
-		return
-	}
-
-	if len(a.tyres.PositionsInCondition(tyres.ConditionInvalid)) > 0 {
+	if a.tyreNotificationsDisabled() {
 		return
 	}
 
 	tyreCondition := a.tyres.GeneralCondition()
 
-	// Only send notification if the state has changed
-	if tyreCondition == a.pitRadioState.tyreState.lastTempNotifyCondition {
+	if !a.shouldSendTyreNotification(tyreCondition) {
 		return
 	}
 
+	a.sendTyreTemperatureMessage(tyreCondition)
+}
+
+// tyreNotificationsDisabled validates preconditions for tyre temperature monitoring.
+func (a *App) tyreNotificationsDisabled() bool {
+	if !a.config.GetTyreMonitoringEnabled() {
+		return true
+	}
+
+	if a.pitRadio == nil || a.pitRadioState == nil {
+		return true
+	}
+
+	if a.tyres == nil {
+		return true
+	}
+
+	if len(a.tyres.PositionsInCondition(tyres.ConditionInvalid)) > 0 {
+		return true
+	}
+
+	return false
+}
+
+// shouldSendTyreNotification checks if a tyre notification should be sent based on
+// stabilization period, state changes, and rate limiting.
+func (a *App) shouldSendTyreNotification(tyreCondition tyres.Condition) bool {
+	// Track state changes with stabilization period
+	if tyreCondition != a.pitRadioState.tyreState.pendingCondition {
+		a.pitRadioState.tyreState.pendingCondition = tyreCondition
+		a.pitRadioState.tyreState.conditionChangeTime = time.Now()
+
+		return false
+	}
+
+	// No radio message if the state hasn't stabilized for at least 5 seconds
+	if time.Since(a.pitRadioState.tyreState.conditionChangeTime) < tyreConditionStablisationTime {
+		return false
+	}
+
+	// Only send notification if the stabilized state is different from the last notified state
+	if tyreCondition == a.pitRadioState.tyreState.lastTempNotifyCondition {
+		return false
+	}
+
+	// Don't send tyre temp notifications too frequently (minimum 30 seconds between notifications)
+	if time.Since(a.pitRadioState.tyreState.lastTempNotifyTime) < tyreInterNotifyGap {
+		return false
+	}
+
+	return true
+}
+
+// sendTyreTemperatureMessage generates and sends the tyre temperature message,
+// updating state and logging the result.
+func (a *App) sendTyreTemperatureMessage(tyreCondition tyres.Condition) {
 	message := a.generateTyreConditionMessage(a.tyres)
 	if message == "" {
-		return // No notification needed
+		return
 	}
 
-	if a.pitRadio != nil {
-		err := a.pitRadio.Send(pitradio.Message{
-			MessageType: pitradio.TextMessage,
-			Text:        message,
-			Lang:        a.i18n.LanguageCode(),
-			Accent:      a.config.GetAppAccent(),
-		})
-		if err != nil {
-			a.log.Error().
-				Err(err).
-				Str("message", message).
-				Msg("Send tyre temp message")
-
-			return
-		}
-
-		a.pitRadioState.tyreState.lastTempNotifyCondition = tyreCondition
-		a.pitRadioState.tyreState.lastTempNotifyTime = time.Now()
-
-		a.log.Info().
+	err := a.pitRadio.Send(pitradio.Message{
+		MessageType: pitradio.TextMessage,
+		Text:        message,
+		Lang:        a.i18n.LanguageCode(),
+		Accent:      a.config.GetAppAccent(),
+	})
+	if err != nil {
+		a.log.Error().
+			Err(err).
 			Str("message", message).
-			Int16("lap", a.state.current.lapNumber).
-			Str("condition", tyreCondition.String()).
-			Str("cond_fl", a.tyres.ConditionAtPosition(tyres.PositionFrontLeft).String()).
-			Str("cond_fr", a.tyres.ConditionAtPosition(tyres.PositionFrontRight).String()).
-			Str("cond_rl", a.tyres.ConditionAtPosition(tyres.PositionRearLeft).String()).
-			Str("cond_rr", a.tyres.ConditionAtPosition(tyres.PositionRearRight).String()).
-			Float32("temp_avg", (tyreTemps.FrontLeft+tyreTemps.FrontRight+tyreTemps.RearLeft+tyreTemps.RearRight)/4).
-			Float32("temp_fl", a.tyres.TemperatureAtPosition(tyres.PositionFrontLeft)).
-			Float32("temp_fr", a.tyres.TemperatureAtPosition(tyres.PositionFrontRight)).
-			Float32("temp_rl", a.tyres.TemperatureAtPosition(tyres.PositionRearLeft)).
-			Float32("temp_rr", a.tyres.TemperatureAtPosition(tyres.PositionRearRight)).
 			Msg("Send tyre temp message")
+
+		return
 	}
+
+	a.pitRadioState.tyreState.lastTempNotifyCondition = tyreCondition
+	a.pitRadioState.tyreState.lastTempNotifyTime = time.Now()
+
+	a.logTyreTemperatureMessage(message, tyreCondition)
+}
+
+// logTyreTemperatureMessage logs detailed tyre temperature information.
+func (a *App) logTyreTemperatureMessage(message string, tyreCondition tyres.Condition) {
+	tyreTemps := a.gtClient.Telemetry.TyreTemperatureCelsius()
+
+	a.log.Info().
+		Str("message", message).
+		Int16("lap", a.state.current.lapNumber).
+		Str("condition", tyreCondition.String()).
+		Str("cond_fl", a.tyres.ConditionAtPosition(tyres.PositionFrontLeft).String()).
+		Str("cond_fr", a.tyres.ConditionAtPosition(tyres.PositionFrontRight).String()).
+		Str("cond_rl", a.tyres.ConditionAtPosition(tyres.PositionRearLeft).String()).
+		Str("cond_rr", a.tyres.ConditionAtPosition(tyres.PositionRearRight).String()).
+		Float32("temp_avg", (tyreTemps.FrontLeft+tyreTemps.FrontRight+tyreTemps.RearLeft+tyreTemps.RearRight)/4).
+		Float32("temp_fl", a.tyres.TemperatureAtPosition(tyres.PositionFrontLeft)).
+		Float32("temp_fr", a.tyres.TemperatureAtPosition(tyres.PositionFrontRight)).
+		Float32("temp_rl", a.tyres.TemperatureAtPosition(tyres.PositionRearLeft)).
+		Float32("temp_rr", a.tyres.TemperatureAtPosition(tyres.PositionRearRight)).
+		Msg("Send tyre temp message")
 }
 
 // generateTyreConditionMessage generates tyre condition messages based on various combinations of tyre state.
