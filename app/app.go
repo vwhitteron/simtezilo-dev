@@ -27,6 +27,7 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/tyres"
 	"github.com/vwhitteron/simtezilo-dev/app/ui"
 	"github.com/vwhitteron/simtezilo-dev/app/ui/webui"
+	"github.com/vwhitteron/simtezilo-dev/app/vehicle"
 	gttelemetry "github.com/zetetos/gt-telemetry"
 	"github.com/zetetos/gt-telemetry/pkg/models"
 )
@@ -39,22 +40,6 @@ const (
 	gameStateRaceMenu
 	gameStateOnCircuit
 )
-
-type vehicleTypeName string
-
-const (
-	vehicleTypeStreet vehicleTypeName = "street"
-	vehicleTypeTuned  vehicleTypeName = "tuned"
-	vehicleTypeRace   vehicleTypeName = "race"
-)
-
-// vehicleRecord holds static vehicle data loaded from the GT vehicle database.
-type vehicleRecord struct {
-	ID          uint32                // Unique vehicle ID from telemetry
-	vehicleType vehicleTypeName       // Vehicle type
-	engine      engineCharacteristics // Engine characteristics
-	revLimit    uint16                // Engine rev limit in RPM
-}
 
 // raceState holds transient race data for haptic generation and pit radio notifications.
 type raceState struct {
@@ -108,10 +93,10 @@ type App struct {
 
 	transmissionGainMin float64 // Minimum transmission gain based on vehicle type
 
-	state         appState       // Application state tracker
-	pitRadioState *pitRadioState // Current pit radio state
-	vehicle       vehicleRecord  // Current vehicle information
-	tyres         *tyres.Tyre    // Tyre monitoring
+	state         appState                // Application state tracker
+	pitRadioState *pitRadioState          // Current pit radio state
+	vehicle       vehicle.Characteristics // Current vehicle information
+	tyres         *tyres.Tyre             // Tyre monitoring
 
 	telemetryChartFeed chan map[string]float32 // Channel for sending telemetry data to web UI
 	webUI              *webui.WebUI            // Web UI server and handler
@@ -808,7 +793,7 @@ func (a *App) handleGameStateChange() {
 	case a.state.current.gameState == gameStateMainMenu:
 		a.disableHaptics("main menu")
 		a.resetPitRadioState()
-		a.vehicle = vehicleRecord{}
+		a.vehicle = vehicle.Characteristics{}
 		a.odometer.Reset()
 		a.fuelRange.Reset()
 		a.circuit.Reset()
@@ -832,7 +817,7 @@ func (a *App) handleGameStateChange() {
 
 	case a.liveFlagHasChanged():
 		a.resetPitRadioState()
-		a.vehicle = vehicleRecord{}
+		a.vehicle = vehicle.Characteristics{}
 		a.fuelRange.ResetEstimate()
 		a.fuelRange.SetLive(a.state.current.isLive)
 		a.circuit.Reset()
@@ -871,17 +856,26 @@ func (a *App) handleVehicleChange() {
 
 // updateVehicle updates the vehicle characteristics from the current telemetry vehicle ID.
 func (a *App) updateVehicle() {
-	vehicleType := a.determineVehicleType()
+	vehicleType := vehicle.DetermineVehicleType(a.gtClient.Telemetry.VehicleType())
 	engine := a.getEngineData()
 	revLimit := a.gtClient.Telemetry.EngineRPMLight().Max
 
 	a.adjustEngineHaptics(&engine, revLimit)
 
-	a.vehicle = vehicleRecord{
+	wheelbase := float32(2.516)  // TODO: get from vehicle DB
+	wheeltrack := float32(2.043) // TODO: get from vehicle DB
+
+	a.vehicle = vehicle.Characteristics{
 		ID:          a.gtClient.Telemetry.VehicleID(),
-		vehicleType: vehicleType,
-		engine:      engine,
-		revLimit:    a.normalizeRevLimit(revLimit),
+		VehicleType: vehicleType,
+		Engine:      engine,
+		RevLimit:    a.normalizeRevLimit(revLimit),
+		Dimensions: vehicle.Dimensions{
+			WheelbaseMeters:    wheelbase,
+			TrackWidthMeters:   wheeltrack,
+			LongitudinalRadius: wheelbase / 2,
+			TransverseRadius:   wheeltrack / 2,
+		},
 	}
 
 	a.setTransmissionGain(vehicleType)
@@ -889,22 +883,8 @@ func (a *App) updateVehicle() {
 	a.logVehicleUpdate(engine, revLimit)
 }
 
-// determineVehicleType determines the vehicle type from telemetry data.
-func (a *App) determineVehicleType() vehicleTypeName {
-	switch a.gtClient.Telemetry.VehicleType() {
-	case string(vehicleTypeStreet):
-		return vehicleTypeStreet
-	case string(vehicleTypeTuned):
-		return vehicleTypeTuned
-	case string(vehicleTypeRace):
-		return vehicleTypeRace
-	default:
-		return vehicleTypeStreet
-	}
-}
-
 // getEngineData retrieves and processes engine characteristics.
-func (a *App) getEngineData() engineCharacteristics {
+func (a *App) getEngineData() vehicle.EngineCharacteristics {
 	engineLayout := a.gtClient.Telemetry.VehicleEngineLayout()
 	bankAngle := a.gtClient.Telemetry.VehicleEngineBankAngle()
 	crankPlaneAngle := a.gtClient.Telemetry.VehicleEngineCrankPlaneAngle()
@@ -924,12 +904,12 @@ func (a *App) getEngineData() engineCharacteristics {
 }
 
 // adjustEngineHaptics adjusts engine haptics based on pulse rate limits.
-func (a *App) adjustEngineHaptics(engine *engineCharacteristics, revLimit uint16) {
-	peakNaturalPulseRate := float64(revLimit) * engine.firingFrequency
-	peakPulseRate := peakNaturalPulseRate * engine.haptics.PulseScale
+func (a *App) adjustEngineHaptics(engine *vehicle.EngineCharacteristics, revLimit uint16) {
+	peakNaturalPulseRate := float64(revLimit) * engine.FiringFrequency
+	peakPulseRate := peakNaturalPulseRate * engine.Haptics.PulseScale
 
 	if peakPulseRate > maxPulseRate {
-		engine.haptics.PulseScale = (maxPulseRate / peakPulseRate) * engine.haptics.PulseScale
+		engine.Haptics.PulseScale = (maxPulseRate / peakPulseRate) * engine.Haptics.PulseScale
 	}
 }
 
@@ -943,11 +923,11 @@ func (a *App) normalizeRevLimit(revLimit uint16) uint16 {
 }
 
 // setTransmissionGain sets the transmission gain based on vehicle type.
-func (a *App) setTransmissionGain(vehicleType vehicleTypeName) {
+func (a *App) setTransmissionGain(vehicleType vehicle.TypeName) {
 	switch vehicleType {
-	case vehicleTypeRace, vehicleTypeTuned:
+	case vehicle.TypeRace, vehicle.TypeTuned:
 		a.transmissionGainMin = a.config.GetTransmissionGain() + a.config.GetTransmissionGainMinRace()
-	case vehicleTypeStreet:
+	case vehicle.TypeStreet:
 		fallthrough
 	default:
 		a.transmissionGainMin = a.config.GetTransmissionGain() + a.config.GetTransmissionGainMinStreet()
@@ -962,30 +942,29 @@ func (a *App) resetVehicleState() {
 }
 
 // logVehicleUpdate logs vehicle update information.
-func (a *App) logVehicleUpdate(engine engineCharacteristics, revLimit uint16) {
+func (a *App) logVehicleUpdate(engine vehicle.EngineCharacteristics, revLimit uint16) {
 	bankAngle := a.gtClient.Telemetry.VehicleEngineBankAngle()
 	crankPlaneAngle := a.gtClient.Telemetry.VehicleEngineCrankPlaneAngle()
-	peakNaturalPulseRate := float64(revLimit) * engine.firingFrequency
-	peakPulseRate := peakNaturalPulseRate * engine.haptics.PulseScale
-
+	peakNaturalPulseRate := float64(revLimit) * engine.FiringFrequency
+	peakPulseRate := peakNaturalPulseRate * engine.Haptics.PulseScale
 	a.log.Debug().
-		Str("engine_layout", a.vehicle.engine.layout).
-		Str("resolved_engine", a.vehicle.engine.dbEntry).
+		Str("engine_layout", a.vehicle.Engine.Layout).
+		Str("resolved_engine", a.vehicle.Engine.DBEntry).
 		Float32("crank_plane_angle", crankPlaneAngle).
 		Float32("cylinder_bank_angle", bankAngle).
-		Uint16("rev_limit", a.vehicle.revLimit).
+		Uint16("rev_limit", a.vehicle.RevLimit).
 		Float64("peak_natural_pulse_rate", peakNaturalPulseRate).
-		Float64("pulse_scale", a.vehicle.engine.haptics.PulseScale).
+		Float64("pulse_scale", a.vehicle.Engine.Haptics.PulseScale).
 		Float64("peak_pulse_rate", peakPulseRate).
-		Float64("pulse_overlap", a.vehicle.engine.pulseOverlap).
+		Float64("pulse_overlap", a.vehicle.Engine.PulseOverlap).
 		Msg("engine characteristics")
 
 	a.log.Info().
 		Uint32("ID", a.vehicle.ID).
 		Str("manufacturer", a.gtClient.Telemetry.VehicleManufacturer()).
 		Str("model", a.gtClient.Telemetry.VehicleModel()).
-		Str("type", string(a.vehicle.vehicleType)).
-		Str("engine", a.vehicle.engine.dbEntry).
+		Str("type", string(a.vehicle.VehicleType)).
+		Str("engine", a.vehicle.Engine.DBEntry).
 		Msg("vehicle update")
 }
 

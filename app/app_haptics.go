@@ -65,7 +65,7 @@ func (a *App) generateForceHaptics() {
 
 	windowSeconds := (float64(a.state.current.sequenceDelta) / frameRate)
 
-	a.kinematics.Update(windowSeconds, a.gtClient)
+	a.kinematics.Update(windowSeconds, a.vehicle.Dimensions, a.gtClient)
 
 	if a.gearHasChanged() {
 		a.playGearShiftHaptic()

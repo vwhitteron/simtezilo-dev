@@ -5,6 +5,7 @@ import (
 
 	"github.com/vwhitteron/simtezilo-dev/app/signal"
 	"github.com/vwhitteron/simtezilo-dev/app/synthesizer"
+	"github.com/vwhitteron/simtezilo-dev/app/vehicle"
 )
 
 // generateTorqueCurveWaveform creates engine haptic waveforms based on engine-specific torque curves
@@ -36,12 +37,11 @@ type torqueWaveformParams struct {
 // calculateTorqueWaveformParams calculates all parameters needed for torque waveform generation.
 func (a *App) calculateTorqueWaveformParams(rpm float64) *torqueWaveformParams {
 	sampleRate := float64(a.synth.GetSampleRate())
-	rpmPercent := rpm / float64(a.vehicle.revLimit)
+	rpmPercent := rpm / float64(a.vehicle.RevLimit)
 	rpmNormalized, _ := signal.LimitWindow(rpmPercent, 0.0, 1.0)
 
 	// Base firing frequency from engine characteristics
-	baseFiringRate := rpm * a.vehicle.engine.firingFrequency * a.vehicle.engine.haptics.PulseScale
-
+	baseFiringRate := rpm * a.vehicle.Engine.FiringFrequency * a.vehicle.Engine.Haptics.PulseScale
 	frequencies := a.calculateTorqueFrequencies(baseFiringRate)
 	amplitudes := a.calculateTorqueAmplitudes(rpmNormalized)
 
@@ -72,7 +72,7 @@ type torqueFrequencies struct {
 func (a *App) calculateTorqueFrequencies(baseFiringRate float64) torqueFrequencies {
 	var secondary, tertiary float64
 
-	switch a.vehicle.engine.layout {
+	switch a.vehicle.Engine.Layout {
 	case "I":
 		// Inline engines: Secondary balance affects reciprocating mass imbalance
 		secondary = baseFiringRate * 2.0
@@ -112,7 +112,7 @@ func (a *App) calculateTorqueFrequencies(baseFiringRate float64) torqueFrequenci
 
 // calculateVEngineFrequencies calculates frequency components for V engines.
 func (a *App) calculateVEngineFrequencies(baseFiringRate float64) (float64, float64) {
-	switch a.vehicle.engine.chambers {
+	switch a.vehicle.Engine.Chambers {
 	case 8:
 		// V8 with typical 90° bank angle
 		return baseFiringRate * 1.5, baseFiringRate * 3.0
@@ -144,13 +144,13 @@ func (a *App) calculateTorqueAmplitudes(rpmNormalized float64) torqueAmplitudes 
 	baseAmplitude := 0.6 + (throttlePercent * amplitudeScale)
 
 	rpmPowerRatio := synthesizer.GainToPowerRatio(-1.0 * rpmNormalized)
-	adjust := synthesizer.GainToPowerRatio(a.vehicle.engine.haptics.Gain + gainOffset)
+	adjust := synthesizer.GainToPowerRatio(a.vehicle.Engine.Haptics.Gain + gainOffset)
 
 	// Calculate component amplitudes
-	primaryAmplitude := baseAmplitude * (2.0 - a.vehicle.engine.haptics.PrimaryBalance) * rpmPowerRatio
-	secondaryAmplitude := baseAmplitude * 0.6 * (1.5 - a.vehicle.engine.haptics.SecondaryBalance) * rpmPowerRatio
-	tertiaryAmplitude := baseAmplitude * 0.3 * (2.0 - a.vehicle.engine.haptics.PrimaryBalance) *
-		(1.5 - a.vehicle.engine.haptics.SecondaryBalance) * rpmPowerRatio
+	primaryAmplitude := baseAmplitude * (2.0 - a.vehicle.Engine.Haptics.PrimaryBalance) * rpmPowerRatio
+	secondaryAmplitude := baseAmplitude * 0.6 * (1.5 - a.vehicle.Engine.Haptics.SecondaryBalance) * rpmPowerRatio
+	tertiaryAmplitude := baseAmplitude * 0.3 * (2.0 - a.vehicle.Engine.Haptics.PrimaryBalance) *
+		(1.5 - a.vehicle.Engine.Haptics.SecondaryBalance) * rpmPowerRatio
 
 	return torqueAmplitudes{
 		base:          baseAmplitude,
@@ -164,12 +164,12 @@ func (a *App) calculateTorqueAmplitudes(rpmNormalized float64) torqueAmplitudes 
 
 // getVehicleTypeAdjustments returns gain offset and amplitude scale based on vehicle type.
 func (a *App) getVehicleTypeAdjustments() (float64, float64) {
-	switch a.vehicle.vehicleType {
-	case vehicleTypeRace:
+	switch a.vehicle.VehicleType {
+	case vehicle.TypeRace:
 		return 0.0, 0.4
-	case vehicleTypeTuned:
+	case vehicle.TypeTuned:
 		return -3.0, 0.25
-	case vehicleTypeStreet:
+	case vehicle.TypeStreet:
 		fallthrough
 	default:
 		return -4.75, 0.02
@@ -217,7 +217,7 @@ func (a *App) applyTorqueModulations(combinedTorque, engineRoughness float64, pa
 
 // applyEngineSpecificModulations applies engine geometry-specific modulations.
 func (a *App) applyEngineSpecificModulations(combinedTorque float64, params *torqueWaveformParams, timePosition float64) float64 {
-	switch a.vehicle.engine.geometry {
+	switch a.vehicle.Engine.Geometry {
 	case "K":
 		// Wankel rotary: Smoother torque curve with unique characteristics
 		combinedTorque *= 0.8

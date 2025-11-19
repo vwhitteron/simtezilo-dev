@@ -11,6 +11,7 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/haptics"
 	"github.com/vwhitteron/simtezilo-dev/app/signal"
 	"github.com/vwhitteron/simtezilo-dev/app/synthesizer"
+	"github.com/vwhitteron/simtezilo-dev/app/vehicle"
 )
 
 const maxPulseRate float64 = 300.0 // Max pulse rate for engine haptics
@@ -20,17 +21,6 @@ type engineState struct {
 	lastKnownRPM  float64   // Cache last known RPM for fallback
 	lastEventTime time.Time // Timestamp of last engine haptic event
 	pulsePolarity bool      // Alternating polarity for engine pulses
-}
-
-type engineCharacteristics struct {
-	layout          string
-	dbEntry         string
-	geometry        string
-	chambers        int
-	revLimit        uint16
-	firingFrequency float64
-	pulseOverlap    float64 // Calculated overlap factor based on cylinder/crank alignment
-	haptics         *haptics.EngineProfile
 }
 
 // generateEngineHaptic creates a wavform to simulate engine vibrations.
@@ -74,7 +64,7 @@ func (a *App) shouldGenerateEngineHaptic() bool {
 	}
 
 	// No engine haptics configured
-	if a.vehicle.engine.firingFrequency == 0 {
+	if a.vehicle.Engine.FiringFrequency == 0 {
 		return false
 	}
 
@@ -141,16 +131,16 @@ func (a *App) adjustEngineBufferPolarity(engineBuffer []float64, lastPolarity in
 	}
 }
 
-// getEngineCharacteristics retrieves engine characteristics based on a given engien geometry and speed.
+// getEngineCharacteristics retrieves engine characteristics based on a given engine geometry and speed.
 func (a *App) getEngineCharacteristics(
 	engineLayout string,
 	cylinderAngle float32,
 	crankPlaneAngle float32,
 	revLimit uint16,
-) (engineCharacteristics, error) {
+) (vehicle.EngineCharacteristics, error) {
 	if engineLayout == "" {
-		return engineCharacteristics{
-			haptics: &haptics.EngineProfile{},
+		return vehicle.EngineCharacteristics{
+			Haptics: &haptics.EngineProfile{},
 		}, errors.New("engine layout not provided")
 	}
 
@@ -158,18 +148,18 @@ func (a *App) getEngineCharacteristics(
 
 	chambers, err := strconv.Atoi(engineLayout[1:]) // Get remaining characters for chamber count
 	if err != nil {
-		return engineCharacteristics{}, err // Return error if conversion fails
+		return vehicle.EngineCharacteristics{}, err // Return error if conversion fails
 	}
 
-	characteristics := engineCharacteristics{
-		layout:          engineLayout,
-		dbEntry:         "",
-		geometry:        geometryCode,
-		chambers:        chambers,
-		revLimit:        revLimit,
-		firingFrequency: getEngineFiringFrequency(geometryCode, chambers),
-		pulseOverlap:    0.5 - calculatePulseOverlap(cylinderAngle, crankPlaneAngle, chambers, geometryCode),
-		haptics: &haptics.EngineProfile{
+	characteristics := vehicle.EngineCharacteristics{
+		Layout:          engineLayout,
+		DBEntry:         "",
+		Geometry:        geometryCode,
+		Chambers:        chambers,
+		RevLimit:        revLimit,
+		FiringFrequency: getEngineFiringFrequency(geometryCode, chambers),
+		PulseOverlap:    0.5 - calculatePulseOverlap(cylinderAngle, crankPlaneAngle, chambers, geometryCode),
+		Haptics: &haptics.EngineProfile{
 			PrimaryBalance:   1.0,
 			SecondaryBalance: 1.0,
 			Gain:             config.MinimumGain,
@@ -208,8 +198,8 @@ func (a *App) getEngineCharacteristics(
 			continue
 		}
 
-		characteristics.dbEntry = variation
-		characteristics.haptics = profile
+		characteristics.DBEntry = variation
+		characteristics.Haptics = profile
 
 		break
 	}
@@ -405,11 +395,11 @@ func clampOverlap(overlap float64) float64 {
 func (a *App) calculateEngineRoughness(rpm float64) float64 {
 	var engineRoughness float64
 
-	switch a.vehicle.engine.geometry {
+	switch a.vehicle.Engine.Geometry {
 	case "K":
 		roughnessPhase := float64(a.state.current.sequenceNumber) * 0.003
-		apexSealRoughness := (1.0 - a.vehicle.engine.haptics.PrimaryBalance) * 0.08
-		housingEccentricity := (1.0 - a.vehicle.engine.haptics.SecondaryBalance) * 0.05
+		apexSealRoughness := (1.0 - a.vehicle.Engine.Haptics.PrimaryBalance) * 0.08
+		housingEccentricity := (1.0 - a.vehicle.Engine.Haptics.SecondaryBalance) * 0.05
 		roughnessIntensity := apexSealRoughness + housingEccentricity*0.7
 
 		// Wankels get smoother at higher RPM due to improved sealing
@@ -419,14 +409,14 @@ func (a *App) calculateEngineRoughness(rpm float64) float64 {
 		// Add characteristic Wankel "chatter" at low RPM
 		if rpm < 2000.0 {
 			chatterPhase := float64(a.state.current.sequenceNumber) * 0.008
-			chatterIntensity := (1.0 - a.vehicle.engine.haptics.SecondaryBalance) * 0.03
+			chatterIntensity := (1.0 - a.vehicle.Engine.Haptics.SecondaryBalance) * 0.03
 			engineRoughness += math.Sin(chatterPhase) * chatterIntensity * (1.0 - rpm/2000.0)
 		}
 	case "S":
 		// 2-stroke engines have characteristic roughness due to scavenging process
 		roughnessPhase := float64(a.state.current.sequenceNumber) * 0.007
-		scavenging := (1.0 - a.vehicle.engine.haptics.PrimaryBalance) * 0.20
-		exhaustBlowdown := (1.0 - a.vehicle.engine.haptics.SecondaryBalance) * 0.12
+		scavenging := (1.0 - a.vehicle.Engine.Haptics.PrimaryBalance) * 0.20
+		exhaustBlowdown := (1.0 - a.vehicle.Engine.Haptics.SecondaryBalance) * 0.12
 		intakeExhaustoverlap := 0.6
 		baseRoughness := scavenging + exhaustBlowdown*intakeExhaustoverlap
 
@@ -439,7 +429,7 @@ func (a *App) calculateEngineRoughness(rpm float64) float64 {
 		// Add port timing irregularities at low RPM
 		if rpm < 3000.0 {
 			portPhase := float64(a.state.current.sequenceNumber) * 0.012
-			portIrregularity := (1.0 - a.vehicle.engine.haptics.SecondaryBalance) * 0.08
+			portIrregularity := (1.0 - a.vehicle.Engine.Haptics.SecondaryBalance) * 0.08
 			engineRoughness += math.Sin(portPhase) * portIrregularity * (1.0 - rpm/3000.0)
 		}
 
@@ -453,20 +443,20 @@ func (a *App) calculateEngineRoughness(rpm float64) float64 {
 		if rpm <= 2400.0 {
 			roughnessPhase := float64(a.state.current.sequenceNumber) * 0.005
 			// Poor primary balance creates more low-frequency roughness
-			primaryRoughness := (1.0 - a.vehicle.engine.haptics.PrimaryBalance) * 0.15
+			primaryRoughness := (1.0 - a.vehicle.Engine.Haptics.PrimaryBalance) * 0.15
 			// Poor secondary balance creates more high-frequency roughness
-			secondaryRoughness := (1.0 - a.vehicle.engine.haptics.SecondaryBalance) * 0.08
+			secondaryRoughness := (1.0 - a.vehicle.Engine.Haptics.SecondaryBalance) * 0.08
 			roughnessIntensity := primaryRoughness + secondaryRoughness*0.5
 			engineRoughness = math.Sin(roughnessPhase)*roughnessIntensity + math.Sin(roughnessPhase*1.7)*roughnessIntensity*0.5
 
 			// Smooth out roughness as RPM increases
 			rpmSmoothingFactor := rpm / 2400.0
-			engineRoughness *= (1.0 - rpmSmoothingFactor*a.vehicle.engine.haptics.PrimaryBalance)
+			engineRoughness *= (1.0 - rpmSmoothingFactor*a.vehicle.Engine.Haptics.PrimaryBalance)
 		} else {
 			// High RPM: roughness based on engine balance characteristics
-			if a.vehicle.engine.haptics.PrimaryBalance < 0.9 {
+			if a.vehicle.Engine.Haptics.PrimaryBalance < 0.9 {
 				roughnessPhase := float64(a.state.current.sequenceNumber) * 0.002
-				highRpmRoughness := (1.0 - a.vehicle.engine.haptics.PrimaryBalance) * 0.02 // Poor primary balance creates roughness
+				highRpmRoughness := (1.0 - a.vehicle.Engine.Haptics.PrimaryBalance) * 0.02 // Poor primary balance creates roughness
 				engineRoughness = math.Sin(roughnessPhase) * highRpmRoughness
 			} else {
 				engineRoughness = 0.0 // Well-balanced engines are smooth at high RPM
@@ -495,7 +485,7 @@ type pulseWaveformParams struct {
 
 // calculatePulseWaveformParams calculates all parameters needed for pulse waveform generation.
 func (a *App) calculatePulseWaveformParams(rpm, engineRoughness float64) *pulseWaveformParams {
-	rpmPercent := rpm / float64(a.vehicle.revLimit)
+	rpmPercent := rpm / float64(a.vehicle.RevLimit)
 	rpmPercent, _ = signal.LimitWindow(rpmPercent, 0.0, 1.0)
 
 	throttlePercent := float64(a.gtClient.Telemetry.ThrottleOutputPercent()) / 100
@@ -505,8 +495,8 @@ func (a *App) calculatePulseWaveformParams(rpm, engineRoughness float64) *pulseW
 	amplitude := a.calculatePulseAmplitude(throttlePercent, engineRoughness, rpmPercent, vehicleTypeGain)
 
 	sampleRate := float64(a.synth.GetSampleRate())
-	pulseRate := rpm * a.vehicle.engine.firingFrequency * a.vehicle.engine.haptics.PulseScale
-	pulseDutyCycle := a.vehicle.engine.pulseOverlap + (rpmPercent * a.vehicle.engine.pulseOverlap * 2)
+	pulseRate := rpm * a.vehicle.Engine.FiringFrequency * a.vehicle.Engine.Haptics.PulseScale
+	pulseDutyCycle := a.vehicle.Engine.PulseOverlap + (rpmPercent * a.vehicle.Engine.PulseOverlap * 2)
 
 	return &pulseWaveformParams{
 		rpmPercent:      rpmPercent,
@@ -520,12 +510,12 @@ func (a *App) calculatePulseWaveformParams(rpm, engineRoughness float64) *pulseW
 
 // getVehicleTypeGainOffset returns the gain offset based on vehicle type.
 func (a *App) getVehicleTypeGainOffset() float64 {
-	switch a.vehicle.vehicleType {
-	case vehicleTypeRace:
+	switch a.vehicle.VehicleType {
+	case vehicle.TypeRace:
 		return 0.0
-	case vehicleTypeTuned:
+	case vehicle.TypeTuned:
 		return -3.0
-	case vehicleTypeStreet:
+	case vehicle.TypeStreet:
 		fallthrough
 	default:
 		return -4.75
@@ -537,7 +527,7 @@ func (a *App) calculatePulseAmplitude(throttlePercent, engineRoughness, rpmPerce
 	engineLoadGainIncrease := 1.0
 	engineLoadGain := (1 - throttlePercent) * engineLoadGainIncrease
 	roughness := 1.0 - (engineRoughness * rpmPercent * 0.1)
-	gain := a.vehicle.engine.haptics.Gain + vehicleTypeGain + engineLoadGain
+	gain := a.vehicle.Engine.Haptics.Gain + vehicleTypeGain + engineLoadGain
 	amplitude := synthesizer.GainToPowerRatio(gain) * roughness
 	amplitude, _ = signal.LimitWindow(amplitude, 0, 1)
 
@@ -606,20 +596,20 @@ func (a *App) updatePulsePolarityIfNeeded(index int, samplesPerPulse float64) {
 
 // generatePulseValueByGeometry generates pulse value based on engine geometry.
 func (a *App) generatePulseValueByGeometry(pulsePhaseNormalized float64) float64 {
-	switch a.vehicle.engine.geometry {
+	switch a.vehicle.Engine.Geometry {
 	case "K":
-		return generatePulseWankel(pulsePhaseNormalized, a.vehicle.engine.haptics)
+		return generatePulseWankel(pulsePhaseNormalized, a.vehicle.Engine.Haptics)
 	case "S":
-		return generatePulseTwoStroke(pulsePhaseNormalized, a.vehicle.engine.haptics)
+		return generatePulseTwoStroke(pulsePhaseNormalized, a.vehicle.Engine.Haptics)
 	default:
-		return generatePulseFourStroke(pulsePhaseNormalized, a.vehicle.engine.haptics)
+		return generatePulseFourStroke(pulsePhaseNormalized, a.vehicle.Engine.Haptics)
 	}
 }
 
 // applyPulseRoughnessVariation applies roughness variation to the pulse value.
 func (a *App) applyPulseRoughnessVariation(pulseValue float64, index int, rpmPercent float64) float64 {
-	secondaryImbalance := 1.0 - a.vehicle.engine.haptics.SecondaryBalance
-	rpm := rpmPercent * float64(a.vehicle.revLimit)
+	secondaryImbalance := 1.0 - a.vehicle.Engine.Haptics.SecondaryBalance
+	rpm := rpmPercent * float64(a.vehicle.RevLimit)
 
 	if rpm <= 2400.0 && secondaryImbalance > 0.02 {
 		roughnessPhase := (float64(a.state.current.sequenceNumber) + float64(index)) * 0.0005

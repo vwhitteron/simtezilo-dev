@@ -5,13 +5,14 @@ import (
 
 	"github.com/vwhitteron/simtezilo-dev/app/signal"
 	"github.com/vwhitteron/simtezilo-dev/app/synthesizer"
+	"github.com/vwhitteron/simtezilo-dev/app/vehicle"
 )
 
 // generateBalancedWaveform creates engine haptic waveforms based on primary and secondary balance characteristics
 // with consideration for the 160Hz low-pass filter of the output device.
 func (a *App) GenerateBalancedWaveform(rpm float64, engineRoughness float64, engineBuffer *[]float64) {
 	sampleRate := float64(a.synth.GetSampleRate())
-	rpmPercent := rpm / float64(a.vehicle.revLimit)
+	rpmPercent := rpm / float64(a.vehicle.RevLimit)
 
 	// Calculate frequencies with low-pass filter consideration
 	primaryFreq, secondaryFreq := a.calculateBalancedFrequencies(rpm)
@@ -23,8 +24,8 @@ func (a *App) GenerateBalancedWaveform(rpm float64, engineRoughness float64, eng
 	secondaryContribution, primaryContribution := calculateBalanceContributions(rpmPercent)
 
 	// Calculate imbalance and throttle factors
-	primaryImbalance := 1.0 - a.vehicle.engine.haptics.PrimaryBalance
-	secondaryImbalance := 1.0 - a.vehicle.engine.haptics.SecondaryBalance
+	primaryImbalance := 1.0 - a.vehicle.Engine.Haptics.PrimaryBalance
+	secondaryImbalance := 1.0 - a.vehicle.Engine.Haptics.SecondaryBalance
 	throttleScale := a.calculateThrottleScale()
 
 	// Generate waveform samples
@@ -36,7 +37,7 @@ func (a *App) GenerateBalancedWaveform(rpm float64, engineRoughness float64, eng
 // calculateBalancedFrequencies calculates primary and secondary frequencies with filter consideration.
 func (a *App) calculateBalancedFrequencies(rpm float64) (primaryFreq, secondaryFreq float64) {
 	// Calculate base firing frequency and harmonics
-	baseFiringRate := rpm * a.vehicle.engine.firingFrequency * a.vehicle.engine.haptics.PulseScale
+	baseFiringRate := rpm * a.vehicle.Engine.FiringFrequency * a.vehicle.Engine.Haptics.PulseScale
 
 	// Primary balance affects fundamental firing frequency
 	primaryFreq = baseFiringRate
@@ -61,7 +62,7 @@ func (a *App) calculateBalancedFrequencies(rpm float64) (primaryFreq, secondaryF
 
 // calculateBalancedAmplitude calculates the final amplitude for balanced waveform generation.
 func (a *App) calculateBalancedAmplitude(rpm float64, engineRoughness float64) float64 {
-	rpmPercent := rpm / float64(a.vehicle.revLimit)
+	rpmPercent := rpm / float64(a.vehicle.RevLimit)
 	throttlePercent := float64(a.gtClient.Telemetry.ThrottleOutputPercent()) / 100
 	throttlePercent, _ = signal.LimitWindow(throttlePercent, 0.0, 1.0)
 
@@ -72,7 +73,7 @@ func (a *App) calculateBalancedAmplitude(rpm float64, engineRoughness float64) f
 	rpmNormalized, _ := signal.LimitWindow(rpmPercent, 0.0, 1.0)
 
 	// Apply full gain control - this should be able to reduce volume significantly
-	gainAdjust := synthesizer.GainToPowerRatio(a.vehicle.engine.haptics.Gain + gainOffset)
+	gainAdjust := synthesizer.GainToPowerRatio(a.vehicle.Engine.Haptics.Gain + gainOffset)
 
 	// Calculate boost to reach signal max at 0dB gain, but scaled for proper gain response
 	targetMaxAmplitude := 0.95 // Slightly below 1.0 to avoid clipping
@@ -86,14 +87,14 @@ func (a *App) calculateBalancedAmplitude(rpm float64, engineRoughness float64) f
 
 // getVehicleTypeSettings returns gain offset and amplitude scale based on vehicle type.
 func (a *App) getVehicleTypeSettings() (gainOffset, amplitudeScale float64) {
-	switch a.vehicle.vehicleType {
-	case vehicleTypeRace:
+	switch a.vehicle.VehicleType {
+	case vehicle.TypeRace:
 		gainOffset = 0.0
 		amplitudeScale = 0.3
-	case vehicleTypeTuned:
+	case vehicle.TypeTuned:
 		gainOffset = -3.0
 		amplitudeScale = 0.2
-	case vehicleTypeStreet:
+	case vehicle.TypeStreet:
 		fallthrough
 	default:
 		gainOffset = -4.75
@@ -183,7 +184,7 @@ func (a *App) generateBalancedSamples(engineBuffer *[]float64, sampleRate, prima
 func (a *App) generatePrimaryWave(primaryFreq, timeOffset, primaryImbalance, maxUsableFreq float64) float64 {
 	primaryPhase := 2.0 * math.Pi * primaryFreq * timeOffset
 
-	switch a.vehicle.engine.geometry {
+	switch a.vehicle.Engine.Geometry {
 	case "K": // Wankel
 		// Triangular rotor creates smoother primary vibrations
 		primaryWave := math.Sin(primaryPhase) * 0.8
@@ -210,7 +211,7 @@ func (a *App) generatePrimaryWave(primaryFreq, timeOffset, primaryImbalance, max
 func (a *App) generateSecondaryWave(secondaryFreq, timeOffset, secondaryImbalance float64) float64 {
 	secondaryPhase := 2.0 * math.Pi * secondaryFreq * timeOffset
 
-	switch a.vehicle.engine.geometry {
+	switch a.vehicle.Engine.Geometry {
 	case "K": // Wankel
 		// Rotor housing vibrations - more complex waveform
 		secondaryWave := math.Sin(secondaryPhase) * 0.6
