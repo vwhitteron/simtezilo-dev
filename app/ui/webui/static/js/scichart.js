@@ -94,10 +94,10 @@ const CHART_CONFIGURATIONS = {
 
     // Dev page - developer-focused charts
     'dev': [
-        { id: 'translational-jerk', containerId: 'scichart-root-1', enabled: true },
-        { id: 'rotational-jerk', containerId: 'scichart-root-2', enabled: true },
-        { id: 'translational-snap', containerId: 'scichart-root-3', enabled: true },
-        { id: 'rotational-snap', containerId: 'scichart-root-4', enabled: true },
+        { id: 'translational-acceleration', containerId: 'scichart-root-1', enabled: true },
+        { id: 'rotational-acceleration', containerId: 'scichart-root-2', enabled: true },
+        { id: 'jerk', containerId: 'scichart-root-3', enabled: true },
+        { id: 'snap', containerId: 'scichart-root-4', enabled: true },
         { id: 'synthesizer-output', containerId: 'scichart-root-5', enabled: true },
         { id: 'compute-time', containerId: 'scichart-root-6', enabled: true }
     ],
@@ -108,10 +108,10 @@ const CHART_CONFIGURATIONS = {
         { id: 'throttle-brake', containerId: 'scichart-root-2', enabled: true },
         { id: 'tyre-temperature', containerId: 'scichart-root-3', enabled: true },
         { id: 'fuel-range', containerId: 'scichart-root-4', enabled: true },
-        { id: 'translational-jerk', containerId: 'scichart-root-5', enabled: true },
-        { id: 'rotational-jerk', containerId: 'scichart-root-6', enabled: true },
-        { id: 'translational-snap', containerId: 'scichart-root-7', enabled: true },
-        { id: 'rotational-snap', containerId: 'scichart-root-8', enabled: true },
+        { id: 'translational-acceleration', containerId: 'scichart-root-5', enabled: true },
+        { id: 'rotational-acceleration', containerId: 'scichart-root-6', enabled: true },
+        { id: 'jerk', containerId: 'scichart-root-7', enabled: true },
+        { id: 'snap', containerId: 'scichart-root-8', enabled: true },
         { id: 'synthesizer-output', containerId: 'scichart-root-9', enabled: true },
         { id: 'compute-time', containerId: 'scichart-root-10', enabled: true }
     ]
@@ -456,22 +456,28 @@ async function initSciChart() {
             }
         },
 
-        'translational-jerk': {
-            title: '6DOF Translational Jerk',
+        'jerk': {
+            title: '6DOF Jerk',
             create: async (containerId) => {
-                const { sciChartSurface, wasmContext } = await createStandardChart(containerId, '6DOF Translational Jerk');
+                const { sciChartSurface, wasmContext } = await createStandardChart(containerId, '6DOF Jerk');
 
-                const calcSeries = createDataSeries(wasmContext);
-                const actualSeries = createDataSeries(wasmContext);
+                const translationalJerk = createDataSeries(wasmContext);
+                const translationalJerkCalc = createDataSeries(wasmContext);
+                const rotationalJerk = createDataSeries(wasmContext);
 
                 sciChartSurface.renderableSeries.add(
                     new SciChart.FastLineRenderableSeries(wasmContext, {
-                        dataSeries: calcSeries,
+                        dataSeries: translationalJerk,
+                        strokeThickness: 1,
+                        stroke: "#949494ff"
+                    }),
+                    new SciChart.FastLineRenderableSeries(wasmContext, {
+                        dataSeries: translationalJerkCalc,
                         strokeThickness: 1,
                         stroke: "#50C7E0"
                     }),
                     new SciChart.FastLineRenderableSeries(wasmContext, {
-                        dataSeries: actualSeries,
+                        dataSeries: rotationalJerk,
                         strokeThickness: 2,
                         stroke: "#C750E0"
                     })
@@ -481,56 +487,31 @@ async function initSciChart() {
                     surface: sciChartSurface,
                     xAxis: sciChartSurface.xAxes.get(0),
                     dataSeries: {
-                        translationalJerkCalc: calcSeries,
-                        translationalJerk: actualSeries
+                        translationalJerk: translationalJerk,
+                        translationalJerkCalc: translationalJerkCalc,
+                        rotationalJerk: rotationalJerk
                     },
-                    dataFields: ['SixDOFTranslationalJerkCalc', 'SixDOFTranslationalJerk']
+                    dataFields: ['SixDOFTranslationalJerk', 'SixDOFTranslationalJerkCalc', 'SixDOFRotationalJerk']
                 };
             }
         },
 
-        'rotational-jerk': {
-            title: '6DOF Rotational Jerk',
+        'snap': {
+            title: '6DOF Snap',
             create: async (containerId) => {
-                const { sciChartSurface, wasmContext } = await createStandardChart(containerId, '6DOF Rotational Jerk');
+                const { sciChartSurface, wasmContext } = await createStandardChart(containerId, '6DOF Snap');
 
-                const series = createDataSeries(wasmContext);
+                const translationalSnapCalc = createDataSeries(wasmContext);
+                const rotationalSnap = createDataSeries(wasmContext);
 
                 sciChartSurface.renderableSeries.add(
                     new SciChart.FastLineRenderableSeries(wasmContext, {
-                        dataSeries: series,
-                        strokeThickness: 2,
-                        stroke: "#C750E0"
-                    })
-                );
-
-                return {
-                    surface: sciChartSurface,
-                    xAxis: sciChartSurface.xAxes.get(0),
-                    dataSeries: {
-                        rotationalJerk: series
-                    },
-                    dataFields: ['SixDOFRotationalJerk']
-                };
-            }
-        },
-
-        'translational-snap': {
-            title: '6DOF Translational Snap',
-            create: async (containerId) => {
-                const { sciChartSurface, wasmContext } = await createStandardChart(containerId, '6DOF Translational Snap');
-
-                const calcSeries = createDataSeries(wasmContext);
-                const actualSeries = createDataSeries(wasmContext);
-
-                sciChartSurface.renderableSeries.add(
-                    new SciChart.FastLineRenderableSeries(wasmContext, {
-                        dataSeries: calcSeries,
+                        dataSeries: translationalSnapCalc,
                         strokeThickness: 1,
                         stroke: "#50C7E0"
                     }),
                     new SciChart.FastLineRenderableSeries(wasmContext, {
-                        dataSeries: actualSeries,
+                        dataSeries: rotationalSnap,
                         strokeThickness: 2,
                         stroke: "#C750E0"
                     })
@@ -540,26 +521,38 @@ async function initSciChart() {
                     surface: sciChartSurface,
                     xAxis: sciChartSurface.xAxes.get(0),
                     dataSeries: {
-                        translationalSnapCalc: calcSeries,
-                        translationalSnap: actualSeries
+                        translationalSnapCalc: translationalSnapCalc,
+                        rotationalSnap: rotationalSnap
                     },
-                    dataFields: ['SixDOFTranslationalSnapCalc', 'SixDOFTranslationalSnap']
+                    dataFields: ['SixDOFTranslationalSnapCalc', 'SixDOFRotationalSnap']
                 };
             }
         },
 
-        'rotational-snap': {
-            title: '6DOF Rotational Snap',
+        'translational-acceleration': {
+            title: '6DOF Translational Acceleration',
             create: async (containerId) => {
-                const { sciChartSurface, wasmContext } = await createStandardChart(containerId, '6DOF Rotational Snap');
+                const { sciChartSurface, wasmContext } = await createStandardChart(containerId, '6DOF Translational Acceleration');
 
-                const series = createDataSeries(wasmContext);
+                const translationalAccelerationX = createDataSeries(wasmContext);
+                const translationalAccelerationY = createDataSeries(wasmContext);
+                const translationalAccelerationZ = createDataSeries(wasmContext);
 
                 sciChartSurface.renderableSeries.add(
                     new SciChart.FastLineRenderableSeries(wasmContext, {
-                        dataSeries: series,
+                        dataSeries: translationalAccelerationX,
+                        strokeThickness: 1,
+                        stroke: "#e05050ff"
+                    }),
+                    new SciChart.FastLineRenderableSeries(wasmContext, {
+                        dataSeries: translationalAccelerationY,
                         strokeThickness: 2,
-                        stroke: "#C750E0"
+                        stroke: "#50e06aff"
+                    }),
+                    new SciChart.FastLineRenderableSeries(wasmContext, {
+                        dataSeries: translationalAccelerationZ,
+                        strokeThickness: 3,
+                        stroke: "#5052e0ff"
                     })
                 );
 
@@ -567,9 +560,51 @@ async function initSciChart() {
                     surface: sciChartSurface,
                     xAxis: sciChartSurface.xAxes.get(0),
                     dataSeries: {
-                        rotationalSnap: series
+                        translationalAccelerationX: translationalAccelerationX,
+                        translationalAccelerationY: translationalAccelerationY,
+                        translationalAccelerationZ: translationalAccelerationZ
                     },
-                    dataFields: ['SixDOFRotationalSnap']
+                    dataFields: ['SixDOFTranslationalAccelX', 'SixDOFTranslationalAccelY', 'SixDOFTranslationalAccelZ']
+                };
+            }
+        },
+
+        'rotational-acceleration': {
+            title: '6DOF Rotational Acceleration',
+            create: async (containerId) => {
+                const { sciChartSurface, wasmContext } = await createStandardChart(containerId, '6DOF Rotational Acceleration');
+
+                const rotationalAccelerationX = createDataSeries(wasmContext);
+                const rotationalAccelerationY = createDataSeries(wasmContext);
+                const rotationalAccelerationZ = createDataSeries(wasmContext);
+
+                sciChartSurface.renderableSeries.add(
+                    new SciChart.FastLineRenderableSeries(wasmContext, {
+                        dataSeries: rotationalAccelerationX,
+                        strokeThickness: 1,
+                        stroke: "#e05050ff"
+                    }),
+                    new SciChart.FastLineRenderableSeries(wasmContext, {
+                        dataSeries: rotationalAccelerationY,
+                        strokeThickness: 2,
+                        stroke: "#50e06aff"
+                    }),
+                    new SciChart.FastLineRenderableSeries(wasmContext, {
+                        dataSeries: rotationalAccelerationZ,
+                        strokeThickness: 3,
+                        stroke: "#5052e0ff"
+                    })
+                );
+
+                return {
+                    surface: sciChartSurface,
+                    xAxis: sciChartSurface.xAxes.get(0),
+                    dataSeries: {
+                        rotationalAccelerationX: rotationalAccelerationX,
+                        rotationalAccelerationY: rotationalAccelerationY,
+                        rotationalAccelerationZ: rotationalAccelerationZ
+                    },
+                    dataFields: ['SixDOFRotationalAccelX', 'SixDOFRotationalAccelY', 'SixDOFRotationalAccelZ']
                 };
             }
         },
@@ -726,8 +761,14 @@ async function initSciChart() {
                         'SixDOFTranslationalJerk': 'translationalJerk',
                         'SixDOFTranslationalSnapCalc': 'translationalSnapCalc',
                         'SixDOFTranslationalSnap': 'translationalSnap',
+                        'SixDOFTranslationalAccelX': 'translationalAccelerationX',
+                        'SixDOFTranslationalAccelY': 'translationalAccelerationY',
+                        'SixDOFTranslationalAccelZ': 'translationalAccelerationZ',
                         'SixDOFRotationalJerk': 'rotationalJerk',
                         'SixDOFRotationalSnap': 'rotationalSnap',
+                        "SixDOFRotationalAccelX": 'rotationalAccelerationX',
+                        "SixDOFRotationalAccelY": 'rotationalAccelerationY',
+                        "SixDOFRotationalAccelZ": 'rotationalAccelerationZ',
                         'synthOutputAmplitude': 'synthAmplitude',
                         'synthOutputFrequency': 'synthFrequency'
                     };

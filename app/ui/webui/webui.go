@@ -241,7 +241,7 @@ func (w *WebUI) handleConfigAPI(response http.ResponseWriter, request *http.Requ
 		w.handleSetConfig(response, request)
 	default:
 		response.WriteHeader(http.StatusMethodNotAllowed)
-		_ = json.NewEncoder(response).Encode(map[string]string{"error": "Method not allowed"})
+		_ = json.NewEncoder(response).Encode(map[string]string{"error": "Method not allowed"}) //nolint:errchkjson // simple encoding
 	}
 }
 
@@ -318,7 +318,7 @@ func (w *WebUI) handleGetConfig(response http.ResponseWriter, _ *http.Request) {
 	if err != nil {
 		w.log.Error().Err(err).Msg("failed to encode config JSON")
 		response.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(response).Encode(map[string]string{"error": "Failed to encode configuration"})
+		_ = json.NewEncoder(response).Encode(map[string]string{"error": "Failed to encode configuration"}) //nolint:errchkjson // simple encoding
 	}
 }
 
@@ -330,7 +330,7 @@ func (w *WebUI) handleSetConfig(response http.ResponseWriter, request *http.Requ
 	if err != nil {
 		w.log.Error().Err(err).Msg("failed to decode config JSON")
 		response.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(response).Encode(map[string]string{"error": "Invalid JSON data"})
+		_ = json.NewEncoder(response).Encode(map[string]string{"error": "Invalid JSON data"}) //nolint:errchkjson // simple encoding
 
 		return
 	}
@@ -353,7 +353,7 @@ func (w *WebUI) handleSetConfig(response http.ResponseWriter, request *http.Requ
 	w.log.Info().Interface("config", configData).Msg("configuration updated successfully")
 
 	// Return success response
-	_ = json.NewEncoder(response).Encode(map[string]string{
+	_ = json.NewEncoder(response).Encode(map[string]string{ //nolint:errchkjson // simple encoding
 		"status":  "success",
 		"message": "Configuration updated successfully",
 	})
@@ -545,7 +545,7 @@ func (w *WebUI) handleConfigReset(response http.ResponseWriter, request *http.Re
 
 	if request.Method != http.MethodPost {
 		response.WriteHeader(http.StatusMethodNotAllowed)
-		_ = json.NewEncoder(response).Encode(map[string]string{"error": "Method not allowed"})
+		_ = json.NewEncoder(response).Encode(map[string]string{"error": "Method not allowed"}) //nolint:errchkjson // simple encoding
 
 		return
 	}
@@ -563,7 +563,7 @@ func (w *WebUI) handleConfigSave(response http.ResponseWriter, request *http.Req
 
 	if request.Method != http.MethodPost {
 		response.WriteHeader(http.StatusMethodNotAllowed)
-		_ = json.NewEncoder(response).Encode(map[string]string{"error": "Method not allowed"})
+		_ = json.NewEncoder(response).Encode(map[string]string{"error": "Method not allowed"}) //nolint:errchkjson // simple encoding
 
 		return
 	}
@@ -575,7 +575,7 @@ func (w *WebUI) handleConfigSave(response http.ResponseWriter, request *http.Req
 	if err != nil {
 		w.log.Error().Err(err).Msg("failed to save configuration")
 		response.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(response).Encode(map[string]string{
+		_ = json.NewEncoder(response).Encode(map[string]string{ //nolint:errchkjson // simple encoding
 			"error": "Failed to save configuration: " + err.Error(),
 		})
 
@@ -585,7 +585,7 @@ func (w *WebUI) handleConfigSave(response http.ResponseWriter, request *http.Req
 	w.log.Info().Str("backup", backupPath).Msg("configuration saved successfully")
 
 	// Return success response with backup information
-	_ = json.NewEncoder(response).Encode(map[string]string{
+	_ = json.NewEncoder(response).Encode(map[string]string{ //nolint:errchkjson // simple encoding
 		"status":     "success",
 		"message":    "Configuration saved",
 		"backupPath": backupPath,
