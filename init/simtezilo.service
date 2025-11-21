@@ -4,7 +4,9 @@ After=local-fs.target
 Wants=local-fs.target
 
 [Service]
+ExecStartPre=/usr/bin/raspi-gpio set 5,6,16,24 ip pu
 ExecStart=/opt/simtezilo/simtezilo
+ExecStartPost=/usr/bin/raspi-gpio set 5,6,16,24 ip pu
 Type=simple
 Restart=always
 

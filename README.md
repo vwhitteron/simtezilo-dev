@@ -45,14 +45,21 @@ levels of ~2.1 volts.
 2. Turn the backlight off by driving GPIO 13 low when not in use
 3. Enable the hifiberry-dac driver
 4. Enable the audio amp by driving GPIO 25 high
+5. Set button GPIO pins to input, driven high
 
 Add the following to `/boot/config.txt`.
 
 ```
 dtparam=spi=on
 gpio=13=op,dl
+
 dtoverlay=hifiberry-dac
 gpio=25=op,dh
+
+gpio=5=ip,dh
+gpio=6=ip,dh
+gpio=16=ip,dh
+gpio=24=ip,dh
 ```
 
 ### Waveshare 1.3inch LCD HAT
