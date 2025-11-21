@@ -65,7 +65,7 @@ buildtime := $(shell date -u '+%Y-%m-%d_%H:%M:%S')
 ## lint: run linter against project
 .PHONY: lint
 lint:
-	@golangci-lint run
+	@golangci-lint run --max-issues-per-linter 0 --max-same-issues 0
 
 ## lint/fix: run linter against the project and fix issues where possible
 .PHONY: lint/fix
