@@ -10,9 +10,7 @@
             "request": "launch",
             "mode": "auto",
             "program": "${workspaceFolder}/cmd/simtezilo/main.go",
-            "args": [
-                "-w=true"
-            ],
+            "args": [],
             "cwd": "${workspaceFolder}",
         }
     ]
