@@ -1,10 +1,40 @@
 // Configuration constants
 const CONFIG = {
-    FIFO_CAPACITY: 200,
+    FIFO_CAPACITY: 100000,  // Increased to retain more historical data for panning
     RECONNECT_DELAY: 1000,
     MAX_RECONNECT_DELAY: 30000,
     WEBSOCKET_URL: `ws://${location.host}/ws`
 };
+
+// Function to update window size display with appropriate units
+function updateWindowSizeDisplay(windowSize) {
+    const displayElement = document.getElementById('window-size-display');
+    if (displayElement) {
+        // Window size is in sequence IDs, data arrives at 60Hz (60 packets per second)
+        // So windowSize / 60 = seconds
+        const windowSizeInSeconds = windowSize / 60;
+
+        let displayText;
+        if (windowSizeInSeconds < 1) {
+            // Less than 1 second - show milliseconds
+            displayText = `${(windowSizeInSeconds * 1000).toFixed(0)} milliseconds`;
+        } else if (windowSizeInSeconds < 60) {
+            // Less than 60 seconds - show seconds
+            displayText = `${windowSizeInSeconds.toFixed(1)} seconds`;
+        } else if (windowSizeInSeconds < 3600) {
+            // Less than 60 minutes - show minutes and seconds
+            const minutes = Math.floor(windowSizeInSeconds / 60);
+            const seconds = Math.floor(windowSizeInSeconds % 60);
+            displayText = `${minutes} minute${minutes !== 1 ? 's' : ''} ${seconds} second${seconds !== 1 ? 's' : ''}`;
+        } else {
+            // 60 minutes or more - show hours and minutes
+            const hours = Math.floor(windowSizeInSeconds / 3600);
+            const minutes = Math.floor((windowSizeInSeconds % 3600) / 60);
+            displayText = `${hours} hour${hours !== 1 ? 's' : ''} ${minutes} minute${minutes !== 1 ? 's' : ''}`;
+        }
+        displayElement.textContent = displayText;
+    }
+}
 
 // Connection state management
 let connectionState = {
@@ -224,8 +254,9 @@ async function initSciChart() {
         return new SciChart.NumericAxis(wasmContext, options);
     };
 
-    const createDataSeries = (wasmContext) => {
+    const createDataSeries = (wasmContext, dataSeriesName = '') => {
         return new SciChart.XyDataSeries(wasmContext, {
+            dataSeriesName: dataSeriesName,
             fifoCapacity: CONFIG.FIFO_CAPACITY,
             isSorted: true,
             containsNaN: false
@@ -233,8 +264,160 @@ async function initSciChart() {
     };
 
     const addZoomModifiers = (surface) => {
+        // Mouse wheel zoom modifier - zoom Y-axis only (vertical scale)
+        surface.chartModifiers.add(new SciChart.MouseWheelZoomModifier({
+            xyDirection: SciChart.EXyDirection.YDirection
+        }));
+
+        // Add custom horizontal scroll handler for adjusting time window
+        surface.domCanvas2D.addEventListener('wheel', (event) => {
+            // Check for horizontal scroll (deltaX != 0)
+            if (Math.abs(event.deltaX) > Math.abs(event.deltaY)) {
+                event.preventDefault();
+
+                const xAxis = surface.xAxes.get(0);
+                if (xAxis) {
+                    const currentRange = xAxis.visibleRange;
+                    const rangeSize = currentRange.max - currentRange.min;
+
+                    // Adjust the time window size based on horizontal scroll
+                    // Positive deltaX = scroll right = zoom out (show more time)
+                    // Negative deltaX = scroll left = zoom in (show less time)
+                    // Scale sensitivity based on current window size for better control
+                    // Smaller windows (< 10 seconds) use 5% steps, larger windows use smaller steps
+                    const windowSizeInSeconds = rangeSize / 60;
+                    let zoomFactor;
+                    if (windowSizeInSeconds < 10) {
+                        // Small windows: 5% steps
+                        zoomFactor = event.deltaX > 0 ? 1.05 : 0.95;
+                    } else if (windowSizeInSeconds < 60) {
+                        // Medium windows (10s-1min): 3% steps
+                        zoomFactor = event.deltaX > 0 ? 1.03 : 0.97;
+                    } else {
+                        // Large windows (>1 min): 2% steps
+                        zoomFactor = event.deltaX > 0 ? 1.02 : 0.98;
+                    }
+                    const newRangeSize = rangeSize * zoomFactor;
+
+                    // Keep the center point the same
+                    const center = (currentRange.min + currentRange.max) / 2;
+                    let newMin = center - newRangeSize / 2;
+                    let newMax = center + newRangeSize / 2;
+
+                    // Don't allow zooming below 0 on the minimum
+                    if (newMin < 0) {
+                        newMin = 0;
+                        newMax = newRangeSize;
+                    }
+
+                    xAxis.visibleRange = new SciChart.NumberRange(newMin, newMax);
+
+                    // Update the window size display
+                    updateWindowSizeDisplay(newRangeSize);
+                }
+            }
+        }, { passive: false });
+
+        // Zoom pan modifier - pan by dragging with left mouse button
+        surface.chartModifiers.add(new SciChart.ZoomPanModifier({
+            xyDirection: SciChart.EXyDirection.XyDirection
+        }));
+
+        // Zoom extents modifier - double click to fit the visible data
         surface.chartModifiers.add(new SciChart.ZoomExtentsModifier({ isAnimated: false }));
-        surface.chartModifiers.add(new SciChart.RubberBandXyZoomModifier());
+
+        // Pinch zoom for touch devices
+        surface.chartModifiers.add(new SciChart.PinchZoomModifier());
+
+        // Add rollover modifier to show values at cursor position (Y values only)
+        surface.chartModifiers.add(new SciChart.RolloverModifier({
+            showTooltip: true,
+            showRolloverLine: true,
+            rolloverLineStroke: "#51cf66",
+            tooltipContainerBackground: "rgba(30, 30, 30, 0.95)",
+            tooltipTextStroke: "#ffffff",
+            showAxisLabels: false,
+            tooltipDataTemplate: (seriesInfo) => {
+                // Access the series name from the data series
+                const seriesName = seriesInfo.seriesName ||
+                    seriesInfo.renderableSeries?.dataSeries?.dataSeriesName ||
+                    'Value';
+                const yValue = seriesInfo.yValue !== undefined ? seriesInfo.yValue.toFixed(2) : 'N/A';
+                return [`${seriesName}: ${yValue}`];
+            }
+        }));
+    };
+
+    const addHorizontalZoomModifiers = (surface) => {
+        // No vertical zoom - only horizontal scroll for time window adjustment
+
+        // Add custom horizontal scroll handler for adjusting time window
+        surface.domCanvas2D.addEventListener('wheel', (event) => {
+            // Check for horizontal scroll (deltaX != 0)
+            if (Math.abs(event.deltaX) > Math.abs(event.deltaY)) {
+                event.preventDefault();
+
+                const xAxis = surface.xAxes.get(0);
+                if (xAxis) {
+                    const currentRange = xAxis.visibleRange;
+                    const rangeSize = currentRange.max - currentRange.min;
+
+                    // Adjust the time window size based on horizontal scroll
+                    const windowSizeInSeconds = rangeSize / 60;
+                    let zoomFactor;
+                    if (windowSizeInSeconds < 10) {
+                        zoomFactor = event.deltaX > 0 ? 1.05 : 0.95;
+                    } else if (windowSizeInSeconds < 60) {
+                        zoomFactor = event.deltaX > 0 ? 1.03 : 0.97;
+                    } else {
+                        zoomFactor = event.deltaX > 0 ? 1.02 : 0.98;
+                    }
+                    const newRangeSize = rangeSize * zoomFactor;
+
+                    const center = (currentRange.min + currentRange.max) / 2;
+                    let newMin = center - newRangeSize / 2;
+                    let newMax = center + newRangeSize / 2;
+
+                    if (newMin < 0) {
+                        newMin = 0;
+                        newMax = newRangeSize;
+                    }
+
+                    xAxis.visibleRange = new SciChart.NumberRange(newMin, newMax);
+                    updateWindowSizeDisplay(newRangeSize);
+                }
+            }
+        }, { passive: false });
+
+        // Zoom pan modifier - horizontal pan only
+        surface.chartModifiers.add(new SciChart.ZoomPanModifier({
+            xyDirection: SciChart.EXyDirection.XDirection
+        }));
+
+        // Zoom extents modifier - double click to fit the visible data
+        surface.chartModifiers.add(new SciChart.ZoomExtentsModifier({ isAnimated: false }));
+
+        // Pinch zoom for touch devices - horizontal only
+        surface.chartModifiers.add(new SciChart.PinchZoomModifier({
+            xyDirection: SciChart.EXyDirection.XDirection
+        }));
+
+        // Add rollover modifier to show values at cursor position
+        surface.chartModifiers.add(new SciChart.RolloverModifier({
+            showTooltip: true,
+            showRolloverLine: true,
+            rolloverLineStroke: "#51cf66",
+            tooltipContainerBackground: "rgba(30, 30, 30, 0.95)",
+            tooltipTextStroke: "#ffffff",
+            showAxisLabels: false,
+            tooltipDataTemplate: (seriesInfo) => {
+                const seriesName = seriesInfo.seriesName ||
+                    seriesInfo.renderableSeries?.dataSeries?.dataSeriesName ||
+                    'Value';
+                const yValue = seriesInfo.yValue !== undefined ? seriesInfo.yValue.toFixed(2) : 'N/A';
+                return [`${seriesName}: ${yValue}`];
+            }
+        }));
     };
 
     const createStandardChart = async (containerId, title) => {
@@ -243,7 +426,7 @@ async function initSciChart() {
             titleStyle: { fontSize: "16" }
         });
 
-        const xAxis = createAxisWithOptions(wasmContext, { autoRange: SciChart.EAutoRange.Always });
+        const xAxis = createAxisWithOptions(wasmContext, { autoRange: SciChart.EAutoRange.Never });
         const yAxis = createAxisWithOptions(wasmContext, { autoRange: SciChart.EAutoRange.Always });
 
         sciChartSurface.xAxes.add(xAxis);
@@ -264,7 +447,7 @@ async function initSciChart() {
 
                 addZoomModifiers(sciChartSurface);
 
-                const xAxis = createAxisWithOptions(wasmContext, { autoRange: SciChart.EAutoRange.Always });
+                const xAxis = createAxisWithOptions(wasmContext, { autoRange: SciChart.EAutoRange.Never });
                 const yAxisRPM = createAxisWithOptions(wasmContext, {
                     id: "ID_Y_AXIS_RPM",
                     axisAlignment: SciChart.EAxisAlignment.Left,
@@ -283,18 +466,20 @@ async function initSciChart() {
                 sciChartSurface.xAxes.add(xAxis);
                 sciChartSurface.yAxes.add(yAxisRPM, yAxisSpeed);
 
-                const rpmSeries = createDataSeries(wasmContext);
-                const speedSeries = createDataSeries(wasmContext);
+                const rpmSeries = createDataSeries(wasmContext, "RPM");
+                const speedSeries = createDataSeries(wasmContext, "Speed (km/h)");
 
                 sciChartSurface.renderableSeries.add(
                     new SciChart.FastLineRenderableSeries(wasmContext, {
                         dataSeries: rpmSeries,
+                        dataSeriesName: "RPM",
                         yAxisId: "ID_Y_AXIS_RPM",
                         strokeThickness: 3,
                         stroke: "#50C7E0"
                     }),
                     new SciChart.FastLineRenderableSeries(wasmContext, {
                         dataSeries: speedSeries,
+                        dataSeriesName: "Speed (km/h)",
                         yAxisId: "ID_Y_AXIS_SPEED",
                         strokeThickness: 3,
                         stroke: "#C750E0"
@@ -321,22 +506,24 @@ async function initSciChart() {
                     titleStyle: { fontSize: "16" }
                 });
 
-                const xAxis = createAxisWithOptions(wasmContext, { autoRange: SciChart.EAutoRange.Always });
+                addZoomModifiers(sciChartSurface);
+
+                const xAxis = createAxisWithOptions(wasmContext, { autoRange: SciChart.EAutoRange.Never });
                 const yAxis = createAxisWithOptions(wasmContext, { visibleRange: new SciChart.NumberRange(0, 110) });
 
                 sciChartSurface.xAxes.add(xAxis);
                 sciChartSurface.yAxes.add(yAxis);
 
-                const throttleInputSeries = createDataSeries(wasmContext);
-                const throttleOutputSeries = createDataSeries(wasmContext);
-                const brakeInputSeries = createDataSeries(wasmContext);
-                const brakeOutputSeries = createDataSeries(wasmContext);
+                const throttleInputSeries = createDataSeries(wasmContext, "Throttle In");
+                const throttleOutputSeries = createDataSeries(wasmContext, "Throttle Out");
+                const brakeInputSeries = createDataSeries(wasmContext, "Brake In");
+                const brakeOutputSeries = createDataSeries(wasmContext, "Brake Out");
 
                 const seriesConfigs = [
-                    { dataSeries: throttleInputSeries, strokeThickness: 3, stroke: "#00F000" },
-                    { dataSeries: throttleOutputSeries, strokeThickness: 2, stroke: "#6EADFF" },
-                    { dataSeries: brakeInputSeries, strokeThickness: 3, stroke: "#F00000" },
-                    { dataSeries: brakeOutputSeries, strokeThickness: 2, stroke: "#FF8A7D" }
+                    { dataSeries: throttleInputSeries, dataSeriesName: "Throttle In", strokeThickness: 3, stroke: "#00F000" },
+                    { dataSeries: throttleOutputSeries, dataSeriesName: "Throttle Out", strokeThickness: 2, stroke: "#6EADFF" },
+                    { dataSeries: brakeInputSeries, dataSeriesName: "Brake In", strokeThickness: 3, stroke: "#F00000" },
+                    { dataSeries: brakeOutputSeries, dataSeriesName: "Brake Out", strokeThickness: 2, stroke: "#FF8A7D" }
                 ];
 
                 seriesConfigs.forEach(config => {
@@ -362,7 +549,19 @@ async function initSciChart() {
         'tyre-temperature': {
             title: 'Tyre Temperature',
             create: async (containerId) => {
-                const { sciChartSurface, wasmContext } = await createStandardChart(containerId, 'Tyre Temperature');
+                const { sciChartSurface, wasmContext } = await SciChart.SciChartSurface.create(containerId, {
+                    title: 'Tyre Temperature',
+                    titleStyle: { fontSize: "16" }
+                });
+
+                addZoomModifiers(sciChartSurface);
+
+                const xAxis = createAxisWithOptions(wasmContext, { autoRange: SciChart.EAutoRange.Never });
+                const yAxis = createAxisWithOptions(wasmContext, {
+                    autoRange: SciChart.EAutoRange.Never,
+                    visibleRange: new SciChart.NumberRange(60, 90)
+                }); sciChartSurface.xAxes.add(xAxis);
+                sciChartSurface.yAxes.add(yAxis);
 
                 const tyreColors = {
                     FL: "#7072fdff", // Front Left - Light Blue
@@ -373,12 +572,13 @@ async function initSciChart() {
 
                 const tyreSeries = {};
                 Object.entries(tyreColors).forEach(([position, color]) => {
-                    const series = createDataSeries(wasmContext);
+                    const series = createDataSeries(wasmContext, `${position}`);
                     tyreSeries[position] = series;
 
                     sciChartSurface.renderableSeries.add(
                         new SciChart.FastLineRenderableSeries(wasmContext, {
                             dataSeries: series,
+                            dataSeriesName: `${position}`,
                             strokeThickness: 3,
                             stroke: color
                         })
@@ -407,7 +607,9 @@ async function initSciChart() {
                     titleStyle: { fontSize: "16" }
                 });
 
-                const xAxis = createAxisWithOptions(wasmContext, { autoRange: SciChart.EAutoRange.Always });
+                addZoomModifiers(sciChartSurface);
+
+                const xAxis = createAxisWithOptions(wasmContext, { autoRange: SciChart.EAutoRange.Never });
                 const yAxisRate = createAxisWithOptions(wasmContext, {
                     id: "ID_Y_AXIS_RATE",
                     axisAlignment: SciChart.EAxisAlignment.Left,
@@ -426,21 +628,23 @@ async function initSciChart() {
                 sciChartSurface.xAxes.add(xAxis);
                 sciChartSurface.yAxes.add(yAxisRate, yAxisRange);
 
-                const fuelRateSeries = createDataSeries(wasmContext);
-                const fuelRangeSeries = createDataSeries(wasmContext);
+                const fuelRateSeries = createDataSeries(wasmContext, "Fuel Usage (%/km)");
+                const fuelRangeSeries = createDataSeries(wasmContext, "Range (km)");
 
                 sciChartSurface.renderableSeries.add(
                     new SciChart.FastLineRenderableSeries(wasmContext, {
                         dataSeries: fuelRateSeries,
+                        dataSeriesName: "Fuel Usage (%/km)",
                         yAxisId: "ID_Y_AXIS_RATE",
-                        strokeThickness: 2,
-                        stroke: "#f9b73dff"
+                        strokeThickness: 3,
+                        stroke: "#50C7E0"
                     }),
                     new SciChart.FastLineRenderableSeries(wasmContext, {
                         dataSeries: fuelRangeSeries,
+                        dataSeriesName: "Range (km)",
                         yAxisId: "ID_Y_AXIS_RANGE",
-                        strokeThickness: 2,
-                        stroke: "#5072e0ff"
+                        strokeThickness: 3,
+                        stroke: "#C750E0"
                     })
                 );
 
@@ -461,23 +665,28 @@ async function initSciChart() {
             create: async (containerId) => {
                 const { sciChartSurface, wasmContext } = await createStandardChart(containerId, '6DOF Jerk');
 
-                const translationalJerk = createDataSeries(wasmContext);
-                const translationalJerkCalc = createDataSeries(wasmContext);
-                const rotationalJerk = createDataSeries(wasmContext);
+                addZoomModifiers(sciChartSurface);
+
+                const translationalJerk = createDataSeries(wasmContext, "Trans. Jerk");
+                const translationalJerkCalc = createDataSeries(wasmContext, "Trans. Jerk (Calc)");
+                const rotationalJerk = createDataSeries(wasmContext, "Rot. Jerk");
 
                 sciChartSurface.renderableSeries.add(
                     new SciChart.FastLineRenderableSeries(wasmContext, {
                         dataSeries: translationalJerk,
+                        dataSeriesName: "Trans. Jerk",
                         strokeThickness: 1,
                         stroke: "#949494ff"
                     }),
                     new SciChart.FastLineRenderableSeries(wasmContext, {
                         dataSeries: translationalJerkCalc,
+                        dataSeriesName: "Trans. Jerk (Calc)",
                         strokeThickness: 1,
                         stroke: "#50C7E0"
                     }),
                     new SciChart.FastLineRenderableSeries(wasmContext, {
                         dataSeries: rotationalJerk,
+                        dataSeriesName: "Rot. Jerk",
                         strokeThickness: 2,
                         stroke: "#C750E0"
                     })
@@ -501,19 +710,23 @@ async function initSciChart() {
             create: async (containerId) => {
                 const { sciChartSurface, wasmContext } = await createStandardChart(containerId, '6DOF Snap');
 
-                const translationalSnapCalc = createDataSeries(wasmContext);
-                const rotationalSnap = createDataSeries(wasmContext);
+                addZoomModifiers(sciChartSurface);
+
+                const translationalSnapCalc = createDataSeries(wasmContext, "Trans. Snap (Calc)");
+                const rotationalSnap = createDataSeries(wasmContext, "Rot. Snap");
 
                 sciChartSurface.renderableSeries.add(
                     new SciChart.FastLineRenderableSeries(wasmContext, {
                         dataSeries: translationalSnapCalc,
+                        dataSeriesName: "Trans. Snap (Calc)",
                         strokeThickness: 1,
-                        stroke: "#50C7E0"
+                        stroke: "#50C7E0ff"
                     }),
                     new SciChart.FastLineRenderableSeries(wasmContext, {
                         dataSeries: rotationalSnap,
+                        dataSeriesName: "Rot. Snap",
                         strokeThickness: 2,
-                        stroke: "#C750E0"
+                        stroke: "#c850e0ff"
                     })
                 );
 
@@ -534,23 +747,28 @@ async function initSciChart() {
             create: async (containerId) => {
                 const { sciChartSurface, wasmContext } = await createStandardChart(containerId, '6DOF Translational Acceleration');
 
-                const translationalAccelerationX = createDataSeries(wasmContext);
-                const translationalAccelerationY = createDataSeries(wasmContext);
-                const translationalAccelerationZ = createDataSeries(wasmContext);
+                addZoomModifiers(sciChartSurface);
+
+                const translationalAccelerationX = createDataSeries(wasmContext, "Surge");
+                const translationalAccelerationY = createDataSeries(wasmContext, "Sway");
+                const translationalAccelerationZ = createDataSeries(wasmContext, "Heave");
 
                 sciChartSurface.renderableSeries.add(
                     new SciChart.FastLineRenderableSeries(wasmContext, {
                         dataSeries: translationalAccelerationX,
+                        dataSeriesName: "Surge",
                         strokeThickness: 1,
                         stroke: "#e05050ff"
                     }),
                     new SciChart.FastLineRenderableSeries(wasmContext, {
                         dataSeries: translationalAccelerationY,
+                        dataSeriesName: "Sway",
                         strokeThickness: 2,
                         stroke: "#50e06aff"
                     }),
                     new SciChart.FastLineRenderableSeries(wasmContext, {
                         dataSeries: translationalAccelerationZ,
+                        dataSeriesName: "Heave",
                         strokeThickness: 3,
                         stroke: "#5052e0ff"
                     })
@@ -574,23 +792,28 @@ async function initSciChart() {
             create: async (containerId) => {
                 const { sciChartSurface, wasmContext } = await createStandardChart(containerId, '6DOF Rotational Acceleration');
 
-                const rotationalAccelerationX = createDataSeries(wasmContext);
-                const rotationalAccelerationY = createDataSeries(wasmContext);
-                const rotationalAccelerationZ = createDataSeries(wasmContext);
+                addZoomModifiers(sciChartSurface);
+
+                const rotationalAccelerationX = createDataSeries(wasmContext, "Pitch");
+                const rotationalAccelerationY = createDataSeries(wasmContext, "Yaw");
+                const rotationalAccelerationZ = createDataSeries(wasmContext, "Roll");
 
                 sciChartSurface.renderableSeries.add(
                     new SciChart.FastLineRenderableSeries(wasmContext, {
                         dataSeries: rotationalAccelerationX,
+                        dataSeriesName: "Pitch",
                         strokeThickness: 1,
                         stroke: "#e05050ff"
                     }),
                     new SciChart.FastLineRenderableSeries(wasmContext, {
                         dataSeries: rotationalAccelerationY,
+                        dataSeriesName: "Yaw",
                         strokeThickness: 2,
                         stroke: "#50e06aff"
                     }),
                     new SciChart.FastLineRenderableSeries(wasmContext, {
                         dataSeries: rotationalAccelerationZ,
+                        dataSeriesName: "Roll ",
                         strokeThickness: 3,
                         stroke: "#5052e0ff"
                     })
@@ -617,40 +840,49 @@ async function initSciChart() {
                     titleStyle: { fontSize: "16" }
                 });
 
-                const xAxis = createAxisWithOptions(wasmContext, { autoRange: SciChart.EAutoRange.Always });
+                addHorizontalZoomModifiers(sciChartSurface);
+
+                const xAxis = createAxisWithOptions(wasmContext, { autoRange: SciChart.EAutoRange.Never });
                 const yAxisAmplitude = createAxisWithOptions(wasmContext, {
                     id: "ID_Y_AXIS_AMPLITUDE",
                     axisAlignment: SciChart.EAxisAlignment.Left,
                     visibleRange: new SciChart.NumberRange(0, 1),
                     labelPrecision: 3,
-                    labelStyle: { color: "#50C7E0" }
+                    labelStyle: { color: "#fcdd5fff" }
                 });
                 const yAxisFrequency = createAxisWithOptions(wasmContext, {
                     id: "ID_Y_AXIS_FREQUENCY",
                     axisAlignment: SciChart.EAxisAlignment.Right,
                     visibleRange: new SciChart.NumberRange(0, 60),
                     labelPrecision: 0,
-                    labelStyle: { color: "#C750E0" }
+                    labelStyle: { color: "#38b0faff" }
                 });
 
                 sciChartSurface.xAxes.add(xAxis);
                 sciChartSurface.yAxes.add(yAxisAmplitude, yAxisFrequency);
 
-                const amplitudeSeries = createDataSeries(wasmContext);
-                const frequencySeries = createDataSeries(wasmContext);
+                const amplitudeSeries = createDataSeries(wasmContext, "Amplitude");
+                const frequencySeries = createDataSeries(wasmContext, "Frequency (Hz)");
 
                 sciChartSurface.renderableSeries.add(
-                    new SciChart.FastLineRenderableSeries(wasmContext, {
+                    new SciChart.FastMountainRenderableSeries(wasmContext, {
                         dataSeries: amplitudeSeries,
+                        dataSeriesName: "Amplitude",
                         yAxisId: "ID_Y_AXIS_AMPLITUDE",
-                        strokeThickness: 3,
-                        stroke: "#50C7E0"
+                        strokeThickness: 1,
+                        stroke: "#fcca5fdf",
+                        fillLinearGradient: new SciChart.GradientParams(new SciChart.Point(0, 0), new SciChart.Point(0, 1), [
+                            { color: "#fcca5f99", offset: 0 },
+                            { color: "#fcca5f1b", offset: 1 },
+                        ]),
+
                     }),
                     new SciChart.FastLineRenderableSeries(wasmContext, {
                         dataSeries: frequencySeries,
+                        dataSeriesName: "Frequency (Hz)",
                         yAxisId: "ID_Y_AXIS_FREQUENCY",
-                        strokeThickness: 3,
-                        stroke: "#C750E0"
+                        strokeThickness: 2,
+                        stroke: "#38b0faff"
                     })
                 );
 
@@ -671,13 +903,20 @@ async function initSciChart() {
             create: async (containerId) => {
                 const { sciChartSurface, wasmContext } = await createStandardChart(containerId, 'Compute Time (µs)');
 
-                const series = createDataSeries(wasmContext);
+                addZoomModifiers(sciChartSurface);
+
+                const series = createDataSeries(wasmContext, "Compute Time (µs)");
 
                 sciChartSurface.renderableSeries.add(
-                    new SciChart.FastLineRenderableSeries(wasmContext, {
+                    new SciChart.FastMountainRenderableSeries(wasmContext, {
                         dataSeries: series,
-                        strokeThickness: 3,
-                        stroke: "#50C7E0"
+                        dataSeriesName: "Compute Time (µs)",
+                        strokeThickness: 1,
+                        stroke: "#42cb52ff",
+                        fillLinearGradient: new SciChart.GradientParams(new SciChart.Point(0, 0), new SciChart.Point(0, 1), [
+                            { color: "#42cb5299", offset: 0 },
+                            { color: "#42cb521e", offset: 1 },
+                        ]),
                     })
                 );
 
@@ -732,6 +971,71 @@ async function initSciChart() {
     // Create all charts and get references
     const { charts, allDataSeries } = await createCharts();
 
+    // Initialize follow mode for all charts and attach pan detection
+    const chartFollowModes = {};
+    let isUpdatingRange = false; // Flag to track when we're programmatically updating ranges
+    let isDoubleClickTriggered = false;
+
+    Object.entries(charts).forEach(([chartId, chart]) => {
+        chartFollowModes[chartId] = true;
+
+        // Disable the ZoomExtents modifier's double-click behavior
+        const zoomExtentsModifier = chart.surface.chartModifiers.asArray().find(
+            m => m instanceof SciChart.ZoomExtentsModifier
+        );
+        if (zoomExtentsModifier) {
+            zoomExtentsModifier.isEnabled = false;
+        }
+
+        // Listen for single click to disable follow mode
+        chart.surface.domCanvas2D.addEventListener('click', (event) => {
+            // Disable follow mode for all charts on single click
+            Object.keys(charts).forEach(otherChartId => {
+                chartFollowModes[otherChartId] = false;
+            });
+        });
+
+        // Listen for double-click to enable follow mode without changing window size
+        chart.surface.domCanvas2D.addEventListener('dblclick', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+
+            // Set flag that double-click was triggered
+            isDoubleClickTriggered = true;
+
+            // Re-enable follow mode for all charts on double-click (preserves window size)
+            Object.keys(charts).forEach(otherChartId => {
+                chartFollowModes[otherChartId] = true;
+            });
+
+            // Reset the flag after a short delay
+            setTimeout(() => {
+                isDoubleClickTriggered = false;
+            }, 100);
+        });
+
+        // Listen for when user manually changes the visible range
+        chart.xAxis.visibleRangeChanged.subscribe((args) => {
+            // Only disable follow mode if this is a user action (not our programmatic update)
+            if (!isUpdatingRange && !isDoubleClickTriggered) {
+                chartFollowModes[chartId] = false;
+
+                // Synchronize all other charts to the same X-axis range
+                isUpdatingRange = true; // Prevent recursion
+                Object.entries(charts).forEach(([otherChartId, otherChart]) => {
+                    if (otherChartId !== chartId && otherChart && otherChart.xAxis) {
+                        chartFollowModes[otherChartId] = false;
+                        otherChart.xAxis.visibleRange = new SciChart.NumberRange(
+                            args.visibleRange.min,
+                            args.visibleRange.max
+                        );
+                    }
+                });
+                isUpdatingRange = false;
+            }
+        });
+    });
+
     // WebSocket message handling
     let lastTimeOfDay = 0;
     let lastSeq = 0;
@@ -742,6 +1046,10 @@ async function initSciChart() {
         // Clear all data series if sequence number has reset (indicates new session)
         if (data.seq < lastSeq) {
             Object.values(allDataSeries).forEach(series => series.clear());
+            // Reset follow modes on new session
+            Object.keys(charts).forEach(chartId => {
+                chartFollowModes[chartId] = true;
+            });
         }
 
         const currentTime = data.seq;
@@ -788,14 +1096,42 @@ async function initSciChart() {
             }
         });
 
-        // Update visible range for smooth scrolling on the first chart (if it exists and not zooming)
-        const firstChart = Object.values(charts)[0];
-        if (firstChart && firstChart.surface.zoomState !== SciChart.EZoomState.UserZooming) {
-            firstChart.xAxis.visibleRange = new SciChart.NumberRange(
-                currentTime - CONFIG.FIFO_CAPACITY,
-                currentTime
-            );
-        }
+        // Update visible range for smooth scrolling on all charts (if following live data)
+        isUpdatingRange = true; // Set flag before updating ranges
+        Object.entries(charts).forEach(([chartId, chart]) => {
+            if (chart && chart.xAxis) {
+                // Initialize visible range on first data if not set
+                if (chart.xAxis.visibleRange.max === 0 || chart.xAxis.visibleRange.min === 0) {
+                    const initialWindowSize = 200;
+                    chart.xAxis.visibleRange = new SciChart.NumberRange(
+                        Math.max(0, currentTime - initialWindowSize),
+                        currentTime
+                    );
+                    // Update window size display on initialization
+                    updateWindowSizeDisplay(initialWindowSize);
+                    return;
+                }
+
+                // Only auto-scroll if in follow mode
+                if (chartFollowModes[chartId]) {
+                    // Preserve the current window size
+                    const currentRange = chart.xAxis.visibleRange;
+                    const windowSize = currentRange.max - currentRange.min;
+
+                    // Update to show the latest data while keeping the same window size
+                    chart.xAxis.visibleRange = new SciChart.NumberRange(
+                        currentTime - windowSize,
+                        currentTime
+                    );
+
+                    // Update window size display periodically (throttle to first chart only)
+                    if (chartId === Object.keys(charts)[0]) {
+                        updateWindowSizeDisplay(windowSize);
+                    }
+                }
+            }
+        });
+        isUpdatingRange = false; // Clear flag after updating ranges
 
         lastTimeOfDay = data.timeOfDay;
         lastSeq = data.seq;
