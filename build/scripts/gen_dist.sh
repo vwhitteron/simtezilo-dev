@@ -17,10 +17,14 @@ version=$(awk -F '=' '/BUILDVERSION/{print $2}' ${appdir}/VERSION)
 cp out/simtezilo-linux-arm64-8 \
    out/simtezilo-macos \
    out/simtezilo.exe \
-   support/README.md \
    ${appdir}/ 
 
-cp data/replays/trial-mountain-porsche-911-rsr-991-17.gtz ${appdir}/replay.gtz
+cp support/README.md \
+   support/setup.sh \
+   support/simtezilo.conf \
+   ${appdir}/
+
+cp data/replays/trial-mountain-porsche-911-rsr-991-17.gtz ${appdir}/demo.gtz
 
 zipname=$(echo "${appname}-${version}.zip" | tr '[A-Z]' '[a-z]')
 
