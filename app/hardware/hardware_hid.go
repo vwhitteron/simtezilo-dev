@@ -72,8 +72,6 @@ func setupGPIOPin(n int) gpio.PinIO {
 			if p := chip.ByName(pinName); p != nil {
 				pin = p
 
-				log.Printf("Using gpioioctl (gpiod) for %s via chip %s", pinName, chip.Name())
-
 				break
 			}
 		}
@@ -82,7 +80,6 @@ func setupGPIOPin(n int) gpio.PinIO {
 	// Fallback to gpioreg if gpioioctl didn't find the pin
 	if pin == nil {
 		pin = gpioreg.ByName(pinName)
-		log.Printf("Using gpioreg for %s (may use sysfs for edge detection)", pinName)
 	}
 
 	if pin == nil {
