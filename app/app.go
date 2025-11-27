@@ -103,6 +103,11 @@ type App struct {
 	webSequenceID      uint32                  // Last sequence ID sent to the web UI
 
 	lapStartEvents chan uint32 // Channel for notifying new lap starts
+
+	// Chassis haptics state
+	jerkPeakHold      float64   // Peak hold value for jerk to prevent cancellation
+	jerkPeakHoldTime  time.Time // Time when peak hold was last updated
+	jerkPeakDecayRate float64   // Rate at which peak hold decays per second
 }
 
 // Options holds configuration options for initializing the App.
@@ -128,6 +133,7 @@ func New(opts Options) (*App, error) {
 		kinematics:         kinematics.NewKinematicsState(),
 		telemetryChartFeed: make(chan map[string]float32, 600),
 		lapStartEvents:     make(chan uint32),
+		jerkPeakDecayRate:  2000.0, // Decay 2000 units per second (adjustable)
 	}
 
 	newApp.initializeConfig(opts)
@@ -862,8 +868,32 @@ func (a *App) updateVehicle() {
 
 	a.adjustEngineHaptics(&engine, revLimit)
 
-	wheelbase := float32(2.516)  // TODO: get from vehicle DB
-	wheeltrack := float32(2.043) // TODO: get from vehicle DB
+	var wheelbaseMeters float32
+
+	var trackFrontMeters float32
+
+	var trackRearMeters float32
+
+	wheelbase := a.gtClient.Telemetry.VehicleWheelbaseMillimeters()
+
+	if wheelbase > 0 {
+		wheelbaseMeters = float32(wheelbase) / 1000
+	} else {
+		wheelbaseMeters = (float32(a.gtClient.Telemetry.VehicleLengthMillimeters()) / 1000) * 0.55
+	}
+
+	trackFront := a.gtClient.Telemetry.VehicleTrackFrontMillimeters()
+	trackRear := a.gtClient.Telemetry.VehicleTrackRearMillimeters()
+
+	if trackFront > 0 || trackRear > 0 {
+		trackFrontMeters = float32(trackFront) / 1000
+		trackRearMeters = float32(trackRear) / 1000
+	} else {
+		trackFrontMeters = (float32(a.gtClient.Telemetry.VehicleWidthMillimeters()) / 1000) * 0.85
+		trackRearMeters = trackFrontMeters
+	}
+
+	trackWidthMeters := (trackFrontMeters + trackRearMeters) / 2
 
 	a.vehicle = vehicle.Characteristics{
 		ID:          a.gtClient.Telemetry.VehicleID(),
@@ -871,10 +901,10 @@ func (a *App) updateVehicle() {
 		Engine:      engine,
 		RevLimit:    a.normalizeRevLimit(revLimit),
 		Dimensions: vehicle.Dimensions{
-			WheelbaseMeters:    wheelbase,
-			TrackWidthMeters:   wheeltrack,
-			LongitudinalRadius: wheelbase / 2,
-			TransverseRadius:   wheeltrack / 2,
+			WheelbaseMeters:    wheelbaseMeters,
+			TrackWidthMeters:   trackWidthMeters,
+			LongitudinalRadius: wheelbaseMeters / 2,
+			TransverseRadius:   trackWidthMeters / 2,
 		},
 	}
 
@@ -965,6 +995,8 @@ func (a *App) logVehicleUpdate(engine vehicle.EngineCharacteristics, revLimit ui
 		Str("model", a.gtClient.Telemetry.VehicleModel()).
 		Str("type", string(a.vehicle.VehicleType)).
 		Str("engine", a.vehicle.Engine.DBEntry).
+		Str("wheelbase", fmt.Sprintf("%.2f m", a.vehicle.Dimensions.WheelbaseMeters)).
+		Str("track_width", fmt.Sprintf("%.2f m", a.vehicle.Dimensions.TrackWidthMeters)).
 		Msg("vehicle update")
 }
 

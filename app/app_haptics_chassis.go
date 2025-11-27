@@ -36,10 +36,7 @@ func (a *App) generateChassisHaptic() {
 
 	// Use the larger of: complete pulse length or minimum frame size
 	// This allows low-frequency pulses to be generated completely
-	bufferSize := pulseLength
-	if bufferSize < minSamplesPerFrame {
-		bufferSize = minSamplesPerFrame
-	}
+	bufferSize := max(pulseLength, minSamplesPerFrame)
 
 	pulseBuffer := make([]float64, bufferSize)
 
@@ -76,12 +73,13 @@ func (a *App) generateChassisHaptic() {
 }
 
 func (a *App) calculateChassisHapticPulseAmplitude() float64 {
-	sig := signal.LargestMagnitude(
+	jerk := signal.LargestMagnitude(
 		a.kinematics.Current.SixDOFTranslationCalc.Jerk,
 		a.kinematics.Current.SixDOFRotation.Jerk,
 	)
 
-	pulseAmplitude := signal.Exponent(sig, a.config.GetJerkCurve()/1000)
+	// Process the signal normally first
+	pulseAmplitude := signal.Exponent(jerk, a.config.GetJerkCurve()/1000)
 	pulseAmplitude = signal.Scale(pulseAmplitude, a.config.GetJerkScale())
 
 	p1 := pulseAmplitude
@@ -91,10 +89,75 @@ func (a *App) calculateChassisHapticPulseAmplitude() float64 {
 		a.log.Debug().Float64("pulse", p1).Msg("limiter")
 	}
 
+	// Apply peak hold to the processed amplitude to prevent cancellation from inverse jerks
+	pulseAmplitude = a.applyJerkPeakHold(jerk, pulseAmplitude)
+
 	a.kinematics.Last.SynthOutputAmplitude = a.kinematics.Current.SynthOutputAmplitude
 	a.kinematics.Current.SynthOutputAmplitude = pulseAmplitude
 
 	return pulseAmplitude
+}
+
+// applyJerkPeakHold implements peak hold with decay to prevent waveform cancellation.
+// When a large jerk occurs (e.g., >2000), it's often followed by an inverse jerk that would
+// cancel out the haptic feedback. This function detects inverse jerk patterns and holds the
+// amplitude to maintain the impact sensation.
+func (a *App) applyJerkPeakHold(rawJerk, processedAmplitude float64) float64 {
+	const jerkThreshold = 2000.0
+
+	const peakHoldDuration = 50 * time.Millisecond
+
+	const minAmplitudeThreshold = 0.3
+
+	now := time.Now()
+	absJerk := signal.Abs(rawJerk)
+	absAmplitude := signal.Abs(processedAmplitude)
+
+	// Activate peak hold when large jerk occurs with significant amplitude
+	if absJerk > jerkThreshold && absAmplitude > minAmplitudeThreshold {
+		a.jerkPeakHold = absAmplitude
+		a.jerkPeakHoldTime = now
+
+		return processedAmplitude
+	}
+
+	// Check if peak hold is active
+	if a.jerkPeakHoldTime.IsZero() {
+		return processedAmplitude
+	}
+
+	timeSinceHold := now.Sub(a.jerkPeakHoldTime)
+
+	// Peak hold expired, reset and return current amplitude
+	if timeSinceHold > peakHoldDuration {
+		a.jerkPeakHold = 0
+		a.jerkPeakHoldTime = time.Time{}
+
+		return processedAmplitude
+	}
+
+	// Within hold duration: detect inverse jerk pattern
+	jerkSignChanged := a.detectInverseJerk(rawJerk)
+
+	// Use peak hold if inverse jerk detected and current amplitude is lower
+	if jerkSignChanged && absAmplitude < a.jerkPeakHold {
+		return a.jerkPeakHold
+	}
+
+	// Update peak if current amplitude is higher
+	if absAmplitude > a.jerkPeakHold {
+		a.jerkPeakHold = absAmplitude
+		a.jerkPeakHoldTime = now
+	}
+
+	return processedAmplitude
+}
+
+// detectInverseJerk checks if the jerk sign has changed from last frame.
+func (a *App) detectInverseJerk(currentJerk float64) bool {
+	lastJerk := a.kinematics.Last.SixDOFTranslationCalc.Jerk
+
+	return (lastJerk > 0 && currentJerk < 0) || (lastJerk < 0 && currentJerk > 0)
 }
 
 func (a *App) calculateChassisHapticPulseFrequency() float64 {
