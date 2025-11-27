@@ -36,11 +36,11 @@ func defaultConfig() *viperConfig {
 		Haptics: &haptics{
 			DynamicTransmissionFeedback:  true,
 			DynamicTransmissionCurve:     150,
-			DynamicTransmissionGforceMax: 1.0,
-			JerkCurve:                    375,
-			JerkMax:                      50,
-			SnapCurve:                    420,
-			SnapMax:                      52,
+			DynamicTransmissionGforceMax: 2.0,
+			JerkCurve:                    200,
+			JerkMax:                      40,
+			SnapCurve:                    370,
+			SnapMax:                      90,
 			PulseMaxAmplitude:            1,
 			PulseMaxFrequencyHz:          60,
 			PulseMinFrequencyHz:          16,
@@ -64,10 +64,10 @@ func defaultConfig() *viperConfig {
 				"v6_b90_c120_rstd":    {PrimaryBalance: 0.72, SecondaryBalance: 0.720, Gain: -1.75, PulseScale: 0.60}, // Toyota GR010 HYBRID '21
 				"v6_b90_c120_rhigh":   {PrimaryBalance: 0.85, SecondaryBalance: 0.960, Gain: -1.50, PulseScale: 0.31}, // Red Bull X2019 Competition
 				"v6_b120_c120_rstd":   {PrimaryBalance: 0.85, SecondaryBalance: 0.960, Gain: -1.75, PulseScale: 0.70}, // Audi R18 TDI '11
-				"v8":                  {PrimaryBalance: 0.95, SecondaryBalance: 0.980, Gain: -0.50, PulseScale: 0.40}, // REF v8_b90_c90_rstd
+				"v8":                  {PrimaryBalance: 0.95, SecondaryBalance: 0.980, Gain: -3.00, PulseScale: 0.40}, // REF v8_b90_c90_rstd
 				"v8_b90_c180_rstd":    {PrimaryBalance: 0.72, SecondaryBalance: 0.980, Gain: -1.00, PulseScale: 0.44}, // Nissan R92CP '92
 				"v8_b90_c180_rmed":    {PrimaryBalance: 0.80, SecondaryBalance: 0.980, Gain: -0.25, PulseScale: 0.40}, // Toyota TS030 Hybrid '12
-				"v8_b90_c90_rstd":     {PrimaryBalance: 0.95, SecondaryBalance: 0.980, Gain: -0.50, PulseScale: 0.40}, // BMW M6 GT3 Endurance Model '16
+				"v8_b90_c90_rstd":     {PrimaryBalance: 0.95, SecondaryBalance: 0.980, Gain: -3.00, PulseScale: 0.40}, // BMW M6 GT3 Endurance Model '16
 				"v10":                 {PrimaryBalance: 0.86, SecondaryBalance: 0.940, Gain: -2.25, PulseScale: 0.40}, // REF v10_b90_c72_rstd
 				"v10_b72_c72_rmed":    {PrimaryBalance: 0.86, SecondaryBalance: 0.950, Gain: -1.75, PulseScale: 0.25}, // Lexus LFA '10
 				"v10_b90_c72_rstd":    {PrimaryBalance: 0.86, SecondaryBalance: 0.940, Gain: -2.25, PulseScale: 0.40}, // Lamborghini Huracán GT3 '15
