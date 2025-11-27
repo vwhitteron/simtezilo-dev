@@ -27,9 +27,16 @@ Software for processing sim racing telemetry signals and outputting the data to 
    ```
 3. Update journald config in `/etc/systemd/journald.conf`
    ```
+   [Journal]
    SystemMaxUse=50M
    ForwardToSyslog=no
    ```
+
+## Simtezilo service
+
+1. Enable the Simtezilo service
+
+   `sudo systemctl enable /opt/simtezilo/init/simtezilo.service`
 
 ### Pimoroni Pirate Audio Series
 
@@ -50,6 +57,7 @@ levels of ~2.1 volts.
 Add the following to `/boot/config.txt`.
 
 ```
+dtparam=audio=off
 dtparam=spi=on
 gpio=13=op,dl
 
