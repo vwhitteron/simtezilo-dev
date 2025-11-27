@@ -9,6 +9,7 @@ import (
 
 	"periph.io/x/conn/v3/gpio"
 	"periph.io/x/conn/v3/gpio/gpioreg"
+	"periph.io/x/host/v3/gpioioctl"
 )
 
 const (
@@ -59,7 +60,34 @@ func OnGPIOButtonPressed(n int, handler func()) {
 //
 //nolint:ireturn // Returning gpio.PinIO interface is appropriate here
 func setupGPIOPin(n int) gpio.PinIO {
-	pin := gpioreg.ByName(fmt.Sprintf("GPIO%d", n))
+	pinName := fmt.Sprintf("GPIO%d", n)
+
+	// Try to get the pin from gpioioctl first (gpiod character device interface)
+	// This is preferred on modern Linux kernels where sysfs is deprecated
+	var pin gpio.PinIO
+
+	if len(gpioioctl.Chips) > 0 {
+		// Look for the pin in gpioioctl chips
+		for _, chip := range gpioioctl.Chips {
+			if p := chip.ByName(pinName); p != nil {
+				pin = p
+
+				log.Printf("Using gpioioctl (gpiod) for %s via chip %s", pinName, chip.Name())
+
+				break
+			}
+		}
+	}
+
+	// Fallback to gpioreg if gpioioctl didn't find the pin
+	if pin == nil {
+		pin = gpioreg.ByName(pinName)
+		log.Printf("Using gpioreg for %s (may use sysfs for edge detection)", pinName)
+	}
+
+	if pin == nil {
+		log.Fatalf("Failed to find pin %s", pinName)
+	}
 
 	err := pin.In(gpio.PullUp, gpio.BothEdges)
 	if err != nil {
@@ -74,66 +102,33 @@ func monitorGPIOButton(pin gpio.PinIO, handler func()) {
 	lastStableLevel := gpio.High
 	gpioStates := debouncedHigh
 
-	for {
-		pin.WaitForEdge(-1)
-		processDebounce(pin, &gpioStates, &lastStableLevel, handler)
-	}
-}
-
-// processDebounce handles the debouncing logic and state transitions.
-func processDebounce(pin gpio.PinIO, gpioStates *uint8, lastStableLevel *gpio.Level, handler func()) {
-	// Start debounce sampling when edge is detected
 	ticker := time.NewTicker(gpioReadSampleRate)
 	defer ticker.Stop()
 
-	for {
-		select {
-		case <-ticker.C:
-			updateGPIOStates(pin, gpioStates)
+	for range ticker.C {
+		// Read current pin state
+		currentRead := pin.Read()
 
-			if stableLevel, isStable := getStableGPIOState(*gpioStates); isStable {
-				if stableLevel != *lastStableLevel {
-					*lastStableLevel = stableLevel
-
-					// Trigger callback on stable transition to LOW (button pressed with pull-up)
-					if stableLevel == gpio.Low {
-						handler()
-						startAutoRepeat(pin, handler)
-					}
-				}
-
-				return // Continue monitoring
-			}
-		default:
-			// Reset the debounce buffer if another edge occurred during debouncing
-			if pin.WaitForEdge(0) { // Non-blocking
-				*gpioStates = 0x00
-			}
+		// Shift in the new reading
+		gpioStates <<= 1
+		if currentRead == gpio.High {
+			gpioStates |= 1
 		}
-	}
-}
 
-// updateGPIOStates reads the pin and updates the GPIO state chronology value.
-func updateGPIOStates(pin gpio.PinIO, buffer *uint8) {
-	pinLevel := pin.Read()
+		// Check for stable low (button pressed)
+		if gpioStates == debouncedLow && lastStableLevel == gpio.High {
+			lastStableLevel = gpio.Low
 
-	// Shift buffer left and add new bit
-	*buffer <<= 1
-	if pinLevel == gpio.High {
-		*buffer |= 1
-	}
-}
+			handler()
+			startAutoRepeat(pin, handler)
+		}
 
-// getStableGPIOState checks if the current GPIO state chronology represents a stable state
-// Returns the stable gpio.Level and true if stable, otherwise false.
-func getStableGPIOState(gpioStates uint8) (gpio.Level, bool) {
-	switch gpioStates {
-	case debouncedHigh:
-		return gpio.High, true
-	case debouncedLow:
-		return gpio.Low, true
-	default: // Not yet stable
-		return gpio.Low, false
+		// Check for stable high (button released)
+		if gpioStates == debouncedHigh && lastStableLevel == gpio.Low {
+			lastStableLevel = gpio.High
+
+			stopActiveAutoRepeat()
+		}
 	}
 }
 
@@ -168,18 +163,29 @@ func startAutoRepeat(pin gpio.PinIO, function func()) {
 	go func() {
 		defer stopActiveAutoRepeat()
 
-		// Initial delay before repeat begins or another button is pressed
-		select {
-		case <-time.After(autoRepeatInitialDelay):
-		case <-ctx.Done():
-			return
+		// Sample the button during initial delay to ensure it stays pressed
+		ticker := time.NewTicker(50 * time.Millisecond)
+		defer ticker.Stop()
+
+		deadline := time.Now().Add(autoRepeatInitialDelay)
+
+		for {
+			select {
+			case <-ticker.C:
+				// If button released during initial delay, cancel auto-repeat
+				if pin.Read() == gpio.High {
+					return
+				}
+				// If we've reached the deadline and button still pressed, start repeating
+				if time.Now().After(deadline) {
+					goto startRepeating
+				}
+			case <-ctx.Done():
+				return
+			}
 		}
 
-		// Check if button is still pressed after delay
-		if pin.Read() == gpio.High {
-			return
-		}
-
+	startRepeating:
 		repeatStartTime := time.Now()
 
 		for {

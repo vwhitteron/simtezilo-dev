@@ -133,7 +133,9 @@ func New(filename string, log zerolog.Logger) *Config {
 	viper.AutomaticEnv()
 	viper.SetConfigName(filename)
 	viper.SetConfigType("toml")
+	viper.AddConfigPath("/boot/firmware/simtezilo/")
 	viper.AddConfigPath("/boot/simtezilo/")
+	viper.AddConfigPath("/opt/simtezilo/etc/")
 	viper.AddConfigPath("/opt/simtezilo/")
 	viper.AddConfigPath(".")
 

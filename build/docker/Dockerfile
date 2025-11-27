@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 ARG GO_VERSION=1.24.6
 
-FROM golang:${GO_VERSION}-bullseye AS base
+FROM golang:${GO_VERSION}-trixie AS base
 WORKDIR /src
 RUN --mount=type=cache,target=/go/pkg/mod/ \
     --mount=type=bind,source=go.sum,target=go.sum \
