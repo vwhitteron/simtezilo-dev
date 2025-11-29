@@ -27,6 +27,10 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/i18n"
 )
 
+const (
+	setupModeFile = "/boot/firmware/simtezilo/SETUPMODE"
+)
+
 //go:embed html/index.html
 var indexHTML string
 
@@ -102,13 +106,17 @@ func handleSave(writer http.ResponseWriter, request *http.Request) {
 
 	fmt.Fprint(writer, `{"success":true}`)
 
-	// Configuration saved successfully, trigger automatic reboot
-	go func() { //nolint:contextcheck
+	// Configuration saved successfully, disable setup mode and and exit
+	go func() {
 		time.Sleep(1 * time.Second)
 
-		ctx := context.Background()
-		cmd := exec.CommandContext(ctx, "sudo", "reboot")
-		_ = cmd.Run()
+		err := os.Remove(setupModeFile)
+		if err != nil {
+			log.Printf("Failed to remove SETUPMODE file: %v\n", err)
+		}
+
+		// exit and let systemd restart the app
+		os.Exit(0)
 	}()
 }
 
