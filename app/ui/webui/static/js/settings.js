@@ -11,6 +11,7 @@ class ConfigManager {
         await this.loadConfiguration();
         this.setupEventListeners();
         this.populateForm();
+        await this.checkSetupModeAvailability();
     }
 
     setupEventListeners() {
@@ -27,6 +28,11 @@ class ConfigManager {
         // Reset button
         document.getElementById('reset-config').addEventListener('click', () => {
             this.resetConfiguration();
+        });
+
+        // Setup mode button
+        document.getElementById('setup-mode').addEventListener('click', () => {
+            this.enterSetupMode();
         });
 
         // Auto-save on input change (debounced)
@@ -220,6 +226,55 @@ class ConfigManager {
             setTimeout(() => {
                 statusElement.style.display = 'none';
             }, 5000);
+        }
+    }
+
+    async checkSetupModeAvailability() {
+        try {
+            const response = await fetch('/api/setup-mode');
+            if (response.ok) {
+                const result = await response.json();
+                if (result.available) {
+                    document.getElementById('system-actions-section').style.display = 'block';
+                }
+            }
+        } catch (error) {
+            console.error('Failed to check setup mode availability:', error);
+        }
+    }
+
+    async enterSetupMode() {
+        if (!confirm('Are you sure you want to enter setup mode? The application will exit and restart in setup mode.')) {
+            return;
+        }
+
+        try {
+            const statusElement = document.getElementById('setup-mode-status');
+            statusElement.textContent = 'Entering setup mode...';
+            statusElement.className = 'config-status info';
+            statusElement.style.display = 'block';
+
+            const response = await fetch('/api/setup-mode', {
+                method: 'POST'
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const result = await response.json();
+            statusElement.textContent = result.message || 'Setup mode activated. Application shutting down...';
+            statusElement.className = 'config-status success';
+
+            // Disable the button after successful request
+            document.getElementById('setup-mode').disabled = true;
+
+        } catch (error) {
+            console.error('Failed to enter setup mode:', error);
+            const statusElement = document.getElementById('setup-mode-status');
+            statusElement.textContent = 'Failed to enter setup mode: ' + error.message;
+            statusElement.className = 'config-status error';
+            statusElement.style.display = 'block';
         }
     }
 

@@ -7,12 +7,18 @@ import (
 	"fmt"
 	"mime"
 	"net/http"
+	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 	"github.com/vwhitteron/simtezilo-dev/app/config"
+)
+
+const (
+	setupModeFile = "/boot/firmware/simtezilo/SETUPMODE"
 )
 
 // WebUI defines the web user interface.
@@ -23,19 +29,29 @@ type WebUI struct {
 	telemetryChartFeed chan map[string]float32
 	config             *config.Config
 	upgrader           websocket.Upgrader
+	shutdownChan       chan bool
+}
+
+type Config struct {
+	Log                zerolog.Logger
+	Port               int
+	TelemetryChartFeed chan map[string]float32
+	Config             *config.Config
+	ShutdownChan       chan bool
 }
 
 // New creates a new instance of the WebUI.
-func New(log zerolog.Logger, port int, telemetryChartFeed chan map[string]float32, config *config.Config) *WebUI {
+func New(config Config) *WebUI {
 	return &WebUI{
 		log:                log.With().Str("component", "web ui").Logger(),
-		port:               port,
+		port:               config.Port,
 		webSocketClients:   0,
-		telemetryChartFeed: telemetryChartFeed,
-		config:             config,
+		telemetryChartFeed: config.TelemetryChartFeed,
+		config:             config.Config,
 		upgrader: websocket.Upgrader{
 			CheckOrigin: func(_ *http.Request) bool { return true },
 		},
+		shutdownChan: config.ShutdownChan,
 	}
 }
 
@@ -49,6 +65,7 @@ func (w *WebUI) Start() {
 	http.HandleFunc("/api/config", w.handleConfigAPI)
 	http.HandleFunc("/api/config/save", w.handleConfigSave)
 	http.HandleFunc("/api/config/reset", w.handleConfigReset)
+	http.HandleFunc("/api/setup-mode", w.handleSetupMode)
 
 	w.log.Info().Int("port", w.port).Msg("Starting Web UI server")
 
@@ -590,4 +607,75 @@ func (w *WebUI) handleConfigSave(response http.ResponseWriter, request *http.Req
 		"message":    "Configuration saved",
 		"backupPath": backupPath,
 	})
+}
+
+// handleSetupMode handles both GET (check availability) and POST (activate setup mode) requests.
+func (w *WebUI) handleSetupMode(response http.ResponseWriter, request *http.Request) {
+	response.Header().Set("Content-Type", "application/json")
+
+	switch request.Method {
+	case http.MethodGet:
+		// Check if the config file exists
+		configFile := "/boot/firmware/simtezilo/simtezilo.conf"
+		_, err := os.Stat(configFile)
+		available := err == nil
+
+		_ = json.NewEncoder(response).Encode(map[string]bool{ //nolint:errchkjson // simple encoding
+			"available": available,
+		})
+
+	case http.MethodPost:
+		w.log.Info().Msg("setup mode requested")
+
+		// Create the setup mode flag file
+		err := w.enableSetupMode()
+		if err != nil {
+			w.log.Error().Err(err).Msg("failed to create setup mode file")
+
+			response.WriteHeader(http.StatusInternalServerError)
+			_ = json.NewEncoder(response).Encode(map[string]string{ //nolint:errchkjson // simple encoding
+				"error": "Failed to create setup mode file: " + err.Error(),
+			})
+
+			return
+		}
+
+		// Return success response
+		_ = json.NewEncoder(response).Encode(map[string]string{ //nolint:errchkjson // simple encoding
+			"status":  "success",
+			"message": "Setup mode activated. Application will shut down.",
+		})
+
+		// Trigger application shutdown in a goroutine to allow the response to be sent
+		go func() {
+			time.Sleep(500 * time.Millisecond) // Give time for response to be sent
+			w.log.Info().Msg("initiating shutdown for setup mode")
+
+			w.shutdownChan <- true
+		}()
+
+	default:
+		response.WriteHeader(http.StatusMethodNotAllowed)
+		_ = json.NewEncoder(response).Encode(map[string]string{"error": "Method not allowed"}) //nolint:errchkjson // simple encoding
+	}
+}
+
+// enableSetupMode creates the setup mode flag file.
+func (w *WebUI) enableSetupMode() error {
+	dir := filepath.Dir(setupModeFile)
+
+	err := os.MkdirAll(dir, 0755)
+	if err != nil {
+		return fmt.Errorf("failed to create directory %s: %w", dir, err)
+	}
+
+	file, err := os.Create(setupModeFile)
+	if err != nil {
+		return fmt.Errorf("failed to create file %s: %w", setupModeFile, err)
+	}
+	defer file.Close()
+
+	w.log.Info().Str("file", setupModeFile).Msg("setup mode file created")
+
+	return nil
 }
