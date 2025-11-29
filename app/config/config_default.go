@@ -39,7 +39,7 @@ func defaultConfig() *viperConfig {
 			DynamicTransmissionGforceMax: 2.0,
 			JerkCurve:                    200,
 			JerkMax:                      40,
-			SnapCurve:                    370,
+			SnapCurve:                    350,
 			SnapMax:                      90,
 			PulseMaxAmplitude:            1,
 			PulseMaxFrequencyHz:          60,
