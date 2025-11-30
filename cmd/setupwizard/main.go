@@ -198,10 +198,10 @@ func main() {
 
 	err = lcd.Write(content)
 	if err != nil {
-		panic(err)
+		log.Printf("Failed to write to display: %v\n", err)
+	} else {
+		lcd.Wakeup()
 	}
-
-	lcd.Wakeup()
 
 	// Wait for shutdown signal
 	<-done
@@ -228,26 +228,32 @@ func main() {
 // P (password): The network password. This field is ignored if the network does not have authentication.
 // H (hidden network): *optional* Set to "true" if the SSID is not broadcast.
 func genQRcode() image.Image {
-	networkSSID, err := getNetworkSSID()
-	if err != nil {
-		panic(err)
+	for {
+		networkSSID, err := getNetworkSSID()
+		if err != nil {
+			time.Sleep(2 * time.Second)
+
+			continue
+		}
+
+		networkPassword := "5imtezil0"
+		networkAuth := "WPA2"
+		networkHidden := "false"
+
+		networkDef := "WIFI:S:" + networkSSID + ";T:" + networkAuth + ";P:" + networkPassword + ";H:" + networkHidden + ";"
+
+		code, err := qrcode.New(networkDef, qrcode.Medium)
+		if err != nil {
+			log.Printf("Failed to generate QR code: %v\n", err)
+
+			return image.Black
+		}
+
+		code.BackgroundColor = image.Black
+		code.ForegroundColor = image.White
+
+		return code.Image(240)
 	}
-
-	networkPassword := "5imtezil0"
-	networkAuth := "WPA2"
-	networkHidden := "false"
-
-	networkDef := "WIFI:S:" + networkSSID + ";T:" + networkAuth + ";P:" + networkPassword + ";H:" + networkHidden + ";"
-
-	code, err := qrcode.New(networkDef, qrcode.Medium)
-	if err != nil {
-		panic(err)
-	}
-
-	code.BackgroundColor = image.Black
-	code.ForegroundColor = image.White
-
-	return code.Image(240)
 }
 
 func getNetworkSSID() (string, error) {
@@ -400,11 +406,11 @@ func saveNetworkConfiguration(ctx context.Context, ssid, password, ipConfig, ipA
 	}
 
 	// Delete any existing RunMode connection first
-	deleteCmd := exec.CommandContext(ctx, "sudo", "nmcli", "connection", "delete", "RunMode")
+	deleteCmd := exec.CommandContext(ctx, "nmcli", "connection", "delete", "RunMode")
 	_ = deleteCmd.Run()
 
 	// Recreate connection for permanent save
-	addCmd := exec.CommandContext(ctx, "sudo", "nmcli", "connection", "add", "type", "wifi", "ifname", "wlan0", "con-name", "RunMode", "ssid", ssid)
+	addCmd := exec.CommandContext(ctx, "nmcli", "connection", "add", "type", "wifi", "ifname", "wlan0", "con-name", "RunMode", "ssid", ssid)
 
 	err := addCmd.Run()
 	if err != nil {
@@ -419,11 +425,11 @@ func saveNetworkConfiguration(ctx context.Context, ssid, password, ipConfig, ipA
 		ipMethod = "auto"
 	}
 
-	modifyIPCmd := exec.CommandContext(ctx, "sudo", "nmcli", "connection", "modify", "RunMode", "ipv4.method", ipMethod)
+	modifyIPCmd := exec.CommandContext(ctx, "nmcli", "connection", "modify", "RunMode", "ipv4.method", ipMethod)
 
 	err = modifyIPCmd.Run()
 	if err != nil {
-		_ = exec.CommandContext(ctx, "sudo", "nmcli", "connection", "delete", "RunMode").Run()
+		_ = exec.CommandContext(ctx, "nmcli", "connection", "delete", "RunMode").Run()
 
 		return fmt.Errorf("failed to set IP method: %w", err)
 	}
@@ -433,29 +439,29 @@ func saveNetworkConfiguration(ctx context.Context, ssid, password, ipConfig, ipA
 		prefix := netmaskToCIDR(netmask)
 		addressWithPrefix := fmt.Sprintf("%s/%d", ipAddress, prefix)
 
-		modifyAddrCmd := exec.CommandContext(ctx, "sudo", "nmcli", "connection", "modify", "RunMode", "ipv4.addresses", addressWithPrefix)
+		modifyAddrCmd := exec.CommandContext(ctx, "nmcli", "connection", "modify", "RunMode", "ipv4.addresses", addressWithPrefix)
 
 		err = modifyAddrCmd.Run()
 		if err != nil {
-			_ = exec.CommandContext(ctx, "sudo", "nmcli", "connection", "delete", "RunMode").Run()
+			deleteRunModeConnection(ctx)
 
 			return fmt.Errorf("failed to set IP address: %w", err)
 		}
 
-		modifyGWCmd := exec.CommandContext(ctx, "sudo", "nmcli", "connection", "modify", "RunMode", "ipv4.gateway", gateway)
+		modifyGWCmd := exec.CommandContext(ctx, "nmcli", "connection", "modify", "RunMode", "ipv4.gateway", gateway)
 
 		err = modifyGWCmd.Run()
 		if err != nil {
-			_ = exec.CommandContext(ctx, "sudo", "nmcli", "connection", "delete", "RunMode").Run()
+			deleteRunModeConnection(ctx)
 
 			return fmt.Errorf("failed to set gateway: %w", err)
 		}
 
-		modifyDNSCmd := exec.CommandContext(ctx, "sudo", "nmcli", "connection", "modify", "RunMode", "ipv4.dns", dns)
+		modifyDNSCmd := exec.CommandContext(ctx, "nmcli", "connection", "modify", "RunMode", "ipv4.dns", dns)
 
 		err = modifyDNSCmd.Run()
 		if err != nil {
-			_ = exec.CommandContext(ctx, "sudo", "nmcli", "connection", "delete", "RunMode").Run()
+			deleteRunModeConnection(ctx)
 
 			return fmt.Errorf("failed to set DNS: %w", err)
 		}
@@ -463,27 +469,63 @@ func saveNetworkConfiguration(ctx context.Context, ssid, password, ipConfig, ipA
 
 	// Configure WiFi security
 	if password != "" {
-		modifyKeyMgmtCmd := exec.CommandContext(ctx, "sudo", "nmcli", "connection", "modify", "RunMode", "wifi-sec.key-mgmt", "wpa-psk")
+		modifyKeyMgmtCmd := exec.CommandContext(ctx, "nmcli", "connection", "modify", "RunMode", "wifi-sec.key-mgmt", "wpa-psk")
 
 		err = modifyKeyMgmtCmd.Run()
 		if err != nil {
-			_ = exec.CommandContext(ctx, "sudo", "nmcli", "connection", "delete", "RunMode").Run()
+			deleteRunModeConnection(ctx)
 
 			return fmt.Errorf("failed to set key management: %w", err)
 		}
 
-		modifyPSKCmd := exec.CommandContext(ctx, "sudo", "nmcli", "connection", "modify", "RunMode", "wifi-sec.psk", password)
+		modifyPSKCmd := exec.CommandContext(ctx, "nmcli", "connection", "modify", "RunMode", "wifi-sec.psk", password)
 
 		err = modifyPSKCmd.Run()
 		if err != nil {
-			_ = exec.CommandContext(ctx, "sudo", "nmcli", "connection", "delete", "RunMode").Run()
+			deleteRunModeConnection(ctx)
 
 			return fmt.Errorf("failed to set password: %w", err)
 		}
 	}
 
-	// Disable SetupMode autoconnect so RunMode takes precedence on reboot
-	modifySetupAutoconnectCmd := exec.CommandContext(ctx, "sudo", "nmcli", "con", "modify", "SetupMode", "autoconnect", "no")
+	// Switch from SetupMode to RunMode
+	err = switchToRunMode(ctx)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func switchToRunMode(ctx context.Context) error {
+	// Enable RunMode autoconnect
+	setupModeDownCmd := exec.CommandContext(ctx, "nmcli", "con", "down", "SetupMode")
+
+	err := setupModeDownCmd.Run()
+	if err != nil {
+		return fmt.Errorf("failed to bring down SetupMode connection: %w", err)
+	}
+
+	runModeUpCmd := exec.CommandContext(ctx, "nmcli", "con", "up", "RunMode")
+
+	err = runModeUpCmd.Run()
+	if err != nil {
+		_ = switchToSetupMode(ctx)
+		deleteRunModeConnection(ctx)
+
+		return fmt.Errorf("failed to bring up RunMode connection: %w", err)
+	}
+
+	// Enable RunMode autoconnect
+	modifyRunAutoconnectCmd := exec.CommandContext(ctx, "nmcli", "con", "modify", "RunMode", "autoconnect", "yes")
+
+	err = modifyRunAutoconnectCmd.Run()
+	if err != nil {
+		log.Printf("Warning: failed to disable SetupMode autoconnect: %v\n", err)
+	}
+
+	// Disable SetupMode autoconnect
+	modifySetupAutoconnectCmd := exec.CommandContext(ctx, "nmcli", "con", "modify", "SetupMode", "autoconnect", "no")
 
 	err = modifySetupAutoconnectCmd.Run()
 	if err != nil {
@@ -491,6 +533,28 @@ func saveNetworkConfiguration(ctx context.Context, ssid, password, ipConfig, ipA
 	}
 
 	return nil
+}
+
+func switchToSetupMode(ctx context.Context) error {
+	// Enable RunMode autoconnect
+	setupModeUpCmd := exec.CommandContext(ctx, "nmcli", "con", "up", "SetupMode")
+
+	err := setupModeUpCmd.Run()
+	if err != nil {
+		return fmt.Errorf("failed to bring up SetupMode connection: %w", err)
+	}
+
+	return nil
+}
+
+func deleteRunModeConnection(ctx context.Context) {
+	// Delete any existing RunMode connection
+	deleteCmd := exec.CommandContext(ctx, "nmcli", "connection", "delete", "RunMode")
+
+	err := deleteCmd.Run()
+	if err != nil {
+		log.Printf("Warning: failed to delete RunMode connection: %v\n", err)
+	}
 }
 
 func validateIPConfiguration(ipAddress, netmask, gateway, dns string) error {
