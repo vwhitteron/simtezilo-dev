@@ -21,6 +21,10 @@ func (a *App) positionHasChanged() bool {
 		return false
 	}
 
+	if a.gtClient.Telemetry.RaceLaps() <= 0 {
+		return false
+	}
+
 	position := a.gtClient.Telemetry.GridPosition()
 
 	if position <= 0 {
