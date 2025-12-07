@@ -4,116 +4,19 @@ run:
   allow-parallel-runners: true
 
 linters:
-  enable:
-    - arangolint
-    - asasalint
-    - asciicheck
-    - bidichk
-    - bodyclose
-    - canonicalheader
-    - containedctx
-    - contextcheck
-    - copyloopvar
-    - cyclop
-    - decorder
-    - depguard
-    - dogsled
-    - dupl
-    # - dupword # too noisy, little value
-    - durationcheck
-    - embeddedstructfieldcheck
-    # - err113 # TODO: enable and fix
-    - errcheck
-    - errchkjson
-    - errname
-    - errorlint
-    - exhaustive
-    # - exhaustruct # prefer shorter struct literals
-    - exptostd
-    - fatcontext
-    - forbidigo
-    - forcetypeassert
-    - funcorder
-    # - funlen # TODO: enable and fix
-    - ginkgolinter
-    - gocheckcompilerdirectives
-    - gochecknoglobals
-    - gochecknoinits
-    - gochecksumtype
-    - gocognit
-    - goconst
-    - gocritic
-    # - gocyclo # use cyclop instead
-    - godot
-    # - godox # TODO: enable and fix
-    - goheader
-    - gomoddirectives
-    - gomodguard
-    - goprintffuncname
-    - gosec
-    - gosmopolitan
-    - govet
-    - grouper
-    - iface
-    - importas
-    - inamedparam
-    - ineffassign
-    - interfacebloat
-    - intrange
-    - ireturn
-    - lll
-    - loggercheck
-    - maintidx
-    - makezero
-    - mirror
-    - misspell
-    # - mnd # TODO: enable and fix
-    - musttag
-    - nakedret
-    - nestif
-    - nilerr
-    - nilnesserr
-    # - nilnil # not bothered by nil val+err
-    - nlreturn
-    - noctx
-    - noinlineerr
-    - nolintlint
-    # - nonamedreturns # prefer named returns in some cases
-    - nosprintfhostport
-    - paralleltest
-    - perfsprint
-    - prealloc
-    - predeclared
-    - promlinter
-    - protogetter
-    - reassign
-    - recvcheck
-    - revive
-    - rowserrcheck
-    - sloglint
-    - spancheck
-    - sqlclosecheck
-    - staticcheck
-    - tagalign
-    - tagliatelle
-    - testableexamples
-    - testifylint
-    - testpackage
-    - thelper
-    - tparallel
-    - unconvert
-    - unparam
-    - unused
-    - usestdlibvars
-    - usetesting
-    - varnamelen
-    - wastedassign
-    - whitespace
-    # - wrapcheck # TODO: enable and fix or user err113 instead
-    # - wsl # use wsl_v5 instead
-    - wsl_v5
-    - zerologlint
+  default: all
   disable:
+    - dupword # too noisy, little value
+    - err113 # TODO: enable and fix
+    - exhaustruct # prefer shorter struct literals
+    - funlen # TODO: enable and fix
+    - gocyclo # use cyclop instead
+    - godox # TODO: enable and fix
+    - mnd # TODO: enable and fix
+    - nilnil # not bothered by nil val+err
+    - nonamedreturns # prefer named returns in some cases
+    - wrapcheck # TODO: enable and fix or user err113 instead
+    - wsl # use wsl_v5 instead
   exclusions:
     generated: lax
     presets:
@@ -122,7 +25,6 @@ linters:
       - legacy
       - std-error-handling
     paths:
-      - internal/gttelemetry/gran_turismo_telemetry.go
       - third_party$
       - builtin$
       - examples$
@@ -133,6 +35,7 @@ linters:
           allow:
             - $gostd
             - atomicgo.dev/keyboard
+            - github.com/Wifx/gonetworkmanager
             - github.com/bwmarrin/discordgo
             - github.com/golang/freetype
             - github.com/gopxl/beep
@@ -141,6 +44,7 @@ linters:
             - github.com/kennygrant/sanitize
             - github.com/pelletier/go-toml/v2
             - github.com/rs/zerolog
+            - github.com/yeqown/go-qrcode
             - github.com/skip2/go-qrcode
             - github.com/spf13/viper
             - github.com/stretchr/testify
@@ -160,24 +64,21 @@ linters:
         rules:
           json: goPascal
 
-
 formatters:
-  default:
-    enable:
-      - gci
-      - gofmt
-      - gofumpt
-      - goimports
-      - golines  exclusions:
-    # generated: lax
-    # paths:
-    #   - third_party$
-    #   - builtin$
-    #   - examples$
+  enable:
+    - gci
+    - gofmt
+    - gofumpt
+    - goimports
+    # - golines # conflicts with nolintlint
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
 
 issues:
-  exclude-use-default: false
-  exlude:
-    - path: _test.go
-      linters:
-        - mnd
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  fix: true
