@@ -12,6 +12,20 @@
 | Pedal  |   28   |   40   |
 
 
+## Current data
+
++----------+---------+----------+----------+----------+---------+---------------------------------------------------------+
+| Version  | Amp Exp | Freq Exp | Channels | Base FFB | GT7 FFB |                          Notes                          |
+|----------+---------+----------+----------+----------+---------+---------------------------------------------------------|
+| 9421fc5! |   190   |   310    |  Stereo  |   Auto   |    8    | Strong feedback, steering FFB a bit weak in comparison  |
+| 9421fc5! |   210   |   310    |  Stereo  |   Auto   |    8    | Strong feedback, fairly well balanced with steering FFB |
+| 9421fc5! |   190   |   350    |  Stereo  |   Auto   |    8    | Good general feeback, maybe a bit too compliant         |
+| 9421fc5! |   190   |   370    |  Stereo  |   Auto   |    8    | Mild feedback, very compliant                           | 
++----------+---------+----------+----------+----------+---------+---------------------------------------------------------+
+
+
+## Older data
+
 | Function | Scale  | Channels | Comments                                                 |
 |----------|--------|---------------------------------------------------------------------|
 | Exp 0.40 | 0.033  |  Mono    | Too harsh, probably needs smaller scale                  |
