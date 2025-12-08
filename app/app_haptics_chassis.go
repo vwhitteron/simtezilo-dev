@@ -30,6 +30,11 @@ func (a *App) generateChassisHaptic() {
 	// High frequency pulses (60Hz) need ~134 samples (17ms)
 	pulseLength := int(pulseWidth * 2)
 
+	// Calculate the duration of this pulse for peak hold
+	// This ensures peak hold matches the impact duration
+	pulseDuration := time.Duration(float64(pulseLength)/float64(a.config.GetInternalSampleRateHz())*1000) * time.Millisecond
+	a.jerkPeakHoldDuration = pulseDuration
+
 	// Ensure minimum buffer size for very high frequency pulses
 	sampleRate := float64(a.config.GetInternalSampleRateHz())
 	minSamplesPerFrame := int(sampleRate / hapticFrameRate)
@@ -105,9 +110,14 @@ func (a *App) calculateChassisHapticPulseAmplitude() float64 {
 func (a *App) applyJerkPeakHold(rawJerk, processedAmplitude float64) float64 {
 	const jerkThreshold = 2000.0
 
-	const peakHoldDuration = 50 * time.Millisecond
-
 	const minAmplitudeThreshold = 0.3
+
+	// Use the dynamic peak hold duration based on current pulse length
+	peakHoldDuration := a.jerkPeakHoldDuration
+	if peakHoldDuration == 0 {
+		// Fallback to 50ms if not set (shouldn't happen in normal operation)
+		peakHoldDuration = 50 * time.Millisecond
+	}
 
 	now := time.Now()
 	absJerk := signal.Abs(rawJerk)
@@ -136,12 +146,22 @@ func (a *App) applyJerkPeakHold(rawJerk, processedAmplitude float64) float64 {
 		return processedAmplitude
 	}
 
+	// Calculate blend factor based on time progression through hold duration
+	// Start at 1.0 (100% peak hold) and decay to 0.0 (100% current amplitude)
+	// This allows gradual mix-in of other haptics rather than reducing amplitude
+	blendProgress := float64(timeSinceHold) / float64(peakHoldDuration)
+	peakHoldWeight := 1.0 - blendProgress
+	currentWeight := blendProgress
+
 	// Within hold duration: detect inverse jerk pattern
 	jerkSignChanged := a.detectInverseJerk(rawJerk)
 
-	// Use peak hold if inverse jerk detected and current amplitude is lower
+	// Blend between peak hold and current amplitude if inverse jerk detected
 	if jerkSignChanged && absAmplitude < a.jerkPeakHold {
-		return a.jerkPeakHold
+		// Mix the peak hold with the current amplitude based on decay progress
+		blendedAmplitude := (a.jerkPeakHold * peakHoldWeight) + (absAmplitude * currentWeight)
+
+		return blendedAmplitude
 	}
 
 	// Update peak if current amplitude is higher

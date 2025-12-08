@@ -105,9 +105,9 @@ type App struct {
 	lapStartEvents chan uint32 // Channel for notifying new lap starts
 
 	// Chassis haptics state
-	jerkPeakHold      float64   // Peak hold value for jerk to prevent cancellation
-	jerkPeakHoldTime  time.Time // Time when peak hold was last updated
-	jerkPeakDecayRate float64   // Rate at which peak hold decays per second
+	jerkPeakHold         float64       // Peak hold value for jerk to prevent cancellation
+	jerkPeakHoldTime     time.Time     // Time when peak hold was last updated
+	jerkPeakHoldDuration time.Duration // Duration to hold peak based on pulse length
 }
 
 // Options holds configuration options for initializing the App.
@@ -133,7 +133,6 @@ func New(opts Options) (*App, error) {
 		kinematics:         kinematics.NewKinematicsState(),
 		telemetryChartFeed: make(chan map[string]float32, 600),
 		lapStartEvents:     make(chan uint32),
-		jerkPeakDecayRate:  2000.0, // Decay 2000 units per second (adjustable)
 	}
 
 	newApp.initializeConfig(opts)
