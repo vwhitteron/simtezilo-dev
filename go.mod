@@ -16,7 +16,7 @@ require (
 	github.com/spf13/viper v1.20.1
 	github.com/stretchr/testify v1.11.1
 	github.com/theojulienne/go-wireless v1.2.0
-	github.com/zetetos/gt-telemetry v1.11.1-0.20251122115344-dd12d929ffb5
+	github.com/zetetos/gt-telemetry v1.11.1-0.20251207083528-8b3ae5e9d8c2
 	golang.org/x/image v0.27.0
 	layeh.com/gopus v0.0.0-20210501142526-1ee02d434e32
 	periph.io/x/conn/v3 v3.7.2
@@ -32,7 +32,7 @@ require (
 	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
 	github.com/grafana/pyroscope-go/godeltaprof v0.1.8 // indirect
 	github.com/hajimehoshi/go-mp3 v0.3.4 // indirect
-	github.com/kaitai-io/kaitai_struct_go_runtime v0.10.0 // indirect
+	github.com/kaitai-io/kaitai_struct_go_runtime v0.11.0 // indirect
 	github.com/klauspost/compress v1.18.0 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect

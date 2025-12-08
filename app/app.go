@@ -542,7 +542,7 @@ func (a *App) startBackgroundTasks() {
 
 	go func() {
 		for {
-			err, recoverable := a.gtClient.Run()
+			recoverable, err := a.gtClient.Run()
 			if err != nil {
 				_ = a.ui.Screen.RenderSplashScreen("GT client error")
 
