@@ -90,7 +90,7 @@ func (r *FuelRange) Reset() {
 	r.maxSamples = maxSamples
 	r.fuelRateSamples = make([]fuelRangeSample, 0, r.maxSamples)
 
-	r.log.Info().
+	r.log.Debug().
 		Msg("Fuel range reset")
 }
 
@@ -103,7 +103,7 @@ func (r *FuelRange) ResetEstimate() {
 	r.fuelRate = 0
 	r.fuelRateSamples = make([]fuelRangeSample, 0, r.maxSamples)
 
-	r.log.Info().
+	r.log.Debug().
 		Msg("Fuel range estimate reset")
 }
 
@@ -115,7 +115,7 @@ func (r *FuelRange) SetLive(isLive bool) {
 
 	r.isLive = isLive
 
-	r.log.Info().
+	r.log.Debug().
 		Bool("is_live", isLive).
 		Msg("Set fuel range sample granularity")
 
@@ -220,10 +220,11 @@ func (r *FuelRange) shouldInitialize(odometerReading float64, fuelLevel float32)
 // shouldResetOnOdometerRollback checks if odometer has rolled back and resets if needed.
 func (r *FuelRange) shouldResetOnOdometerRollback(odometerReading float64) bool {
 	if odometerReading < r.lastOdometerReading {
-		r.log.Info().
+		r.log.Debug().
 			Float64("last_odometer", r.lastOdometerReading).
 			Float64("current_odometer", odometerReading).
 			Msg("Odometer reset detected")
+
 		r.ResetEstimate()
 
 		return true
@@ -284,7 +285,7 @@ func (r *FuelRange) resetDistanceAndFuelLevel(fuelLevel float32) {
 // checkRefuelCompletion checks if refueling has completed.
 func (r *FuelRange) checkRefuelCompletion(consumed float64, fuelLevel float32) {
 	if r.refueling && consumed > 0 {
-		r.log.Info().
+		r.log.Debug().
 			Float32("fuel_level", fuelLevel).
 			Float64("last_consumed", consumed).
 			Msg("Refuel complete")
@@ -306,7 +307,7 @@ func (r *FuelRange) detectRefueling(consumed float64, fuelLevel float32) {
 		r.ResetEstimate()
 		r.refueling = true
 
-		r.log.Info().
+		r.log.Debug().
 			Float32("fuel_level", fuelLevel).
 			Float64("fuel_consumed", consumed).
 			Msg("Refuel detected")

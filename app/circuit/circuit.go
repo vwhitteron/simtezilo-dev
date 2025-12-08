@@ -70,10 +70,9 @@ func (c *Circuit) Reset() {
 	}
 
 	c.candidates = make(Candidates)
-
 	c.ResetLapProgress()
 
-	c.log.Info().
+	c.log.Debug().
 		Msg("Circuit reset")
 }
 
@@ -84,8 +83,8 @@ func (c *Circuit) ResetLapProgress() {
 	c.bestLapTime = 100 * time.Hour
 	c.lastCoordinate = models.Coordinate{}
 
-	c.log.Info().
-		Msg("Circuit reset")
+	c.log.Debug().
+		Msg("Lap progress reset")
 }
 
 // Name returns the name of the current circuit.
@@ -216,7 +215,7 @@ func (c *Circuit) setLapStartMarker(odomoterReading float64) {
 
 	c.lapProgressMeters = 0
 
-	c.log.Info().
+	c.log.Debug().
 		Float64("odometer", odomoterReading).
 		Msg("Lap start marker set")
 }

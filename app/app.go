@@ -634,7 +634,7 @@ func (a *App) mainLoop() {
 		case <-tickerPitRadio.C:
 			a.handlePitRadioTick()
 		case <-tickerDebug.C:
-			a.handleDebugTick()
+			// a.handleDebugTick()
 		}
 	}
 }
@@ -778,7 +778,7 @@ func (a *App) resetAppState() {
 
 	a.kinematics = kinematics.NewKinematicsState()
 
-	a.log.Info().Msg("App state reset")
+	a.log.Debug().Msg("App state reset")
 }
 
 func (a *App) getGameState() gameState {
@@ -813,7 +813,7 @@ func (a *App) handleGameStateChange() {
 		a.resetAppState()
 		a.stopRecording()
 
-		a.log.Info().Msg("Entered main menu")
+		a.log.Debug().Msg("Entered main menu")
 
 	case a.state.current.gameState == gameStateRaceMenu:
 		a.disableHaptics("race menu")
@@ -823,10 +823,10 @@ func (a *App) handleGameStateChange() {
 		a.circuit.ResetLapProgress()
 		a.stopRecording()
 
-		a.log.Info().Msg("Entered race menu")
+		a.log.Debug().Msg("Entered race menu")
 
 	case a.state.current.gameState == gameStateOnCircuit:
-		a.log.Info().Msg("Vehicle on circuit")
+		a.log.Debug().Msg("Vehicle on circuit")
 
 	case a.liveFlagHasChanged():
 		a.resetPitRadioState()
@@ -844,7 +844,7 @@ func (a *App) handleGameStateChange() {
 		a.fuelRange.ResetEstimate()
 		a.circuit.ResetLapProgress()
 
-		a.log.Info().Msg("Time of day reset")
+		a.log.Debug().Msg("Time of day reset")
 
 	// Assune vehicle pit stop
 	case a.gtClient.Telemetry.Flags().Loading:

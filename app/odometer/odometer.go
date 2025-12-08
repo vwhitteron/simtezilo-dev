@@ -35,8 +35,7 @@ func (m *Odometer) Reset() {
 	m.distanceMeters = 0
 	m.lastCoordinate = models.Coordinate{}
 
-	m.log.Info().
-		Msg("Odometer reset")
+	m.log.Debug().Msg("Odometer reset")
 }
 
 // Add updates the odometer with the current position and returns the distance travelled since the last update.
