@@ -56,7 +56,7 @@ func New(db circuits.CircuitDB, logger zerolog.Logger) (*Circuit, error) {
 		lapStartOdometerReading: 0,
 		lapProgressMeters:       0,
 		bestLapTime:             100 * time.Hour,
-		info:                    circuitInfoInit(),
+		info:                    emptyCircuitInfo(),
 		lastCoordinate:          models.Coordinate{},
 		candidates:              make(Candidates),
 	}, nil
@@ -64,11 +64,7 @@ func New(db circuits.CircuitDB, logger zerolog.Logger) (*Circuit, error) {
 
 // Reset clears the current circuit information and lap start marker distance.
 func (c *Circuit) Reset() {
-	c.info = circuits.CircuitInfo{
-		ID:   circuitInfoInit().ID,
-		Name: circuitInfoInit().Name,
-	}
-
+	c.info = emptyCircuitInfo()
 	c.candidates = make(Candidates)
 	c.ResetLapProgress()
 
@@ -115,8 +111,8 @@ func (c *Circuit) LapProgressRemaining() float64 {
 	return 1.0 - progress
 }
 
-// UpdateCircuit updates the current circuit information by matching the provided coordinate with a circuit DB entry
-// The updateType flag indicates if the coordinate is from a start line crossing or general positional update.
+// UpdateCircuit updates the current circuit information by matching the provided coordinate with a circuit DB entry.
+// Returns true if the circuit was updated.
 func (c *Circuit) UpdateCircuit(
 	odometerReading float64,
 	lap int16,
@@ -131,17 +127,11 @@ func (c *Circuit) UpdateCircuit(
 		c.setLapStartMarker(odometerReading)
 	}
 
-	var matchingCircuits []string
+	coordinateNorm := circuits.NormaliseStartLineCoordinate(coordinate)
+	key := coordinateNorm.String()
 
 	circuitID, found := c.database.GetCircuitAtCoordinate(coordinate, coordinateType)
-	if found {
-		matchingCircuits = append(matchingCircuits, circuitID)
-	}
-
-	coordinateNorm := circuits.NormaliseStartLineCoordinate(coordinate)
-	key := circuits.CoordinateNormToKey(coordinateNorm)
-
-	if len(matchingCircuits) == 0 {
+	if !found {
 		c.log.Debug().
 			Str("coordinate", key).
 			Msg("No coordinate matched")
@@ -149,9 +139,7 @@ func (c *Circuit) UpdateCircuit(
 		return false
 	}
 
-	for _, circuitID := range matchingCircuits {
-		c.updateCandidateConfidence(circuitID, key)
-	}
+	c.updateCandidateConfidence(circuitID, key)
 
 	bestCandidate := c.bestCandidate()
 	if bestCandidate == nil {
@@ -173,6 +161,15 @@ func (c *Circuit) UpdateCircuit(
 			Msg("Circuit updated")
 
 		return true
+	}
+
+	if bestCandidate.confidence == 100 {
+		c.log.Info().
+			Str("track", c.info.Variation).
+			Str("confidence", fmt.Sprintf("%.0f%%", bestCandidate.confidence*100)).
+			Int("matches", len(bestCandidate.matchedCoords)).
+			Int("length_meters", c.info.Length).
+			Msg("Circuit match confidence maximized")
 	}
 
 	return false
@@ -241,8 +238,8 @@ func (c *Circuit) setCircuitLength(lapTime time.Duration) {
 		Msg("Observed circuit length updated")
 }
 
-// Initial unknown circuit info.
-func circuitInfoInit() circuits.CircuitInfo {
+// emptyCircuitInfo returns a default empty CircuitInfo instance.
+func emptyCircuitInfo() circuits.CircuitInfo {
 	return circuits.CircuitInfo{
 		ID:        "unknown",
 		Name:      "unknown",
@@ -251,7 +248,7 @@ func circuitInfoInit() circuits.CircuitInfo {
 	}
 }
 
-// circuitIsKnown returns true if the current circuit is known.
+// circuitIsKnown returns true if the current circuit has been identified.
 func (c *Circuit) circuitIsKnown() bool {
-	return c.info.ID != circuitInfoInit().ID
+	return c.info.ID != emptyCircuitInfo().ID
 }

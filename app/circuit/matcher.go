@@ -23,11 +23,6 @@ func (c *Circuit) updateCandidateConfidence(circuitID string, coordinateKey stri
 		return
 	}
 
-	// Stop tracking new coordinates once we've matched all unique coordinates
-	if len(candidate.matchedCoords) >= candidate.info.UniqueCoordinateCount {
-		return
-	}
-
 	if !candidate.matchedCoords[coordinateKey] {
 		candidate.matchedCoords[coordinateKey] = true
 	}
