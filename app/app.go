@@ -633,7 +633,7 @@ func (a *App) mainLoop() {
 		case <-tickerPitRadio.C:
 			a.handlePitRadioTick()
 		case <-tickerDebug.C:
-			// a.handleDebugTick()
+			a.handleDebugTick()
 		}
 	}
 }
@@ -693,11 +693,15 @@ func (a *App) handlePitRadioTick() {
 
 // handleDebugTick processes debug logging.
 func (a *App) handleDebugTick() {
+	if a.log.GetLevel() > zerolog.DebugLevel {
+		return
+	}
+
 	if !a.gtClient.Telemetry.IsOnCircuit() {
 		return
 	}
 
-	a.log.Info().
+	a.log.Debug().
 		Int("lap", int(a.state.current.lapNumber)).
 		Float32("percent", a.gtClient.Telemetry.FuelLevelPercent()).
 		Int("odometer", int(a.odometer.Read())).
@@ -712,7 +716,7 @@ func (a *App) handleDebugTick() {
 		a.gtClient.Telemetry.TyreTemperatureCelsius().RearLeft +
 		a.gtClient.Telemetry.TyreTemperatureCelsius().RearRight) / 4
 
-	a.log.Info().
+	a.log.Debug().
 		Float32("temp_avg", averageTemp).
 		Float32("temp_fl", a.gtClient.Telemetry.TyreTemperatureCelsius().FrontLeft).
 		Float32("temp_fr", a.gtClient.Telemetry.TyreTemperatureCelsius().FrontRight).
