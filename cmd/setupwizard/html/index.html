@@ -146,7 +146,9 @@
         <div id="network-config" class="hidden">
             <div class="form-group">
                 <label for="password">Network Password:</label>
-                <input type="password" id="password" placeholder="Enter network password">
+                <input type="password" id="password"
+                    placeholder="Enter network password (leave empty for open networks)">
+                <div id="password-error" class="validation-error"></div>
             </div>
 
             <div class="form-group">
@@ -205,6 +207,7 @@
         const ipConfigRadios = document.querySelectorAll('input[name="ip-config"]');
         const saveBtn = document.getElementById('save-btn');
         const statusMessage = document.getElementById('status-message');
+        const passwordInput = document.getElementById('password');
 
         // IP address validation regex
         const ipRegex = /^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
@@ -240,6 +243,31 @@
             return true;
         }
 
+        function validatePassword() {
+            const password = passwordInput.value;
+            const errorElement = document.getElementById('password-error');
+
+            // Empty password is valid (open network)
+            if (password === '') {
+                errorElement.textContent = '';
+                return true;
+            }
+
+            // WPA/WPA2/WPA3 passphrase must be 8-63 characters
+            if (password.length < 8) {
+                errorElement.textContent = 'Password must be at least 8 characters (or empty for open networks)';
+                return false;
+            }
+
+            if (password.length > 63) {
+                errorElement.textContent = 'Password must not exceed 63 characters';
+                return false;
+            }
+
+            errorElement.textContent = '';
+            return true;
+        }
+
         function validateStaticIPFields() {
             const ipConfig = document.querySelector('input[name="ip-config"]:checked').value;
             if (ipConfig !== 'static') {
@@ -258,31 +286,52 @@
             if (!networkSelect.value) {
                 return false;
             }
-            return validateStaticIPFields();
+            let isValid = validatePassword();
+            isValid = validateStaticIPFields() && isValid;
+            return isValid;
         }
+
+        function updateSaveButtonState() {
+            saveBtn.disabled = !validateForm();
+        }
+
+        // Add password validation on input
+        passwordInput.addEventListener('input', function () {
+            validatePassword();
+            updateSaveButtonState();
+        });
+
+        passwordInput.addEventListener('blur', function () {
+            validatePassword();
+            updateSaveButtonState();
+        });
 
         // Add input validation on blur
         document.getElementById('ip-address').addEventListener('blur', function () {
             if (document.querySelector('input[name="ip-config"]:checked').value === 'static') {
                 validateIPAddress(this.value, 'ip-address-error');
+                updateSaveButtonState();
             }
         });
 
         document.getElementById('netmask').addEventListener('blur', function () {
             if (document.querySelector('input[name="ip-config"]:checked').value === 'static') {
                 validateIPAddress(this.value, 'netmask-error');
+                updateSaveButtonState();
             }
         });
 
         document.getElementById('gateway').addEventListener('blur', function () {
             if (document.querySelector('input[name="ip-config"]:checked').value === 'static') {
                 validateIPAddress(this.value, 'gateway-error');
+                updateSaveButtonState();
             }
         });
 
         document.getElementById('dns').addEventListener('blur', function () {
             if (document.querySelector('input[name="ip-config"]:checked').value === 'static') {
                 validateDNS(this.value, 'dns-error');
+                updateSaveButtonState();
             }
         });
 
@@ -314,6 +363,7 @@
         networkSelect.addEventListener('change', function () {
             if (this.value) {
                 networkConfig.classList.remove('hidden');
+                updateSaveButtonState();
             } else {
                 networkConfig.classList.add('hidden');
             }
@@ -332,6 +382,7 @@
                     document.getElementById('gateway-error').textContent = '';
                     document.getElementById('dns-error').textContent = '';
                 }
+                updateSaveButtonState();
             });
         });
 
@@ -341,13 +392,13 @@
                 return;
             }
 
-            if (!confirm('Settings will be applied and the device will reboot. Continue?')) {
+            if (!confirm('Settings will be applied and device will no longer be accessible on this address. Continue?')) {
                 return;
             }
 
             statusMessage.style.display = 'none';
             saveBtn.disabled = true;
-            saveBtn.textContent = 'Saving and Rebooting...';
+            saveBtn.textContent = 'Configuring network (this may take up to 60 seconds)...';
 
             const formData = new FormData();
             formData.append('ssid', networkSelect.value);
@@ -365,9 +416,10 @@
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
-                        statusMessage.textContent = 'Configuration saved! Device is rebooting...';
+                        statusMessage.textContent = 'Configuration verified successfully! Device is now connected to your network.';
                         statusMessage.className = 'success';
                         statusMessage.style.display = 'block';
+                        saveBtn.textContent = 'Configuration Complete';
                     } else {
                         statusMessage.textContent = 'Failed to save configuration: ' + data.error;
                         statusMessage.className = 'error';

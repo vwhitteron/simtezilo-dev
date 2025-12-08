@@ -1,13 +1,13 @@
 package main
 
 import (
-	_ "embed"
-
 	"context"
+	_ "embed"
 	"errors"
 	"fmt"
 	"image"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -19,6 +19,7 @@ import (
 
 	"atomicgo.dev/keyboard"
 	"atomicgo.dev/keyboard/keys"
+	"github.com/Wifx/gonetworkmanager/v2"
 	"github.com/rs/zerolog"
 	"github.com/skip2/go-qrcode"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware"
@@ -28,7 +29,11 @@ import (
 )
 
 const (
-	setupModeFile = "/boot/firmware/simtezilo/SETUPMODE"
+	setupModeFile        = "/boot/firmware/simtezilo/SETUPMODE"
+	wlanInterface        = "wlan0"
+	runModeProfile       = "RunMode"
+	runModeBackupProfile = runModeProfile + "-Backup"
+	setupModeProfile     = "SetupMode"
 )
 
 //go:embed html/index.html
@@ -39,8 +44,8 @@ func handleRoot(writer http.ResponseWriter, _ *http.Request) {
 	fmt.Fprint(writer, indexHTML)
 }
 
-func handleNetworks(writer http.ResponseWriter, request *http.Request) {
-	networks, err := getAvailableNetworks(request.Context())
+func handleNetworks(writer http.ResponseWriter, _ *http.Request) {
+	networks, err := getAvailableNetworks()
 	if err != nil {
 		log.Printf("Failed to get available networks: %v\n", err)
 		http.Error(writer, fmt.Sprintf("Error fetching networks: %v", err), http.StatusInternalServerError)
@@ -52,23 +57,69 @@ func handleNetworks(writer http.ResponseWriter, request *http.Request) {
 	fmt.Fprintf(writer, `{"networks":%s}`, networks)
 }
 
-func getAvailableNetworks(ctx context.Context) (string, error) {
-	cmd := exec.CommandContext(ctx, "sudo", "nmcli", "-f", "SSID", "-t", "d", "wifi", "list", "ifname", "wlan0", "--rescan", "auto")
-
-	output, err := cmd.Output()
+func getAvailableNetworks() (string, error) {
+	nm, err := gonetworkmanager.NewNetworkManager()
 	if err != nil {
-		return "", fmt.Errorf("failed to get networks: %w", err)
+		return "", fmt.Errorf("failed to connect to NetworkManager: %w", err)
 	}
 
-	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+	devices, err := nm.GetDevices()
+	if err != nil {
+		return "", fmt.Errorf("failed to get devices: %w", err)
+	}
+
+	var wifiDevice gonetworkmanager.DeviceWireless
+
+	for _, device := range devices {
+		devType, err := device.GetPropertyDeviceType()
+		if err != nil {
+			continue
+		}
+
+		if devType == gonetworkmanager.NmDeviceTypeWifi {
+			iface, err := device.GetPropertyInterface()
+			if err != nil {
+				continue
+			}
+
+			if iface == wlanInterface {
+				wifiDevice, err = gonetworkmanager.NewDeviceWireless(device.GetPath())
+				if err != nil {
+					continue
+				}
+
+				break
+			}
+		}
+	}
+
+	if wifiDevice == nil {
+		return "", fmt.Errorf("%s device not found", wlanInterface)
+	}
+
+	// Request scan
+	err = wifiDevice.RequestScan()
+	if err != nil {
+		log.Printf("Warning: failed to request scan: %v\n", err)
+	}
+
+	// Get access points
+	accessPoints, err := wifiDevice.GetAccessPoints()
+	if err != nil {
+		return "", fmt.Errorf("failed to get access points: %w", err)
+	}
 
 	seen := make(map[string]bool)
 
 	var networks []string
 
-	for _, line := range lines {
-		ssid := strings.TrimSpace(line)
-		if ssid != "" && !seen[ssid] {
+	for _, ap := range accessPoints {
+		ssid, err := ap.GetPropertySSID()
+		if err != nil || ssid == "" {
+			continue
+		}
+
+		if !seen[ssid] {
 			seen[ssid] = true
 			networks = append(networks, fmt.Sprintf(`"%s"`, ssid))
 		}
@@ -101,21 +152,18 @@ func handleSave(writer http.ResponseWriter, request *http.Request) {
 		writer.WriteHeader(http.StatusInternalServerError)
 		fmt.Fprintf(writer, `{"success":false,"error":"%s"}`, err.Error())
 
+		// Don't exit - allow user to try again
 		return
 	}
 
 	fmt.Fprint(writer, `{"success":true}`)
 
-	// Configuration saved successfully, disable setup mode and and exit
+	// Configuration saved and verified successfully, exit with success code
+	// The SETUPMODE file is intentionally NOT deleted to allow re-entry if needed
 	go func() {
 		time.Sleep(1 * time.Second)
 
-		err := os.Remove(setupModeFile)
-		if err != nil {
-			log.Printf("Failed to remove SETUPMODE file: %v\n", err)
-		}
-
-		// exit and let systemd restart the app
+		log.Println("Network configuration completed successfully, exiting with code 0")
 		os.Exit(0)
 	}()
 }
@@ -132,7 +180,7 @@ func main() {
 	// Handle OS signals (Ctrl+C)
 	go func() {
 		sig := <-sigChan
-		log.Printf("Received %v signal, shutting down\n", sig)
+		log.Printf("Received %v signal, shutting down without completing setup\n", sig)
 
 		done <- true
 	}()
@@ -206,7 +254,7 @@ func main() {
 	// Wait for shutdown signal
 	<-done
 
-	log.Println("Shutting down...")
+	log.Println("Shutting down without completing setup, exiting with code 1")
 
 	// Clear display to black
 	blackCanvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
@@ -220,6 +268,9 @@ func main() {
 	}
 
 	lcd.Sleep()
+
+	// Exit with error code since setup was not completed
+	os.Exit(1)
 }
 
 // WIFI:S:<SSID>;T:<AUTH>;P:<PASSWORD>;H:<true|false|blank>;;
@@ -257,86 +308,52 @@ func genQRcode() image.Image {
 }
 
 func getNetworkSSID() (string, error) {
-	wlanIface := "wlan0"
-
-	output, err := runNmcliDevShowCommand(wlanIface)
+	nm, err := gonetworkmanager.NewNetworkManager()
 	if err != nil {
-		return "", errors.New("nmcli command failed: " + err.Error())
+		return "", fmt.Errorf("failed to connect to NetworkManager: %w", err)
 	}
 
-	ssid := extractSSIDFromOutput(output)
-	if ssid != "" {
-		return ssid, nil
-	}
-
-	return "", errors.New("SSID not found in nmcli output")
-}
-
-func runNmcliDevShowCommand(iface string) (string, error) {
-	ctx := context.Background()
-	cmd := exec.CommandContext(ctx, "nmcli", "-f", "AP", "dev", "show", iface)
-
-	output, err := cmd.Output()
+	devices, err := nm.GetDevices()
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to get devices: %w", err)
 	}
 
-	return string(output), nil
-}
-
-func extractSSIDFromOutput(output string) string {
-	lines := strings.Split(output, "\n")
-
-	inUseIndex := findInUseAPIndex(lines)
-	if inUseIndex < 0 {
-		return ""
-	}
-
-	return findSSIDFromIndex(lines, inUseIndex)
-}
-
-func findInUseAPIndex(lines []string) int {
-	for index, line := range lines {
-		if !strings.Contains(line, "AP[") || !strings.Contains(line, ".IN-USE:") || !strings.Contains(line, "*") {
+	for _, device := range devices {
+		devType, err := device.GetPropertyDeviceType()
+		if err != nil {
 			continue
 		}
 
-		// Extract the AP index number
-		re := regexp.MustCompile(`AP\[(\d+)\]\.IN-USE:`)
-		matches := re.FindStringSubmatch(line)
+		if devType == gonetworkmanager.NmDeviceTypeWifi {
+			iface, err := device.GetPropertyInterface()
+			if err != nil {
+				continue
+			}
 
-		if len(matches) == 2 {
-			return index
-		}
-	}
+			if iface == wlanInterface {
+				wifiDevice, err := gonetworkmanager.NewDeviceWireless(device.GetPath())
+				if err != nil {
+					return "", fmt.Errorf("failed to create wireless device: %w", err)
+				}
 
-	return -1
-}
+				activeAP, err := wifiDevice.GetPropertyActiveAccessPoint()
+				if err != nil {
+					return "", fmt.Errorf("failed to get active access point: %w", err)
+				}
 
-func findSSIDFromIndex(lines []string, startIndex int) string {
-	maxLines := startIndex + 50
-	if maxLines > len(lines) {
-		maxLines = len(lines)
-	}
+				if activeAP != nil {
+					ssid, err := activeAP.GetPropertySSID()
+					if err != nil {
+						return "", fmt.Errorf("failed to get SSID: %w", err)
+					}
 
-	for index := startIndex; index < maxLines; index++ {
-		line := lines[index]
-		if !strings.Contains(line, ".SSID:") {
-			continue
-		}
-
-		parts := strings.Split(line, ":")
-		if len(parts) >= 2 {
-			ssid := strings.TrimSpace(strings.Join(parts[1:], ":"))
-			if ssid != "" {
-				return ssid
+					return ssid, nil
+				}
 			}
 		}
-
-		break
 	}
 
-	return ""
+	return "", fmt.Errorf("%s device not found or not connected", wlanInterface)
 }
 
 // GenerateNetworkSSID generates the WiFi network name (SSID) based on the device serial number.
@@ -356,8 +373,8 @@ func getDeviceSerial() string {
 		return fallbackSerial
 	}
 
-	lines := strings.Split(string(data), "\n")
-	for _, line := range lines {
+	lines := strings.SplitSeq(string(data), "\n")
+	for line := range lines {
 		if strings.HasPrefix(line, "Serial") {
 			parts := strings.Split(line, ":")
 
@@ -405,87 +422,93 @@ func saveNetworkConfiguration(ctx context.Context, ssid, password, ipConfig, ipA
 		}
 	}
 
-	// Delete any existing RunMode connection first
-	deleteCmd := exec.CommandContext(ctx, "nmcli", "connection", "delete", "RunMode")
-	_ = deleteCmd.Run()
+	// Backup existing RunMode connection before deleting
+	backupRunModeConnection()
 
-	// Recreate connection for permanent save
-	addCmd := exec.CommandContext(ctx, "nmcli", "connection", "add", "type", "wifi", "ifname", "wlan0", "con-name", "RunMode", "ssid", ssid)
+	// Delete any existing RunMode connection
+	deleteRunModeConnection()
 
-	err := addCmd.Run()
-	if err != nil {
-		return fmt.Errorf("failed to add connection: %w", err)
-	}
-
-	// Configure IP method
-	var ipMethod string
-	if ipConfig == "static" {
-		ipMethod = "manual"
-	} else {
-		ipMethod = "auto"
-	}
-
-	modifyIPCmd := exec.CommandContext(ctx, "nmcli", "connection", "modify", "RunMode", "ipv4.method", ipMethod)
-
-	err = modifyIPCmd.Run()
-	if err != nil {
-		_ = exec.CommandContext(ctx, "nmcli", "connection", "delete", "RunMode").Run()
-
-		return fmt.Errorf("failed to set IP method: %w", err)
-	}
-
-	// Configure static IP if selected
-	if ipConfig == "static" {
-		prefix := netmaskToCIDR(netmask)
-		addressWithPrefix := fmt.Sprintf("%s/%d", ipAddress, prefix)
-
-		modifyAddrCmd := exec.CommandContext(ctx, "nmcli", "connection", "modify", "RunMode", "ipv4.addresses", addressWithPrefix)
-
-		err = modifyAddrCmd.Run()
-		if err != nil {
-			deleteRunModeConnection(ctx)
-
-			return fmt.Errorf("failed to set IP address: %w", err)
-		}
-
-		modifyGWCmd := exec.CommandContext(ctx, "nmcli", "connection", "modify", "RunMode", "ipv4.gateway", gateway)
-
-		err = modifyGWCmd.Run()
-		if err != nil {
-			deleteRunModeConnection(ctx)
-
-			return fmt.Errorf("failed to set gateway: %w", err)
-		}
-
-		modifyDNSCmd := exec.CommandContext(ctx, "nmcli", "connection", "modify", "RunMode", "ipv4.dns", dns)
-
-		err = modifyDNSCmd.Run()
-		if err != nil {
-			deleteRunModeConnection(ctx)
-
-			return fmt.Errorf("failed to set DNS: %w", err)
-		}
+	// Build connection settings
+	settings := gonetworkmanager.ConnectionSettings{
+		"connection": map[string]interface{}{
+			"id":             runModeProfile,
+			"type":           "802-11-wireless",
+			"interface-name": wlanInterface,
+			"autoconnect":    true,
+		},
+		"802-11-wireless": map[string]interface{}{
+			"ssid": []byte(ssid),
+			"mode": "infrastructure",
+		},
 	}
 
 	// Configure WiFi security
 	if password != "" {
-		modifyKeyMgmtCmd := exec.CommandContext(ctx, "nmcli", "connection", "modify", "RunMode", "wifi-sec.key-mgmt", "wpa-psk")
+		settings["802-11-wireless-security"] = map[string]interface{}{
+			"key-mgmt":  "wpa-psk",
+			"psk":       password,
+			"psk-flags": uint32(0), // NM_SETTING_SECRET_FLAG_NONE - store password
+		}
+	}
 
-		err = modifyKeyMgmtCmd.Run()
-		if err != nil {
-			deleteRunModeConnection(ctx)
+	// Configure IP settings
+	if ipConfig == "static" {
+		prefix := netmaskToCIDR(netmask)
 
-			return fmt.Errorf("failed to set key management: %w", err)
+		// Parse IP addresses
+		ipAddr := net.ParseIP(ipAddress)
+		gatewayAddr := net.ParseIP(gateway)
+
+		if ipAddr == nil || gatewayAddr == nil {
+			return errors.New("invalid IP address format")
 		}
 
-		modifyPSKCmd := exec.CommandContext(ctx, "nmcli", "connection", "modify", "RunMode", "wifi-sec.psk", password)
-
-		err = modifyPSKCmd.Run()
-		if err != nil {
-			deleteRunModeConnection(ctx)
-
-			return fmt.Errorf("failed to set password: %w", err)
+		// Build address data: array of [address, prefix, gateway]
+		addressData := []map[string]any{
+			{
+				"address": ipAddress,
+				"prefix":  prefix,
+			},
 		}
+
+		// Parse DNS servers - convert to uint32 array (network byte order)
+		dnsServers := strings.Split(dns, ",")
+
+		var dnsAddresses []uint32
+
+		for _, dnsServer := range dnsServers {
+			dnsIP := net.ParseIP(strings.TrimSpace(dnsServer))
+			if dnsIP != nil {
+				// Convert IPv4 to uint32 (network byte order)
+				ipv4 := dnsIP.To4()
+				if ipv4 != nil {
+					dnsUint32 := uint32(ipv4[0])<<24 | uint32(ipv4[1])<<16 | uint32(ipv4[2])<<8 | uint32(ipv4[3])
+					dnsAddresses = append(dnsAddresses, dnsUint32)
+				}
+			}
+		}
+
+		settings["ipv4"] = map[string]any{
+			"method":       "manual",
+			"address-data": addressData,
+			"gateway":      gateway,
+			"dns":          dnsAddresses,
+		}
+	} else {
+		settings["ipv4"] = map[string]any{
+			"method": "auto",
+		}
+	}
+
+	// Add the connection
+	settingsObj, err := gonetworkmanager.NewSettings()
+	if err != nil {
+		return fmt.Errorf("failed to get settings: %w", err)
+	}
+
+	_, err = settingsObj.AddConnection(settings)
+	if err != nil {
+		return fmt.Errorf("failed to add connection: %w", err)
 	}
 
 	// Switch from SetupMode to RunMode
@@ -497,49 +520,369 @@ func saveNetworkConfiguration(ctx context.Context, ssid, password, ipConfig, ipA
 	return nil
 }
 
-func switchToRunMode(ctx context.Context) error {
-	// Enable RunMode autoconnect
-	setupModeDownCmd := exec.CommandContext(ctx, "nmcli", "con", "down", "SetupMode")
+func waitForConnectionState(ctx context.Context, activeConn gonetworkmanager.ActiveConnection, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
 
-	err := setupModeDownCmd.Run()
-	if err != nil {
-		return fmt.Errorf("failed to bring down SetupMode connection: %w", err)
+	for time.Now().Before(deadline) {
+		state, err := activeConn.GetPropertyState()
+		if err != nil {
+			return fmt.Errorf("failed to get connection state: %w", err)
+		}
+
+		if state == gonetworkmanager.NmActiveConnectionStateActivated {
+			return nil
+		}
+
+		if state >= gonetworkmanager.NmActiveConnectionStateDeactivating {
+			return fmt.Errorf("connection failed or deactivated (state: %d)", state)
+		}
+
+		// Check context cancellation
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(500 * time.Millisecond):
+			// Continue waiting
+		}
 	}
 
-	runModeUpCmd := exec.CommandContext(ctx, "nmcli", "con", "up", "RunMode")
+	return errors.New("timeout waiting for connection to activate")
+}
 
-	err = runModeUpCmd.Run()
+func verifyIPAddress(device gonetworkmanager.Device) error {
+	// Get IP4Config
+	ip4Config, err := device.GetPropertyIP4Config()
 	if err != nil {
-		_ = switchToSetupMode(ctx)
-		deleteRunModeConnection(ctx)
-
-		return fmt.Errorf("failed to bring up RunMode connection: %w", err)
+		return fmt.Errorf("failed to get IP4Config: %w", err)
 	}
 
-	// Enable RunMode autoconnect
-	modifyRunAutoconnectCmd := exec.CommandContext(ctx, "nmcli", "con", "modify", "RunMode", "autoconnect", "yes")
-
-	err = modifyRunAutoconnectCmd.Run()
-	if err != nil {
-		log.Printf("Warning: failed to disable SetupMode autoconnect: %v\n", err)
+	if ip4Config == nil {
+		return errors.New("no IP configuration available")
 	}
 
-	// Disable SetupMode autoconnect
-	modifySetupAutoconnectCmd := exec.CommandContext(ctx, "nmcli", "con", "modify", "SetupMode", "autoconnect", "no")
-
-	err = modifySetupAutoconnectCmd.Run()
+	addresses, err := ip4Config.GetPropertyAddressData()
 	if err != nil {
-		log.Printf("Warning: failed to disable SetupMode autoconnect: %v\n", err)
+		return fmt.Errorf("failed to get addresses: %w", err)
 	}
+
+	if len(addresses) == 0 {
+		return errors.New("no IP addresses assigned")
+	}
+
+	log.Printf("IP address assigned: %s/%d\n", addresses[0].Address, addresses[0].Prefix)
 
 	return nil
 }
 
-func switchToSetupMode(ctx context.Context) error {
-	// Enable RunMode autoconnect
-	setupModeUpCmd := exec.CommandContext(ctx, "nmcli", "con", "up", "SetupMode")
+func testConnectivity(ctx context.Context) error {
+	// Try to ping the gateway first
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
 
-	err := setupModeUpCmd.Run()
+	// Get the default gateway
+	nm, err := gonetworkmanager.NewNetworkManager()
+	if err != nil {
+		return fmt.Errorf("failed to connect to NetworkManager: %w", err)
+	}
+
+	devices, err := nm.GetDevices()
+	if err != nil {
+		return fmt.Errorf("failed to get devices: %w", err)
+	}
+
+	var gateway string
+
+	for _, device := range devices {
+		iface, err := device.GetPropertyInterface()
+		if err != nil || iface != wlanInterface {
+			continue
+		}
+
+		ip4Config, err := device.GetPropertyIP4Config()
+		if err != nil || ip4Config == nil {
+			continue
+		}
+
+		gateway, err = ip4Config.GetPropertyGateway()
+		if err == nil && gateway != "" {
+			break
+		}
+	}
+
+	if gateway == "" {
+		// Try DNS as fallback
+		gateway = "1.1.1.1"
+	}
+
+	log.Printf("Testing connectivity to %s...\n", gateway)
+
+	// Ping test with 3 packets, 2 second timeout per packet
+	cmd := "ping -c 3 -W 2 " + gateway
+
+	_, err = runCommandWithContext(ctx, cmd)
+	if err != nil {
+		return fmt.Errorf("connectivity test failed: %w", err)
+	}
+
+	log.Println("Connectivity test passed")
+
+	return nil
+}
+
+func runCommandWithContext(ctx context.Context, cmdStr string) (string, error) {
+	parts := strings.Fields(cmdStr)
+	if len(parts) == 0 {
+		return "", errors.New("empty command")
+	}
+
+	cmd := exec.CommandContext(ctx, parts[0], parts[1:]...) //nolint:gosec
+	output, err := cmd.CombinedOutput()
+
+	return string(output), err
+}
+
+func switchToRunMode(ctx context.Context) error {
+	nm, err := gonetworkmanager.NewNetworkManager() //nolint:varnamelen // not confusing
+	if err != nil {
+		return fmt.Errorf("failed to connect to NetworkManager: %w", err)
+	}
+
+	// Get all connections
+	settings, err := gonetworkmanager.NewSettings()
+	if err != nil {
+		return fmt.Errorf("failed to get settings: %w", err)
+	}
+
+	connections, err := settings.ListConnections()
+	if err != nil {
+		return fmt.Errorf("failed to list connections: %w", err)
+	}
+
+	var setupModeConn, runModeConn gonetworkmanager.Connection
+
+	for _, conn := range connections {
+		connSettings, err := conn.GetSettings()
+		if err != nil {
+			continue
+		}
+
+		connMap, ok := connSettings["connection"]
+		if !ok {
+			continue
+		}
+
+		if id, ok := connMap["id"].(string); ok {
+			switch id {
+			case setupModeProfile:
+				setupModeConn = conn
+			case runModeProfile:
+				runModeConn = conn
+			}
+		}
+	}
+
+	if runModeConn == nil {
+		return fmt.Errorf("connection profile %q not found", runModeProfile)
+	}
+
+	// Deactivate SetupMode
+	if setupModeConn != nil {
+		activeConns, err := nm.GetPropertyActiveConnections()
+		if err == nil {
+			for _, activeConn := range activeConns {
+				connPath, err := activeConn.GetPropertyConnection()
+				if err == nil && connPath.GetPath() == setupModeConn.GetPath() {
+					err = nm.DeactivateConnection(activeConn)
+					if err != nil {
+						log.Printf("Warning: failed to deactivate SetupMode: %v\n", err)
+					}
+
+					break
+				}
+			}
+		}
+
+		// Disable SetupMode autoconnect
+		setupSettings, err := setupModeConn.GetSettings()
+		if err == nil {
+			connMap, ok := setupSettings["connection"]
+
+			if ok {
+				connMap["autoconnect"] = false
+
+				err = setupModeConn.Update(setupSettings)
+				if err != nil {
+					log.Printf("Warning: failed to disable SetupMode autoconnect: %v\n", err)
+				}
+			}
+		}
+	}
+
+	// Activate RunMode
+	devices, err := nm.GetDevices()
+	if err != nil {
+		return fmt.Errorf("failed to get devices: %w", err)
+	}
+
+	var wlanDevice gonetworkmanager.Device
+
+	for _, device := range devices {
+		iface, err := device.GetPropertyInterface()
+		if err == nil && iface == wlanInterface {
+			wlanDevice = device
+
+			break
+		}
+	}
+
+	if wlanDevice == nil {
+		return fmt.Errorf("%s device not found", wlanInterface)
+	}
+
+	// Activate the RunMode connection
+	log.Printf("Activating connection profile %q...\n", runModeProfile)
+
+	activeConn, err := nm.ActivateConnection(runModeConn, wlanDevice, nil)
+	if err != nil {
+		log.Printf("Failed to activate connection profile %q: %v\n", runModeProfile, err)
+		restoreRunModeConnection()
+
+		_ = switchToSetupMode()
+
+		return fmt.Errorf("failed to activate connection profile %q: %w", runModeProfile, err)
+	}
+
+	// Wait for connection to reach activated state (30 second timeout)
+	log.Println("Waiting for connection to activate...")
+
+	err = waitForConnectionState(ctx, activeConn, 30*time.Second)
+	if err != nil {
+		log.Printf("Failed to activate connection profile %q: %v\n", runModeProfile, err)
+		restoreRunModeConnection()
+
+		_ = switchToSetupMode()
+
+		return fmt.Errorf("failed to activate connection profile %q: %w", runModeProfile, err)
+	}
+
+	log.Println("Connection activated successfully")
+
+	// Verify IP address assignment (wait up to 15 seconds)
+	log.Println("Verifying IP address assignment...")
+
+	var ipVerified bool
+
+	for range 30 {
+		err = verifyIPAddress(wlanDevice)
+		if err == nil {
+			ipVerified = true
+
+			break
+		}
+
+		select {
+		case <-ctx.Done():
+			restoreRunModeConnection()
+
+			_ = switchToSetupMode()
+
+			return ctx.Err()
+		case <-time.After(500 * time.Millisecond):
+			// Continue waiting
+		}
+	}
+
+	if !ipVerified {
+		log.Println("Failed to obtain IP address")
+		restoreRunModeConnection()
+
+		_ = switchToSetupMode()
+
+		return errors.New("failed to obtain IP address")
+	}
+
+	// Test connectivity
+	log.Println("Testing network connectivity...")
+
+	err = testConnectivity(ctx)
+	if err != nil {
+		log.Printf("Connectivity test failed: %v\n", err)
+		restoreRunModeConnection()
+
+		_ = switchToSetupMode()
+
+		return fmt.Errorf("connectivity test failed: %w", err)
+	}
+
+	log.Println("Network configuration verified successfully")
+
+	// Delete the backup since the new configuration is working
+	deleteRunModeBackup()
+
+	return nil
+}
+
+func switchToSetupMode() error {
+	nm, err := gonetworkmanager.NewNetworkManager() //nolint:varnamelen // not confusing
+	if err != nil {
+		return fmt.Errorf("failed to connect to NetworkManager: %w", err)
+	}
+
+	settings, err := gonetworkmanager.NewSettings()
+	if err != nil {
+		return fmt.Errorf("failed to get settings: %w", err)
+	}
+
+	connections, err := settings.ListConnections()
+	if err != nil {
+		return fmt.Errorf("failed to list connections: %w", err)
+	}
+
+	var setupModeConn gonetworkmanager.Connection
+
+	for _, conn := range connections {
+		connSettings, err := conn.GetSettings()
+		if err != nil {
+			continue
+		}
+
+		connMap, ok := connSettings["connection"]
+		if !ok {
+			continue
+		}
+
+		if id, ok := connMap["id"].(string); ok && id == "SetupMode" {
+			setupModeConn = conn
+
+			break
+		}
+	}
+
+	if setupModeConn == nil {
+		return errors.New("SetupMode connection not found")
+	}
+
+	devices, err := nm.GetDevices()
+	if err != nil {
+		return fmt.Errorf("failed to get devices: %w", err)
+	}
+
+	var wlanDevice gonetworkmanager.Device
+
+	for _, device := range devices {
+		iface, err := device.GetPropertyInterface()
+		if err == nil && iface == wlanInterface {
+			wlanDevice = device
+
+			break
+		}
+	}
+
+	if wlanDevice == nil {
+		return fmt.Errorf("%s device not found", wlanInterface)
+	}
+
+	_, err = nm.ActivateConnection(setupModeConn, wlanDevice, nil)
 	if err != nil {
 		return fmt.Errorf("failed to bring up SetupMode connection: %w", err)
 	}
@@ -547,13 +890,219 @@ func switchToSetupMode(ctx context.Context) error {
 	return nil
 }
 
-func deleteRunModeConnection(ctx context.Context) {
-	// Delete any existing RunMode connection
-	deleteCmd := exec.CommandContext(ctx, "nmcli", "connection", "delete", "RunMode")
-
-	err := deleteCmd.Run()
+func backupRunModeConnection() {
+	settings, err := gonetworkmanager.NewSettings()
 	if err != nil {
-		log.Printf("Warning: failed to delete RunMode connection: %v\n", err)
+		log.Printf("Warning: failed to get settings for backup: %v\n", err)
+
+		return
+	}
+
+	connections, err := settings.ListConnections()
+	if err != nil {
+		log.Printf("Warning: failed to list connections for backup: %v\n", err)
+
+		return
+	}
+
+	// First, delete any existing backup
+	for _, conn := range connections {
+		connSettings, err := conn.GetSettings()
+		if err != nil {
+			continue
+		}
+
+		connMap, ok := connSettings["connection"]
+		if !ok {
+			continue
+		}
+
+		if id, ok := connMap["id"].(string); ok && id == runModeBackupProfile {
+			err = conn.Delete()
+			if err != nil {
+				log.Printf("Warning: failed to delete backup connection profile %q: %v\n", runModeBackupProfile, err)
+			}
+
+			break
+		}
+	}
+
+	// Now find and backup the current RunMode connection
+	for _, conn := range connections {
+		connSettings, err := conn.GetSettings()
+		if err != nil {
+			continue
+		}
+
+		connMap, ok := connSettings["connection"]
+		if !ok {
+			continue
+		}
+
+		if id, ok := connMap["id"].(string); ok && id == runModeProfile {
+			// Clone the settings and rename to RunMode-Backup
+			connMap["id"] = runModeBackupProfile
+			connMap["autoconnect"] = false // Don't auto-connect to backup
+
+			_, err = settings.AddConnection(connSettings)
+			if err != nil {
+				log.Printf("Warning: failed to create backup connection profile %q: %v\n", runModeBackupProfile, err)
+			} else {
+				log.Printf("Existing connection profile %q backed up to %q\n", runModeProfile, runModeBackupProfile)
+			}
+
+			return
+		}
+	}
+
+	log.Printf("No existing connection profile %q to backup\n", runModeProfile)
+}
+
+func restoreRunModeConnection() {
+	log.Printf("Restoring connection profile %q from backup...\n", runModeProfile)
+
+	settings, err := gonetworkmanager.NewSettings()
+	if err != nil {
+		log.Printf("Warning: failed to restore connection profile %q: %v\n", runModeProfile, err)
+
+		return
+	}
+
+	connections, err := settings.ListConnections()
+	if err != nil {
+		log.Printf("Warning: failed to list connections for restore: %v\n", err)
+
+		return
+	}
+
+	// Find the backup connection
+	var backupConn gonetworkmanager.Connection
+
+	for _, conn := range connections {
+		connSettings, err := conn.GetSettings()
+		if err != nil {
+			continue
+		}
+
+		connMap, ok := connSettings["connection"]
+		if !ok {
+			continue
+		}
+
+		if id, ok := connMap["id"].(string); ok && id == runModeBackupProfile {
+			backupConn = conn
+
+			break
+		}
+	}
+
+	if backupConn == nil {
+		log.Println("No backup connection found to restore")
+
+		return
+	}
+
+	// Get backup settings
+	backupSettings, err := backupConn.GetSettings()
+	if err != nil {
+		log.Printf("Warning: failed to get backup settings: %v\n", err)
+
+		return
+	}
+
+	// Delete current failed RunMode connection
+	deleteRunModeConnection()
+
+	// Rename backup back to RunMode
+	if connMap, ok := backupSettings["connection"]; ok {
+		connMap["id"] = runModeProfile
+		connMap["autoconnect"] = true
+	}
+
+	// Create the restored connection
+	_, err = settings.AddConnection(backupSettings)
+	if err != nil {
+		log.Printf("Warning: failed to restore connection profile %q: %v\n", runModeProfile, err)
+
+		return
+	}
+
+	log.Printf("Successfully restored previous connection profile %q from backup\n", runModeProfile)
+
+	// Delete the backup
+	err = backupConn.Delete()
+	if err != nil {
+		log.Printf("Warning: failed to delete backup connection profile %q after restore: %v\n", runModeBackupProfile, err)
+	}
+}
+
+func deleteRunModeBackup() {
+	settings, err := gonetworkmanager.NewSettings()
+	if err != nil {
+		return
+	}
+
+	connections, err := settings.ListConnections()
+	if err != nil {
+		return
+	}
+
+	for _, conn := range connections {
+		connSettings, err := conn.GetSettings()
+		if err != nil {
+			continue
+		}
+
+		connMap, ok := connSettings["connection"]
+		if !ok {
+			continue
+		}
+
+		if id, ok := connMap["id"].(string); ok && id == runModeBackupProfile {
+			err = conn.Delete()
+			if err != nil {
+				log.Printf("Warning: failed to delete backup connection profile %q: %v\n", runModeBackupProfile, err)
+			}
+
+			return
+		}
+	}
+}
+
+func deleteRunModeConnection() {
+	settings, err := gonetworkmanager.NewSettings()
+	if err != nil {
+		log.Printf("Warning: failed to get settings: %v\n", err)
+
+		return
+	}
+
+	connections, err := settings.ListConnections()
+	if err != nil {
+		log.Printf("Warning: failed to list connections: %v\n", err)
+
+		return
+	}
+
+	for _, conn := range connections {
+		connSettings, err := conn.GetSettings()
+		if err != nil {
+			continue
+		}
+
+		connMap, ok := connSettings["connection"]
+		if !ok {
+			continue
+		}
+
+		if id, ok := connMap["id"].(string); ok && id == runModeProfile {
+			err = conn.Delete()
+			if err != nil {
+				log.Printf("Warning: failed to delete %s connection: %v\n", runModeProfile, err)
+			}
+
+			return
+		}
 	}
 }
 
@@ -581,6 +1130,7 @@ func validateIPConfiguration(ipAddress, netmask, gateway, dns string) error {
 	dnsServers := strings.Split(dns, ",")
 	for _, server := range dnsServers {
 		server = strings.TrimSpace(server)
+
 		if !ipRegex.MatchString(server) {
 			return fmt.Errorf("invalid DNS server: %s", server)
 		}
