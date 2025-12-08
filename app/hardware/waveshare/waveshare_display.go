@@ -11,17 +11,19 @@ import (
 	"periph.io/x/conn/v3/spi"
 )
 
-const dataCommPin = "GPIO25"
-const resetPin = "GPIO27"
-const backlightPin = "GPIO24"
-const lcdPixelRows uint16 = 240
-const lcdPixelColumns uint16 = 240
-const lcdDPI float64 = 265
-const lcdRotation = st7789.Rotation90
-const spiPort = "SPI0.0"
-const spiFrequency = 40 * physic.MegaHertz
-const spiMode = spi.Mode0
-const spiBits uint8 = 8
+const (
+	dataCommPin             = "GPIO25"
+	resetPin                = "GPIO27"
+	backlightPin            = "GPIO24"
+	lcdPixelRows    uint16  = 240
+	lcdPixelColumns uint16  = 240
+	lcdDPI          float64 = 265
+	lcdRotation             = st7789.Rotation90
+	spiPort                 = "SPI0.0"
+	spiFrequency            = 40 * physic.MegaHertz
+	spiMode                 = spi.Mode0
+	spiBits         uint8   = 8
+)
 
 type DisplayOptions struct {
 	Orientation int

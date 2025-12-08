@@ -3,13 +3,12 @@ package main
 import (
 	"flag"
 	"fmt"
+	_ "image/png"
 	"log"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
-
-	_ "image/png"
 
 	"github.com/rs/zerolog"
 	"github.com/vwhitteron/simtezilo-dev/app"

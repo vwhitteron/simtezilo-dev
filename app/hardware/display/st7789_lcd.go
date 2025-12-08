@@ -5,10 +5,9 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	_ "image/png" // for loading sprite data
 	"sync"
 	"time"
-
-	_ "image/png" // for loading sprite data
 
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/display/st7789"
 	"github.com/vwhitteron/simtezilo-dev/app/i18n"

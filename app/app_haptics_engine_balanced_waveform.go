@@ -143,7 +143,8 @@ func (a *App) calculateThrottleScale() float64 {
 // generateBalancedSamples generates the actual waveform samples for the balanced approach.
 func (a *App) generateBalancedSamples(engineBuffer *[]float64, sampleRate, primaryFreq, secondaryFreq,
 	primaryImbalance, secondaryImbalance, primaryContribution, secondaryContribution,
-	throttleScale, amplitude, engineRoughness float64) {
+	throttleScale, amplitude, engineRoughness float64,
+) {
 	maxUsableFreq := 160.0
 
 	for index := range *engineBuffer {

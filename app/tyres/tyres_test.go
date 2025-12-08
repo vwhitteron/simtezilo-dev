@@ -113,6 +113,7 @@ func (suite *TyreTestSuite) TestAverageTemperature() {
 	expected := (70.0 + 80.0 + 90.0 + 100.0) / 4.0
 	suite.InEpsilon(float32(expected), average, 0.001)
 }
+
 func (suite *TyreTestSuite) TestPositionsInCondition() {
 	// Arrange
 	tyreTemps := models.CornerSet{

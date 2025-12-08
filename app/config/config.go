@@ -1581,7 +1581,7 @@ func (c *Config) SaveConfigToFile() (string, error) {
 	// Write to temporary file first
 	tempPath := configPath + ".tmp"
 
-	err = os.WriteFile(tempPath, tomlData, 0600)
+	err = os.WriteFile(tempPath, tomlData, 0o600)
 	if err != nil {
 		return backupPath, fmt.Errorf("failed to write temporary file: %w", err)
 	}

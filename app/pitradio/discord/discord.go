@@ -3,10 +3,9 @@ package discord
 
 import (
 	"bytes"
-	_ "embed" // for embedding static files
-	"encoding/binary"
-
 	"context"
+	_ "embed" // required for embedding files
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -462,7 +461,6 @@ func (d *Discord) sendVoiceAudio(dca []byte) error {
 		// Read encoded pcm from dca file.
 		buf := make([]byte, opusLen)
 		err = binary.Read(reader, binary.LittleEndian, &buf)
-
 		// Should not be any end of file errors
 		if err != nil {
 			d.log.Error().

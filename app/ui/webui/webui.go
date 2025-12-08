@@ -664,7 +664,7 @@ func (w *WebUI) handleSetupMode(response http.ResponseWriter, request *http.Requ
 func (w *WebUI) enableSetupMode() error {
 	dir := filepath.Dir(setupModeFile)
 
-	err := os.MkdirAll(dir, 0755)
+	err := os.MkdirAll(dir, 0o755)
 	if err != nil {
 		return fmt.Errorf("failed to create directory %s: %w", dir, err)
 	}

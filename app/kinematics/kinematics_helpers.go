@@ -19,7 +19,7 @@ const (
 
 // GearName returns the string representation for a given gear number.
 func GearName(gearNum int) string {
-	var GearMap = map[int]string{
+	GearMap := map[int]string{
 		-100: "NULL",
 		0:    "R",
 		1:    "1",
