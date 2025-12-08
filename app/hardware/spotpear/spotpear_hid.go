@@ -57,27 +57,27 @@ func SetupHID(hidEvent chan ui.HIDInputEvent) {
 	})
 }
 
-// OnButtonXPressed registers a callback function to be called when the up button is pressed.
+// OnButtonUpPressed registers a callback function to be called when the up button is pressed.
 func OnButtonUpPressed(callback func()) {
 	hardware.OnGPIOButtonPressed(5, callback)
 }
 
-// OnButtonYPressed registers a callback function to be called when the down button is pressed.
+// OnButtonDownPressed registers a callback function to be called when the down button is pressed.
 func OnButtonDownPressed(callback func()) {
 	hardware.OnGPIOButtonPressed(6, callback)
 }
 
-// OnButtonAPressed registers a callback function to be called when the left button is pressed.
+// OnButtonLeftPressed registers a callback function to be called when the left button is pressed.
 func OnButtonLeftPressed(callback func()) {
 	hardware.OnGPIOButtonPressed(16, callback)
 }
 
-// OnButtonBPressed registers a callback function to be called when the right button is pressed.
+// OnButtonRightPressed registers a callback function to be called when the right button is pressed.
 func OnButtonRightPressed(callback func()) {
 	hardware.OnGPIOButtonPressed(13, callback)
 }
 
-// OnButtonXPressed registers a callback function to be called when the A button is pressed.
+// OnButtonAPressed registers a callback function to be called when the A button is pressed.
 func OnButtonAPressed(callback func()) {
 	hardware.OnGPIOButtonPressed(21, callback)
 }

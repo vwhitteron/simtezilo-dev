@@ -8,7 +8,7 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/vehicle"
 )
 
-// generateBalancedWaveform creates engine haptic waveforms based on primary and secondary balance characteristics
+// GenerateBalancedWaveform creates engine haptic waveforms based on primary and secondary balance characteristics
 // with consideration for the 160Hz low-pass filter of the output device.
 func (a *App) GenerateBalancedWaveform(rpm float64, engineRoughness float64, engineBuffer *[]float64) {
 	sampleRate := float64(a.synth.GetSampleRate())

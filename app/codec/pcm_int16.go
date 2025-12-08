@@ -20,7 +20,7 @@ func NewPCMInt16(samples []int16, sampleRate, channels int) *PCMInt16 {
 	}
 }
 
-// ToFloat64 converts Int16 PCM samples to float64 format.
+// Samples returns the PCM int16 audio samples.
 func (p *PCMInt16) Samples() []int16 {
 	return p.samples
 }

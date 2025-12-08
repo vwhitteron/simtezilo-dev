@@ -8,7 +8,7 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/vehicle"
 )
 
-// generateTorqueCurveWaveform creates engine haptic waveforms based on engine-specific torque curves
+// GenerateTorqueCurveWaveform creates engine haptic waveforms based on engine-specific torque curves
 // and torsional excitation characteristics as documented by EPI Engineering.
 // This function incorporates both primary and secondary balance configurations to model
 // realistic engine torque output variations.

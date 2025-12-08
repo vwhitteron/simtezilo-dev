@@ -1,4 +1,3 @@
-// Package st7789 provides constants and functions for the ST7789 display controller.
 package st7789
 
 // Rotation represents the display rotation in 90 degree intervals.

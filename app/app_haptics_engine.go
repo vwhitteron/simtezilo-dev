@@ -1,5 +1,6 @@
-// TODO: this file is mostly LLM generated and needs heavy refactoring.
 package app
+
+// TODO: this file is mostly LLM generated and needs heavy refactoring.
 
 import (
 	"errors"

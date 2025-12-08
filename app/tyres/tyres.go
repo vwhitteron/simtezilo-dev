@@ -167,7 +167,7 @@ func (a *Tyre) GeneralCondition() Condition {
 	return ConditionMarginal
 }
 
-// averageTemperature calculates the average temperature of the entire tyre set.
+// GeneralTemperature calculates the average temperature of the entire tyre set.
 func (a *Tyre) GeneralTemperature() float32 {
 	return (a.frontLeft.temperature + a.frontRight.temperature + a.rearLeft.temperature + a.rearRight.temperature) / 4.0
 }

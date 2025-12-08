@@ -26,7 +26,7 @@ func GainToAmplitudeRatio(gain float64) float64 {
 	return amplitudeRatio
 }
 
-// findZeroCrossing searches for the first zero point or crossing in a given array of samples
+// FindSampleZeroCrossing searches for the first zero point or crossing in a given array of samples
 // Returns the position of the zero crossing and the polarity just before the crossing (-1 or 1)
 // If no zero point or crossing is found then it returns the first index and polarity of first sample.
 func FindSampleZeroCrossing(samples []float64) (offset int, polarity int) {
@@ -121,14 +121,14 @@ func InvertSamplePolarity(samples *[]float64) {
 	}
 }
 
-// Adjusts the scale of the samples by the given magnitude.
+// ScaleSamples adjusts the scale of the samples by the given magnitude.
 func ScaleSamples(samples *[]float64, magnitude float64) {
 	for i := range *samples {
 		(*samples)[i] *= magnitude
 	}
 }
 
-// Adjusts the gain on a slice of samples using the peak value.
+// scaleSamplesPeak adjusts the gain on a slice of samples using the peak value.
 func scaleSamplesPeak(samples *[]float64, peak float64) {
 	if peak < 1.0 {
 		return
@@ -139,7 +139,7 @@ func scaleSamplesPeak(samples *[]float64, peak float64) {
 	ScaleSamples(samples, scale)
 }
 
-// Mixes two samples using a simple sum algorithm.
+// mixSampleSum mixes two samples using a simple sum algorithm.
 // Returns the mixed sample and the peak value which is later used to scale a slice of samples.
 func mixSampleSum(sample1 float64, sample2 float64, peak *float64) float64 {
 	sum := sample1 + sample2

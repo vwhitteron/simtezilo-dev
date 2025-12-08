@@ -84,7 +84,7 @@ func (m *Mixer) Close() {
 	_ = m.SetChannelGain("_master", config.MinimumGain)
 }
 
-// GetBufferLength returns the configured buffer length duration.
+// GetBufferCapacity returns the configured buffer length duration in samples.
 func (m *Mixer) GetBufferCapacity() int {
 	return int(m.bufferLength.Seconds() * float64(m.sampleRateHz))
 }
