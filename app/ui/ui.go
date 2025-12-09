@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
+	"github.com/vwhitteron/simtezilo-dev/app/exitcode"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware"
 	"github.com/vwhitteron/simtezilo-dev/app/i18n"
 	"github.com/vwhitteron/simtezilo-dev/app/kinematics"
@@ -18,7 +19,7 @@ type Config struct {
 	Display          hardware.Display
 	LiveData         *LiveData
 	SettingsCallback func(string, string) string
-	Done             chan bool
+	Done             chan exitcode.ExitCode
 	Log              zerolog.Logger
 }
 
@@ -40,7 +41,7 @@ type UserInterface struct {
 	log zerolog.Logger
 
 	settingsCallback func(menuPage string, action string) string
-	done             chan bool
+	done             chan exitcode.ExitCode
 
 	displayData  LiveData
 	mode         ScreenMode

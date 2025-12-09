@@ -4,6 +4,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/vwhitteron/simtezilo-dev/app/exitcode"
 	"github.com/vwhitteron/simtezilo-dev/app/i18n/languagedb"
 )
 
@@ -98,7 +99,7 @@ func (u *UserInterface) handleEscapeKey() {
 		Str("type", "app").
 		Msg("HID event")
 
-	u.done <- true
+	u.done <- exitcode.Success
 }
 
 // handlePowerKey handles the power key for toggling display off.

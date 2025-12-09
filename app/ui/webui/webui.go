@@ -15,6 +15,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/vwhitteron/simtezilo-dev/app/config"
+	"github.com/vwhitteron/simtezilo-dev/app/exitcode"
 )
 
 const (
@@ -29,7 +30,7 @@ type WebUI struct {
 	telemetryChartFeed chan map[string]float32
 	config             *config.Config
 	upgrader           websocket.Upgrader
-	shutdownChan       chan bool
+	shutdownChan       chan exitcode.ExitCode
 }
 
 type Config struct {
@@ -37,7 +38,7 @@ type Config struct {
 	Port               int
 	TelemetryChartFeed chan map[string]float32
 	Config             *config.Config
-	ShutdownChan       chan bool
+	ShutdownChan       chan exitcode.ExitCode
 }
 
 // New creates a new instance of the WebUI.
@@ -651,7 +652,7 @@ func (w *WebUI) handleSetupMode(response http.ResponseWriter, request *http.Requ
 			time.Sleep(500 * time.Millisecond) // Give time for response to be sent
 			w.log.Info().Msg("initiating shutdown for setup mode")
 
-			w.shutdownChan <- true
+			w.shutdownChan <- exitcode.SetupMode
 		}()
 
 	default:

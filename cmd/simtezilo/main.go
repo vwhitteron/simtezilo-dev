@@ -12,6 +12,7 @@ import (
 
 	"github.com/rs/zerolog"
 	"github.com/vwhitteron/simtezilo-dev/app"
+	"github.com/vwhitteron/simtezilo-dev/app/exitcode"
 	"github.com/vwhitteron/simtezilo-dev/app/profiler"
 )
 
@@ -19,13 +20,13 @@ func main() {
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 
-	done := make(chan bool, 1)
+	done := make(chan exitcode.ExitCode, 1)
 
 	go func() {
 		sig := <-sigs
 		log.Printf("Received %v signal, shutting down\n", sig)
 
-		done <- true
+		done <- exitcode.Success
 	}()
 
 	var (
@@ -68,7 +69,8 @@ func main() {
 
 	go app.Run()
 
-	<-done
+	exitCode := <-done
+
 	app.Close()
 
 	if profiler != nil {
@@ -77,6 +79,10 @@ func main() {
 			logger.Fatal().Err(err).Msg("Error shutting down Pyroscope profiler")
 		}
 	}
+
+	logger.Info().Int("exitCode", int(exitCode)).Msg("Exiting app")
+
+	os.Exit(int(exitCode))
 }
 
 func startPyroscope(endpoint string, logger *zerolog.Logger) (*profiler.PyroscopeProfiler, error) {

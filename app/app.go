@@ -12,6 +12,7 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/cache"
 	"github.com/vwhitteron/simtezilo-dev/app/circuit"
 	"github.com/vwhitteron/simtezilo-dev/app/config"
+	"github.com/vwhitteron/simtezilo-dev/app/exitcode"
 	"github.com/vwhitteron/simtezilo-dev/app/fuelrange"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/console"
@@ -71,9 +72,9 @@ type appState struct {
 
 // App is the main application struct holding all components and state.
 type App struct {
-	log    zerolog.Logger // Application logger
-	config *config.Config // Application configuration
-	done   chan bool      // Channel to signal application shutdown
+	log    zerolog.Logger         // Application logger
+	config *config.Config         // Application configuration
+	done   chan exitcode.ExitCode // Channel to signal application shutdown with exit code
 
 	cache cache.Cache // Cache manager
 
@@ -112,9 +113,9 @@ type App struct {
 
 // Options holds configuration options for initializing the App.
 type Options struct {
-	VehicleDB string          // Path to an external vehicle database file
-	Done      chan bool       // Channel to signal application shutdown
-	Logger    *zerolog.Logger // Logger instance for application logging
+	VehicleDB string                 // Path to an external vehicle database file
+	Done      chan exitcode.ExitCode // Channel to signal application shutdown with exit code
+	Logger    *zerolog.Logger        // Logger instance for application logging
 }
 
 // New creates a new App instance and sets up all components based on the provided options.
@@ -180,6 +181,7 @@ func (a *App) Run() {
 
 // Close performs cleanup and resource deallocation before application exit.
 func (a *App) Close() {
+	// setupModeExit flag is checked after Close() returns
 	a.log.Info().Msg("Shutting down app")
 
 	err := a.synth.Close()
@@ -857,7 +859,7 @@ func (a *App) handleGameStateChange() {
 	}
 
 	if a.sessionIsComplete() {
-		a.done <- true
+		a.done <- exitcode.Success
 	}
 }
 
