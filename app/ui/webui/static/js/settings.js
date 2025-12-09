@@ -231,7 +231,7 @@ class ConfigManager {
 
     async checkSetupModeAvailability() {
         try {
-            const response = await fetch('/api/setup-mode');
+            const response = await fetch('/api/mode/setup');
             if (response.ok) {
                 const result = await response.json();
                 if (result.available) {
@@ -254,7 +254,7 @@ class ConfigManager {
             statusElement.className = 'config-status info';
             statusElement.style.display = 'block';
 
-            const response = await fetch('/api/setup-mode', {
+            const response = await fetch('/api/mode/setup', {
                 method: 'POST'
             });
 
