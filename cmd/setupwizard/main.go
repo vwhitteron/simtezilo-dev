@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	_ "embed"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"image"
@@ -29,7 +30,6 @@ import (
 )
 
 const (
-	setupModeFile        = "/boot/firmware/simtezilo/SETUPMODE"
 	wlanInterface        = "wlan0"
 	runModeProfile       = "RunMode"
 	runModeBackupProfile = runModeProfile + "-Backup"
@@ -54,10 +54,15 @@ func handleNetworks(writer http.ResponseWriter, _ *http.Request) {
 	}
 
 	writer.Header().Set("Content-Type", "application/json")
-	fmt.Fprintf(writer, `{"networks":%s}`, networks)
+	fmt.Fprint(writer, networks)
 }
 
-func getAvailableNetworks() (string, error) {
+type networkInfo struct {
+	SSID     string `json:"ssid"`     //nolint:tagliatelle // lowercase for compatibility with JS
+	Security string `json:"security"` //nolint:tagliatelle // lowercase for compatibility with JS
+}
+
+func getAvailableNetworks() (string, error) { //nolint:cyclop // complexity from network scanning logic
 	nm, err := gonetworkmanager.NewNetworkManager()
 	if err != nil {
 		return "", fmt.Errorf("failed to connect to NetworkManager: %w", err)
@@ -111,21 +116,74 @@ func getAvailableNetworks() (string, error) {
 
 	seen := make(map[string]bool)
 
-	var networks []string
+	var networks []networkInfo
 
-	for _, ap := range accessPoints {
-		ssid, err := ap.GetPropertySSID()
+	for _, accessPoint := range accessPoints {
+		ssid, err := accessPoint.GetPropertySSID()
 		if err != nil || ssid == "" {
 			continue
 		}
 
 		if !seen[ssid] {
 			seen[ssid] = true
-			networks = append(networks, fmt.Sprintf(`"%s"`, ssid))
+
+			// Determine security type from WPA and RSN flags
+			security := detectSecurityType(accessPoint)
+
+			networks = append(networks, networkInfo{
+				SSID:     ssid,
+				Security: security,
+			})
 		}
 	}
 
-	return "[" + strings.Join(networks, ",") + "]", nil
+	data, err := json.Marshal(networks)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal networks: %w", err)
+	}
+
+	return string(data), nil
+}
+
+func detectSecurityType(accessPoint gonetworkmanager.AccessPoint) string {
+	wpaFlags, err := accessPoint.GetPropertyWPAFlags()
+	if err != nil {
+		log.Printf("Warning: failed to get WPA flags: %v\n", err)
+	}
+
+	rsnFlags, err := accessPoint.GetPropertyRSNFlags()
+	if err != nil {
+		log.Printf("Warning: failed to get RSN flags: %v\n", err)
+	}
+
+	// Check for WPA3 (SAE)
+	if (rsnFlags & uint32(gonetworkmanager.Nm80211APSecKeyMgmtSAE)) != 0 {
+		return "wpa3"
+	}
+
+	// Check for WPA2 (RSN with PSK)
+	if (rsnFlags & uint32(gonetworkmanager.Nm80211APSecKeyMgmtPSK)) != 0 {
+		return "wpa2"
+	}
+
+	// Check for WPA (WPA flags with PSK)
+	if (wpaFlags & uint32(gonetworkmanager.Nm80211APSecKeyMgmtPSK)) != 0 {
+		return "wpa"
+	}
+
+	// Check for WEP
+	if (wpaFlags&uint32(gonetworkmanager.Nm80211APSecPairWEP40)) != 0 ||
+		(wpaFlags&uint32(gonetworkmanager.Nm80211APSecPairWEP104)) != 0 {
+		return "wep"
+	}
+
+	// No security (open network)
+	if wpaFlags == 0 && rsnFlags == 0 {
+		return "none"
+	}
+
+	// Default to WPA2 if we can't determine
+	return "wpa2"
 }
 
 func handleSave(writer http.ResponseWriter, request *http.Request) {
@@ -137,35 +195,22 @@ func handleSave(writer http.ResponseWriter, request *http.Request) {
 
 	ssid := request.FormValue("ssid")
 	password := request.FormValue("password")
+	security := request.FormValue("security")
 	ipConfig := request.FormValue("ipConfig")
 	ipAddress := request.FormValue("ipAddress")
 	netmask := request.FormValue("netmask")
 	gateway := request.FormValue("gateway")
 	dns := request.FormValue("dns")
 
-	err := saveNetworkConfiguration(request.Context(), ssid, password, ipConfig, ipAddress, netmask, gateway, dns)
-
-	writer.Header().Set("Content-Type", "application/json")
-
+	err := saveNetworkConfiguration(request.Context(), ssid, password, security, ipConfig, ipAddress, netmask, gateway, dns)
 	if err != nil {
 		log.Printf("Save configuration failed: %v\n", err)
-		writer.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(writer, `{"success":false,"error":"%s"}`, err.Error())
-
-		// Don't exit - allow user to try again
-		return
+		log.Println("Network configuration failed, exiting with code 1")
+		os.Exit(1)
 	}
 
-	fmt.Fprint(writer, `{"success":true}`)
-
-	// Configuration saved and verified successfully, exit with success code
-	// The SETUPMODE file is intentionally NOT deleted to allow re-entry if needed
-	go func() {
-		time.Sleep(1 * time.Second)
-
-		log.Println("Network configuration completed successfully, exiting with code 0")
-		os.Exit(0)
-	}()
+	log.Println("Network configuration completed successfully, exiting with code 0")
+	os.Exit(0)
 }
 
 func main() {
@@ -356,43 +401,6 @@ func getNetworkSSID() (string, error) {
 	return "", fmt.Errorf("%s device not found or not connected", wlanInterface)
 }
 
-// GenerateNetworkSSID generates the WiFi network name (SSID) based on the device serial number.
-func generateNetworkSSID() string {
-	serial := getDeviceSerial()
-
-	return "Simtezilo-" + serial
-}
-
-// getDeviceSerial reads the Raspberry Pi serial number from /proc/cpuinfo.
-// Returns the last 8 characters of the serial for use in the WiFi SSID.
-func getDeviceSerial() string {
-	fallbackSerial := "00000000"
-
-	data, err := os.ReadFile("/proc/cpuinfo")
-	if err != nil {
-		return fallbackSerial
-	}
-
-	lines := strings.SplitSeq(string(data), "\n")
-	for line := range lines {
-		if strings.HasPrefix(line, "Serial") {
-			parts := strings.Split(line, ":")
-
-			if len(parts) == 2 {
-				serial := strings.TrimSpace(parts[1])
-
-				if len(serial) >= 8 {
-					return serial[len(serial)-8:]
-				}
-
-				return serial
-			}
-		}
-	}
-
-	return fallbackSerial
-}
-
 // imageToRGBA converts an image.Image to *image.RGBA.
 func imageToRGBA(img image.Image) *image.RGBA {
 	if rgba, ok := img.(*image.RGBA); ok {
@@ -411,7 +419,7 @@ func imageToRGBA(img image.Image) *image.RGBA {
 	return rgba
 }
 
-func saveNetworkConfiguration(ctx context.Context, ssid, password, ipConfig, ipAddress, netmask, gateway, dns string) error { //nolint:cyclop
+func saveNetworkConfiguration(ctx context.Context, ssid, password, security, ipConfig, ipAddress, netmask, gateway, dns string) error { //nolint:cyclop
 	// Validate static IP configuration if provided
 	if ipConfig == "static" {
 		err := validateIPConfiguration(ipAddress, netmask, gateway, dns)
@@ -442,13 +450,32 @@ func saveNetworkConfiguration(ctx context.Context, ssid, password, ipConfig, ipA
 		},
 	}
 
-	// Configure WiFi security
-	if password != "" {
-		settings["802-11-wireless-security"] = map[string]interface{}{
-			"key-mgmt":  "wpa-psk",
+	// Configure WiFi security based on security type
+	if security != "none" && password != "" {
+		securitySettings := map[string]interface{}{
 			"psk":       password,
 			"psk-flags": uint32(0), // NM_SETTING_SECRET_FLAG_NONE - store password
 		}
+
+		switch security {
+		case "wpa3":
+			securitySettings["key-mgmt"] = "sae"
+		case "wpa2":
+			securitySettings["key-mgmt"] = "wpa-psk"
+		case "wpa":
+			securitySettings["key-mgmt"] = "wpa-psk"
+		case "wep":
+			securitySettings["key-mgmt"] = "none"
+			securitySettings["wep-key0"] = password
+			securitySettings["wep-key-type"] = uint32(1) // NM_WEP_KEY_TYPE_PASSPHRASE
+			delete(securitySettings, "psk")
+			delete(securitySettings, "psk-flags")
+		default:
+			// Default to WPA2 for unknown types
+			securitySettings["key-mgmt"] = "wpa-psk"
+		}
+
+		settings["802-11-wireless-security"] = securitySettings
 	}
 
 	// Configure IP settings

@@ -48,6 +48,11 @@
             box-sizing: border-box;
         }
 
+        #network-select {
+            height: auto;
+            overflow-y: auto;
+        }
+
         .radio-group {
             margin: 10px 0;
         }
@@ -127,6 +132,43 @@
             border-radius: 4px;
             margin: 10px 0;
         }
+
+        .network-select-container {
+            display: flex;
+            gap: 10px;
+            align-items: flex-start;
+        }
+
+        .network-select-container select {
+            flex: 1;
+            min-height: 130px;
+        }
+
+        .btn-rescan {
+            padding: 10px 16px;
+            font-size: 16px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background-color: white;
+            cursor: pointer;
+            color: #555;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        .btn-rescan:hover:not(:disabled) {
+            background-color: #f5f5f5;
+            border-color: #999;
+        }
+
+        .btn-rescan:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-rescan.scanning {
+            color: #666;
+        }
     </style>
 </head>
 
@@ -137,13 +179,39 @@
 
         <div class="form-group">
             <label for="network-select">Select Wireless Network:</label>
-            <select id="network-select" disabled>
-                <option>Loading networks...</option>
-            </select>
+            <div class="network-select-container">
+                <select id="network-select" size="5" disabled>
+                    <option>Loading networks...</option>
+                </select>
+                <button type="button" id="rescan-btn" class="btn-rescan" title="Rescan for networks">🔄 Rescan</button>
+            </div>
             <div id="error-message" class="error" style="display:none;"></div>
         </div>
 
+        <div id="manual-ssid-config" class="hidden">
+            <div class="form-group">
+                <label for="manual-ssid">Network Name (SSID):</label>
+                <input type="text" id="manual-ssid" placeholder="Enter network SSID">
+                <div id="manual-ssid-error" class="validation-error"></div>
+            </div>
+            <div class="form-group">
+                <label for="manual-security-type">Security Type:</label>
+                <select id="manual-security-type">
+                    <option value="none">None (Open Network)</option>
+                    <option value="wep">WEP</option>
+                    <option value="wpa">WPA</option>
+                    <option value="wpa2" selected>WPA2</option>
+                    <option value="wpa3">WPA3</option>
+                </select>
+            </div>
+        </div>
+
         <div id="network-config" class="hidden">
+            <div class="form-group">
+                <label for="security-type">Security Type:</label>
+                <input type="text" id="security-type" readonly style="background-color: #f5f5f5;">
+            </div>
+
             <div class="form-group">
                 <label for="password">Network Password:</label>
                 <input type="password" id="password"
@@ -203,11 +271,19 @@
     <script>
         const networkSelect = document.getElementById('network-select');
         const networkConfig = document.getElementById('network-config');
+        const manualSsidConfig = document.getElementById('manual-ssid-config');
+        const manualSsidInput = document.getElementById('manual-ssid');
         const staticIpConfig = document.getElementById('static-ip-config');
         const ipConfigRadios = document.querySelectorAll('input[name="ip-config"]');
         const saveBtn = document.getElementById('save-btn');
         const statusMessage = document.getElementById('status-message');
         const passwordInput = document.getElementById('password');
+        const securityTypeInput = document.getElementById('security-type');
+        const manualSecurityTypeSelect = document.getElementById('manual-security-type');
+        const rescanBtn = document.getElementById('rescan-btn');
+
+        // Store network data with security information
+        let networksData = [];
 
         // IP address validation regex
         const ipRegex = /^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
@@ -247,8 +323,13 @@
             const password = passwordInput.value;
             const errorElement = document.getElementById('password-error');
 
-            // Empty password is valid (open network)
-            if (password === '') {
+            // Get security type based on whether manual entry is selected
+            const security = networkSelect.value === 'manual'
+                ? manualSecurityTypeSelect.value
+                : (networkSelect.options[networkSelect.selectedIndex]?.dataset.security || 'none');
+
+            // Empty password is valid for open networks
+            if (security === 'none' || password === '') {
                 errorElement.textContent = '';
                 return true;
             }
@@ -283,9 +364,14 @@
         }
 
         function validateForm() {
-            if (!networkSelect.value) {
+            // Either network must be selected OR manual SSID must be filled
+            const hasNetwork = networkSelect.value !== '' && networkSelect.value !== 'manual';
+            const hasManualSsid = networkSelect.value === 'manual' && manualSsidInput.value.trim() !== '';
+
+            if (!hasNetwork && !hasManualSsid) {
                 return false;
             }
+
             let isValid = validatePassword();
             isValid = validateStaticIPFields() && isValid;
             return isValid;
@@ -335,38 +421,152 @@
             }
         });
 
-        window.addEventListener('DOMContentLoaded', function () {
+        function loadNetworks() {
+            const errorDiv = document.getElementById('error-message');
+            errorDiv.style.display = 'none';
+            networkSelect.disabled = true;
+            rescanBtn.disabled = true;
+            rescanBtn.classList.add('scanning');
+            rescanBtn.textContent = '🔄 Scanning...';
+            networkSelect.innerHTML = '<option>Scanning for networks...</option>';
+
             fetch('/networks')
                 .then(response => response.json())
                 .then(data => {
-                    networkSelect.innerHTML = '<option value="">-- Choose a network --</option>';
+                    networksData = data;
 
-                    data.networks.forEach(network => {
+                    // Remember current selection if any
+                    const currentSelection = networkSelect.value;
+
+                    networkSelect.innerHTML = '';
+
+                    // Add manual entry option at the top
+                    const manualOption = document.createElement('option');
+                    manualOption.value = 'manual';
+                    manualOption.textContent = '-- Enter network manually --';
+                    networkSelect.appendChild(manualOption);
+
+                    data.forEach(network => {
                         const option = document.createElement('option');
-                        option.value = network;
-                        option.textContent = network;
+                        option.value = network.ssid;
+                        option.textContent = network.ssid;
+                        option.dataset.security = network.security;
                         networkSelect.appendChild(option);
                     });
 
+                    // Restore selection if it still exists
+                    if (currentSelection && Array.from(networkSelect.options).some(opt => opt.value === currentSelection)) {
+                        networkSelect.value = currentSelection;
+                    } else if (!currentSelection) {
+                        // Default to manual option on first load
+                        networkSelect.value = 'manual';
+                        // Trigger change event to show manual input fields
+                        networkSelect.dispatchEvent(new Event('change'));
+                    }
+
                     networkSelect.disabled = false;
+                    rescanBtn.disabled = false;
+                    rescanBtn.classList.remove('scanning');
+                    rescanBtn.textContent = '🔄 Rescan';
                 })
                 .catch(error => {
-                    const errorDiv = document.getElementById('error-message');
-
                     networkSelect.innerHTML = '<option>Failed to load networks</option>';
                     errorDiv.textContent = 'Error loading networks: ' + error.message;
                     errorDiv.style.display = 'block';
+                    rescanBtn.disabled = false;
+                    rescanBtn.classList.remove('scanning');
+                    rescanBtn.textContent = '🔄 Rescan';
                 });
+        }
+
+        window.addEventListener('DOMContentLoaded', function () {
+            loadNetworks();
+        });
+
+        // Rescan button handler
+        rescanBtn.addEventListener('click', function () {
+            loadNetworks();
         });
 
         // Show network configuration when a network is selected
         networkSelect.addEventListener('change', function () {
-            if (this.value) {
+            if (this.value === 'manual') {
+                // Show manual SSID and security input
+                manualSsidConfig.classList.remove('hidden');
+                networkConfig.classList.remove('hidden');
+
+                // Hide the readonly security type display for manual entry
+                securityTypeInput.parentElement.style.display = 'none';
+
+                // Enable password field (will be toggled by security selection)
+                passwordInput.disabled = false;
+                passwordInput.placeholder = 'Enter network password';
+                passwordInput.value = '';
+
+                updateSaveButtonState();
+            } else if (this.value) {
+                // Hide manual SSID input
+                manualSsidConfig.classList.add('hidden');
+                manualSsidInput.value = '';
+
+                // Show readonly security type display
+                securityTypeInput.parentElement.style.display = 'block';
+
+                const selectedOption = this.options[this.selectedIndex];
+                const security = selectedOption.dataset.security;
+
+                // Display security type in readonly field
+                const securityDisplay = {
+                    'none': 'None (Open Network)',
+                    'wep': 'WEP',
+                    'wpa': 'WPA',
+                    'wpa2': 'WPA2',
+                    'wpa3': 'WPA3'
+                };
+                securityTypeInput.value = securityDisplay[security] || security.toUpperCase();
+
+                // Disable password field for open networks
+                if (security === 'none') {
+                    passwordInput.disabled = true;
+                    passwordInput.placeholder = 'No password required';
+                    passwordInput.value = '';
+                } else {
+                    passwordInput.disabled = false;
+                    passwordInput.placeholder = 'Enter network password';
+                }
+
                 networkConfig.classList.remove('hidden');
                 updateSaveButtonState();
             } else {
+                manualSsidConfig.classList.add('hidden');
                 networkConfig.classList.add('hidden');
             }
+        });
+
+        // Update password field when manual security type changes
+        manualSecurityTypeSelect.addEventListener('change', function () {
+            if (this.value === 'none') {
+                passwordInput.disabled = true;
+                passwordInput.placeholder = 'No password required';
+                passwordInput.value = '';
+            } else {
+                passwordInput.disabled = false;
+                passwordInput.placeholder = 'Enter network password';
+            }
+            validatePassword();
+            updateSaveButtonState();
+        });
+
+        // Validate manual SSID input
+        manualSsidInput.addEventListener('input', updateSaveButtonState);
+        manualSsidInput.addEventListener('blur', function () {
+            const errorElement = document.getElementById('manual-ssid-error');
+            if (networkSelect.value === 'manual' && this.value.trim() === '') {
+                errorElement.textContent = 'SSID is required';
+            } else {
+                errorElement.textContent = '';
+            }
+            updateSaveButtonState();
         });
 
         // Toggle static IP fields based on radio selection
@@ -400,9 +600,18 @@
             saveBtn.disabled = true;
             saveBtn.textContent = 'Configuring network (this may take up to 60 seconds)...';
 
+            // Get SSID from manual input or selected network
+            const ssid = networkSelect.value === 'manual' ? manualSsidInput.value.trim() : networkSelect.value;
+
+            // Get security type from manual select or scanned network data
+            const security = networkSelect.value === 'manual'
+                ? manualSecurityTypeSelect.value
+                : networkSelect.options[networkSelect.selectedIndex].dataset.security;
+
             const formData = new FormData();
-            formData.append('ssid', networkSelect.value);
+            formData.append('ssid', ssid);
             formData.append('password', document.getElementById('password').value);
+            formData.append('security', security);
             formData.append('ipConfig', document.querySelector('input[name="ip-config"]:checked').value);
             formData.append('ipAddress', document.getElementById('ip-address').value);
             formData.append('netmask', document.getElementById('netmask').value);
