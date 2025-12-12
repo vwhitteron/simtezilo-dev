@@ -34,18 +34,59 @@ setupAPConn() {
 
 startAPConn() {
     ${NMCLI} con up ${CONNNAME}
-    }
+    exitCode=$?
+    if [ $exitCode -ne 0 ]; then
+        echo "Starting ${CONNNAME} connection failed with error ${exitCode}"
+
+        exit 1
+    fi
+}
+
+enableDNSMasq() {
+    echo "Enabling DNSMasq"
+
+    systemctl enable dnsmasq
+    systemctl start dnsmasq
+
+    if [ $? -ne 0 ]; then
+        exitCode=$?
+        echo "Enabling DNSMasq failed with error ${exitCode}"
+
+        exit ${exitCode}
+    fi
+
+}
+
+disableDNSMasq() {
+    echo "Disabling DNSMasq"
+
+    systemctl disable dnsmasq
+    systemctl stop dnsmasq
+
+    if [ $? -ne 0 ]; then
+        exitCode=$?
+        echo "Disabling DNSMasq failed with error ${exitCode}"
+
+        exit ${exitCode}
+    fi
+
+}
 
 enableSetupModeFlag() {
+    echo "Enabling setup mode"
     touch "$SETUPMODE_FILE"
 }
 
-setup() {
+disableSetupModeFlag() {
+    echo "Disabling setup mode"
+    rm -f "$SETUPMODE_FILE"
+}
+
+initSetupMode() {
     if ! apConnExists; then
-        echo "SetupMode access point connection not found. Creating it."
+        echo "Creating SetupMode access point connection."
 
         setupAPConn
-
         startAPConn
 
         enableSetupModeFlag
@@ -57,35 +98,26 @@ setup() {
 if [ -f "$SETUPMODE_FILE" ]; then
     echo "Setup mode detected. Staring AP mode and launching setup wizard"
     
-    /usr/bin/nmcli con up SetupMode
-
+    startAPConn
     if [ $? -eq 10 ]; then
-        echo "Creating SetupMode access point connection."
-
-        setup
-
-        if [ $? -ne 0 ]; then
-            echo "SetupMode access point connection failed with error $?"
-
-            exit 1
-        fi
-
-        /usr/bin/nmcli con up SetupMode
+        initSetupMode
     elif [ $? -ne 0 ]; then
         echo "Starting SetupMode access point failed with error $?"
     fi
 
+    enableDNSMasq
+
     /opt/simtezilo/bin/setupwizard
-
     if [ $? -ne 0 ]; then
-        echo "Setup wizard exited with error $?"
+        exitCode=$?
+        echo "Setup wizard exited with error ${exitCode}"
 
-        exit $?
+        exit ${exitCode}
     fi
-
-    echo "Setup wizard completed successfully, disabling setup mode"
-
-    rm -f "$SETUPMODE_FILE"
+    echo "Setup wizard completed successfully"
+    
+    disableDNSMasq
+    disableSetupModeFlag
 
     exit 0
 else
@@ -96,13 +128,15 @@ else
     if [ $? -eq 33 ]; then
         echo "Simtezilo exited into setup mode."
 
-        touch "$SETUPMODE_FILE"
+        enableDNSMasq
+        enableSetupModeFlag
 
         exit 0
     elif [ $? -ne 0 ]; then
-        echo "Simtezilo exited with error $?"
+        exitCode=$?
+        echo "Simtezilo exited with error ${exitCode}"
 
-        exit $?
+        exit ${exitCode}
     fi
 
     echo "Simtezilo exited normally"
