@@ -18,4 +18,4 @@ scichart/node_modules/
 data/persist/
 data/replays/
 data/tmp/
-cache/
+data/cache/
