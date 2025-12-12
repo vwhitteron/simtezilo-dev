@@ -592,10 +592,6 @@
                 return;
             }
 
-            if (!confirm('Settings will be applied and device will no longer be accessible on this address. Continue?')) {
-                return;
-            }
-
             statusMessage.style.display = 'none';
             saveBtn.disabled = true;
             saveBtn.textContent = 'Configuring network (this may take up to 60 seconds)...';
