@@ -1,11 +1,13 @@
 package app
 
 var (
-	Version   = "DEV" //nolint:gochecknoglobals // special global for build info
-	BuildTime string  //nolint:gochecknoglobals // special global for build info
+	Version   = "dev"  //nolint:gochecknoglobals // special global for build version
+	BuildTime string   //nolint:gochecknoglobals // special global for build time
+	Platform  = "none" //nolint:gochecknoglobals // special global for build platform
 )
 
 type Info struct {
 	BuildTime string
 	Version   string
+	Platform  string
 }

@@ -61,6 +61,7 @@ upgradeable:
 buildmodule := $(shell awk '/module/ {print $$NF}' go.mod)
 buildversion := $(shell git describe --tags --always --dirty)
 buildtime := $(shell date -u '+%Y-%m-%d_%H:%M:%S')
+platform := $(shell uname -s | tr '[:upper:]' '[:lower:]')
 
 ## lint: run linter against project
 .PHONY: lint
@@ -80,21 +81,21 @@ dist: build/rpi/v8/64 build/windows/64 build/darwin/silicon
 ## build: build the application for the current platform
 .PHONY: build
 build:
-	@go build -ldflags "-X '$(buildmodule)/app.Version=$(buildversion)' -X '$(buildmodule)/app.BuildTime=$(buildtime)'" \
+	@go build -ldflags "-X '$(buildmodule)/app.Version=$(buildversion)' -X '$(buildmodule)/app.BuildTime=$(buildtime)' -X '$(buildmodule)/app.Platform=local'" \
 	-o ./out/simtezilo-local ./cmd/simtezilo/main.go
 
 ## build/darwin/silicon: build the application for Apple Silicon
 .PHONY: build/darwin/silicon
 build/darwin/silicon:
 	GOOS=darwin GOARCH=arm64 \
-	go build -ldflags "-X '$(buildmodule)/app.Version=$(buildversion)' -X '$(buildmodule)/app.BuildTime=$(buildtime)'" \
+	go build -ldflags "-X '$(buildmodule)/app.Version=$(buildversion)' -X '$(buildmodule)/app.BuildTime=$(buildtime)' -X '$(buildmodule)/app.Platform=darwin'" \
 	-o ./out/simtezilo-macos ./cmd/simtezilo/main.go
 
 ## build/darwin/silicon: build the application for Apple Silicon
 .PHONY: build/windows/64
 build/windows/64:
 	GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc \
-	go build -ldflags "-X '$(buildmodule)/app.Version=$(buildversion)' -X '$(buildmodule)/app.BuildTime=$(buildtime)' -s" \
+	go build -ldflags "-X '$(buildmodule)/app.Version=$(buildversion)' -X '$(buildmodule)/app.BuildTime=$(buildtime)' -X '$(buildmodule)/app.Platform=windows' -s" \
 	-o ./out/simtezilo.exe ./cmd/simtezilo/main.go
 
 ## build/rpi: build the application for Raspberry Pi using ARMHF (any version)
@@ -105,6 +106,7 @@ build/rpi:
 	--build-arg BUILDMODULE=$(buildmodule) \
 	--build-arg BUILDTIME=$(buildtime) \
 	--build-arg BUILDVERSION=$(buildversion) \
+	--build-arg PLATFORM="simtezilo" \
 	--output=out --target=binaries-armhf --progress=plain \
 	-f build/docker/Dockerfile .
 
@@ -116,6 +118,7 @@ build/rpi/v6:
 	--build-arg BUILDMODULE=$(buildmodule) \
 	--build-arg BUILDTIME=$(buildtime) \
 	--build-arg BUILDVERSION=$(buildversion) \
+	--build-arg PLATFORM="simtezilo" \
 	--output=out --target=binaries-armel --progress=plain \
 	-f build/docker/Dockerfile .
 
@@ -127,6 +130,7 @@ build/rpi/v7:
 	--build-arg BUILDMODULE=$(buildmodule) \
 	--build-arg BUILDTIME=$(buildtime) \
 	--build-arg BUILDVERSION=$(buildversion) \
+	--build-arg PLATFORM="simtezilo" \
 	--output=out --target=binaries-armel --progress=plain \
 	-f build/docker/Dockerfile .
 
@@ -138,6 +142,7 @@ build/rpi/v8/32:
 	--build-arg BUILDMODULE=$(buildmodule) \
 	--build-arg BUILDTIME=$(buildtime) \
 	--build-arg BUILDVERSION=$(buildversion) \
+	--build-arg PLATFORM="simtezilo" \
 	--output=out --target=binaries-armel-8 --progress=plain \
 	-f build/docker/Dockerfile .
 
@@ -149,6 +154,7 @@ build/rpi/v8/64:
 	--build-arg BUILDMODULE=$(buildmodule) \
 	--build-arg BUILDTIME=$(buildtime) \
 	--build-arg BUILDVERSION=$(buildversion) \
+	--build-arg PLATFORM="simtezilo" \
 	--output=out --target=binaries-arm64-8 --progress=plain \
 	-f build/docker/Dockerfile .
 

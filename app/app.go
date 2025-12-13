@@ -80,8 +80,9 @@ type App struct {
 
 	ui *ui.UserInterface // User interface manager
 
-	i18n    *i18n.I18n       // Language translations
-	display hardware.Display // Hardware display interface
+	i18n     *i18n.I18n         // Language translations
+	display  hardware.Display   // Hardware display interface
+	platform *hardware.Platform // Hardware platform information
 
 	gtClient   *gttelemetry.Client      // GT telemetry client
 	pitRadio   pitradio.PitRadio        // Pit radio notification service
@@ -116,13 +117,15 @@ type Options struct {
 	VehicleDB string                 // Path to an external vehicle database file
 	Done      chan exitcode.ExitCode // Channel to signal application shutdown with exit code
 	Logger    *zerolog.Logger        // Logger instance for application logging
+	Platform  *hardware.Platform     // Hardware platform information
 }
 
 // New creates a new App instance and sets up all components based on the provided options.
 func New(opts Options) (*App, error) {
 	newApp := &App{
-		log:  opts.Logger.With().Str("package", "app").Logger(),
-		done: opts.Done,
+		log:      opts.Logger.With().Str("package", "app").Logger(),
+		done:     opts.Done,
+		platform: opts.Platform,
 		state: appState{
 			current: raceState{
 				transmissionGear: kinematics.NullGear,
@@ -134,6 +137,10 @@ func New(opts Options) (*App, error) {
 		kinematics:         kinematics.NewKinematicsState(),
 		telemetryChartFeed: make(chan map[string]float32, 600),
 		lapStartEvents:     make(chan uint32),
+	}
+
+	if newApp.platform == nil {
+		newApp.platform = hardware.NewPlatform(Platform)
 	}
 
 	newApp.initializeConfig(opts)
@@ -193,12 +200,20 @@ func (a *App) Close() {
 			Msg("close")
 	}
 
-	err = a.pitRadio.Close()
-	if err != nil {
-		a.log.Error().
-			Err(err).
+	if a.pitRadio != nil {
+		err = a.pitRadio.Close()
+		if err != nil {
+			a.log.Error().
+				Err(err).
+				Str("component", "discord").
+				Str("result", "failure").
+				Msg("close")
+		}
+	} else {
+		a.log.Info().
 			Str("component", "discord").
-			Str("result", "failure").
+			Str("result", "skipped").
+			Str("reason", "object is nil").
 			Msg("close")
 	}
 
@@ -573,6 +588,7 @@ func (a *App) startBackgroundTasks() {
 			TelemetryChartFeed: a.telemetryChartFeed,
 			Config:             a.config,
 			ShutdownChan:       a.done,
+			SetupModeEnabled:   a.platform.SupportsSetupMode(),
 		})
 
 		go a.webUI.Start()
