@@ -4,7 +4,7 @@ After=local-fs.target
 Wants=local-fs.target
 
 [Service]
-ExecStart=/opt/simtezilo/simtezilo
+ExecStart=/opt/simtezilo/bin/launch.sh
 Type=simple
 Restart=always
 

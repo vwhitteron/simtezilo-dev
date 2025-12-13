@@ -27,6 +27,7 @@ type WebUI struct {
 	config             *config.Config
 	upgrader           websocket.Upgrader
 	shutdownChan       chan exitcode.ExitCode
+	setupModeEnabled   bool
 }
 
 type Config struct {
@@ -35,6 +36,7 @@ type Config struct {
 	TelemetryChartFeed chan map[string]float32
 	Config             *config.Config
 	ShutdownChan       chan exitcode.ExitCode
+	SetupModeEnabled   bool
 }
 
 // New creates a new instance of the WebUI.
@@ -48,7 +50,8 @@ func New(config Config) *WebUI {
 		upgrader: websocket.Upgrader{
 			CheckOrigin: func(_ *http.Request) bool { return true },
 		},
-		shutdownChan: config.ShutdownChan,
+		shutdownChan:     config.ShutdownChan,
+		setupModeEnabled: config.SetupModeEnabled,
 	}
 }
 
@@ -62,7 +65,10 @@ func (w *WebUI) Start() {
 	http.HandleFunc("/api/config", w.handleConfigAPI)
 	http.HandleFunc("/api/config/save", w.handleConfigSave)
 	http.HandleFunc("/api/config/reset", w.handleConfigReset)
-	http.HandleFunc("/api/mode/setup", w.handleSetupMode)
+
+	if w.setupModeEnabled {
+		http.HandleFunc("/api/mode/setup", w.handleSetupMode)
+	}
 
 	w.log.Info().Int("port", w.port).Msg("Starting Web UI server")
 

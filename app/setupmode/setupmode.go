@@ -1,21 +1,19 @@
-package main
+package setupmode
 
 import (
 	"context"
-	_ "embed"
+	"embed"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"image"
-	"log"
+	"mime"
 	"net"
 	"net/http"
-	"os"
 	"os/exec"
-	"os/signal"
+	"path/filepath"
 	"regexp"
 	"strings"
-	"syscall"
 	"time"
 
 	"atomicgo.dev/keyboard"
@@ -23,6 +21,7 @@ import (
 	"github.com/Wifx/gonetworkmanager/v2"
 	"github.com/rs/zerolog"
 	"github.com/skip2/go-qrcode"
+	"github.com/vwhitteron/simtezilo-dev/app/exitcode"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/display"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/pirateaudio"
@@ -44,10 +43,49 @@ func handleRoot(writer http.ResponseWriter, _ *http.Request) {
 	fmt.Fprint(writer, indexHTML)
 }
 
-func handleNetworks(writer http.ResponseWriter, _ *http.Request) {
-	networks, err := getAvailableNetworks()
+//go:embed static/*
+var staticFiles embed.FS
+
+func handleStaticFiles(writer http.ResponseWriter, request *http.Request, logger *zerolog.Logger) {
+	filename := "static" + request.URL.Path
+
+	content, err := staticFiles.ReadFile(filename)
 	if err != nil {
-		log.Printf("Failed to get available networks: %v\n", err)
+		writer.WriteHeader(http.StatusNotFound)
+		logger.Error().Err(err).Str("file", filename).Msg("Static file not found")
+
+		return
+	}
+
+	contentType := getContentType(filename)
+	writer.Header().Set("Content-Type", contentType)
+	writer.Header().Set("Cache-Control", "public, max-age=31536000")
+
+	length, err := writer.Write(content)
+	if err != nil {
+		logger.Error().Err(err).Int("bytes_written", length).Msg("Error writing static file")
+
+		return
+	}
+
+	logger.Debug().Str("file", filename).Str("mime-type", contentType).Msg("Served static file")
+}
+
+func getContentType(filename string) string {
+	ext := filepath.Ext(filename)
+	contentType := mime.TypeByExtension(ext)
+
+	if contentType == "" {
+		return "application/octet-stream"
+	}
+
+	return contentType
+}
+
+func handleAPIGetNetworks(writer http.ResponseWriter, _ *http.Request, logger *zerolog.Logger) {
+	networks, err := getAvailableNetworks(logger)
+	if err != nil {
+		logger.Error().Err(err).Msg("Failed to get available networks")
 		http.Error(writer, fmt.Sprintf("Error fetching networks: %v", err), http.StatusInternalServerError)
 
 		return
@@ -62,7 +100,7 @@ type networkInfo struct {
 	Security string `json:"security"` //nolint:tagliatelle // lowercase for compatibility with JS
 }
 
-func getAvailableNetworks() (string, error) { //nolint:cyclop // complexity from network scanning logic
+func getAvailableNetworks(logger *zerolog.Logger) (string, error) { //nolint:cyclop // complexity from network scanning logic
 	nm, err := gonetworkmanager.NewNetworkManager()
 	if err != nil {
 		return "", fmt.Errorf("failed to connect to NetworkManager: %w", err)
@@ -105,7 +143,7 @@ func getAvailableNetworks() (string, error) { //nolint:cyclop // complexity from
 	// Request scan
 	err = wifiDevice.RequestScan()
 	if err != nil {
-		log.Printf("Warning: failed to request scan: %v\n", err)
+		logger.Warn().Err(err).Msg("Failed to request scan")
 	}
 
 	// Get access points
@@ -128,7 +166,7 @@ func getAvailableNetworks() (string, error) { //nolint:cyclop // complexity from
 			seen[ssid] = true
 
 			// Determine security type from WPA and RSN flags
-			security := detectSecurityType(accessPoint)
+			security := detectSecurityType(accessPoint, logger)
 
 			networks = append(networks, networkInfo{
 				SSID:     ssid,
@@ -145,15 +183,15 @@ func getAvailableNetworks() (string, error) { //nolint:cyclop // complexity from
 	return string(data), nil
 }
 
-func detectSecurityType(accessPoint gonetworkmanager.AccessPoint) string {
+func detectSecurityType(accessPoint gonetworkmanager.AccessPoint, logger *zerolog.Logger) string {
 	wpaFlags, err := accessPoint.GetPropertyWPAFlags()
 	if err != nil {
-		log.Printf("Warning: failed to get WPA flags: %v\n", err)
+		logger.Warn().Err(err).Msg("Failed to get WPA flags")
 	}
 
 	rsnFlags, err := accessPoint.GetPropertyRSNFlags()
 	if err != nil {
-		log.Printf("Warning: failed to get RSN flags: %v\n", err)
+		logger.Warn().Err(err).Msg("Failed to get RSN flags")
 	}
 
 	// Check for WPA3 (SAE)
@@ -186,7 +224,7 @@ func detectSecurityType(accessPoint gonetworkmanager.AccessPoint) string {
 	return "wpa2"
 }
 
-func handleSave(writer http.ResponseWriter, request *http.Request) {
+func handleAPIConfigSave(writer http.ResponseWriter, request *http.Request, done chan<- exitcode.ExitCode, shutdown chan struct{}, logger *zerolog.Logger) {
 	if request.Method != http.MethodPost {
 		http.Error(writer, "Method not allowed", http.StatusMethodNotAllowed)
 
@@ -202,42 +240,64 @@ func handleSave(writer http.ResponseWriter, request *http.Request) {
 	gateway := request.FormValue("gateway")
 	dns := request.FormValue("dns")
 
-	err := saveNetworkConfiguration(request.Context(), ssid, password, security, ipConfig, ipAddress, netmask, gateway, dns)
+	err := saveNetworkConfiguration(request.Context(), ssid, password, security, ipConfig, ipAddress, netmask, gateway, dns, logger)
 	if err != nil {
-		log.Printf("Save configuration failed: %v\n", err)
-		log.Println("Network configuration failed, exiting with code 1")
-		os.Exit(1)
+		logger.Error().Err(err).Msg("Save configuration failed")
+
+		writer.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(writer, `{"success":false,"error":"Failed to save configuration: %v"}`, err)
+
+		return
 	}
 
-	log.Println("Network configuration completed successfully, exiting with code 0")
-	os.Exit(0)
+	writer.Header().Set("Content-Type", "application/json")
+	fmt.Fprint(writer, `{"success":true,"message":"Configuration saved successfully"}`)
+
+	logger.Info().Int("exitCode", int(exitcode.Success)).Msg("Network configuration completed successfully, sending exit code")
+
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+
+		done <- exitcode.Success
+
+		close(shutdown)
+	}()
 }
 
-func main() {
+func handleModeRun(writer http.ResponseWriter, _ *http.Request, done chan<- exitcode.ExitCode, shutdown chan struct{}, logger *zerolog.Logger) {
+	logger.Info().Msg("User cancelled setup, returning to run mode without saving")
+
+	writer.Header().Set("Content-Type", "application/json")
+	fmt.Fprint(writer, `{"success":true,"message":"Returning to run mode"}`)
+
+	logger.Info().Int("exitCode", int(exitcode.Success)).Msg("Setup cancelled by user, sending success exit code")
+
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+
+		done <- exitcode.Success
+
+		close(shutdown)
+	}()
+}
+
+// Run starts the setup wizard for configuring WiFi network.
+func Run(done chan<- exitcode.ExitCode, logger *zerolog.Logger) {
 	hardware.Init()
 
-	// Create channels for shutdown signals
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-
-	done := make(chan bool, 1)
-
-	// Handle OS signals (Ctrl+C)
-	go func() {
-		sig := <-sigChan
-		log.Printf("Received %v signal, shutting down without completing setup\n", sig)
-
-		done <- true
-	}()
+	// Create a local channel to signal when we should exit
+	shutdown := make(chan struct{})
 
 	// Handle keyboard input
 	go func() {
 		_ = keyboard.Listen(func(key keys.Key) (stop bool, err error) {
 			switch key.Code { //nolint:exhaustive
 			case keys.CtrlC, keys.Escape:
-				log.Println("Escape key pressed, shutting down")
+				logger.Info().Msg("Escape key pressed, shutting down")
 
-				done <- true
+				done <- exitcode.GeneralFailure
+
+				close(shutdown)
 
 				return true, nil
 			}
@@ -249,9 +309,25 @@ func main() {
 	// Start web server
 	go func() {
 		http.HandleFunc("/", handleRoot)
-		http.HandleFunc("/networks", handleNetworks)
-		http.HandleFunc("/save", handleSave)
-		log.Println("Starting web server on port 80...")
+		http.HandleFunc("/images/", func(w http.ResponseWriter, r *http.Request) {
+			handleStaticFiles(w, r, logger)
+		})
+		http.HandleFunc("/css/", func(w http.ResponseWriter, r *http.Request) {
+			handleStaticFiles(w, r, logger)
+		})
+		http.HandleFunc("/js/", func(w http.ResponseWriter, r *http.Request) {
+			handleStaticFiles(w, r, logger)
+		})
+		http.HandleFunc("/api/getnetworks", func(w http.ResponseWriter, r *http.Request) {
+			handleAPIGetNetworks(w, r, logger)
+		})
+		http.HandleFunc("/api/config/save", func(w http.ResponseWriter, r *http.Request) {
+			handleAPIConfigSave(w, r, done, shutdown, logger)
+		})
+		http.HandleFunc("/api/mode/run", func(w http.ResponseWriter, r *http.Request) {
+			handleModeRun(w, r, done, shutdown, logger)
+		})
+		logger.Info().Msg("Starting web server on port 80...")
 
 		server := &http.Server{
 			Addr:              ":80",
@@ -262,7 +338,7 @@ func main() {
 
 		err := server.ListenAndServe()
 		if err != nil {
-			log.Printf("Web server error: %v\n", err)
+			logger.Error().Err(err).Msg("Web server error")
 		}
 	}()
 
@@ -281,7 +357,7 @@ func main() {
 		fmt.Printf("Failed to initialize display: %v\n", err) //nolint:forbidigo
 	}
 
-	code := genQRcode()
+	code := genQRcode(logger)
 
 	// display the qrcode image on the lcd
 	canvas := imageToRGBA(code)
@@ -291,31 +367,15 @@ func main() {
 
 	err = lcd.Write(content)
 	if err != nil {
-		log.Printf("Failed to write to display: %v\n", err)
+		logger.Error().Err(err).Msg("Failed to write to display")
 	} else {
 		lcd.Wakeup()
 	}
 
 	// Wait for shutdown signal
-	<-done
-
-	log.Println("Shutting down without completing setup, exiting with code 1")
-
-	// Clear display to black
-	blackCanvas := image.NewRGBA(image.Rect(0, 0, 240, 240))
-	blackContent := &display.Content{
-		Canvas: blackCanvas,
-	}
-
-	err = lcd.Write(blackContent)
-	if err != nil {
-		log.Printf("Failed to clear display: %v\n", err)
-	}
-
-	lcd.Sleep()
-
-	// Exit with error code since setup was not completed
-	os.Exit(1)
+	// This will be triggered by either successful configuration (handleSave)
+	// or keyboard interrupt, or signal from main
+	<-shutdown
 }
 
 // WIFI:S:<SSID>;T:<AUTH>;P:<PASSWORD>;H:<true|false|blank>;;
@@ -323,9 +383,9 @@ func main() {
 // T (authentication type): The network encryption type (WPA, WPA2, WPA3, or WEP). Leave empty for open networks with no password.
 // P (password): The network password. This field is ignored if the network does not have authentication.
 // H (hidden network): *optional* Set to "true" if the SSID is not broadcast.
-func genQRcode() image.Image {
+func genQRcode(logger *zerolog.Logger) image.Image {
 	for {
-		networkSSID, err := getNetworkSSID()
+		networkSSID, err := getNetworkSSID(logger)
 		if err != nil {
 			time.Sleep(2 * time.Second)
 
@@ -340,7 +400,7 @@ func genQRcode() image.Image {
 
 		code, err := qrcode.New(networkDef, qrcode.Medium)
 		if err != nil {
-			log.Printf("Failed to generate QR code: %v\n", err)
+			logger.Error().Err(err).Msg("Failed to generate QR code")
 
 			return image.Black
 		}
@@ -352,7 +412,7 @@ func genQRcode() image.Image {
 	}
 }
 
-func getNetworkSSID() (string, error) {
+func getNetworkSSID(logger *zerolog.Logger) (string, error) {
 	nm, err := gonetworkmanager.NewNetworkManager()
 	if err != nil {
 		return "", fmt.Errorf("failed to connect to NetworkManager: %w", err)
@@ -419,22 +479,28 @@ func imageToRGBA(img image.Image) *image.RGBA {
 	return rgba
 }
 
-func saveNetworkConfiguration(ctx context.Context, ssid, password, security, ipConfig, ipAddress, netmask, gateway, dns string) error { //nolint:cyclop
+func saveNetworkConfiguration(ctx context.Context, ssid, password, security, ipConfig, ipAddress, netmask, gateway, dns string, logger *zerolog.Logger) error { //nolint:cyclop
 	// Validate static IP configuration if provided
 	if ipConfig == "static" {
 		err := validateIPConfiguration(ipAddress, netmask, gateway, dns)
 		if err != nil {
-			log.Printf("IP configuration validation failed: %v\n", err)
+			logger.Error().Err(err).Msg("IP configuration validation failed")
 
 			return fmt.Errorf("invalid IP configuration: %w", err)
 		}
 	}
 
 	// Backup existing RunMode connection before deleting
-	backupRunModeConnection()
+	// err := backupRunModeConnection(logger)
+	// if err != nil {
+	// 	return fmt.Errorf("backup existing connection: %w", err)
+	// }
 
 	// Delete any existing RunMode connection
-	deleteRunModeConnection()
+	err := deleteRunModeConnection(logger)
+	if err != nil {
+		return fmt.Errorf("delete existing connection: %w", err)
+	}
 
 	// Build connection settings
 	settings := gonetworkmanager.ConnectionSettings{
@@ -530,18 +596,18 @@ func saveNetworkConfiguration(ctx context.Context, ssid, password, security, ipC
 	// Add the connection
 	settingsObj, err := gonetworkmanager.NewSettings()
 	if err != nil {
-		return fmt.Errorf("failed to get settings: %w", err)
+		return fmt.Errorf("get network settings: %w", err)
 	}
 
 	_, err = settingsObj.AddConnection(settings)
 	if err != nil {
-		return fmt.Errorf("failed to add connection: %w", err)
+		return fmt.Errorf("add connection: %w", err)
 	}
 
 	// Switch from SetupMode to RunMode
-	err = switchToRunMode(ctx)
+	err = switchToRunMode(ctx, logger)
 	if err != nil {
-		return err
+		return fmt.Errorf("switch to run mode: %w", err)
 	}
 
 	return nil
@@ -576,7 +642,7 @@ func waitForConnectionState(ctx context.Context, activeConn gonetworkmanager.Act
 	return errors.New("timeout waiting for connection to activate")
 }
 
-func verifyIPAddress(device gonetworkmanager.Device) error {
+func verifyIPAddress(device gonetworkmanager.Device, logger *zerolog.Logger) error {
 	// Get IP4Config
 	ip4Config, err := device.GetPropertyIP4Config()
 	if err != nil {
@@ -596,12 +662,12 @@ func verifyIPAddress(device gonetworkmanager.Device) error {
 		return errors.New("no IP addresses assigned")
 	}
 
-	log.Printf("IP address assigned: %s/%d\n", addresses[0].Address, addresses[0].Prefix)
+	logger.Info().Str("address", addresses[0].Address).Uint8("prefix", addresses[0].Prefix).Msg("IP address assigned")
 
 	return nil
 }
 
-func testConnectivity(ctx context.Context) error {
+func testConnectivity(ctx context.Context, logger *zerolog.Logger) error {
 	// Try to ping the gateway first
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
@@ -641,7 +707,7 @@ func testConnectivity(ctx context.Context) error {
 		gateway = "1.1.1.1"
 	}
 
-	log.Printf("Testing connectivity to %s...\n", gateway)
+	logger.Info().Str("gateway", gateway).Msg("Testing connectivity")
 
 	// Ping test with 3 packets, 2 second timeout per packet
 	cmd := "ping -c 3 -W 2 " + gateway
@@ -651,7 +717,7 @@ func testConnectivity(ctx context.Context) error {
 		return fmt.Errorf("connectivity test failed: %w", err)
 	}
 
-	log.Println("Connectivity test passed")
+	logger.Info().Msg("Connectivity test passed")
 
 	return nil
 }
@@ -668,7 +734,7 @@ func runCommandWithContext(ctx context.Context, cmdStr string) (string, error) {
 	return string(output), err
 }
 
-func switchToRunMode(ctx context.Context) error {
+func switchToRunMode(ctx context.Context, logger *zerolog.Logger) error {
 	nm, err := gonetworkmanager.NewNetworkManager() //nolint:varnamelen // not confusing
 	if err != nil {
 		return fmt.Errorf("failed to connect to NetworkManager: %w", err)
@@ -721,7 +787,7 @@ func switchToRunMode(ctx context.Context) error {
 				if err == nil && connPath.GetPath() == setupModeConn.GetPath() {
 					err = nm.DeactivateConnection(activeConn)
 					if err != nil {
-						log.Printf("Warning: failed to deactivate SetupMode: %v\n", err)
+						logger.Warn().Err(err).Msg("Failed to deactivate SetupMode")
 					}
 
 					break
@@ -739,7 +805,7 @@ func switchToRunMode(ctx context.Context) error {
 
 				err = setupModeConn.Update(setupSettings)
 				if err != nil {
-					log.Printf("Warning: failed to disable SetupMode autoconnect: %v\n", err)
+					logger.Warn().Err(err).Msg("Failed to disable SetupMode autoconnect")
 				}
 			}
 		}
@@ -767,40 +833,40 @@ func switchToRunMode(ctx context.Context) error {
 	}
 
 	// Activate the RunMode connection
-	log.Printf("Activating connection profile %q...\n", runModeProfile)
+	logger.Info().Str("profile", runModeProfile).Msg("Activating connection profile")
 
 	activeConn, err := nm.ActivateConnection(runModeConn, wlanDevice, nil)
 	if err != nil {
-		log.Printf("Failed to activate connection profile %q: %v\n", runModeProfile, err)
-		restoreRunModeConnection()
+		logger.Error().Err(err).Str("profile", runModeProfile).Msg("Failed to activate connection profile")
+		restoreRunModeConnection(logger)
 
-		_ = switchToSetupMode()
+		_ = switchToSetupMode(logger)
 
 		return fmt.Errorf("failed to activate connection profile %q: %w", runModeProfile, err)
 	}
 
 	// Wait for connection to reach activated state (30 second timeout)
-	log.Println("Waiting for connection to activate...")
+	logger.Info().Msg("Waiting for connection to activate")
 
 	err = waitForConnectionState(ctx, activeConn, 30*time.Second)
 	if err != nil {
-		log.Printf("Failed to activate connection profile %q: %v\n", runModeProfile, err)
-		restoreRunModeConnection()
+		logger.Error().Err(err).Str("profile", runModeProfile).Msg("Failed to activate connection profile")
+		restoreRunModeConnection(logger)
 
-		_ = switchToSetupMode()
+		_ = switchToSetupMode(logger)
 
 		return fmt.Errorf("failed to activate connection profile %q: %w", runModeProfile, err)
 	}
 
-	log.Println("Connection activated successfully")
+	logger.Info().Msg("Connection activated successfully")
 
 	// Verify IP address assignment (wait up to 15 seconds)
-	log.Println("Verifying IP address assignment...")
+	logger.Info().Msg("Verifying IP address assignment")
 
 	var ipVerified bool
 
 	for range 30 {
-		err = verifyIPAddress(wlanDevice)
+		err = verifyIPAddress(wlanDevice, logger)
 		if err == nil {
 			ipVerified = true
 
@@ -809,9 +875,9 @@ func switchToRunMode(ctx context.Context) error {
 
 		select {
 		case <-ctx.Done():
-			restoreRunModeConnection()
+			restoreRunModeConnection(logger)
 
-			_ = switchToSetupMode()
+			_ = switchToSetupMode(logger)
 
 			return ctx.Err()
 		case <-time.After(500 * time.Millisecond):
@@ -820,28 +886,28 @@ func switchToRunMode(ctx context.Context) error {
 	}
 
 	if !ipVerified {
-		log.Println("Failed to obtain IP address")
-		restoreRunModeConnection()
+		logger.Error().Msg("Failed to obtain IP address")
+		restoreRunModeConnection(logger)
 
-		_ = switchToSetupMode()
+		_ = switchToSetupMode(logger)
 
 		return errors.New("failed to obtain IP address")
 	}
 
 	// Test connectivity
-	log.Println("Testing network connectivity...")
+	logger.Info().Msg("Testing network connectivity")
 
-	err = testConnectivity(ctx)
+	err = testConnectivity(ctx, logger)
 	if err != nil {
-		log.Printf("Connectivity test failed: %v\n", err)
-		restoreRunModeConnection()
+		logger.Error().Err(err).Msg("Connectivity test failed")
+		restoreRunModeConnection(logger)
 
-		_ = switchToSetupMode()
+		_ = switchToSetupMode(logger)
 
 		return fmt.Errorf("connectivity test failed: %w", err)
 	}
 
-	log.Println("Network configuration verified successfully")
+	logger.Info().Msg("Network configuration verified successfully")
 
 	// Delete the backup since the new configuration is working
 	deleteRunModeBackup()
@@ -849,7 +915,7 @@ func switchToRunMode(ctx context.Context) error {
 	return nil
 }
 
-func switchToSetupMode() error {
+func switchToSetupMode(logger *zerolog.Logger) error {
 	nm, err := gonetworkmanager.NewNetworkManager() //nolint:varnamelen // not confusing
 	if err != nil {
 		return fmt.Errorf("failed to connect to NetworkManager: %w", err)
@@ -917,19 +983,15 @@ func switchToSetupMode() error {
 	return nil
 }
 
-func backupRunModeConnection() {
+func backupRunModeConnection(logger *zerolog.Logger) error {
 	settings, err := gonetworkmanager.NewSettings()
 	if err != nil {
-		log.Printf("Warning: failed to get settings for backup: %v\n", err)
-
-		return
+		return fmt.Errorf("failed to get settings for backup: %w", err)
 	}
 
 	connections, err := settings.ListConnections()
 	if err != nil {
-		log.Printf("Warning: failed to list connections for backup: %v\n", err)
-
-		return
+		return fmt.Errorf("failed to list connections for backup: %w", err)
 	}
 
 	// First, delete any existing backup
@@ -947,7 +1009,7 @@ func backupRunModeConnection() {
 		if id, ok := connMap["id"].(string); ok && id == runModeBackupProfile {
 			err = conn.Delete()
 			if err != nil {
-				log.Printf("Warning: failed to delete backup connection profile %q: %v\n", runModeBackupProfile, err)
+				return fmt.Errorf("failed to delete existing backup connection profile: %w", err)
 			}
 
 			break
@@ -973,31 +1035,33 @@ func backupRunModeConnection() {
 
 			_, err = settings.AddConnection(connSettings)
 			if err != nil {
-				log.Printf("Warning: failed to create backup connection profile %q: %v\n", runModeBackupProfile, err)
-			} else {
-				log.Printf("Existing connection profile %q backed up to %q\n", runModeProfile, runModeBackupProfile)
+				return fmt.Errorf("failed to create backup connection profile: %w", err)
 			}
 
-			return
+			logger.Info().Str("from", runModeProfile).Str("to", runModeBackupProfile).Msg("Connection profile backed up")
+
+			return nil
 		}
 	}
 
-	log.Printf("No existing connection profile %q to backup\n", runModeProfile)
+	logger.Info().Str("profile", runModeProfile).Msg("No existing connection profile to backup")
+
+	return nil
 }
 
-func restoreRunModeConnection() {
-	log.Printf("Restoring connection profile %q from backup...\n", runModeProfile)
+func restoreRunModeConnection(logger *zerolog.Logger) {
+	logger.Info().Str("profile", runModeProfile).Msg("Restoring connection profile from backup")
 
 	settings, err := gonetworkmanager.NewSettings()
 	if err != nil {
-		log.Printf("Warning: failed to restore connection profile %q: %v\n", runModeProfile, err)
+		logger.Warn().Err(err).Str("profile", runModeProfile).Msg("Failed to restore connection profile")
 
 		return
 	}
 
 	connections, err := settings.ListConnections()
 	if err != nil {
-		log.Printf("Warning: failed to list connections for restore: %v\n", err)
+		logger.Warn().Err(err).Msg("Failed to list connections for restore")
 
 		return
 	}
@@ -1024,7 +1088,7 @@ func restoreRunModeConnection() {
 	}
 
 	if backupConn == nil {
-		log.Println("No backup connection found to restore")
+		logger.Info().Msg("No backup connection found to restore")
 
 		return
 	}
@@ -1032,13 +1096,13 @@ func restoreRunModeConnection() {
 	// Get backup settings
 	backupSettings, err := backupConn.GetSettings()
 	if err != nil {
-		log.Printf("Warning: failed to get backup settings: %v\n", err)
+		logger.Warn().Err(err).Msg("Failed to get backup settings")
 
 		return
 	}
 
 	// Delete current failed RunMode connection
-	deleteRunModeConnection()
+	deleteRunModeConnection(logger)
 
 	// Rename backup back to RunMode
 	if connMap, ok := backupSettings["connection"]; ok {
@@ -1049,17 +1113,17 @@ func restoreRunModeConnection() {
 	// Create the restored connection
 	_, err = settings.AddConnection(backupSettings)
 	if err != nil {
-		log.Printf("Warning: failed to restore connection profile %q: %v\n", runModeProfile, err)
+		logger.Warn().Err(err).Str("profile", runModeProfile).Msg("Failed to restore connection profile")
 
 		return
 	}
 
-	log.Printf("Successfully restored previous connection profile %q from backup\n", runModeProfile)
+	logger.Info().Str("profile", runModeProfile).Msg("Successfully restored connection profile from backup")
 
 	// Delete the backup
 	err = backupConn.Delete()
 	if err != nil {
-		log.Printf("Warning: failed to delete backup connection profile %q after restore: %v\n", runModeBackupProfile, err)
+		logger.Warn().Err(err).Str("profile", runModeBackupProfile).Msg("Failed to delete backup connection profile after restore")
 	}
 }
 
@@ -1088,7 +1152,7 @@ func deleteRunModeBackup() {
 		if id, ok := connMap["id"].(string); ok && id == runModeBackupProfile {
 			err = conn.Delete()
 			if err != nil {
-				log.Printf("Warning: failed to delete backup connection profile %q: %v\n", runModeBackupProfile, err)
+				// Silent failure - deleteRunModeBackup has no logger parameter
 			}
 
 			return
@@ -1096,19 +1160,15 @@ func deleteRunModeBackup() {
 	}
 }
 
-func deleteRunModeConnection() {
+func deleteRunModeConnection(logger *zerolog.Logger) error {
 	settings, err := gonetworkmanager.NewSettings()
 	if err != nil {
-		log.Printf("Warning: failed to get settings: %v\n", err)
-
-		return
+		return fmt.Errorf("failed to get settings: %w", err)
 	}
 
 	connections, err := settings.ListConnections()
 	if err != nil {
-		log.Printf("Warning: failed to list connections: %v\n", err)
-
-		return
+		return fmt.Errorf("failed to list connections: %w", err)
 	}
 
 	for _, conn := range connections {
@@ -1125,12 +1185,18 @@ func deleteRunModeConnection() {
 		if id, ok := connMap["id"].(string); ok && id == runModeProfile {
 			err = conn.Delete()
 			if err != nil {
-				log.Printf("Warning: failed to delete %s connection: %v\n", runModeProfile, err)
+				return fmt.Errorf("failed to delete connection profile: %w", err)
 			}
 
-			return
+			logger.Info().Str("profile", runModeProfile).Msg("Connection profile deleted")
+
+			return nil
 		}
 	}
+
+	logger.Info().Str("profile", runModeProfile).Msg("No existing connection profile to delete")
+
+	return nil
 }
 
 func validateIPConfiguration(ipAddress, netmask, gateway, dns string) error {
