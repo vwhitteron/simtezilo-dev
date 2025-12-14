@@ -830,6 +830,31 @@
             // Global i18n object to store translations
             let i18n = null;
 
+            // Detect browser language and match with available languages
+            function detectBrowserLanguage(availableLanguages) {
+                // Get browser language preferences (ordered by preference)
+                const browserLanguages = navigator.languages || [navigator.language || navigator.userLanguage || 'en'];
+
+                // Try to find exact match first (e.g., 'en-US' matches 'en-US')
+                for (const browserLang of browserLanguages) {
+                    const langCode = browserLang.toLowerCase();
+                    if (availableLanguages.includes(langCode)) {
+                        return langCode;
+                    }
+                }
+
+                // Try to find match with just the language part (e.g., 'en-US' matches 'en')
+                for (const browserLang of browserLanguages) {
+                    const langCode = browserLang.split('-')[0].toLowerCase();
+                    if (availableLanguages.includes(langCode)) {
+                        return langCode;
+                    }
+                }
+
+                // Default to English if no match found
+                return availableLanguages.includes('en') ? 'en' : availableLanguages[0];
+            }
+
             // Load available languages from API
             async function loadLanguages() {
                 try {
@@ -845,11 +870,17 @@
                     // Clear existing options
                     languageSelect.innerHTML = '';
 
+                    // Detect browser language preference
+                    const browserLang = detectBrowserLanguage(languages.map(l => l.code));
+
                     // Populate language select with fetched languages
                     languages.forEach(lang => {
                         const option = document.createElement('option');
                         option.value = lang.code;
                         option.textContent = lang.name;
+                        if (lang.code === browserLang) {
+                            option.selected = true;
+                        }
                         languageSelect.appendChild(option);
                     });
 
