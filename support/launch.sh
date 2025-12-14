@@ -11,25 +11,26 @@ IPV4ADDR="10.33.0.1/24"
 #########################
 
 NMCLI="/usr/bin/nmcli"
+SYSTEMCTL="/usr/bin/systemctl"
+SIMTEZILO="/opt/simtezilo/bin/simtezilo"
 
 OPTIONS="$@"
+
+initSetupMode() {
+    if ! setupModeExists; then
+        echo "Creating SetupMode access point connection."
+
+        setupAPConn
+        startAPConn
+
+        enableSetupModeFlag
+    fi
+}
 
 connExists() {
     name="$1"
 
     ${NMCLI} con show | grep -q "^${name}\s"
-}
-
-connUp() {
-    name="$1"
-
-    ${NMCLI} con up "${name}"
-
-    if [ $? -eq 10 ]; then
-        initSetupMode
-    elif [ $? -ne 0 ]; then
-        echo "Starting wifi failed with error $?"
-    fi
 }
 
 setupModeExists() {
@@ -40,7 +41,22 @@ runModeExists() {
     connExists "${RUNCONNNAME}"
 }
 
+connUp() {
+    name="$1"
+
+    ${NMCLI} con up "${name}"
+    exitCode=$?
+
+    if [ $exitCode -eq 10 ]; then
+        initSetupMode
+    elif [ $exitCode -ne 0 ]; then
+        echo "Failed to start ${name} wifi connection with error $?"
+    fi
+}
+
 setupAPConn() {
+    echo "Setting up SetupMode access point connection."
+
     serial=$(awk '/^Serial/ {sub(/^0*/, "", $NF); print $NF}' /proc/cpuinfo)
     ssid="${SSIDPREFIX}${serial}"
 
@@ -57,56 +73,28 @@ setupAPConn() {
 
 startAPConn() {
     connUp "${APCONNNAME}"
+    exitCode=$?
 
-    if [ $? -eq 10 ]; then
+    if [ $exitCode -eq 10 ]; then
         initSetupMode
-    elif [ $? -ne 0 ]; then
-        echo "Starting wifi failed with error $?"
+    elif [ $exitCode -ne 0 ]; then
+        echo "Failed to start SetupMode wifi connectio with error $?"
     fi
 }
 
 startRunModeConn() {
     connUp "${RUNCONNNAME}"
+    exitCode=$?
 
-    if [ $? -eq 10 ]; then
+    if [ $exitCode -eq 10 ]; then
         echo "RunMode connection not present, switching to SetupMode $?"
 
         enableSetupModeFlag
 
         exit 1
-    elif [ $? -ne 0 ]; then
-        echo "Starting wifi failed with error $?"
+    elif [ $exitCode -ne 0 ]; then
+        echo "Failed to start RunMode wifi connection with error $?"
     fi
-}
-
-enableDNSMasq() {
-    echo "Enabling DNSMasq"
-
-    systemctl enable dnsmasq
-    systemctl start dnsmasq
-
-    if [ $? -ne 0 ]; then
-        exitCode=$?
-        echo "Enabling DNSMasq failed with error ${exitCode}"
-
-        exit ${exitCode}
-    fi
-
-}
-
-disableDNSMasq() {
-    echo "Disabling DNSMasq"
-
-    systemctl disable dnsmasq
-    systemctl stop dnsmasq
-
-    if [ $? -ne 0 ]; then
-        exitCode=$?
-        echo "Disabling DNSMasq failed with error ${exitCode}"
-
-        exit ${exitCode}
-    fi
-
 }
 
 enableSetupModeFlag() {
@@ -119,15 +107,34 @@ disableSetupModeFlag() {
     rm -f "$SETUPMODE_FILE"
 }
 
-initSetupMode() {
-    if ! setupModeExists; then
-        echo "Creating SetupMode access point connection."
+enableDNSMasq() {
+    echo "Enabling DNSMasq"
 
-        setupAPConn
-        startAPConn
+    ${SYSTEMCTL} enable dnsmasq
+    ${SYSTEMCTL} start dnsmasq
+    exitCode=$?
 
-        enableSetupModeFlag
+    if [ $exitCode -ne 0 ]; then
+        echo "Failed to enable DNSMasq with error ${exitCode}"
+
+        exit ${exitCode}
     fi
+
+}
+
+disableDNSMasq() {
+    echo "Disabling DNSMasq"
+
+    ${SYSTEMCTL} disable dnsmasq
+    ${SYSTEMCTL} stop dnsmasq
+    exitCode=$?
+
+    if [ $exitCode -ne 0 ]; then
+        echo "Failed to disable DNSMasq with error ${exitCode}"
+
+        exit ${exitCode}
+    fi
+
 }
 
 setupRequired() {
@@ -149,7 +156,7 @@ if setupRequired; then
     startAPConn
     enableDNSMasq
 
-    /opt/simtezilo/bin/simtezilo -s
+   ${SIMTEZILO} -s
     if [ $? -ne 0 ]; then
         exitCode=$?
         echo "Simtezilo setup mode exited with error ${exitCode}"
@@ -167,7 +174,7 @@ if setupRequired; then
 else
     echo "Run mode detected. Launching Simtezilo"
 
-    /opt/simtezilo/bin/simtezilo $OPTIONS
+    ${SIMTEZILO} $OPTIONS
     if [ $? -eq 33 ]; then
         echo "Simtezilo exited into setup mode."
 
