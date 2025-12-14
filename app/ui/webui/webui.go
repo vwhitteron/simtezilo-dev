@@ -13,7 +13,6 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
 	"github.com/vwhitteron/simtezilo-dev/app/config"
 	"github.com/vwhitteron/simtezilo-dev/app/exitcode"
 )
@@ -42,7 +41,7 @@ type Config struct {
 // New creates a new instance of the WebUI.
 func New(config Config) *WebUI {
 	return &WebUI{
-		log:                log.With().Str("component", "web ui").Logger(),
+		log:                config.Log.With().Str("component", "web ui").Logger(),
 		port:               config.Port,
 		webSocketClients:   0,
 		telemetryChartFeed: config.TelemetryChartFeed,

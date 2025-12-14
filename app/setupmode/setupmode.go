@@ -82,6 +82,95 @@ func getContentType(filename string) string {
 	return contentType
 }
 
+func handleAPIGetLanguages(writer http.ResponseWriter, _ *http.Request, logger *zerolog.Logger) {
+	// Create i18n instance to get available languages
+	langCode := "en"
+
+	i18nInstance, err := i18n.New(&langCode, *logger)
+	if err != nil {
+		logger.Error().Err(err).Msg("Failed to create i18n instance")
+		http.Error(writer, fmt.Sprintf("Error fetching languages: %v", err), http.StatusInternalServerError)
+
+		return
+	}
+
+	languagesMap := i18nInstance.Languages()
+
+	// Build response as array of language objects
+	type languageInfo struct {
+		Code string `json:"code"` //nolint:tagliatelle
+		Name string `json:"name"` //nolint:tagliatelle
+	}
+
+	languages := make([]languageInfo, 0, len(languagesMap))
+	for code, metadata := range languagesMap {
+		languages = append(languages, languageInfo{
+			Code: code,
+			Name: metadata.Name,
+		})
+	}
+
+	data, err := json.Marshal(languages)
+	if err != nil {
+		logger.Error().Err(err).Msg("Failed to marshal languages")
+		http.Error(writer, fmt.Sprintf("Error encoding languages: %v", err), http.StatusInternalServerError)
+
+		return
+	}
+
+	writer.Header().Set("Content-Type", "application/json")
+	writer.Header().Set("Cache-Control", "public, max-age=3600")
+
+	length, err := writer.Write(data)
+	if err != nil {
+		logger.Error().Err(err).Int("bytes_written", length).Msg("Error writing languages response")
+
+		return
+	}
+
+	logger.Debug().Int("count", len(languages)).Msg("Served languages list")
+}
+
+func handleAPIGetI18n(writer http.ResponseWriter, request *http.Request, logger *zerolog.Logger) {
+	// Get language from query parameter, default to English
+	lang := request.URL.Query().Get("lang")
+	if lang == "" {
+		lang = "en"
+	}
+
+	// Create i18n instance to get translations from languagedb
+	i18nInstance, err := i18n.New(&lang, *logger)
+	if err != nil {
+		logger.Error().Err(err).Str("lang", lang).Msg("Failed to create i18n instance")
+		http.Error(writer, fmt.Sprintf("Error loading language: %v", err), http.StatusInternalServerError)
+
+		return
+	}
+
+	// Get all translations with the "setupmode." prefix
+	translations := i18nInstance.GetStringsWithPrefix("setupmode.")
+
+	data, err := json.Marshal(translations)
+	if err != nil {
+		logger.Error().Err(err).Msg("Failed to marshal translations")
+		http.Error(writer, fmt.Sprintf("Error encoding translations: %v", err), http.StatusInternalServerError)
+
+		return
+	}
+
+	writer.Header().Set("Content-Type", "application/json")
+	writer.Header().Set("Cache-Control", "public, max-age=3600")
+
+	length, err := writer.Write(data)
+	if err != nil {
+		logger.Error().Err(err).Int("bytes_written", length).Msg("Error writing i18n response")
+
+		return
+	}
+
+	logger.Debug().Str("language", lang).Msg("Served i18n translations")
+}
+
 func handleAPIGetNetworks(writer http.ResponseWriter, _ *http.Request, logger *zerolog.Logger) {
 	networks, err := getAvailableNetworks(logger)
 	if err != nil {
@@ -90,6 +179,14 @@ func handleAPIGetNetworks(writer http.ResponseWriter, _ *http.Request, logger *z
 
 		return
 	}
+
+	// TODO: Remove this hardcoded test data
+	// networks := `[
+	// 	{"ssid": "Simtezilo-Setup", "security": "wpa2"},
+	// 	{"ssid": "ExampleNetwork1", "security": "wpa2"},
+	// 	{"ssid": "ExampleNetwork2", "security": "wep"},
+	// 	{"ssid": "OpenNetwork",     "security": "none"}
+	// ]`
 
 	writer.Header().Set("Content-Type", "application/json")
 	fmt.Fprint(writer, networks)
@@ -317,6 +414,12 @@ func Run(done chan<- exitcode.ExitCode, logger *zerolog.Logger) {
 		})
 		http.HandleFunc("/js/", func(w http.ResponseWriter, r *http.Request) {
 			handleStaticFiles(w, r, logger)
+		})
+		http.HandleFunc("/api/languages", func(w http.ResponseWriter, r *http.Request) {
+			handleAPIGetLanguages(w, r, logger)
+		})
+		http.HandleFunc("/api/i18n", func(w http.ResponseWriter, r *http.Request) {
+			handleAPIGetI18n(w, r, logger)
 		})
 		http.HandleFunc("/api/getnetworks", func(w http.ResponseWriter, r *http.Request) {
 			handleAPIGetNetworks(w, r, logger)

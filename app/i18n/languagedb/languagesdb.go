@@ -12,8 +12,8 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/i18n/font"
 )
 
-// languageMetadata holds the metadata for a language.
-type languageMetadata struct {
+// LanguageMetadata holds the metadata for a language.
+type LanguageMetadata struct {
 	Code string `json:"Code"`
 	Name string `json:"Name"`
 }
@@ -32,7 +32,7 @@ type languageTranslations map[string]string
 
 // languageData holds the data and attributes for a language.
 type languageData struct {
-	Metadata     languageMetadata     `json:"Metadata"`
+	Metadata     LanguageMetadata     `json:"Metadata"`
 	Fonts        languageFonts        `json:"Fonts"`
 	Translations languageTranslations `json:"Translations"`
 }
@@ -73,28 +73,36 @@ func NewFromJSON(jsonData []byte, log zerolog.Logger) (*LanguageDB, error) {
 	return translation, nil
 }
 
-// LanguageCodes returns a slice of all available language codes.
-func (l *LanguageDB) LanguageCodes() []string {
-	languageCodes := []string{}
+// Languages returns a map of all available languages with their associated metadata.
+func (l *LanguageDB) Languages() map[string]LanguageMetadata {
+	languages := make(map[string]LanguageMetadata)
 
-	for _, lang := range l.db {
-		languageCodes = append(languageCodes, lang.Metadata.Code)
+	for code, lang := range l.db {
+		languages[code] = lang.Metadata
 	}
 
-	return languageCodes
+	return languages
+}
+
+// LanguageCodes returns a slice of all available language codes.
+func (l *LanguageDB) LanguageCodes() []string {
+	languages := l.Languages()
+
+	codes := make([]string, 0, len(languages))
+	for code := range languages {
+		codes = append(codes, code)
+	}
+
+	return codes
 }
 
 // ValidateCode checks if the provided language code is valid.
 func (l *LanguageDB) ValidateCode(code string) bool {
-	validCodes := l.LanguageCodes()
+	languages := l.Languages()
 
-	for _, validCode := range validCodes {
-		if code == validCode {
-			return true
-		}
-	}
+	_, found := languages[code]
 
-	return false
+	return found
 }
 
 // String retrieves the translation for the given language code and key.
@@ -127,6 +135,23 @@ func (l *LanguageDB) String(code string, key Key) (value string) {
 	}
 
 	return value
+}
+
+// GetStringsWithPrefix retrieves all translations for the given language code that start with the specified prefix.
+// It returns a map where keys are the full translation keys and values are the translated strings.
+func (l *LanguageDB) GetStringsWithPrefix(code string, prefix string) map[string]string {
+	result := make(map[string]string)
+	prefix = strings.ToLower(prefix)
+
+	if language, ok := l.db[code]; ok {
+		for key, value := range language.Translations {
+			if strings.HasPrefix(key, prefix) {
+				result[key] = value
+			}
+		}
+	}
+
+	return result
 }
 
 // RegularFont returns the font used for displaying regular text for the given language code.

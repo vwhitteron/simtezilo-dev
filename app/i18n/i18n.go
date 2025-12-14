@@ -30,8 +30,6 @@ func New(langCode *string, log zerolog.Logger) (*I18n, error) {
 		return nil, fmt.Errorf("load languages: %w", err)
 	}
 
-	newI18n.languages.LanguageCodes()
-
 	if !newI18n.languages.ValidateCode(*langCode) {
 		log.Warn().Str("requested", *langCode).Msg("unsupported language, defaulting to 'en'")
 
@@ -44,6 +42,11 @@ func New(langCode *string, log zerolog.Logger) (*I18n, error) {
 	go newI18n.watchForConfigChanges()
 
 	return newI18n, nil
+}
+
+// Languages returns a map of all available languages with their metadata.
+func (i *I18n) Languages() map[string]languagedb.LanguageMetadata {
+	return i.languages.Languages()
 }
 
 // LanguageCodes returns a slice of all available language codes.
@@ -77,6 +80,11 @@ func (i *I18n) LanguageName() string {
 // GetString retrieves the translation for the given key.
 func (i *I18n) GetString(key languagedb.Key) string {
 	return i.languages.String(i.languageCode, key)
+}
+
+// GetStringsWithPrefix retrieves all translations that start with the specified prefix.
+func (i *I18n) GetStringsWithPrefix(prefix string) map[string]string {
+	return i.languages.GetStringsWithPrefix(i.languageCode, prefix)
 }
 
 // RegularFont returns the regular font for the language.
