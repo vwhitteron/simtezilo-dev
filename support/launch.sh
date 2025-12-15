@@ -29,8 +29,13 @@ initSetupMode() {
 
 connExists() {
     name="$1"
+    
+    if networkManagerRunning; then
+        ${NMCLI} con show | grep -q "^${name}\s"
+        return $?
+    fi
 
-    ${NMCLI} con show | grep -q "^${name}\s"
+    test -f "/etc/NetworkManager/system-connections/${name}.nmconnection"
 }
 
 setupModeExists() {
@@ -41,8 +46,30 @@ runModeExists() {
     connExists "${RUNCONNNAME}"
 }
 
+networkManagerRunning() {
+    ${SYSTEMCTL} is-active --quiet NetworkManager
+}
+
+waitForNetworkManager() {
+    if networkManagerRunning; then
+        return
+    fi
+    
+    echo "Waiting for NetworkManager to start."
+
+    until networkManagerRunning; do    
+        sleep 2
+    done
+
+    echo "NetworkManager is running."
+}
+
 connUp() {
     name="$1"
+
+    waitForNetworkManager
+
+    echo "Starting ${name} wifi connection."
 
     ${NMCLI} con up "${name}"
     exitCode=$?
@@ -55,6 +82,8 @@ connUp() {
 }
 
 setupAPConn() {
+    waitForNetworkManager
+
     echo "Setting up SetupMode access point connection."
 
     serial=$(awk '/^Serial/ {sub(/^0*/, "", $NF); print $NF}' /proc/cpuinfo)
@@ -110,7 +139,7 @@ disableSetupModeFlag() {
 enableDNSMasq() {
     echo "Enabling DNSMasq"
 
-    ${SYSTEMCTL} enable dnsmasq
+    ${SYSTEMCTL} enable dnsmasq && \
     ${SYSTEMCTL} start dnsmasq
     exitCode=$?
 
@@ -125,8 +154,8 @@ enableDNSMasq() {
 disableDNSMasq() {
     echo "Disabling DNSMasq"
 
+    ${SYSTEMCTL} stop dnsmasq && \
     ${SYSTEMCTL} disable dnsmasq
-    ${SYSTEMCTL} stop dnsmasq
     exitCode=$?
 
     if [ $exitCode -ne 0 ]; then
