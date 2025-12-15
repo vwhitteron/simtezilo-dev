@@ -28,12 +28,120 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/i18n"
 )
 
+type networkInfo struct {
+	SSID     string `json:"ssid"`     //nolint:tagliatelle // lowercase for compatibility with JS
+	Security string `json:"security"` //nolint:tagliatelle // lowercase for compatibility with JS
+}
+
 const (
 	wlanInterface        = "wlan0"
 	runModeProfile       = "RunMode"
 	runModeBackupProfile = runModeProfile + "-Backup"
 	setupModeProfile     = "SetupMode"
 )
+
+// Run starts the setup wizard for configuring WiFi network.
+func Run(done chan<- exitcode.ExitCode, logger *zerolog.Logger) {
+	hardware.Init()
+
+	// Create a local channel to signal when we should exit
+	shutdown := make(chan struct{})
+
+	// Handle keyboard input
+	go func() {
+		_ = keyboard.Listen(func(key keys.Key) (stop bool, err error) {
+			switch key.Code { //nolint:exhaustive
+			case keys.CtrlC, keys.Escape:
+				logger.Info().Msg("Escape key pressed, shutting down")
+
+				done <- exitcode.GeneralFailure
+
+				close(shutdown)
+
+				return true, nil
+			}
+
+			return false, nil
+		})
+	}()
+
+	// Start web server
+	go func() {
+		http.HandleFunc("/", handleRoot)
+		http.HandleFunc("/images/", func(w http.ResponseWriter, r *http.Request) {
+			handleStaticFiles(w, r, logger)
+		})
+		http.HandleFunc("/css/", func(w http.ResponseWriter, r *http.Request) {
+			handleStaticFiles(w, r, logger)
+		})
+		http.HandleFunc("/js/", func(w http.ResponseWriter, r *http.Request) {
+			handleStaticFiles(w, r, logger)
+		})
+		http.HandleFunc("/api/languages", func(w http.ResponseWriter, r *http.Request) {
+			handleAPIGetLanguages(w, r, logger)
+		})
+		http.HandleFunc("/api/i18n", func(w http.ResponseWriter, r *http.Request) {
+			handleAPIGetI18n(w, r, logger)
+		})
+		http.HandleFunc("/api/getnetworks", func(w http.ResponseWriter, r *http.Request) {
+			handleAPIGetNetworks(w, r, logger)
+		})
+		http.HandleFunc("/api/config/save", func(w http.ResponseWriter, r *http.Request) {
+			handleAPIConfigSave(w, r, done, shutdown, logger)
+		})
+		http.HandleFunc("/api/mode/run", func(w http.ResponseWriter, r *http.Request) {
+			handleModeRun(w, r, done, shutdown, logger)
+		})
+		logger.Info().Msg("Starting web server on port 80...")
+
+		server := &http.Server{
+			Addr:              ":80",
+			ReadHeaderTimeout: 10 * time.Second,
+			ReadTimeout:       30 * time.Second,
+			WriteTimeout:      30 * time.Second,
+		}
+
+		err := server.ListenAndServe()
+		if err != nil {
+			logger.Error().Err(err).Msg("Web server error")
+		}
+	}()
+
+	langCode := "en"
+
+	lang, err := i18n.New(&langCode, zerolog.Logger{})
+	if err != nil {
+		fmt.Printf("Failed to initialize i18n: %v\n", err) //nolint:forbidigo
+	}
+
+	lcd, err := pirateaudio.NewDisplay(pirateaudio.DisplayOptions{
+		Orientation: 0,
+		I18n:        lang,
+	})
+	if err != nil {
+		fmt.Printf("Failed to initialize display: %v\n", err) //nolint:forbidigo
+	}
+
+	code := genQRcode(logger)
+
+	// display the qrcode image on the lcd
+	canvas := imageToRGBA(code)
+	content := &display.Content{
+		Canvas: canvas,
+	}
+
+	err = lcd.Write(content)
+	if err != nil {
+		logger.Error().Err(err).Msg("Failed to write to display")
+	} else {
+		lcd.Wakeup()
+	}
+
+	// Wait for shutdown signal
+	// This will be triggered by either successful configuration (handleSave)
+	// or keyboard interrupt, or signal from main
+	<-shutdown
+}
 
 //go:embed html/index.html
 var indexHTML string
@@ -182,7 +290,6 @@ func handleAPIGetNetworks(writer http.ResponseWriter, _ *http.Request, logger *z
 
 	// TODO: Remove this hardcoded test data
 	// networks := `[
-	// 	{"ssid": "Simtezilo-Setup", "security": "wpa2"},
 	// 	{"ssid": "ExampleNetwork1", "security": "wpa2"},
 	// 	{"ssid": "ExampleNetwork2", "security": "wep"},
 	// 	{"ssid": "OpenNetwork",     "security": "none"}
@@ -192,9 +299,61 @@ func handleAPIGetNetworks(writer http.ResponseWriter, _ *http.Request, logger *z
 	fmt.Fprint(writer, networks)
 }
 
-type networkInfo struct {
-	SSID     string `json:"ssid"`     //nolint:tagliatelle // lowercase for compatibility with JS
-	Security string `json:"security"` //nolint:tagliatelle // lowercase for compatibility with JS
+func handleAPIConfigSave(writer http.ResponseWriter, request *http.Request, done chan<- exitcode.ExitCode, shutdown chan struct{}, logger *zerolog.Logger) {
+	if request.Method != http.MethodPost {
+		http.Error(writer, "Method not allowed", http.StatusMethodNotAllowed)
+
+		return
+	}
+
+	ssid := request.FormValue("ssid")
+	password := request.FormValue("password")
+	security := request.FormValue("security")
+	ipConfig := request.FormValue("ipConfig")
+	ipAddress := request.FormValue("ipAddress")
+	netmask := request.FormValue("netmask")
+	gateway := request.FormValue("gateway")
+	dns := request.FormValue("dns")
+
+	err := saveNetworkConfiguration(request.Context(), ssid, password, security, ipConfig, ipAddress, netmask, gateway, dns, logger)
+	if err != nil {
+		logger.Error().Err(err).Msg("Save configuration failed")
+
+		writer.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(writer, `{"success":false,"error":"Failed to save configuration: %v"}`, err)
+
+		return
+	}
+
+	writer.Header().Set("Content-Type", "application/json")
+	fmt.Fprint(writer, `{"success":true,"message":"Configuration saved successfully"}`)
+
+	logger.Info().Int("exitCode", int(exitcode.Success)).Msg("Network configuration completed successfully, sending exit code")
+
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+
+		done <- exitcode.Success
+
+		close(shutdown)
+	}()
+}
+
+func handleModeRun(writer http.ResponseWriter, _ *http.Request, done chan<- exitcode.ExitCode, shutdown chan struct{}, logger *zerolog.Logger) {
+	logger.Info().Msg("User cancelled setup, returning to run mode without saving")
+
+	writer.Header().Set("Content-Type", "application/json")
+	fmt.Fprint(writer, `{"success":true,"message":"Returning to run mode"}`)
+
+	logger.Info().Int("exitCode", int(exitcode.Success)).Msg("Setup cancelled by user, sending success exit code")
+
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+
+		done <- exitcode.Success
+
+		close(shutdown)
+	}()
 }
 
 func getAvailableNetworks(logger *zerolog.Logger) (string, error) { //nolint:cyclop // complexity from network scanning logic
@@ -319,166 +478,6 @@ func detectSecurityType(accessPoint gonetworkmanager.AccessPoint, logger *zerolo
 
 	// Default to WPA2 if we can't determine
 	return "wpa2"
-}
-
-func handleAPIConfigSave(writer http.ResponseWriter, request *http.Request, done chan<- exitcode.ExitCode, shutdown chan struct{}, logger *zerolog.Logger) {
-	if request.Method != http.MethodPost {
-		http.Error(writer, "Method not allowed", http.StatusMethodNotAllowed)
-
-		return
-	}
-
-	ssid := request.FormValue("ssid")
-	password := request.FormValue("password")
-	security := request.FormValue("security")
-	ipConfig := request.FormValue("ipConfig")
-	ipAddress := request.FormValue("ipAddress")
-	netmask := request.FormValue("netmask")
-	gateway := request.FormValue("gateway")
-	dns := request.FormValue("dns")
-
-	err := saveNetworkConfiguration(request.Context(), ssid, password, security, ipConfig, ipAddress, netmask, gateway, dns, logger)
-	if err != nil {
-		logger.Error().Err(err).Msg("Save configuration failed")
-
-		writer.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(writer, `{"success":false,"error":"Failed to save configuration: %v"}`, err)
-
-		return
-	}
-
-	writer.Header().Set("Content-Type", "application/json")
-	fmt.Fprint(writer, `{"success":true,"message":"Configuration saved successfully"}`)
-
-	logger.Info().Int("exitCode", int(exitcode.Success)).Msg("Network configuration completed successfully, sending exit code")
-
-	go func() {
-		time.Sleep(100 * time.Millisecond)
-
-		done <- exitcode.Success
-
-		close(shutdown)
-	}()
-}
-
-func handleModeRun(writer http.ResponseWriter, _ *http.Request, done chan<- exitcode.ExitCode, shutdown chan struct{}, logger *zerolog.Logger) {
-	logger.Info().Msg("User cancelled setup, returning to run mode without saving")
-
-	writer.Header().Set("Content-Type", "application/json")
-	fmt.Fprint(writer, `{"success":true,"message":"Returning to run mode"}`)
-
-	logger.Info().Int("exitCode", int(exitcode.Success)).Msg("Setup cancelled by user, sending success exit code")
-
-	go func() {
-		time.Sleep(100 * time.Millisecond)
-
-		done <- exitcode.Success
-
-		close(shutdown)
-	}()
-}
-
-// Run starts the setup wizard for configuring WiFi network.
-func Run(done chan<- exitcode.ExitCode, logger *zerolog.Logger) {
-	hardware.Init()
-
-	// Create a local channel to signal when we should exit
-	shutdown := make(chan struct{})
-
-	// Handle keyboard input
-	go func() {
-		_ = keyboard.Listen(func(key keys.Key) (stop bool, err error) {
-			switch key.Code { //nolint:exhaustive
-			case keys.CtrlC, keys.Escape:
-				logger.Info().Msg("Escape key pressed, shutting down")
-
-				done <- exitcode.GeneralFailure
-
-				close(shutdown)
-
-				return true, nil
-			}
-
-			return false, nil
-		})
-	}()
-
-	// Start web server
-	go func() {
-		http.HandleFunc("/", handleRoot)
-		http.HandleFunc("/images/", func(w http.ResponseWriter, r *http.Request) {
-			handleStaticFiles(w, r, logger)
-		})
-		http.HandleFunc("/css/", func(w http.ResponseWriter, r *http.Request) {
-			handleStaticFiles(w, r, logger)
-		})
-		http.HandleFunc("/js/", func(w http.ResponseWriter, r *http.Request) {
-			handleStaticFiles(w, r, logger)
-		})
-		http.HandleFunc("/api/languages", func(w http.ResponseWriter, r *http.Request) {
-			handleAPIGetLanguages(w, r, logger)
-		})
-		http.HandleFunc("/api/i18n", func(w http.ResponseWriter, r *http.Request) {
-			handleAPIGetI18n(w, r, logger)
-		})
-		http.HandleFunc("/api/getnetworks", func(w http.ResponseWriter, r *http.Request) {
-			handleAPIGetNetworks(w, r, logger)
-		})
-		http.HandleFunc("/api/config/save", func(w http.ResponseWriter, r *http.Request) {
-			handleAPIConfigSave(w, r, done, shutdown, logger)
-		})
-		http.HandleFunc("/api/mode/run", func(w http.ResponseWriter, r *http.Request) {
-			handleModeRun(w, r, done, shutdown, logger)
-		})
-		logger.Info().Msg("Starting web server on port 80...")
-
-		server := &http.Server{
-			Addr:              ":80",
-			ReadHeaderTimeout: 10 * time.Second,
-			ReadTimeout:       30 * time.Second,
-			WriteTimeout:      30 * time.Second,
-		}
-
-		err := server.ListenAndServe()
-		if err != nil {
-			logger.Error().Err(err).Msg("Web server error")
-		}
-	}()
-
-	langCode := "en"
-
-	lang, err := i18n.New(&langCode, zerolog.Logger{})
-	if err != nil {
-		fmt.Printf("Failed to initialize i18n: %v\n", err) //nolint:forbidigo
-	}
-
-	lcd, err := pirateaudio.NewDisplay(pirateaudio.DisplayOptions{
-		Orientation: 0,
-		I18n:        lang,
-	})
-	if err != nil {
-		fmt.Printf("Failed to initialize display: %v\n", err) //nolint:forbidigo
-	}
-
-	code := genQRcode(logger)
-
-	// display the qrcode image on the lcd
-	canvas := imageToRGBA(code)
-	content := &display.Content{
-		Canvas: canvas,
-	}
-
-	err = lcd.Write(content)
-	if err != nil {
-		logger.Error().Err(err).Msg("Failed to write to display")
-	} else {
-		lcd.Wakeup()
-	}
-
-	// Wait for shutdown signal
-	// This will be triggered by either successful configuration (handleSave)
-	// or keyboard interrupt, or signal from main
-	<-shutdown
 }
 
 // WIFI:S:<SSID>;T:<AUTH>;P:<PASSWORD>;H:<true|false|blank>;;
