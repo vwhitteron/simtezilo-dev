@@ -9,7 +9,7 @@ const CONFIG = {
 // Function to update window size display with appropriate units
 function updateWindowSizeDisplay(windowSize) {
     const displayElement = document.getElementById('window-size-display');
-    if (displayElement) {
+    if (displayElement && !displayElement.dataset.userEditing) {
         // Window size is in sequence IDs, data arrives at 60Hz (60 packets per second)
         // So windowSize / 60 = seconds
         const windowSizeInSeconds = windowSize / 60;
@@ -17,23 +17,112 @@ function updateWindowSizeDisplay(windowSize) {
         let displayText;
         if (windowSizeInSeconds < 1) {
             // Less than 1 second - show milliseconds
-            displayText = `${(windowSizeInSeconds * 1000).toFixed(0)} milliseconds`;
+            displayText = `${(windowSizeInSeconds * 1000).toFixed(0)}ms`;
         } else if (windowSizeInSeconds < 60) {
             // Less than 60 seconds - show seconds
-            displayText = `${windowSizeInSeconds.toFixed(1)} seconds`;
+            displayText = `${windowSizeInSeconds.toFixed(1)}s`;
         } else if (windowSizeInSeconds < 3600) {
             // Less than 60 minutes - show minutes and seconds
             const minutes = Math.floor(windowSizeInSeconds / 60);
             const seconds = Math.floor(windowSizeInSeconds % 60);
-            displayText = `${minutes} minute${minutes !== 1 ? 's' : ''} ${seconds} second${seconds !== 1 ? 's' : ''}`;
+            displayText = `${minutes}m ${seconds}s`;
         } else {
             // 60 minutes or more - show hours and minutes
             const hours = Math.floor(windowSizeInSeconds / 3600);
             const minutes = Math.floor((windowSizeInSeconds % 3600) / 60);
-            displayText = `${hours} hour${hours !== 1 ? 's' : ''} ${minutes} minute${minutes !== 1 ? 's' : ''}`;
+            displayText = `${hours}h ${minutes}m`;
         }
-        displayElement.textContent = displayText;
+        displayElement.value = displayText;
     }
+}
+
+// Function to parse user input with units and return window size in sequence IDs
+function parseWindowSizeInput(input) {
+    const trimmed = input.trim().toLowerCase();
+
+    // Parse patterns like "10s", "2m", "500ms", "1h", "2m 30s"
+    const patterns = [
+        { regex: /^(\d+(?:\.\d+)?)\s*ms$/, multiplier: 0.001 },
+        { regex: /^(\d+(?:\.\d+)?)\s*s$/, multiplier: 1 },
+        { regex: /^(\d+(?:\.\d+)?)\s*m$/, multiplier: 60 },
+        { regex: /^(\d+(?:\.\d+)?)\s*h$/, multiplier: 3600 },
+        { regex: /^(\d+)\s*m\s+(\d+)\s*s$/, isComplex: true },
+        { regex: /^(\d+)\s*h\s+(\d+)\s*m$/, isComplex: true }
+    ];
+
+    for (const pattern of patterns) {
+        const match = trimmed.match(pattern.regex);
+        if (match) {
+            let seconds;
+            if (pattern.isComplex) {
+                if (trimmed.includes('h')) {
+                    seconds = parseInt(match[1]) * 3600 + parseInt(match[2]) * 60;
+                } else {
+                    seconds = parseInt(match[1]) * 60 + parseInt(match[2]);
+                }
+            } else {
+                seconds = parseFloat(match[1]) * pattern.multiplier;
+            }
+            // Convert seconds to sequence IDs (60 per second)
+            return seconds * 60;
+        }
+    }
+
+    return null;
+}
+
+// Setup window size input handler
+function setupWindowSizeInput(charts, chartFollowModes) {
+    const displayElement = document.getElementById('window-size-display');
+    if (!displayElement) return;
+
+    displayElement.addEventListener('focus', () => {
+        displayElement.dataset.userEditing = 'true';
+    });
+
+    displayElement.addEventListener('blur', () => {
+        delete displayElement.dataset.userEditing;
+    });
+
+    displayElement.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+            const windowSize = parseWindowSizeInput(displayElement.value);
+            if (windowSize !== null && windowSize > 0) {
+                // Apply the new window size to all charts
+                charts.forEach((chart, index) => {
+                    const xAxis = chart.xAxis;
+                    const currentRange = xAxis.visibleRange;
+                    const currentCenter = (currentRange.min + currentRange.max) / 2;
+
+                    let newMin = currentCenter - windowSize / 2;
+                    let newMax = currentCenter + windowSize / 2;
+
+                    if (newMin < 0) {
+                        newMin = 0;
+                        newMax = windowSize;
+                    }
+
+                    xAxis.visibleRange = new SciChart.NumberRange(newMin, newMax);
+
+                    // Enable follow mode for this chart (like double-click behavior)
+                    const chartId = Object.keys(chartFollowModes)[index];
+                    if (chartId) {
+                        chartFollowModes[chartId] = true;
+                    }
+                });
+
+                displayElement.blur();
+                updateWindowSizeDisplay(windowSize);
+            } else {
+                // Invalid input - revert to current window size
+                const xAxis = charts[0].xAxis;
+                const currentRange = xAxis.visibleRange;
+                const rangeSize = currentRange.max - currentRange.min;
+                updateWindowSizeDisplay(rangeSize);
+                displayElement.blur();
+            }
+        }
+    });
 }
 
 // Connection state management
@@ -46,50 +135,32 @@ let connectionState = {
 // UI status update functions
 function updateConnectionStatus(status, message) {
     const statusIndicator = document.getElementById('status-indicator');
-    const statusText = document.getElementById('status-text');
     const reconnectBtn = document.getElementById('reconnect-btn');
 
     if (!statusIndicator) return;
 
-    // Clear existing classes and content
-    statusIndicator.className = '';
-    statusIndicator.style.backgroundColor = '';
-    statusIndicator.style.width = '';
-    statusIndicator.style.height = '';
-    statusIndicator.style.borderRadius = '';
-
     switch (status) {
         case 'connected':
-            statusIndicator.innerHTML = '<i class="fa-solid fa-circle-check" style="color: #51cf66; font-size: 16px;" title="Connected to telemetry server"></i>';
-            if (statusText) {
-                statusText.textContent = '';
-                statusText.style.display = 'none';
-            }
-            if (reconnectBtn) reconnectBtn.style.display = 'none';
+            statusIndicator.className = '';
+            statusIndicator.innerHTML = '<i class="fas fa-circle-check text-success" style="font-size: 1.25rem;" title="Connected to telemetry server"></i>';
+            if (reconnectBtn) reconnectBtn.classList.add('d-none');
             break;
         case 'connecting':
-            statusIndicator.innerHTML = '<i class="fa-solid fa-rotate-right fa-spin" style="color: #ffd43b; font-size: 16px;" title="Connecting to telemetry server..."></i>';
-            if (statusText) {
-                statusText.textContent = '';
-                statusText.style.display = 'none';
-            }
-            if (reconnectBtn) reconnectBtn.style.display = 'none';
+            statusIndicator.className = 'spinner-border spinner-border-sm text-warning';
+            statusIndicator.innerHTML = '<span class="visually-hidden">Connecting...</span>';
+            statusIndicator.setAttribute('role', 'status');
+            statusIndicator.setAttribute('title', 'Connecting to telemetry server...');
+            if (reconnectBtn) reconnectBtn.classList.add('d-none');
             break;
         case 'disconnected':
-            statusIndicator.innerHTML = '<i class="fa-solid fa-circle-xmark" style="color: #ff6b6b; font-size: 16px;" title="Disconnected from telemetry server"></i>';
-            if (statusText) {
-                statusText.textContent = '';
-                statusText.style.display = 'none';
-            }
-            if (reconnectBtn) reconnectBtn.style.display = 'inline-block';
+            statusIndicator.className = '';
+            statusIndicator.innerHTML = '<i class="fas fa-circle-xmark text-danger" style="font-size: 1.25rem;" title="Disconnected from telemetry server"></i>';
+            if (reconnectBtn) reconnectBtn.classList.remove('d-none');
             break;
         case 'error':
-            statusIndicator.innerHTML = '<i class="fa-solid fa-triangle-exclamation" style="color: #ff6b6b; font-size: 16px;" title="Connection error - unable to connect to telemetry server"></i>';
-            if (statusText) {
-                statusText.textContent = '';
-                statusText.style.display = 'none';
-            }
-            if (reconnectBtn) reconnectBtn.style.display = 'inline-block';
+            statusIndicator.className = '';
+            statusIndicator.innerHTML = '<i class="fas fa-triangle-exclamation text-danger" style="font-size: 1.25rem;" title="Connection error - unable to connect to telemetry server"></i>';
+            if (reconnectBtn) reconnectBtn.classList.remove('d-none');
             break;
     }
 }
@@ -975,6 +1046,9 @@ async function initSciChart() {
     const chartFollowModes = {};
     let isUpdatingRange = false; // Flag to track when we're programmatically updating ranges
     let isDoubleClickTriggered = false;
+
+    // Setup window size input handler (after chartFollowModes is initialized)
+    setupWindowSizeInput(Object.values(charts), chartFollowModes);
 
     Object.entries(charts).forEach(([chartId, chart]) => {
         chartFollowModes[chartId] = true;

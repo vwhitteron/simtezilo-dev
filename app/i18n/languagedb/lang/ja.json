@@ -146,6 +146,8 @@
         "runmode.settings.app.language": "言語",
         "runmode.settings.app.accent": "アクセントカラー",
         "runmode.settings.app.loglevel": "ログレベル",
+        "runmode.settings.app.basedir": "ベースディレクトリ",
+        "runmode.settings.app.vehicledbfile": "車両データベースファイル",
         "runmode.settings.app.datadir": "データディレクトリ",
         "runmode.settings.app.replaymode": "リプレイモード",
         "runmode.settings.app.webuienabled": "WebUI有効",
@@ -169,8 +171,9 @@
         "runmode.settings.hardware.model": "ハードウェアモデル",
         "runmode.settings.hardware.displayorientation": "ディスプレイの向き",
 
-        "runmode.settings.haptics.title": "ハプティクス",
-        "runmode.settings.haptics.dynamictransmission": "動的トランスミッションフィードバック",
+        "runmode.settings.haptics.title": "ハプティクス",        "runmode.settings.haptics.transmission_title": "トランスミッションフィードバック",
+        "runmode.settings.haptics.chassis_title": "シャーシフィードバック",
+        "runmode.settings.haptics.pulse_title": "パルス設定",        "runmode.settings.haptics.dynamictransmission": "動的トランスミッションフィードバック",
         "runmode.settings.haptics.transmissioncurve": "トランスミッションカーブ",
         "runmode.settings.haptics.gforcemax": "トランスミッションG力最大値",
         "runmode.settings.haptics.jerkcurve": "ジャークカーブ",
@@ -183,9 +186,13 @@
 
         "runmode.settings.pitradio.title": "ピットラジオ",
         "runmode.settings.pitradio.enabled": "ピットラジオ有効",
+        "runmode.settings.pitradio.discord_note": "注: ピットラジオを使用するには、Discordを設定して有効にする必要があります。",
         "runmode.settings.pitradio.interval": "メッセージ送信間隔（ms）",
+        "runmode.settings.pitradio.interval_help": "連続するピットラジオメッセージ間の時間",
 
         "runmode.settings.synth.title": "シンセサイザー",
+        "runmode.settings.synth.samplerates_title": "サンプルレート",
+        "runmode.settings.synth.gains_title": "ゲインコントロール",
         "runmode.settings.synth.internalsamplerate": "内部サンプルレート（Hz）",
         "runmode.settings.synth.outputsamplerate": "出力サンプルレート（Hz）",
         "runmode.settings.synth.buffersize": "バッファサイズ（サンプル）",
@@ -201,6 +208,7 @@
 
         "runmode.settings.telemetry.title": "テレメトリー",
         "runmode.settings.telemetry.source": "テレメトリーソース",
+        "runmode.settings.telemetry.auto": "自動",
 
         "runmode.settings.tyres.title": "タイヤ管理",
         "runmode.settings.tyres.enabled": "タイヤ監視有効",
@@ -213,9 +221,10 @@
         "runmode.settings.actions.restoredefaults": "デフォルトに戻す",
         "runmode.settings.actions.factoryreset": "工場出荷時リセット",
 
-        "runmode.settings.config.title": "設定操作",
+        "runmode.settings.config.title": "設定",
+        "runmode.settings.config.reload": "リロード",
+        "runmode.settings.config.reset": "デフォルトにリセット",
         "runmode.settings.system.title": "システム操作",
-
         "runmode.settings.status.saved": "設定が正常に保存されました！",
         "runmode.settings.status.reloaded": "ファイルから設定を再読み込みしました。",
         "runmode.settings.status.restored": "デフォルト設定が復元されました。",

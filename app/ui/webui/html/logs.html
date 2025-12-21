@@ -5,9 +5,10 @@
     <!-- Required meta tags -->
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- Halfmoon CSS -->
+    <link rel="stylesheet" href="/css/halfmoon.min.css">
+    <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="/css/common.css">
-    <link rel="stylesheet" href="/css/logs.css">
     <script>
         const currentPageId = 'logs';
 
@@ -25,13 +26,31 @@
             { timestamp: '2024-10-16 14:30:45.123', level: 'info', message: 'Connection to simulation established' }
         ];
 
+        function getLevelBadgeClass(level) {
+            const levelMap = {
+                'info': 'badge text-bg-info',
+                'warn': 'badge text-bg-warning',
+                'error': 'badge text-bg-danger',
+                'debug': 'badge text-bg-secondary'
+            };
+            return levelMap[level] || 'badge text-bg-secondary';
+        }
+
         function renderLogs() {
             const logsContainer = document.getElementById('logs-container');
             logsContainer.innerHTML = sampleLogs.map(log => `
-                <div class="log-entry">
-                    <span class="log-timestamp">${log.timestamp}</span>
-                    <span class="log-level ${log.level}">${log.level}</span>
-                    <span class="log-message">${log.message}</span>
+                <div class="card p-10" style="margin-bottom: 2px;">
+                    <div class="d-flex align-items-center">
+                        <div class="font-monospace" style="min-width: 200px; max-width: 200px;">
+                            <span class="text-muted">${log.timestamp}</span>
+                        </div>
+                        <div class="text-center" style="min-width: 80px; max-width: 80px; margin: 0 5px;">
+                            <span class="${getLevelBadgeClass(log.level)}">${log.level.toUpperCase()}</span>
+                        </div>
+                        <div class="flex-fill font-monospace">
+                            <span>${log.message}</span>
+                        </div>
+                    </div>
                 </div>
             `).join('');
         }
@@ -45,57 +64,79 @@
     <title>Logs - Simtezilo</title>
 </head>
 
-<body>
+<body data-bs-theme="dark">
     <div id="navigation"></div>
 
     <div class="content-container">
-        <div class="logs-section">
-            <div class="stats-grid">
-                <div class="stat-item">
-                    <div class="stat-value">10</div>
-                    <div class="stat-label">Total Entries</div>
+        <!-- Statistics Cards -->
+        <div class="row mx-auto" style="max-width: 60%; margin-top: 30px; margin-bottom: 30px; gap: 15px;">
+            <div class="col-sm ms-20">
+                <div class="card d-flex flex-row align-items-center justify-content-between border"
+                    style="padding: 15px; border-color: rgba(255,255,255,0.1) !important;">
+                    <p class="text-muted mb-0 small">Total Entries</p>
+                    <h4 class="mb-0">10</h4>
                 </div>
-                <div class="stat-item">
-                    <div class="stat-value">1</div>
-                    <div class="stat-label">Errors</div>
+            </div>
+            <div class="col-sm">
+                <div class="card d-flex flex-row align-items-center justify-content-between border"
+                    style="padding: 15px; border-color: rgba(255,255,255,0.1) !important;">
+                    <p class="text-muted mb-0 small">Errors</p>
+                    <h4 class="mb-0 text-danger">1</h4>
                 </div>
-                <div class="stat-item">
-                    <div class="stat-value">1</div>
-                    <div class="stat-label">Warnings</div>
+            </div>
+            <div class="col-sm">
+                <div class="card d-flex flex-row align-items-center justify-content-between border"
+                    style="padding: 15px; border-color: rgba(255,255,255,0.1) !important;">
+                    <p class="text-muted mb-0 small">Warnings</p>
+                    <h4 class="mb-0 text-warning">1</h4>
                 </div>
-                <div class="stat-item">
-                    <div class="stat-value">6</div>
-                    <div class="stat-label">Info Messages</div>
+            </div>
+            <div class="col-sm me-20">
+                <div class="card d-flex flex-row align-items-center justify-content-between border"
+                    style="padding: 15px; border-color: rgba(255,255,255,0.1) !important;">
+                    <p class="text-muted mb-0 small">Info Messages</p>
+                    <h4 class="mb-0 text-info">6</h4>
                 </div>
             </div>
         </div>
 
-        <div class="logs-section">
-            <div class="logs-header">
-                <h2>📋 System Logs</h2>
-                <div class="logs-controls">
-                    <select>
-                        <option>All Levels</option>
+        <!-- Coming Soon Alert -->
+        <div class="alert alert-info text-center mx-auto" role="alert"
+            style="max-width: 70%; margin-top: 30px; margin-bottom: 30px;">
+            <p class="mb-0">Real-time log streaming and advanced filtering features are currently under development.</p>
+        </div>
+
+        <!-- Logs Card -->
+        <div class="card mt-30">
+            <div class="d-flex align-items-center justify-content-end mb-15">
+                <div class="d-flex gap-10">
+                    <select class="form-select form-select-sm w-auto">
+                        <option>All</option>
                         <option>Error</option>
                         <option>Warning</option>
                         <option>Info</option>
                         <option>Debug</option>
                     </select>
-                    <button onclick="renderLogs()">Refresh</button>
-                    <button>Clear</button>
-                    <button>Export</button>
+                    <button class="btn btn-sm btn-primary" onclick="renderLogs()">
+                        <i class="fa-solid fa-rotate"></i>
+                    </button>
+                    <button class="btn btn-sm btn-secondary">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>
+                    <button class="btn btn-sm btn-secondary">
+                        <i class="fa-solid fa-download"></i>
+                    </button>
                 </div>
             </div>
 
-            <div id="logs-container">
+            <div id="logs-container" class="mt-15">
                 <!-- Logs will be populated by JavaScript -->
             </div>
         </div>
-
-        <div class="logs-section">
-            <p class="coming-soon">🚧 Real-time log streaming and advanced filtering coming soon...</p>
-        </div>
     </div>
+
+    <!-- Bootstrap Bundle JS -->
+    <script src="/js/bootstrap.bundle.min.js"></script>
 </body>
 
 </html>

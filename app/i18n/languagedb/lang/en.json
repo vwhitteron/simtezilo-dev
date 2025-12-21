@@ -146,6 +146,8 @@
         "runmode.settings.app.language": "Language",
         "runmode.settings.app.accent": "Accent",
         "runmode.settings.app.loglevel": "Log Level",
+        "runmode.settings.app.basedir": "Base Directory",
+        "runmode.settings.app.vehicledbfile": "Vehicle Database File",
         "runmode.settings.app.datadir": "Data Directory",
         "runmode.settings.app.replaymode": "Replay Mode",
         "runmode.settings.app.webuienabled": "Web UI Enabled",
@@ -170,6 +172,9 @@
         "runmode.settings.hardware.displayorientation": "Display Orientation",
 
         "runmode.settings.haptics.title": "Haptics",
+        "runmode.settings.haptics.transmission_title": "Transmission Feedback",
+        "runmode.settings.haptics.chassis_title": "Chassis Feedback",
+        "runmode.settings.haptics.pulse_title": "Pulse Settings",
         "runmode.settings.haptics.dynamictransmission": "Dynamic Transmission Feedback",
         "runmode.settings.haptics.transmissioncurve": "Transmission Curve",
         "runmode.settings.haptics.gforcemax": "Transmission G-Force Max",
@@ -183,9 +188,13 @@
 
         "runmode.settings.pitradio.title": "Pit Radio",
         "runmode.settings.pitradio.enabled": "Pit Radio Enabled",
+        "runmode.settings.pitradio.discord_note": "Note: Discord must be configured and enabled for Pit Radio to function.",
         "runmode.settings.pitradio.interval": "Message Send Interval (ms)",
+        "runmode.settings.pitradio.interval_help": "Time between consecutive pit radio messages",
 
         "runmode.settings.synth.title": "Synthesizer",
+        "runmode.settings.synth.samplerates_title": "Sample Rates",
+        "runmode.settings.synth.gains_title": "Gain Controls",
         "runmode.settings.synth.internalsamplerate": "Internal Sample Rate (Hz)",
         "runmode.settings.synth.outputsamplerate": "Output Sample Rate (Hz)",
         "runmode.settings.synth.buffersize": "Buffer Size (Samples)",
@@ -201,6 +210,7 @@
 
         "runmode.settings.telemetry.title": "Telemetry",
         "runmode.settings.telemetry.source": "Telemetry Source",
+        "runmode.settings.telemetry.auto": "Auto",
 
         "runmode.settings.tyres.title": "Tyre Management",
         "runmode.settings.tyres.enabled": "Tyre Monitoring Enabled",
@@ -213,7 +223,9 @@
         "runmode.settings.actions.restoredefaults": "Restore Defaults",
         "runmode.settings.actions.factoryreset": "Factory Reset",
 
-        "runmode.settings.config.title": "Configuration Actions",
+        "runmode.settings.config.title": "Configuration",
+        "runmode.settings.config.reload": "Reload",
+        "runmode.settings.config.reset": "Reset to Defaults",
         "runmode.settings.system.title": "System Actions",
 
         "runmode.settings.status.saved": "Configuration saved successfully!",

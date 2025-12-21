@@ -5,63 +5,94 @@
     <!-- Required meta tags -->
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- Halfmoon CSS -->
+    <link rel="stylesheet" href="/css/halfmoon.min.css">
+    <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="/css/common.css">
-    <link rel="stylesheet" href="/css/telemetry.css">
     <!-- Include SciChart.js v4 -->
     <script src="https://cdn.jsdelivr.net/npm/scichart@4/_wasm/scichart.browser.js" crossorigin="anonymous"></script>
     <script>
         const currentPageId = 'dev';
         const connectionStatusHTML = `
-          <div id="connection-status" style="display: flex; align-items: center; font-size: 14px;">
-            <div id="status-indicator" style="margin-right: 8px;">
-              <i class="fa-solid fa-rotate-right fa-spin" style="color: #ffd43b; font-size: 16px;"></i>
-            </div>
-            <span id="status-text" style="display: none;"></span>
-            <button id="reconnect-btn" title="Manually reconnect to telemetry server"
-              style="margin-left: 10px; padding: 2px 8px; background: rgba(81, 207, 102, 0.2); border: 1px solid #51cf66; color: #51cf66; border-radius: 4px; cursor: pointer; font-size: 12px; display: none;">Reconnect</button>
-          </div>`;
+      <div id="connection-status" class="d-flex align-items-center">
+        <div id="status-indicator" class="spinner-border spinner-border-sm text-warning" role="status">
+          <span class="visually-hidden">Connecting...</span>
+        </div>
+        <button id="reconnect-btn" class="btn btn-sm btn-success ms-2 d-none" data-i18n="runmode.telemetry.reconnect" title="Manually reconnect to telemetry server">Reconnect</button>
+      </div>`;
     </script>
     <script src="/js/i18n.js"></script>
     <script src="/js/navigation.js"></script>
     <title>Simtezilo</title>
 </head>
 
-<body>
+<body data-bs-theme="dark">
     <div id="navigation"></div>
 
     <div class="content-container">
-        <!-- Graph Window Info -->
-        <div id="graph-info"
-            style="padding: 10px 15px; margin-bottom: 15px; background: rgba(40, 40, 40, 0.6); border-radius: 8px; border: 1px solid #555; font-size: 14px;">
-            <span style="color: #51cf66; font-weight: bold;">📊 Graph Window:</span>
-            <span id="window-size-display" style="color: #f9e67f; margin-left: 10px;">--</span>
-            <span style="color: #888; margin-left: 5px; font-size: 12px;">(Use horizontal scroll to adjust)</span>
-        </div>
-        <!-- Create the Div to host the SciChartSurface -->
-        <div style="width: 100%; overflow: hidden;">
-            <div id="scichart-root-1" style="width: 49%; height: 300px; float: left;"></div>
-            <div id="scichart-root-2" style="width: 49%; height: 300px; margin-left: 50%;"></div>
-        </div>
-        <div style="width: 100%; overflow: hidden; margin-top: 10px">
-            <div id="scichart-root-3" style="width: 49%; height: 300px; float: left;"></div>
-            <div id="scichart-root-4" style="width: 49%; height: 300px; margin-left: 50%;"></div>
-        </div>
-        <div style="width: 100%; overflow: hidden; margin-top: 10px">
-            <div id="scichart-root-5" style="width: 49%; height: 300px; float: left;"></div>
-            <div id="scichart-root-6" style="width: 49%; height: 300px; margin-left: 50%;"></div>
-        </div>
-        <div style="width: 100%; overflow: hidden; margin-top: 10px">
-            <div id="scichart-root-7" style="width: 49%; height: 300px; float: left;"></div>
-            <div id="scichart-root-8" style="width: 49%; height: 300px; margin-left: 50%;"></div>
-        </div>
-        <div style="width: 100%; overflow: hidden; margin-top: 10px">
-            <div id="scichart-root-9" style="width: 49%; height: 300px; float: left;"></div>
-            <div id="scichart-root-10" style="width: 49%; height: 300px; margin-left: 50%;"></div>
+        <div class="container-fluid">
+            <!-- Graph Window Info -->
+            <div class="row mb-15">
+                <div class="col-md-10"></div>
+                <div class="col-md-2">
+                    <div class="input-group">
+                        <span class="input-group-text">
+                            <i class="fa-solid fa-arrows-left-right-to-line"></i>
+                        </span>
+                        <input type="text" id="window-size-display" class="form-control text-center fw-bold" value="--"
+                            placeholder="e.g. 10s, 2m">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Create the Div to host the SciChartSurface -->
+            <div class="row g-1">
+                <div class="col-md-6">
+                    <div id="scichart-root-1" style="height: 300px;"></div>
+                </div>
+                <div class="col-md-6">
+                    <div id="scichart-root-2" style="height: 300px;"></div>
+                </div>
+            </div>
+            <div class="row g-1 mt-1">
+                <div class="col-md-6">
+                    <div id="scichart-root-3" style="height: 300px;"></div>
+                </div>
+                <div class="col-md-6">
+                    <div id="scichart-root-4" style="height: 300px;"></div>
+                </div>
+            </div>
+            <div class="row g-1 mt-1">
+                <div class="col-md-6">
+                    <div id="scichart-root-5" style="height: 300px;"></div>
+                </div>
+                <div class="col-md-6">
+                    <div id="scichart-root-6" style="height: 300px;"></div>
+                </div>
+            </div>
+            <div class="row g-1 mt-1">
+                <div class="col-md-6">
+                    <div id="scichart-root-7" style="height: 300px;"></div>
+                </div>
+                <div class="col-md-6">
+                    <div id="scichart-root-8" style="height: 300px;"></div>
+                </div>
+            </div>
+            <div class="row g-1 mt-1">
+                <div class="col-md-6">
+                    <div id="scichart-root-9" style="height: 300px;"></div>
+                </div>
+                <div class="col-md-6">
+                    <div id="scichart-root-10" style="height: 300px;"></div>
+                </div>
+            </div>
         </div>
     </div>
     <!-- The JavaScript to create a SciChartSurface -->
     <script src="/js/scichart.js" data-chart-config="dev"></script>
+
+    <!-- Bootstrap Bundle JS -->
+    <script src="/js/bootstrap.bundle.min.js"></script>
 </body>
 
 </html>

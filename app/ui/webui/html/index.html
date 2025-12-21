@@ -5,9 +5,10 @@
     <!-- Required meta tags -->
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- Halfmoon CSS -->
+    <link rel="stylesheet" href="/css/halfmoon.min.css">
+    <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="/css/common.css">
-    <link rel="stylesheet" href="/css/home.css">
     <script>
         const currentPageId = 'home';
     </script>
@@ -16,7 +17,7 @@
     <title>Simtezilo</title>
 </head>
 
-<body>
+<body data-bs-theme="dark">
     <div id="navigation"></div>
 
     <div class="content-container">
@@ -24,35 +25,10 @@
             <h1 data-i18n="runmode.home.title">Welcome to Simtezilo</h1>
             <p data-i18n="runmode.home.subtitle">Advanced racing simulation telemetry and analysis platform</p>
         </div>
-
-        <div class="page-grid">
-            <a href="/telemetry" class="page-card">
-                <h3><i class="fa-solid fa-chart-line"></i> <span
-                        data-i18n="runmode.home.telemetry.title">Telemetry</span></h3>
-                <p data-i18n="runmode.home.telemetry.description">View real-time telemetry data, charts, and performance
-                    metrics from your racing simulation.</p>
-            </a>
-
-            <a href="/dev" class="page-card">
-                <h3><i class="fa-solid fa-magnifying-glass-chart"></i> <span
-                        data-i18n="runmode.home.developer.title">Developer</span></h3>
-                <p data-i18n="runmode.home.developer.description">Access development tools, debug information, and
-                    advanced configuration options.</p>
-            </a>
-
-            <a href="/settings" class="page-card">
-                <h3><i class="fa-solid fa-gear"></i> <span data-i18n="runmode.home.settings.title">Settings</span></h3>
-                <p data-i18n="runmode.home.settings.description">Configure application settings, preferences, and system
-                    parameters.</p>
-            </a>
-
-            <a href="/logs" class="page-card">
-                <h3><i class="fa-solid fa-scroll"></i> <span data-i18n="runmode.home.logs.title">Logs</span></h3>
-                <p data-i18n="runmode.home.logs.description">View system logs, error reports, and diagnostic
-                    information.</p>
-            </a>
-        </div>
     </div>
+
+    <!-- Bootstrap Bundle JS -->
+    <script src="/js/bootstrap.bundle.min.js"></script>
 </body>
 
 </html>

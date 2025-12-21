@@ -12,55 +12,16 @@ class ConfigManager {
     async init() {
         await this.loadLanguages();
         await this.loadConfiguration();
-        this.addStatusIcons(); // Add status icons to all settings
         this.setupEventListeners();
         this.populateForm();
         await this.checkSetupModeAvailability();
     }
 
-    // Add status icons beside each input
-    addStatusIcons() {
-        const inputs = document.querySelectorAll('[data-config]');
-        inputs.forEach(input => {
-            // Skip if icon already exists
-            if (input.parentElement.querySelector('.setting-status-icon')) {
-                return;
-            }
-
-            const icon = document.createElement('i');
-            icon.className = 'setting-status-icon fas';
-            input.parentElement.appendChild(icon);
-        });
-    }
-
-    // Show status icon for a specific input
+    // Show status in navbar for a specific input
     showInputStatus(input, type) {
-        const icon = input.parentElement.querySelector('.setting-status-icon');
-        if (!icon) return;
-
-        // Clear existing classes and timeout
-        icon.classList.remove('show', 'success', 'error', 'saving');
-
-        // Set icon based on type
-        switch (type) {
-            case 'saving':
-                icon.className = 'setting-status-icon fas fa-spinner fa-spin show saving';
-                break;
-            case 'success':
-                icon.className = 'setting-status-icon fas fa-circle-check show success';
-                break;
-            case 'error':
-                icon.className = 'setting-status-icon fas fa-circle-xmark show error';
-                break;
-        }
-
-        // Auto-hide after delay
-        if (type !== 'saving') {
-            const inputId = input.id || input.dataset.config;
-            clearTimeout(this.inputSaveTimeouts.get(inputId + '-icon'));
-            this.inputSaveTimeouts.set(inputId + '-icon', setTimeout(() => {
-                icon.classList.remove('show');
-            }, 3000));
+        // Show in navbar if available
+        if (typeof window.showNavbarStatus === 'function') {
+            window.showNavbarStatus(type);
         }
     }
 
@@ -470,23 +431,8 @@ class ConfigManager {
     }
 
     showStatus(message, type) {
-        const statusElement = document.getElementById('config-status');
-        statusElement.textContent = message;
-        statusElement.className = `config-status ${type}`;
-        statusElement.style.display = 'block';
-
-        // Clear any existing timeout
-        if (this.statusTimeout) {
-            clearTimeout(this.statusTimeout);
-        }
-
-        // Auto-hide after delay (shorter for brief success messages)
-        if (type !== 'info') {
-            const delay = message.startsWith('✓') ? 2000 : 5000;
-            this.statusTimeout = setTimeout(() => {
-                statusElement.style.display = 'none';
-            }, delay);
-        }
+        // Status is now shown in navbar indicator only
+        // This method kept for backward compatibility but does nothing
     }
 
     async checkSetupModeAvailability() {
