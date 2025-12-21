@@ -87,6 +87,11 @@ func (i *I18n) GetStringsWithPrefix(prefix string) map[string]string {
 	return i.languages.GetStringsWithPrefix(i.languageCode, prefix)
 }
 
+// GetStringsWithPrefixForLanguage retrieves all translations for a specific language that start with the specified prefix.
+func (i *I18n) GetStringsWithPrefixForLanguage(languageCode string, prefix string) map[string]string {
+	return i.languages.GetStringsWithPrefix(languageCode, prefix)
+}
+
 // RegularFont returns the regular font for the language.
 func (i *I18n) RegularFont() font.Font {
 	return i.languages.RegularFont(i.languageCode)

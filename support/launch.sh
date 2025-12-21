@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Simtezilo launch script
+# TODO: delete when functionality internalised within app
+
 ##### Configuration #####
 SETUPMODE_FILE="/boot/firmware/simtezilo/SETUPMODE"
 WLANDEV="wlan0"
@@ -10,8 +13,7 @@ WPAPSK="5imtezil0"
 IPV4ADDR="10.33.0.1/24"
 #########################
 
-NMCLI="/usr/bin/nmcli"
-SYSTEMCTL="/usr/bin/systemctl"
+NETMAN="/opt/simtezilo/bin/netman.sh"
 SIMTEZILO="/opt/simtezilo/bin/simtezilo"
 
 OPTIONS="$@"
@@ -27,27 +29,30 @@ initSetupMode() {
     fi
 }
 
-connExists() {
-    name="$1"
+# connExists() {
+#     name="$1"
     
-    if networkManagerRunning; then
-        ${NMCLI} con show | grep -q "^${name}\s"
-        return $?
-    fi
+#     if networkManagerRunning; then
+#         ${NMCLI} con show | grep -q "^${name}\s"
+#         return $?
+#     fi
 
-    test -f "/etc/NetworkManager/system-connections/${name}.nmconnection"
-}
+#     test -f "/etc/NetworkManager/system-connections/${name}.nmconnection"
+# }
 
 setupModeExists() {
-    connExists "${APCONNNAME}"
+    # connExists "${APCONNNAME}"
+    ${NETMAN} connExists "${APCONNNAME}"
 }
 
 runModeExists() {
-    connExists "${RUNCONNNAME}"
+    # connExists "${RUNCONNNAME}"
+    ${NETMAN} connExists "${RUNCONNNAME}"
 }
 
 networkManagerRunning() {
-    ${SYSTEMCTL} is-active --quiet NetworkManager
+    # ${SYSTEMCTL} is-active --quiet NetworkManager
+    ${NETMAN} networkManagerRunning
 }
 
 waitForNetworkManager() {
@@ -89,7 +94,7 @@ setupAPConn() {
     serial=$(awk '/^Serial/ {sub(/^0*/, "", $NF); print $NF}' /proc/cpuinfo)
     ssid="${SSIDPREFIX}${serial}"
 
-    ${NMCLI} con add type wifi ifname "${WLANDEV}" con-name "${APCONNNAME}" autoconnect yes ssid "${ssid}"
+    ${NMCLI} con add type wifi ifname "${WLANDEV}" con-name "${APCONNNAME}" autoconnect no ssid "${ssid}"
     ${NMCLI} con modify "${APCONNNAME}" ipv4.address ${IPV4ADDR}
     ${NMCLI} con modify "${APCONNNAME}" 802-11-wireless.mode ap 802-11-wireless.band bg ipv4.method manual
     ${NMCLI} con modify "${APCONNNAME}" wifi-sec.key-mgmt wpa-psk
@@ -167,35 +172,37 @@ disableDNSMasq() {
 }
 
 setupRequired() {
-    if ! runModeExists; then
-        return 0
-    fi
-
-    if [ -f "$SETUPMODE_FILE" ]; then
-        return 0
-    else
-        return 1
-    fi
+    ${NETMAN} setupRequired
 }
 
 
 if setupRequired; then
     echo "Setup required, starting captured Wifi network and launching in setup mode."
-    
-    startAPConn
-    enableDNSMasq
 
-   ${SIMTEZILO} -s
-    if [ $? -ne 0 ]; then
-        exitCode=$?
-        echo "Simtezilo setup mode exited with error ${exitCode}"
+    ${NETMAN} enableSetupMode    
+    netmanErr=$?
+    if [ $netmanErr -ne 0 ]; then
+        
+        echo "Failed to enable setup mode with error ${netmanErr}"
 
-        exit ${exitCode}
+        exit 1
     fi
-    
-    disableDNSMasq
-    disableSetupModeFlag
-    startRunModeConn
+
+    ${SIMTEZILO} -s
+    err=$?
+    if [ $err -ne 0 ]; then
+        echo "Simtezilo setup mode exited with error ${err}"
+
+        exit ${err}
+    fi
+
+    ${NETMAN} disableSetupMode
+    netmanErr=$?
+    if [ $netmanErr -ne 0 ]; then
+        echo "Failed to disable setup mode with error ${netmanErr}"
+
+        exit 1
+    fi   
 
     echo "Simtezilo setup mode completed successfully"
 
@@ -203,18 +210,32 @@ if setupRequired; then
 else
     echo "Run mode detected. Launching Simtezilo"
 
+    ${NETMAN} startRunModeConn
+    err=$?
+    if [ $err -ne 0 ]; then
+        echo "Failed to start RunMode connection with error ${err}"
+
+        exit 1
+    fi
+
     ${SIMTEZILO} $OPTIONS
-    if [ $? -eq 33 ]; then
+    err=$?
+    if [ $err -eq 33 ]; then
         echo "Simtezilo exited into setup mode."
 
-        enableSetupModeFlag
+        ${NETMAN} enableSetupModeFlag
+        netmanErr=$?
+        if [ $? -ne 0 ]; then
+            echo "Failed to enable setup mode with error ${netmanErr}"
+
+            exit 1
+        fi
 
         exit 0
-    elif [ $? -ne 0 ]; then
-        exitCode=$?
-        echo "Simtezilo run mode exited with error ${exitCode}"
+    elif [ $err -ne 0 ]; then
+        echo "Simtezilo run mode exited with error ${err}"
 
-        exit ${exitCode}
+        exit ${err}
     fi
 
     echo "Simtezilo run mode exited normally"

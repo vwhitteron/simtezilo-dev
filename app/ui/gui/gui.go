@@ -227,3 +227,21 @@ func (r *Screen) renderBackgroundScreen(sprite sprites.SpriteName, value string)
 
 	return nil
 }
+
+// ImageToRGBA converts an image.Image to *image.RGBA.
+func ImageToRGBA(img image.Image) *image.RGBA {
+	if rgba, ok := img.(*image.RGBA); ok {
+		return rgba
+	}
+
+	bounds := img.Bounds()
+	rgba := image.NewRGBA(bounds)
+
+	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+		for x := bounds.Min.X; x < bounds.Max.X; x++ {
+			rgba.Set(x, y, img.At(x, y))
+		}
+	}
+
+	return rgba
+}

@@ -715,9 +715,9 @@
                             </div>
 
                             <div class="form-group">
-                                <label for="netmask">Netmask</label>
-                                <input type="text" id="netmask" placeholder="e.g., 255.255.255.0">
-                                <div id="netmask-error" class="validation-error"></div>
+                                <label for="prefix">Prefix</label>
+                                <input type="text" id="prefix" placeholder="e.g., 24">
+                                <div id="prefix-error" class="validation-error"></div>
                             </div>
 
                             <div class="form-group">
@@ -956,13 +956,13 @@
 
                 // Static IP fields
                 document.querySelector('label[for="ip-address"]').textContent = t('setupmode.network.ipaddress');
-                document.getElementById('ip-address').placeholder = t('setupmode.network.ipaddressprefix') + ' 192.168.1.100';
-                document.querySelector('label[for="netmask"]').textContent = t('setupmode.network.netmask');
-                document.getElementById('netmask').placeholder = t('setupmode.network.netmaskprefix') + ' 255.255.255.0';
+                document.getElementById('ip-address').placeholder = t('setupmode.network.ipaddressexample') + ' 192.168.1.100';
+                document.querySelector('label[for="prefix"]').textContent = t('setupmode.network.prefix');
+                document.getElementById('prefix').placeholder = t('setupmode.network.prefixexample') + ' 24';
                 document.querySelector('label[for="gateway"]').textContent = t('setupmode.network.gateway');
-                document.getElementById('gateway').placeholder = t('setupmode.network.gatewayprefix') + ' 192.168.1.1';
+                document.getElementById('gateway').placeholder = t('setupmode.network.gatewayexample') + ' 192.168.1.1';
                 document.querySelector('label[for="dns"]').textContent = t('setupmode.network.dns');
-                document.getElementById('dns').placeholder = t('setupmode.network.dnsprefix') + ' 192.168.1.1, 1.1.1.1';
+                document.getElementById('dns').placeholder = t('setupmode.network.dnsexample') + ' 192.168.1.1, 1.1.1.1';
 
                 // Return link
                 document.getElementById('return-link').textContent = t('setupmode.network.returntorunmode');
@@ -1178,7 +1178,7 @@
 
                 let isValid = true;
                 isValid = validateIPAddress(document.getElementById('ip-address').value, 'ip-address-error') && isValid;
-                isValid = validateIPAddress(document.getElementById('netmask').value, 'netmask-error') && isValid;
+                isValid = validateIPAddress(document.getElementById('prefix').value, 'prefix-error') && isValid;
                 isValid = validateIPAddress(document.getElementById('gateway').value, 'gateway-error') && isValid;
                 isValid = validateDNS(document.getElementById('dns').value, 'dns-error') && isValid;
                 return isValid;
@@ -1227,9 +1227,9 @@
                 }
             });
 
-            document.getElementById('netmask').addEventListener('blur', function () {
+            document.getElementById('prefix').addEventListener('blur', function () {
                 if (document.querySelector('input[name="ip-config"]:checked').value === 'static') {
-                    validateIPAddress(this.value, 'netmask-error');
+                    validateIPAddress(this.value, 'prefix-error');
                     updateSaveButtonState();
                 }
             });
@@ -1248,6 +1248,29 @@
                 }
             });
 
+            // Check setup status and update return link visibility
+            async function checkSetupStatus() {
+                try {
+                    const response = await fetch('/api/status');
+                    if (!response.ok) {
+                        // If status endpoint doesn't exist or fails, hide the return link
+                        returnLink.style.display = 'none';
+                        return;
+                    }
+                    const status = await response.json();
+                    // Show return link only if run mode connection is present
+                    if (status.runModePresent) {
+                        returnLink.style.display = 'block';
+                    } else {
+                        returnLink.style.display = 'none';
+                    }
+                } catch (error) {
+                    console.error('Error checking setup status:', error);
+                    // Hide return link on error
+                    returnLink.style.display = 'none';
+                }
+            }
+
             function loadNetworks() {
                 const errorDiv = document.getElementById('error-message');
                 errorDiv.style.display = 'none';
@@ -1260,7 +1283,10 @@
                 const scanningForNetworks = i18n ? t('setupmode.network.scanningfornetworks') : 'Scanning for networks...';
                 networkSelect.innerHTML = '<option>' + scanningForNetworks + '</option>';
 
-                fetch('/api/getnetworks')
+                // Check setup status to determine if return link should be visible
+                checkSetupStatus();
+
+                fetch('/api/networks')
                     .then(response => response.json())
                     .then(data => {
                         networksData = data;
@@ -1413,7 +1439,7 @@
                         staticIpConfig.classList.add('hidden');
                         // Clear validation errors when switching to DHCP
                         document.getElementById('ip-address-error').textContent = '';
-                        document.getElementById('netmask-error').textContent = '';
+                        document.getElementById('prefix-error').textContent = '';
                         document.getElementById('gateway-error').textContent = '';
                         document.getElementById('dns-error').textContent = '';
                     }
@@ -1488,7 +1514,7 @@
                 formData.append('security', security);
                 formData.append('ipConfig', document.querySelector('input[name="ip-config"]:checked').value);
                 formData.append('ipAddress', document.getElementById('ip-address').value);
-                formData.append('netmask', document.getElementById('netmask').value);
+                formData.append('prefix', document.getElementById('prefix').value);
                 formData.append('gateway', document.getElementById('gateway').value);
                 formData.append('dns', document.getElementById('dns').value);
 

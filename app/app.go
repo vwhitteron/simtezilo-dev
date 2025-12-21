@@ -2,7 +2,10 @@
 package app
 
 import (
+	"context"
 	"fmt"
+	"net/http"
+	"path/filepath"
 	"time"
 
 	"github.com/gopxl/beep"
@@ -16,6 +19,7 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/fuelrange"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/console"
+	"github.com/vwhitteron/simtezilo-dev/app/hardware/display"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/pirateaudio"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/spotpear"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/waveshare"
@@ -24,6 +28,7 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/odometer"
 	"github.com/vwhitteron/simtezilo-dev/app/pitradio"
 	"github.com/vwhitteron/simtezilo-dev/app/pitradio/discord"
+	"github.com/vwhitteron/simtezilo-dev/app/setupmode"
 	"github.com/vwhitteron/simtezilo-dev/app/synthesizer"
 	"github.com/vwhitteron/simtezilo-dev/app/tyres"
 	"github.com/vwhitteron/simtezilo-dev/app/ui"
@@ -63,6 +68,7 @@ type raceState struct {
 type appState struct {
 	hapticsEnabled   bool           // Flag to indicate if haptics are enabled // TODO: move state to haptics?
 	telemetryActive  bool           // Flag to indicate if telemetry is active
+	sessionEnded     bool           // Flag to indicate if session end has been handled
 	raceCompleteTime time.Duration  // Time of day when the race was completed
 	current          raceState      // Race state at the current telemetry sequence
 	last             raceState      // Race state at the last telemetry sequence
@@ -72,17 +78,18 @@ type appState struct {
 
 // App is the main application struct holding all components and state.
 type App struct {
-	log    zerolog.Logger         // Application logger
-	config *config.Config         // Application configuration
-	done   chan exitcode.ExitCode // Channel to signal application shutdown with exit code
+	log    zerolog.Logger     // Application logger
+	config *config.Config     // Application configuration
+	done   chan exitcode.Code // Channel to signal application shutdown with exit code
 
 	cache cache.Cache // Cache manager
 
+	setupMode *setupmode.SetupMode // Setup mode manager
+
 	ui *ui.UserInterface // User interface manager
 
-	i18n     *i18n.I18n         // Language translations
-	display  hardware.Display   // Hardware display interface
-	platform *hardware.Platform // Hardware platform information
+	i18n    *i18n.I18n       // Language translations
+	display hardware.Display // Hardware display interface
 
 	gtClient   *gttelemetry.Client      // GT telemetry client
 	pitRadio   pitradio.PitRadio        // Pit radio notification service
@@ -106,6 +113,9 @@ type App struct {
 
 	lapStartEvents chan uint32 // Channel for notifying new lap starts
 
+	httpServer        *http.Server // Shared HTTP server for both modes
+	activeHTTPHandler http.Handler // Current handler (setup mode or run mode)
+
 	// Chassis haptics state
 	jerkPeakHold         float64       // Peak hold value for jerk to prevent cancellation
 	jerkPeakHoldTime     time.Time     // Time when peak hold was last updated
@@ -114,18 +124,16 @@ type App struct {
 
 // Options holds configuration options for initializing the App.
 type Options struct {
-	VehicleDB string                 // Path to an external vehicle database file
-	Done      chan exitcode.ExitCode // Channel to signal application shutdown with exit code
-	Logger    *zerolog.Logger        // Logger instance for application logging
-	Platform  *hardware.Platform     // Hardware platform information
+	ConfigFile string             // Path to configuration file
+	Done       chan exitcode.Code // Channel to signal application shutdown with exit code
+	Logger     *zerolog.Logger    // Logger instance for application logging
 }
 
 // New creates a new App instance and sets up all components based on the provided options.
 func New(opts Options) (*App, error) {
 	newApp := &App{
-		log:      opts.Logger.With().Str("package", "app").Logger(),
-		done:     opts.Done,
-		platform: opts.Platform,
+		log:  opts.Logger.With().Str("package", "app").Logger(),
+		done: opts.Done,
 		state: appState{
 			current: raceState{
 				transmissionGear: kinematics.NullGear,
@@ -137,10 +145,6 @@ func New(opts Options) (*App, error) {
 		kinematics:         kinematics.NewKinematicsState(),
 		telemetryChartFeed: make(chan map[string]float32, 600),
 		lapStartEvents:     make(chan uint32),
-	}
-
-	if newApp.platform == nil {
-		newApp.platform = hardware.NewPlatform(Platform)
 	}
 
 	newApp.initializeConfig(opts)
@@ -156,6 +160,14 @@ func New(opts Options) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// Initialize setupMode after display is created
+	newApp.setupMode = setupmode.New(setupmode.Options{
+		Config:  newApp.config,
+		Done:    newApp.done,
+		Logger:  &newApp.log,
+		Display: newApp.getDisplayLCD(),
+	})
 
 	err = newApp.initializeUI(opts, hidEvents)
 	if err != nil {
@@ -177,18 +189,37 @@ func New(opts Options) (*App, error) {
 	return newApp, nil
 }
 
-// Run starts the main application loop and associated goroutines.
-func (a *App) Run() {
-	a.startBackgroundTasks()
+// RunResult is the result of a mode function.
+type RunResult int
 
-	a.startAudioOutput()
+const (
+	RunResultContinue RunResult = iota
+	RunResultSwitchMode
+	RunResultExit
+)
 
-	a.mainLoop()
+// Start launches the application and switches between setup and run modes as needed.
+func (a *App) Start() {
+	for {
+		status := a.setupMode.Status(context.Background())
+		setupModeActive := status.Available && status.FlagEnabled
+
+		if setupModeActive {
+			result := a.runSetupMode()
+			if result == RunResultExit {
+				return
+			}
+		} else {
+			result := a.runAppMode()
+			if result == RunResultExit {
+				return
+			}
+		}
+	}
 }
 
 // Close performs cleanup and resource deallocation before application exit.
 func (a *App) Close() {
-	// setupModeExit flag is checked after Close() returns
 	a.log.Info().Msg("Shutting down app")
 
 	err := a.synth.Close()
@@ -231,10 +262,128 @@ func (a *App) Close() {
 	a.display.Close()
 }
 
+// runSetupMode runs setup mode and returns ModeSwitchResult.
+func (a *App) runSetupMode() RunResult {
+	a.log.Info().Msg("Launching setup mode")
+
+	if a.httpServer == nil {
+		a.startHTTPServer()
+	}
+
+	a.activeHTTPHandler = a.setupMode.GetHTTPHandler()
+
+	a.setupMode.Run()
+
+	select {
+	case code := <-a.done:
+		if code == exitcode.Success || code == exitcode.SetupMode {
+			a.log.Info().Msg("Setup mode signaled switch to run mode")
+
+			return RunResultSwitchMode
+		}
+
+		a.stopHTTPServer()
+
+		a.done <- code
+
+		return RunResultExit
+	default:
+		status := a.setupMode.Status(context.Background())
+		if status.Available && !status.FlagEnabled {
+			a.log.Info().Msg("Setup mode completed, switching to run mode")
+
+			return RunResultSwitchMode
+		}
+
+		return RunResultContinue
+	}
+}
+
+// runAppMode runs the main app logic and returns ModeSwitchResult.
+func (a *App) runAppMode() RunResult {
+	a.log.Info().Msg("Launching run mode")
+
+	// Ensure webUI is initialized before setting handler
+	if a.config.GetAppWebUIEnabled() && a.webUI == nil {
+		status := a.setupMode.Status(context.Background())
+
+		a.webUI = webui.New(webui.Config{
+			Log:                a.log,
+			Port:               a.config.GetAppWebUIPort(),
+			TelemetryChartFeed: a.telemetryChartFeed,
+			Config:             a.config,
+			ShutdownChan:       a.done,
+			SetupModeAvailable: status.Available,
+		})
+	}
+
+	if a.config.GetAppWebUIEnabled() {
+		if a.httpServer == nil {
+			a.startHTTPServer()
+		}
+
+		if a.webUI != nil {
+			a.activeHTTPHandler = a.webUI.GetHTTPHandler()
+		}
+	} else {
+		if a.httpServer != nil {
+			a.stopHTTPServer()
+		}
+
+		a.activeHTTPHandler = nil
+	}
+
+	a.run()
+
+	select {
+	case code := <-a.done:
+		if code == exitcode.SetupMode {
+			a.log.Info().Msg("Setup mode requested from run mode")
+
+			return RunResultSwitchMode
+		}
+
+		if code == exitcode.RestartGTClient {
+			a.log.Info().Msg("GT client restart requested, reinitializing")
+
+			err := a.reinitializeGTClient()
+			if err != nil {
+				a.log.Error().Err(err).Msg("Failed to reinitialize GT client")
+
+				a.done <- exitcode.InternalErr
+
+				return RunResultExit
+			}
+
+			return RunResultContinue
+		}
+
+		a.stopHTTPServer()
+
+		a.done <- code
+
+		return RunResultExit
+	default:
+		return RunResultContinue
+	}
+}
+
+// run starts the main application loop and associated goroutines.
+func (a *App) run() {
+	a.startBackgroundTasks()
+
+	a.startAudioOutput()
+
+	a.mainLoop()
+}
+
 // initializeConfig sets up configuration and logging.
 func (a *App) initializeConfig(opts Options) {
 	// load config from file
-	a.config = config.New("simtezilo.conf", *opts.Logger)
+	a.config = config.New(config.Options{
+		ConfigFile: opts.ConfigFile,
+		Logger:     *opts.Logger,
+	})
 
 	zerolog.FloatingPointPrecision = 5
 
@@ -249,7 +398,7 @@ func (a *App) initializeConfig(opts Options) {
 		a.log.Debug().Str("level", configLogLevel.String()).Str("source", "config").Msg("log level update")
 	}
 
-	cacheDir := a.config.GetAppDataDir() + "/cache"
+	cacheDir := filepath.Join(a.config.GetAppBaseDir(), "data", "cache")
 	a.cache = cache.New(cacheDir, *opts.Logger)
 }
 
@@ -477,7 +626,7 @@ func (a *App) initializeComponents(opts Options) error {
 		Source:    a.config.GetTelemetrySource(),
 		Logger:    &gtClientLogger,
 		LogLevel:  a.config.GetAppLogLevel(),
-		VehicleDB: opts.VehicleDB,
+		VehicleDB: a.config.GetAppVehicleDBFile(),
 	})
 	if err != nil {
 		a.log.Error().
@@ -515,6 +664,47 @@ func (a *App) initializeComponents(opts Options) error {
 	return nil
 }
 
+// reinitializeGTClient reinitializes the GT telemetry client with current config settings.
+func (a *App) reinitializeGTClient() error {
+	gtClientLogger := a.log.With().Str("component", "gt client").Logger()
+
+	var err error
+
+	a.gtClient, err = gttelemetry.New(gttelemetry.Options{
+		Source:    a.config.GetTelemetrySource(),
+		Logger:    &gtClientLogger,
+		LogLevel:  a.config.GetAppLogLevel(),
+		VehicleDB: a.config.GetAppVehicleDBFile(),
+	})
+	if err != nil {
+		a.log.Error().
+			Err(err).
+			Str("component", "gt client").
+			Str("result", "failure").
+			Msg("reinit")
+
+		_ = a.ui.Screen.RenderErrorScreen("GT client reinit")
+
+		return err
+	}
+
+	// Reinitialize circuit with new GT client
+	a.circuit, err = circuit.New(*a.gtClient.CircuitDB, a.log)
+	if err != nil {
+		a.log.Error().
+			Err(err).
+			Str("package", "circuit").
+			Str("result", "failure").
+			Msg("reinit")
+	}
+
+	a.log.Info().
+		Str("source", a.config.GetTelemetrySource()).
+		Msg("GT client reinitialized")
+
+	return nil
+}
+
 // initializeDiscord sets up Discord pit radio if enabled.
 func (a *App) initializeDiscord(opts Options) {
 	if !a.config.GetDiscordEnabled() {
@@ -544,6 +734,66 @@ func (a *App) initializeDiscord(opts Options) {
 	}
 
 	a.resetPitRadioState()
+}
+
+// startHTTPServer creates and starts the HTTP server.
+func (a *App) startHTTPServer() {
+	port := a.config.GetAppWebUIPort()
+	a.httpServer = &http.Server{
+		Addr:              fmt.Sprintf(":%d", port),
+		Handler:           http.HandlerFunc(a.handleHTTP),
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      30 * time.Second,
+	}
+
+	go func() {
+		a.log.Info().Msgf("Starting HTTP server on port %d", port)
+
+		err := a.httpServer.ListenAndServe()
+		if err != nil && err != http.ErrServerClosed {
+			a.log.Error().Err(err).Msg("HTTP server error")
+		}
+	}()
+}
+
+// stopHTTPServer gracefully shuts down the HTTP server.
+func (a *App) stopHTTPServer() {
+	if a.httpServer == nil {
+		return
+	}
+
+	a.log.Info().Msg("Stopping HTTP server")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	err := a.httpServer.Shutdown(ctx)
+	if err != nil {
+		a.log.Error().Err(err).Msg("HTTP server shutdown error")
+	}
+
+	a.httpServer = nil
+}
+
+// handleHTTP delegates requests to the current handler based on mode.
+func (a *App) handleHTTP(writer http.ResponseWriter, request *http.Request) {
+	if a.activeHTTPHandler == nil {
+		http.NotFound(writer, request)
+
+		return
+	}
+
+	a.activeHTTPHandler.ServeHTTP(writer, request)
+}
+
+// getDisplayLCD returns the underlying ST7789LCD display if available, otherwise returns nil.
+func (a *App) getDisplayLCD() *display.ST7789LCD {
+	if lcd, ok := a.display.(*display.ST7789LCD); ok {
+		return lcd
+	}
+
+	return nil
 }
 
 // startBackgroundTasks launches all necessary background goroutines for the application.
@@ -580,19 +830,6 @@ func (a *App) startBackgroundTasks() {
 			}
 		}
 	}()
-
-	if a.config.GetAppWebUIEnabled() {
-		a.webUI = webui.New(webui.Config{
-			Log:                a.log,
-			Port:               a.config.GetAppWebUIPort(),
-			TelemetryChartFeed: a.telemetryChartFeed,
-			Config:             a.config,
-			ShutdownChan:       a.done,
-			SetupModeEnabled:   a.platform.SupportsSetupMode(),
-		})
-
-		go a.webUI.Start()
-	}
 }
 
 func (a *App) startAudioOutput() {
@@ -799,6 +1036,8 @@ func (a *App) resetAppState() {
 
 	a.kinematics = kinematics.NewKinematicsState()
 
+	a.state.sessionEnded = false
+
 	a.log.Debug().Msg("App state reset")
 }
 
@@ -819,6 +1058,25 @@ func (a *App) getGameState() gameState {
 }
 
 func (a *App) handleGameStateChange() {
+	// Check if telemetry stream has ended (disconnect, crash, shutdown)
+	if a.sessionIsComplete() {
+		// Only handle session completion once to prevent log spam
+		if !a.state.sessionEnded {
+			a.disableHaptics("telemetry stream ended")
+			a.resetPitRadioState()
+			a.vehicle = vehicle.Characteristics{}
+			a.odometer.Reset()
+			a.fuelRange.Reset()
+			a.circuit.Reset()
+			a.resetAppState()
+			a.stopRecording()
+			a.log.Info().Msg("Telemetry stream ended")
+			a.state.sessionEnded = true
+		}
+
+		return
+	}
+
 	if a.state.current.gameState == a.state.last.gameState || a.state.current.gameState == gameStateUnknown {
 		return
 	}
@@ -867,15 +1125,11 @@ func (a *App) handleGameStateChange() {
 
 		a.log.Debug().Msg("Time of day reset")
 
-	// Assune vehicle pit stop
+	// Assume vehicle pit stop
 	case a.gtClient.Telemetry.Flags().Loading:
 		a.fuelRange.ResetEstimate()
 
 		a.log.Debug().Msg("Loading flag")
-	}
-
-	if a.sessionIsComplete() {
-		a.done <- exitcode.Success
 	}
 }
 

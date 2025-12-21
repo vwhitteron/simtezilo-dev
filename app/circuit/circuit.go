@@ -132,10 +132,6 @@ func (c *Circuit) UpdateCircuit(
 
 	circuitID, found := c.database.GetCircuitAtCoordinate(coordinate, coordinateType)
 	if !found {
-		c.log.Debug().
-			Str("coordinate", key).
-			Msg("No coordinate matched")
-
 		return false
 	}
 

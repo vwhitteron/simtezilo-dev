@@ -8,9 +8,33 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="/css/common.css">
     <link rel="stylesheet" href="/css/settings.css">
+    <style>
+        .custom-tooltip {
+            position: absolute;
+            background: #333;
+            color: #fff;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 13px;
+            max-width: 300px;
+            z-index: 1000;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+            display: none;
+        }
+
+        .custom-tooltip a {
+            color: #6eb5ff;
+            text-decoration: underline;
+        }
+
+        .custom-tooltip.show {
+            display: block;
+        }
+    </style>
     <script>
         const currentPageId = 'settings';
     </script>
+    <script src="/js/i18n.js"></script>
     <script src="/js/navigation.js"></script>
     <script src="/js/settings.js"></script>
     <title>Settings - Simtezilo</title>
@@ -22,36 +46,26 @@
     <div class="content-container">
         <!-- Application Settings -->
         <div class="settings-section">
-            <h2>⚙️ Application Settings</h2>
+            <h2><span data-i18n="runmode.settings.app.title">Application</span></h2>
             <div class="setting-item">
-                <span class="setting-label">Language</span>
+                <span class="setting-label" data-i18n="runmode.settings.app.language">Language</span>
                 <div class="setting-control">
                     <select id="app-language" data-config="app.language">
                         <option value="en">English</option>
-                        <option value="fr">French</option>
-                        <option value="de">German</option>
-                        <option value="es">Spanish</option>
-                        <option value="it">Italian</option>
-                        <option value="pt">Portuguese</option>
-                        <option value="ja">Japanese</option>
-                        <option value="ko">Korean</option>
-                        <option value="zh">Chinese</option>
+                        <option value="ja">日本語</option>
                     </select>
                 </div>
             </div>
             <div class="setting-item">
-                <span class="setting-label">Accent</span>
+                <span class="setting-label" data-i18n="runmode.settings.app.accent">Accent</span>
                 <div class="setting-control">
-                    <select id="app-accent" data-config="app.accent">
-                        <option value="us">US</option>
-                        <option value="uk">UK</option>
-                        <option value="au">Australia</option>
-                        <option value="ca">Canada</option>
-                    </select>
+                    <i class="fa-solid fa-circle-question tooltip-trigger" style="margin-right: 8px; color: #666;"
+                        data-tooltip="Enter a lowercase <a href='https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2' target='_blank' rel='noopener noreferrer'>ISO 3166-1 alpha-2</a> country code."></i>
+                    <input type="text" id="app-accent" data-config="app.accent" placeholder="e.g., us, uk, au">
                 </div>
             </div>
             <div class="setting-item">
-                <span class="setting-label">Log Level</span>
+                <span class="setting-label" data-i18n="runmode.settings.app.loglevel">Log Level</span>
                 <div class="setting-control">
                     <select id="app-loglevel" data-config="app.logLevel">
                         <option value="trace">Trace</option>
@@ -64,63 +78,58 @@
                 </div>
             </div>
             <div class="setting-item">
-                <span class="setting-label">Data Directory</span>
+                <span class="setting-label" data-i18n="runmode.settings.app.basedir">Base Directory</span>
                 <div class="setting-control">
-                    <input type="text" id="app-datadir" data-config="app.dataDir" placeholder="data">
+                    <input type="text" id="app-basedir" data-config="app.baseDir" placeholder="/path/to/simtezilo">
                 </div>
             </div>
             <div class="setting-item">
-                <span class="setting-label">Replay Mode</span>
+                <span class="setting-label" data-i18n="runmode.settings.app.vehicledbfile">Vehicle Database File</span>
+                <div class="setting-control">
+                    <input type="text" id="app-vehicledbfile" data-config="app.vehicleDBFile"
+                        placeholder="/path/to/vehicle.db">
+                </div>
+            </div>
+            <div class="setting-item">
+                <span class="setting-label" data-i18n="runmode.settings.app.replaymode">Replay Mode</span>
                 <div class="setting-control">
                     <input type="checkbox" id="app-replaymode" data-config="app.replayMode">
-                </div>
-            </div>
-            <div class="setting-item">
-                <span class="setting-label">Web UI Enabled</span>
-                <div class="setting-control">
-                    <input type="checkbox" id="app-webuienabled" data-config="app.webUIEnabled">
-                </div>
-            </div>
-            <div class="setting-item">
-                <span class="setting-label">Web UI Port</span>
-                <div class="setting-control">
-                    <input type="number" id="app-webuiport" data-config="app.webUIPort" min="1" max="65535">
                 </div>
             </div>
         </div>
 
         <!-- Discord Settings -->
         <div class="settings-section">
-            <h2>💬 Discord Settings</h2>
+            <h2><span data-i18n="runmode.settings.discord.title">Discord</span></h2>
             <div class="setting-item">
-                <span class="setting-label">Discord Enabled</span>
+                <span class="setting-label" data-i18n="runmode.settings.discord.enabled">Discord Enabled</span>
                 <div class="setting-control">
                     <input type="checkbox" id="discord-enabled" data-config="discord.enabled">
                 </div>
             </div>
             <div class="setting-item">
-                <span class="setting-label">Bot Token</span>
+                <span class="setting-label" data-i18n="runmode.settings.discord.token">Bot Token</span>
                 <div class="setting-control">
                     <input type="password" id="discord-token" data-config="discord.token"
                         placeholder="Enter Discord bot token">
                 </div>
             </div>
             <div class="setting-item">
-                <span class="setting-label">Guild ID</span>
+                <span class="setting-label" data-i18n="runmode.settings.discord.guildid">Guild ID</span>
                 <div class="setting-control">
                     <input type="text" id="discord-guildid" data-config="discord.guildID"
                         placeholder="Discord server ID">
                 </div>
             </div>
             <div class="setting-item">
-                <span class="setting-label">Channel ID</span>
+                <span class="setting-label" data-i18n="runmode.settings.discord.channelid">Channel ID</span>
                 <div class="setting-control">
                     <input type="text" id="discord-channelid" data-config="discord.channelID"
                         placeholder="Text channel ID">
                 </div>
             </div>
             <div class="setting-item">
-                <span class="setting-label">Voice Channel ID</span>
+                <span class="setting-label" data-i18n="runmode.settings.discord.voicechannelid">Voice Channel ID</span>
                 <div class="setting-control">
                     <input type="text" id="discord-voicechannelid" data-config="discord.voiceChannelID"
                         placeholder="Voice channel ID">
@@ -130,36 +139,38 @@
 
         <!-- Fuel Management Settings -->
         <div class="settings-section">
-            <h2>⛽ Fuel Management Settings</h2>
+            <h2><span data-i18n="runmode.settings.fuel.title">Fuel Management</span></h2>
             <div class="setting-item">
-                <span class="setting-label">Fuel Monitoring Enabled</span>
+                <span class="setting-label" data-i18n="runmode.settings.fuel.enabled">Fuel Monitoring Enabled</span>
                 <div class="setting-control">
                     <input type="checkbox" id="fuel-enabled" data-config="fuel.monitoringEnabled">
                 </div>
             </div>
             <div class="setting-item">
-                <span class="setting-label">Pre-warn Notify Laps</span>
+                <span class="setting-label" data-i18n="runmode.settings.fuel.prewarnlaps">Pre-warn Notify Laps</span>
                 <div class="setting-control">
                     <input type="number" id="fuel-prewarnlaps" data-config="fuel.preWarnNotifyLaps" min="0" max="10"
                         step="0.1">
                 </div>
             </div>
             <div class="setting-item">
-                <span class="setting-label">Strategy Notify Laps</span>
+                <span class="setting-label" data-i18n="runmode.settings.fuel.strategylaps">Strategy Notify Laps</span>
                 <div class="setting-control">
                     <input type="number" id="fuel-strategylaps" data-config="fuel.strategyNotifyLaps" min="0" max="20"
                         step="0.1">
                 </div>
             </div>
             <div class="setting-item">
-                <span class="setting-label">Range Safety Margin (Laps)</span>
+                <span class="setting-label" data-i18n="runmode.settings.fuel.safetymarginlaps">Range Safety Margin
+                    (Laps)</span>
                 <div class="setting-control">
                     <input type="number" id="fuel-safetymarginlaps" data-config="fuel.rangeSafetyMarginLaps" min="0"
                         max="2" step="0.05">
                 </div>
             </div>
             <div class="setting-item">
-                <span class="setting-label">Range Safety Margin (Meters)</span>
+                <span class="setting-label" data-i18n="runmode.settings.fuel.safetymarginmeters">Range Safety Margin
+                    (Meters)</span>
                 <div class="setting-control">
                     <input type="number" id="fuel-safetymarginmeters" data-config="fuel.rangeSafetyMarginMeters" min="0"
                         max="2000" step="50">
@@ -169,26 +180,27 @@
 
         <!-- Hardware Settings -->
         <div class="settings-section">
-            <h2>🖥️ Hardware Settings</h2>
+            <h2><span data-i18n="runmode.settings.hardware.title">Hardware</span></h2>
             <div class="setting-item">
-                <span class="setting-label">Hardware Model</span>
+                <span class="setting-label" data-i18n="runmode.settings.hardware.model">Hardware Model</span>
                 <div class="setting-control">
                     <select id="hardware-model" data-config="hardware.model">
                         <option value="none">None</option>
-                        <option value="rpi4">Raspberry Pi 4</option>
-                        <option value="rpi3">Raspberry Pi 3</option>
-                        <option value="pc">PC</option>
+                        <option value="pirateaudio">Pimoroni Pirate Audio</option>
+                        <option value="waveshare">Waveshare 1.3inch LCD HAT</option>
+                        <option value="spotpear">Spotpear RPi-1.3inch-MINI-LCD</option>
                     </select>
                 </div>
             </div>
             <div class="setting-item">
-                <span class="setting-label">Display Orientation</span>
+                <span class="setting-label" data-i18n="runmode.settings.hardware.displayorientation">Display
+                    Orientation</span>
                 <div class="setting-control">
                     <select id="hardware-displayorientation" data-config="hardware.displayOrientation">
-                        <option value="0">0° (Normal)</option>
-                        <option value="90">90° (Rotated Left)</option>
-                        <option value="180">180° (Upside Down)</option>
-                        <option value="270">270° (Rotated Right)</option>
+                        <option value="0">0°</option>
+                        <option value="90">90°</option>
+                        <option value="180">180°</option>
+                        <option value="270">270°</option>
                     </select>
                 </div>
             </div>
@@ -196,88 +208,115 @@
 
         <!-- Haptics Settings -->
         <div class="settings-section">
-            <h2>🎮 Haptics Settings</h2>
+            <h2><span data-i18n="runmode.settings.haptics.title">Haptics</span></h2>
             <div class="setting-item">
-                <span class="setting-label">Dynamic Transmission Feedback</span>
+                <span class="setting-label" data-i18n="runmode.settings.haptics.dynamictransmission">Dynamic
+                    Transmission Feedback</span>
                 <div class="setting-control">
+                    <i class="fa-solid fa-circle-question tooltip-trigger" style="margin-right: 8px; color: #666;"
+                        data-tooltip="Scale the gear change haptic feedback based on longitudinal g-force. When disabled the haptic feedback scale is static."></i>
                     <input type="checkbox" id="haptics-dynamictransmission"
                         data-config="haptics.dynamicTransmissionFeedback">
                 </div>
             </div>
             <div class="setting-item">
-                <span class="setting-label">Transmission Curve</span>
+                <span class="setting-label" data-i18n="runmode.settings.haptics.transmissioncurve">Transmission
+                    Curve</span>
                 <div class="setting-control">
+                    <i class="fa-solid fa-circle-question tooltip-trigger" style="margin-right: 8px; color: #666;"
+                        data-tooltip="Compression curve applied to dynamic transmission feedback. Lower values apply more compression and high values approach a linear shape."></i>
                     <input type="number" id="haptics-transmissioncurve" data-config="haptics.dynamicTransmissionCurve"
-                        min="50" max="500" step="5">
+                        min="5" max="955" step="1">
                 </div>
             </div>
             <div class="setting-item">
-                <span class="setting-label">Transmission G-Force Max</span>
+                <span class="setting-label" data-i18n="runmode.settings.haptics.gforcemax">Transmission G-Force
+                    Max</span>
                 <div class="setting-control">
+                    <i class="fa-solid fa-circle-question tooltip-trigger" style="margin-right: 8px; color: #666;"
+                        data-tooltip="The g-force value at which the dynamic transmission feedback reaches maximum scale."></i>
                     <input type="number" id="haptics-gforcemax" data-config="haptics.dynamicTransmissionGforceMax"
                         min="0.1" max="5.0" step="0.1">
                 </div>
             </div>
             <div class="setting-item">
-                <span class="setting-label">Jerk Curve</span>
+                <span class="setting-label" data-i18n="runmode.settings.haptics.jerkcurve">Jerk Curve</span>
                 <div class="setting-control">
-                    <input type="number" id="haptics-jerkcurve" data-config="haptics.jerkCurve" min="100" max="1000"
-                        step="5">
+                    <i class="fa-solid fa-circle-question tooltip-trigger" style="margin-right: 8px; color: #666;"
+                        data-tooltip="Compression curve applied to the strength of chassis haptic feedback. Lower values apply more compression and high values approach a linear shape."></i>
+                    <input type="number" id="haptics-jerkcurve" data-config="haptics.jerkCurve" min="5" max="955"
+                        step="1">
                 </div>
             </div>
             <div class="setting-item">
-                <span class="setting-label">Jerk Max</span>
+                <span class="setting-label" data-i18n="runmode.settings.haptics.jerkmax">Jerk Max</span>
                 <div class="setting-control">
-                    <input type="number" id="haptics-jerkmax" data-config="haptics.jerkMax" min="10" max="100" step="1">
+                    <i class="fa-solid fa-circle-question tooltip-trigger" style="margin-right: 8px; color: #666;"
+                        data-tooltip="The maximum value where chassis haptic feedback reaches maximum strength."></i>
+                    <input type="number" id="haptics-jerkmax" data-config="haptics.jerkMax" min="5" max="955" step="1">
                 </div>
             </div>
             <div class="setting-item">
-                <span class="setting-label">Snap Curve</span>
+                <span class="setting-label" data-i18n="runmode.settings.haptics.snapcurve">Snap Curve</span>
                 <div class="setting-control">
-                    <input type="number" id="haptics-snapcurve" data-config="haptics.snapCurve" min="100" max="1000"
-                        step="5">
+                    <i class="fa-solid fa-circle-question tooltip-trigger" style="margin-right: 8px; color: #666;"
+                        data-tooltip="Compression curve applied to the frequency of chassis haptic feedback. Lower values apply more compression and high values approach a linear shape."></i>
+                    <input type="number" id="haptics-snapcurve" data-config="haptics.snapCurve" min="5" max="955"
+                        step="1">
                 </div>
             </div>
             <div class="setting-item">
-                <span class="setting-label">Snap Max</span>
+                <span class="setting-label" data-i18n="runmode.settings.haptics.snapmax">Snap Max</span>
                 <div class="setting-control">
+                    <i class="fa-solid fa-circle-question tooltip-trigger" style="margin-right: 8px; color: #666;"
+                        data-tooltip="The maximum value where chassis haptic feedback reaches maximum frequency."></i>
                     <input type="number" id="haptics-snapmax" data-config="haptics.snapMax" min="10" max="100" step="1">
                 </div>
             </div>
             <div class="setting-item">
-                <span class="setting-label">Pulse Max Amplitude</span>
+                <span class="setting-label" data-i18n="runmode.settings.haptics.pulseamplitude">Pulse Max
+                    Amplitude</span>
                 <div class="setting-control">
-                    <input type="number" id="haptics-pulseamplitude" data-config="haptics.pulseMaxAmplitude" min="0.1"
-                        max="2.0" step="0.05">
+                    <i class="fa-solid fa-circle-question tooltip-trigger" style="margin-right: 8px; color: #666;"
+                        data-tooltip="The maximum output volume allowed to be produced."></i>
+                    <input type="number" id="haptics-pulseamplitude" data-config="haptics.pulseMaxAmplitude" min="0.05"
+                        max="1.0" step="0.05">
                 </div>
             </div>
             <div class="setting-item">
-                <span class="setting-label">Pulse Max Frequency (Hz)</span>
+                <span class="setting-label" data-i18n="runmode.settings.haptics.pulsemaxfreq">Pulse Max Frequency
+                    (Hz)</span>
                 <div class="setting-control">
-                    <input type="number" id="haptics-pulsemaxfreq" data-config="haptics.pulseMaxFrequencyHz" min="10"
-                        max="200" step="1">
+                    <i class="fa-solid fa-circle-question tooltip-trigger" style="margin-right: 8px; color: #666;"
+                        data-tooltip="The maximum frequency that should be output for haptic feedback."></i>
+                    <input type="number" id="haptics-pulsemaxfreq" data-config="haptics.pulseMaxFrequencyHz" min="20"
+                        max="160" step="1">
                 </div>
             </div>
             <div class="setting-item">
-                <span class="setting-label">Pulse Min Frequency (Hz)</span>
+                <span class="setting-label" data-i18n="runmode.settings.haptics.pulseminfreq">Pulse Min Frequency
+                    (Hz)</span>
                 <div class="setting-control">
+                    <i class="fa-solid fa-circle-question tooltip-trigger" style="margin-right: 8px; color: #666;"
+                        data-tooltip="The minimum frequency that should be output for haptic feedback. Values lower than 12 Hz may not be effective."></i>
                     <input type="number" id="haptics-pulseminfreq" data-config="haptics.pulseMinFrequencyHz" min="5"
-                        max="100" step="1">
+                        max="150" step="1">
                 </div>
             </div>
         </div>
 
         <!-- Pit Radio Settings -->
         <div class="settings-section">
-            <h2>� Pit Radio Settings</h2>
+            <h2><span data-i18n="runmode.settings.pitradio.title">Pit Radio</span></h2>
             <div class="setting-item">
-                <span class="setting-label">Pit Radio Enabled</span>
+                <span class="setting-label" data-i18n="runmode.settings.pitradio.enabled">Pit Radio Enabled</span>
                 <div class="setting-control">
                     <input type="checkbox" id="pitradio-enabled" data-config="pitRadio.enabled">
                 </div>
             </div>
             <div class="setting-item">
-                <span class="setting-label">Message Send Interval (ms)</span>
+                <span class="setting-label" data-i18n="runmode.settings.pitradio.interval">Message Send Interval
+                    (ms)</span>
                 <div class="setting-control">
                     <input type="number" id="pitradio-interval" data-config="pitRadio.messageSendIntervalMs" min="500"
                         max="10000" step="100">
@@ -287,83 +326,101 @@
 
         <!-- Synthesizer Settings -->
         <div class="settings-section">
-            <h2>🔊 Synthesizer Settings</h2>
+            <h2><span data-i18n="runmode.settings.synth.title">Synthesizer</span></h2>
             <div class="setting-item">
-                <span class="setting-label">Internal Sample Rate (Hz)</span>
+                <span class="setting-label" data-i18n="runmode.settings.synth.internalsamplerate">Internal Sample Rate
+                    (Hz)</span>
                 <div class="setting-control">
+                    <i class="fa-solid fa-circle-question tooltip-trigger" style="margin-right: 8px; color: #666;"
+                        data-tooltip="8 kHz should be sufficient. Higher values will consume more CPU resources."></i>
                     <select id="synth-internalsamplerate" data-config="synthesizer.internalSampleRateHz">
-                        <option value="8000">8000</option>
-                        <option value="16000">16000</option>
-                        <option value="22050">22050</option>
-                        <option value="44100">44100</option>
-                        <option value="48000">48000</option>
+                        <option value="8000">8 kHz</option>
+                        <option value="16000">16 kHz</option>
+                        <option value="22050">22.05 kHz</option>
+                        <option value="32000">32 kHz</option>
+                        <option value="44100">44.1 kHz</option>
+                        <option value="48000">48 kHz</option>
                     </select>
                 </div>
             </div>
             <div class="setting-item">
-                <span class="setting-label">Output Sample Rate (Hz)</span>
+                <span class="setting-label" data-i18n="runmode.settings.synth.outputsamplerate">Output Sample Rate
+                    (Hz)</span>
                 <div class="setting-control">
+                    <i class="fa-solid fa-circle-question tooltip-trigger" style="margin-right: 8px; color: #666;"
+                        data-tooltip="Many audio chipsets will only support samples rates of 32 kHz or higher. Higher values will consume more CPU resources than lower values."></i>
                     <select id="synth-outputsamplerate" data-config="synthesizer.outputSampleRateHz">
-                        <option value="16000">16000</option>
-                        <option value="22050">22050</option>
-                        <option value="32000">32000</option>
-                        <option value="44100">44100</option>
-                        <option value="48000">48000</option>
+                        <option value="8000">8 kHz</option>
+                        <option value="16000">16 kHz</option>
+                        <option value="22050">22.05 kHz</option>
+                        <option value="32000">32 kHz</option>
+                        <option value="44100">44.1 kHz</option>
+                        <option value="48000">48 kHz</option>
                     </select>
                 </div>
             </div>
             <div class="setting-item">
-                <span class="setting-label">Output File</span>
+                <span class="setting-label" data-i18n="runmode.settings.synth.mastergain">Master Gain (dB)</span>
                 <div class="setting-control">
-                    <input type="text" id="synth-outputfile" data-config="synthesizer.outputFile"
-                        placeholder="Leave empty for direct output">
-                </div>
-            </div>
-            <div class="setting-item">
-                <span class="setting-label">Master Gain (dB)</span>
-                <div class="setting-control">
-                    <input type="number" id="synth-mastergain" data-config="synthesizer.masterGain" min="-40" max="10"
+                    <i class="fa-solid fa-circle-question tooltip-trigger" style="margin-right: 8px; color: #666;"
+                        data-tooltip="Controls the overall output gain (volume). Maximum output is 0 dB and minimum is -60 dB which will disable processing of haptic output."></i>
+                    <input type="number" id="synth-mastergain" data-config="synthesizer.masterGain" min="-60" max="0"
                         step="0.25">
                 </div>
             </div>
             <div class="setting-item">
-                <span class="setting-label">Chassis Gain (dB)</span>
+                <span class="setting-label" data-i18n="runmode.settings.synth.chassisgain">Chassis Gain (dB)</span>
                 <div class="setting-control">
+                    <i class="fa-solid fa-circle-question tooltip-trigger" style="margin-right: 8px; color: #666;"
+                        data-tooltip="Controls the volume of chassis vibration effects. Adjust to balance the intensity of road surface and suspension feedback."></i>
                     <input type="number" id="synth-chassisgain" data-config="synthesizer.chassisGain" min="-20" max="20"
                         step="0.25">
                 </div>
             </div>
             <div class="setting-item">
-                <span class="setting-label">Transmission Gain (dB)</span>
+                <span class="setting-label" data-i18n="runmode.settings.synth.transmissiongain">Transmission Gain
+                    (dB)</span>
                 <div class="setting-control">
+                    <i class="fa-solid fa-circle-question tooltip-trigger" style="margin-right: 8px; color: #666;"
+                        data-tooltip="Controls the volume of transmission vibration effects. Affects gear shift feedback intensity."></i>
                     <input type="number" id="synth-transmissiongain" data-config="synthesizer.transmissionGain"
                         min="-20" max="20" step="0.25">
                 </div>
             </div>
             <div class="setting-item">
-                <span class="setting-label">Transmission Gain Min Race (dB)</span>
+                <span class="setting-label" data-i18n="runmode.settings.synth.transmissiongainminrace">Transmission Gain
+                    Min Race (dB)</span>
                 <div class="setting-control">
+                    <i class="fa-solid fa-circle-question tooltip-trigger" style="margin-right: 8px; color: #666;"
+                        data-tooltip="Minimum transmission gain for race transmissions. Used to reduce feedback when in higher gears at racing speeds."></i>
                     <input type="number" id="synth-transmissiongainminrace"
                         data-config="synthesizer.transmissionGainMinRace" min="-20" max="20" step="0.25">
                 </div>
             </div>
             <div class="setting-item">
-                <span class="setting-label">Transmission Gain Min Street (dB)</span>
+                <span class="setting-label" data-i18n="runmode.settings.synth.transmissiongainminstreet">Transmission
+                    Gain Min Street (dB)</span>
                 <div class="setting-control">
+                    <i class="fa-solid fa-circle-question tooltip-trigger" style="margin-right: 8px; color: #666;"
+                        data-tooltip="Minimum transmission gain for street transmissions. Used to reduce feedback when in higher gears."></i>
                     <input type="number" id="synth-transmissiongainminstreet"
                         data-config="synthesizer.transmissionGainMinStreet" min="-20" max="20" step="0.25">
                 </div>
             </div>
             <div class="setting-item">
-                <span class="setting-label">Engine Gain (dB)</span>
+                <span class="setting-label" data-i18n="runmode.settings.synth.enginegain">Engine Gain (dB)</span>
                 <div class="setting-control">
+                    <i class="fa-solid fa-circle-question tooltip-trigger" style="margin-right: 8px; color: #666;"
+                        data-tooltip="Controls the volume of engine vibration effects. Adjust to balance the intensity of engine RPM and load feedback."></i>
                     <input type="number" id="synth-enginegain" data-config="synthesizer.engineGain" min="-20" max="20"
                         step="0.25">
                 </div>
             </div>
             <div class="setting-item">
-                <span class="setting-label">Gain Increment</span>
+                <span class="setting-label" data-i18n="runmode.settings.synth.gainincrement">Gain Increment</span>
                 <div class="setting-control">
+                    <i class="fa-solid fa-circle-question tooltip-trigger" style="margin-right: 8px; color: #666;"
+                        data-tooltip="The increment step size (in dB) used when adjusting gain values on the device UI. Smaller values allow finer control."></i>
                     <input type="number" id="synth-gainincrement" data-config="synthesizer.gainIncrement" min="0.05"
                         max="1.0" step="0.05">
                 </div>
@@ -372,10 +429,12 @@
 
         <!-- Telemetry Settings -->
         <div class="settings-section">
-            <h2>📊 Telemetry Settings</h2>
+            <h2><span data-i18n="runmode.settings.telemetry.title">Telemetry Settings</span></h2>
             <div class="setting-item">
-                <span class="setting-label">Telemetry Source</span>
+                <span class="setting-label" data-i18n="runmode.settings.telemetry.source">Telemetry Source</span>
                 <div class="setting-control">
+                    <i class="fa-solid fa-circle-question tooltip-trigger" style="margin-right: 8px; color: #666;"
+                        data-tooltip="Accepts a UDP address in the format udp://<ip_address>:<port> or a replay file path inf the format file://path/to/replay.<gtr|gtz>. The default value of udp://255.255.255.255:33739 should automatically connect to GT7 on the local network in most cases."></i>
                     <input type="text" id="telemetry-source" data-config="telemetry.source"
                         placeholder="udp://255.255.255.255:33739">
                 </div>
@@ -384,29 +443,31 @@
 
         <!-- Tyre Management Settings -->
         <div class="settings-section">
-            <h2>🏁 Tyre Management Settings</h2>
+            <h2><span data-i18n="runmode.settings.tyres.title">Tyre Management Settings</span></h2>
             <div class="setting-item">
-                <span class="setting-label">Tyre Monitoring Enabled</span>
+                <span class="setting-label" data-i18n="runmode.settings.tyres.enabled">Tyre Monitoring Enabled</span>
                 <div class="setting-control">
                     <input type="checkbox" id="tyres-enabled" data-config="tyres.monitoringEnabled">
                 </div>
             </div>
             <div class="setting-item">
-                <span class="setting-label">Temperature Optimal (°C)</span>
+                <span class="setting-label" data-i18n="runmode.settings.tyres.tempoptimal">Temperature Optimal
+                    (°C)</span>
                 <div class="setting-control">
                     <input type="number" id="tyres-tempoptimal" data-config="tyres.temperatureOptimalCelsius" min="60"
                         max="120" step="1">
                 </div>
             </div>
             <div class="setting-item">
-                <span class="setting-label">Temperature Operating Window (°C)</span>
+                <span class="setting-label" data-i18n="runmode.settings.tyres.tempwindow">Temperature Operating Window
+                    (°C)</span>
                 <div class="setting-control">
                     <input type="number" id="tyres-tempwindow" data-config="tyres.temperatureOperatingWindow" min="2"
                         max="20" step="0.5">
                 </div>
             </div>
             <div class="setting-item">
-                <span class="setting-label">Temperature Margin (°C)</span>
+                <span class="setting-label" data-i18n="runmode.settings.tyres.tempmargin">Temperature Margin (°C)</span>
                 <div class="setting-control">
                     <input type="number" id="tyres-tempmargin" data-config="tyres.temperatureMarginCelsius" min="1"
                         max="10" step="0.5">
@@ -416,9 +477,8 @@
 
         <!-- Actions -->
         <div class="settings-section">
-            <h2>💾 Configuration Actions</h2>
+            <h2><span data-i18n="runmode.settings.config.title">Configuration Actions</span></h2>
             <div class="setting-actions">
-                <button id="save-config" class="action-button primary">Save to File</button>
                 <button id="load-config" class="action-button">Reload</button>
                 <button id="reset-config" class="action-button danger">Reset to Defaults</button>
             </div>
@@ -427,13 +487,82 @@
 
         <!-- System Actions -->
         <div class="settings-section" id="system-actions-section" style="display: none;">
-            <h2>🔧 System Actions</h2>
+            <h2><span data-i18n="runmode.settings.system.title">System Actions</span></h2>
             <div class="setting-actions">
-                <button id="setup-mode" class="action-button danger">Enter Setup Mode</button>
+                <button id="restart-app" class="action-button info">Restart</button>
+                <button id="setup-mode" class="action-button info">Enter Setup Mode</button>
+                <button id="factory-reset" class="action-button danger">Factory Reset</button>
             </div>
+            <div id="restart-app-status" class="config-status"></div>
             <div id="setup-mode-status" class="config-status"></div>
+            <div id="factory-reset-status" class="config-status"></div>
         </div>
     </div>
+
+    <!-- Factory Reset Confirmation Modal -->
+    <div id="factory-reset-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <i class="fas fa-exclamation-triangle modal-icon"></i>
+            <p data-i18n="runmode.settings.modal.warning">This will permanently delete:</p>
+            <ul>
+                <li data-i18n="runmode.settings.modal.item1">All application settings</li>
+                <li data-i18n="runmode.settings.modal.item2">All network configurations</li>
+                <li data-i18n="runmode.settings.modal.item3">All saved data</li>
+            </ul>
+            <p><strong data-i18n="runmode.settings.modal.cannotundo">The changes made by this action cannot be undone
+                    and all data will be lost.</strong></p>
+            <p data-i18n-html="runmode.settings.modal.confirmtext">To confirm, type <strong>reset</strong> below and
+                click Continue:</p>
+            <input type="text" id="factory-reset-confirm-input"
+                data-i18n-placeholder="runmode.settings.modal.placeholder" placeholder="Type 'reset' to confirm"
+                autocomplete="off">
+            <div class="modal-buttons">
+                <button id="factory-reset-cancel" class="action-button"
+                    data-i18n="runmode.settings.modal.cancel">Cancel</button>
+                <button id="factory-reset-confirm" class="action-button danger" data-i18n="runmode.settings.modal.reset"
+                    disabled>Reset</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="custom-tooltip" class="custom-tooltip"></div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const tooltip = document.getElementById('custom-tooltip');
+            let currentTrigger = null;
+
+            document.querySelectorAll('.tooltip-trigger').forEach(trigger => {
+                trigger.addEventListener('click', function (e) {
+                    e.stopPropagation();
+
+                    if (currentTrigger === trigger && tooltip.classList.contains('show')) {
+                        tooltip.classList.remove('show');
+                        currentTrigger = null;
+                    } else {
+                        const content = trigger.getAttribute('data-tooltip');
+                        tooltip.innerHTML = content;
+
+                        const rect = trigger.getBoundingClientRect();
+                        tooltip.style.left = (rect.left + window.scrollX) + 'px';
+                        tooltip.style.top = (rect.bottom + window.scrollY + 5) + 'px';
+
+                        tooltip.classList.add('show');
+                        currentTrigger = trigger;
+                    }
+                });
+            });
+
+            document.addEventListener('click', function () {
+                tooltip.classList.remove('show');
+                currentTrigger = null;
+            });
+
+            tooltip.addEventListener('click', function (e) {
+                e.stopPropagation();
+            });
+        });
+    </script>
 </body>
 
 </html>

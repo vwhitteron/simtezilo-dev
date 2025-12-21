@@ -8,7 +8,9 @@ import (
 	"mime"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -25,7 +27,7 @@ type WebUI struct {
 	telemetryChartFeed chan map[string]float32
 	config             *config.Config
 	upgrader           websocket.Upgrader
-	shutdownChan       chan exitcode.ExitCode
+	shutdownChan       chan exitcode.Code
 	setupModeEnabled   bool
 }
 
@@ -34,8 +36,8 @@ type Config struct {
 	Port               int
 	TelemetryChartFeed chan map[string]float32
 	Config             *config.Config
-	ShutdownChan       chan exitcode.ExitCode
-	SetupModeEnabled   bool
+	ShutdownChan       chan exitcode.Code
+	SetupModeAvailable bool
 }
 
 // New creates a new instance of the WebUI.
@@ -50,40 +52,33 @@ func New(config Config) *WebUI {
 			CheckOrigin: func(_ *http.Request) bool { return true },
 		},
 		shutdownChan:     config.ShutdownChan,
-		setupModeEnabled: config.SetupModeEnabled,
+		setupModeEnabled: config.SetupModeAvailable,
 	}
 }
 
-// Start sets up handlers and starts the web server.
-func (w *WebUI) Start() {
-	http.HandleFunc("/", w.htmlRouterHandlerFunc())
-	http.HandleFunc("/css/", w.cssHandlerFunc())
-	http.HandleFunc("/images/", w.imagesHandlerFunc())
-	http.HandleFunc("/js/", w.sciChartJSHandlerFunc())
-	http.HandleFunc("/ws", w.handleWebSocketConnection)
-	http.HandleFunc("/api/config", w.handleConfigAPI)
-	http.HandleFunc("/api/config/save", w.handleConfigSave)
-	http.HandleFunc("/api/config/reset", w.handleConfigReset)
+// GetHTTPHandler returns the HTTP handler for the web UI.
+func (w *WebUI) GetHTTPHandler() http.Handler {
+	// Create a new ServeMux with all routes
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", w.htmlRouterHandlerFunc())
+	mux.HandleFunc("/css/", w.cssHandlerFunc())
+	mux.HandleFunc("/images/", w.imagesHandlerFunc())
+	mux.HandleFunc("/js/", w.sciChartJSHandlerFunc())
+	mux.HandleFunc("/ws", w.handleWebSocketConnection)
+	mux.HandleFunc("/api/config", w.handleConfigAPI)
+	mux.HandleFunc("/api/config/reset", w.handleConfigReset)
+	mux.HandleFunc("/api/i18n", w.handleI18nAPI)
+	mux.HandleFunc("/api/languages", w.handleLanguagesAPI)
 
 	if w.setupModeEnabled {
-		http.HandleFunc("/api/mode/setup", w.handleSetupMode)
+		mux.HandleFunc("/api/restart", w.handleRestart)
+		mux.HandleFunc("/api/mode/setup", w.handleSetupMode)
+		mux.HandleFunc("/api/factory-reset", w.handleFactoryReset)
 	}
 
-	w.log.Info().Int("port", w.port).Msg("Starting Web UI server")
+	w.log.Debug().Msg("Web UI handler configured")
 
-	server := &http.Server{
-		Addr:              fmt.Sprintf(":%d", w.port),
-		ReadHeaderTimeout: 3 * time.Second,
-	}
-
-	err := server.ListenAndServe()
-	if err != nil {
-		w.log.Error().Err(err).Msg("error starting web server")
-
-		return
-	}
-
-	w.log.Info().Int("port", w.port).Msg("Web UI started")
+	return mux
 }
 
 // HasActiveClients returns true if there are active WebSocket clients connected.
@@ -271,7 +266,7 @@ func (w *WebUI) handleGetConfig(response http.ResponseWriter, _ *http.Request) {
 			"language":     *w.config.GetAppLanguage(),
 			"accent":       w.config.GetAppAccent(),
 			"logLevel":     w.config.GetAppLogLevel(),
-			"dataDir":      w.config.GetAppDataDir(),
+			"baseDir":      w.config.GetAppBaseDir(),
 			"replayMode":   w.config.GetAppReplayMode(),
 			"webUIEnabled": w.config.GetAppWebUIEnabled(),
 			"webUIPort":    w.config.GetAppWebUIPort(),
@@ -371,10 +366,25 @@ func (w *WebUI) handleSetConfig(response http.ResponseWriter, request *http.Requ
 
 	w.log.Info().Interface("config", configData).Msg("configuration updated successfully")
 
+	// Save configuration to file
+	err = w.config.SaveConfigToFile()
+	if err != nil {
+		w.log.Error().Err(err).Msg("failed to save configuration to file")
+		response.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(response).Encode(map[string]string{ //nolint:errchkjson // simple encoding
+			"status":  "error",
+			"message": "Configuration updated but failed to save: " + err.Error(),
+		})
+
+		return
+	}
+
+	w.log.Info().Msg("configuration saved to file")
+
 	// Return success response
 	_ = json.NewEncoder(response).Encode(map[string]string{ //nolint:errchkjson // simple encoding
 		"status":  "success",
-		"message": "Configuration updated successfully",
+		"message": "Configuration updated and saved successfully",
 	})
 }
 
@@ -428,6 +438,51 @@ func (w *WebUI) applyAppConfig(config map[string]any) []string {
 			w.config.SetAppLogLevel(levelStr)
 		} else {
 			errors = append(errors, "invalid log level value")
+		}
+	}
+
+	if baseDir, ok := config["baseDir"]; ok {
+		if baseDirStr, ok := baseDir.(string); ok {
+			w.config.SetAppBaseDir(baseDirStr)
+		} else {
+			errors = append(errors, "invalid base directory value")
+		}
+	}
+
+	if vehicleDBFile, ok := config["vehicleDBFile"]; ok {
+		if vehicleDBFileStr, ok := vehicleDBFile.(string); ok {
+			// If a file path is provided, validate that it exists
+			if vehicleDBFileStr != "" {
+				if _, err := os.Stat(vehicleDBFileStr); err != nil {
+					if os.IsNotExist(err) {
+						errors = append(errors, fmt.Sprintf("vehicle database file not found: %s", vehicleDBFileStr))
+					} else {
+						errors = append(errors, fmt.Sprintf("cannot access vehicle database file: %s", err.Error()))
+					}
+
+					return errors
+				}
+			}
+
+			oldVehicleDBFile := w.config.GetAppVehicleDBFile()
+			w.config.SetAppVehicleDBFile(vehicleDBFileStr)
+
+			// Signal GT client restart if vehicle DB file changed
+			if oldVehicleDBFile != vehicleDBFileStr {
+				w.log.Info().
+					Str("old_vehicle_db", oldVehicleDBFile).
+					Str("new_vehicle_db", vehicleDBFileStr).
+					Msg("Vehicle database file changed, signaling GT client restart")
+
+				select {
+				case w.shutdownChan <- exitcode.RestartGTClient:
+					w.log.Debug().Msg("GT client restart signal sent")
+				default:
+					w.log.Debug().Msg("GT client restart signal already pending")
+				}
+			}
+		} else {
+			errors = append(errors, "invalid vehicle database file value")
 		}
 	}
 
@@ -549,7 +604,37 @@ func (w *WebUI) applyTelemetryConfig(config map[string]any) []string {
 
 	if source, ok := config["source"]; ok {
 		if sourceStr, ok := source.(string); ok {
+			// If source is a file:// path, validate that the file exists
+			if strings.HasPrefix(sourceStr, "file://") {
+				filePath := strings.TrimPrefix(sourceStr, "file://")
+				if _, err := os.Stat(filePath); err != nil {
+					if os.IsNotExist(err) {
+						errors = append(errors, fmt.Sprintf("telemetry replay file not found: %s", filePath))
+					} else {
+						errors = append(errors, fmt.Sprintf("cannot access telemetry replay file: %s", err.Error()))
+					}
+
+					return errors
+				}
+			}
+
+			oldSource := w.config.GetTelemetrySource()
 			w.config.SetTelemetrySource(sourceStr)
+
+			// Signal GT client restart if source changed
+			if oldSource != sourceStr {
+				w.log.Info().
+					Str("old_source", oldSource).
+					Str("new_source", sourceStr).
+					Msg("Telemetry source changed, signaling GT client restart")
+
+				select {
+				case w.shutdownChan <- exitcode.RestartGTClient:
+					w.log.Debug().Msg("GT client restart signal sent")
+				default:
+					w.log.Debug().Msg("GT client restart signal already pending")
+				}
+			}
 		} else {
 			errors = append(errors, "invalid telemetry source value")
 		}
@@ -576,39 +661,30 @@ func (w *WebUI) handleConfigReset(response http.ResponseWriter, request *http.Re
 	w.handleGetConfig(response, request)
 }
 
-// handleConfigSave saves the current configuration to the file with backup.
-func (w *WebUI) handleConfigSave(response http.ResponseWriter, request *http.Request) {
-	response.Header().Set("Content-Type", "application/json")
-
+// handleRestart handles POST requests to restart the application.
+func (w *WebUI) handleRestart(response http.ResponseWriter, request *http.Request) {
 	if request.Method != http.MethodPost {
 		response.WriteHeader(http.StatusMethodNotAllowed)
-		_ = json.NewEncoder(response).Encode(map[string]string{"error": "Method not allowed"}) //nolint:errchkjson // simple encoding
 
 		return
 	}
 
-	w.log.Info().Msg("configuration save requested")
+	response.Header().Set("Content-Type", "application/json")
+	w.log.Info().Msg("application restart requested")
 
-	// Save configuration to file with backup
-	backupPath, err := w.config.SaveConfigToFile()
-	if err != nil {
-		w.log.Error().Err(err).Msg("failed to save configuration")
-		response.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(response).Encode(map[string]string{ //nolint:errchkjson // simple encoding
-			"error": "Failed to save configuration: " + err.Error(),
-		})
-
-		return
-	}
-
-	w.log.Info().Str("backup", backupPath).Msg("configuration saved successfully")
-
-	// Return success response with backup information
+	// Return success response
 	_ = json.NewEncoder(response).Encode(map[string]string{ //nolint:errchkjson // simple encoding
-		"status":     "success",
-		"message":    "Configuration saved",
-		"backupPath": backupPath,
+		"status":  "success",
+		"message": "Application restarting...",
 	})
+
+	// Trigger application shutdown in a goroutine to allow the response to be sent
+	go func() {
+		time.Sleep(500 * time.Millisecond) // Give time for response to be sent
+		w.log.Info().Msg("initiating restart")
+
+		w.shutdownChan <- exitcode.RestartApp
+	}()
 }
 
 // handleSetupMode handles both GET (check availability) and POST (activate setup mode) requests.
@@ -629,6 +705,24 @@ func (w *WebUI) handleSetupMode(response http.ResponseWriter, request *http.Requ
 	case http.MethodPost:
 		w.log.Info().Msg("setup mode requested")
 
+		// Execute setup binary to enable setup mode
+		setupBinPath := filepath.Join(w.config.GetAppBaseDir(), "bin", "setup")
+		cmd := exec.CommandContext(request.Context(), setupBinPath, "enable")
+
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			w.log.Error().Err(err).Str("output", string(output)).Msg("failed to enable setup mode")
+			response.WriteHeader(http.StatusInternalServerError)
+			_ = json.NewEncoder(response).Encode(map[string]string{ //nolint:errchkjson // simple encoding
+				"status":  "error",
+				"message": "Failed to enable setup mode: " + err.Error(),
+			})
+
+			return
+		}
+
+		w.log.Info().Str("output", string(output)).Msg("setup mode enabled")
+
 		// Return success response
 		_ = json.NewEncoder(response).Encode(map[string]string{ //nolint:errchkjson // simple encoding
 			"status":  "success",
@@ -647,4 +741,133 @@ func (w *WebUI) handleSetupMode(response http.ResponseWriter, request *http.Requ
 		response.WriteHeader(http.StatusMethodNotAllowed)
 		_ = json.NewEncoder(response).Encode(map[string]string{"error": "Method not allowed"}) //nolint:errchkjson // simple encoding
 	}
+}
+
+// handleFactoryReset handles POST requests to perform a factory reset.
+func (w *WebUI) handleFactoryReset(response http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodPost {
+		response.WriteHeader(http.StatusMethodNotAllowed)
+
+		return
+	}
+
+	w.log.Warn().Msg("factory reset requested - all settings and network configurations will be deleted")
+
+	// Execute setup binary with reset action to delete all connections and reinitialize
+	// Note: No response is sent as the network will disconnect during the reset
+	setupBinPath := filepath.Join(w.config.GetAppBaseDir(), "bin", "setup")
+	cmd := exec.CommandContext(request.Context(), setupBinPath, "reset")
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		w.log.Error().Err(err).Str("output", string(output)).Msg("failed to perform factory reset")
+
+		return
+	}
+
+	w.log.Info().Str("output", string(output)).Msg("factory reset completed successfully")
+
+	// Trigger application shutdown to restart in setup mode
+	w.log.Info().Msg("initiating shutdown for setup mode after factory reset")
+
+	w.shutdownChan <- exitcode.SetupMode
+}
+
+// handleI18nAPI handles GET requests for i18n translations.
+func (w *WebUI) handleI18nAPI(response http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodGet {
+		response.WriteHeader(http.StatusMethodNotAllowed)
+
+		return
+	}
+
+	// Get language from query parameter, default to config language
+	lang := request.URL.Query().Get("lang")
+	if lang == "" {
+		lang = *w.config.GetAppLanguage()
+	}
+
+	// Get all translations with the "runmode." prefix
+	i18n := w.config.GetI18n()
+	if i18n == nil {
+		w.log.Error().Msg("i18n instance not available")
+		http.Error(response, "i18n not configured", http.StatusInternalServerError)
+
+		return
+	}
+
+	translations := i18n.GetStringsWithPrefixForLanguage(lang, "runmode.")
+
+	data, err := json.Marshal(translations)
+	if err != nil {
+		w.log.Error().Err(err).Msg("failed to marshal translations")
+		http.Error(response, "error encoding translations", http.StatusInternalServerError)
+
+		return
+	}
+
+	response.Header().Set("Content-Type", "application/json")
+	response.Header().Set("Cache-Control", "public, max-age=3600")
+
+	length, err := response.Write(data)
+	if err != nil {
+		w.log.Error().Err(err).Int("bytes_written", length).Msg("error writing i18n response")
+
+		return
+	}
+
+	w.log.Debug().Str("language", lang).Msg("served i18n translations")
+}
+
+// handleLanguagesAPI handles GET requests for available languages.
+func (w *WebUI) handleLanguagesAPI(response http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodGet {
+		response.WriteHeader(http.StatusMethodNotAllowed)
+
+		return
+	}
+
+	i18n := w.config.GetI18n()
+	if i18n == nil {
+		w.log.Error().Msg("i18n instance not available")
+		http.Error(response, "i18n not configured", http.StatusInternalServerError)
+
+		return
+	}
+
+	languagesMap := i18n.Languages()
+
+	// Build response as array of language objects
+	type languageInfo struct {
+		Code string `json:"code"` //nolint:tagliatelle // lowercase for interface simpicity
+		Name string `json:"name"` //nolint:tagliatelle
+	}
+
+	languages := make([]languageInfo, 0, len(languagesMap))
+	for code, metadata := range languagesMap {
+		languages = append(languages, languageInfo{
+			Code: code,
+			Name: metadata.Name,
+		})
+	}
+
+	data, err := json.Marshal(languages)
+	if err != nil {
+		w.log.Error().Err(err).Msg("failed to marshal languages")
+		http.Error(response, "error encoding languages", http.StatusInternalServerError)
+
+		return
+	}
+
+	response.Header().Set("Content-Type", "application/json")
+	response.Header().Set("Cache-Control", "public, max-age=3600")
+
+	length, err := response.Write(data)
+	if err != nil {
+		w.log.Error().Err(err).Int("bytes_written", length).Msg("error writing languages response")
+
+		return
+	}
+
+	w.log.Debug().Msg("served available languages")
 }

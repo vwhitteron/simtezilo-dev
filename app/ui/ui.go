@@ -19,7 +19,7 @@ type Config struct {
 	Display          hardware.Display
 	LiveData         *LiveData
 	SettingsCallback func(string, string) string
-	Done             chan exitcode.ExitCode
+	Done             chan exitcode.Code
 	Log              zerolog.Logger
 }
 
@@ -41,7 +41,7 @@ type UserInterface struct {
 	log zerolog.Logger
 
 	settingsCallback func(menuPage string, action string) string
-	done             chan exitcode.ExitCode
+	done             chan exitcode.Code
 
 	displayData  LiveData
 	mode         ScreenMode

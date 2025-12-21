@@ -81,8 +81,10 @@ dist: build/rpi/v8/64 build/windows/64 build/darwin/silicon
 ## build: build the application for the current platform
 .PHONY: build
 build:
-	@go build -ldflags "-X '$(buildmodule)/app.Version=$(buildversion)' -X '$(buildmodule)/app.BuildTime=$(buildtime)' -X '$(buildmodule)/app.Platform=local'" \
+	go build -ldflags "-X '$(buildmodule)/app.Version=$(buildversion)' -X '$(buildmodule)/app.BuildTime=$(buildtime)' -X '$(buildmodule)/app.Platform=local'" \
 	-o ./out/simtezilo-local ./cmd/simtezilo/main.go
+	go build -ldflags "-X '$(buildmodule)/app.Version=$(buildversion)' -X '$(buildmodule)/app.BuildTime=$(buildtime)' -X '$(buildmodule)/app.Platform=local'" \
+	-o ./out/setup-local ./cmd/setup/main.go
 
 ## build/darwin/silicon: build the application for Apple Silicon
 .PHONY: build/darwin/silicon

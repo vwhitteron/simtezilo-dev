@@ -21,13 +21,14 @@ import (
 )
 
 type app struct {
-	Language     string `toml:"language"`
-	Accent       string `toml:"accent"`
-	LogLevel     string `toml:"logLevel"`
-	DataDir      string `toml:"dataDir"`
-	ReplayMode   bool   `toml:"replayMode"`
-	WebUIEnabled bool   `toml:"webUIEnabled"`
-	WebUIPort    int    `toml:"webUIPort"`
+	Language      string `toml:"language"`
+	Accent        string `toml:"accent"`
+	LogLevel      string `toml:"logLevel"`
+	BaseDir       string `toml:"baseDir"`
+	VehicleDBFile string `toml:"vehicleDBFile"`
+	ReplayMode    bool   `toml:"replayMode"`
+	WebUIEnabled  bool   `toml:"webUIEnabled"`
+	WebUIPort     int    `toml:"webUIPort"`
 }
 
 type discord struct {
@@ -115,46 +116,64 @@ type viperConfig struct {
 
 // Config holds the application configuration and provides methods for accessing and modifying the data.
 type Config struct {
-	viper    *viperConfig
-	i18n     *i18n.I18n
-	filename string
-	mu       sync.RWMutex
+	viper      *viperConfig
+	i18n       *i18n.I18n
+	configFile string
+	mu         sync.RWMutex
+}
+
+type Options struct {
+	ConfigFile string
+	Logger     zerolog.Logger
 }
 
 // New creates a new Config instance loading configuration from the specified filename.
-func New(filename string, log zerolog.Logger) *Config {
+func New(opts Options) *Config {
 	config := &Config{
-		viper:    defaultConfig(),
-		filename: filename,
+		viper:      defaultConfig(),
+		configFile: opts.ConfigFile,
 	}
 
 	viper.SetEnvPrefix("SIMTEZILO")
 	viper.SetEnvKeyReplacer(strings.NewReplacer(`.`, `_`))
 	viper.AutomaticEnv()
-	viper.SetConfigName(filename)
 	viper.SetConfigType("toml")
-	viper.AddConfigPath("/boot/firmware/simtezilo/")
-	viper.AddConfigPath("/boot/simtezilo/")
-	viper.AddConfigPath("/opt/simtezilo/etc/")
-	viper.AddConfigPath("/opt/simtezilo/")
-	viper.AddConfigPath(".")
+
+	if opts.ConfigFile != "" {
+		opts.Logger.Debug().Str("filename", opts.ConfigFile).Msg("Loading config file")
+
+		viper.SetConfigFile(opts.ConfigFile)
+	} else {
+		opts.Logger.Debug().Msg("No config file specified, searching default locations")
+
+		viper.SetConfigName("simtezilo.conf")
+		viper.AddConfigPath("/boot/firmware/simtezilo/")
+		viper.AddConfigPath("/boot/simtezilo/")
+		viper.AddConfigPath("/opt/simtezilo/etc/")
+		viper.AddConfigPath("/opt/simtezilo/")
+		viper.AddConfigPath(".")
+	}
 
 	err := viper.ReadInConfig()
 	if err != nil {
-		log.Error().Err(err).Msg("read config file")
+		log.Error().
+			Str("filename", viper.ConfigFileUsed()).
+			Err(err).
+			Msg("read config file")
 	} else {
 		err = viper.Unmarshal(config.viper)
 		if err != nil {
 			log.Error().Err(err).Msg("unmarshal config")
 		}
+
+		config.configFile = viper.ConfigFileUsed()
+		log.Debug().Str("source", config.configFile).Msg("config loaded")
 	}
 
-	configSource := viper.ConfigFileUsed()
-	if configSource == "" {
-		configSource = "internal default"
+	// When config is loaded from defaults set a default config file for file save operations
+	if config.configFile == "" {
+		config.configFile = filepath.Join(".", "simtezilo.conf")
 	}
-
-	log.Debug().Str("source", configSource).Msg("config loaded")
 
 	config.finalise()
 
@@ -203,6 +222,11 @@ func (c *Config) SetI18n(i18n *i18n.I18n) {
 	c.i18n = i18n
 }
 
+// GetI18n returns the i18n instance.
+func (c *Config) GetI18n() *i18n.I18n {
+	return c.i18n
+}
+
 // GetOutputFile returns the synthesizer output file path.
 func (c *Config) GetOutputFile() string {
 	c.mu.RLock()
@@ -214,6 +238,56 @@ func (c *Config) GetOutputFile() string {
 // ****************************************************************************
 // App section methods.
 // ****************************************************************************
+
+// GetAppAccent returns the configured accent.
+// If not set, it defaults to "us".
+func (c *Config) GetAppAccent() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if c.viper.App.Accent == "" {
+		return "us"
+	}
+
+	return c.viper.App.Accent
+}
+
+// GetAppBaseDir returns the configured base directory.
+// If not set, it defaults to the current directory (".").
+func (c *Config) GetAppBaseDir() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if c.viper.App.BaseDir == "" {
+		return "."
+	}
+
+	return c.viper.App.BaseDir
+}
+
+// SetAppBaseDir sets the application base directory.
+func (c *Config) SetAppBaseDir(value string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.App.BaseDir = value
+}
+
+// GetAppVehicleDBFile returns the configured vehicle database file path.
+func (c *Config) GetAppVehicleDBFile() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.App.VehicleDBFile
+}
+
+// SetAppVehicleDBFile sets the vehicle database file path.
+func (c *Config) SetAppVehicleDBFile(value string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.App.VehicleDBFile = value
+}
 
 // GetAppLanguage returns the configured application language.
 // If not set, it defaults to "en".
@@ -238,22 +312,9 @@ func (c *Config) SetAppLanguage(value string) {
 	c.viper.App.Language = value
 }
 
-// GetAppAccent returns the configured accent.
-// If not set, it defaults to "us".
-func (c *Config) GetAppAccent() string {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	if c.viper.App.Accent == "" {
-		return "us"
-	}
-
-	return c.viper.App.Accent
-}
-
-// NextLanguage cycles to the next available language.
+// NextAppLanguage cycles to the next available language.
 // It returns the language code of the selected language.
-func (c *Config) NextLanguage() string {
+func (c *Config) NextAppLanguage() string {
 	if c.i18n == nil {
 		log.Warn().Msg("i18n instance not set in config")
 
@@ -285,9 +346,9 @@ func (c *Config) NextLanguage() string {
 	return c.viper.App.Language
 }
 
-// PreviousLanguage cycles to the previous available language.
+// PreviousAppLanguage cycles to the previous available language.
 // It returns the language code of the selected language.
-func (c *Config) PreviousLanguage() string {
+func (c *Config) PreviousAppLanguage() string {
 	if c.i18n == nil {
 		log.Warn().Msg("i18n instance not set in config")
 
@@ -348,19 +409,6 @@ func (c *Config) GetAppReplayMode() bool {
 	defer c.mu.RUnlock()
 
 	return c.viper.App.ReplayMode
-}
-
-// GetAppDataDir returns the configured application data directory.
-// If not set, it defaults to "data".
-func (c *Config) GetAppDataDir() string {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	if c.viper.App.DataDir == "" {
-		return "data"
-	}
-
-	return c.viper.App.DataDir
 }
 
 // GetAppWebUIEnabled returns true if the web UI is enabled.
@@ -1526,18 +1574,16 @@ func (c *Config) GetTyreTemperatureMarginCelsius() float32 {
 // BackupConfigFile creates a backup of the current configuration file.
 // Returns the backup filename and any error encountered.
 func (c *Config) BackupConfigFile() (string, error) {
-	configPath := c.resolveConfigFilePath()
-
 	// If the file doesn't exist, nothing to back up
-	_, err := os.Stat(configPath)
+	_, err := os.Stat(c.configFile)
 	if err != nil {
-		return "", fmt.Errorf("configuration file %s not found", configPath)
+		return "", fmt.Errorf("configuration file %s not found", c.configFile)
 	}
 
 	timestamp := time.Now().Format("20060102_150405")
-	backupPath := fmt.Sprintf("%s.backup.%s", configPath, timestamp)
+	backupPath := fmt.Sprintf("%s.backup.%s", c.configFile, timestamp)
 
-	source, err := os.Open(configPath)
+	source, err := os.Open(c.configFile)
 	if err != nil {
 		return "", fmt.Errorf("failed to open source file: %w", err)
 	}
@@ -1558,43 +1604,34 @@ func (c *Config) BackupConfigFile() (string, error) {
 }
 
 // SaveConfigToFile saves the current configuration to the configuration file.
-// It creates a backup before saving and returns both the backup filename and any error.
-func (c *Config) SaveConfigToFile() (string, error) {
+func (c *Config) SaveConfigToFile() error {
 	c.mu.RLock()
 	config := c.viper
 	c.mu.RUnlock()
 
-	configPath := c.resolveConfigFilePath()
-
-	// Create backup first
-	backupPath, err := c.BackupConfigFile()
-	if err != nil {
-		return "", fmt.Errorf("failed to create backup: %w", err)
-	}
-
 	// Marshal the configuration to TOML
 	tomlData, err := toml.Marshal(config)
 	if err != nil {
-		return backupPath, fmt.Errorf("failed to marshal configuration to TOML: %w", err)
+		return fmt.Errorf("failed to marshal configuration to TOML: %w", err)
 	}
 
 	// Write to temporary file first
-	tempPath := configPath + ".tmp"
+	tempPath := c.configFile + ".tmp"
 
 	err = os.WriteFile(tempPath, tomlData, 0o600)
 	if err != nil {
-		return backupPath, fmt.Errorf("failed to write temporary file: %w", err)
+		return fmt.Errorf("failed to write temporary file: %w", err)
 	}
 
 	// Atomic rename to replace the original file
-	err = os.Rename(tempPath, configPath)
+	err = os.Rename(tempPath, c.configFile)
 	if err != nil {
 		os.Remove(tempPath)
 
-		return backupPath, fmt.Errorf("failed to replace configuration file: %w", err)
+		return fmt.Errorf("failed to replace configuration file: %w", err)
 	}
 
-	return backupPath, nil
+	return nil
 }
 
 // ****************************************************************************
@@ -1627,25 +1664,26 @@ func (c *Config) updatePulseWidthExtents() {
 		(2 * c.viper.Haptics.PulseMinFrequencyHz)
 }
 
+// TODO: remove this method
 // resolveConfigFilePath finds the config file in standard locations or returns a default path for writing.
-func (c *Config) resolveConfigFilePath() string {
-	c.mu.RLock()
-	filename := c.filename
-	c.mu.RUnlock()
+// func (c *Config) resolveConfigFilePath() string {
+// 	c.mu.RLock()
+// 	filename := c.filename
+// 	c.mu.RUnlock()
 
-	searchPaths := []string{
-		filepath.Join("/boot/simtezilo/", filename),
-		filepath.Join("/opt/simtezilo/", filename),
-		filepath.Join(".", filename),
-	}
+// 	searchPaths := []string{
+// 		filepath.Join("/boot/simtezilo/", filename),
+// 		filepath.Join("/opt/simtezilo/", filename),
+// 		filepath.Join(".", filename),
+// 	}
 
-	for _, path := range searchPaths {
-		_, err := os.Stat(path)
-		if err != nil {
-			return path
-		}
-	}
+// 	for _, path := range searchPaths {
+// 		_, err := os.Stat(path)
+// 		if err != nil {
+// 			return path
+// 		}
+// 	}
 
-	// If not found, return default path in current directory (for writing new file)
-	return filepath.Join(".", filename)
-}
+// 	// If not found, return default path in current directory (for writing new file)
+// 	return filepath.Join(".", filename)
+// }

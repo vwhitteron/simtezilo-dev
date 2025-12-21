@@ -1,10 +1,10 @@
 // Navigation component for Simtezilo Web UI
 function createNavigation(currentPage) {
     const pages = [
-        { path: '/telemetry', name: 'Telemetry', id: 'telemetry' },
-        { path: '/dev', name: 'Developer', id: 'dev' },
-        { path: '/settings', name: 'Settings', id: 'settings' },
-        { path: '/logs', name: 'Logs', id: 'logs' }
+        { path: '/telemetry', nameKey: 'runmode.nav.telemetry', fallback: 'Telemetry', id: 'telemetry' },
+        { path: '/dev', nameKey: 'runmode.nav.developer', fallback: 'Developer', id: 'dev' },
+        { path: '/settings', nameKey: 'runmode.nav.settings', fallback: 'Settings', id: 'settings' },
+        { path: '/logs', nameKey: 'runmode.nav.logs', fallback: 'Logs', id: 'logs' }
     ];
 
     let navHTML = `
@@ -74,7 +74,7 @@ function createNavigation(currentPage) {
         const isActive = page.id === currentPage;
         navHTML += `
                     <li class="nav-tab${isActive ? ' active' : ''}">
-                        <a href="${page.path}">${page.name}</a>
+                        <a href="${page.path}" data-i18n="${page.nameKey}">${page.fallback}</a>
                     </li>`;
     });
 
@@ -100,6 +100,25 @@ function createNavigation(currentPage) {
 document.addEventListener('DOMContentLoaded', function () {
     const navContainer = document.getElementById('navigation');
     if (navContainer && typeof currentPageId !== 'undefined') {
+        // Create navigation immediately with fallback text
         navContainer.innerHTML = createNavigation(currentPageId);
+
+        // Apply translations when i18n loads
+        if (typeof i18nLoaded !== 'undefined' && i18nLoaded && typeof applyTranslations === 'function') {
+            applyTranslations();
+        } else {
+            window.addEventListener('i18nLoaded', function () {
+                if (typeof applyTranslations === 'function') {
+                    applyTranslations();
+                }
+            }, { once: true });
+        }
+
+        // Also listen for language changes
+        window.addEventListener('i18nLanguageChanged', function () {
+            if (typeof applyTranslations === 'function') {
+                applyTranslations();
+            }
+        });
     }
 });

@@ -183,9 +183,9 @@ func (a *App) handleForceSatSetting(action string) string {
 func (a *App) handleLanguageSetting(action string) string {
 	switch action {
 	case "increase":
-		return a.config.NextLanguage()
+		return a.config.NextAppLanguage()
 	case "decrease":
-		return a.config.PreviousLanguage()
+		return a.config.PreviousAppLanguage()
 	default:
 		return *a.config.GetAppLanguage()
 	}

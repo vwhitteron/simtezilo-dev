@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -92,8 +93,10 @@ func (a *App) startRecording() {
 	timestamp := time.Now()
 	a.state.recorder.startTime = timestamp
 
-	filepath := fmt.Sprintf("%s/replays/%s",
-		a.config.GetAppDataDir(),
+	filepath := filepath.Join(
+		a.config.GetAppBaseDir(),
+		"data",
+		"replays",
 		a.generateRecordingFilename(timestamp),
 	)
 
