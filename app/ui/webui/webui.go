@@ -17,6 +17,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/vwhitteron/simtezilo-dev/app/config"
 	"github.com/vwhitteron/simtezilo-dev/app/exitcode"
+	"github.com/vwhitteron/simtezilo-dev/app/logstore"
 )
 
 // WebUI defines the web user interface.
@@ -29,6 +30,7 @@ type WebUI struct {
 	upgrader           websocket.Upgrader
 	shutdownChan       chan exitcode.Code
 	setupModeEnabled   bool
+	logStore           *logstore.Store
 }
 
 type Config struct {
@@ -38,6 +40,7 @@ type Config struct {
 	Config             *config.Config
 	ShutdownChan       chan exitcode.Code
 	SetupModeAvailable bool
+	LogStore           *logstore.Store
 }
 
 // New creates a new instance of the WebUI.
@@ -52,7 +55,7 @@ func New(config Config) *WebUI {
 			CheckOrigin: func(_ *http.Request) bool { return true },
 		},
 		shutdownChan:     config.ShutdownChan,
-		setupModeEnabled: config.SetupModeAvailable,
+		setupModeEnabled: config.SetupModeAvailable, logStore: config.LogStore,
 	}
 }
 
@@ -69,6 +72,7 @@ func (w *WebUI) GetHTTPHandler() http.Handler {
 	mux.HandleFunc("/api/config/reset", w.handleConfigReset)
 	mux.HandleFunc("/api/i18n", w.handleI18nAPI)
 	mux.HandleFunc("/api/languages", w.handleLanguagesAPI)
+	mux.HandleFunc("/api/logs", w.handleLogsAPI)
 
 	if w.setupModeEnabled {
 		mux.HandleFunc("/api/restart", w.handleRestart)
@@ -455,9 +459,9 @@ func (w *WebUI) applyAppConfig(config map[string]any) []string {
 			if vehicleDBFileStr != "" {
 				if _, err := os.Stat(vehicleDBFileStr); err != nil {
 					if os.IsNotExist(err) {
-						errors = append(errors, fmt.Sprintf("vehicle database file not found: %s", vehicleDBFileStr))
+						errors = append(errors, "vehicle database file not found: "+vehicleDBFileStr)
 					} else {
-						errors = append(errors, fmt.Sprintf("cannot access vehicle database file: %s", err.Error()))
+						errors = append(errors, "cannot access vehicle database file: "+err.Error())
 					}
 
 					return errors
@@ -609,9 +613,9 @@ func (w *WebUI) applyTelemetryConfig(config map[string]any) []string {
 				filePath := strings.TrimPrefix(sourceStr, "file://")
 				if _, err := os.Stat(filePath); err != nil {
 					if os.IsNotExist(err) {
-						errors = append(errors, fmt.Sprintf("telemetry replay file not found: %s", filePath))
+						errors = append(errors, "telemetry replay file not found: "+filePath)
 					} else {
-						errors = append(errors, fmt.Sprintf("cannot access telemetry replay file: %s", err.Error()))
+						errors = append(errors, "cannot access telemetry replay file: "+err.Error())
 					}
 
 					return errors
@@ -870,4 +874,129 @@ func (w *WebUI) handleLanguagesAPI(response http.ResponseWriter, request *http.R
 	}
 
 	w.log.Debug().Msg("served available languages")
+}
+
+// handleLogsAPI returns log entries from the in-memory store.
+func (w *WebUI) handleLogsAPI(response http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodGet {
+		response.WriteHeader(http.StatusMethodNotAllowed)
+		_ = json.NewEncoder(response).Encode(map[string]string{"error": "Method not allowed"}) //nolint:errchkjson // simple encoding
+
+		return
+	}
+
+	if w.logStore == nil {
+		w.log.Warn().Msg("log store not initialized")
+		response.WriteHeader(http.StatusServiceUnavailable)
+		_ = json.NewEncoder(response).Encode(map[string]string{"error": "Log store not available"}) //nolint:errchkjson // simple encoding
+
+		return
+	}
+
+	// Parse pagination parameters
+	queryParams := request.URL.Query()
+	page := 1
+	pageSize := 100
+
+	if pageStr := queryParams.Get("page"); pageStr != "" {
+		if p, err := fmt.Sscanf(pageStr, "%d", &page); err == nil && p == 1 {
+			if page < 1 {
+				page = 1
+			}
+		}
+	}
+
+	if pageSizeStr := queryParams.Get("pageSize"); pageSizeStr != "" {
+		if ps, err := fmt.Sscanf(pageSizeStr, "%d", &pageSize); err == nil && ps == 1 {
+			if pageSize < 1 {
+				pageSize = 100
+			} else if pageSize > 1000 {
+				pageSize = 1000 // max limit
+			}
+		}
+	}
+
+	// Parse level filters
+	var levelFilters map[string]bool
+
+	if levelsParam := queryParams.Get("levels"); levelsParam != "" {
+		levels := strings.Split(levelsParam, ",")
+		levelFilters = make(map[string]bool)
+
+		for _, level := range levels {
+			trimmedLevel := strings.TrimSpace(level)
+			if trimmedLevel != "" {
+				levelFilters[trimmedLevel] = true
+			}
+		}
+	}
+
+	// Get all logs and filter by level if needed
+	allLogs := w.logStore.GetAll()
+
+	var filteredLogs []logstore.LogEntry
+
+	if len(levelFilters) > 0 {
+		for _, log := range allLogs {
+			if level, ok := log["level"].(string); ok && levelFilters[level] {
+				filteredLogs = append(filteredLogs, log)
+			}
+		}
+	} else {
+		filteredLogs = allLogs
+	}
+
+	// Calculate pagination based on filtered results
+	totalCount := len(filteredLogs)
+
+	totalPages := (totalCount + pageSize - 1) / pageSize
+	if totalPages < 1 {
+		totalPages = 1
+	}
+
+	// Validate page number
+	if page > totalPages {
+		page = totalPages
+	}
+
+	// Calculate offset and slice the filtered logs
+	offset := (page - 1) * pageSize
+
+	endIdx := offset + pageSize
+	if endIdx > totalCount {
+		endIdx = totalCount
+	}
+
+	var logs []logstore.LogEntry
+	if offset < totalCount {
+		logs = filteredLogs[offset:endIdx]
+	} else {
+		logs = []logstore.LogEntry{}
+	}
+
+	stats := w.logStore.GetStats()
+
+	// Build response
+	responseData := map[string]any{
+		"logs":       logs,
+		"stats":      stats,
+		"count":      len(logs),
+		"totalCount": totalCount,
+		"page":       page,
+		"pageSize":   pageSize,
+		"totalPages": totalPages,
+	}
+
+	response.Header().Set("Content-Type", "application/json")
+	response.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+
+	err := json.NewEncoder(response).Encode(responseData)
+	if err != nil {
+		w.log.Error().Err(err).Msg("failed to encode logs response")
+		http.Error(response, "error encoding logs", http.StatusInternalServerError)
+
+		return
+	}
+
+	w.log.Debug().Int("log_count", len(logs)).Int("page", page).Msg("served logs")
 }

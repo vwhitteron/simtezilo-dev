@@ -9,54 +9,257 @@
     <link rel="stylesheet" href="/css/halfmoon.min.css">
     <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        #logs-container {
+            max-height: calc(100vh - 200px);
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+    </style>
     <script>
         const currentPageId = 'logs';
 
-        // Sample log data for demonstration
-        const sampleLogs = [
-            { timestamp: '2024-10-16 14:30:15.123', level: 'info', message: 'Application started successfully' },
-            { timestamp: '2024-10-16 14:30:16.456', level: 'info', message: 'WebSocket server listening on port 8080' },
-            { timestamp: '2024-10-16 14:30:17.789', level: 'debug', message: 'Telemetry data collection initialized' },
-            { timestamp: '2024-10-16 14:30:20.321', level: 'info', message: 'Client connected from 192.168.1.100' },
-            { timestamp: '2024-10-16 14:30:25.654', level: 'warn', message: 'High CPU usage detected: 85%' },
-            { timestamp: '2024-10-16 14:30:30.987', level: 'info', message: 'Telemetry data streaming active' },
-            { timestamp: '2024-10-16 14:30:35.234', level: 'debug', message: 'Processing 120 data points per second' },
-            { timestamp: '2024-10-16 14:30:40.567', level: 'error', message: 'Failed to connect to simulation: Connection timeout' },
-            { timestamp: '2024-10-16 14:30:42.890', level: 'info', message: 'Retrying connection to simulation...' },
-            { timestamp: '2024-10-16 14:30:45.123', level: 'info', message: 'Connection to simulation established' }
-        ];
+        let logsData = [];
+        let statsData = {};
+        let autoRefresh = false;
+        let refreshInterval = null;
+        let currentPage = 1;
+        let pageSize = 100;
+        let totalLogs = 0;
+        let totalPages = 1;
+        let selectedLevels = new Set(['error', 'warn', 'info', 'debug', 'trace']);
 
         function getLevelBadgeClass(level) {
             const levelMap = {
                 'info': 'badge text-bg-info',
                 'warn': 'badge text-bg-warning',
                 'error': 'badge text-bg-danger',
-                'debug': 'badge text-bg-secondary'
+                'debug': 'badge text-bg-secondary',
+                'trace': 'badge text-bg-secondary',
+                'fatal': 'badge text-bg-danger',
+                'panic': 'badge text-bg-danger'
             };
             return levelMap[level] || 'badge text-bg-secondary';
         }
 
+        function formatTimestamp(timestamp) {
+            try {
+                const date = new Date(timestamp);
+                return date.toLocaleString('en-GB', {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    fractionalSecondDigits: 3
+                }).replace(',', '');
+            } catch (e) {
+                return timestamp;
+            }
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function hasAdditionalFields(log) {
+            const excludeFields = ['timestamp', 'time', 'level', 'message'];
+            return Object.entries(log).some(([key, value]) =>
+                !excludeFields.includes(key) && value !== undefined && value !== null && value !== ''
+            );
+        }
+
+        function toggleLogDetails(index) {
+            const detailsElement = document.getElementById(`log-details-${index}`);
+            const icon = document.getElementById(`log-icon-${index}`);
+
+            if (detailsElement.style.display === 'none') {
+                detailsElement.style.display = 'block';
+                icon.classList.remove('fa-chevron-right');
+                icon.classList.add('fa-chevron-down');
+            } else {
+                detailsElement.style.display = 'none';
+                icon.classList.remove('fa-chevron-down');
+                icon.classList.add('fa-chevron-right');
+            }
+        }
+
+        function formatLogDetails(log) {
+            // Get all fields excluding the ones already shown in the summary
+            const excludeFields = ['timestamp', 'time', 'level', 'message'];
+            const details = Object.entries(log)
+                .filter(([key, value]) => !excludeFields.includes(key) && value !== undefined && value !== null && value !== '')
+                .map(([key, value]) => {
+                    let displayValue = value;
+                    if (typeof value === 'object') {
+                        displayValue = JSON.stringify(value, null, 2);
+                    }
+                    return `<div class="mb-1"><strong class="text-muted">${escapeHtml(key)}:</strong> <span class="ms-2">${escapeHtml(String(displayValue))}</span></div>`;
+                })
+                .join('');
+
+            return details || '<div class="text-muted fst-italic">No additional fields</div>';
+        }
+
         function renderLogs() {
             const logsContainer = document.getElementById('logs-container');
-            logsContainer.innerHTML = sampleLogs.map(log => `
-                <div class="card p-10" style="margin-bottom: 2px;">
-                    <div class="d-flex align-items-center">
-                        <div class="font-monospace" style="min-width: 200px; max-width: 200px;">
-                            <span class="text-muted">${log.timestamp}</span>
+
+            if (logsData.length === 0) {
+                logsContainer.innerHTML = '<div class="text-center text-muted p-20">No log entries available</div>';
+                return;
+            }
+
+            logsContainer.innerHTML = logsData.map((log, index) => `
+                <div class="card p-10" style="margin-bottom: 2px; font-size: 0.7rem;">
+                    <div class="d-flex align-items-start">
+                        ${hasAdditionalFields(log) ? `
+                        <div class="text-center" style="width: 2ch; flex-shrink: 0; cursor: pointer;" onclick="toggleLogDetails(${index})" title="Expand/collapse details">
+                            <i id="log-icon-${index}" class="fa-solid fa-chevron-right text-muted" style="font-size: 0.6rem;"></i>
                         </div>
-                        <div class="text-center" style="min-width: 80px; max-width: 80px; margin: 0 5px;">
-                            <span class="${getLevelBadgeClass(log.level)}">${log.level.toUpperCase()}</span>
+                        ` : '<div style="width: 2ch; flex-shrink: 0;"></div>'}
+                        <div class="font-monospace" style="width: 23ch; flex-shrink: 0; margin-left: 0.5em;">
+                            <span class="text-muted">${escapeHtml(formatTimestamp(log.timestamp || log.time))}</span>
                         </div>
-                        <div class="flex-fill font-monospace">
-                            <span>${log.message}</span>
+                        <div class="text-center" style="width: 6ch; flex-shrink: 0; margin: 0 1em;">
+                            <span class="${getLevelBadgeClass(log.level)}">${escapeHtml(log.level.toUpperCase())}</span>
+                        </div>
+                        <div class="font-monospace" style="flex: 1; word-wrap: break-word; overflow-wrap: break-word;">
+                            <span>${escapeHtml(log.message)}</span>
                         </div>
                     </div>
+                    ${hasAdditionalFields(log) ? `
+                    <div id="log-details-${index}" class="mt-10 ps-4 font-monospace" style="display: none; font-size: 0.65rem; border-left: 2px solid rgba(255,255,255,0.1); padding-left: 1em;">
+                        ${formatLogDetails(log)}
+                    </div>
+                    ` : ''}
                 </div>
             `).join('');
+
+            // Scroll to bottom to show latest logs
+            logsContainer.scrollTop = logsContainer.scrollHeight;
+        }
+
+        function updateStats() {
+            document.getElementById('total-entries').textContent = totalLogs;
+            document.getElementById('error-count').textContent = statsData.error || 0;
+            document.getElementById('warning-count').textContent = statsData.warn || 0;
+            document.getElementById('info-count').textContent = statsData.info || 0;
+            document.getElementById('debug-count').textContent = statsData.debug || 0;
+            document.getElementById('trace-count').textContent = statsData.trace || 0;
+        }
+
+        function updatePaginationInfo() {
+            const info = document.getElementById('pagination-info');
+            if (info) {
+                const start = (currentPage - 1) * pageSize + 1;
+                const end = Math.min(currentPage * pageSize, totalLogs);
+                info.textContent = `Showing ${start}-${end} of ${totalLogs} logs`;
+            }
+        }
+
+        function updatePaginationControls() {
+            const prevBtn = document.getElementById('prev-page');
+            const nextBtn = document.getElementById('next-page');
+            const pageInfo = document.getElementById('page-info');
+
+            if (prevBtn) {
+                prevBtn.disabled = currentPage <= 1;
+            }
+            if (nextBtn) {
+                nextBtn.disabled = currentPage >= totalPages;
+            }
+            if (pageInfo) {
+                pageInfo.textContent = `Page ${currentPage} of ${totalPages}`;
+            }
+        }
+
+        function goToPage(page) {
+            if (page < 1 || page > totalPages) return;
+            currentPage = page;
+            fetchLogs();
+        }
+
+        function changePageSize(newSize) {
+            pageSize = parseInt(newSize);
+            currentPage = 1; // Reset to first page when changing page size
+            fetchLogs();
+        }
+
+        function toggleLogLevel(level) {
+            const checkbox = document.getElementById(`level-${level}`);
+            if (checkbox.checked) {
+                selectedLevels.add(level);
+            } else {
+                selectedLevels.delete(level);
+            }
+            currentPage = 1; // Reset to first page when filter changes
+            fetchLogs();
+        }
+
+        async function fetchLogs() {
+            try {
+                // Build levels parameter
+                const levels = Array.from(selectedLevels).join(',');
+                const url = `/api/logs?page=${currentPage}&pageSize=${pageSize}${levels ? '&levels=' + levels : ''}`;
+
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+
+                logsData = data.logs || [];
+                statsData = data.stats || {};
+                totalLogs = data.totalCount || 0;
+                totalPages = data.totalPages || 1;
+                currentPage = data.page || 1;
+
+                updateStats();
+                updatePaginationInfo();
+                updatePaginationControls();
+                renderLogs();
+            } catch (error) {
+                console.error('Error fetching logs:', error);
+                document.getElementById('logs-container').innerHTML =
+                    '<div class="alert alert-danger">Failed to load logs: ' + error.message + '</div>';
+            }
+        }
+
+        function toggleAutoRefresh() {
+            autoRefresh = !autoRefresh;
+            const button = document.getElementById('auto-refresh-btn');
+
+            if (autoRefresh) {
+                button.classList.remove('btn-secondary');
+                button.classList.add('btn-primary');
+                refreshInterval = setInterval(fetchLogs, 2000); // Refresh every 2 seconds
+                fetchLogs(); // Immediate fetch
+            } else {
+                button.classList.remove('btn-primary');
+                button.classList.add('btn-secondary');
+                if (refreshInterval) {
+                    clearInterval(refreshInterval);
+                    refreshInterval = null;
+                }
+            }
         }
 
         document.addEventListener('DOMContentLoaded', function () {
-            renderLogs();
+            // Initial fetch
+            fetchLogs();
+
+            // Auto-refresh toggle button
+            document.getElementById('auto-refresh-btn').addEventListener('click', toggleAutoRefresh);
+        });
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', function () {
+            if (refreshInterval) {
+                clearInterval(refreshInterval);
+            }
         });
     </script>
     <script src="/js/i18n.js"></script>
@@ -69,68 +272,145 @@
 
     <div class="content-container">
         <!-- Statistics Cards -->
-        <div class="row mx-auto" style="max-width: 60%; margin-top: 30px; margin-bottom: 30px; gap: 15px;">
+        <div class="row mx-auto" style="max-width: 80%; margin-top: 20px; margin-bottom: 20px; gap: 15px;">
             <div class="col-sm ms-20">
                 <div class="card d-flex flex-row align-items-center justify-content-between border"
-                    style="padding: 15px; border-color: rgba(255,255,255,0.1) !important;">
-                    <p class="text-muted mb-0 small">Total Entries</p>
-                    <h4 class="mb-0">10</h4>
+                    style="padding: 10px 20px; border-color: rgba(255,255,255,0.1) !important; min-width: 120px;">
+                    <p class="text-muted mb-0 form-label" style="margin-right: 15px;">All</p>
+                    <h4 class="mb-0" id="total-entries">0</h4>
                 </div>
             </div>
             <div class="col-sm">
                 <div class="card d-flex flex-row align-items-center justify-content-between border"
-                    style="padding: 15px; border-color: rgba(255,255,255,0.1) !important;">
-                    <p class="text-muted mb-0 small">Errors</p>
-                    <h4 class="mb-0 text-danger">1</h4>
+                    style="padding: 10px 20px; border-color: rgba(255,255,255,0.1) !important; min-width: 120px;">
+                    <p class="text-muted mb-0 form-label" style="margin-right: 15px;">Error</p>
+                    <h4 class="mb-0 text-danger" id="error-count">0</h4>
                 </div>
             </div>
             <div class="col-sm">
                 <div class="card d-flex flex-row align-items-center justify-content-between border"
-                    style="padding: 15px; border-color: rgba(255,255,255,0.1) !important;">
-                    <p class="text-muted mb-0 small">Warnings</p>
-                    <h4 class="mb-0 text-warning">1</h4>
+                    style="padding: 10px 20px; border-color: rgba(255,255,255,0.1) !important; min-width: 120px;">
+                    <p class="text-muted mb-0 form-label" style="margin-right: 15px;">Warning</p>
+                    <h4 class="mb-0 text-warning" id="warning-count">0</h4>
+                </div>
+            </div>
+            <div class="col-sm">
+                <div class="card d-flex flex-row align-items-center justify-content-between border"
+                    style="padding: 10px 20px; border-color: rgba(255,255,255,0.1) !important; min-width: 120px;">
+                    <p class="text-muted mb-0 form-label" style="margin-right: 15px;">Info</p>
+                    <h4 class="mb-0 text-info" id="info-count">0</h4>
+                </div>
+            </div>
+            <div class="col-sm">
+                <div class="card d-flex flex-row align-items-center justify-content-between border"
+                    style="padding: 10px 20px; border-color: rgba(255,255,255,0.1) !important; min-width: 120px;">
+                    <p class="text-muted mb-0 form-label" style="margin-right: 15px;">Debug</p>
+                    <h4 class="mb-0 text-secondary" id="debug-count">0</h4>
                 </div>
             </div>
             <div class="col-sm me-20">
                 <div class="card d-flex flex-row align-items-center justify-content-between border"
-                    style="padding: 15px; border-color: rgba(255,255,255,0.1) !important;">
-                    <p class="text-muted mb-0 small">Info Messages</p>
-                    <h4 class="mb-0 text-info">6</h4>
+                    style="padding: 10px 20px; border-color: rgba(255,255,255,0.1) !important; min-width: 120px;">
+                    <p class="text-muted mb-0 form-label" style="margin-right: 15px;">Trace</p>
+                    <h4 class="mb-0 text-secondary" id="trace-count">0</h4>
                 </div>
             </div>
         </div>
 
-        <!-- Coming Soon Alert -->
-        <div class="alert alert-info text-center mx-auto" role="alert"
-            style="max-width: 70%; margin-top: 30px; margin-bottom: 30px;">
-            <p class="mb-0">Real-time log streaming and advanced filtering features are currently under development.</p>
-        </div>
+        <!-- Logs Content -->
+        <div class="logs-content mt-30">
+            <!-- Logs Card -->
+            <div class="card">
+                <div class="d-flex align-items-center justify-content-between mb-15">
+                    <div class="d-flex align-items-center gap-10">
+                        <span class="text-muted" style="font-size: 0.85rem;" id="pagination-info">Loading...</span>
+                        <select id="page-size" class="form-select form-select-sm w-auto"
+                            onchange="changePageSize(this.value)">
+                            <option value="20">20 per page</option>
+                            <option value="50">50 per page</option>
+                            <option value="100" selected>100 per page</option>
+                            <option value="500">500 per page</option>
+                            <option value="1000">1000 per page</option>
+                        </select>
+                    </div>
+                    <div class="d-flex gap-10">
+                        <div class="dropdown">
+                            <button class="btn btn-sm btn-secondary dropdown-toggle" type="button"
+                                data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="fa-solid fa-filter"></i> Filter Levels
+                            </button>
+                            <ul class="dropdown-menu" style="padding: 0.5rem;">
+                                <li>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="level-error" checked
+                                            onchange="toggleLogLevel('error')">
+                                        <label class="form-check-label" for="level-error">
+                                            <span class="badge text-bg-danger">ERROR</span>
+                                        </label>
+                                    </div>
+                                </li>
+                                <li>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="level-warn" checked
+                                            onchange="toggleLogLevel('warn')">
+                                        <label class="form-check-label" for="level-warn">
+                                            <span class="badge text-bg-warning">WARN</span>
+                                        </label>
+                                    </div>
+                                </li>
+                                <li>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="level-info" checked
+                                            onchange="toggleLogLevel('info')">
+                                        <label class="form-check-label" for="level-info">
+                                            <span class="badge text-bg-info">INFO</span>
+                                        </label>
+                                    </div>
+                                </li>
+                                <li>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="level-debug" checked
+                                            onchange="toggleLogLevel('debug')">
+                                        <label class="form-check-label" for="level-debug">
+                                            <span class="badge text-bg-secondary">DEBUG</span>
+                                        </label>
+                                    </div>
+                                </li>
+                                <li>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="level-trace" checked
+                                            onchange="toggleLogLevel('trace')">
+                                        <label class="form-check-label" for="level-trace">
+                                            <span class="badge text-bg-secondary">TRACE</span>
+                                        </label>
+                                    </div>
+                                </li>
+                            </ul>
+                        </div>
+                        <button id="auto-refresh-btn" class="btn btn-sm btn-secondary"
+                            title="Toggle auto-refresh (every 2 seconds)">
+                            <i class="fa-solid fa-arrows-rotate"></i>
+                        </button>
+                    </div>
+                </div>
 
-        <!-- Logs Card -->
-        <div class="card mt-30">
-            <div class="d-flex align-items-center justify-content-end mb-15">
-                <div class="d-flex gap-10">
-                    <select class="form-select form-select-sm w-auto">
-                        <option>All</option>
-                        <option>Error</option>
-                        <option>Warning</option>
-                        <option>Info</option>
-                        <option>Debug</option>
-                    </select>
-                    <button class="btn btn-sm btn-primary" onclick="renderLogs()">
-                        <i class="fa-solid fa-rotate"></i>
+                <div id="logs-container">
+                    <!-- Logs will be populated by JavaScript -->
+                    <div class="text-center text-muted p-20">Loading logs...</div>
+                </div>
+
+                <!-- Pagination Controls -->
+                <div class="d-flex align-items-center justify-content-center mt-15 mb-15" style="gap: 10px;">
+                    <button id="prev-page" class="btn btn-sm btn-secondary" onclick="goToPage(currentPage - 1)"
+                        disabled>
+                        <i class="fa-solid fa-chevron-left"></i> Previous
                     </button>
-                    <button class="btn btn-sm btn-secondary">
-                        <i class="fa-solid fa-trash"></i>
-                    </button>
-                    <button class="btn btn-sm btn-secondary">
-                        <i class="fa-solid fa-download"></i>
+                    <span class="text-muted" id="page-info">Page 1 of 1</span>
+                    <button id="next-page" class="btn btn-sm btn-secondary" onclick="goToPage(currentPage + 1)"
+                        disabled>
+                        Next <i class="fa-solid fa-chevron-right"></i>
                     </button>
                 </div>
-            </div>
-
-            <div id="logs-container" class="mt-15">
-                <!-- Logs will be populated by JavaScript -->
             </div>
         </div>
     </div>

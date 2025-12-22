@@ -13,6 +13,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/vwhitteron/simtezilo-dev/app"
 	"github.com/vwhitteron/simtezilo-dev/app/exitcode"
+	"github.com/vwhitteron/simtezilo-dev/app/logstore"
 	"github.com/vwhitteron/simtezilo-dev/app/profiler"
 )
 
@@ -55,7 +56,9 @@ func main() {
 		log.Fatalf("Invalid log level: %s", err)
 	}
 
-	logger := zerolog.New(os.Stderr).With().Timestamp().Logger().Level(logLevel)
+	// Create logger with in-memory store (max 5000 entries)
+	loggerWithStore := logstore.NewLoggerWithStore(logLevel, 5000)
+	logger := loggerWithStore.Logger
 
 	if app.BuildTime == "" {
 		app.BuildTime = time.Now().Format("2006-01-02_15:04:05")
@@ -79,6 +82,7 @@ func main() {
 			ConfigFile: configFile,
 			Done:       done,
 			Logger:     &logger,
+			LogStore:   loggerWithStore.Store,
 		})
 		if err != nil {
 			logger.Fatal().Err(err).Msg("Error creating app")

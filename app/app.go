@@ -25,6 +25,7 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/waveshare"
 	"github.com/vwhitteron/simtezilo-dev/app/i18n"
 	"github.com/vwhitteron/simtezilo-dev/app/kinematics"
+	"github.com/vwhitteron/simtezilo-dev/app/logstore"
 	"github.com/vwhitteron/simtezilo-dev/app/odometer"
 	"github.com/vwhitteron/simtezilo-dev/app/pitradio"
 	"github.com/vwhitteron/simtezilo-dev/app/pitradio/discord"
@@ -78,9 +79,10 @@ type appState struct {
 
 // App is the main application struct holding all components and state.
 type App struct {
-	log    zerolog.Logger     // Application logger
-	config *config.Config     // Application configuration
-	done   chan exitcode.Code // Channel to signal application shutdown with exit code
+	log      zerolog.Logger     // Application logger
+	logStore *logstore.Store    // In-memory log storage
+	config   *config.Config     // Application configuration
+	done     chan exitcode.Code // Channel to signal application shutdown with exit code
 
 	cache cache.Cache // Cache manager
 
@@ -127,13 +129,15 @@ type Options struct {
 	ConfigFile string             // Path to configuration file
 	Done       chan exitcode.Code // Channel to signal application shutdown with exit code
 	Logger     *zerolog.Logger    // Logger instance for application logging
+	LogStore   *logstore.Store    // In-memory log storage
 }
 
 // New creates a new App instance and sets up all components based on the provided options.
 func New(opts Options) (*App, error) {
 	newApp := &App{
-		log:  opts.Logger.With().Str("package", "app").Logger(),
-		done: opts.Done,
+		log:      opts.Logger.With().Str("package", "app").Logger(),
+		logStore: opts.LogStore,
+		done:     opts.Done,
 		state: appState{
 			current: raceState{
 				transmissionGear: kinematics.NullGear,
@@ -314,6 +318,7 @@ func (a *App) runAppMode() RunResult {
 			Config:             a.config,
 			ShutdownChan:       a.done,
 			SetupModeAvailable: status.Available,
+			LogStore:           a.logStore,
 		})
 	}
 
