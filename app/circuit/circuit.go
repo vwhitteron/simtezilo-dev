@@ -46,6 +46,7 @@ type Circuit struct {
 	observedLength          int                  // Observed circuit length of the circuit
 	lastCoordinate          models.Coordinate    // Last known coordinate for distance tracking
 	candidates              Candidates           // Circuit candidates with confidence tracking
+	seenCoordinates         map[string]uint16    // Tracks which coordinate boxes have been processed
 }
 
 // New creates a new Circuit instance with the provided logger and initializes the circuit database.
@@ -59,6 +60,7 @@ func New(db circuits.CircuitDB, logger zerolog.Logger) (*Circuit, error) {
 		info:                    emptyCircuitInfo(),
 		lastCoordinate:          models.Coordinate{},
 		candidates:              make(Candidates),
+		seenCoordinates:         make(map[string]uint16),
 	}, nil
 }
 
@@ -66,6 +68,7 @@ func New(db circuits.CircuitDB, logger zerolog.Logger) (*Circuit, error) {
 func (c *Circuit) Reset() {
 	c.info = emptyCircuitInfo()
 	c.candidates = make(Candidates)
+	c.seenCoordinates = make(map[string]uint16)
 	c.ResetLapProgress()
 
 	c.log.Debug().
@@ -130,12 +133,17 @@ func (c *Circuit) UpdateCircuit(
 	coordinateNorm := circuits.NormaliseStartLineCoordinate(coordinate)
 	key := coordinateNorm.String()
 
-	circuitID, found := c.database.GetCircuitAtCoordinate(coordinate, coordinateType)
-	if !found {
+	circuitID, seenCoordinate := c.database.GetCircuitAtCoordinate(coordinate, coordinateType)
+	if !seenCoordinate {
 		return false
 	}
 
-	c.updateCandidateConfidence(circuitID, key)
+	// Only update confidence for new coordinate boxes to avoid log spam
+	_, seenCoordinate = c.seenCoordinates[key]
+	if !seenCoordinate {
+		c.seenCoordinates[key]++
+		c.updateCandidateConfidence(circuitID, key)
+	}
 
 	bestCandidate := c.bestCandidate()
 	if bestCandidate == nil {

@@ -1011,18 +1011,6 @@ func (a *App) newLapHandler() bool {
 	}
 }
 
-// sessionIsComplete checks if the session has completed.
-// Returns true if the session is complete.
-func (a *App) sessionIsComplete() bool {
-	if a.gtClient.Finished {
-		a.log.Debug().Msg("session finished")
-
-		return true
-	}
-
-	return false
-}
-
 // resetAppState resets the application state.
 func (a *App) resetAppState() {
 	a.state.last = raceState{
@@ -1064,7 +1052,7 @@ func (a *App) getGameState() gameState {
 
 func (a *App) handleGameStateChange() {
 	// Check if telemetry stream has ended (disconnect, crash, shutdown)
-	if a.sessionIsComplete() {
+	if a.gtClient.Finished {
 		// Only handle session completion once to prevent log spam
 		if !a.state.sessionEnded {
 			a.disableHaptics("telemetry stream ended")
