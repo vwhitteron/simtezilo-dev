@@ -78,10 +78,14 @@ func New(opts *SynthOpts) (*Synthesizer, error) {
 }
 
 // Close gracefully shuts down the synthesizer, closing the mixer and output file if applicable.
-func (s *Synthesizer) Close() error {
+func (s *Synthesizer) Close() (err error) {
 	s.mixer.Close()
 
-	return s.outFile.Close()
+	if s.outFile != nil {
+		err = s.outFile.Close()
+	}
+
+	return err
 }
 
 // GetSampleRate returns the internal sample rate of the synthesizer.
