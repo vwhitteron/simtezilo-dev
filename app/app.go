@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"path/filepath"
+	"strconv"
+	"sync"
 	"time"
 
 	"github.com/gopxl/beep"
@@ -38,6 +40,15 @@ import (
 	gttelemetry "github.com/zetetos/gt-telemetry"
 	"github.com/zetetos/gt-telemetry/pkg/models"
 )
+
+// lapEvent represents a single lap completion event.
+type lapEvent struct {
+	Lap      int16
+	LapTime  time.Duration
+	Delta    time.Duration
+	Position int16
+	HasDelta bool
+}
 
 type gameState int
 
@@ -109,9 +120,16 @@ type App struct {
 	vehicle       vehicle.Characteristics // Current vehicle information
 	tyres         *tyres.Tyre             // Tyre monitoring
 
-	telemetryChartFeed chan map[string]float32 // Channel for sending telemetry data to web UI
-	webUI              *webui.WebUI            // Web UI server and handler
-	webSequenceID      uint32                  // Last sequence ID sent to the web UI
+	telemetryChartFeed chan map[string]float32     // Channel for sending telemetry data to web UI
+	vehicleInfoFeed    chan map[string]interface{} // Channel for sending vehicle info to web UI
+	circuitInfoFeed    chan map[string]string      // Channel for sending circuit info to web UI
+	raceInfoFeed       chan map[string]interface{} // Channel for sending race info to web UI
+	webUI              *webui.WebUI                // Web UI server and handler
+	webSequenceID      uint32                      // Last sequence ID sent to the web UI
+
+	lapEvents      []lapEvent    // History of lap events
+	lapEventsMutex sync.Mutex    // Mutex for lap events slice
+	bestLapTime    time.Duration // Best lap time for delta calculation
 
 	lapStartEvents chan uint32 // Channel for notifying new lap starts
 
@@ -148,6 +166,9 @@ func New(opts Options) (*App, error) {
 		},
 		kinematics:         kinematics.NewKinematicsState(),
 		telemetryChartFeed: make(chan map[string]float32, 600),
+		vehicleInfoFeed:    make(chan map[string]interface{}, 10),
+		circuitInfoFeed:    make(chan map[string]string, 10),
+		raceInfoFeed:       make(chan map[string]interface{}, 10),
 		lapStartEvents:     make(chan uint32),
 	}
 
@@ -207,6 +228,8 @@ func (a *App) Start() {
 	for {
 		status := a.setupMode.Status(context.Background())
 		setupModeActive := status.Available && status.FlagEnabled
+
+		a.log.Debug().Bool("available", status.Available).Bool("flagEnabled", status.FlagEnabled).Msg("Setup mode status")
 
 		if setupModeActive {
 			result := a.runSetupMode()
@@ -307,6 +330,16 @@ func (a *App) runSetupMode() RunResult {
 func (a *App) runAppMode() RunResult {
 	a.log.Info().Msg("Launching run mode")
 
+	err := a.ui.Screen.RenderSplashScreen("Ready")
+	if err != nil {
+		a.log.Error().
+			Err(err).
+			Str("component", "ui").
+			Str("sub", "screen").
+			Str("result", "failure").
+			Msg("render splash screen")
+	}
+
 	// Ensure webUI is initialized before setting handler
 	if a.config.GetAppWebUIEnabled() && a.webUI == nil {
 		status := a.setupMode.Status(context.Background())
@@ -315,10 +348,16 @@ func (a *App) runAppMode() RunResult {
 			Log:                a.log,
 			Port:               a.config.GetAppWebUIPort(),
 			TelemetryChartFeed: a.telemetryChartFeed,
+			VehicleInfoFeed:    a.vehicleInfoFeed,
+			CircuitInfoFeed:    a.circuitInfoFeed,
+			RaceInfoFeed:       a.raceInfoFeed,
 			Config:             a.config,
 			ShutdownChan:       a.done,
 			SetupModeAvailable: status.Available,
 			LogStore:           a.logStore,
+			BuildVersion:       Version,
+			BuildTime:          BuildTime,
+			BuildPlatform:      Platform,
 		})
 	}
 
@@ -587,7 +626,7 @@ func (a *App) initializeUI(opts Options, hidEvents chan ui.HIDInputEvent) error 
 		Done:             a.done,
 	})
 
-	err := a.ui.Screen.RenderSplashScreen(Version)
+	err := a.ui.Screen.RenderSplashScreen("Starting...")
 	if err != nil {
 		a.log.Error().
 			Err(err).
@@ -598,6 +637,13 @@ func (a *App) initializeUI(opts Options, hidEvents chan ui.HIDInputEvent) error 
 
 		return fmt.Errorf("render splash screen: %w", err)
 	}
+
+	// Set up display orientation callback to update display immediately when orientation changes
+	a.config.SetDisplayOrientationCallback(func(orientation int) {
+		a.display.SetOrientation(orientation)
+		// Force redraw by marking data as requiring refresh
+		a.ui.ForceRedraw()
+	})
 
 	return nil
 }
@@ -710,17 +756,50 @@ func (a *App) reinitializeGTClient() error {
 	return nil
 }
 
-// initializeDiscord sets up Discord pit radio if enabled.
+// initializeDiscord sets up Discord pit radio if PitRadio is enabled.
 func (a *App) initializeDiscord(opts Options) {
-	if !a.config.GetDiscordEnabled() {
+	if !a.config.PitRadioEnabled() {
 		return
 	}
 
+	// Validate Discord configuration
+	token := a.config.GetDiscordToken()
+	guildID := a.config.GetDiscordGuildID()
+	channelID := a.config.GetDiscordChannelID()
+	voiceChannelID := a.config.GetDiscordVoiceChannelID()
+
+	hasTextConfig := token != "" && channelID != ""
+	hasVoiceConfig := token != "" && guildID != "" && voiceChannelID != ""
+
+	if !hasTextConfig && !hasVoiceConfig {
+		a.log.Warn().
+			Str("component", "discord").
+			Msg("Pit Radio is enabled but Discord configuration is incomplete - Discord bot will not function")
+
+		if token == "" {
+			a.log.Warn().
+				Str("component", "discord").
+				Msg("Missing Discord bot token")
+		}
+
+		if channelID == "" && voiceChannelID == "" {
+			a.log.Warn().
+				Str("component", "discord").
+				Msg("Missing Discord channel ID and voice channel ID")
+		}
+
+		if guildID == "" && voiceChannelID != "" {
+			a.log.Warn().
+				Str("component", "discord").
+				Msg("Missing Discord guild ID (required for voice)")
+		}
+	}
+
 	discordBotConfig := discord.Config{
-		Token:          a.config.GetDiscordToken(),
-		ChannelID:      a.config.GetDiscordChannelID(),
-		VoiceChannelID: a.config.GetDiscordVoiceChannelID(),
-		GuildID:        a.config.GetDiscordGuildID(),
+		Token:          token,
+		ChannelID:      channelID,
+		VoiceChannelID: voiceChannelID,
+		GuildID:        guildID,
 		MessageGap:     time.Duration(a.config.GetMessageSendIntervalMs()) * time.Millisecond,
 		Cache:          &a.cache,
 		SampleBank:     a.synth.EffectSampleBank(),
@@ -867,6 +946,9 @@ func (a *App) mainLoop() {
 	tickerEngineHaptics := time.NewTicker((1000 / engineHapticFrameRate) * time.Millisecond)
 	tickerDisplay := time.NewTicker((1000 / displayFrameRate) * time.Millisecond)
 	tickerPitRadio := time.NewTicker((1000 / pitRadioFrameRate) * time.Millisecond)
+	tickerVehicleInfo := time.NewTicker(2 * time.Second)
+	tickerCircuitInfo := time.NewTicker(1 * time.Second)
+	tickerRaceInfo := time.NewTicker(1 * time.Second)
 	tickerDebug := time.NewTicker(30 * time.Second)
 
 	a.log.Debug().Str("component", "app").Str("result", "success").Msg("main loop started")
@@ -892,6 +974,12 @@ func (a *App) mainLoop() {
 			a.handleDisplayTick()
 		case <-tickerPitRadio.C:
 			a.handlePitRadioTick()
+		case <-tickerVehicleInfo.C:
+			a.handleVehicleInfoTick()
+		case <-tickerCircuitInfo.C:
+			a.handleCircuitInfoTick()
+		case <-tickerRaceInfo.C:
+			a.handleRaceInfoTick()
 		case <-tickerDebug.C:
 			a.handleDebugTick()
 		}
@@ -951,6 +1039,34 @@ func (a *App) handlePitRadioTick() {
 	}
 }
 
+// handleVehicleInfoTick periodically pushes current vehicle info to ensure new clients receive data.
+func (a *App) handleVehicleInfoTick() {
+	if a.webUI == nil || !a.webUI.HasActiveClients() {
+		return
+	}
+
+	// Only push if we have a valid vehicle
+	if a.vehicle.ID == 0 {
+		return
+	}
+
+	a.pushVehicleInfo()
+}
+
+// handleRaceInfoTick periodically pushes current race info to the web UI.
+func (a *App) handleRaceInfoTick() {
+	if a.webUI == nil || !a.webUI.HasActiveClients() {
+		return
+	}
+
+	// Only push if on circuit
+	if !a.gtClient.Telemetry.IsOnCircuit() {
+		return
+	}
+
+	a.pushRaceInfo()
+}
+
 // handleDebugTick processes debug logging.
 func (a *App) handleDebugTick() {
 	if a.log.GetLevel() > zerolog.DebugLevel {
@@ -995,12 +1111,24 @@ func (a *App) newLapHandler() bool {
 		case <-a.lapStartEvents:
 			lap := a.state.current.lapNumber
 			lapTime := a.state.current.lastLapTime
+			position := a.gtClient.Telemetry.GridPosition()
 			coordinate := a.gtClient.Telemetry.PositionalMapCoordinates()
 			odometerReading := a.odometer.Add(coordinate)
 
+			// Track lap event if valid lap time
+			// When we cross the line to start lap N, lastLapTime is for lap N-1
+			if lapTime > 0 && lap > 1 {
+				completedLap := lap - 1
+				a.addLapEvent(completedLap, lapTime, position)
+			}
+
 			didUpdate := a.circuit.UpdateCircuit(odometerReading, lap, lapTime, coordinate, models.CoordinateTypeStartLine)
 			if didUpdate {
+				a.log.Debug().Msg("lapStartEvents: circuit was updated, calling pushCircuitInfo")
 				a.state.last.lastLapTime = 0
+				a.pushCircuitInfo()
+			} else {
+				a.log.Debug().Msg("lapStartEvents: circuit was NOT updated")
 			}
 
 			a.notifyLapTime()
@@ -1050,6 +1178,32 @@ func (a *App) getGameState() gameState {
 	}
 }
 
+// getGameStateString returns the current game state as a string for the web UI.
+func (a *App) getGameStateString() string {
+	state := a.state.current.gameState
+
+	// Check for paused state (on circuit but paused)
+	if state == gameStateOnCircuit && a.gtClient.Telemetry.Flags().GamePaused {
+		return "paused"
+	}
+
+	// Check for replay mode
+	if !a.gtClient.Telemetry.Flags().Live {
+		return "replay"
+	}
+
+	switch state {
+	case gameStateMainMenu:
+		return "main_menu"
+	case gameStateRaceMenu:
+		return "race_menu"
+	case gameStateOnCircuit:
+		return "on_circuit"
+	default:
+		return "unknown"
+	}
+}
+
 func (a *App) handleGameStateChange() {
 	// Check if telemetry stream has ended (disconnect, crash, shutdown)
 	if a.gtClient.Finished {
@@ -1058,6 +1212,9 @@ func (a *App) handleGameStateChange() {
 			a.disableHaptics("telemetry stream ended")
 			a.resetPitRadioState()
 			a.vehicle = vehicle.Characteristics{}
+			a.clearVehicleInfo()
+			a.clearCircuitInfo()
+			a.clearRaceInfo()
 			a.odometer.Reset()
 			a.fuelRange.Reset()
 			a.circuit.Reset()
@@ -1079,6 +1236,9 @@ func (a *App) handleGameStateChange() {
 		a.disableHaptics("main menu")
 		a.resetPitRadioState()
 		a.vehicle = vehicle.Characteristics{}
+		a.clearVehicleInfo()
+		a.clearCircuitInfo()
+		a.clearRaceInfo()
 		a.odometer.Reset()
 		a.fuelRange.Reset()
 		a.circuit.Reset()
@@ -1103,6 +1263,9 @@ func (a *App) handleGameStateChange() {
 	case a.liveFlagHasChanged():
 		a.resetPitRadioState()
 		a.vehicle = vehicle.Characteristics{}
+		a.clearVehicleInfo()
+		a.clearCircuitInfo()
+		a.clearRaceInfo()
 		a.fuelRange.ResetEstimate()
 		a.fuelRange.SetLive(a.state.current.isLive)
 		a.circuit.Reset()
@@ -1186,6 +1349,7 @@ func (a *App) updateVehicle() {
 	a.setTransmissionGain(vehicleType)
 	a.resetVehicleState()
 	a.logVehicleUpdate(engine, revLimit)
+	a.pushVehicleInfo()
 }
 
 // getEngineData retrieves and processes engine characteristics.
@@ -1295,4 +1459,328 @@ func (a *App) raceHasFinished() bool {
 	currentTime := a.gtClient.Telemetry.TimeOfDay()
 
 	return a.state.raceCompleteTime > currentTime+5*time.Second
+}
+
+// pushVehicleInfo sends the current vehicle manufacturer and model to the web UI.
+func (a *App) pushVehicleInfo() {
+	if a.webUI == nil || !a.webUI.HasActiveClients() {
+		return
+	}
+
+	manufacturer := a.gtClient.Telemetry.VehicleManufacturer()
+	model := a.gtClient.Telemetry.VehicleModel()
+	carID := a.gtClient.Telemetry.VehicleID()
+
+	// Get game state as string
+	gameStateStr := a.getGameStateString()
+
+	if manufacturer == "" && model == "" {
+		return
+	}
+
+	vehicleInfo := map[string]interface{}{
+		"manufacturer": manufacturer,
+		"model":        model,
+		"carID":        carID,
+		"gamestate":    gameStateStr,
+	}
+
+	select {
+	case a.vehicleInfoFeed <- vehicleInfo:
+		a.log.Debug().
+			Str("manufacturer", manufacturer).
+			Str("model", model).
+			Uint32("carID", carID).
+			Msg("pushed vehicle info to web UI")
+	default:
+		a.log.Debug().Msg("vehicle info feed channel full, skipping push")
+	}
+}
+
+// clearVehicleInfo sends empty vehicle info to the web UI to clear the display.
+func (a *App) clearVehicleInfo() {
+	if a.webUI == nil || !a.webUI.HasActiveClients() {
+		return
+	}
+
+	vehicleInfo := map[string]interface{}{
+		"manufacturer": "",
+		"model":        "",
+		"carID":        uint32(0),
+	}
+
+	select {
+	case a.vehicleInfoFeed <- vehicleInfo:
+		a.log.Debug().Msg("cleared vehicle info in web UI")
+	default:
+		a.log.Debug().Msg("vehicle info feed channel full, skipping clear")
+	}
+}
+
+// pushCircuitInfo sends the current circuit details to the web UI.
+func (a *App) pushCircuitInfo() {
+	if a.webUI == nil {
+		a.log.Debug().Msg("pushCircuitInfo: webUI is nil")
+
+		return
+	}
+
+	if !a.webUI.HasActiveClients() {
+		a.log.Debug().Msg("pushCircuitInfo: no active clients")
+
+		return
+	}
+
+	circuitName := a.circuit.Name()
+	circuitVariation := a.circuit.Variation()
+	circuitCountry := a.circuit.Country()
+	circuitLength := a.circuit.LengthMeters()
+	candidateCount := a.circuit.CandidateCount()
+
+	a.log.Debug().
+		Str("name", circuitName).
+		Str("variation", circuitVariation).
+		Str("country", circuitCountry).
+		Float64("length", circuitLength).
+		Int("candidates", candidateCount).
+		Msg("pushCircuitInfo: circuit data retrieved")
+
+	// Send circuit info even if empty to indicate we're analyzing
+	circuitInfo := map[string]string{
+		"name":       circuitName,
+		"variation":  circuitVariation,
+		"country":    circuitCountry,
+		"length":     fmt.Sprintf("%.2f", circuitLength/1000.0), // Convert meters to km
+		"candidates": strconv.Itoa(candidateCount),
+	}
+
+	select {
+	case a.circuitInfoFeed <- circuitInfo:
+		a.log.Debug().Str("circuit", circuitName).Str("variation", circuitVariation).Msg("pushed circuit info to web UI")
+	default:
+		a.log.Debug().Msg("circuit info feed channel full, skipping push")
+	}
+}
+
+// clearCircuitInfo sends empty circuit info to the web UI to clear the display.
+func (a *App) clearCircuitInfo() {
+	if a.webUI == nil || !a.webUI.HasActiveClients() {
+		return
+	}
+
+	circuitInfo := map[string]string{
+		"name":      "",
+		"variation": "",
+		"country":   "",
+		"length":    "",
+	}
+
+	select {
+	case a.circuitInfoFeed <- circuitInfo:
+		a.log.Debug().Msg("cleared circuit info in web UI")
+	default:
+		a.log.Debug().Msg("circuit info feed channel full, skipping clear")
+	}
+}
+
+// handleCircuitInfoTick periodically pushes current circuit info to ensure new clients receive data.
+func (a *App) handleCircuitInfoTick() {
+	if a.webUI == nil || !a.webUI.HasActiveClients() {
+		return
+	}
+
+	// Push circuit info if we have valid data OR if telemetry is active (to show "Analyzing...")
+	if a.circuit.Name() != "" || a.circuit.Variation() != "" || (a.state.telemetryActive && a.gtClient.Telemetry.IsOnCircuit()) {
+		a.pushCircuitInfo()
+	}
+}
+
+// addLapEvent adds a new lap event to the history.
+func (a *App) addLapEvent(lap int16, lapTime time.Duration, position int16) {
+	a.lapEventsMutex.Lock()
+	defer a.lapEventsMutex.Unlock()
+
+	// Check if this lap already exists (prevent duplicates)
+	for _, existingEvent := range a.lapEvents {
+		if existingEvent.Lap == lap {
+			a.log.Debug().
+				Int16("lap", lap).
+				Msg("lap event already exists, skipping duplicate")
+
+			return
+		}
+	}
+
+	// Calculate delta from previous lap
+	var (
+		delta    time.Duration
+		hasDelta bool
+	)
+
+	// Lap 1 has no delta (no previous lap to compare to)
+
+	if lap == 1 {
+		hasDelta = false
+
+		if a.bestLapTime == 0 || lapTime < a.bestLapTime {
+			a.bestLapTime = lapTime
+		}
+	} else {
+		// Find the previous lap to calculate delta
+		var previousLapTime time.Duration
+
+		for i := len(a.lapEvents) - 1; i >= 0; i-- {
+			if a.lapEvents[i].Lap == lap-1 {
+				previousLapTime = a.lapEvents[i].LapTime
+
+				break
+			}
+		}
+
+		if previousLapTime > 0 {
+			hasDelta = true
+			delta = lapTime - previousLapTime
+		} else {
+			hasDelta = false
+		}
+
+		// Update best lap time
+		if a.bestLapTime == 0 || lapTime < a.bestLapTime {
+			a.bestLapTime = lapTime
+		}
+	}
+
+	// Add new event
+	event := lapEvent{
+		Lap:      lap,
+		LapTime:  lapTime,
+		Delta:    delta,
+		Position: position,
+		HasDelta: hasDelta,
+	}
+
+	a.lapEvents = append(a.lapEvents, event)
+
+	// Keep only last 10 laps
+	if len(a.lapEvents) > 10 {
+		a.lapEvents = a.lapEvents[len(a.lapEvents)-10:]
+	}
+
+	a.log.Debug().
+		Int16("lap", lap).
+		Dur("lapTime", lapTime).
+		Dur("delta", delta).
+		Int16("position", position).
+		Msg("added lap event")
+}
+
+// pushRaceInfo sends the current race details to the web UI.
+func (a *App) pushRaceInfo() {
+	if a.webUI == nil || !a.webUI.HasActiveClients() {
+		return
+	}
+
+	// Get race info from telemetry
+	timeOfDay := a.gtClient.Telemetry.TimeOfDay()
+	currentLap := a.state.current.lapNumber
+	raceLaps := a.gtClient.Telemetry.RaceLaps()
+	position := a.gtClient.Telemetry.GridPosition()
+	gridSize := a.gtClient.Telemetry.RaceEntrants()
+
+	// Format time of day as HH:MM:SS
+	hours := int(timeOfDay.Hours())
+	minutes := int(timeOfDay.Minutes()) % 60
+	seconds := int(timeOfDay.Seconds()) % 60
+	timeOfDayStr := fmt.Sprintf("%02d:%02d:%02d", hours, minutes, seconds)
+
+	// Get lap events
+	a.lapEventsMutex.Lock()
+
+	lapEventsData := make([]map[string]interface{}, 0, len(a.lapEvents))
+	for _, event := range a.lapEvents {
+		// Format lap time as MM:SS.mmm
+		lapTimeStr := formatLapTime(event.LapTime)
+
+		// Format delta as +/-SS.mmm or show as best lap
+		deltaStr := "-"
+
+		if event.HasDelta {
+			if event.Delta > 0 {
+				deltaStr = fmt.Sprintf("+%.3f", event.Delta.Seconds())
+			} else if event.Delta < 0 {
+				deltaStr = fmt.Sprintf("-%.3f", -event.Delta.Seconds())
+			} else {
+				// Delta == 0 means this is the best lap
+				deltaStr = "0.000"
+			}
+		}
+
+		lapEventsData = append(lapEventsData, map[string]interface{}{
+			"lap":      event.Lap,
+			"laptime":  lapTimeStr,
+			"delta":    deltaStr,
+			"position": event.Position,
+		})
+	}
+
+	a.lapEventsMutex.Unlock()
+
+	raceInfo := map[string]interface{}{
+		"timeofday":  timeOfDayStr,
+		"currentlap": strconv.Itoa(int(currentLap)),
+		"racelaps":   strconv.Itoa(int(raceLaps)),
+		"position":   strconv.Itoa(int(position)),
+		"gridsize":   strconv.Itoa(int(gridSize)),
+		"lapevents":  lapEventsData,
+	}
+
+	select {
+	case a.raceInfoFeed <- raceInfo:
+		a.log.Debug().
+			Str("timeofday", timeOfDayStr).
+			Int16("lap", currentLap).
+			Int16("race_laps", raceLaps).
+			Int("lap_events", len(lapEventsData)).
+			Msg("pushed race info to web UI")
+	default:
+		a.log.Debug().Msg("race info feed channel full, skipping push")
+	}
+}
+
+// formatLapTime formats a duration as MM:SS.mmm.
+func formatLapTime(d time.Duration) string {
+	totalSeconds := d.Seconds()
+	minutes := int(totalSeconds / 60)
+	seconds := totalSeconds - float64(minutes*60)
+
+	return fmt.Sprintf("%d:%06.3f", minutes, seconds)
+}
+
+// clearRaceInfo sends empty race info to the web UI to clear the display.
+func (a *App) clearRaceInfo() {
+	if a.webUI == nil || !a.webUI.HasActiveClients() {
+		return
+	}
+
+	// Clear lap events
+	a.lapEventsMutex.Lock()
+	a.lapEvents = nil
+	a.bestLapTime = 0
+	a.lapEventsMutex.Unlock()
+
+	raceInfo := map[string]interface{}{
+		"timeofday":  "",
+		"currentlap": "",
+		"racelaps":   "",
+		"position":   "",
+		"gridsize":   "",
+		"lapevents":  []map[string]interface{}{},
+	}
+
+	select {
+	case a.raceInfoFeed <- raceInfo:
+		a.log.Debug().Msg("cleared race info in web UI")
+	default:
+		a.log.Debug().Msg("race info feed channel full, skipping clear")
+	}
 }

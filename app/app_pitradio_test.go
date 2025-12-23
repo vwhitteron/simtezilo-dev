@@ -106,6 +106,9 @@ var _ circuit.Manager = (*circuitMock)(nil)
 func (m *circuitMock) Reset()                {}
 func (m *circuitMock) ResetLapProgress()     {}
 func (m *circuitMock) Name() string          { return m.name }
+func (m *circuitMock) Variation() string     { return "" }
+func (m *circuitMock) Country() string       { return "" }
+func (m *circuitMock) CandidateCount() int   { return 0 }
 func (m *circuitMock) LengthMeters() float64 { return m.lengthMeters }
 
 func (m *circuitMock) LapProgress() float64 {

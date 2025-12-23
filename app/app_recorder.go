@@ -28,6 +28,11 @@ type recordingState struct {
 
 // detectRecordingTrigger processes high beam state changes and triggers recording when toggled 3 times quickly.
 func (a *App) detectRecordingTrigger() {
+	// Ignore recording triggers for replays
+	if !a.gtClient.Telemetry.Flags().Live {
+		return
+	}
+
 	currentTriggerState := a.gtClient.Telemetry.Flags().HighBeamActive
 	currentSequenceID := a.state.current.sequenceNumber
 

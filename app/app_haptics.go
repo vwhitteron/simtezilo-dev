@@ -54,6 +54,11 @@ func (a *App) generateForceHaptics() {
 		a.enableHaptics()
 	}
 
+	// Push circuit info to show "Analyzing..." state if circuit not yet matched
+	if a.circuit.Name() == "" && a.circuit.Variation() == "" {
+		a.pushCircuitInfo()
+	}
+
 	// a.ui.SetLive(true)
 
 	a.kinematics.Current.SequenceID = a.state.current.sequenceNumber

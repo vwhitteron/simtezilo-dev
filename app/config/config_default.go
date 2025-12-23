@@ -16,13 +16,6 @@ func defaultConfig() *viperConfig {
 			WebUIEnabled:  true,
 			WebUIPort:     80,
 		},
-		Discord: &discord{
-			Enabled:        false,
-			Token:          "",
-			GuildID:        "",
-			ChannelID:      "",
-			VoiceChannelID: "",
-		},
 		Fuel: &fuel{
 			MonitoringEnabled:       true,
 			PreWarnNotifyLaps:       2.0,
@@ -90,6 +83,12 @@ func defaultConfig() *viperConfig {
 		PitRadio: &pitRadio{
 			Enabled:               false,
 			MessageSendIntervalMs: 2000,
+			Discord: &discord{
+				Token:          "",
+				GuildID:        "",
+				ChannelID:      "",
+				VoiceChannelID: "",
+			},
 		},
 		Synthesizer: &Synthesizer{
 			InternalSampleRateHz:      8000,

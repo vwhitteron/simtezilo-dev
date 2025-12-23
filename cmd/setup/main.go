@@ -194,6 +194,43 @@ func newManager(logLevel zerolog.Level) *manager {
 	return &mgr
 }
 
+func (m *manager) isNetworkManagerReady() bool {
+	_, err := gonetworkmanager.NewNetworkManager()
+
+	return err == nil
+}
+
+func (m *manager) waitForNetworkManager() (ok bool) {
+	const (
+		maxWaitAttempts = 30
+		waitInterval    = 1 * time.Second
+	)
+
+	for attempt := 1; attempt <= maxWaitAttempts; attempt++ {
+		if m.isNetworkManagerReady() {
+			m.log.Debug().Int("attempt", attempt).Msg("NetworkManager is ready")
+
+			return true
+		}
+
+		if attempt == maxWaitAttempts {
+			errMsg := "NetworkManager not available after waiting"
+			m.log.Error().Msg(errMsg)
+			outputJSON(map[string]any{
+				"error":  errMsg,
+				"result": setupmode.ResultFailure,
+			})
+
+			return false
+		}
+
+		m.log.Debug().Int("attempt", attempt).Int("max_attempts", maxWaitAttempts).Msg("Waiting for NetworkManager to start")
+		time.Sleep(waitInterval)
+	}
+
+	return true
+}
+
 func (m *manager) status() exitcode.Code {
 	status := setupmode.CmdStatus{
 		Available:        true,
@@ -202,6 +239,7 @@ func (m *manager) status() exitcode.Code {
 		RunModePresent:   false,
 		SetupModePresent: false,
 		SetupRequired:    true,
+		Ready:            m.isNetworkManagerReady(),
 	}
 
 	// Check if setup mode flag file exists
@@ -214,7 +252,7 @@ func (m *manager) status() exitcode.Code {
 
 	connections, err := m.getConnections()
 	if err != nil {
-		errMsg := "failed to get network connections"
+		errMsg := "failed to get network connections: " + err.Error()
 		m.log.Error().Err(err).Msg(errMsg)
 		outputJSON(map[string]any{
 			"error":  errMsg,
@@ -258,6 +296,10 @@ func (m *manager) status() exitcode.Code {
 }
 
 func (m *manager) init() exitcode.Code {
+	if ok := m.waitForNetworkManager(); !ok {
+		return exitcode.GeneralErr
+	}
+
 	connections, err := m.getConnections()
 	if err != nil {
 		errMsg := "failed to get network connections"
@@ -306,6 +348,10 @@ func (m *manager) init() exitcode.Code {
 }
 
 func (m *manager) reset() exitcode.Code {
+	if ok := m.waitForNetworkManager(); !ok {
+		return exitcode.GeneralErr
+	}
+
 	err := m.deleteConnectionProfile(setupModeProfile)
 	if err != nil {
 		m.log.Warn().Err(err).Msgf("Failed to delete %s connection", setupModeProfile)
@@ -370,6 +416,10 @@ func (m *manager) enableSetupModeFlag() exitcode.Code {
 }
 
 func (m *manager) enterRunMode() exitcode.Code {
+	if ok := m.waitForNetworkManager(); !ok {
+		return exitcode.GeneralErr
+	}
+
 	err := m.activateConnection(runModeProfile)
 	if err != nil {
 		errMsg := "failed to activate RunMode connection"
@@ -394,6 +444,10 @@ func (m *manager) enterRunMode() exitcode.Code {
 }
 
 func (m *manager) enterSetupMode() exitcode.Code {
+	if ok := m.waitForNetworkManager(); !ok {
+		return exitcode.GeneralErr
+	}
+
 	err := m.activateConnection(setupModeProfile)
 	if err != nil {
 		errMsg := "failed to activate SetupMode connection"
@@ -405,6 +459,9 @@ func (m *manager) enterSetupMode() exitcode.Code {
 
 		return exitcode.GeneralErr
 	}
+
+	// Give some time for the new connection to stabilize
+	time.Sleep(2 * time.Second)
 
 	// Start dnsmasq service when entering setup mode
 	err = m.controlDNSMasq(dnsmasqStart)
@@ -429,6 +486,10 @@ func (m *manager) provisionSetupModeConnection() error {
 }
 
 func (m *manager) provisionRunModeConnection() exitcode.Code {
+	if ok := m.waitForNetworkManager(); !ok {
+		return exitcode.GeneralErr
+	}
+
 	// Read JSON from stdin
 	var inputConfig []struct {
 		SSID     string `json:"ssid"`     //nolint:tagliatelle // lowercase for easier compatibility
@@ -501,6 +562,10 @@ func (m *manager) provisionRunModeConnection() exitcode.Code {
 }
 
 func (m *manager) scanWiFi() exitcode.Code {
+	if ok := m.waitForNetworkManager(); !ok {
+		return exitcode.GeneralErr
+	}
+
 	networks, err := m.getAvailableNetworks()
 	if err != nil {
 		errMsg := "failed to scan WiFi networks"
@@ -522,6 +587,10 @@ func (m *manager) scanWiFi() exitcode.Code {
 }
 
 func (m *manager) wifiDetails() exitcode.Code {
+	if ok := m.waitForNetworkManager(); !ok {
+		return exitcode.GeneralErr
+	}
+
 	connections, err := m.getConnections()
 	if err != nil {
 		errMsg := "failed to get connections"
@@ -547,16 +616,6 @@ func (m *manager) wifiDetails() exitcode.Code {
 		return exitcode.GeneralErr
 	}
 
-	// Return SSID, PSK, and Security from setupModeConfig
-	// outputJSON(map[string]any{
-	// 	"result": setupmode.ResultSuccess,
-	// 	"wifi": map[string]string{
-	// 		"ssid":     m.setupModeConfig.ssid,
-	// 		"psk":      m.setupModeConfig.psk,
-	// 		"security": m.setupModeConfig.security,
-	// 	},
-	// })
-
 	outputJSON(setupmode.CmdResponse{
 		Result: setupmode.ResultSuccess,
 		WiFi: &setupmode.CmdNetworkInfo{
@@ -569,6 +628,37 @@ func (m *manager) wifiDetails() exitcode.Code {
 	return exitcode.Success
 }
 
+func (m *manager) getConnectionsFromFiles() map[string]bool {
+	const connectionDir = "/etc/NetworkManager/system-connections"
+
+	connections := make(map[string]bool)
+
+	// Read all files in the connection directory
+	entries, err := os.ReadDir(connectionDir)
+	if err != nil {
+		m.log.Debug().Err(err).Str("dir", connectionDir).Msg("Failed to read connection directory")
+
+		return connections
+	}
+
+	// Find all .nmconnection files
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		filename := entry.Name()
+		if strings.HasSuffix(filename, ".nmconnection") {
+			// Strip the .nmconnection extension
+			connName := strings.TrimSuffix(filename, ".nmconnection")
+			m.log.Debug().Str("file", filename).Str("connection", connName).Msg("Found connection file")
+			connections[connName] = false // Cannot determine if active from file
+		}
+	}
+
+	return connections
+}
+
 func (m *manager) getConnections() (map[string]bool, error) {
 	// Check if RunMode connection exists
 	settings, err := gonetworkmanager.NewSettings()
@@ -578,7 +668,15 @@ func (m *manager) getConnections() (map[string]bool, error) {
 
 	connections, err := settings.ListConnections()
 	if err != nil {
-		return map[string]bool{}, fmt.Errorf("list connections: %w", err)
+		// Fall back to checking files if NetworkManager is not fully ready
+		m.log.Debug().Err(err).Msg("NetworkManager not ready, checking connection files")
+
+		fileConnections := m.getConnectionsFromFiles()
+		if len(fileConnections) == 0 {
+			return map[string]bool{}, nil
+		}
+
+		return fileConnections, nil
 	}
 
 	// Get active connections
@@ -776,15 +874,15 @@ func (m *manager) saveNetworkConfiguration(config networkConfig) error {
 		return fmt.Errorf("invalid IP configuration: %w", err)
 	}
 
-	err = m.backupConnectionProfile(m.runModeProfile)
+	err = m.backupConnectionProfile(config.name)
 	if err != nil {
-		log.Warn().Err(err).Msg("Failed to backup existing RunMode connection")
+		log.Warn().Err(err).Msg("Failed to backup existing connection")
 	}
 
-	// Delete any existing RunMode connection
-	err = m.deleteConnectionProfile(m.runModeProfile)
+	// Delete any existing connection
+	err = m.deleteConnectionProfile(config.name)
 	if err != nil {
-		m.restoreConnectionProfile(m.runModeProfile)
+		m.restoreConnectionProfile(config.name)
 
 		return fmt.Errorf("delete existing connection: %w", err)
 	}
@@ -792,7 +890,7 @@ func (m *manager) saveNetworkConfiguration(config networkConfig) error {
 	// Build connection settings
 	settings := gonetworkmanager.ConnectionSettings{
 		"connection": map[string]interface{}{
-			"id":             runModeProfile,
+			"id":             config.name,
 			"type":           "802-11-wireless",
 			"interface-name": wlanInterface,
 			"autoconnect":    config.autoconnect,
@@ -848,17 +946,33 @@ func (m *manager) saveNetworkConfiguration(config networkConfig) error {
 			}
 		}
 
-		settings["ipv4"] = map[string]any{
+		// Convert prefix from string to uint32
+		var prefixUint uint32
+		if _, err := fmt.Sscanf(config.prefix, "%d", &prefixUint); err != nil {
+			return fmt.Errorf("invalid prefix format: %w", err)
+		}
+
+		ipv4Settings := map[string]any{
 			"method": "manual",
 			"address-data": []map[string]any{
 				{
 					"address": config.ipAddr,
-					"prefix":  config.prefix,
+					"prefix":  prefixUint,
 				},
 			},
-			"gateway": config.gateway,
-			"dns":     dnsAddr,
 		}
+
+		// Only add gateway if non-empty
+		if config.gateway != "" {
+			ipv4Settings["gateway"] = config.gateway
+		}
+
+		// Only add DNS if there are servers
+		if len(dnsAddr) > 0 {
+			ipv4Settings["dns"] = dnsAddr
+		}
+
+		settings["ipv4"] = ipv4Settings
 	} else {
 		settings["ipv4"] = map[string]any{
 			"method": "auto",
@@ -868,24 +982,27 @@ func (m *manager) saveNetworkConfiguration(config networkConfig) error {
 	// Add the connection
 	settingsObj, err := gonetworkmanager.NewSettings()
 	if err != nil {
-		m.restoreConnectionProfile(m.runModeProfile)
+		m.restoreConnectionProfile(config.name)
 
 		return fmt.Errorf("get network settings: %w", err)
 	}
 
 	_, err = settingsObj.AddConnection(settings)
 	if err != nil {
-		m.restoreConnectionProfile(m.runModeProfile)
+		m.restoreConnectionProfile(config.name)
 
 		return fmt.Errorf("add connection: %w", err)
 	}
 
-	// Switch from SetupMode to RunMode
-	err = m.activateConnection(runModeProfile)
-	if err != nil {
-		m.restoreConnectionProfile(m.runModeProfile)
+	// Only activate and switch if this is RunMode configuration
+	if config.name == runModeProfile {
+		// Switch from SetupMode to RunMode
+		err = m.activateConnection(runModeProfile)
+		if err != nil {
+			m.restoreConnectionProfile(config.name)
 
-		return fmt.Errorf("switch to run mode: %w", err)
+			return fmt.Errorf("switch to run mode: %w", err)
+		}
 	}
 
 	return nil

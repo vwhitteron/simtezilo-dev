@@ -26,7 +26,7 @@ function createNavigation(currentPage) {
                 <div class="collapse navbar-collapse" id="navbar-collapse-1">
                     <ul class="navbar-nav me-auto mb-2 mb-lg-0">
                         <li class="nav-item dropdown">
-                            <a class="nav-link dropdown-toggle${telemetryActive ? ' active' : ''}"${telemetryActive ? ' aria-current="page"' : ''} href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <a class="nav-link dropdown-toggle${telemetryActive ? ' active' : ''}"${telemetryActive ? ' aria-current="page"' : ''} href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false" data-i18n="runmode.nav.telemetry">
                                 Telemetry
                             </a>
                             <ul class="dropdown-menu mt-lg-2 rounded-top-0">`;
@@ -49,24 +49,30 @@ function createNavigation(currentPage) {
                         </li>`;
     });
 
+    // Add Info nav item with popover
+    navHTML += `
+                        <li class="nav-item">
+                            <a class="nav-link" href="#" id="info-nav-link" data-i18n="runmode.nav.info">Info</a>
+                        </li>`;
+
     navHTML += `
                     </ul>`;
 
-    // Add status spinner at the far right
+    // Add status indicators at the far right
     navHTML += `
                     <div class="d-flex align-items-center me-3">`;
 
-    // Add connection status if it exists in the current page
-    if (typeof connectionStatusHTML !== 'undefined') {
-        navHTML += `
-                        ${connectionStatusHTML}`;
-    }
-
-    // Add config status spinner
+    // Add restart required indicator
     navHTML += `
-                        <div id="nav-status-indicator" class="d-flex align-items-center ms-3" style="display: none !important;">
+                        <div id="restart-required-indicator" style="color: #ff4d4d; font-weight: 600; font-size: 0.875rem; white-space: nowrap; display: none; margin-right: 1rem;">
+                            <span data-i18n="runmode.settings.restart.required">Restart Required</span>
+                        </div>`;
+
+    // Add unified status indicator (used for both telemetry connection and settings save status)
+    navHTML += `
+                        <div id="nav-status-indicator" class="d-flex align-items-center justify-content-center" style="width: 24px; height: 24px; visibility: hidden;">
                             <div id="nav-spinner" class="spinner-border spinner-border-sm text-warning" role="status" style="display: none;">
-                                <span class="visually-hidden">Saving...</span>
+                                <span class="visually-hidden">Loading...</span>
                             </div>
                             <i id="nav-success-icon" class="fas fa-circle-check text-success" style="display: none; font-size: 1.25rem;"></i>
                             <i id="nav-error-icon" class="fas fa-circle-xmark text-danger" style="display: none; font-size: 1.25rem;"></i>
@@ -95,9 +101,8 @@ window.showNavbarStatus = function (type) {
     successIcon.style.display = 'none';
     errorIcon.style.display = 'none';
 
-    // Show the container
-    indicator.style.display = 'flex !important';
-    indicator.style.removeProperty('display');
+    // Show the container (make visible)
+    indicator.style.visibility = 'visible';
 
     // Show appropriate indicator
     switch (type) {
@@ -124,7 +129,7 @@ window.hideNavbarStatus = function () {
     const errorIcon = document.getElementById('nav-error-icon');
 
     if (indicator) {
-        indicator.style.display = 'none';
+        indicator.style.visibility = 'hidden';
     }
 
     // Also hide individual icons
@@ -139,6 +144,95 @@ document.addEventListener('DOMContentLoaded', function () {
     if (navContainer && typeof currentPageId !== 'undefined') {
         // Create navigation immediately with fallback text
         navContainer.innerHTML = createNavigation(currentPageId);
+
+        // Add popover element to body if not exists
+        if (!document.getElementById('info-popover')) {
+            const popover = document.createElement('div');
+            popover.id = 'info-popover';
+            popover.className = 'card shadow-lg';
+            popover.style.cssText = 'position: absolute; display: none; z-index: 9999; min-width: 280px;';
+            popover.innerHTML = `
+                <div class="card-body">
+                    <div class="mb-2">
+                        <small class="text-muted" data-i18n="runmode.info.version">Version:</small>
+                        <div id="info-version" class="fw-semibold">-</div>
+                    </div>
+                    <div class="mb-2">
+                        <small class="text-muted" data-i18n="runmode.info.buildDate">Build Date:</small>
+                        <div id="info-build-date" class="fw-semibold">-</div>
+                    </div>
+                    <div class="mb-2">
+                        <small class="text-muted" data-i18n="runmode.info.targetPlatform">Target Platform:</small>
+                        <div id="info-build-platform" class="fw-semibold">-</div>
+                    </div>
+                    <div class="mb-0">
+                        <small class="text-muted" data-i18n="runmode.info.hardware">Hardware:</small>
+                        <div id="info-hardware" class="fw-semibold">-</div>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(popover);
+        }
+
+        // Handle Info nav link click
+        const infoLink = document.getElementById('info-nav-link');
+        const popover = document.getElementById('info-popover');
+        let popoverVisible = false;
+
+        if (infoLink && popover) {
+            infoLink.addEventListener('click', function (e) {
+                e.preventDefault();
+
+                if (popoverVisible) {
+                    popover.style.display = 'none';
+                    popoverVisible = false;
+                } else {
+                    // Position popover below the nav link
+                    const rect = infoLink.getBoundingClientRect();
+                    popover.style.left = rect.left + 'px';
+                    popover.style.top = (rect.bottom + 5) + 'px';
+                    popover.style.display = 'block';
+                    popoverVisible = true;
+
+                    // Fetch and populate system info
+                    fetch('/api/system/info')
+                        .then(response => response.json())
+                        .then(data => {
+                            document.getElementById('info-version').textContent = data.version || '-';
+                            document.getElementById('info-build-date').textContent = data.buildTime || '-';
+                            document.getElementById('info-build-platform').textContent = data.buildPlatform || '-';
+                            document.getElementById('info-hardware').textContent = data.hardware || '-';
+                        })
+                        .catch(error => console.error('Failed to fetch system info:', error));
+                }
+            });
+
+            // Close popover when clicking outside
+            document.addEventListener('click', function (e) {
+                if (popoverVisible && !popover.contains(e.target) && e.target !== infoLink) {
+                    popover.style.display = 'none';
+                    popoverVisible = false;
+                }
+            });
+        }
+
+        // Check config status from backend if on settings page
+        if (currentPageId === 'settings' && typeof window.configManager !== 'undefined') {
+            // Config manager will handle showing restart indicator via status polling
+        } else {
+            // For other pages, check backend status once
+            fetch('/api/config/status')
+                .then(response => response.ok ? response.json() : null)
+                .then(status => {
+                    if (status && status.restartRequired) {
+                        const indicator = document.getElementById('restart-required-indicator');
+                        if (indicator) {
+                            indicator.style.display = 'inline-block';
+                        }
+                    }
+                })
+                .catch(error => console.error('Failed to check config status:', error));
+        }
 
         // Apply translations when i18n loads
         if (typeof i18nLoaded !== 'undefined' && i18nLoaded && typeof applyTranslations === 'function') {

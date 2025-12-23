@@ -2,21 +2,28 @@
 package webui
 
 import (
+	"bytes"
 	"embed"
 	"encoding/json"
 	"fmt"
+	"io"
 	"mime"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/pelletier/go-toml/v2"
 	"github.com/rs/zerolog"
+	"github.com/spf13/viper"
 	"github.com/vwhitteron/simtezilo-dev/app/config"
 	"github.com/vwhitteron/simtezilo-dev/app/exitcode"
+	appHaptics "github.com/vwhitteron/simtezilo-dev/app/haptics"
+	"github.com/vwhitteron/simtezilo-dev/app/hardware"
 	"github.com/vwhitteron/simtezilo-dev/app/logstore"
 )
 
@@ -26,37 +33,94 @@ type WebUI struct {
 	port               int
 	webSocketClients   int
 	telemetryChartFeed chan map[string]float32
+	vehicleInfoFeed    chan map[string]interface{}
+	currentVehicleInfo map[string]interface{}
+	vehicleInfoMutex   sync.RWMutex
+	vehicleClients     []*websocket.Conn
+	vehicleClientsChan chan *websocket.Conn
+	vehicleUnsubChan   chan *websocket.Conn
+	circuitInfoFeed    chan map[string]string
+	currentCircuitInfo map[string]string
+	circuitInfoMutex   sync.RWMutex
+	circuitClients     []*websocket.Conn
+	circuitClientsChan chan *websocket.Conn
+	circuitUnsubChan   chan *websocket.Conn
+	raceInfoFeed       chan map[string]interface{}
+	currentRaceInfo    map[string]interface{}
+	raceInfoMutex      sync.RWMutex
+	raceClients        []*websocket.Conn
+	raceClientsChan    chan *websocket.Conn
+	raceUnsubChan      chan *websocket.Conn
 	config             *config.Config
 	upgrader           websocket.Upgrader
 	shutdownChan       chan exitcode.Code
 	setupModeEnabled   bool
 	logStore           *logstore.Store
+	buildVersion       string
+	buildTime          string
+	buildPlatform      string
 }
 
 type Config struct {
 	Log                zerolog.Logger
 	Port               int
 	TelemetryChartFeed chan map[string]float32
+	VehicleInfoFeed    chan map[string]interface{}
+	CircuitInfoFeed    chan map[string]string
+	RaceInfoFeed       chan map[string]interface{}
 	Config             *config.Config
 	ShutdownChan       chan exitcode.Code
 	SetupModeAvailable bool
 	LogStore           *logstore.Store
+	BuildVersion       string
+	BuildTime          string
+	BuildPlatform      string
 }
 
 // New creates a new instance of the WebUI.
 func New(config Config) *WebUI {
-	return &WebUI{
+	webUI := &WebUI{
 		log:                config.Log.With().Str("component", "web ui").Logger(),
 		port:               config.Port,
 		webSocketClients:   0,
 		telemetryChartFeed: config.TelemetryChartFeed,
+		vehicleInfoFeed:    config.VehicleInfoFeed,
+		currentVehicleInfo: make(map[string]interface{}),
+		vehicleClients:     make([]*websocket.Conn, 0),
+		vehicleClientsChan: make(chan *websocket.Conn, 10),
+		vehicleUnsubChan:   make(chan *websocket.Conn, 10),
+		circuitInfoFeed:    config.CircuitInfoFeed,
+		currentCircuitInfo: make(map[string]string),
+		circuitClients:     make([]*websocket.Conn, 0),
+		circuitClientsChan: make(chan *websocket.Conn, 10),
+		circuitUnsubChan:   make(chan *websocket.Conn, 10),
+		raceInfoFeed:       config.RaceInfoFeed,
+		currentRaceInfo:    make(map[string]interface{}),
+		raceClients:        make([]*websocket.Conn, 0),
+		raceClientsChan:    make(chan *websocket.Conn, 10),
+		raceUnsubChan:      make(chan *websocket.Conn, 10),
 		config:             config.Config,
 		upgrader: websocket.Upgrader{
 			CheckOrigin: func(_ *http.Request) bool { return true },
 		},
 		shutdownChan:     config.ShutdownChan,
-		setupModeEnabled: config.SetupModeAvailable, logStore: config.LogStore,
+		setupModeEnabled: config.SetupModeAvailable,
+		logStore:         config.LogStore,
+		buildVersion:     config.BuildVersion,
+		buildTime:        config.BuildTime,
+		buildPlatform:    config.BuildPlatform,
 	}
+
+	// Start vehicle info broadcaster
+	go webUI.vehicleInfoBroadcaster()
+
+	// Start circuit info broadcaster
+	go webUI.circuitInfoBroadcaster()
+
+	// Start race info broadcaster
+	go webUI.raceInfoBroadcaster()
+
+	return webUI
 }
 
 // GetHTTPHandler returns the HTTP handler for the web UI.
@@ -68,11 +132,18 @@ func (w *WebUI) GetHTTPHandler() http.Handler {
 	mux.HandleFunc("/images/", w.imagesHandlerFunc())
 	mux.HandleFunc("/js/", w.sciChartJSHandlerFunc())
 	mux.HandleFunc("/ws", w.handleWebSocketConnection)
+	mux.HandleFunc("/ws/vehicle", w.handleVehicleWebSocketConnection)
+	mux.HandleFunc("/ws/circuit", w.handleCircuitWebSocketConnection)
+	mux.HandleFunc("/ws/race", w.handleRaceWebSocketConnection)
 	mux.HandleFunc("/api/config", w.handleConfigAPI)
+	mux.HandleFunc("/api/config/status", w.handleConfigStatus)
 	mux.HandleFunc("/api/config/reset", w.handleConfigReset)
+	mux.HandleFunc("/api/config/export", w.handleConfigExport)
+	mux.HandleFunc("/api/config/import", w.handleConfigImport)
 	mux.HandleFunc("/api/i18n", w.handleI18nAPI)
 	mux.HandleFunc("/api/languages", w.handleLanguagesAPI)
 	mux.HandleFunc("/api/logs", w.handleLogsAPI)
+	mux.HandleFunc("/api/system/info", w.handleSystemInfo)
 
 	if w.setupModeEnabled {
 		mux.HandleFunc("/api/restart", w.handleRestart)
@@ -87,7 +158,7 @@ func (w *WebUI) GetHTTPHandler() http.Handler {
 
 // HasActiveClients returns true if there are active WebSocket clients connected.
 func (w *WebUI) HasActiveClients() bool {
-	return w.webSocketClients > 0
+	return w.webSocketClients > 0 || len(w.vehicleClients) > 0 || len(w.circuitClients) > 0 || len(w.raceClients) > 0
 }
 
 //go:embed html/*
@@ -236,6 +307,385 @@ func (w *WebUI) handleWebSocketConnection(response http.ResponseWriter, request 
 	}
 }
 
+// handleVehicleWebSocketConnection upgrades the HTTP connection to a WebSocket and streams vehicle info updates.
+func (w *WebUI) handleVehicleWebSocketConnection(response http.ResponseWriter, request *http.Request) {
+	webSocket, err := w.upgrader.Upgrade(response, request, nil)
+	if err != nil {
+		w.log.Error().Err(err).Msg("error upgrading vehicle websocket connection")
+
+		return
+	}
+
+	w.log.Debug().Msg("vehicle websocket connection established")
+
+	// Subscribe this client
+	w.vehicleClientsChan <- webSocket
+
+	defer func() {
+		// Unsubscribe on disconnect
+		w.vehicleUnsubChan <- webSocket
+
+		err := webSocket.Close()
+		if err != nil {
+			w.log.Error().Err(err).Msg("closing vehicle websocket connection")
+		}
+	}()
+
+	// Send current vehicle info immediately (with mutex protection)
+	w.vehicleInfoMutex.RLock()
+
+	if len(w.currentVehicleInfo) > 0 {
+		encodedData, err := json.Marshal(w.currentVehicleInfo)
+		w.vehicleInfoMutex.RUnlock()
+
+		if err == nil {
+			err = webSocket.WriteMessage(websocket.TextMessage, encodedData)
+			if err != nil {
+				w.log.Debug().Err(err).Msg("failed to send initial vehicle info")
+			} else {
+				w.log.Debug().Msg("sent initial vehicle info to new client")
+			}
+		}
+	} else {
+		w.vehicleInfoMutex.RUnlock()
+	}
+
+	// Keep connection alive - read messages (if any) to detect disconnects
+	for {
+		_, _, err := webSocket.ReadMessage()
+		if err != nil {
+			w.log.Debug().Err(err).Msg("vehicle websocket read error, closing connection")
+
+			break
+		}
+	}
+}
+
+// vehicleInfoBroadcaster manages vehicle info broadcasting to all connected clients.
+func (w *WebUI) vehicleInfoBroadcaster() {
+	for {
+		select {
+		case client := <-w.vehicleClientsChan:
+			// Add new client
+			w.vehicleClients = append(w.vehicleClients, client)
+			w.log.Debug().Int("vehicle_clients", len(w.vehicleClients)).Msg("vehicle client subscribed")
+
+		case client := <-w.vehicleUnsubChan:
+			// Remove client
+			for i, c := range w.vehicleClients {
+				if c == client {
+					w.vehicleClients = append(w.vehicleClients[:i], w.vehicleClients[i+1:]...)
+
+					break
+				}
+			}
+
+			w.log.Debug().Int("vehicle_clients", len(w.vehicleClients)).Msg("vehicle client unsubscribed")
+
+		case vehicleInfo := <-w.vehicleInfoFeed:
+			// Store current state with mutex protection
+			w.vehicleInfoMutex.Lock()
+			w.currentVehicleInfo = vehicleInfo
+			w.vehicleInfoMutex.Unlock()
+
+			// Broadcast to all connected clients
+			encodedData, err := json.Marshal(vehicleInfo)
+			if err != nil {
+				w.log.Error().Err(err).Msg("failed to encode vehicle info JSON")
+
+				continue
+			}
+
+			// Send to all clients, remove failed ones
+			activeClients := make([]*websocket.Conn, 0, len(w.vehicleClients))
+			for _, client := range w.vehicleClients {
+				err := client.WriteMessage(websocket.TextMessage, encodedData)
+				if err != nil {
+					w.log.Debug().Err(err).Msg("failed to send vehicle info to client, removing")
+
+					_ = client.Close()
+				} else {
+					activeClients = append(activeClients, client)
+				}
+			}
+
+			w.vehicleClients = activeClients
+
+			if len(vehicleInfo) > 0 {
+				manufacturer, _ := vehicleInfo["manufacturer"].(string)
+				model, _ := vehicleInfo["model"].(string)
+				carID, _ := vehicleInfo["carID"].(uint32)
+
+				w.log.Debug().
+					Str("manufacturer", manufacturer).
+					Str("model", model).
+					Uint32("carID", carID).
+					Int("clients", len(w.vehicleClients)).
+					Msg("broadcast vehicle info")
+			}
+		}
+	}
+}
+
+// handleCircuitWebSocketConnection upgrades the HTTP connection to a WebSocket and streams circuit info updates.
+func (w *WebUI) handleCircuitWebSocketConnection(response http.ResponseWriter, request *http.Request) {
+	webSocket, err := w.upgrader.Upgrade(response, request, nil)
+	if err != nil {
+		w.log.Error().Err(err).Msg("error upgrading circuit websocket connection")
+
+		return
+	}
+
+	w.log.Debug().Msg("circuit websocket connection established")
+
+	// Subscribe this client
+	w.circuitClientsChan <- webSocket
+
+	defer func() {
+		// Unsubscribe on disconnect
+		w.circuitUnsubChan <- webSocket
+
+		err := webSocket.Close()
+		if err != nil {
+			w.log.Error().Err(err).Msg("closing circuit websocket connection")
+		}
+	}()
+
+	// Send current circuit info immediately (with mutex protection)
+	w.circuitInfoMutex.RLock()
+
+	if len(w.currentCircuitInfo) > 0 {
+		encodedData, err := json.Marshal(w.currentCircuitInfo)
+		w.circuitInfoMutex.RUnlock()
+
+		if err == nil {
+			err = webSocket.WriteMessage(websocket.TextMessage, encodedData)
+			if err != nil {
+				w.log.Debug().Err(err).Msg("failed to send initial circuit info")
+			} else {
+				w.log.Debug().Msg("sent initial circuit info to new client")
+			}
+		}
+	} else {
+		w.circuitInfoMutex.RUnlock()
+	}
+
+	// Keep connection alive - read messages (if any) to detect disconnects
+	for {
+		_, _, err := webSocket.ReadMessage()
+		if err != nil {
+			w.log.Debug().Err(err).Msg("circuit websocket read error, closing connection")
+
+			break
+		}
+	}
+}
+
+// handleRaceWebSocketConnection handles WebSocket connections for race info updates.
+func (w *WebUI) handleRaceWebSocketConnection(response http.ResponseWriter, request *http.Request) {
+	webSocket, err := w.upgrader.Upgrade(response, request, nil)
+	if err != nil {
+		w.log.Error().Err(err).Msg("error upgrading race websocket connection")
+
+		return
+	}
+
+	w.log.Debug().Msg("race websocket connection established")
+
+	// Subscribe this client
+	w.raceClientsChan <- webSocket
+
+	defer func() {
+		// Unsubscribe on disconnect
+		w.raceUnsubChan <- webSocket
+
+		err := webSocket.Close()
+		if err != nil {
+			w.log.Error().Err(err).Msg("closing race websocket connection")
+		}
+	}()
+
+	// Send current race info immediately (with mutex protection)
+	w.raceInfoMutex.RLock()
+
+	if len(w.currentRaceInfo) > 0 {
+		encodedData, err := json.Marshal(w.currentRaceInfo)
+		w.raceInfoMutex.RUnlock()
+
+		if err == nil {
+			err = webSocket.WriteMessage(websocket.TextMessage, encodedData)
+			if err != nil {
+				w.log.Debug().Err(err).Msg("failed to send initial race info")
+			} else {
+				w.log.Debug().Msg("sent initial race info to new client")
+			}
+		}
+	} else {
+		w.raceInfoMutex.RUnlock()
+	}
+
+	// Keep connection alive - read messages (if any) to detect disconnects
+	for {
+		_, _, err := webSocket.ReadMessage()
+		if err != nil {
+			w.log.Debug().Err(err).Msg("race websocket read error, closing connection")
+
+			break
+		}
+	}
+}
+
+// circuitInfoBroadcaster manages circuit info broadcasting to all connected clients.
+func (w *WebUI) circuitInfoBroadcaster() {
+	for {
+		select {
+		case client := <-w.circuitClientsChan:
+			// Add new client
+			w.circuitClients = append(w.circuitClients, client)
+			w.log.Debug().Int("circuit_clients", len(w.circuitClients)).Msg("circuit client subscribed")
+
+		case client := <-w.circuitUnsubChan:
+			// Remove client
+			for i, c := range w.circuitClients {
+				if c == client {
+					w.circuitClients = append(w.circuitClients[:i], w.circuitClients[i+1:]...)
+
+					break
+				}
+			}
+
+			w.log.Debug().Int("circuit_clients", len(w.circuitClients)).Msg("circuit client unsubscribed")
+
+		case circuitInfo := <-w.circuitInfoFeed:
+			w.log.Debug().
+				Interface("circuitInfo", circuitInfo).
+				Int("num_clients", len(w.circuitClients)).
+				Msg("circuitInfoBroadcaster: received circuit info")
+
+			// Store current state with mutex protection
+			w.circuitInfoMutex.Lock()
+			w.currentCircuitInfo = circuitInfo
+			w.circuitInfoMutex.Unlock()
+
+			// Broadcast to all connected clients
+			encodedData, err := json.Marshal(circuitInfo)
+			if err != nil {
+				w.log.Error().Err(err).Msg("failed to encode circuit info JSON")
+
+				continue
+			}
+
+			w.log.Debug().
+				Str("json_data", string(encodedData)).
+				Msg("circuitInfoBroadcaster: marshaled JSON")
+
+			// Send to all clients, remove failed ones
+			activeClients := make([]*websocket.Conn, 0, len(w.circuitClients))
+			for _, client := range w.circuitClients {
+				err := client.WriteMessage(websocket.TextMessage, encodedData)
+				if err != nil {
+					w.log.Debug().Err(err).Msg("failed to send circuit info to client, removing")
+
+					_ = client.Close()
+				} else {
+					activeClients = append(activeClients, client)
+				}
+			}
+
+			w.circuitClients = activeClients
+
+			if len(circuitInfo) > 0 {
+				w.log.Debug().
+					Str("circuit", circuitInfo["name"]).
+					Str("variation", circuitInfo["variation"]).
+					Int("clients", len(w.circuitClients)).
+					Msg("broadcast circuit info")
+			}
+		}
+	}
+}
+
+// raceInfoBroadcaster listens for race info updates and broadcasts them to all connected clients.
+func (w *WebUI) raceInfoBroadcaster() {
+	for {
+		select {
+		case client := <-w.raceClientsChan:
+			// Add new client
+			w.raceClients = append(w.raceClients, client)
+			w.log.Debug().Int("race_clients", len(w.raceClients)).Msg("race client subscribed")
+
+		case client := <-w.raceUnsubChan:
+			// Remove client
+			for i, c := range w.raceClients {
+				if c == client {
+					w.raceClients = append(w.raceClients[:i], w.raceClients[i+1:]...)
+
+					break
+				}
+			}
+
+			w.log.Debug().Int("race_clients", len(w.raceClients)).Msg("race client unsubscribed")
+
+		case raceInfo := <-w.raceInfoFeed:
+			w.log.Debug().
+				Interface("raceInfo", raceInfo).
+				Int("num_clients", len(w.raceClients)).
+				Msg("raceInfoBroadcaster: received race info")
+
+			// Store current state with mutex protection
+			w.raceInfoMutex.Lock()
+			w.currentRaceInfo = raceInfo
+			w.raceInfoMutex.Unlock()
+
+			// Broadcast to all connected clients
+			encodedData, err := json.Marshal(raceInfo)
+			if err != nil {
+				w.log.Error().Err(err).Msg("failed to encode race info JSON")
+
+				continue
+			}
+
+			w.log.Debug().
+				Str("json_data", string(encodedData)).
+				Msg("raceInfoBroadcaster: marshaled JSON")
+
+			// Send to all clients, remove failed ones
+			activeClients := make([]*websocket.Conn, 0, len(w.raceClients))
+			for _, client := range w.raceClients {
+				err := client.WriteMessage(websocket.TextMessage, encodedData)
+				if err != nil {
+					w.log.Debug().Err(err).Msg("failed to send race info to client, removing")
+
+					_ = client.Close()
+				} else {
+					activeClients = append(activeClients, client)
+				}
+			}
+
+			w.raceClients = activeClients
+
+			if len(raceInfo) > 0 {
+				currentLap := ""
+				position := ""
+
+				if val, ok := raceInfo["currentlap"].(string); ok {
+					currentLap = val
+				}
+
+				if val, ok := raceInfo["position"].(string); ok {
+					position = val
+				}
+
+				w.log.Debug().
+					Str("currentlap", currentLap).
+					Str("position", position).
+					Int("clients", len(w.raceClients)).
+					Msg("broadcast race info")
+			}
+		}
+	}
+}
+
 // getContentType returns the appropriate MIME type based on file extension using the standard library.
 func getContentType(filename string) string {
 	ext := filepath.Ext(filename)
@@ -276,7 +726,6 @@ func (w *WebUI) handleGetConfig(response http.ResponseWriter, _ *http.Request) {
 			"webUIPort":    w.config.GetAppWebUIPort(),
 		},
 		"discord": map[string]any{
-			"enabled":        w.config.GetDiscordEnabled(),
 			"token":          w.config.GetDiscordToken(),
 			"guildID":        w.config.GetDiscordGuildID(),
 			"channelID":      w.config.GetDiscordChannelID(),
@@ -308,6 +757,12 @@ func (w *WebUI) handleGetConfig(response http.ResponseWriter, _ *http.Request) {
 		"pitRadio": map[string]any{
 			"enabled":               w.config.PitRadioEnabled(),
 			"messageSendIntervalMs": w.config.GetMessageSendIntervalMs(),
+			"discord": map[string]any{
+				"token":          w.config.GetDiscordToken(),
+				"guildID":        w.config.GetDiscordGuildID(),
+				"channelID":      w.config.GetDiscordChannelID(),
+				"voiceChannelID": w.config.GetDiscordVoiceChannelID(),
+			},
 		},
 		"synthesizer": map[string]any{
 			"internalSampleRateHz":      w.config.GetInternalSampleRateHz(),
@@ -320,6 +775,8 @@ func (w *WebUI) handleGetConfig(response http.ResponseWriter, _ *http.Request) {
 			"transmissionGainMinStreet": w.config.GetTransmissionGainMinStreet(),
 			"engineGain":                w.config.GetEngineGain(),
 			"gainIncrement":             w.config.GetGainIncrement(),
+			"engineProfiles":            w.config.GetEngineProfiles(),
+			"eq":                        w.config.GetEq(),
 		},
 		"telemetry": map[string]any{
 			"source": w.config.GetTelemetrySource(),
@@ -353,6 +810,9 @@ func (w *WebUI) handleSetConfig(response http.ResponseWriter, request *http.Requ
 		return
 	}
 
+	// Check if restart is required BEFORE applying changes
+	restartRequired := w.checkRestartRequired(configData)
+
 	// Apply configuration changes using setter methods
 	errors := w.applyConfigChanges(configData)
 
@@ -368,14 +828,14 @@ func (w *WebUI) handleSetConfig(response http.ResponseWriter, request *http.Requ
 		return
 	}
 
-	w.log.Info().Interface("config", configData).Msg("configuration updated successfully")
+	w.log.Debug().Interface("config", configData).Msg("configuration updated successfully")
 
 	// Save configuration to file
 	err = w.config.SaveConfigToFile()
 	if err != nil {
 		w.log.Error().Err(err).Msg("failed to save configuration to file")
 		response.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(response).Encode(map[string]string{ //nolint:errchkjson // simple encoding
+		_ = json.NewEncoder(response).Encode(map[string]any{ //nolint:errchkjson // simple encoding
 			"status":  "error",
 			"message": "Configuration updated but failed to save: " + err.Error(),
 		})
@@ -383,12 +843,13 @@ func (w *WebUI) handleSetConfig(response http.ResponseWriter, request *http.Requ
 		return
 	}
 
-	w.log.Info().Msg("configuration saved to file")
+	w.log.Debug().Msg("configuration saved to file")
 
 	// Return success response
-	_ = json.NewEncoder(response).Encode(map[string]string{ //nolint:errchkjson // simple encoding
-		"status":  "success",
-		"message": "Configuration updated and saved successfully",
+	_ = json.NewEncoder(response).Encode(map[string]any{ //nolint:errchkjson // simple encoding
+		"status":          "success",
+		"message":         "Configuration updated and saved successfully",
+		"restartRequired": restartRequired,
 	})
 }
 
@@ -414,8 +875,16 @@ func (w *WebUI) applyConfigChanges(configData map[string]any) []string {
 			errors = append(errors, w.applyHapticsConfig(sectionMap)...)
 		case "fuel":
 			errors = append(errors, w.applyFuelConfig(sectionMap)...)
+		case "hardware":
+			errors = append(errors, w.applyHardwareConfig(sectionMap)...)
 		case "telemetry":
 			errors = append(errors, w.applyTelemetryConfig(sectionMap)...)
+		case "discord":
+			errors = append(errors, w.applyDiscordConfig(sectionMap)...)
+		case "pitRadio":
+			errors = append(errors, w.applyPitRadioConfig(sectionMap)...)
+		case "tyres":
+			errors = append(errors, w.applyTyresConfig(sectionMap)...)
 		// Add more sections as needed
 		default:
 			w.log.Debug().Str("section", section).Msg("configuration section not implemented for updates")
@@ -434,6 +903,14 @@ func (w *WebUI) applyAppConfig(config map[string]any) []string {
 			w.config.SetAppLanguage(langStr)
 		} else {
 			errors = append(errors, "invalid language value")
+		}
+	}
+
+	if accent, ok := config["accent"]; ok {
+		if accentStr, ok := accent.(string); ok {
+			w.config.SetAppAccent(accentStr)
+		} else {
+			errors = append(errors, "invalid accent value")
 		}
 	}
 
@@ -468,25 +945,17 @@ func (w *WebUI) applyAppConfig(config map[string]any) []string {
 				}
 			}
 
-			oldVehicleDBFile := w.config.GetAppVehicleDBFile()
 			w.config.SetAppVehicleDBFile(vehicleDBFileStr)
-
-			// Signal GT client restart if vehicle DB file changed
-			if oldVehicleDBFile != vehicleDBFileStr {
-				w.log.Info().
-					Str("old_vehicle_db", oldVehicleDBFile).
-					Str("new_vehicle_db", vehicleDBFileStr).
-					Msg("Vehicle database file changed, signaling GT client restart")
-
-				select {
-				case w.shutdownChan <- exitcode.RestartGTClient:
-					w.log.Debug().Msg("GT client restart signal sent")
-				default:
-					w.log.Debug().Msg("GT client restart signal already pending")
-				}
-			}
 		} else {
 			errors = append(errors, "invalid vehicle database file value")
+		}
+	}
+
+	if replayMode, ok := config["replayMode"]; ok {
+		if replayBool, ok := replayMode.(bool); ok {
+			w.config.SetAppReplayMode(replayBool)
+		} else {
+			errors = append(errors, "invalid replay mode value")
 		}
 	}
 
@@ -496,6 +965,22 @@ func (w *WebUI) applyAppConfig(config map[string]any) []string {
 // applySynthesizerConfig applies synthesizer configuration changes.
 func (w *WebUI) applySynthesizerConfig(config map[string]any) []string {
 	var errors []string
+
+	if internalSampleRate, ok := config["internalSampleRateHz"]; ok {
+		if rateFloat, ok := internalSampleRate.(float64); ok {
+			w.config.SetInternalSampleRateHz(int(rateFloat))
+		} else {
+			errors = append(errors, "invalid internal sample rate value")
+		}
+	}
+
+	if outputSampleRate, ok := config["outputSampleRateHz"]; ok {
+		if rateFloat, ok := outputSampleRate.(float64); ok {
+			w.config.SetOutputSampleRateHz(int(rateFloat))
+		} else {
+			errors = append(errors, "invalid output sample rate value")
+		}
+	}
 
 	if masterGain, ok := config["masterGain"]; ok {
 		if gainFloat, ok := masterGain.(float64); ok {
@@ -521,11 +1006,85 @@ func (w *WebUI) applySynthesizerConfig(config map[string]any) []string {
 		}
 	}
 
+	if transmissionGainMinRace, ok := config["transmissionGainMinRace"]; ok {
+		if gainFloat, ok := transmissionGainMinRace.(float64); ok {
+			w.config.SetTransmissionGainMinRace(gainFloat)
+		} else {
+			errors = append(errors, "invalid transmission gain min race value")
+		}
+	}
+
+	if transmissionGainMinStreet, ok := config["transmissionGainMinStreet"]; ok {
+		if gainFloat, ok := transmissionGainMinStreet.(float64); ok {
+			w.config.SetTransmissionGainMinStreet(gainFloat)
+		} else {
+			errors = append(errors, "invalid transmission gain min street value")
+		}
+	}
+
 	if engineGain, ok := config["engineGain"]; ok {
 		if gainFloat, ok := engineGain.(float64); ok {
 			w.config.SetEngineGain(gainFloat)
 		} else {
 			errors = append(errors, "invalid engine gain value")
+		}
+	}
+
+	if gainIncrement, ok := config["gainIncrement"]; ok {
+		if incrementFloat, ok := gainIncrement.(float64); ok {
+			w.config.SetGainIncrement(incrementFloat)
+		} else {
+			errors = append(errors, "invalid gain increment value")
+		}
+	}
+
+	// Handle engine profiles
+	if engineProfiles, ok := config["engineProfiles"]; ok {
+		if profilesMap, ok := engineProfiles.(map[string]any); ok {
+			for name, profileData := range profilesMap {
+				if profileMap, ok := profileData.(map[string]any); ok {
+					profile := appHaptics.EngineProfile{}
+					
+					if pb, ok := profileMap["PrimaryBalance"].(float64); ok {
+						profile.PrimaryBalance = pb
+					}
+					if sb, ok := profileMap["SecondaryBalance"].(float64); ok {
+						profile.SecondaryBalance = sb
+					}
+					if g, ok := profileMap["Gain"].(float64); ok {
+						profile.Gain = g
+					}
+					if ps, ok := profileMap["PulseScale"].(float64); ok {
+						profile.PulseScale = ps
+					}
+					
+					w.config.SetEngineProfile(name, profile)
+				}
+			}
+		} else {
+			errors = append(errors, "invalid engine profiles format")
+		}
+	}
+
+	// Handle EQ array
+	if eq, ok := config["eq"]; ok {
+		if eqArray, ok := eq.([]any); ok {
+			eqFloat := make([]float64, 0, len(eqArray))
+			for _, val := range eqArray {
+				if f, ok := val.(float64); ok {
+					eqFloat = append(eqFloat, f)
+				} else {
+					errors = append(errors, "invalid EQ value")
+					break
+				}
+			}
+			if len(eqFloat) == 40 {
+				w.config.SetEq(eqFloat)
+			} else {
+				errors = append(errors, "EQ array must have exactly 40 values")
+			}
+		} else {
+			errors = append(errors, "invalid EQ format")
 		}
 	}
 
@@ -546,6 +1105,22 @@ func (w *WebUI) applyHapticsConfig(config map[string]any) []string {
 		}
 
 		return f, ok
+	}
+
+	// Helper for bool conversion
+	parseBool := func(val any, key string) (bool, bool) {
+		b, ok := val.(bool)
+		if !ok {
+			errors = append(errors, "invalid "+key+" value")
+		}
+
+		return b, ok
+	}
+
+	if dynamicTransmission, ok := config["dynamicTransmissionFeedback"]; ok {
+		if dynamicBool, ok := parseBool(dynamicTransmission, "dynamic transmission feedback"); ok {
+			w.config.SetDynamicTransmissionFeedbackEnabled(dynamicBool)
+		}
 	}
 
 	if jerkCurve, ok := config["jerkCurve"]; ok {
@@ -584,7 +1159,52 @@ func (w *WebUI) applyHapticsConfig(config map[string]any) []string {
 		}
 	}
 
+	if pulseMaxAmplitude, ok := config["pulseMaxAmplitude"]; ok {
+		if amplitudeFloat, ok := parseFloat(pulseMaxAmplitude, "pulse max amplitude"); ok {
+			w.config.SetPulseMaxAmplitude(amplitudeFloat)
+		}
+	}
+
+	if pulseMaxFreq, ok := config["pulseMaxFrequencyHz"]; ok {
+		if freqFloat, ok := parseFloat(pulseMaxFreq, "pulse max frequency"); ok {
+			w.config.SetPulseMaxFrequencyHz(freqFloat)
+		}
+	}
+
+	if pulseMinFreq, ok := config["pulseMinFrequencyHz"]; ok {
+		if freqFloat, ok := parseFloat(pulseMinFreq, "pulse min frequency"); ok {
+			w.config.SetPulseMinFrequencyHz(freqFloat)
+		}
+	}
+
 	return errors
+}
+
+// checkRestartRequired checks if any configuration changes require a restart.
+func (w *WebUI) checkRestartRequired(configData map[string]any) bool {
+	// Check if vehicleDBFile changed
+	if appConfig, ok := configData["app"].(map[string]any); ok {
+		if vehicleDBFile, ok := appConfig["vehicleDBFile"]; ok {
+			if vehicleDBFileStr, ok := vehicleDBFile.(string); ok {
+				if vehicleDBFileStr != w.config.GetAppVehicleDBFile() {
+					return true
+				}
+			}
+		}
+	}
+
+	// Check if telemetry source changed
+	if telemetryConfig, ok := configData["telemetry"].(map[string]any); ok {
+		if source, ok := telemetryConfig["source"]; ok {
+			if sourceStr, ok := source.(string); ok {
+				if sourceStr != w.config.GetTelemetrySource() {
+					return true
+				}
+			}
+		}
+	}
+
+	return false
 }
 
 // applyFuelConfig applies fuel management configuration changes.
@@ -596,6 +1216,61 @@ func (w *WebUI) applyFuelConfig(config map[string]any) []string {
 			w.config.SetFuelMonitoringEnabled(enabledBool)
 		} else {
 			errors = append(errors, "invalid fuel monitoring enabled value")
+		}
+	}
+
+	if preWarnLaps, ok := config["preWarnNotifyLaps"]; ok {
+		if lapsFloat, ok := preWarnLaps.(float64); ok {
+			w.config.SetFuelPreWarnNotifyLaps(lapsFloat)
+		} else {
+			errors = append(errors, "invalid pre-warn notify laps value")
+		}
+	}
+
+	if strategyLaps, ok := config["strategyNotifyLaps"]; ok {
+		if lapsFloat, ok := strategyLaps.(float64); ok {
+			w.config.SetFuelStrategyNotifyLaps(lapsFloat)
+		} else {
+			errors = append(errors, "invalid strategy notify laps value")
+		}
+	}
+
+	if safetyMarginLaps, ok := config["rangeSafetyMarginLaps"]; ok {
+		if marginFloat, ok := safetyMarginLaps.(float64); ok {
+			w.config.SetFuelRangeSafetyMarginLaps(marginFloat)
+		} else {
+			errors = append(errors, "invalid range safety margin laps value")
+		}
+	}
+
+	if safetyMarginMeters, ok := config["rangeSafetyMarginMeters"]; ok {
+		if marginFloat, ok := safetyMarginMeters.(float64); ok {
+			w.config.SetFuelRangeSafetyMarginMeters(marginFloat)
+		} else {
+			errors = append(errors, "invalid range safety margin meters value")
+		}
+	}
+
+	return errors
+}
+
+// applyHardwareConfig applies hardware configuration changes.
+func (w *WebUI) applyHardwareConfig(config map[string]any) []string {
+	var errors []string
+
+	if model, ok := config["model"]; ok {
+		if modelStr, ok := model.(string); ok {
+			w.config.SetHardwareModel(modelStr)
+		} else {
+			errors = append(errors, "invalid hardware model value")
+		}
+	}
+
+	if orientation, ok := config["displayOrientation"]; ok {
+		if orientFloat, ok := orientation.(float64); ok {
+			w.config.SetDisplayOrientation(int(orientFloat))
+		} else {
+			errors = append(errors, "invalid display orientation value")
 		}
 	}
 
@@ -622,29 +1297,150 @@ func (w *WebUI) applyTelemetryConfig(config map[string]any) []string {
 				}
 			}
 
-			oldSource := w.config.GetTelemetrySource()
 			w.config.SetTelemetrySource(sourceStr)
-
-			// Signal GT client restart if source changed
-			if oldSource != sourceStr {
-				w.log.Info().
-					Str("old_source", oldSource).
-					Str("new_source", sourceStr).
-					Msg("Telemetry source changed, signaling GT client restart")
-
-				select {
-				case w.shutdownChan <- exitcode.RestartGTClient:
-					w.log.Debug().Msg("GT client restart signal sent")
-				default:
-					w.log.Debug().Msg("GT client restart signal already pending")
-				}
-			}
 		} else {
 			errors = append(errors, "invalid telemetry source value")
 		}
 	}
 
 	return errors
+}
+
+// applyDiscordConfig applies Discord configuration changes.
+func (w *WebUI) applyDiscordConfig(config map[string]any) []string {
+	var errors []string
+
+	if token, ok := config["token"]; ok {
+		if tokenStr, ok := token.(string); ok {
+			w.config.SetDiscordToken(tokenStr)
+		} else {
+			errors = append(errors, "invalid discord token value")
+		}
+	}
+
+	if guildID, ok := config["guildID"]; ok {
+		if guildIDStr, ok := guildID.(string); ok {
+			w.config.SetDiscordGuildID(guildIDStr)
+		} else {
+			errors = append(errors, "invalid discord guild ID value")
+		}
+	}
+
+	if channelID, ok := config["channelID"]; ok {
+		if channelIDStr, ok := channelID.(string); ok {
+			w.config.SetDiscordChannelID(channelIDStr)
+		} else {
+			errors = append(errors, "invalid discord channel ID value")
+		}
+	}
+
+	if voiceChannelID, ok := config["voiceChannelID"]; ok {
+		if voiceChannelIDStr, ok := voiceChannelID.(string); ok {
+			w.config.SetDiscordVoiceChannelID(voiceChannelIDStr)
+		} else {
+			errors = append(errors, "invalid discord voice channel ID value")
+		}
+	}
+
+	return errors
+}
+
+// applyPitRadioConfig applies pit radio configuration changes.
+func (w *WebUI) applyPitRadioConfig(config map[string]any) []string {
+	var errors []string
+
+	if enabled, ok := config["enabled"]; ok {
+		if enabledBool, ok := enabled.(bool); ok {
+			w.config.SetPitRadioEnabled(enabledBool)
+		} else {
+			errors = append(errors, "invalid pit radio enabled value")
+		}
+	}
+
+	if intervalMs, ok := config["messageSendIntervalMs"]; ok {
+		if intervalFloat, ok := intervalMs.(float64); ok {
+			w.config.SetMessageSendIntervalMs(int(intervalFloat))
+		} else {
+			errors = append(errors, "invalid message send interval value")
+		}
+	}
+
+	// Handle nested Discord configuration
+	if discordConfig, ok := config["discord"]; ok {
+		if discordMap, ok := discordConfig.(map[string]any); ok {
+			discordErrors := w.applyDiscordConfig(discordMap)
+			errors = append(errors, discordErrors...)
+		} else {
+			errors = append(errors, "invalid discord configuration structure")
+		}
+	}
+
+	return errors
+}
+
+// applyTyresConfig applies tyre management configuration changes.
+func (w *WebUI) applyTyresConfig(config map[string]any) []string {
+	var errors []string
+
+	if monitoringEnabled, ok := config["monitoringEnabled"]; ok {
+		if enabledBool, ok := monitoringEnabled.(bool); ok {
+			w.config.SetTyreMonitoringEnabled(enabledBool)
+		} else {
+			errors = append(errors, "invalid tyre monitoring enabled value")
+		}
+	}
+
+	if tempOptimal, ok := config["temperatureOptimalCelsius"]; ok {
+		if tempFloat, ok := tempOptimal.(float64); ok {
+			w.config.SetTyreTemperatureOptimalCelsius(float32(tempFloat))
+		} else {
+			errors = append(errors, "invalid temperature optimal value")
+		}
+	}
+
+	if tempWindow, ok := config["temperatureOperatingWindow"]; ok {
+		if windowFloat, ok := tempWindow.(float64); ok {
+			w.config.SetTyreTemperatureOperatingWindow(float32(windowFloat))
+		} else {
+			errors = append(errors, "invalid temperature operating window value")
+		}
+	}
+
+	if tempMargin, ok := config["temperatureMarginCelsius"]; ok {
+		if marginFloat, ok := tempMargin.(float64); ok {
+			w.config.SetTyreTemperatureMarginCelsius(float32(marginFloat))
+		} else {
+			errors = append(errors, "invalid temperature margin value")
+		}
+	}
+
+	return errors
+}
+
+// handleConfigStatus returns the configuration status including last update timestamp and restart required flag.
+func (w *WebUI) handleConfigStatus(response http.ResponseWriter, request *http.Request) {
+	response.Header().Set("Content-Type", "application/json")
+
+	if request.Method != http.MethodGet {
+		response.WriteHeader(http.StatusMethodNotAllowed)
+		_ = json.NewEncoder(response).Encode(map[string]string{"error": "Method not allowed"}) //nolint:errchkjson // simple encoding
+
+		return
+	}
+
+	status := w.config.Status()
+
+	statusData := map[string]any{
+		"lastUpdate":      status.LastUpdate,
+		"restartRequired": status.RestartRequired,
+	}
+
+	err := json.NewEncoder(response).Encode(statusData)
+	if err != nil {
+		w.log.Error().Err(err).Msg("failed to encode config status JSON")
+		response.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(response).Encode(map[string]string{"error": "Failed to encode status"}) //nolint:errchkjson // simple encoding
+	}
 }
 
 // handleConfigReset resets the configuration to default values.
@@ -663,6 +1459,165 @@ func (w *WebUI) handleConfigReset(response http.ResponseWriter, request *http.Re
 	w.config.SetDefault()
 
 	w.handleGetConfig(response, request)
+}
+
+// handleConfigExport handles GET requests to export the full configuration file from disk.
+func (w *WebUI) handleConfigExport(response http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodGet {
+		response.WriteHeader(http.StatusMethodNotAllowed)
+		_ = json.NewEncoder(response).Encode(map[string]string{"error": "Method not allowed"}) //nolint:errchkjson // simple encoding
+
+		return
+	}
+
+	// Get the config file path
+	configFilePath := w.config.GetConfigFilePath()
+
+	// Read the config file from disk
+	configData, err := os.ReadFile(configFilePath)
+	if err != nil {
+		w.log.Error().Err(err).Str("file", configFilePath).Msg("failed to read config file")
+		response.WriteHeader(http.StatusInternalServerError)
+		response.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(response).Encode(map[string]string{"error": "Failed to read configuration file"}) //nolint:errchkjson // simple encoding
+
+		return
+	}
+
+	// Set headers for file download
+	response.Header().Set("Content-Type", "application/toml")
+	response.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"simtezilo-config-%s.conf\"",
+		time.Now().Format("20060102-150405")))
+
+	// Write the config file content
+	_, err = response.Write(configData)
+	if err != nil {
+		w.log.Error().Err(err).Msg("failed to write config data to response")
+	}
+}
+
+// handleConfigImport handles POST requests to import and validate a configuration file.
+func (w *WebUI) handleConfigImport(response http.ResponseWriter, request *http.Request) {
+	response.Header().Set("Content-Type", "application/json")
+
+	if request.Method != http.MethodPost {
+		response.WriteHeader(http.StatusMethodNotAllowed)
+		_ = json.NewEncoder(response).Encode(map[string]string{"error": "Method not allowed"}) //nolint:errchkjson // simple encoding
+
+		return
+	}
+
+	// Parse the multipart form with a size limit (10 MB)
+	err := request.ParseMultipartForm(10 << 20)
+	if err != nil {
+		w.log.Error().Err(err).Msg("failed to parse multipart form")
+		response.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(response).Encode(map[string]string{"error": "Failed to parse form data"}) //nolint:errchkjson // simple encoding
+
+		return
+	}
+
+	// Get the file from the form
+	file, header, err := request.FormFile("config")
+	if err != nil {
+		w.log.Error().Err(err).Msg("failed to get file from form")
+		response.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(response).Encode(map[string]string{"error": "No config file provided"}) //nolint:errchkjson // simple encoding
+
+		return
+	}
+	defer file.Close()
+
+	w.log.Info().Str("filename", header.Filename).Int64("size", header.Size).Msg("config import requested")
+
+	// Read the file content
+	fileContent, err := io.ReadAll(file)
+	if err != nil {
+		w.log.Error().Err(err).Msg("failed to read uploaded file")
+		response.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(response).Encode(map[string]string{"error": "Failed to read uploaded file"}) //nolint:errchkjson // simple encoding
+
+		return
+	}
+
+	// Validate the TOML content by attempting to unmarshal it
+	var testConfig map[string]interface{}
+
+	err = toml.Unmarshal(fileContent, &testConfig)
+	if err != nil {
+		w.log.Error().Err(err).Msg("invalid TOML format")
+		response.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(response).Encode(map[string]string{"error": fmt.Sprintf("Invalid TOML format: %v", err)}) //nolint:errchkjson // simple encoding
+
+		return
+	}
+
+	// Load and validate the configuration using viper and our validation logic
+	v := viper.New()
+	v.SetConfigType("toml")
+
+	err = v.ReadConfig(bytes.NewReader(fileContent))
+	if err != nil {
+		w.log.Error().Err(err).Msg("failed to parse config with viper")
+		response.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(response).Encode(map[string]string{"error": fmt.Sprintf("Invalid configuration format: %v", err)}) //nolint:errchkjson // simple encoding
+
+		return
+	}
+
+	// Create a temporary config instance to validate the structure and values
+	tempConfig := &config.Config{}
+
+	err = v.Unmarshal(tempConfig)
+	if err != nil {
+		w.log.Error().Err(err).Msg("failed to unmarshal config")
+		response.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(response).Encode(map[string]string{"error": fmt.Sprintf("Configuration structure error: %v", err)}) //nolint:errchkjson // simple encoding
+
+		return
+	}
+
+	// Run comprehensive validation
+	validationResult := w.config.ValidateConfig(fileContent)
+	if !validationResult.Valid {
+		w.log.Warn().Interface("errors", validationResult.Errors).Msg("config validation failed")
+		response.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(response).Encode(map[string]interface{}{ //nolint:errchkjson // simple encoding
+			"error":            "Configuration validation failed",
+			"validationErrors": validationResult.Errors,
+		})
+
+		return
+	}
+
+	// Create a backup of the current config file before overwriting
+	backupPath, err := w.config.BackupConfigFile()
+	if err != nil {
+		w.log.Warn().Err(err).Msg("failed to backup current config (continuing anyway)")
+	} else {
+		w.log.Info().Str("backup", backupPath).Msg("created config backup")
+	}
+
+	// Write the validated config to the config file
+	configFilePath := w.config.GetConfigFilePath()
+
+	err = os.WriteFile(configFilePath, fileContent, 0o600)
+	if err != nil {
+		w.log.Error().Err(err).Str("file", configFilePath).Msg("failed to write config file")
+		response.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(response).Encode(map[string]string{"error": "Failed to write configuration file"}) //nolint:errchkjson // simple encoding
+
+		return
+	}
+
+	w.log.Info().Str("file", configFilePath).Msg("config file imported successfully")
+
+	// Return success response
+	_ = json.NewEncoder(response).Encode(map[string]interface{}{ //nolint:errchkjson // simple encoding
+		"status":  "success",
+		"message": "Configuration imported successfully. Please restart the application for changes to take effect.",
+		"backup":  backupPath,
+	})
 }
 
 // handleRestart handles POST requests to restart the application.
@@ -691,60 +1646,49 @@ func (w *WebUI) handleRestart(response http.ResponseWriter, request *http.Reques
 	}()
 }
 
-// handleSetupMode handles both GET (check availability) and POST (activate setup mode) requests.
+// handleSetupMode handles POST requests to activate setup mode.
 func (w *WebUI) handleSetupMode(response http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodPost {
+		response.WriteHeader(http.StatusMethodNotAllowed)
+
+		return
+	}
+
 	response.Header().Set("Content-Type", "application/json")
 
-	switch request.Method {
-	case http.MethodGet:
-		// Check if the config file exists
-		configFile := "/boot/firmware/simtezilo/simtezilo.conf"
-		_, err := os.Stat(configFile)
-		available := err == nil
+	w.log.Info().Msg("setup mode requested")
 
-		_ = json.NewEncoder(response).Encode(map[string]bool{ //nolint:errchkjson // simple encoding
-			"available": available,
-		})
+	// Execute setup binary to enable setup mode
+	setupBinPath := filepath.Join(w.config.GetAppBaseDir(), "bin", "setup")
+	cmd := exec.CommandContext(request.Context(), setupBinPath, "enable")
 
-	case http.MethodPost:
-		w.log.Info().Msg("setup mode requested")
-
-		// Execute setup binary to enable setup mode
-		setupBinPath := filepath.Join(w.config.GetAppBaseDir(), "bin", "setup")
-		cmd := exec.CommandContext(request.Context(), setupBinPath, "enable")
-
-		output, err := cmd.CombinedOutput()
-		if err != nil {
-			w.log.Error().Err(err).Str("output", string(output)).Msg("failed to enable setup mode")
-			response.WriteHeader(http.StatusInternalServerError)
-			_ = json.NewEncoder(response).Encode(map[string]string{ //nolint:errchkjson // simple encoding
-				"status":  "error",
-				"message": "Failed to enable setup mode: " + err.Error(),
-			})
-
-			return
-		}
-
-		w.log.Info().Str("output", string(output)).Msg("setup mode enabled")
-
-		// Return success response
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		w.log.Error().Err(err).Str("output", string(output)).Msg("failed to enable setup mode")
+		response.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(response).Encode(map[string]string{ //nolint:errchkjson // simple encoding
-			"status":  "success",
-			"message": "Setup mode activated. Application will shut down.",
+			"status":  "error",
+			"message": "Failed to enable setup mode: " + err.Error(),
 		})
 
-		// Trigger application shutdown in a goroutine to allow the response to be sent
-		go func() {
-			time.Sleep(500 * time.Millisecond) // Give time for response to be sent
-			w.log.Info().Msg("initiating shutdown for setup mode")
-
-			w.shutdownChan <- exitcode.SetupMode
-		}()
-
-	default:
-		response.WriteHeader(http.StatusMethodNotAllowed)
-		_ = json.NewEncoder(response).Encode(map[string]string{"error": "Method not allowed"}) //nolint:errchkjson // simple encoding
+		return
 	}
+
+	w.log.Info().Str("output", string(output)).Msg("setup mode enabled")
+
+	// Return success response
+	_ = json.NewEncoder(response).Encode(map[string]string{ //nolint:errchkjson // simple encoding
+		"status":  "success",
+		"message": "Setup mode activated. Application will shut down.",
+	})
+
+	// Trigger application shutdown in a goroutine to allow the response to be sent
+	go func() {
+		time.Sleep(500 * time.Millisecond) // Give time for response to be sent
+		w.log.Info().Msg("initiating shutdown for setup mode")
+
+		w.shutdownChan <- exitcode.SetupMode
+	}()
 }
 
 // handleFactoryReset handles POST requests to perform a factory reset.
@@ -811,7 +1755,7 @@ func (w *WebUI) handleI18nAPI(response http.ResponseWriter, request *http.Reques
 	}
 
 	response.Header().Set("Content-Type", "application/json")
-	response.Header().Set("Cache-Control", "public, max-age=3600")
+	response.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 
 	length, err := response.Write(data)
 	if err != nil {
@@ -874,6 +1818,38 @@ func (w *WebUI) handleLanguagesAPI(response http.ResponseWriter, request *http.R
 	}
 
 	w.log.Debug().Msg("served available languages")
+}
+
+// handleSystemInfo handles GET requests for system information including build info and hardware platform.
+func (w *WebUI) handleSystemInfo(response http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodGet {
+		response.WriteHeader(http.StatusMethodNotAllowed)
+
+		return
+	}
+
+	platform := hardware.Platform()
+
+	responseData := map[string]any{
+		"version":            w.buildVersion,
+		"buildTime":          w.buildTime,
+		"buildPlatform":      w.buildPlatform,
+		"hardware":           platform.String(),
+		"setupModeAvailable": w.setupModeEnabled,
+	}
+
+	response.Header().Set("Content-Type", "application/json")
+	response.Header().Set("Cache-Control", "public, max-age=3600")
+
+	err := json.NewEncoder(response).Encode(responseData)
+	if err != nil {
+		w.log.Error().Err(err).Msg("failed to encode system info response")
+		http.Error(response, "error encoding system info", http.StatusInternalServerError)
+
+		return
+	}
+
+	w.log.Debug().Msg("served system info")
 }
 
 // handleLogsAPI returns log entries from the in-memory store.

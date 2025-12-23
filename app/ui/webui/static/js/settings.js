@@ -6,6 +6,8 @@ class ConfigManager {
         this.saveTimeout = null;
         this.inputSaveTimeouts = new Map(); // Track individual input save timeouts
         this.previousValues = new Map(); // Store previous valid values
+        this.configTimestamp = 0; // Backend config timestamp
+        this.statusCheckInterval = null; // Interval for checking config status
         this.init();
     }
 
@@ -15,6 +17,98 @@ class ConfigManager {
         this.setupEventListeners();
         this.populateForm();
         await this.checkSetupModeAvailability();
+        await this.checkHardwarePlatform();
+        this.startStatusPolling();
+        this.initAdvancedToggle();
+        this.initEngineProfiles();
+        this.initEqualizer();
+    }
+
+    // Initialize advanced settings toggle
+    initAdvancedToggle() {
+        const advancedToggle = document.getElementById('advanced-settings-toggle');
+        const advancedSettings = document.getElementById('advancedSettings');
+
+        if (advancedToggle && advancedSettings) {
+            console.log('Advanced toggle initialized');
+            advancedToggle.addEventListener('change', (e) => {
+                console.log('Toggle changed:', e.target.checked);
+                advancedSettings.style.display = e.target.checked ? 'block' : 'none';
+            });
+        } else {
+            console.error('Advanced toggle or settings not found:', {
+                toggle: !!advancedToggle,
+                settings: !!advancedSettings
+            });
+        }
+    }
+
+    async checkHardwarePlatform() {
+        try {
+            const response = await fetch('/api/system/info');
+            if (!response.ok) {
+                return;
+            }
+            const data = await response.json();
+
+            // Hide hardware navigation item if not on RPI platform
+            if (data.hardware !== 'rpi') {
+                const hardwareNavItem = document.querySelector('.settings-nav-link[data-section="hardware"]');
+                if (hardwareNavItem) {
+                    hardwareNavItem.parentElement.style.display = 'none';
+                }
+
+                const hardwareOption = document.querySelector('#sectionSelect option[value="hardware"]');
+                if (hardwareOption) {
+                    hardwareOption.style.display = 'none';
+                }
+            }
+        } catch (error) {
+            console.error('Failed to check hardware platform:', error);
+        }
+    }
+
+    // Start polling backend for config status changes
+    startStatusPolling() {
+        // Check every 2 seconds for config changes
+        this.statusCheckInterval = setInterval(() => {
+            this.checkConfigStatus();
+        }, 2000);
+    }
+
+    // Stop status polling
+    stopStatusPolling() {
+        if (this.statusCheckInterval) {
+            clearInterval(this.statusCheckInterval);
+            this.statusCheckInterval = null;
+        }
+    }
+
+    // Check config status from backend
+    async checkConfigStatus() {
+        try {
+            const response = await fetch('/api/config/status');
+            if (!response.ok) {
+                return;
+            }
+
+            const status = await response.json();
+
+            // Update restart indicator based on backend status
+            if (status.restartRequired) {
+                this.showRestartRequired();
+            } else {
+                this.hideRestartRequired();
+            }
+
+            // Check if backend config is newer than our local copy
+            if (status.lastUpdate > this.configTimestamp) {
+                console.log('Backend config is newer, reloading configuration');
+                await this.loadConfiguration();
+            }
+        } catch (error) {
+            console.error('Failed to check config status:', error);
+        }
     }
 
     // Show status in navbar for a specific input
@@ -22,6 +116,22 @@ class ConfigManager {
         // Show in navbar if available
         if (typeof window.showNavbarStatus === 'function') {
             window.showNavbarStatus(type);
+        }
+    }
+
+    // Show restart required indicator
+    showRestartRequired() {
+        const indicator = document.getElementById('restart-required-indicator');
+        if (indicator) {
+            indicator.style.display = 'inline-block';
+        }
+    }
+
+    // Hide restart required indicator
+    hideRestartRequired() {
+        const indicator = document.getElementById('restart-required-indicator');
+        if (indicator) {
+            indicator.style.display = 'none';
         }
     }
 
@@ -56,9 +166,24 @@ class ConfigManager {
     }
 
     setupEventListeners() {
-        // Load button
-        document.getElementById('load-config').addEventListener('click', () => {
-            this.loadConfiguration();
+        // Export button
+        document.getElementById('export-config').addEventListener('click', () => {
+            this.exportConfiguration();
+        });
+
+        // Import button
+        document.getElementById('import-config').addEventListener('click', () => {
+            document.getElementById('import-file-input').click();
+        });
+
+        // File input change handler
+        document.getElementById('import-file-input').addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (file) {
+                this.importConfiguration(file);
+            }
+            // Reset file input so the same file can be selected again
+            event.target.value = '';
         });
 
         // Reset button
@@ -130,7 +255,7 @@ class ConfigManager {
 
         if (input.type === 'checkbox') {
             newValue = input.checked;
-        } else if (input.type === 'number') {
+        } else if (input.type === 'number' || input.dataset.type === 'number') {
             newValue = parseFloat(input.value);
             if (isNaN(newValue)) {
                 newValue = 0;
@@ -279,6 +404,20 @@ class ConfigManager {
             this.populateForm();
             this.showStatus('Configuration loaded successfully', 'success');
 
+            // Get and store the backend timestamp
+            const statusResponse = await fetch('/api/config/status');
+            if (statusResponse.ok) {
+                const status = await statusResponse.json();
+                this.configTimestamp = status.lastUpdate;
+
+                // Update restart indicator based on backend status
+                if (status.restartRequired) {
+                    this.showRestartRequired();
+                } else {
+                    this.hideRestartRequired();
+                }
+            }
+
         } catch (error) {
             console.error('Failed to load configuration:', error);
             this.showStatus('Failed to load configuration: ' + error.message, 'error');
@@ -410,6 +549,86 @@ class ConfigManager {
         }
     }
 
+    exportConfiguration() {
+        try {
+            // Fetch the full config file from the server instead of using the cached JSON payload
+            const link = document.createElement('a');
+            link.href = '/api/config/export';
+            link.download = ''; // Let server decide filename
+
+            // Trigger download
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            console.log('Configuration export triggered');
+        } catch (error) {
+            console.error('Failed to export configuration:', error);
+            alert('Failed to export configuration: ' + error.message);
+        }
+    }
+
+    async importConfiguration(file) {
+        try {
+            // Validate file extension
+            if (!file.name.endsWith('.conf') && !file.name.endsWith('.toml')) {
+                throw new Error('Invalid file type. Please select a .conf or .toml file.');
+            }
+
+            // Create FormData to send file
+            const formData = new FormData();
+            formData.append('config', file);
+
+            // Show loading state
+            const importBtn = document.getElementById('import-config');
+            const originalText = importBtn.textContent;
+            importBtn.disabled = true;
+            importBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Importing...';
+
+            // Send to server
+            const response = await fetch('/api/config/import', {
+                method: 'POST',
+                body: formData
+            });
+
+            const result = await response.json();
+
+            // Restore button state
+            importBtn.disabled = false;
+            importBtn.textContent = originalText;
+
+            if (!response.ok) {
+                // Handle validation errors specially
+                if (result.validationErrors && result.validationErrors.length > 0) {
+                    let errorMessage = 'Configuration validation failed:\n\n';
+                    result.validationErrors.forEach(err => {
+                        errorMessage += `• ${err.field}: ${err.message}\n`;
+                    });
+                    throw new Error(errorMessage);
+                }
+                throw new Error(result.error || 'Failed to import configuration');
+            }
+
+            console.log('Configuration imported successfully:', result);
+
+            // Show success message
+            alert(result.message + (result.backup ? '\n\nBackup created at: ' + result.backup : ''));
+
+            // Reload the configuration
+            await this.loadConfiguration();
+        } catch (error) {
+            console.error('Failed to import configuration:', error);
+            alert('Failed to import configuration: ' + error.message);
+
+            // Restore button state if error occurred
+            const importBtn = document.getElementById('import-config');
+            if (importBtn) {
+                importBtn.disabled = false;
+                importBtn.textContent = 'Import Configuration';
+            }
+        }
+    }
+
     getNestedValue(obj, path) {
         return path.split('.').reduce((current, key) => {
             return current && current[key] !== undefined ? current[key] : undefined;
@@ -437,11 +656,13 @@ class ConfigManager {
 
     async checkSetupModeAvailability() {
         try {
-            const response = await fetch('/api/mode/setup');
+            const response = await fetch('/api/system/info');
             if (response.ok) {
                 const result = await response.json();
-                if (result.available) {
-                    document.getElementById('system-actions-section').style.display = 'block';
+                if (result.setupModeAvailable) {
+                    // Show setup mode and factory reset buttons
+                    document.getElementById('setup-mode').style.display = '';
+                    document.getElementById('factory-reset').style.display = '';
                 }
             }
         } catch (error) {
@@ -455,11 +676,6 @@ class ConfigManager {
         }
 
         try {
-            const statusElement = document.getElementById('restart-app-status');
-            statusElement.textContent = 'Restarting application...';
-            statusElement.className = 'config-status info';
-            statusElement.style.display = 'block';
-
             const response = await fetch('/api/restart', {
                 method: 'POST'
             });
@@ -468,19 +684,12 @@ class ConfigManager {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
 
-            const result = await response.json();
-            statusElement.textContent = result.message || 'Application restarting...';
-            statusElement.className = 'config-status success';
-
             // Disable the button after successful request
             document.getElementById('restart-app').disabled = true;
 
         } catch (error) {
             console.error('Failed to restart application:', error);
-            const statusElement = document.getElementById('restart-app-status');
-            statusElement.textContent = 'Failed to restart application: ' + error.message;
-            statusElement.className = 'config-status error';
-            statusElement.style.display = 'block';
+            alert('Failed to restart application: ' + error.message);
         }
     }
 
@@ -490,11 +699,6 @@ class ConfigManager {
         }
 
         try {
-            const statusElement = document.getElementById('setup-mode-status');
-            statusElement.textContent = 'Entering setup mode...';
-            statusElement.className = 'config-status info';
-            statusElement.style.display = 'block';
-
             const response = await fetch('/api/mode/setup', {
                 method: 'POST'
             });
@@ -503,19 +707,12 @@ class ConfigManager {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
 
-            const result = await response.json();
-            statusElement.textContent = result.message || 'Setup mode activated. Application shutting down...';
-            statusElement.className = 'config-status success';
-
             // Disable the button after successful request
             document.getElementById('setup-mode').disabled = true;
 
         } catch (error) {
             console.error('Failed to enter setup mode:', error);
-            const statusElement = document.getElementById('setup-mode-status');
-            statusElement.textContent = 'Failed to enter setup mode: ' + error.message;
-            statusElement.className = 'config-status error';
-            statusElement.style.display = 'block';
+            alert('Failed to enter setup mode: ' + error.message);
         }
     }
 
@@ -575,10 +772,7 @@ class ConfigManager {
 
             } catch (error) {
                 console.error('Failed to perform factory reset:', error);
-                const statusElement = document.getElementById('factory-reset-status');
-                statusElement.textContent = 'Failed to perform factory reset: ' + error.message;
-                statusElement.className = 'config-status error';
-                statusElement.style.display = 'block';
+                alert('Failed to perform factory reset: ' + error.message);
                 document.getElementById('factory-reset').disabled = false;
             }
         };
@@ -618,6 +812,349 @@ class ConfigManager {
         }
 
         return true;
+    }
+
+    // Format engine profile key into human-readable name
+    formatEngineProfileName(key) {
+        // Engine layout names
+        const layouts = {
+            's': 'Two-Stroke',
+            'i': 'Inline',
+            'v': 'V',
+            'w': 'W',
+            'h': 'Flat',
+            'k': 'Wankel'
+        };
+
+        // Wankel rotor count names
+        const rotorNames = {
+            '1': 'Single Rotor',
+            '2': 'Twin Rotor',
+            '3': 'Triple Rotor',
+            '4': 'Quad Rotor'
+        };
+
+        // RPM category names
+        const rpmCategories = {
+            'rstd': 'standard RPM',
+            'rhigh': 'high RPM',
+            'rmed': 'medium RPM'
+        };
+
+        // Parse the key
+        const match = key.match(/^([a-z]+)(\d+)(?:_b(\d+))?(?:_c(\d+))?(?:_(rstd|rhigh|rmed))?$/i);
+
+        if (!match) {
+            return key; // Return original if format doesn't match
+        }
+
+        const [, layout, cylinders, bank, crank, rpm] = match;
+
+        // Special case: VR6 (V6 with 15° bank angle)
+        if (layout.toLowerCase() === 'v' && cylinders === '6' && bank === '15') {
+            let name = 'VR6';
+            if (crank) {
+                name += `, ${crank}º crank plane`;
+            }
+            if (rpm) {
+                name += `, ${rpmCategories[rpm] || rpm}`;
+            }
+            return name;
+        }
+
+        // Special case: Single cylinder two-stroke
+        if (layout.toLowerCase() === 's' && cylinders === '1') {
+            let name = 'Two-Stroke';
+            if (rpm) {
+                name += `, ${rpmCategories[rpm] || rpm}`;
+            }
+            return name;
+        }
+
+        // Build the formatted name
+        let name;
+
+        // Special handling for Wankel rotary engines
+        if (layout.toLowerCase() === 'k') {
+            name = rotorNames[cylinders] || `${cylinders} Rotor`;
+        } else {
+            const layoutName = layouts[layout.toLowerCase()] || layout.toUpperCase();
+            // V and W engines have no space between layout and cylinder count
+            if (layout.toLowerCase() === 'v' || layout.toLowerCase() === 'w') {
+                name = `${layoutName}${cylinders}`;
+            } else {
+                // Other layouts (Inline, Flat, Two-Stroke) have a space
+                name = `${layoutName} ${cylinders}`;
+            }
+        }
+
+        if (bank) {
+            name += `, ${bank}º bank`;
+        }
+
+        if (crank) {
+            name += `, ${crank}º crank plane`;
+        }
+
+        if (rpm) {
+            name += `, ${rpmCategories[rpm] || rpm}`;
+        }
+
+        return name;
+    }
+
+    // Initialize engine profiles dropdown and settings
+    initEngineProfiles() {
+        const profileSelect = document.getElementById('engine-profile-select');
+        const profileSettings = document.getElementById('engine-profile-settings');
+
+        if (!profileSelect || !this.config.synthesizer || !this.config.synthesizer.engineProfiles) {
+            return;
+        }
+
+        // Populate dropdown with engine profiles
+        profileSelect.innerHTML = '<option value="" disabled selected>Select an engine profile...</option>';
+
+        const profiles = this.config.synthesizer.engineProfiles;
+
+        // Define custom layout order: Inline, Flat, V, W, Wankel, Two-Stroke
+        const layoutOrder = { 'i': 1, 'h': 2, 'v': 3, 'w': 4, 'k': 5, 's': 6 };
+
+        // Sort by layout type, then cylinder count, then alphabetically
+        const sortedKeys = Object.keys(profiles).sort((a, b) => {
+            // Extract layout and cylinder count from keys
+            const matchA = a.match(/^([a-z]+)(\d+)/i);
+            const matchB = b.match(/^([a-z]+)(\d+)/i);
+
+            if (!matchA || !matchB) return a.localeCompare(b);
+
+            const layoutA = matchA[1].toLowerCase();
+            const layoutB = matchB[1].toLowerCase();
+            const cylindersA = parseInt(matchA[2]);
+            const cylindersB = parseInt(matchB[2]);
+
+            // Sort by custom layout order
+            const orderA = layoutOrder[layoutA] || 999;
+            const orderB = layoutOrder[layoutB] || 999;
+
+            if (orderA !== orderB) {
+                return orderA - orderB;
+            }
+
+            // Then by cylinder count
+            if (cylindersA !== cylindersB) {
+                return cylindersA - cylindersB;
+            }
+
+            // Finally alphabetically by full key
+            return a.localeCompare(b);
+        });
+
+        sortedKeys.forEach(key => {
+            const option = document.createElement('option');
+            option.value = key;
+            option.textContent = this.formatEngineProfileName(key);
+            profileSelect.appendChild(option);
+        });
+
+        // Auto-select first profile if available
+        if (sortedKeys.length > 0) {
+            const firstProfile = sortedKeys[0];
+            profileSelect.value = firstProfile;
+            this.loadEngineProfile(firstProfile, profiles[firstProfile]);
+            profileSettings.style.display = 'block';
+        }
+
+        // Handle profile selection
+        profileSelect.addEventListener('change', () => {
+            const selectedProfile = profileSelect.value;
+            if (selectedProfile && profiles[selectedProfile]) {
+                this.loadEngineProfile(selectedProfile, profiles[selectedProfile]);
+                profileSettings.style.display = 'block';
+            } else {
+                profileSettings.style.display = 'none';
+            }
+        });
+
+        // Setup input handlers for engine profile settings
+        ['engine-primarybalance', 'engine-secondarybalance', 'engine-gain', 'engine-pulsescale'].forEach(id => {
+            const input = document.getElementById(id);
+            if (input) {
+                input.addEventListener('change', () => this.saveEngineProfile());
+                input.addEventListener('input', () => this.debounceEngineProfileSave());
+            }
+        });
+    }
+
+    // Load engine profile data into form
+    loadEngineProfile(profileName, profile) {
+        document.getElementById('engine-primarybalance').value = profile.PrimaryBalance;
+        document.getElementById('engine-secondarybalance').value = profile.SecondaryBalance;
+        document.getElementById('engine-gain').value = profile.Gain;
+        document.getElementById('engine-pulsescale').value = profile.PulseScale;
+    }
+
+    // Debounce save for engine profile
+    debounceEngineProfileSave() {
+        clearTimeout(this.engineProfileSaveTimeout);
+        this.engineProfileSaveTimeout = setTimeout(() => this.saveEngineProfile(), 1000);
+    }
+
+    // Save engine profile changes
+    async saveEngineProfile() {
+        const profileSelect = document.getElementById('engine-profile-select');
+        const selectedProfile = profileSelect.value;
+
+        if (!selectedProfile) return;
+
+        const profile = {
+            PrimaryBalance: parseFloat(document.getElementById('engine-primarybalance').value),
+            SecondaryBalance: parseFloat(document.getElementById('engine-secondarybalance').value),
+            Gain: parseFloat(document.getElementById('engine-gain').value),
+            PulseScale: parseFloat(document.getElementById('engine-pulsescale').value)
+        };
+
+        try {
+            // Update local config
+            if (!this.config.synthesizer.engineProfiles) {
+                this.config.synthesizer.engineProfiles = {};
+            }
+            this.config.synthesizer.engineProfiles[selectedProfile] = profile;
+
+            // Save to server
+            const formData = {
+                synthesizer: {
+                    engineProfiles: {
+                        [selectedProfile]: profile
+                    }
+                }
+            };
+
+            const response = await fetch('/api/config', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(formData)
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            console.log('Engine profile saved:', selectedProfile);
+        } catch (error) {
+            console.error('Failed to save engine profile:', error);
+            alert('Failed to save engine profile: ' + error.message);
+        }
+    }
+
+    // Initialize equalizer controls
+    initEqualizer() {
+        const eqContainer = document.getElementById('equalizer-controls');
+        const resetBtn = document.getElementById('eq-reset-btn');
+
+        if (!eqContainer || !this.config.synthesizer) {
+            return;
+        }
+
+        // Get EQ array or create default
+        let eq = this.config.synthesizer.eq || Array(40).fill(1.0);
+
+        // Generate 40 EQ sliders (10-49 Hz)
+        eqContainer.innerHTML = '';
+        for (let i = 0; i < 40; i++) {
+            const freq = 10 + i;
+            const col = document.createElement('div');
+            col.className = 'col-6 col-sm-4 col-md-3 col-lg-2';
+
+            col.innerHTML = `
+                <label for="eq-${freq}" class="form-label small">${freq} Hz</label>
+                <input type="range" class="form-range" id="eq-${freq}" 
+                       min="0" max="2" step="0.1" value="${eq[i]}"
+                       data-eq-index="${i}">
+                <div class="text-center small text-muted" id="eq-${freq}-value">${eq[i].toFixed(1)}</div>
+            `;
+
+            eqContainer.appendChild(col);
+
+            const slider = col.querySelector('input');
+            const valueDisplay = col.querySelector('.text-muted');
+
+            slider.addEventListener('input', (e) => {
+                valueDisplay.textContent = parseFloat(e.target.value).toFixed(1);
+                this.debounceEqSave();
+            });
+        }
+
+        // Setup reset button
+        if (resetBtn) {
+            resetBtn.addEventListener('click', () => {
+                for (let i = 0; i < 40; i++) {
+                    const freq = 10 + i;
+                    const slider = document.getElementById(`eq-${freq}`);
+                    const valueDisplay = document.getElementById(`eq-${freq}-value`);
+                    if (slider && valueDisplay) {
+                        slider.value = 1.0;
+                        valueDisplay.textContent = '1.0';
+                    }
+                }
+                this.saveEqualizer();
+            });
+        }
+    }
+
+    // Debounce save for equalizer
+    debounceEqSave() {
+        clearTimeout(this.eqSaveTimeout);
+        this.eqSaveTimeout = setTimeout(() => this.saveEqualizer(), 1000);
+    }
+
+    // Save equalizer settings
+    async saveEqualizer() {
+        const eq = [];
+
+        for (let i = 0; i < 40; i++) {
+            const freq = 10 + i;
+            const slider = document.getElementById(`eq-${freq}`);
+            if (slider) {
+                eq.push(parseFloat(slider.value));
+            }
+        }
+
+        if (eq.length !== 40) {
+            console.error('EQ array must have exactly 40 values');
+            return;
+        }
+
+        try {
+            // Update local config
+            this.config.synthesizer.eq = eq;
+
+            // Save to server
+            const formData = {
+                synthesizer: {
+                    eq: eq
+                }
+            };
+
+            const response = await fetch('/api/config', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(formData)
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            console.log('Equalizer saved');
+        } catch (error) {
+            console.error('Failed to save equalizer:', error);
+            alert('Failed to save equalizer: ' + error.message);
+        }
     }
 }
 

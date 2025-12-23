@@ -32,7 +32,6 @@ type app struct {
 }
 
 type discord struct {
-	Enabled        bool   `toml:"enabled"`
 	Token          string `toml:"token"`
 	GuildID        string `toml:"guildID"`
 	ChannelID      string `toml:"channelID"`
@@ -71,8 +70,9 @@ type hardware struct {
 }
 
 type pitRadio struct {
-	Enabled               bool `toml:"enabled"`
-	MessageSendIntervalMs int  `toml:"messageSendIntervalMs"`
+	Enabled               bool     `toml:"enabled"`
+	MessageSendIntervalMs int      `toml:"messageSendIntervalMs"`
+	Discord               *discord `toml:"discord"`
 }
 
 // Synthesizer represents an audio synthesizer used for haptic feedback.
@@ -95,6 +95,12 @@ type Telemetry struct {
 	Source string `toml:"source"`
 }
 
+// Status represents the status of the configuration.
+type Status struct {
+	LastUpdate      int64
+	RestartRequired bool
+}
+
 type tyres struct {
 	MonitoringEnabled          bool    `toml:"monitoringEnabled"`
 	TemperatureOptimalCelsius  float32 `toml:"temperatureOptimalCelsius"`
@@ -104,7 +110,6 @@ type tyres struct {
 
 type viperConfig struct {
 	App         *app         `toml:"app"`
-	Discord     *discord     `toml:"discord"`
 	Fuel        *fuel        `toml:"fuel"`
 	Hardware    *hardware    `toml:"hardware"`
 	Haptics     *haptics     `toml:"haptics"`
@@ -116,10 +121,12 @@ type viperConfig struct {
 
 // Config holds the application configuration and provides methods for accessing and modifying the data.
 type Config struct {
-	viper      *viperConfig
-	i18n       *i18n.I18n
-	configFile string
-	mu         sync.RWMutex
+	viper                      *viperConfig
+	i18n                       *i18n.I18n
+	configFile                 string
+	status                     Status
+	displayOrientationCallback func(int)
+	mu                         sync.RWMutex
 }
 
 type Options struct {
@@ -219,20 +226,43 @@ func (c *Config) SetDefault() {
 
 // SetI18n sets the i18n instance for the Config which is required for interaction with language settings.
 func (c *Config) SetI18n(i18n *i18n.I18n) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	c.i18n = i18n
 }
 
 // GetI18n returns the i18n instance.
 func (c *Config) GetI18n() *i18n.I18n {
-	return c.i18n
-}
-
-// GetOutputFile returns the synthesizer output file path.
-func (c *Config) GetOutputFile() string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	return c.viper.Synthesizer.OutputFile
+	return c.i18n
+}
+
+// Status returns the current configuration status.
+// The status includes Unix timestamp of the last change and whether a restart is required to apply the config.
+func (c *Config) Status() Status {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.status
+}
+
+// IsUpToDate returns true if the configuration has changed since the given Unix timestamp.
+func (c *Config) IsUpToDate(timestamp int64) bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return timestamp < c.status.LastUpdate
+}
+
+// RestartRequired returns true if a restart is required for configuration changes to take effect.
+func (c *Config) RestartRequired() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.status.RestartRequired
 }
 
 // ****************************************************************************
@@ -250,6 +280,16 @@ func (c *Config) GetAppAccent() string {
 	}
 
 	return c.viper.App.Accent
+}
+
+// SetAppAccent sets the application accent.
+func (c *Config) SetAppAccent(value string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.App.Accent = value
+
+	c.registerUpdate(false)
 }
 
 // GetAppBaseDir returns the configured base directory.
@@ -271,6 +311,8 @@ func (c *Config) SetAppBaseDir(value string) {
 	defer c.mu.Unlock()
 
 	c.viper.App.BaseDir = value
+
+	c.registerUpdate(true)
 }
 
 // GetAppVehicleDBFile returns the configured vehicle database file path.
@@ -287,6 +329,8 @@ func (c *Config) SetAppVehicleDBFile(value string) {
 	defer c.mu.Unlock()
 
 	c.viper.App.VehicleDBFile = value
+
+	c.registerUpdate(true)
 }
 
 // GetAppLanguage returns the configured application language.
@@ -310,6 +354,8 @@ func (c *Config) SetAppLanguage(value string) {
 	// TODO: validate language code
 
 	c.viper.App.Language = value
+
+	c.registerUpdate(false)
 }
 
 // NextAppLanguage cycles to the next available language.
@@ -342,6 +388,8 @@ func (c *Config) NextAppLanguage() string {
 	} else {
 		c.viper.App.Language = "en"
 	}
+
+	c.registerUpdate(false)
 
 	return c.viper.App.Language
 }
@@ -377,6 +425,8 @@ func (c *Config) PreviousAppLanguage() string {
 		c.viper.App.Language = "en"
 	}
 
+	c.registerUpdate(false)
+
 	return c.viper.App.Language
 }
 
@@ -401,6 +451,8 @@ func (c *Config) SetAppLogLevel(value string) {
 	// TODO: validate log level
 
 	c.viper.App.LogLevel = value
+
+	c.registerUpdate(true)
 }
 
 // GetAppReplayMode returns true if replay mode is enabled.
@@ -409,6 +461,16 @@ func (c *Config) GetAppReplayMode() bool {
 	defer c.mu.RUnlock()
 
 	return c.viper.App.ReplayMode
+}
+
+// SetAppReplayMode sets whether replay mode is enabled.
+func (c *Config) SetAppReplayMode(value bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.App.ReplayMode = value
+
+	c.registerUpdate(true)
 }
 
 // GetAppWebUIEnabled returns true if the web UI is enabled.
@@ -436,20 +498,22 @@ func (c *Config) GetAppWebUIPort() int {
 // Discord section methods.
 // ****************************************************************************
 
-// GetDiscordEnabled returns true if Discord integration is enabled.
-func (c *Config) GetDiscordEnabled() bool {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.Discord.Enabled
-}
-
 // GetDiscordToken returns the Discord API token.
 func (c *Config) GetDiscordToken() string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	return c.viper.Discord.Token
+	return c.viper.PitRadio.Discord.Token
+}
+
+// SetDiscordToken sets the Discord API token.
+func (c *Config) SetDiscordToken(token string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.PitRadio.Discord.Token = token
+
+	c.registerUpdate(true)
 }
 
 // GetDiscordGuildID returns the Discord guild (server) ID.
@@ -457,7 +521,17 @@ func (c *Config) GetDiscordGuildID() string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	return c.viper.Discord.GuildID
+	return c.viper.PitRadio.Discord.GuildID
+}
+
+// SetDiscordGuildID sets the Discord guild (server) ID.
+func (c *Config) SetDiscordGuildID(guildID string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.PitRadio.Discord.GuildID = guildID
+
+	c.registerUpdate(true)
 }
 
 // GetDiscordChannelID returns the Discord text channel ID.
@@ -465,7 +539,17 @@ func (c *Config) GetDiscordChannelID() string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	return c.viper.Discord.ChannelID
+	return c.viper.PitRadio.Discord.ChannelID
+}
+
+// SetDiscordChannelID sets the Discord text channel ID.
+func (c *Config) SetDiscordChannelID(channelID string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.PitRadio.Discord.ChannelID = channelID
+
+	c.registerUpdate(true)
 }
 
 // GetDiscordVoiceChannelID returns the Discord voice channel ID.
@@ -473,7 +557,17 @@ func (c *Config) GetDiscordVoiceChannelID() string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	return c.viper.Discord.VoiceChannelID
+	return c.viper.PitRadio.Discord.VoiceChannelID
+}
+
+// SetDiscordVoiceChannelID sets the Discord voice channel ID.
+func (c *Config) SetDiscordVoiceChannelID(voiceChannelID string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.PitRadio.Discord.VoiceChannelID = voiceChannelID
+
+	c.registerUpdate(true)
 }
 
 // ****************************************************************************
@@ -494,6 +588,8 @@ func (c *Config) SetFuelMonitoringEnabled(value bool) {
 	defer c.mu.Unlock()
 
 	c.viper.Fuel.MonitoringEnabled = value
+
+	c.registerUpdate(false)
 }
 
 // GetFuelPreWarnNotifyLaps returns the number of laps remaining before a fuel pre-warning is triggered.
@@ -528,6 +624,46 @@ func (c *Config) GetFuelRangeSafetyMarginMeters() float64 {
 	return c.viper.Fuel.RangeSafetyMarginMeters
 }
 
+// SetFuelPreWarnNotifyLaps sets the number of laps remaining before a fuel pre-warning is triggered.
+func (c *Config) SetFuelPreWarnNotifyLaps(value float64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.Fuel.PreWarnNotifyLaps = value
+
+	c.registerUpdate(false)
+}
+
+// SetFuelStrategyNotifyLaps sets the number of laps remaining before a fuel strategy notification is triggered.
+func (c *Config) SetFuelStrategyNotifyLaps(value float64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.Fuel.StrategyNotifyLaps = value
+
+	c.registerUpdate(false)
+}
+
+// SetFuelRangeSafetyMarginLaps sets the safety margin in laps to apply when calculating fuel range.
+func (c *Config) SetFuelRangeSafetyMarginLaps(value float64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.Fuel.RangeSafetyMarginLaps = value
+
+	c.registerUpdate(false)
+}
+
+// SetFuelRangeSafetyMarginMeters sets the safety margin in meters to apply when calculating fuel range.
+func (c *Config) SetFuelRangeSafetyMarginMeters(value float64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.Fuel.RangeSafetyMarginMeters = value
+
+	c.registerUpdate(false)
+}
+
 // ****************************************************************************
 // Hardware section methods.
 // ****************************************************************************
@@ -540,6 +676,25 @@ func (c *Config) GetHardwareModel() string {
 	return c.viper.Hardware.Model
 }
 
+// SetHardwareModel sets the hardware model.
+func (c *Config) SetHardwareModel(model string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.Hardware.Model = model
+
+	c.registerUpdate(true)
+}
+
+// SetDisplayOrientationCallback sets a callback function to be invoked when display orientation changes.
+// This allows the display hardware to be updated immediately when orientation is changed.
+func (c *Config) SetDisplayOrientationCallback(callback func(int)) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.displayOrientationCallback = callback
+}
+
 // GetDisplayOrientation returns the configured display orientation in degrees.
 // Valid orientaitions are 0, 90, 180, and 270 degrees.
 func (c *Config) GetDisplayOrientation() int {
@@ -547,6 +702,34 @@ func (c *Config) GetDisplayOrientation() int {
 	defer c.mu.RUnlock()
 
 	return c.viper.Hardware.DisplayOrientation
+}
+
+// SetDisplayOrientation sets the display orientation in degrees.
+// Valid values are 0, 90, 180, and 270 degrees.
+func (c *Config) SetDisplayOrientation(orientation int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// Normalize the orientation to valid values (0, 90, 180, 270)
+	orientation %= 360
+	if orientation < 0 {
+		orientation += 360
+	}
+
+	// Round to nearest 90-degree increment
+	orientation = (orientation + 45) / 90 * 90
+	if orientation == 360 {
+		orientation = 0
+	}
+
+	c.viper.Hardware.DisplayOrientation = orientation
+
+	// Invoke callback if set to update display hardware immediately
+	if c.displayOrientationCallback != nil {
+		c.displayOrientationCallback(orientation)
+	}
+
+	c.registerUpdate(false)
 }
 
 // ****************************************************************************
@@ -559,6 +742,16 @@ func (c *Config) DynamicTransmissionFeedbackEnabled() bool {
 	defer c.mu.RUnlock()
 
 	return c.viper.Haptics.DynamicTransmissionFeedback
+}
+
+// SetDynamicTransmissionFeedbackEnabled sets whether dynamic transmission feedback is enabled.
+func (c *Config) SetDynamicTransmissionFeedbackEnabled(value bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.Haptics.DynamicTransmissionFeedback = value
+
+	c.registerUpdate(false)
 }
 
 // GetJerkCurve returns the jerk curve value.
@@ -582,6 +775,8 @@ func (c *Config) SetJerkCurve(value int) {
 	value = max(value, 5)
 
 	c.viper.Haptics.JerkCurve = value
+
+	c.UpdateJerkScale()
 }
 
 // IncreaseJerkCurve increases the jerk curve value in increments of 5.
@@ -634,6 +829,8 @@ func (c *Config) UpdateJerkScale() {
 	jerkMax := 100 * float64(c.viper.Haptics.JerkMax)
 
 	c.viper.Haptics.JerkScale = 1 / math.Pow(jerkMax, exponent)
+
+	c.registerUpdate(false)
 }
 
 // GetJerkMax returns the maximum jerk value.
@@ -657,6 +854,8 @@ func (c *Config) SetJerkMax(value int) {
 	value = max(value, 1)
 
 	c.viper.Haptics.JerkMax = value
+
+	c.UpdateJerkScale()
 }
 
 // IncreaseJerkMax increases the maximum jerk value in increments of 1.
@@ -710,6 +909,8 @@ func (c *Config) SetSnapCurve(value int) {
 	value = max(value, 5)
 
 	c.viper.Haptics.SnapCurve = value
+
+	c.registerUpdate(false)
 }
 
 // IncreaseSnapCurve increases the snap curve value in increments of 5.
@@ -763,6 +964,8 @@ func (c *Config) UpdateSnapScale() {
 	snapMax := 1000 * float64(c.viper.Haptics.SnapMax)
 
 	c.viper.Haptics._snapScale = 1 / math.Pow(snapMax, exponent)
+
+	c.registerUpdate(false)
 }
 
 // GetSnapMax returns the maximum snap value.
@@ -785,6 +988,8 @@ func (c *Config) SetSnapMax(value int) {
 	value = max(value, 1)
 
 	c.viper.Haptics.SnapMax = value
+
+	c.registerUpdate(false)
 }
 
 // IncreaseSnapMax increases the maximum snap value in increments of 1.
@@ -838,6 +1043,8 @@ func (c *Config) SetTransmissionCurve(value int) {
 	value = max(value, 5)
 
 	c.viper.Haptics.DynamicTransmissionCurve = value
+
+	c.registerUpdate(false)
 }
 
 // IncreaseTransmissionCurve increases the transmission curve value in increments of 5.
@@ -849,6 +1056,8 @@ func (c *Config) IncreaseTransmissionCurve() int {
 		955,
 		c.viper.Haptics.DynamicTransmissionCurve+5,
 	)
+
+	c.registerUpdate(false)
 
 	return c.viper.Haptics.DynamicTransmissionCurve
 }
@@ -862,6 +1071,8 @@ func (c *Config) DecreaseTransmissionCurve() int {
 		5,
 		c.viper.Haptics.DynamicTransmissionCurve-5,
 	)
+
+	c.registerUpdate(false)
 
 	return c.viper.Haptics.DynamicTransmissionCurve
 }
@@ -885,6 +1096,8 @@ func (c *Config) SetTransmissionGforceMax(value float64) {
 	value = math.Max(0, value)
 
 	c.viper.Haptics.DynamicTransmissionGforceMax = value
+
+	c.registerUpdate(false)
 }
 
 // IncreaseTransmissionGforceMax increases the maximum g-force for dynamic transmission feedback in increments of 0.1g.
@@ -897,6 +1110,8 @@ func (c *Config) IncreaseTransmissionGforceMax() float64 {
 	)
 
 	c.mu.Unlock()
+
+	c.registerUpdate(false)
 
 	return c.viper.Haptics.DynamicTransmissionGforceMax
 }
@@ -911,6 +1126,8 @@ func (c *Config) DecreaseTransmissionGforceMax() float64 {
 	)
 
 	c.mu.Unlock()
+
+	c.registerUpdate(false)
 
 	return c.viper.Haptics.DynamicTransmissionGforceMax
 }
@@ -968,6 +1185,8 @@ func (c *Config) IncreaseEnginePrimaryBalance() float64 {
 		c.viper.Haptics._engineProfile.PrimaryBalance+0.01,
 	)
 
+	c.registerUpdate(false)
+
 	return c.viper.Haptics._engineProfile.PrimaryBalance
 }
 
@@ -985,6 +1204,8 @@ func (c *Config) DecreaseEnginePrimaryBalance() float64 {
 		0.0,
 		c.viper.Haptics._engineProfile.PrimaryBalance-0.01,
 	)
+
+	c.registerUpdate(false)
 
 	return c.viper.Haptics._engineProfile.PrimaryBalance
 }
@@ -1017,6 +1238,8 @@ func (c *Config) IncreaseEngineSecondaryBalance() float64 {
 		c.viper.Haptics._engineProfile.SecondaryBalance+0.01,
 	)
 
+	c.registerUpdate(false)
+
 	return c.viper.Haptics._engineProfile.SecondaryBalance
 }
 
@@ -1034,6 +1257,8 @@ func (c *Config) DecreaseEngineSecondaryBalance() float64 {
 		0.0,
 		c.viper.Haptics._engineProfile.SecondaryBalance-0.01,
 	)
+
+	c.registerUpdate(false)
 
 	return c.viper.Haptics._engineProfile.SecondaryBalance
 }
@@ -1066,6 +1291,8 @@ func (c *Config) IncreaseEnginePulseGain() float64 {
 		c.viper.Haptics._engineProfile.Gain+c.viper.Synthesizer.GainIncrement,
 	)
 
+	c.registerUpdate(false)
+
 	return c.viper.Haptics._engineProfile.Gain
 }
 
@@ -1083,6 +1310,8 @@ func (c *Config) DecreaseEnginePulseGain() float64 {
 		MinimumGain,
 		c.viper.Haptics._engineProfile.Gain-c.viper.Synthesizer.GainIncrement,
 	)
+
+	c.registerUpdate(false)
 
 	return c.viper.Haptics._engineProfile.Gain
 }
@@ -1115,6 +1344,8 @@ func (c *Config) IncreaseEnginePulseScale() float64 {
 		c.viper.Haptics._engineProfile.PulseScale+0.01,
 	)
 
+	c.registerUpdate(false)
+
 	return c.viper.Haptics._engineProfile.PulseScale
 }
 
@@ -1133,6 +1364,8 @@ func (c *Config) DecreaseEnginePulseScale() float64 {
 		c.viper.Haptics._engineProfile.PulseScale-0.01,
 	)
 
+	c.registerUpdate(false)
+
 	return c.viper.Haptics._engineProfile.PulseScale
 }
 
@@ -1146,6 +1379,8 @@ func (c *Config) IncreaseMinHz() int {
 	c.updatePulseWidthExtents()
 
 	c.mu.Unlock()
+
+	c.registerUpdate(false)
 
 	return int(c.viper.Haptics.PulseMinFrequencyHz)
 }
@@ -1161,6 +1396,8 @@ func (c *Config) DecreaseMinHz() int {
 
 	c.mu.Unlock()
 
+	c.registerUpdate(false)
+
 	return int(c.viper.Haptics.PulseMinFrequencyHz)
 }
 
@@ -1169,6 +1406,8 @@ func (c *Config) DecreaseMinHz() int {
 func (c *Config) GetMaxHz() float64 {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
+
+	c.registerUpdate(false)
 
 	return c.viper.Haptics.PulseMaxFrequencyHz
 }
@@ -1232,6 +1471,44 @@ func (c *Config) GetPulseMaxAmplitude() float64 {
 	return c.viper.Haptics.PulseMaxAmplitude
 }
 
+// SetPulseMaxAmplitude sets the maximum pulse amplitude for chassis bump haptics.
+func (c *Config) SetPulseMaxAmplitude(value float64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.Haptics.PulseMaxAmplitude = value
+
+	c.registerUpdate(false)
+}
+
+// GetPulseMaxFrequencyHz returns the maximum pulse frequency in Hz for chassis bump haptics.
+func (c *Config) GetPulseMaxFrequencyHz() float64 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.Haptics.PulseMaxFrequencyHz
+}
+
+// SetPulseMaxFrequencyHz sets the maximum pulse frequency in Hz for chassis bump haptics.
+func (c *Config) SetPulseMaxFrequencyHz(value float64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.Haptics.PulseMaxFrequencyHz = value
+
+	c.updatePulseWidthExtents()
+}
+
+// SetPulseMinFrequencyHz sets the minimum pulse frequency in Hz for chassis bump haptics.
+func (c *Config) SetPulseMinFrequencyHz(value float64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.Haptics.PulseMinFrequencyHz = value
+
+	c.updatePulseWidthExtents()
+}
+
 // ****************************************************************************
 // Pit Radio section methods.
 // ****************************************************************************
@@ -1244,12 +1521,32 @@ func (c *Config) PitRadioEnabled() bool {
 	return c.viper.PitRadio.Enabled
 }
 
+// SetPitRadioEnabled sets whether pit radio integration is enabled.
+func (c *Config) SetPitRadioEnabled(value bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.PitRadio.Enabled = value
+
+	c.registerUpdate(true)
+}
+
 // GetMessageSendIntervalMs returns the interval in milliseconds between sending of pit radio messages.
 func (c *Config) GetMessageSendIntervalMs() int {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
 	return c.viper.PitRadio.MessageSendIntervalMs
+}
+
+// SetMessageSendIntervalMs sets the interval in milliseconds between sending of pit radio messages.
+func (c *Config) SetMessageSendIntervalMs(value int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.PitRadio.MessageSendIntervalMs = value
+
+	c.registerUpdate(false)
 }
 
 // ****************************************************************************
@@ -1284,6 +1581,28 @@ func (c *Config) GetOutputSampleRateHz() int {
 	return c.viper.Synthesizer.OutputSampleRateHz
 }
 
+// SetInternalSampleRateHz sets the internal sample rate of the synthesizer in Hz.
+func (c *Config) SetInternalSampleRateHz(value int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.Synthesizer.InternalSampleRateHz = value
+
+	c.updatePulseWidthExtents()
+
+	c.registerUpdate(true)
+}
+
+// SetOutputSampleRateHz sets the output sample rate of the synthesizer in Hz.
+func (c *Config) SetOutputSampleRateHz(value int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.Synthesizer.OutputSampleRateHz = value
+
+	c.registerUpdate(true)
+}
+
 // GetGainIncrement returns the gain increment value.
 func (c *Config) GetGainIncrement() float64 {
 	c.mu.RLock()
@@ -1299,6 +1618,8 @@ func (c *Config) SetGainIncrement(value float64) {
 
 	value = max(0.01, value)
 	value = min(10, value)
+
+	c.registerUpdate(false)
 
 	c.viper.Synthesizer.GainIncrement = value
 }
@@ -1320,19 +1641,22 @@ func (c *Config) SetMasterGain(value float64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	c.registerUpdate(false)
+
 	c.viper.Synthesizer.MasterGain = max(MinimumGain, min(MaximumGain, value))
 }
 
 // IncreaseMasterGain increases the master gain by the configured gain increment.
 func (c *Config) IncreaseMasterGain() float64 {
 	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	c.viper.Synthesizer.MasterGain = min(
 		MaximumGain,
 		c.viper.Synthesizer.MasterGain+c.viper.Synthesizer.GainIncrement,
 	)
 
-	c.mu.Unlock()
+	c.registerUpdate(false)
 
 	return c.viper.Synthesizer.MasterGain
 }
@@ -1340,13 +1664,14 @@ func (c *Config) IncreaseMasterGain() float64 {
 // DecreaseMasterGain decreases the master gain by the configured gain increment.
 func (c *Config) DecreaseMasterGain() float64 {
 	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	c.viper.Synthesizer.MasterGain = max(
 		MinimumGain,
 		c.viper.Synthesizer.MasterGain-c.viper.Synthesizer.GainIncrement,
 	)
 
-	c.mu.Unlock()
+	c.registerUpdate(false)
 
 	return c.viper.Synthesizer.MasterGain
 }
@@ -1367,18 +1692,21 @@ func (c *Config) SetChassisGain(value float64) {
 	defer c.mu.Unlock()
 
 	c.viper.Synthesizer.ChassisGain = max(MinimumGain, min(MaximumGain, value))
+
+	c.registerUpdate(false)
 }
 
 // IncreaseChassisGain increases the chassis gain by the configured gain increment.
 func (c *Config) IncreaseChassisGain() float64 {
 	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	c.viper.Synthesizer.ChassisGain = min(
 		MaximumGain,
 		c.viper.Synthesizer.ChassisGain+c.viper.Synthesizer.GainIncrement,
 	)
 
-	c.mu.Unlock()
+	c.registerUpdate(false)
 
 	return c.viper.Synthesizer.ChassisGain
 }
@@ -1386,15 +1714,36 @@ func (c *Config) IncreaseChassisGain() float64 {
 // DecreaseChassisGain decreases the chassis gain by the configured gain increment.
 func (c *Config) DecreaseChassisGain() float64 {
 	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	c.viper.Synthesizer.ChassisGain = max(
 		MinimumGain,
 		c.viper.Synthesizer.ChassisGain-c.viper.Synthesizer.GainIncrement,
 	)
 
-	c.mu.Unlock()
+	c.registerUpdate(false)
 
 	return c.viper.Synthesizer.ChassisGain
+}
+
+// SetTransmissionGainMinRace sets the minimum transmission gain for race transmissions.
+func (c *Config) SetTransmissionGainMinRace(value float64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.Synthesizer.TransmissionGainMinRace = max(MinimumGain, min(MaximumGain, value))
+
+	c.registerUpdate(false)
+}
+
+// SetTransmissionGainMinStreet sets the minimum transmission gain for street transmissions.
+func (c *Config) SetTransmissionGainMinStreet(value float64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.Synthesizer.TransmissionGainMinStreet = max(MinimumGain, min(MaximumGain, value))
+
+	c.registerUpdate(false)
 }
 
 // GetTransmissionGain returns the transmission gain of the synthesizer (i.e. the volume level for transmission
@@ -1414,18 +1763,21 @@ func (c *Config) SetTransmissionGain(value float64) {
 	defer c.mu.Unlock()
 
 	c.viper.Synthesizer.TransmissionGain = max(MinimumGain, min(MaximumGain, value))
+
+	c.registerUpdate(false)
 }
 
 // IncreaseTransmissionGain increases the transmission gain by the configured gain increment.
 func (c *Config) IncreaseTransmissionGain() float64 {
 	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	c.viper.Synthesizer.TransmissionGain = min(
 		MaximumGain,
 		c.viper.Synthesizer.TransmissionGain+c.viper.Synthesizer.GainIncrement,
 	)
 
-	c.mu.Unlock()
+	c.registerUpdate(false)
 
 	return c.viper.Synthesizer.TransmissionGain
 }
@@ -1433,13 +1785,14 @@ func (c *Config) IncreaseTransmissionGain() float64 {
 // DecreaseTransmissionGain decreases the transmission gain by the configured gain increment.
 func (c *Config) DecreaseTransmissionGain() float64 {
 	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	c.viper.Synthesizer.TransmissionGain = max(
 		MinimumGain,
 		c.viper.Synthesizer.TransmissionGain-c.viper.Synthesizer.GainIncrement,
 	)
 
-	c.mu.Unlock()
+	c.registerUpdate(false)
 
 	return c.viper.Synthesizer.TransmissionGain
 }
@@ -1478,18 +1831,21 @@ func (c *Config) SetEngineGain(gain float64) {
 	defer c.mu.Unlock()
 
 	c.viper.Synthesizer.EngineGain = max(MinimumGain, min(MaximumGain, gain))
+
+	c.registerUpdate(false)
 }
 
 // IncreaseEngineGain increases the gain of the currently selected engine by the configured gain increment.
 func (c *Config) IncreaseEngineGain() float64 {
 	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	c.viper.Synthesizer.EngineGain = min(
 		MaximumGain,
 		c.viper.Synthesizer.EngineGain+c.viper.Synthesizer.GainIncrement,
 	)
 
-	c.mu.Unlock()
+	c.registerUpdate(false)
 
 	return c.viper.Synthesizer.EngineGain
 }
@@ -1497,15 +1853,62 @@ func (c *Config) IncreaseEngineGain() float64 {
 // DecreaseEngineGain decreases the gain of the currently selected engine by the configured gain increment.
 func (c *Config) DecreaseEngineGain() float64 {
 	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	c.viper.Synthesizer.EngineGain = max(
 		MinimumGain,
 		c.viper.Synthesizer.EngineGain-c.viper.Synthesizer.GainIncrement,
 	)
 
-	c.mu.Unlock()
+	c.registerUpdate(false)
 
 	return c.viper.Synthesizer.EngineGain
+}
+
+// GetOutputFile returns the synthesizer output file path.
+func (c *Config) GetOutputFile() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.Synthesizer.OutputFile
+}
+
+// GetEngineProfiles returns all engine profiles as a map.
+func (c *Config) GetEngineProfiles() map[string]appHaptics.EngineProfile {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.Haptics.EngineProfiles
+}
+
+// SetEngineProfile updates or creates an engine profile.
+func (c *Config) SetEngineProfile(name string, profile appHaptics.EngineProfile) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	name = strings.ToLower(name)
+	c.viper.Haptics.EngineProfiles[name] = profile
+
+	c.registerUpdate(false)
+}
+
+// GetEq returns the equalizer array.
+func (c *Config) GetEq() []float64 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.Synthesizer.Eq
+}
+
+// SetEq sets the equalizer array.
+func (c *Config) SetEq(eq []float64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if len(eq) == 40 {
+		c.viper.Synthesizer.Eq = eq
+		c.registerUpdate(false)
+	}
 }
 
 // ****************************************************************************
@@ -1528,6 +1931,8 @@ func (c *Config) SetTelemetrySource(value string) {
 	// TODO: validate value
 
 	c.viper.Telemetry.Source = value
+
+	c.registerUpdate(true)
 }
 
 // ****************************************************************************
@@ -1542,12 +1947,32 @@ func (c *Config) GetTyreMonitoringEnabled() bool {
 	return c.viper.Tyres.MonitoringEnabled
 }
 
+// SetTyreMonitoringEnabled sets whether tyre monitoring is enabled.
+func (c *Config) SetTyreMonitoringEnabled(value bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.Tyres.MonitoringEnabled = value
+
+	c.registerUpdate(false)
+}
+
 // GetTyreTemperatureOptimalCelsius returns the optimal (center) tyre temperature in Celsius.
 func (c *Config) GetTyreTemperatureOptimalCelsius() float32 {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
 	return c.viper.Tyres.TemperatureOptimalCelsius
+}
+
+// SetTyreTemperatureOptimalCelsius sets the optimal (center) tyre temperature in Celsius.
+func (c *Config) SetTyreTemperatureOptimalCelsius(value float32) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.Tyres.TemperatureOptimalCelsius = value
+
+	c.registerUpdate(false)
 }
 
 // GetTyreTemperatureOperatingWindow returns the total operating window width around optimal temperature in Celsius.
@@ -1559,12 +1984,32 @@ func (c *Config) GetTyreTemperatureOperatingWindow() float32 {
 	return c.viper.Tyres.TemperatureOperatingWindow
 }
 
+// SetTyreTemperatureOperatingWindow sets the total operating window width around optimal temperature in Celsius.
+func (c *Config) SetTyreTemperatureOperatingWindow(value float32) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.Tyres.TemperatureOperatingWindow = value
+
+	c.registerUpdate(false)
+}
+
 // GetTyreTemperatureMarginCelsius returns the margin beyond operating window for hot/cold thresholds in Celsius.
 func (c *Config) GetTyreTemperatureMarginCelsius() float32 {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
 	return c.viper.Tyres.TemperatureMarginCelsius
+}
+
+// SetTyreTemperatureMarginCelsius sets the margin beyond operating window for hot/cold thresholds in Celsius.
+func (c *Config) SetTyreTemperatureMarginCelsius(value float32) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.Tyres.TemperatureMarginCelsius = value
+
+	c.registerUpdate(false)
 }
 
 // ****************************************************************************
@@ -1655,6 +2100,16 @@ func (c *Config) finalise() {
 	c.UpdateSnapScale()
 }
 
+// registerUpdate records the time of the last configuration update.
+// Assumes that the caller holds the write lock.
+func (c *Config) registerUpdate(restartRequired bool) {
+	c.status.LastUpdate = time.Now().Unix()
+
+	if restartRequired {
+		c.status.RestartRequired = restartRequired
+	}
+}
+
 // updatePulseWidthExtents recalculates the minimum and maximum pulse widths in samples.
 func (c *Config) updatePulseWidthExtents() {
 	c.viper.Haptics._pulseWidthMin = float64(c.viper.Synthesizer.InternalSampleRateHz) /
@@ -1662,28 +2117,11 @@ func (c *Config) updatePulseWidthExtents() {
 
 	c.viper.Haptics._pulseWidthMax = float64(c.viper.Synthesizer.InternalSampleRateHz) /
 		(2 * c.viper.Haptics.PulseMinFrequencyHz)
+
+	c.registerUpdate(false)
 }
 
-// TODO: remove this method
-// resolveConfigFilePath finds the config file in standard locations or returns a default path for writing.
-// func (c *Config) resolveConfigFilePath() string {
-// 	c.mu.RLock()
-// 	filename := c.filename
-// 	c.mu.RUnlock()
-
-// 	searchPaths := []string{
-// 		filepath.Join("/boot/simtezilo/", filename),
-// 		filepath.Join("/opt/simtezilo/", filename),
-// 		filepath.Join(".", filename),
-// 	}
-
-// 	for _, path := range searchPaths {
-// 		_, err := os.Stat(path)
-// 		if err != nil {
-// 			return path
-// 		}
-// 	}
-
-// 	// If not found, return default path in current directory (for writing new file)
-// 	return filepath.Join(".", filename)
-// }
+// GetConfigFilePath returns the path to the configuration file.
+func (c *Config) GetConfigFilePath() string {
+	return c.configFile
+}

@@ -21,6 +21,9 @@ type Manager interface {
 	Reset()
 	ResetLapProgress()
 	Name() string
+	Variation() string
+	Country() string
+	CandidateCount() int
 	LengthMeters() float64
 	LapProgress() float64
 	LapProgressRemaining() float64
@@ -89,6 +92,21 @@ func (c *Circuit) ResetLapProgress() {
 // Name returns the name of the current circuit.
 func (c *Circuit) Name() string {
 	return c.info.Name
+}
+
+// Variation returns the variation of the current circuit.
+func (c *Circuit) Variation() string {
+	return c.info.Variation
+}
+
+// Country returns the country of the current circuit.
+func (c *Circuit) Country() string {
+	return c.info.Country
+}
+
+// CandidateCount returns the number of circuit candidates currently being tracked.
+func (c *Circuit) CandidateCount() int {
+	return len(c.candidates)
 }
 
 // LengthMeters returns the length of the current circuit in meters.

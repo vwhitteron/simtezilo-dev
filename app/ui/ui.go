@@ -162,6 +162,12 @@ func (u *UserInterface) DrawLiveDisplay(data LiveData) {
 	u.log.Debug().Str("state", "live").Msg("display update")
 }
 
+// ForceRedraw marks the display data as requiring a refresh on the next update.
+// This is useful when display orientation changes or other display properties are updated.
+func (u *UserInterface) ForceRedraw() {
+	u.displayData.forceRefresh = true
+}
+
 // SettingAction performs a settings action and returns the resulting setting value.
 func (u *UserInterface) SettingAction(setting string, action string) string {
 	u.RegisterActivity()

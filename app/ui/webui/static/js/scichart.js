@@ -134,34 +134,20 @@ let connectionState = {
 
 // UI status update functions
 function updateConnectionStatus(status, message) {
-    const statusIndicator = document.getElementById('status-indicator');
-    const reconnectBtn = document.getElementById('reconnect-btn');
-
-    if (!statusIndicator) return;
-
-    switch (status) {
-        case 'connected':
-            statusIndicator.className = '';
-            statusIndicator.innerHTML = '<i class="fas fa-circle-check text-success" style="font-size: 1.25rem;" title="Connected to telemetry server"></i>';
-            if (reconnectBtn) reconnectBtn.classList.add('d-none');
-            break;
-        case 'connecting':
-            statusIndicator.className = 'spinner-border spinner-border-sm text-warning';
-            statusIndicator.innerHTML = '<span class="visually-hidden">Connecting...</span>';
-            statusIndicator.setAttribute('role', 'status');
-            statusIndicator.setAttribute('title', 'Connecting to telemetry server...');
-            if (reconnectBtn) reconnectBtn.classList.add('d-none');
-            break;
-        case 'disconnected':
-            statusIndicator.className = '';
-            statusIndicator.innerHTML = '<i class="fas fa-circle-xmark text-danger" style="font-size: 1.25rem;" title="Disconnected from telemetry server"></i>';
-            if (reconnectBtn) reconnectBtn.classList.remove('d-none');
-            break;
-        case 'error':
-            statusIndicator.className = '';
-            statusIndicator.innerHTML = '<i class="fas fa-triangle-exclamation text-danger" style="font-size: 1.25rem;" title="Connection error - unable to connect to telemetry server"></i>';
-            if (reconnectBtn) reconnectBtn.classList.remove('d-none');
-            break;
+    // Use the unified nav-status-indicator
+    if (typeof window.showNavbarStatus === 'function') {
+        switch (status) {
+            case 'connected':
+                window.showNavbarStatus('success');
+                break;
+            case 'connecting':
+                window.showNavbarStatus('saving');
+                break;
+            case 'disconnected':
+            case 'error':
+                window.showNavbarStatus('error');
+                break;
+        }
     }
 }
 
@@ -1219,12 +1205,6 @@ async function initSciChart() {
     // Initialize WebSocket connection
     globalWebSocket = createWebSocketConnection();
     globalWebSocket.addEventListener('message', handleWebSocketMessage);
-
-    // Set up manual reconnect button
-    const reconnectBtn = document.getElementById('reconnect-btn');
-    if (reconnectBtn) {
-        reconnectBtn.addEventListener('click', forceReconnect);
-    }
 }
 
 // Initialize the application

@@ -14,6 +14,7 @@ func (a *App) updateCircuit() {
 
 	if didUpdate := a.circuit.UpdateCircuit(odometer, lap, lapTime, coordinates, models.CoordinateTypeCircuit); didUpdate {
 		a.state.last.lastLapTime = 0
+		a.pushCircuitInfo()
 	}
 }
 

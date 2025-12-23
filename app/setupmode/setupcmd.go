@@ -15,6 +15,7 @@ type CmdStatus struct {
 	ActiveConn       string `json:"activeConn"`          //nolint:tagliatelle // lowercase for easy compatibility
 	Available        bool   `json:"available,omitempty"` //nolint:tagliatelle
 	FlagEnabled      bool   `json:"flagEnabled"`         //nolint:tagliatelle
+	Ready            bool   `json:"ready"`               //nolint:tagliatelle
 	RunModePresent   bool   `json:"runModePresent"`      //nolint:tagliatelle
 	SetupModePresent bool   `json:"setupModePresent"`    //nolint:tagliatelle
 	SetupRequired    bool   `json:"setupRequired"`       //nolint:tagliatelle

@@ -96,6 +96,36 @@ func (s *SetupMode) GetHTTPHandler() http.Handler {
 
 // Run starts the setup wizard for configuring WiFi network.
 func (s *SetupMode) Run() {
+	// Check setup status first
+	s.log.Info().Msg("Checking setup status")
+
+	statusCtx, statusCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	status := s.Status(statusCtx)
+
+	statusCancel()
+
+	// If setup mode is not present, initialize it
+	if !status.SetupModePresent {
+		s.log.Info().Msg("Setup mode not present, running setup init")
+
+		initCtx, initCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer initCancel()
+
+		_, err := s.runSetupCommand(initCtx, "init", nil)
+		if err != nil {
+			s.log.Error().Err(err).Msg("Failed to initialize setup mode")
+			s.showErrorSprite()
+
+			s.done <- exitcode.GeneralErr
+
+			close(s.shutdown)
+
+			return
+		}
+
+		s.log.Info().Msg("Setup mode initialized successfully")
+	}
+
 	// Ensure setup mode is active
 	s.log.Info().Msg("Activating setup mode connection")
 
@@ -230,7 +260,7 @@ func handleAPIGetLanguages(writer http.ResponseWriter, _ *http.Request, logger *
 	}
 
 	writer.Header().Set("Content-Type", "application/json")
-	writer.Header().Set("Cache-Control", "public, max-age=3600")
+	writer.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 
 	length, err := writer.Write(data)
 	if err != nil {
@@ -270,7 +300,7 @@ func handleAPIGetI18n(writer http.ResponseWriter, request *http.Request, logger 
 	}
 
 	writer.Header().Set("Content-Type", "application/json")
-	writer.Header().Set("Cache-Control", "public, max-age=3600")
+	writer.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 
 	length, err := writer.Write(data)
 	if err != nil {
