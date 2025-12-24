@@ -8,37 +8,42 @@ class ConfigManager {
         this.previousValues = new Map(); // Store previous valid values
         this.configTimestamp = 0; // Backend config timestamp
         this.statusCheckInterval = null; // Interval for checking config status
+        this.isInitializing = true; // Flag to prevent saves during initial load
         this.init();
     }
 
     async init() {
         await this.loadLanguages();
-        await this.loadConfiguration();
+        await this.loadConfiguration(); // This calls populateForm() internally
         this.setupEventListeners();
-        this.populateForm();
+        // populateForm() already called in loadConfiguration(), no need to call again
         await this.checkSetupModeAvailability();
         await this.checkHardwarePlatform();
         this.startStatusPolling();
         this.initAdvancedToggle();
         this.initEngineProfiles();
         this.initEqualizer();
+        this.isInitializing = false; // Initialization complete, allow saves
     }
 
     // Initialize advanced settings toggle
     initAdvancedToggle() {
-        const advancedToggle = document.getElementById('advanced-settings-toggle');
         const advancedSettings = document.getElementById('advancedSettings');
+        const advancedChevron = document.getElementById('advanced-settings-chevron');
 
-        if (advancedToggle && advancedSettings) {
-            console.log('Advanced toggle initialized');
-            advancedToggle.addEventListener('change', (e) => {
-                console.log('Toggle changed:', e.target.checked);
-                advancedSettings.style.display = e.target.checked ? 'block' : 'none';
+        if (advancedSettings && advancedChevron) {
+            // Listen to Bootstrap collapse events to rotate chevron
+            advancedSettings.addEventListener('show.bs.collapse', () => {
+                advancedChevron.style.transform = 'rotate(90deg)';
+            });
+
+            advancedSettings.addEventListener('hide.bs.collapse', () => {
+                advancedChevron.style.transform = 'rotate(0deg)';
             });
         } else {
-            console.error('Advanced toggle or settings not found:', {
-                toggle: !!advancedToggle,
-                settings: !!advancedSettings
+            console.error('Advanced settings or chevron not found:', {
+                settings: !!advancedSettings,
+                chevron: !!advancedChevron
             });
         }
     }
@@ -103,7 +108,6 @@ class ConfigManager {
 
             // Check if backend config is newer than our local copy
             if (status.lastUpdate > this.configTimestamp) {
-                console.log('Backend config is newer, reloading configuration');
                 await this.loadConfiguration();
             }
         } catch (error) {
@@ -206,7 +210,7 @@ class ConfigManager {
             this.factoryReset();
         });
 
-        // Auto-save on input change (debounced per input)
+        // Auto-save on blur or Enter key for inputs
         const inputs = document.querySelectorAll('[data-config]');
         inputs.forEach(input => {
             // Store initial value as previous value
@@ -214,20 +218,45 @@ class ConfigManager {
             const currentValue = input.type === 'checkbox' ? input.checked : input.value;
             this.previousValues.set(configPath, currentValue);
 
-            input.addEventListener('change', () => {
-                // Check if language changed to reload translations
-                if (input.id === 'app-language') {
-                    this.handleLanguageChange(input.value);
-                } else {
-                    this.debounceInputSave(input);
-                }
-            });
+            // Checkboxes and selects should save immediately on change
+            if (input.type === 'checkbox' || input.tagName === 'SELECT') {
+                input.addEventListener('change', () => {
+                    // Check if language changed to reload translations
+                    if (input.id === 'app-language') {
+                        this.handleLanguageChange(input.value);
+                    } else {
+                        this.saveInputConfiguration(input);
+                    }
+                });
+            } else {
+                // For text and number inputs, save on blur
+                input.addEventListener('blur', () => {
+                    if (input.id === 'app-language') {
+                        this.handleLanguageChange(input.value);
+                    } else {
+                        this.saveInputConfiguration(input);
+                    }
+                });
 
-            input.addEventListener('input', () => {
-                if (input.type === 'range' || input.type === 'number') {
-                    this.debounceInputSave(input);
+                // Also save on Enter key press
+                input.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        input.blur(); // Trigger blur to save
+                    }
+                });
+
+                // For gain inputs, haptics, fuel, tyres, and pitRadio inputs, also save immediately on change (spinner buttons)
+                if (input.classList.contains('gain-input') ||
+                    configPath.startsWith('haptics.') ||
+                    configPath.startsWith('fuel.') ||
+                    configPath.startsWith('tyres.') ||
+                    configPath.startsWith('pitRadio.')) {
+                    input.addEventListener('change', () => {
+                        this.saveInputConfiguration(input);
+                    });
                 }
-            });
+            }
         });
     }
 
@@ -239,9 +268,6 @@ class ConfigManager {
         // Clear existing timeout for this input
         clearTimeout(this.inputSaveTimeouts.get(inputId));
 
-        // Show saving indicator
-        this.showInputStatus(input, 'saving');
-
         // Set new timeout
         this.inputSaveTimeouts.set(inputId, setTimeout(async () => {
             await this.saveInputConfiguration(input);
@@ -250,6 +276,11 @@ class ConfigManager {
 
     // Save configuration for a specific input
     async saveInputConfiguration(input) {
+        // Skip saves during initial load
+        if (this.isInitializing) {
+            return;
+        }
+
         const configPath = input.dataset.config;
         let newValue;
 
@@ -260,6 +291,14 @@ class ConfigManager {
             if (isNaN(newValue)) {
                 newValue = 0;
             }
+
+            // Haptics curve values need to be divided by 1000 before sending to backend
+            // The UI shows integers (5-955) but backend expects floats (0.005-0.955)
+            if (configPath === 'haptics.jerkCurve' ||
+                configPath === 'haptics.snapCurve' ||
+                configPath === 'haptics.dynamicTransmissionCurve') {
+                newValue = newValue / 1000.0;
+            }
         } else {
             newValue = input.value;
         }
@@ -267,6 +306,9 @@ class ConfigManager {
         // Store the attempted value
         const attemptedValue = newValue;
         const previousValue = this.previousValues.get(configPath);
+
+        // Show saving indicator now that we're actually making the API call
+        this.showInputStatus(input, 'saving');
 
         try {
             // Build form data with just this value
@@ -303,8 +345,12 @@ class ConfigManager {
             this.inputSaveTimeouts.set(inputId + '-revert', setTimeout(() => {
                 if (input.type === 'checkbox') {
                     input.checked = previousValue;
+                    // Dispatch change event to update any UI elements that depend on this checkbox
+                    input.dispatchEvent(new Event('change', { bubbles: true }));
                 } else {
                     input.value = previousValue;
+                    // Dispatch input event for text/number fields
+                    input.dispatchEvent(new Event('input', { bubbles: true }));
                 }
             }, 3000));
         }
@@ -402,7 +448,7 @@ class ConfigManager {
 
             this.config = await response.json();
             this.populateForm();
-            this.showStatus('Configuration loaded successfully', 'success');
+            // Configuration loaded successfully (no need to show indicator)
 
             // Get and store the backend timestamp
             const statusResponse = await fetch('/api/config/status');
@@ -428,6 +474,11 @@ class ConfigManager {
         const inputs = document.querySelectorAll('[data-config]');
 
         inputs.forEach(input => {
+            // Skip updating fields that currently have focus (user is editing)
+            if (document.activeElement === input) {
+                return;
+            }
+
             const configPath = input.dataset.config;
             const value = this.getNestedValue(this.config, configPath);
 
@@ -441,6 +492,34 @@ class ConfigManager {
                 this.previousValues.set(configPath, value);
             }
         });
+
+        // After populating all inputs, update all mute icons based on checkbox states
+        this.updateAllMuteIcons();
+    }
+
+    // Update all mute icons based on their corresponding checkbox states
+    updateAllMuteIcons() {
+        const muteCheckboxes = document.querySelectorAll('input[type="checkbox"][id*="mute"]');
+        muteCheckboxes.forEach(checkbox => {
+            this.updateMuteIconForCheckbox(checkbox);
+        });
+    }
+
+    // Helper to update mute icon based on checkbox state
+    updateMuteIconForCheckbox(checkbox) {
+        // Find the icon associated with this checkbox
+        const icon = document.querySelector(`[data-mute-checkbox="${checkbox.id}"]`);
+        if (icon) {
+            if (checkbox.checked) {
+                icon.classList.remove('fa-volume-high');
+                icon.classList.add('fa-volume-xmark');
+                icon.style.color = '#dc3545';
+            } else {
+                icon.classList.remove('fa-volume-xmark');
+                icon.classList.add('fa-volume-high');
+                icon.style.color = '';
+            }
+        }
     }
 
     collectFormData() {
@@ -470,8 +549,9 @@ class ConfigManager {
 
     async saveConfiguration(silent = false) {
         try {
-            if (!silent) {
-                this.showStatus('Saving configuration...', 'info');
+            // Show saving indicator for explicit saves
+            if (!silent && typeof window.showNavbarStatus === 'function') {
+                window.showNavbarStatus('saving');
             }
 
             const formData = this.collectFormData();
@@ -503,15 +583,11 @@ class ConfigManager {
                 }
 
                 const saveResult = await saveResponse.json();
+            }
 
-                if (saveResult.backupPath) {
-                    this.showStatus(`Configuration saved successfully. Backup created: ${saveResult.backupPath}`, 'success');
-                } else {
-                    this.showStatus('Configuration saved successfully', 'success');
-                }
-            } else {
-                // Silent save completed - show brief success feedback
-                this.showStatus('✓ Saved', 'success');
+            // Show success indicator
+            if (typeof window.showNavbarStatus === 'function') {
+                window.showNavbarStatus('success');
             }
 
             // Update local config with server response
@@ -519,7 +595,10 @@ class ConfigManager {
 
         } catch (error) {
             console.error('Failed to save configuration:', error);
-            this.showStatus('Failed to save configuration: ' + error.message, 'error');
+            // Show error indicator
+            if (typeof window.showNavbarStatus === 'function') {
+                window.showNavbarStatus('error');
+            }
         }
     }
 
@@ -541,11 +620,18 @@ class ConfigManager {
 
             this.config = await response.json();
             this.populateForm();
-            this.showStatus('Configuration reset to defaults successfully', 'success');
+
+            // Show success indicator for reset operation
+            if (typeof window.showNavbarStatus === 'function') {
+                window.showNavbarStatus('success');
+            }
 
         } catch (error) {
             console.error('Failed to reset configuration:', error);
-            this.showStatus('Failed to reset configuration: ' + error.message, 'error');
+            // Show error indicator for reset operation
+            if (typeof window.showNavbarStatus === 'function') {
+                window.showNavbarStatus('error');
+            }
         }
     }
 
@@ -560,8 +646,6 @@ class ConfigManager {
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
-
-            console.log('Configuration export triggered');
         } catch (error) {
             console.error('Failed to export configuration:', error);
             alert('Failed to export configuration: ' + error.message);
@@ -609,8 +693,6 @@ class ConfigManager {
                 throw new Error(result.error || 'Failed to import configuration');
             }
 
-            console.log('Configuration imported successfully:', result);
-
             // Show success message
             alert(result.message + (result.backup ? '\n\nBackup created at: ' + result.backup : ''));
 
@@ -650,8 +732,9 @@ class ConfigManager {
     }
 
     showStatus(message, type) {
-        // Status is now shown in navbar indicator only
-        // This method kept for backward compatibility but does nothing
+        // Only show navbar indicator for actual save operations (success/error from saves)
+        // Don't show for 'info' type (loading messages) or other informational states
+        // This prevents indicators from showing on page load or config reload
     }
 
     async checkSetupModeAvailability() {
@@ -1015,6 +1098,11 @@ class ConfigManager {
         };
 
         try {
+            // Show saving indicator
+            if (typeof window.showNavbarStatus === 'function') {
+                window.showNavbarStatus('saving');
+            }
+
             // Update local config
             if (!this.config.synthesizer.engineProfiles) {
                 this.config.synthesizer.engineProfiles = {};
@@ -1042,66 +1130,483 @@ class ConfigManager {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
 
-            console.log('Engine profile saved:', selectedProfile);
+            // Show success indicator
+            if (typeof window.showNavbarStatus === 'function') {
+                window.showNavbarStatus('success');
+            }
         } catch (error) {
             console.error('Failed to save engine profile:', error);
+            // Show error indicator
+            if (typeof window.showNavbarStatus === 'function') {
+                window.showNavbarStatus('error');
+            }
             alert('Failed to save engine profile: ' + error.message);
         }
     }
 
     // Initialize equalizer controls
     initEqualizer() {
-        const eqContainer = document.getElementById('equalizer-controls');
+        const bandSelect = document.getElementById('eq-band-select');
+        const frequencySlider = document.getElementById('eq-frequency-slider');
+        const gainSlider = document.getElementById('eq-gain-slider');
+        const qSlider = document.getElementById('eq-q-slider');
+        const frequencyValue = document.getElementById('eq-frequency-value');
+        const gainValue = document.getElementById('eq-gain-value');
+        const qValue = document.getElementById('eq-q-value');
         const resetBtn = document.getElementById('eq-reset-btn');
+        const eqEnabledCheckbox = document.getElementById('synth-eqenabled');
 
-        if (!eqContainer || !this.config.synthesizer) {
+        if (!bandSelect || !frequencySlider || !gainSlider || !qSlider || !this.config.synthesizer) {
             return;
         }
 
-        // Get EQ array or create default
-        let eq = this.config.synthesizer.eq || Array(40).fill(1.0);
-
-        // Generate 40 EQ sliders (10-49 Hz)
-        eqContainer.innerHTML = '';
-        for (let i = 0; i < 40; i++) {
-            const freq = 10 + i;
-            const col = document.createElement('div');
-            col.className = 'col-6 col-sm-4 col-md-3 col-lg-2';
-
-            col.innerHTML = `
-                <label for="eq-${freq}" class="form-label small">${freq} Hz</label>
-                <input type="range" class="form-range" id="eq-${freq}" 
-                       min="0" max="2" step="0.1" value="${eq[i]}"
-                       data-eq-index="${i}">
-                <div class="text-center small text-muted" id="eq-${freq}-value">${eq[i].toFixed(1)}</div>
-            `;
-
-            eqContainer.appendChild(col);
-
-            const slider = col.querySelector('input');
-            const valueDisplay = col.querySelector('.text-muted');
-
-            slider.addEventListener('input', (e) => {
-                valueDisplay.textContent = parseFloat(e.target.value).toFixed(1);
+        // Set EQ enabled checkbox
+        if (eqEnabledCheckbox) {
+            eqEnabledCheckbox.checked = this.config.synthesizer.eqEnabled || false;
+            // Listen for checkbox changes and trigger EQ save
+            eqEnabledCheckbox.addEventListener('change', () => {
                 this.debounceEqSave();
+            });
+        }
+
+        // Get EQ bands array (parametric format: [{frequency, gain, q}, ...])
+        let eqBands = this.config.synthesizer.eq;
+
+        // If eq is not in the expected format or missing, use defaults
+        if (!Array.isArray(eqBands) || eqBands.length !== 8) {
+            eqBands = [
+                { frequency: 12, gain: 0.0, q: 2.0 },
+                { frequency: 16, gain: 0.0, q: 2.0 },
+                { frequency: 20, gain: 0.0, q: 2.0 },
+                { frequency: 25, gain: 0.0, q: 2.0 },
+                { frequency: 30, gain: 0.0, q: 2.0 },
+                { frequency: 38, gain: 0.0, q: 2.0 },
+                { frequency: 48, gain: 0.0, q: 2.0 },
+                { frequency: 58, gain: 0.0, q: 2.0 }
+            ];
+        }
+
+        // Store bands in config
+        this.eqBands = eqBands;
+        this.currentBandIndex = 0;
+        this.isDraggingBand = false;
+        this.draggedBandIndex = -1;
+
+        // Populate band select dropdown
+        this.updateBandSelect();
+
+        // Load initial band values
+        this.loadBandValues(0);
+
+        // Band select change event
+        bandSelect.addEventListener('change', (e) => {
+            this.currentBandIndex = parseInt(e.target.value);
+            this.loadBandValues(this.currentBandIndex);
+            this.updateFrequencyConstraints();
+            this.drawEqCurve(); // Redraw to highlight selected band
+        });
+
+        // Frequency slider events
+        frequencySlider.addEventListener('input', (e) => {
+            const value = parseFloat(e.target.value);
+            frequencyValue.textContent = `${value} Hz`;
+            this.eqBands[this.currentBandIndex].frequency = value;
+            this.updateBandSelect(); // Update dropdown to show new frequency
+            this.updateFrequencyConstraints(); // Update constraints for neighboring bands
+            this.drawEqCurve(); // Redraw to show updated position
+            this.debounceEqSave();
+        });
+
+        // Gain slider events
+        gainSlider.addEventListener('input', (e) => {
+            const value = parseFloat(e.target.value);
+            gainValue.textContent = `${value > 0 ? '+' : ''}${value.toFixed(1)} dB`;
+            this.eqBands[this.currentBandIndex].gain = value;
+            this.drawEqCurve(); // Redraw to show updated position
+            this.debounceEqSave();
+        });
+
+        // Q slider events
+        qSlider.addEventListener('input', (e) => {
+            const value = parseFloat(e.target.value);
+            qValue.textContent = value.toFixed(1);
+            this.eqBands[this.currentBandIndex].q = value;
+            this.debounceEqSave();
+        });
+
+        // Draw initial curve
+        this.drawEqCurve();
+
+        // Add mouse handlers to canvas for selecting and dragging bands
+        const canvas = document.getElementById('eq-curve-canvas');
+        if (canvas) {
+            canvas.style.cursor = 'pointer';
+
+            canvas.addEventListener('mousedown', (e) => {
+                this.handleCanvasMouseDown(e);
+            });
+
+            canvas.addEventListener('mousemove', (e) => {
+                this.handleCanvasMouseMove(e);
+            });
+
+            canvas.addEventListener('mouseup', (e) => {
+                this.handleCanvasMouseUp(e);
+            });
+
+            canvas.addEventListener('mouseleave', (e) => {
+                this.handleCanvasMouseUp(e);
             });
         }
 
         // Setup reset button
         if (resetBtn) {
             resetBtn.addEventListener('click', () => {
-                for (let i = 0; i < 40; i++) {
-                    const freq = 10 + i;
-                    const slider = document.getElementById(`eq-${freq}`);
-                    const valueDisplay = document.getElementById(`eq-${freq}-value`);
-                    if (slider && valueDisplay) {
-                        slider.value = 1.0;
-                        valueDisplay.textContent = '1.0';
-                    }
-                }
+                const defaultBands = [
+                    { frequency: 12, gain: 0.0, q: 2.0 },
+                    { frequency: 16, gain: 0.0, q: 2.0 },
+                    { frequency: 20, gain: 0.0, q: 2.0 },
+                    { frequency: 25, gain: 0.0, q: 2.0 },
+                    { frequency: 30, gain: 0.0, q: 2.0 },
+                    { frequency: 38, gain: 0.0, q: 2.0 },
+                    { frequency: 48, gain: 0.0, q: 2.0 },
+                    { frequency: 58, gain: 0.0, q: 2.0 }
+                ];
+                this.eqBands = defaultBands;
+                this.updateBandSelect();
+                this.loadBandValues(this.currentBandIndex);
                 this.saveEqualizer();
             });
         }
+    }
+
+    // Update band select dropdown options
+    updateBandSelect() {
+        const bandSelect = document.getElementById('eq-band-select');
+        if (!bandSelect || !this.eqBands) return;
+
+        bandSelect.innerHTML = '';
+        this.eqBands.forEach((band, index) => {
+            const freq = band.frequency !== undefined ? band.frequency : (band.Frequency !== undefined ? band.Frequency : 12);
+            const option = document.createElement('option');
+            option.value = index;
+            option.textContent = `Band ${index + 1} (${freq} Hz)`;
+            if (index === this.currentBandIndex) {
+                option.selected = true;
+            }
+            bandSelect.appendChild(option);
+        });
+    }
+
+    // Load values for selected band into sliders
+    loadBandValues(index) {
+        const frequencySlider = document.getElementById('eq-frequency-slider');
+        const gainSlider = document.getElementById('eq-gain-slider');
+        const qSlider = document.getElementById('eq-q-slider');
+        const frequencyValue = document.getElementById('eq-frequency-value');
+        const gainValue = document.getElementById('eq-gain-value');
+        const qValue = document.getElementById('eq-q-value');
+
+        if (!this.eqBands || index < 0 || index >= this.eqBands.length) return;
+
+        const band = this.eqBands[index];
+        const freq = band.frequency !== undefined ? band.frequency : (band.Frequency !== undefined ? band.Frequency : 12);
+        const gain = band.gain !== undefined ? band.gain : (band.Gain !== undefined ? band.Gain : 0.0);
+        const q = band.q !== undefined ? band.q : (band.Q !== undefined ? band.Q : 2.0);
+
+        if (frequencySlider) {
+            frequencySlider.value = freq;
+            frequencyValue.textContent = `${freq} Hz`;
+        }
+
+        if (gainSlider) {
+            gainSlider.value = gain;
+            gainValue.textContent = `${gain > 0 ? '+' : ''}${gain.toFixed(1)} dB`;
+        }
+
+        if (qSlider) {
+            qSlider.value = q;
+            qValue.textContent = q.toFixed(1);
+        }
+    }
+
+    // Update frequency slider constraints based on neighboring bands
+    updateFrequencyConstraints() {
+        const frequencySlider = document.getElementById('eq-frequency-slider');
+        if (!frequencySlider || !this.eqBands) return;
+
+        const index = this.currentBandIndex;
+        let minFreq = 10;  // Absolute minimum
+        let maxFreq = 70;  // Absolute maximum
+
+        // Get frequency of previous band (if exists)
+        if (index > 0) {
+            const prevBand = this.eqBands[index - 1];
+            const prevFreq = prevBand.frequency !== undefined ? prevBand.frequency : (prevBand.Frequency !== undefined ? prevBand.Frequency : 10);
+            minFreq = prevFreq + 0.5; // Must be at least 0.5 Hz above previous band
+        }
+
+        // Get frequency of next band (if exists)
+        if (index < this.eqBands.length - 1) {
+            const nextBand = this.eqBands[index + 1];
+            const nextFreq = nextBand.frequency !== undefined ? nextBand.frequency : (nextBand.Frequency !== undefined ? nextBand.Frequency : 70);
+            maxFreq = nextFreq - 0.5; // Must be at least 0.5 Hz below next band
+        }
+
+        frequencySlider.min = minFreq;
+        frequencySlider.max = maxFreq;
+
+        // Constrain current value if it's out of bounds
+        const currentFreq = parseFloat(frequencySlider.value);
+        if (currentFreq < minFreq) {
+            frequencySlider.value = minFreq;
+            this.eqBands[index].frequency = minFreq;
+        } else if (currentFreq > maxFreq) {
+            frequencySlider.value = maxFreq;
+            this.eqBands[index].frequency = maxFreq;
+        }
+    }
+
+    // Handle canvas mouse down to start dragging
+    handleCanvasMouseDown(event) {
+        const canvas = document.getElementById('eq-curve-canvas');
+        if (!canvas || !this.eqBands) return;
+
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        const x = (event.clientX - rect.left) * scaleX;
+        const y = (event.clientY - rect.top) * scaleY;
+
+        const width = canvas.width;
+        const height = canvas.height;
+
+        // Check if mouse down is near any band dot
+        const clickRadius = 15;
+
+        for (let index = 0; index < this.eqBands.length; index++) {
+            const band = this.eqBands[index];
+            const freq = band.frequency !== undefined ? band.frequency : (band.Frequency !== undefined ? band.Frequency : 12);
+            const gain = band.gain !== undefined ? band.gain : (band.Gain !== undefined ? band.Gain : 0.0);
+
+            const bandX = ((freq - 10) / 60) * width;
+            const bandY = height / 2 - (gain / 18) * height / 2;
+
+            const distance = Math.sqrt(Math.pow(x - bandX, 2) + Math.pow(y - bandY, 2));
+
+            if (distance < clickRadius) {
+                this.isDraggingBand = true;
+                this.draggedBandIndex = index;
+                this.currentBandIndex = index;
+
+                // Update dropdown
+                const bandSelect = document.getElementById('eq-band-select');
+                if (bandSelect) {
+                    bandSelect.value = index;
+                }
+
+                // Update sliders
+                this.loadBandValues(index);
+                this.updateFrequencyConstraints();
+
+                // Redraw to highlight selected band
+                this.drawEqCurve();
+
+                canvas.style.cursor = 'grabbing';
+                break;
+            }
+        }
+    }
+
+    // Handle canvas mouse move for dragging
+    handleCanvasMouseMove(event) {
+        if (!this.isDraggingBand || this.draggedBandIndex === -1) return;
+
+        const canvas = document.getElementById('eq-curve-canvas');
+        if (!canvas || !this.eqBands) return;
+
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        const x = (event.clientX - rect.left) * scaleX;
+        const y = (event.clientY - rect.top) * scaleY;
+
+        const width = canvas.width;
+        const height = canvas.height;
+
+        // Convert x position to frequency (10-70 Hz)
+        let frequency = (x / width) * 60 + 10;
+
+        // Apply frequency constraints
+        const index = this.draggedBandIndex;
+        let minFreq = 10;
+        let maxFreq = 70;
+
+        if (index > 0) {
+            const prevBand = this.eqBands[index - 1];
+            const prevFreq = prevBand.frequency !== undefined ? prevBand.frequency : (prevBand.Frequency !== undefined ? prevBand.Frequency : 10);
+            minFreq = prevFreq + 0.5;
+        }
+
+        if (index < this.eqBands.length - 1) {
+            const nextBand = this.eqBands[index + 1];
+            const nextFreq = nextBand.frequency !== undefined ? nextBand.frequency : (nextBand.Frequency !== undefined ? nextBand.Frequency : 70);
+            maxFreq = nextFreq - 0.5;
+        }
+
+        frequency = Math.max(minFreq, Math.min(maxFreq, frequency));
+        frequency = Math.round(frequency * 2) / 2; // Round to nearest 0.5
+
+        // Convert y position to gain (-12 to +6 dB)
+        let gain = ((height / 2 - y) / (height / 2)) * 18;
+        gain = Math.max(-12, Math.min(6, gain));
+        gain = Math.round(gain * 2) / 2; // Round to nearest 0.5
+
+        // Update band values
+        this.eqBands[index].frequency = frequency;
+        this.eqBands[index].gain = gain;
+
+        // Update sliders and values
+        const frequencySlider = document.getElementById('eq-frequency-slider');
+        const gainSlider = document.getElementById('eq-gain-slider');
+        const frequencyValue = document.getElementById('eq-frequency-value');
+        const gainValue = document.getElementById('eq-gain-value');
+
+        if (frequencySlider) {
+            frequencySlider.value = frequency;
+            frequencyValue.textContent = `${frequency} Hz`;
+        }
+
+        if (gainSlider) {
+            gainSlider.value = gain;
+            gainValue.textContent = `${gain > 0 ? '+' : ''}${gain.toFixed(1)} dB`;
+        }
+
+        // Update dropdown and constraints
+        this.updateBandSelect();
+        this.updateFrequencyConstraints();
+
+        // Redraw curve
+        this.drawEqCurve();
+    }
+
+    // Handle canvas mouse up to stop dragging
+    handleCanvasMouseUp(event) {
+        if (this.isDraggingBand) {
+            this.isDraggingBand = false;
+            this.draggedBandIndex = -1;
+
+            const canvas = document.getElementById('eq-curve-canvas');
+            if (canvas) {
+                canvas.style.cursor = 'pointer';
+            }
+
+            // Save changes
+            this.debounceEqSave();
+        }
+    }
+
+    // Handle canvas click to select bands (legacy - now handled by mousedown)
+    handleCanvasClick(event) {
+        // No longer needed - selection is handled in mousedown
+    }
+
+    // Draw EQ curve visualization
+    drawEqCurve() {
+        const canvas = document.getElementById('eq-curve-canvas');
+        if (!canvas || !this.config.eqCurve) return;
+
+        const ctx = canvas.getContext('2d');
+        const width = canvas.width;
+        const height = canvas.height;
+        const curve = this.config.eqCurve.curve || [];
+        const minFreq = this.config.eqCurve.minFreq || 10;
+        const resolution = this.config.eqCurve.resolution || 0.5;
+
+        // Clear canvas
+        ctx.clearRect(0, 0, width, height);
+
+        // Draw background grid
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+        ctx.lineWidth = 1;
+
+        // Horizontal grid lines (dB levels)
+        const dbLevels = [-12, -6, 0, 6];
+        dbLevels.forEach(db => {
+            const y = height / 2 - (db / 18) * height / 2; // Scale to canvas
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(width, y);
+            ctx.stroke();
+
+            // Label
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+            ctx.font = '10px sans-serif';
+            ctx.fillText(`${db > 0 ? '+' : ''}${db}dB`, 5, y - 3);
+        });
+
+        // Draw 0dB line thicker
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(0, height / 2);
+        ctx.lineTo(width, height / 2);
+        ctx.stroke();
+
+        // Draw curve
+        if (curve.length > 0) {
+            ctx.strokeStyle = '#0d6efd';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+
+            curve.forEach((value, i) => {
+                const freq = minFreq + i * resolution;
+                const x = ((freq - 10) / 60) * width; // 10-70 Hz range
+                // Convert amplitude ratio to dB for display
+                const db = 20 * Math.log10(value || 1);
+                const y = height / 2 - (db / 18) * height / 2;
+
+                if (i === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            });
+
+            ctx.stroke();
+        }
+
+        // Draw band markers as dots
+        if (this.eqBands && this.eqBands.length > 0) {
+            this.eqBands.forEach((band, index) => {
+                const freq = band.frequency !== undefined ? band.frequency : (band.Frequency !== undefined ? band.Frequency : 12);
+                const gain = band.gain !== undefined ? band.gain : (band.Gain !== undefined ? band.Gain : 0.0);
+
+                const x = ((freq - 10) / 60) * width; // 10-70 Hz range
+                const y = height / 2 - (gain / 18) * height / 2;
+
+                // Draw dot
+                ctx.beginPath();
+                ctx.arc(x, y, 5, 0, 2 * Math.PI);
+
+                // Highlight active band
+                if (index === this.currentBandIndex) {
+                    ctx.fillStyle = '#ff9800'; // Orange for active band
+                } else {
+                    ctx.fillStyle = '#0d6efd'; // Blue for inactive bands
+                }
+                ctx.fill();
+            });
+        }
+
+        // Draw frequency markers
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+        ctx.font = '10px sans-serif';
+        const freqMarkers = [10, 20, 30, 40, 50, 60, 70];
+        freqMarkers.forEach(freq => {
+            const x = ((freq - 10) / 60) * width;
+            ctx.fillText(`${freq}Hz`, x - 10, height - 5);
+        });
     }
 
     // Debounce save for equalizer
@@ -1112,29 +1617,37 @@ class ConfigManager {
 
     // Save equalizer settings
     async saveEqualizer() {
-        const eq = [];
+        const eqEnabledCheckbox = document.getElementById('synth-eqenabled');
 
-        for (let i = 0; i < 40; i++) {
-            const freq = 10 + i;
-            const slider = document.getElementById(`eq-${freq}`);
-            if (slider) {
-                eq.push(parseFloat(slider.value));
-            }
-        }
-
-        if (eq.length !== 40) {
-            console.error('EQ array must have exactly 40 values');
+        if (!this.eqBands || this.eqBands.length !== 8) {
+            console.error('EQ must have exactly 8 bands');
             return;
         }
 
         try {
+            // Show saving indicator
+            if (typeof window.showNavbarStatus === 'function') {
+                window.showNavbarStatus('saving');
+            }
+
+            // Normalize bands to ensure lowercase field names
+            const normalizedBands = this.eqBands.map(band => ({
+                frequency: band.frequency !== undefined ? band.frequency : (band.Frequency !== undefined ? band.Frequency : 0),
+                gain: band.gain !== undefined ? band.gain : (band.Gain !== undefined ? band.Gain : 0),
+                q: band.q !== undefined ? band.q : (band.Q !== undefined ? band.Q : 2.0)
+            }));
+
             // Update local config
-            this.config.synthesizer.eq = eq;
+            this.config.synthesizer.eq = normalizedBands;
+            if (eqEnabledCheckbox) {
+                this.config.synthesizer.eqEnabled = eqEnabledCheckbox.checked;
+            }
 
             // Save to server
             const formData = {
                 synthesizer: {
-                    eq: eq
+                    eqEnabled: eqEnabledCheckbox ? eqEnabledCheckbox.checked : false,
+                    eq: normalizedBands
                 }
             };
 
@@ -1150,10 +1663,24 @@ class ConfigManager {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
 
-            console.log('Equalizer saved');
+            const result = await response.json();
+
+            // Update curve data and redraw
+            if (result.config && result.config.eqCurve) {
+                this.config.eqCurve = result.config.eqCurve;
+                this.drawEqCurve();
+            }
+
+            // Show success indicator
+            if (typeof window.showNavbarStatus === 'function') {
+                window.showNavbarStatus('success');
+            }
         } catch (error) {
             console.error('Failed to save equalizer:', error);
-            alert('Failed to save equalizer: ' + error.message);
+            // Show error indicator
+            if (typeof window.showNavbarStatus === 'function') {
+                window.showNavbarStatus('error');
+            }
         }
     }
 }

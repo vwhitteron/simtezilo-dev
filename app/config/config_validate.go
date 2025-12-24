@@ -28,7 +28,7 @@ func (vr ValidationResult) Error() string {
 		return ""
 	}
 
-	var messages []string
+	var messages []string //nolint:prealloc // ubknown but small number of errors expected
 	for _, err := range vr.Errors {
 		messages = append(messages, fmt.Sprintf("%s: %s", err.Field, err.Message))
 	}
@@ -220,9 +220,29 @@ func validateSynthesizer(synth *Synthesizer, result *ValidationResult) {
 	validateGain("synthesizer.transmissionGainMinStreet", synth.TransmissionGainMinStreet)
 	validateGain("synthesizer.engineGain", synth.EngineGain)
 
-	// Validate EQ array
-	if len(synth.Eq) != 40 {
-		addError(result, "synthesizer.eq", fmt.Sprintf("EQ array must have exactly 40 values, got %d", len(synth.Eq)))
+	// Validate EQ bands (8-band parametric EQ)
+	if len(synth.EqBands) != 8 {
+		addError(result, "synthesizer.eqBands", fmt.Sprintf("EQ must have exactly 8 bands, got %d", len(synth.EqBands)))
+	} else {
+		for bandID, band := range synth.EqBands {
+			// Validate frequency range (10-70 Hz covers haptic range)
+			if band.Frequency < 10.0 || band.Frequency > 70.0 {
+				addError(result, fmt.Sprintf("synthesizer.eqBands[%d].frequency", bandID),
+					fmt.Sprintf("frequency %.2f Hz is out of valid range (10.0-70.0 Hz)", band.Frequency))
+			}
+
+			// Validate gain range
+			if band.Gain < -12.0 || band.Gain > 6.0 {
+				addError(result, fmt.Sprintf("synthesizer.eqBands[%d].gain", bandID),
+					fmt.Sprintf("gain %.2f dB is out of valid range (-12.0 to +6.0 dB)", band.Gain))
+			}
+
+			// Validate Q factor range
+			if band.Q < 0.1 || band.Q > 20.0 {
+				addError(result, fmt.Sprintf("synthesizer.eqBands[%d].q", bandID),
+					fmt.Sprintf("Q factor %.2f is out of valid range (0.1-20.0)", band.Q))
+			}
+		}
 	}
 }
 
@@ -242,12 +262,12 @@ func validateHaptics(hap *haptics, result *ValidationResult) {
 	}
 
 	// Validate max values
-	if hap.JerkMax < 1 || hap.JerkMax > 1000 {
-		addError(result, "haptics.jerkMax", fmt.Sprintf("jerkMax %d is out of valid range (1-1000)", hap.JerkMax))
+	if hap.JerkMax < 5 || hap.JerkMax > 955 {
+		addError(result, "haptics.jerkMax", fmt.Sprintf("jerkMax %d is out of valid range (5-955)", hap.JerkMax))
 	}
 
-	if hap.SnapMax < 1 || hap.SnapMax > 1000 {
-		addError(result, "haptics.snapMax", fmt.Sprintf("snapMax %d is out of valid range (1-1000)", hap.SnapMax))
+	if hap.SnapMax < 5 || hap.SnapMax > 955 {
+		addError(result, "haptics.snapMax", fmt.Sprintf("snapMax %d is out of valid range (5-955)", hap.SnapMax))
 	}
 
 	// Validate pulse settings
@@ -255,12 +275,12 @@ func validateHaptics(hap *haptics, result *ValidationResult) {
 		addError(result, "haptics.pulseMaxAmplitude", fmt.Sprintf("amplitude %.2f is out of valid range (0.0-1.0)", hap.PulseMaxAmplitude))
 	}
 
-	if hap.PulseMaxFrequencyHz <= 0 || hap.PulseMaxFrequencyHz > 20000 {
-		addError(result, "haptics.pulseMaxFrequencyHz", fmt.Sprintf("frequency %.2f is out of valid range (0-20000)", hap.PulseMaxFrequencyHz))
+	if hap.PulseMaxFrequencyHz <= 20 || hap.PulseMaxFrequencyHz > 200 {
+		addError(result, "haptics.pulseMaxFrequencyHz", fmt.Sprintf("frequency %.2f is out of valid range (20-200)", hap.PulseMaxFrequencyHz))
 	}
 
-	if hap.PulseMinFrequencyHz <= 0 || hap.PulseMinFrequencyHz > 20000 {
-		addError(result, "haptics.pulseMinFrequencyHz", fmt.Sprintf("frequency %.2f is out of valid range (0-20000)", hap.PulseMinFrequencyHz))
+	if hap.PulseMinFrequencyHz <= 5 || hap.PulseMinFrequencyHz > 50 {
+		addError(result, "haptics.pulseMinFrequencyHz", fmt.Sprintf("frequency %.2f is out of valid range (5-50)", hap.PulseMinFrequencyHz))
 	}
 
 	// Validate min < max

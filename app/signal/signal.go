@@ -17,16 +17,31 @@ func Abs(value float64) float64 {
 }
 
 // Equalize applies equalization based on pulse width and synthesizer settings.
-func Equalize(value float64, pulseWidth float64, synth *config.Synthesizer) float64 {
-	freq := int(math.Round(float64(synth.InternalSampleRateHz) / (2 * pulseWidth)))
-
-	if freq < 10 || freq > 49 {
+// Uses a precomputed EQ curve for efficient lookup instead of calculating per-sample.
+func Equalize(value float64, pulseWidth float64, cfg *config.Config) float64 {
+	// Check if EQ is enabled
+	if !cfg.GetEqEnabled() {
 		return value
 	}
 
-	value *= synth.Eq[freq-10]
+	sampleRate := cfg.GetInternalSampleRateHz()
+	freq := float64(sampleRate) / (2 * pulseWidth)
 
-	return value
+	curve, minFreq, resolution := cfg.GetEqCurve()
+	if len(curve) == 0 {
+		return value // No EQ curve computed
+	}
+
+	// Calculate bucket index for this frequency
+	index := int((freq - minFreq) / resolution)
+
+	// Bounds check
+	if index < 0 || index >= len(curve) {
+		return value // Outside EQ range
+	}
+
+	// Apply precomputed amplitude ratio
+	return value * curve[index]
 }
 
 // Exponent raises a value to a given exponent.

@@ -3,6 +3,7 @@ package config
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -51,7 +52,7 @@ type haptics struct {
 	DynamicTransmissionGforceMax float64                             `toml:"dynamicTransmissionGforceMax"`
 	JerkCurve                    int                                 `toml:"jerkCurve"`
 	JerkMax                      int                                 `toml:"jerkMax"`
-	JerkScale                    float64                             `toml:"jerkScale"`
+	_jerkScale                   float64                             `toml:"-"`
 	SnapCurve                    int                                 `toml:"snapCurve"`
 	SnapMax                      int                                 `toml:"snapMax"`
 	_snapScale                   float64                             `toml:"-"`
@@ -75,19 +76,35 @@ type pitRadio struct {
 	Discord               *discord `toml:"discord"`
 }
 
+// EQBand represents a parametric equalizer band with center frequency, gain, and Q factor.
+type EQBand struct {
+	Frequency float64 `toml:"frequency"` // Center frequency in Hz
+	Gain      float64 `toml:"gain"`      // Gain in dB (-12 to +6)
+	Q         float64 `toml:"q"`         // Q factor (0.1 to 20, higher = narrower)
+}
+
 // Synthesizer represents an audio synthesizer used for haptic feedback.
 type Synthesizer struct {
 	InternalSampleRateHz      int       `toml:"internalSampleRateHz"`
 	OutputSampleRateHz        int       `toml:"outputSampleRateHz"`
 	OutputFile                string    `toml:"outputFile"`
 	MasterGain                float64   `toml:"masterGain"`
+	MasterGainMute            bool      `toml:"masterGainMute"`
 	ChassisGain               float64   `toml:"chassisGain"`
+	ChassisGainMute           bool      `toml:"chassisGainMute"`
 	TransmissionGain          float64   `toml:"transmissionGain"`
+	TransmissionGainMute      bool      `toml:"transmissionGainMute"`
 	TransmissionGainMinRace   float64   `toml:"transmissionGainMinRace"`
 	TransmissionGainMinStreet float64   `toml:"transmissionGainMinStreet"`
 	EngineGain                float64   `toml:"engineGain"`
+	EngineGainMute            bool      `toml:"engineGainMute"`
 	GainIncrement             float64   `toml:"gainIncrement"`
-	Eq                        []float64 `toml:"eq"`
+	EqEnabled                 bool      `toml:"eqEnabled"`
+	EqBands                   []EQBand  `toml:"eqBands"`
+	_eqCurve                  []float64 `toml:"-"` // Computed curve for fast lookup
+	_eqMinFreq                float64   `toml:"-"` // Minimum frequency for curve
+	_eqMaxFreq                float64   `toml:"-"` // Maximum frequency for curve
+	_eqResolution             float64   `toml:"-"` // Frequency resolution (Hz per bucket)
 }
 
 // Telemetry represents the telemetry data source configuration.
@@ -124,6 +141,7 @@ type Config struct {
 	viper                      *viperConfig
 	i18n                       *i18n.I18n
 	configFile                 string
+	lastSavedConfig            []byte // Last config written to disk (to avoid unnecessary writes)
 	status                     Status
 	displayOrientationCallback func(int)
 	mu                         sync.RWMutex
@@ -139,6 +157,10 @@ func New(opts Options) *Config {
 	config := &Config{
 		viper:      defaultConfig(),
 		configFile: opts.ConfigFile,
+		status: Status{
+			RestartRequired: false,
+			LastUpdate:      0,
+		},
 	}
 
 	viper.SetEnvPrefix("SIMTEZILO")
@@ -175,6 +197,12 @@ func New(opts Options) *Config {
 
 		config.configFile = viper.ConfigFileUsed()
 		log.Debug().Str("source", config.configFile).Msg("config loaded")
+
+		// Initialize lastSavedConfig with current state to prevent false restart indicators
+		tomlData, err := toml.Marshal(config.viper)
+		if err == nil {
+			config.lastSavedConfig = tomlData
+		}
 	}
 
 	// When config is loaded from defaults set a default config file for file save operations
@@ -218,9 +246,11 @@ func NewFromJSON(json []byte, log zerolog.Logger) *Config {
 // SetDefault resets the configuration to the default values.
 func (c *Config) SetDefault() {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 
 	c.viper = defaultConfig()
+
+	c.mu.Unlock()
+
 	c.finalise()
 }
 
@@ -769,14 +799,15 @@ func (c *Config) GetJerkCurve() float64 {
 // Values closer to 1 produce a more exponential response.
 func (c *Config) SetJerkCurve(value int) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 
 	value = min(value, 955)
 	value = max(value, 5)
 
 	c.viper.Haptics.JerkCurve = value
 
-	c.UpdateJerkScale()
+	c.mu.Unlock()
+
+	c.updateJerkScale()
 }
 
 // IncreaseJerkCurve increases the jerk curve value in increments of 5.
@@ -790,7 +821,7 @@ func (c *Config) IncreaseJerkCurve() int {
 
 	c.mu.Unlock()
 
-	c.UpdateJerkScale()
+	c.updateJerkScale()
 
 	return c.viper.Haptics.JerkCurve
 }
@@ -806,7 +837,7 @@ func (c *Config) DecreaseJerkCurve() int {
 
 	c.mu.Unlock()
 
-	c.UpdateJerkScale()
+	c.updateJerkScale()
 
 	return c.viper.Haptics.JerkCurve
 }
@@ -816,21 +847,7 @@ func (c *Config) GetJerkScale() float64 {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	return c.viper.Haptics.JerkScale
-}
-
-// UpdateJerkScale recalculates the jerk scale factor based on the current jerk curve, scale and maximum.
-func (c *Config) UpdateJerkScale() {
-	exponent := c.GetJerkCurve() / 1000
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	jerkMax := 100 * float64(c.viper.Haptics.JerkMax)
-
-	c.viper.Haptics.JerkScale = 1 / math.Pow(jerkMax, exponent)
-
-	c.registerUpdate(false)
+	return c.viper.Haptics._jerkScale
 }
 
 // GetJerkMax returns the maximum jerk value.
@@ -848,14 +865,15 @@ func (c *Config) GetJerkMax() int {
 // Any jerk vakues above this value are clamped to this maximum.
 func (c *Config) SetJerkMax(value int) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 
 	value = min(value, 200)
 	value = max(value, 1)
 
 	c.viper.Haptics.JerkMax = value
 
-	c.UpdateJerkScale()
+	c.mu.Unlock()
+
+	c.updateJerkScale()
 }
 
 // IncreaseJerkMax increases the maximum jerk value in increments of 1.
@@ -869,7 +887,7 @@ func (c *Config) IncreaseJerkMax() int {
 
 	c.mu.Unlock()
 
-	c.UpdateJerkScale()
+	c.updateJerkScale()
 
 	return c.viper.Haptics.JerkMax
 }
@@ -885,7 +903,7 @@ func (c *Config) DecreaseJerkMax() int {
 
 	c.mu.Unlock()
 
-	c.UpdateJerkScale()
+	c.updateJerkScale()
 
 	return c.viper.Haptics.JerkMax
 }
@@ -924,7 +942,7 @@ func (c *Config) IncreaseSnapCurve() int {
 
 	c.mu.Unlock()
 
-	c.UpdateSnapScale()
+	c.updateSnapScale()
 
 	return c.viper.Haptics.SnapCurve
 }
@@ -941,7 +959,7 @@ func (c *Config) DecreaseSnapCurve() int {
 
 	c.mu.Unlock()
 
-	c.UpdateSnapScale()
+	c.updateSnapScale()
 
 	return c.viper.Haptics.SnapCurve
 }
@@ -952,20 +970,6 @@ func (c *Config) GetSnapScale() float64 {
 	defer c.mu.RUnlock()
 
 	return c.viper.Haptics._snapScale
-}
-
-// UpdateSnapScale recalculates the snap scale factor based on the current snap curve, scale and maximum.
-func (c *Config) UpdateSnapScale() {
-	exponent := c.GetSnapCurve() / 1000
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	snapMax := 1000 * float64(c.viper.Haptics.SnapMax)
-
-	c.viper.Haptics._snapScale = 1 / math.Pow(snapMax, exponent)
-
-	c.registerUpdate(false)
 }
 
 // GetSnapMax returns the maximum snap value.
@@ -1003,7 +1007,7 @@ func (c *Config) IncreaseSnapMax() int {
 
 	c.mu.Unlock()
 
-	c.UpdateSnapScale()
+	c.updateSnapScale()
 
 	return c.viper.Haptics.SnapMax
 }
@@ -1019,7 +1023,7 @@ func (c *Config) DecreaseSnapMax() int {
 
 	c.mu.Unlock()
 
-	c.UpdateSnapScale()
+	c.updateSnapScale()
 
 	return c.viper.Haptics.SnapMax
 }
@@ -1646,6 +1650,24 @@ func (c *Config) SetMasterGain(value float64) {
 	c.viper.Synthesizer.MasterGain = max(MinimumGain, min(MaximumGain, value))
 }
 
+// GetMasterGainMute returns whether the master gain is muted.
+func (c *Config) GetMasterGainMute() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.Synthesizer.MasterGainMute
+}
+
+// SetMasterGainMute sets whether the master gain is muted.
+func (c *Config) SetMasterGainMute(mute bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.Synthesizer.MasterGainMute = mute
+
+	c.registerUpdate(false)
+}
+
 // IncreaseMasterGain increases the master gain by the configured gain increment.
 func (c *Config) IncreaseMasterGain() float64 {
 	c.mu.Lock()
@@ -1683,6 +1705,24 @@ func (c *Config) GetChassisGain() float64 {
 	defer c.mu.RUnlock()
 
 	return c.viper.Synthesizer.ChassisGain
+}
+
+// GetChassisGainMute returns whether the chassis gain is muted.
+func (c *Config) GetChassisGainMute() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.Synthesizer.ChassisGainMute
+}
+
+// SetChassisGainMute sets whether the chassis gain is muted.
+func (c *Config) SetChassisGainMute(mute bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.Synthesizer.ChassisGainMute = mute
+
+	c.registerUpdate(false)
 }
 
 // SetChassisGain sets the chassis gain of the synthesizer.
@@ -1756,6 +1796,24 @@ func (c *Config) GetTransmissionGain() float64 {
 	return c.viper.Synthesizer.TransmissionGain
 }
 
+// GetTransmissionGainMute returns whether the transmission gain is muted.
+func (c *Config) GetTransmissionGainMute() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.Synthesizer.TransmissionGainMute
+}
+
+// SetTransmissionGainMute sets whether the transmission gain is muted.
+func (c *Config) SetTransmissionGainMute(mute bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.Synthesizer.TransmissionGainMute = mute
+
+	c.registerUpdate(false)
+}
+
 // SetTransmissionGain sets the transmission gain of the synthesizer.
 // 0.0 is maximum gain and -60.0 will mute transmission haptic output.
 func (c *Config) SetTransmissionGain(value float64) {
@@ -1822,6 +1880,24 @@ func (c *Config) GetEngineGain() float64 {
 	defer c.mu.RUnlock()
 
 	return c.viper.Synthesizer.EngineGain
+}
+
+// GetEngineGainMute returns whether the engine gain is muted.
+func (c *Config) GetEngineGainMute() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.Synthesizer.EngineGainMute
+}
+
+// SetEngineGainMute sets whether the engine gain is muted.
+func (c *Config) SetEngineGainMute(mute bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.Synthesizer.EngineGainMute = mute
+
+	c.registerUpdate(false)
 }
 
 // SetEngineGain sets the engine gain of the synthesizer.
@@ -1892,21 +1968,50 @@ func (c *Config) SetEngineProfile(name string, profile appHaptics.EngineProfile)
 	c.registerUpdate(false)
 }
 
-// GetEq returns the equalizer array.
-func (c *Config) GetEq() []float64 {
+// GetEqEnabled returns whether the equalizer is enabled.
+func (c *Config) GetEqEnabled() bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	return c.viper.Synthesizer.Eq
+	return c.viper.Synthesizer.EqEnabled
 }
 
-// SetEq sets the equalizer array.
-func (c *Config) SetEq(eq []float64) {
+// SetEqEnabled sets whether the equalizer is enabled.
+func (c *Config) SetEqEnabled(enabled bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if len(eq) == 40 {
-		c.viper.Synthesizer.Eq = eq
+	c.viper.Synthesizer.EqEnabled = enabled
+	c.registerUpdate(false)
+}
+
+// GetEq returns the equalizer bands.
+func (c *Config) GetEq() []EQBand {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.Synthesizer.EqBands
+}
+
+// GetEqCurve returns the computed EQ curve for fast lookup.
+// Returns the curve, minimum frequency, and resolution (Hz per bucket).
+func (c *Config) GetEqCurve() ([]float64, float64, float64) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.Synthesizer._eqCurve,
+		c.viper.Synthesizer._eqMinFreq,
+		c.viper.Synthesizer._eqResolution
+}
+
+// SetEq sets the equalizer bands and recomputes the curve.
+func (c *Config) SetEq(bands []EQBand) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if len(bands) == 8 {
+		c.viper.Synthesizer.EqBands = bands
+		c.computeEqCurve()
 		c.registerUpdate(false)
 	}
 }
@@ -2049,55 +2154,190 @@ func (c *Config) BackupConfigFile() (string, error) {
 }
 
 // SaveConfigToFile saves the current configuration to the configuration file.
+// Skips writing if the config hasn't changed to reduce disk wear.
 func (c *Config) SaveConfigToFile() error {
-	c.mu.RLock()
-	config := c.viper
-	c.mu.RUnlock()
+	// If no config file was specified, we can't save
+	if c.configFile == "" {
+		return errors.New("no config file specified")
+	}
+
+	// Lock for the entire save operation to serialize concurrent saves
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	// Marshal the configuration to TOML
-	tomlData, err := toml.Marshal(config)
+	tomlData, err := toml.Marshal(c.viper)
 	if err != nil {
 		return fmt.Errorf("failed to marshal configuration to TOML: %w", err)
 	}
 
-	// Write to temporary file first
-	tempPath := c.configFile + ".tmp"
-
-	err = os.WriteFile(tempPath, tomlData, 0o600)
-	if err != nil {
-		return fmt.Errorf("failed to write temporary file: %w", err)
+	// Skip write if config hasn't changed (reduces SD card wear)
+	if bytes.Equal(tomlData, c.lastSavedConfig) {
+		return nil
 	}
 
-	// Atomic rename to replace the original file
-	err = os.Rename(tempPath, c.configFile)
-	if err != nil {
-		os.Remove(tempPath)
+	// Ensure the directory exists
+	configDir := filepath.Dir(c.configFile)
 
-		return fmt.Errorf("failed to replace configuration file: %w", err)
+	err = os.MkdirAll(configDir, 0o755)
+	if err != nil {
+		return fmt.Errorf("failed to create config directory %s: %w", configDir, err)
 	}
+
+	// Write directly to config file with fsync to ensure durability
+	file, err := os.OpenFile(c.configFile, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+	if err != nil {
+		return fmt.Errorf("failed to open config file %s: %w", c.configFile, err)
+	}
+
+	_, err = file.Write(tomlData)
+	if err != nil {
+		file.Close()
+
+		return fmt.Errorf("failed to write config file %s: %w", c.configFile, err)
+	}
+
+	// Force sync to disk before closing
+	err = file.Sync()
+	if err != nil {
+		file.Close()
+
+		return fmt.Errorf("failed to sync config file %s: %w", c.configFile, err)
+	}
+
+	err = file.Close()
+	if err != nil {
+		return fmt.Errorf("failed to close config file %s: %w", c.configFile, err)
+	}
+
+	// Update last saved config
+	c.lastSavedConfig = tomlData
 
 	return nil
 }
 
 // ****************************************************************************
-// Helper methods.
+// Public Helper methods.
+// ****************************************************************************
+
+// GetConfigFilePath returns the path to the configuration file.
+func (c *Config) GetConfigFilePath() string {
+	return c.configFile
+}
+
+// ****************************************************************************
+// Private Helper methods.
 // ****************************************************************************
 
 // finalise performs validation of the config and updates any derived configuration values.
 func (c *Config) finalise() {
-	if len(c.viper.Synthesizer.Eq) != 40 {
-		log.Warn().Int("length", len(c.viper.Synthesizer.Eq)).Msg("invalid synthesizer EQ length")
+	c.mu.Lock()
 
-		c.viper.Synthesizer.Eq = make([]float64, 40)
-		for i := range 40 {
-			c.viper.Synthesizer.Eq[i] = 1
+	if len(c.viper.Synthesizer.EqBands) != 8 {
+		log.Warn().Int("length", len(c.viper.Synthesizer.EqBands)).Msg("invalid synthesizer EQ bands length")
+
+		// Initialize with 8 default bands spanning 10-60 Hz
+		c.viper.Synthesizer.EqBands = []EQBand{
+			{Frequency: 12, Gain: 0.0},
+			{Frequency: 16, Gain: 0.0},
+			{Frequency: 20, Gain: 0.0},
+			{Frequency: 25, Gain: 0.0},
+			{Frequency: 30, Gain: 0.0},
+			{Frequency: 38, Gain: 0.0},
+			{Frequency: 48, Gain: 0.0},
+			{Frequency: 58, Gain: 0.0},
 		}
 	}
 
+	// Compute the EQ curve for efficient runtime application
+	c.computeEqCurve()
+
 	c.updatePulseWidthExtents()
 
-	c.UpdateJerkScale()
-	c.UpdateSnapScale()
+	c.mu.Unlock()
+
+	c.updateJerkScale()
+	c.updateSnapScale()
+}
+
+// updateJerkScale recalculates the jerk scale factor based on the current jerk curve, scale and maximum.
+func (c *Config) updateJerkScale() {
+	exponent := c.GetJerkCurve() / 1000
+
+	jerkMax := 100 * float64(c.viper.Haptics.JerkMax)
+
+	c.viper.Haptics._jerkScale = 1 / math.Pow(jerkMax, exponent)
+
+	c.registerUpdate(false)
+}
+
+// updateSnapScale recalculates the snap scale factor based on the current snap curve, scale and maximum.
+func (c *Config) updateSnapScale() {
+	exponent := c.GetSnapCurve() / 1000
+
+	snapMax := 1000 * float64(c.viper.Haptics.SnapMax)
+
+	c.viper.Haptics._snapScale = 1 / math.Pow(snapMax, exponent)
+
+	c.registerUpdate(false)
+}
+
+// computeEqCurve computes the EQ curve based on the current bands.
+// Uses 8-band parametric EQ with bell filters.
+func (c *Config) computeEqCurve() {
+	const minFreq = 10.0 // Minimum frequency in Hz
+
+	const maxFreq = 70.0 // Maximum frequency in Hz
+
+	const resolution = 0.5 // Hz per bucket
+
+	numBuckets := int((maxFreq-minFreq)/resolution) + 1
+	curve := make([]float64, numBuckets)
+
+	// For each frequency bucket, compute the EQ response using bell filter
+	for bucketNum := range numBuckets {
+		freq := minFreq + float64(bucketNum)*resolution
+
+		// Start with unity gain (1.0 in linear, 0.0 in dB)
+		amplitudeRatio := 1.0
+
+		// Apply each band's bell filter by multiplication in linear space
+		for _, band := range c.viper.Synthesizer.EqBands {
+			// Calculate bell filter response at this frequency
+			// Using per-band Q factor for bandwidth control
+			if band.Gain != 0.0 {
+				// Use band's qVal value, default to 2.0 if not set
+				qVal := band.Q
+				if qVal <= 0 {
+					qVal = 2.0
+				}
+
+				freqRatio := freq / band.Frequency
+				if freqRatio > 0 {
+					// Bell filter magnitude response in dB
+					// H(f) = G / sqrt(1 + Q^2 * (f/fc - fc/f)^2)
+					// At center frequency (f = fc), delta = 0, denom = 1, so gain = G (exact)
+					delta := freqRatio - 1.0/freqRatio
+					denom := math.Sqrt(1.0 + qVal*qVal*delta*delta)
+
+					if denom > 0 {
+						// Calculate this band's gain at this frequency in dB
+						bandGainDB := band.Gain / denom
+						// Convert to amplitude ratio and multiply
+						amplitudeRatio *= math.Pow(10, bandGainDB/20)
+					}
+				}
+			}
+		}
+
+		// Store the final amplitude ratio for efficient multiplication
+		curve[bucketNum] = amplitudeRatio
+	}
+
+	c.viper.Synthesizer._eqCurve = curve
+	c.viper.Synthesizer._eqMinFreq = minFreq
+	c.viper.Synthesizer._eqMaxFreq = maxFreq
+	c.viper.Synthesizer._eqResolution = resolution
 }
 
 // registerUpdate records the time of the last configuration update.
@@ -2119,9 +2359,4 @@ func (c *Config) updatePulseWidthExtents() {
 		(2 * c.viper.Haptics.PulseMinFrequencyHz)
 
 	c.registerUpdate(false)
-}
-
-// GetConfigFilePath returns the path to the configuration file.
-func (c *Config) GetConfigFilePath() string {
-	return c.configFile
 }

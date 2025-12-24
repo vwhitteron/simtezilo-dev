@@ -10,6 +10,48 @@
     <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
+        /* Fixed navbar at top */
+        #navigation {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1030;
+            background: var(--bs-body-bg);
+        }
+
+        /* Add padding to body to account for fixed navbar */
+        body {
+            padding-top: 70px;
+        }
+
+        /* Fixed sidebar with own scroll */
+        .settings-sidebar {
+            position: fixed;
+            top: 90px;
+            left: 20px;
+            width: calc((100% / 12 * 3) - 40px);
+            /* 3 columns minus padding */
+            height: calc(100vh - 110px);
+            overflow-y: auto;
+            overscroll-behavior: contain;
+            /* Prevent scroll chaining */
+        }
+
+        @media (min-width: 1200px) {
+            .settings-sidebar {
+                width: calc((100% / 12 * 3) - 40px);
+                /* xl: 3 columns */
+            }
+        }
+
+        @media (min-width: 1400px) {
+            .settings-sidebar {
+                width: calc((100% / 12 * 2) - 40px);
+                /* xxl: 2 columns */
+            }
+        }
+
         .custom-tooltip {
             position: absolute;
             background: #333;
@@ -30,14 +72,6 @@
 
         .custom-tooltip.show {
             display: block;
-        }
-
-        .settings-sidebar {
-            position: sticky;
-            top: 20px;
-            height: fit-content;
-            max-height: calc(100vh - 100px);
-            overflow-y: auto;
         }
 
         .settings-nav {
@@ -95,6 +129,223 @@
 
         .restart-required-indicator.show {
             display: inline-block;
+        }
+
+        /* Equalizer Styles */
+        .eq-bands-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+
+        .eq-band-control {
+            padding: 12px;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 6px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .eq-band-control h6 {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: var(--bs-primary);
+        }
+
+        .eq-band-input {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
+        .eq-band-input label {
+            flex: 0 0 70px;
+            font-size: 12px;
+            margin: 0;
+        }
+
+        .eq-band-input input {
+            flex: 1;
+            font-size: 13px;
+        }
+
+        .eq-band-input .input-group-text {
+            font-size: 11px;
+            padding: 0.25rem 0.5rem;
+        }
+
+        .eq-scroll-wrapper {
+            overflow-x: auto;
+            overflow-y: hidden;
+            border-radius: 8px;
+            background: linear-gradient(to bottom, rgba(255, 255, 255, 0.02) 0%, transparent 100%);
+        }
+
+        .eq-scroll-wrapper::-webkit-scrollbar {
+            height: 8px;
+        }
+
+        .eq-scroll-wrapper::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 4px;
+        }
+
+        .eq-scroll-wrapper::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+        }
+
+        .eq-scroll-wrapper::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .eq-container {
+            display: flex;
+            align-items: flex-end;
+            justify-content: flex-start;
+            gap: 8px;
+            padding: 20px;
+            min-height: 280px;
+            width: max-content;
+        }
+
+        .eq-band {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            flex: 0 0 auto;
+            width: 28px;
+        }
+
+        .eq-slider-wrapper {
+            position: relative;
+            height: 200px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 8px;
+        }
+
+        .eq-slider {
+            -webkit-appearance: slider-vertical;
+            appearance: slider-vertical;
+            writing-mode: bt-lr;
+            width: 6px;
+            height: 200px;
+            padding: 0;
+            margin: 0;
+            cursor: pointer;
+            background: transparent;
+        }
+
+        .eq-slider::-webkit-slider-runnable-track {
+            width: 6px;
+            height: 200px;
+            background: linear-gradient(to top, #0d6efd 0%, #198754 50%, #ffc107 100%);
+            border-radius: 3px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .eq-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #fff;
+            border: 2px solid #0d6efd;
+            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+            margin-left: -6px;
+        }
+
+        .eq-slider::-moz-range-track {
+            width: 6px;
+            height: 200px;
+            background: linear-gradient(to top, #0d6efd 0%, #198754 50%, #ffc107 100%);
+            border-radius: 3px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .eq-slider::-moz-range-thumb {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #fff;
+            border: 2px solid #0d6efd;
+            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .eq-slider:hover::-webkit-slider-thumb {
+            border-color: #0a58ca;
+            transform: scale(1.1);
+        }
+
+        .eq-slider:hover::-moz-range-thumb {
+            border-color: #0a58ca;
+            transform: scale(1.1);
+        }
+
+        .eq-value {
+            font-size: 10px;
+            font-weight: 600;
+            color: var(--bs-primary);
+            margin-bottom: 4px;
+            min-height: 16px;
+            text-align: center;
+        }
+
+        .eq-freq {
+            font-size: 10px;
+            color: var(--bs-secondary-color);
+            text-align: center;
+            writing-mode: horizontal-tb;
+            transform: rotate(-45deg);
+            transform-origin: center;
+            white-space: nowrap;
+            margin-top: 4px;
+        }
+
+        .eq-controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        @media (max-width: 768px) {
+            .eq-container {
+                gap: 6px;
+                padding: 15px 10px;
+                min-height: 240px;
+            }
+
+            .eq-band {
+                width: 22px;
+            }
+
+            .eq-slider-wrapper {
+                height: 150px;
+            }
+
+            .eq-slider,
+            .eq-slider::-webkit-slider-runnable-track,
+            .eq-slider::-moz-range-track {
+                height: 150px;
+            }
+
+            .eq-freq {
+                font-size: 8px;
+            }
+
+            .eq-value {
+                font-size: 9px;
+            }
         }
     </style>
     <script>
@@ -224,7 +475,7 @@
                                         <span data-i18n="runmode.settings.telemetry.source">Telemetry Source</span>
                                         <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
                                             role="button"
-                                            data-tooltip="Accepts a UDP address in the format udp://<ip_address>:<port> or a replay file path in the format file://path/to/replay.<gtr|gtz>. The default value of udp://255.255.255.255:33739 should automatically connect to GT7 on the local network in most cases."></i>
+                                            data-tooltip="Accepts a UDP address in the format udp://<ip_address>:<port> or a replay file path in the format file://path/to/replay.<gtr|gtz>. Use the Auto button to automatically connect to GT7 running on the local network."></i>
                                     </label>
                                     <div class="input-group mb-3">
                                         <input type="text" id="telemetry-source" class="form-control"
@@ -269,15 +520,16 @@
                                 <input type="checkbox" class="form-check-input" id="pitradio-enabled"
                                     data-config="pitRadio.enabled" role="switch">
                                 <label class="form-check-label" for="pitradio-enabled"
-                                    data-i18n="runmode.settings.pitradio.enabled">Pit Radio Enabled</label>
+                                    data-i18n="runmode.settings.pitradio.enabled">Enable</label>
                             </div>
-                            <div class="mb-0">
-                                <label for="pitradio-interval" class="form-label"
-                                    data-i18n="runmode.settings.pitradio.interval">Message Send Interval (ms)</label>
-                                <input type="number" id="pitradio-interval" class="form-control"
-                                    data-config="pitRadio.messageSendIntervalMs" min="500" max="10000" step="100">
-                                <div class="form-text" data-i18n="runmode.settings.pitradio.interval_help">Time between
-                                    consecutive pit radio messages</div>
+                            <div class="row g-3">
+                                <div class="col-md-6 col-lg-4">
+                                    <label for="pitradio-interval" class="form-label"
+                                        data-i18n="runmode.settings.pitradio.interval">Message Send Interval
+                                        (ms)</label>
+                                    <input type="number" id="pitradio-interval" class="form-control"
+                                        data-config="pitRadio.messageSendIntervalMs" min="500" max="10000" step="100">
+                                </div>
                             </div>
 
                             <h5 class="mt-5 mb-3"><i class="fa-brands fa-discord me-2"></i><span
@@ -315,7 +567,7 @@
                                         <input type="checkbox" class="form-check-input" id="fuel-enabled"
                                             data-config="fuel.monitoringEnabled" role="switch">
                                         <label class="form-check-label" for="fuel-enabled"
-                                            data-i18n="runmode.settings.fuel.enabled">Fuel Monitoring Enabled</label>
+                                            data-i18n="runmode.settings.fuel.enabled">Enable</label>
                                     </div>
                                 </div>
                                 <div class="col-md-6 col-lg-3">
@@ -353,7 +605,7 @@
                                         <input type="checkbox" class="form-check-input" id="tyres-enabled"
                                             data-config="tyres.monitoringEnabled" role="switch">
                                         <label class="form-check-label" for="tyres-enabled"
-                                            data-i18n="runmode.settings.tyres.enabled">Tyre Monitoring Enabled</label>
+                                            data-i18n="runmode.settings.tyres.enabled">Enable</label>
                                     </div>
                                 </div>
                                 <div class="col-md-6 col-lg-4">
@@ -417,16 +669,27 @@
                                 Transmission Feedback</h5>
                             <div class="row g-3 mb-4">
                                 <div class="col-md-6">
-                                    <div class="form-check form-switch">
-                                        <input type="checkbox" class="form-check-input" id="haptics-dynamictransmission"
-                                            data-config="haptics.dynamicTransmissionFeedback" role="switch">
-                                        <label class="form-check-label" for="haptics-dynamictransmission">
-                                            <span data-i18n="runmode.settings.haptics.dynamictransmission">Dynamic
-                                                Transmission Feedback</span>
-                                            <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
+                                    <div class="d-flex align-items-center gap-3">
+                                        <div class="d-flex align-items-center gap-1">
+                                            <span data-i18n="runmode.settings.haptics.dynamictransmission">Feedback
+                                                strength</span>
+                                            <i class="fa-solid fa-circle-question tooltip-trigger text-muted"
                                                 role="button"
-                                                data-tooltip="Scale the gear change haptic feedback based on longitudinal g-force. When disabled the haptic feedback scale is static."></i>
-                                        </label>
+                                                data-tooltip="The strength of gear change haptics can be fixed or dynamically scaled based on the acceleration of the vehicle to simulate the higher jerk that occurs during hard acceleration and braking. When set to fixed mode the feedback strength can be adjusted using the transmission gain control."></i>
+                                        </div>
+                                        <div class="btn-group" role="group">
+                                            <input type="radio" class="btn-check" name="transmission-mode"
+                                                id="transmission-fixed-radio" autocomplete="off" checked>
+                                            <label class="btn btn-sm btn-outline-primary"
+                                                for="transmission-fixed-radio">Fixed</label>
+
+                                            <input type="radio" class="btn-check" name="transmission-mode"
+                                                id="transmission-dynamic-radio" autocomplete="off">
+                                            <label class="btn btn-sm btn-outline-primary"
+                                                for="transmission-dynamic-radio">Dynamic</label>
+                                        </div>
+                                        <input type="checkbox" id="haptics-dynamictransmission"
+                                            data-config="haptics.dynamicTransmissionFeedback" style="display: none;">
                                     </div>
                                 </div>
                             </div>
@@ -509,21 +772,10 @@
                                             Amplitude</span>
                                         <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
                                             role="button"
-                                            data-tooltip="The maximum output volume allowed to be produced."></i>
+                                            data-tooltip="The maximum output volume allowed to be produced between 0.0 (mute) and 1.0 (max). Generally this can be left at the default value of 1"></i>
                                     </label>
                                     <input type="number" id="haptics-pulseamplitude" class="form-control"
                                         data-config="haptics.pulseMaxAmplitude" min="0.05" max="1.0" step="0.05">
-                                </div>
-                                <div class="col-md-6 col-lg-4">
-                                    <label for="haptics-pulsemaxfreq" class="form-label">
-                                        <span data-i18n="runmode.settings.haptics.pulsemaxfreq">Pulse Max Frequency
-                                            (Hz)</span>
-                                        <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
-                                            role="button"
-                                            data-tooltip="The maximum frequency that should be output for haptic feedback."></i>
-                                    </label>
-                                    <input type="number" id="haptics-pulsemaxfreq" class="form-control"
-                                        data-config="haptics.pulseMaxFrequencyHz" min="20" max="160" step="1">
                                 </div>
                                 <div class="col-md-6 col-lg-4">
                                     <label for="haptics-pulseminfreq" class="form-label">
@@ -531,10 +783,21 @@
                                             (Hz)</span>
                                         <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
                                             role="button"
-                                            data-tooltip="The minimum frequency that should be output for haptic feedback. Values lower than 12 Hz may not be effective."></i>
+                                            data-tooltip="The minimum frequency that should be output for haptic feedback. Values lower than ~10 Hz may be difficult to perceive."></i>
                                     </label>
                                     <input type="number" id="haptics-pulseminfreq" class="form-control"
                                         data-config="haptics.pulseMinFrequencyHz" min="5" max="150" step="1">
+                                </div>
+                                <div class="col-md-6 col-lg-4">
+                                    <label for="haptics-pulsemaxfreq" class="form-label">
+                                        <span data-i18n="runmode.settings.haptics.pulsemaxfreq">Pulse Max Frequency
+                                            (Hz)</span>
+                                        <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
+                                            role="button"
+                                            data-tooltip="The maximum frequency that should be output for haptic feedback. Values higher than ~60 Hz may be difficult to perceive."></i>
+                                    </label>
+                                    <input type="number" id="haptics-pulsemaxfreq" class="form-control"
+                                        data-config="haptics.pulseMaxFrequencyHz" min="20" max="160" step="1">
                                 </div>
                             </div>
                         </div>
@@ -554,10 +817,10 @@
                                             (Hz)</span>
                                         <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
                                             role="button"
-                                            data-tooltip="8 kHz should be sufficient. Higher values will consume more CPU resources."></i>
+                                            data-tooltip="The sample rate for the computed haptic signal. A value of 8 kHz is more than sufficient for the haptic range and will consume less CPU resources than higher values."></i>
                                     </label>
                                     <select id="synth-internalsamplerate" class="form-select"
-                                        data-config="synthesizer.internalSampleRateHz">
+                                        data-config="synthesizer.internalSampleRateHz" data-type="number">
                                         <option value="8000">8 kHz</option>
                                         <option value="16000">16 kHz</option>
                                         <option value="22050">22.05 kHz</option>
@@ -572,10 +835,10 @@
                                             (Hz)</span>
                                         <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
                                             role="button"
-                                            data-tooltip="Many audio chipsets will only support samples rates of 32 kHz or higher. Higher values will consume more CPU resources than lower values."></i>
+                                            data-tooltip="The haptic signal can be efficiently resampled to higher rates for audio chipsets that do not support the lower internal sample rate. Many chipsets support only 32 kHz or higher so adjust this setting accordingly."></i>
                                     </label>
                                     <select id="synth-outputsamplerate" class="form-select"
-                                        data-config="synthesizer.outputSampleRateHz">
+                                        data-config="synthesizer.outputSampleRateHz" data-type="number">
                                         <option value="8000">8 kHz</option>
                                         <option value="16000">16 kHz</option>
                                         <option value="22050">22.05 kHz</option>
@@ -591,106 +854,143 @@
                             <div class="row g-3">
                                 <div class="col-md-6 col-lg-4">
                                     <label for="synth-mastergain" class="form-label">
-                                        <span data-i18n="runmode.settings.synth.mastergain">Master Gain (dB)</span>
+                                        <span data-i18n="runmode.settings.synth.mastergain">Master (dB)</span>
                                         <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
                                             role="button"
-                                            data-tooltip="Controls the overall output gain (volume). Maximum output is 0 dB and minimum is -60 dB which will disable processing of haptic output."></i>
+                                            data-tooltip="Controls the overall output gain (strength) of the haptic feedback. The range is -60 dB (silent) to 0 dB (loudest)."></i>
                                     </label>
-                                    <input type="number" id="synth-mastergain" class="form-control"
-                                        data-config="synthesizer.masterGain" min="-60" max="0" step="0.25">
+                                    <div style="position: relative;">
+                                        <input type="number" id="synth-mastergain" class="form-control gain-input"
+                                            data-config="synthesizer.masterGain" min="-60" max="0" step="0.25">
+                                        <input type="checkbox" id="synth-mastergainmute"
+                                            data-config="synthesizer.masterGainMute" style="display: none;">
+                                        <i class="fa-solid fa-volume-high mute-toggle-icon"
+                                            data-gain-input="synth-mastergain" data-mute-checkbox="synth-mastergainmute"
+                                            style="position: absolute; right: 35px; top: 50%; transform: translateY(-50%); font-size: 16px; cursor: pointer;"></i>
+                                    </div>
                                 </div>
                                 <div class="col-md-6 col-lg-4">
                                     <label for="synth-chassisgain" class="form-label">
-                                        <span data-i18n="runmode.settings.synth.chassisgain">Chassis Gain (dB)</span>
+                                        <span data-i18n="runmode.settings.synth.chassisgain">Chassis (dB)</span>
                                         <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
                                             role="button"
-                                            data-tooltip="Controls the volume of chassis vibration effects. Adjust to balance the intensity of road surface and suspension feedback."></i>
+                                            data-tooltip="Controls the strength of chassis vibration effects."></i>
                                     </label>
-                                    <input type="number" id="synth-chassisgain" class="form-control"
-                                        data-config="synthesizer.chassisGain" min="-20" max="20" step="0.25">
-                                </div>
-                                <div class="col-md-6 col-lg-4">
-                                    <label for="synth-transmissiongain" class="form-label">
-                                        <span data-i18n="runmode.settings.synth.transmissiongain">Transmission Gain
-                                            (dB)</span>
-                                        <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
-                                            role="button"
-                                            data-tooltip="Controls the volume of transmission vibration effects. Affects gear shift feedback intensity."></i>
-                                    </label>
-                                    <input type="number" id="synth-transmissiongain" class="form-control"
-                                        data-config="synthesizer.transmissionGain" min="-20" max="20" step="0.25">
-                                </div>
-                                <div class="col-md-6 col-lg-4">
-                                    <label for="synth-transmissiongainminrace" class="form-label">
-                                        <span data-i18n="runmode.settings.synth.transmissiongainminrace">Trans. Gain Min
-                                            Race (dB)</span>
-                                        <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
-                                            role="button"
-                                            data-tooltip="Minimum transmission gain for race transmissions. Used to reduce feedback when in higher gears at racing speeds."></i>
-                                    </label>
-                                    <input type="number" id="synth-transmissiongainminrace" class="form-control"
-                                        data-config="synthesizer.transmissionGainMinRace" min="-20" max="20"
-                                        step="0.25">
-                                </div>
-                                <div class="col-md-6 col-lg-4">
-                                    <label for="synth-transmissiongainminstreet" class="form-label">
-                                        <span data-i18n="runmode.settings.synth.transmissiongainminstreet">Trans. Gain
-                                            Min Street (dB)</span>
-                                        <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
-                                            role="button"
-                                            data-tooltip="Minimum transmission gain for street transmissions. Used to reduce feedback when in higher gears."></i>
-                                    </label>
-                                    <input type="number" id="synth-transmissiongainminstreet" class="form-control"
-                                        data-config="synthesizer.transmissionGainMinStreet" min="-20" max="20"
-                                        step="0.25">
+                                    <div style="position: relative;">
+                                        <input type="number" id="synth-chassisgain" class="form-control gain-input"
+                                            data-config="synthesizer.chassisGain" min="-60" max="0" step="0.25">
+                                        <input type="checkbox" id="synth-chassisgainmute"
+                                            data-config="synthesizer.chassisGainMute" style="display: none;">
+                                        <i class="fa-solid fa-volume-high mute-toggle-icon"
+                                            data-gain-input="synth-chassisgain"
+                                            data-mute-checkbox="synth-chassisgainmute"
+                                            style="position: absolute; right: 35px; top: 50%; transform: translateY(-50%); font-size: 16px; cursor: pointer;"></i>
+                                    </div>
                                 </div>
                                 <div class="col-md-6 col-lg-4">
                                     <label for="synth-enginegain" class="form-label">
-                                        <span data-i18n="runmode.settings.synth.enginegain">Engine Gain (dB)</span>
+                                        <span data-i18n="runmode.settings.synth.enginegain">Engine (dB)</span>
                                         <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
                                             role="button"
-                                            data-tooltip="Controls the volume of engine vibration effects. Adjust to balance the intensity of engine RPM and load feedback."></i>
+                                            data-tooltip="Controls the strength of engine vibration effects."></i>
                                     </label>
-                                    <input type="number" id="synth-enginegain" class="form-control"
-                                        data-config="synthesizer.engineGain" min="-20" max="20" step="0.25">
+                                    <div style="position: relative;">
+                                        <input type="number" id="synth-enginegain" class="form-control gain-input"
+                                            data-config="synthesizer.engineGain" min="-60" max="0" step="0.25">
+                                        <input type="checkbox" id="synth-enginegainmute"
+                                            data-config="synthesizer.engineGainMute" style="display: none;">
+                                        <i class="fa-solid fa-volume-high mute-toggle-icon"
+                                            data-gain-input="synth-enginegain" data-mute-checkbox="synth-enginegainmute"
+                                            style="position: absolute; right: 35px; top: 50%; transform: translateY(-50%); font-size: 16px; cursor: pointer;"></i>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 col-lg-4">
+                                    <label for="synth-transmissiongain" class="form-label">
+                                        <span data-i18n="runmode.settings.synth.transmissiongain">Transmission
+                                            (dB)</span>
+                                        <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
+                                            role="button"
+                                            data-tooltip="Controls the strength of transmission feedback effects."></i>
+                                    </label>
+                                    <div style="position: relative;">
+                                        <input type="number" id="synth-transmissiongain" class="form-control gain-input"
+                                            data-config="synthesizer.transmissionGain" min="-60" max="0" step="0.25">
+                                        <input type="checkbox" id="synth-transmissiongainmute"
+                                            data-config="synthesizer.transmissionGainMute" style="display: none;">
+                                        <i class="fa-solid fa-volume-high mute-toggle-icon"
+                                            data-gain-input="synth-transmissiongain"
+                                            data-mute-checkbox="synth-transmissiongainmute"
+                                            style="position: absolute; right: 35px; top: 50%; transform: translateY(-50%); font-size: 16px; cursor: pointer;"></i>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 col-lg-4">
+                                    <label for="synth-transmissiongainminrace" class="form-label">
+                                        <span data-i18n="runmode.settings.synth.transmissiongainminrace">Transmission
+                                            Min
+                                            Race (dB)</span>
+                                        <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
+                                            role="button"
+                                            data-tooltip="Minimum transmission gain for race vehicles. This value is the output strength when the vehicle is stopped and very low acceleration rates."></i>
+                                    </label>
+                                    <div style="position: relative;">
+                                        <input type="number" id="synth-transmissiongainminrace"
+                                            class="form-control gain-input"
+                                            data-config="synthesizer.transmissionGainMinRace" min="-60" max="0"
+                                            step="0.25">
+                                        <i class="fa-solid fa-volume-xmark mute-indicator"
+                                            style="position: absolute; right: 35px; top: 50%; transform: translateY(-50%); color: #dc3545; font-size: 16px; pointer-events: none; display: none;"></i>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 col-lg-4">
+                                    <label for="synth-transmissiongainminstreet" class="form-label">
+                                        <span data-i18n="runmode.settings.synth.transmissiongainminstreet">Transmission
+                                            Min Street (dB)</span>
+                                        <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
+                                            role="button"
+                                            data-tooltip="Minimum transmission gain for street vehicles. This value is the output strength when the vehicle is stopped and very low acceleration rates."></i>
+                                    </label>
+                                    <div style="position: relative;">
+                                        <input type="number" id="synth-transmissiongainminstreet"
+                                            class="form-control gain-input"
+                                            data-config="synthesizer.transmissionGainMinStreet" min="-60" max="0"
+                                            step="0.25">
+                                        <i class="fa-solid fa-volume-xmark mute-indicator"
+                                            style="position: absolute; right: 35px; top: 50%; transform: translateY(-50%); color: #dc3545; font-size: 16px; pointer-events: none; display: none;"></i>
+                                    </div>
                                 </div>
                                 <div class="col-md-6 col-lg-4">
                                     <label for="synth-gainincrement" class="form-label">
                                         <span data-i18n="runmode.settings.synth.gainincrement">Gain Increment</span>
                                         <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
                                             role="button"
-                                            data-tooltip="The increment step size (in dB) used when adjusting gain values on the device UI. Smaller values allow finer control."></i>
+                                            data-tooltip="The increment dB step size used when adjusting gain values using UI buttons."></i>
                                     </label>
-                                    <input type="number" id="synth-gainincrement" class="form-control"
+                                    <input type="number" id="synth-gainincrement" class="form-control gain-input"
                                         data-config="synthesizer.gainIncrement" min="0.05" max="1.0" step="0.05">
                                 </div>
                             </div>
 
                             <!-- Advanced Settings Toggle -->
                             <div class="mt-5">
-                                <div class="d-flex align-items-center mb-3">
+                                <div class="d-flex align-items-center mb-3" data-bs-toggle="collapse"
+                                    data-bs-target="#advancedSettings" aria-expanded="false"
+                                    aria-controls="advancedSettings" style="cursor: pointer;">
                                     <h5 class="mb-0 me-3">
-                                        <i class="fa-solid fa-sliders me-2"></i>
                                         <span data-i18n="runmode.settings.synth.advanced">Advanced Settings</span>
                                     </h5>
-                                    <div class="form-check form-switch">
-                                        <input class="form-check-input" type="checkbox" role="switch"
-                                            id="advanced-settings-toggle">
-                                        <label class="form-check-label" for="advanced-settings-toggle"></label>
-                                    </div>
+                                    <i class="fa-solid fa-chevron-right" id="advanced-settings-chevron"
+                                        style="transition: transform 0.3s ease;"></i>
                                 </div>
 
-                                <div id="advancedSettings" style="display: none;">
+                                <div id="advancedSettings" class="collapse">
+
                                     <!-- Engine Profiles Card -->
                                     <div class="card mb-3">
                                         <div class="card-body">
-                                            <h6 class="card-title mb-3">
+                                            <h5 class="card-title mb-3">
                                                 <span data-i18n="runmode.settings.synth.engineprofiles">Engine
                                                     Profiles</span>
-                                                <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
-                                                    role="button"
-                                                    data-tooltip="Configure haptic feedback characteristics for different engine types. Each profile controls the balance, gain, and pulse scaling for specific engine configurations."></i>
-                                            </h6>
+                                            </h5>
                                             <div class="row g-3 mb-3">
                                                 <div class="col-12">
                                                     <select id="engine-profile-select" class="form-select">
@@ -719,7 +1019,7 @@
                                                                 Balance</span>
                                                             <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
                                                                 role="button"
-                                                                data-tooltip="Secondary balance of the engine (0.0 = unbalanced, 1.0 = perfectly balanced). Affects harmonic vibrations."></i>
+                                                                data-tooltip="Secondary balance of the engine (0.0 = unbalanced, 1.0 = perfectly balanced). Affects harmonic vibrations. Note that this setting doesn't currently have any noticeable effect."></i>
                                                         </label>
                                                         <input type="number" id="engine-secondarybalance"
                                                             class="form-control" min="0" max="1" step="0.01">
@@ -755,22 +1055,74 @@
                                     <!-- Equalizer Card -->
                                     <div class="card">
                                         <div class="card-body">
-                                            <h6 class="card-title mb-3">
+                                            <h5 class="card-title mb-3">
                                                 <span data-i18n="runmode.settings.synth.equalizer">Equalizer</span>
-                                                <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
-                                                    role="button"
-                                                    data-tooltip="40-band equalizer covering 10-49 Hz. Each band is a multiplier (0.0-2.0) applied to that frequency range. Default is 1.0 (no change)."></i>
-                                            </h6>
-                                            <div id="equalizer-controls" class="row g-2">
-                                                <!-- EQ sliders will be dynamically generated here -->
+                                            </h5>
+                                            <div class="mb-3">
+                                                <div class="form-check form-switch">
+                                                    <input type="checkbox" class="form-check-input" id="synth-eqenabled"
+                                                        role="switch">
+                                                    <label class="form-check-label" for="synth-eqenabled">
+                                                        <span data-i18n="runmode.settings.synth.eqenabled">Enable</span>
+                                                    </label>
+                                                </div>
                                             </div>
-                                            <div class="mt-3">
+                                            <!-- EQ Curve Visualization -->
+                                            <div class="mb-3">
+                                                <canvas id="eq-curve-canvas" width="800" height="150"
+                                                    style="width: 100%; height: 150px; background: rgba(0,0,0,0.2); border-radius: 4px;"></canvas>
+                                            </div>
+                                            <!-- EQ Band Selection and Reset -->
+                                            <div class="mb-3 d-flex justify-content-between align-items-center">
+                                                <div class="d-flex align-items-center gap-2">
+                                                    <select id="eq-band-select" class="form-select"
+                                                        style="width: auto; display: inline-block;">
+                                                        <!-- Options populated by JavaScript -->
+                                                    </select>
+                                                    <i class="fa-solid fa-circle-question tooltip-trigger text-muted"
+                                                        role="button"
+                                                        data-tooltip="An 8-band parametric equalizer to adjust the frequency response of the synthesized audio signal. Avoid boosting values above zero as it can result in distortion and could damage your equipment. Instead try reducing stronger frequencies down to match the weaker frequencies."></i>
+                                                </div>
                                                 <button type="button" class="btn btn-sm btn-secondary"
                                                     id="eq-reset-btn">
                                                     <i class="fa-solid fa-rotate-left me-1"></i>
-                                                    <span data-i18n="runmode.settings.synth.reseteq">Reset to
-                                                        Flat</span>
+                                                    <span data-i18n="runmode.settings.synth.reseteq">Reset</span>
                                                 </button>
+                                            </div>
+                                            <!-- EQ Band Controls -->
+                                            <div class="eq-band-controls" id="equalizer-controls">
+                                                <!-- Frequency Slider -->
+                                                <div class="mb-3 d-flex align-items-center gap-3">
+                                                    <label for="eq-frequency-slider" class="form-label mb-0"
+                                                        style="min-width: 180px; padding-left: 24px;">
+                                                        <span
+                                                            data-i18n="runmode.settings.synth.frequency">Frequency</span>
+                                                        <span id="eq-frequency-value" class="ms-2 text-muted">12
+                                                            Hz</span>
+                                                    </label>
+                                                    <input type="range" class="form-range" id="eq-frequency-slider"
+                                                        min="10" max="70" step="0.5" value="12">
+                                                </div>
+                                                <!-- Gain Slider -->
+                                                <div class="mb-3 d-flex align-items-center gap-3">
+                                                    <label for="eq-gain-slider" class="form-label mb-0"
+                                                        style="min-width: 180px; padding-left: 24px;">
+                                                        <span data-i18n="runmode.settings.synth.gain">Gain</span>
+                                                        <span id="eq-gain-value" class="ms-2 text-muted">0.0 dB</span>
+                                                    </label>
+                                                    <input type="range" class="form-range" id="eq-gain-slider" min="-12"
+                                                        max="6" step="0.5" value="0">
+                                                </div>
+                                                <!-- Q Factor Slider -->
+                                                <div class="mb-3 d-flex align-items-center gap-3">
+                                                    <label for="eq-q-slider" class="form-label mb-0"
+                                                        style="min-width: 180px; padding-left: 24px;">
+                                                        <span data-i18n="runmode.settings.synth.qfactor">Q Factor</span>
+                                                        <span id="eq-q-value" class="ms-2 text-muted">2.0</span>
+                                                    </label>
+                                                    <input type="range" class="form-range" id="eq-q-slider" min="0.1"
+                                                        max="20" step="0.1" value="2">
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -913,6 +1265,106 @@
                     switchSection(this.value);
                 });
             }
+
+            // Transmission feedback button group with radio buttons
+            const transmissionCheckbox = document.getElementById('haptics-dynamictransmission');
+            const fixedRadio = document.getElementById('transmission-fixed-radio');
+            const dynamicRadio = document.getElementById('transmission-dynamic-radio');
+            const transmissionCurveInput = document.getElementById('haptics-transmissioncurve');
+            const gForceMaxInput = document.getElementById('haptics-gforcemax');
+
+            function updateTransmissionRadios(isDynamic) {
+                if (isDynamic) {
+                    dynamicRadio.checked = true;
+                } else {
+                    fixedRadio.checked = true;
+                }
+
+                // Disable/enable compression curve and g-force max based on mode
+                if (transmissionCurveInput) {
+                    transmissionCurveInput.disabled = !isDynamic;
+                }
+                if (gForceMaxInput) {
+                    gForceMaxInput.disabled = !isDynamic;
+                }
+            }
+
+            if (transmissionCheckbox && fixedRadio && dynamicRadio) {
+                // Handle radio button changes
+                fixedRadio.addEventListener('change', function () {
+                    if (this.checked) {
+                        transmissionCheckbox.checked = false;
+                        // Trigger change event for settings.js to save
+                        transmissionCheckbox.dispatchEvent(new Event('change', { bubbles: true }));
+                    }
+                });
+
+                dynamicRadio.addEventListener('change', function () {
+                    if (this.checked) {
+                        transmissionCheckbox.checked = true;
+                        // Trigger change event for settings.js to save
+                        transmissionCheckbox.dispatchEvent(new Event('change', { bubbles: true }));
+                    }
+                });
+
+                // Override the checkbox's checked property to update radio buttons
+                const originalDescriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'checked');
+                Object.defineProperty(transmissionCheckbox, 'checked', {
+                    get() {
+                        return originalDescriptor.get.call(this);
+                    },
+                    set(value) {
+                        originalDescriptor.set.call(this, value);
+                        updateTransmissionRadios(value);
+                    },
+                    configurable: true,
+                    enumerable: true
+                });
+
+                // Initial update
+                updateTransmissionRadios(transmissionCheckbox.checked);
+            }
+
+            // Gain mute toggle handling
+            const muteToggleIcons = document.querySelectorAll('.mute-toggle-icon');
+
+            function updateMuteIcon(icon, isMuted) {
+                if (isMuted) {
+                    icon.classList.remove('fa-volume-high');
+                    icon.classList.add('fa-volume-xmark');
+                    icon.style.color = '#dc3545';
+                } else {
+                    icon.classList.remove('fa-volume-xmark');
+                    icon.classList.add('fa-volume-high');
+                    icon.style.color = '';
+                }
+            }
+
+            muteToggleIcons.forEach(icon => {
+                const gainInputId = icon.dataset.gainInput;
+                const muteCheckboxId = icon.dataset.muteCheckbox;
+                const gainInput = document.getElementById(gainInputId);
+                const muteCheckbox = document.getElementById(muteCheckboxId);
+
+                if (gainInput && muteCheckbox) {
+                    // Click handler to toggle mute
+                    icon.addEventListener('click', function () {
+                        muteCheckbox.checked = !muteCheckbox.checked;
+                        updateMuteIcon(icon, muteCheckbox.checked);
+
+                        // Trigger change event to save
+                        muteCheckbox.dispatchEvent(new Event('change', { bubbles: true }));
+                    });
+
+                    // Update icon when checkbox changes (from config load)
+                    muteCheckbox.addEventListener('change', function () {
+                        updateMuteIcon(icon, this.checked);
+                    });
+
+                    // Initial state
+                    updateMuteIcon(icon, muteCheckbox.checked);
+                }
+            });
         });
     </script>
 

@@ -1192,7 +1192,7 @@ func (a *App) getGameStateString() string {
 		return "replay"
 	}
 
-	switch state {
+	switch state { //nolint:exhaustive // handled by default
 	case gameStateMainMenu:
 		return "main_menu"
 	case gameStateRaceMenu:
@@ -1705,11 +1705,12 @@ func (a *App) pushRaceInfo() {
 		deltaStr := "-"
 
 		if event.HasDelta {
-			if event.Delta > 0 {
+			switch {
+			case event.Delta > 0:
 				deltaStr = fmt.Sprintf("+%.3f", event.Delta.Seconds())
-			} else if event.Delta < 0 {
+			case event.Delta < 0:
 				deltaStr = fmt.Sprintf("-%.3f", -event.Delta.Seconds())
-			} else {
+			default:
 				// Delta == 0 means this is the best lap
 				deltaStr = "0.000"
 			}

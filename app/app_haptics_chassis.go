@@ -4,12 +4,11 @@ import (
 	"math"
 	"time"
 
-	"github.com/vwhitteron/simtezilo-dev/app/config"
 	"github.com/vwhitteron/simtezilo-dev/app/signal"
 )
 
 func (a *App) generateChassisHaptic() {
-	if a.config.GetChassisGain() <= config.MinimumGain {
+	if a.config.GetChassisGainMute() {
 		return
 	}
 
@@ -20,6 +19,9 @@ func (a *App) generateChassisHaptic() {
 	pulseWidth := math.Round(float64(a.config.GetInternalSampleRateHz()) / (2 * pulseFrequencyHz))
 
 	pulseAmplitude := a.calculateChassisHapticPulseAmplitude()
+
+	// Apply equalizer based on frequency
+	pulseAmplitude = signal.Equalize(pulseAmplitude, pulseWidth, a.config)
 
 	waveOffset := pulseWidth / 2
 	waveSamplePeriod := math.Pi / pulseWidth

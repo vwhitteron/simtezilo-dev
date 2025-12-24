@@ -227,7 +227,6 @@
         "runmode.settings.pitradio.title": "ピットラジオ",
         "runmode.settings.pitradio.enabled": "ピットラジオ有効",
         "runmode.settings.pitradio.interval": "メッセージ送信間隔（ms）",
-        "runmode.settings.pitradio.interval_help": "連続するピットラジオメッセージ間の時間",
 
         "runmode.settings.synth.title": "シンセサイザー",
         "runmode.settings.synth.samplerates_title": "サンプルレート",
@@ -252,7 +251,11 @@
         "runmode.settings.synth.engineprofilegain": "ゲイン（dB）",
         "runmode.settings.synth.pulsescale": "パルススケール",
         "runmode.settings.synth.equalizer": "イコライザー",
-        "runmode.settings.synth.reseteq": "フラットにリセット",
+        "runmode.settings.synth.eqenabled": "イコライザーを有効にする",
+        "runmode.settings.synth.frequency": "周波数",
+        "runmode.settings.synth.gain": "ゲイン",
+        "runmode.settings.synth.qfactor": "Qファクター",
+        "runmode.settings.synth.reseteq": "リセット",
 
         "runmode.settings.telemetry.title": "テレメトリー",
         "runmode.settings.telemetry.source": "テレメトリーソース",

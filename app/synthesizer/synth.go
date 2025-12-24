@@ -44,19 +44,20 @@ func New(opts *SynthOpts) (*Synthesizer, error) {
 	bufferLength := 2 * time.Second
 
 	synthesizer.mixer, err = NewMixer(MixerConfig{
-		MasterGain:    &opts.Config.MasterGain,
-		GainIncrement: &opts.Config.GainIncrement,
-		BufferLength:  bufferLength,
-		SampleRateHz:  opts.Config.InternalSampleRateHz,
-		Log:           opts.Logger.With().Str("package", "synth mixer").Logger(),
+		MasterGain:     &opts.Config.MasterGain,
+		MasterGainMute: &opts.Config.MasterGainMute,
+		GainIncrement:  &opts.Config.GainIncrement,
+		BufferLength:   bufferLength,
+		SampleRateHz:   opts.Config.InternalSampleRateHz,
+		Log:            opts.Logger.With().Str("package", "synth mixer").Logger(),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create mixer: %w", err)
 	}
 
-	_ = synthesizer.mixer.AddChannel("transmission", &opts.Config.TransmissionGain)
-	_ = synthesizer.mixer.AddChannel("chassis", &opts.Config.ChassisGain)
-	_ = synthesizer.mixer.AddChannel("engine", &opts.Config.EngineGain)
+	_ = synthesizer.mixer.AddChannel("transmission", &opts.Config.TransmissionGain, &opts.Config.TransmissionGainMute)
+	_ = synthesizer.mixer.AddChannel("chassis", &opts.Config.ChassisGain, &opts.Config.ChassisGainMute)
+	_ = synthesizer.mixer.AddChannel("engine", &opts.Config.EngineGain, &opts.Config.EngineGainMute)
 
 	synthesizer.outputDevice, err = NewOutputDevice(SynthOutDeviceOpts{
 		Log: opts.Logger.With().Str("package", "synth output device").Logger(),

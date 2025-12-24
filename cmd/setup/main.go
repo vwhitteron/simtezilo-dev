@@ -948,7 +948,9 @@ func (m *manager) saveNetworkConfiguration(config networkConfig) error {
 
 		// Convert prefix from string to uint32
 		var prefixUint uint32
-		if _, err := fmt.Sscanf(config.prefix, "%d", &prefixUint); err != nil {
+
+		_, err := fmt.Sscanf(config.prefix, "%d", &prefixUint)
+		if err != nil {
 			return fmt.Errorf("invalid prefix format: %w", err)
 		}
 

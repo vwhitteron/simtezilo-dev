@@ -60,7 +60,7 @@ func (a *App) generateEngineHaptic() {
 // shouldGenerateEngineHaptic checks if engine haptic generation should proceed.
 func (a *App) shouldGenerateEngineHaptic() bool {
 	// Engine haptics are silenced
-	if a.config.GetEngineGain() <= config.MinimumGain {
+	if a.config.GetEngineGainMute() {
 		return false
 	}
 

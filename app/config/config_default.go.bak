@@ -95,26 +95,17 @@ func defaultConfig() *viperConfig {
 			OutputSampleRateHz:        32000,
 			OutputFile:                "",
 			MasterGain:                -15.00,
-			MasterGainMute:            false,
 			GainIncrement:             0.25,
 			ChassisGain:               0.00,
-			ChassisGainMute:           false,
 			TransmissionGain:          0.00,
-			TransmissionGainMute:      false,
 			TransmissionGainMinRace:   -3.00,
 			TransmissionGainMinStreet: -6.00,
 			EngineGain:                -4.25,
-			EngineGainMute:            false,
-			EqEnabled:                 false,
-			EqBands: []EQBand{
-				{Frequency: 12, Gain: 0.0, Q: 2.0}, // Sub-bass rumble
-				{Frequency: 16, Gain: 0.0, Q: 2.0}, // Deep bass
-				{Frequency: 20, Gain: 0.0, Q: 2.0}, // Bass
-				{Frequency: 25, Gain: 0.0, Q: 2.0}, // Low-mid
-				{Frequency: 30, Gain: 0.0, Q: 2.0}, // Mid
-				{Frequency: 38, Gain: 0.0, Q: 2.0}, // Upper-mid
-				{Frequency: 48, Gain: 0.0, Q: 2.0}, // High
-				{Frequency: 58, Gain: 0.0, Q: 2.0}, // Upper range
+			Eq: []float64{
+				0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, // 10-19Hz (dB)
+				0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, // 20-29Hz (dB)
+				0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, // 30-39Hz (dB)
+				0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, // 40-49Hz (dB)
 			},
 		},
 		Telemetry: &Telemetry{

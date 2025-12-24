@@ -34,16 +34,18 @@ type Mixer struct {
 type MixerChannel struct {
 	activeGain float64
 	configGain *float64
+	configMute *bool
 	buffer     Buffer
 }
 
 // MixerConfig holds configuration options for the Mixer.
 type MixerConfig struct {
-	MasterGain    *float64       // Pointer to the configuration master gain value
-	GainIncrement *float64       // Pointer to the configuration gain increment value
-	BufferLength  time.Duration  // Duration of audio the buffer should hold
-	SampleRateHz  int            // Sample rate in Hz
-	Log           zerolog.Logger // Logger instance for logging
+	MasterGain     *float64       // Pointer to the configuration master gain value
+	MasterGainMute *bool          // Pointer to the configuration master gain mute value
+	GainIncrement  *float64       // Pointer to the configuration gain increment value
+	BufferLength   time.Duration  // Duration of audio the buffer should hold
+	SampleRateHz   int            // Sample rate in Hz
+	Log            zerolog.Logger // Logger instance for logging
 }
 
 // NewMixer creates a new Mixer instance with the provided configuration.
@@ -69,7 +71,7 @@ func NewMixer(mixerConfig MixerConfig) (*Mixer, error) {
 		healthCheckInterval: 5 * time.Second,
 	}
 
-	err := mixer.AddChannel("_master", mixerConfig.MasterGain)
+	err := mixer.AddChannel("_master", mixerConfig.MasterGain, mixerConfig.MasterGainMute)
 	if err != nil {
 		return nil, fmt.Errorf("add master channel: %w", err)
 	}
@@ -90,7 +92,7 @@ func (m *Mixer) GetBufferCapacity() int {
 }
 
 // AddChannel adds a new channel to the mixer with the specified name and initial gain.
-func (m *Mixer) AddChannel(name string, gain *float64) error {
+func (m *Mixer) AddChannel(name string, gain *float64, mute *bool) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -101,6 +103,7 @@ func (m *Mixer) AddChannel(name string, gain *float64) error {
 	m.channels[name] = &MixerChannel{
 		activeGain: *gain,
 		configGain: gain,
+		configMute: mute,
 		// buffer: NewLinearBuffer(m.bufferLength, m.sampleRateHz),
 		// buffer: NewRingBuffer(m.bufferLength, m.sampleRateHz),
 		buffer: NewAdaptiveBuffer(m.bufferLength, m.sampleRateHz),
@@ -141,14 +144,21 @@ func (m *Mixer) ReadChannel(name string, length int) []float64 {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	if _, ok := m.channels[name]; !ok {
+	channel, ok := m.channels[name]
+	if !ok {
 		return nil
+	}
+
+	// Check if channel is muted
+	if channel.configMute != nil && *channel.configMute {
+		// Return silence for muted channels
+		return make([]float64, length)
 	}
 
 	// Check buffer health periodically
 	m.checkBufferHealth()
 
-	return m.channels[name].Read(length)
+	return channel.Read(length)
 }
 
 // InspectChannelBuffer returns a copy of the specified channel buffer for inspection.
@@ -321,7 +331,7 @@ func (m *Mixer) MixToMaster(length int) {
 			continue
 		}
 
-		if *channel.configGain == config.MinimumGain {
+		if channel.configMute != nil && *channel.configMute {
 			continue
 		}
 
@@ -368,7 +378,7 @@ func (m *Mixer) mixEngineChannel(outSamples []float64, length int) {
 		return
 	}
 
-	if *channel.configGain <= config.MinimumGain {
+	if channel.configMute != nil && *channel.configMute {
 		return
 	}
 
@@ -427,7 +437,7 @@ func (m *Mixer) checkBufferHealth() {
 			continue
 		}
 
-		if *channel.configGain <= config.MinimumGain {
+		if channel.configMute != nil && *channel.configMute {
 			continue
 		}
 

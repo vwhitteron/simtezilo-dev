@@ -20,7 +20,7 @@ import (
 	"github.com/pelletier/go-toml/v2"
 	"github.com/rs/zerolog"
 	"github.com/spf13/viper"
-	"github.com/vwhitteron/simtezilo-dev/app/config"
+	appconfig "github.com/vwhitteron/simtezilo-dev/app/config"
 	"github.com/vwhitteron/simtezilo-dev/app/exitcode"
 	appHaptics "github.com/vwhitteron/simtezilo-dev/app/haptics"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware"
@@ -51,7 +51,7 @@ type WebUI struct {
 	raceClients        []*websocket.Conn
 	raceClientsChan    chan *websocket.Conn
 	raceUnsubChan      chan *websocket.Conn
-	config             *config.Config
+	config             *appconfig.Config
 	upgrader           websocket.Upgrader
 	shutdownChan       chan exitcode.Code
 	setupModeEnabled   bool
@@ -68,7 +68,7 @@ type Config struct {
 	VehicleInfoFeed    chan map[string]interface{}
 	CircuitInfoFeed    chan map[string]string
 	RaceInfoFeed       chan map[string]interface{}
-	Config             *config.Config
+	Config             *appconfig.Config
 	ShutdownChan       chan exitcode.Code
 	SetupModeAvailable bool
 	LogStore           *logstore.Store
@@ -769,15 +769,29 @@ func (w *WebUI) handleGetConfig(response http.ResponseWriter, _ *http.Request) {
 			"outputSampleRateHz":        w.config.GetOutputSampleRateHz(),
 			"outputFile":                w.config.GetOutputFile(),
 			"masterGain":                w.config.GetMasterGain(),
+			"masterGainMute":            w.config.GetMasterGainMute(),
 			"chassisGain":               w.config.GetChassisGain(),
+			"chassisGainMute":           w.config.GetChassisGainMute(),
 			"transmissionGain":          w.config.GetTransmissionGain(),
+			"transmissionGainMute":      w.config.GetTransmissionGainMute(),
 			"transmissionGainMinRace":   w.config.GetTransmissionGainMinRace(),
 			"transmissionGainMinStreet": w.config.GetTransmissionGainMinStreet(),
 			"engineGain":                w.config.GetEngineGain(),
+			"engineGainMute":            w.config.GetEngineGainMute(),
 			"gainIncrement":             w.config.GetGainIncrement(),
 			"engineProfiles":            w.config.GetEngineProfiles(),
+			"eqEnabled":                 w.config.GetEqEnabled(),
 			"eq":                        w.config.GetEq(),
 		},
+		"eqCurve": func() map[string]any {
+			curve, minFreq, resolution := w.config.GetEqCurve()
+
+			return map[string]any{
+				"curve":      curve,
+				"minFreq":    minFreq,
+				"resolution": resolution,
+			}
+		}(),
 		"telemetry": map[string]any{
 			"source": w.config.GetTelemetrySource(),
 		},
@@ -845,11 +859,22 @@ func (w *WebUI) handleSetConfig(response http.ResponseWriter, request *http.Requ
 
 	w.log.Debug().Msg("configuration saved to file")
 
-	// Return success response
+	// Return success response with updated config including EQ curve
 	_ = json.NewEncoder(response).Encode(map[string]any{ //nolint:errchkjson // simple encoding
 		"status":          "success",
 		"message":         "Configuration updated and saved successfully",
 		"restartRequired": restartRequired,
+		"config": map[string]any{
+			"eqCurve": func() map[string]any {
+				curve, minFreq, resolution := w.config.GetEqCurve()
+
+				return map[string]any{
+					"curve":      curve,
+					"minFreq":    minFreq,
+					"resolution": resolution,
+				}
+			}(),
+		},
 	})
 }
 
@@ -934,7 +959,8 @@ func (w *WebUI) applyAppConfig(config map[string]any) []string {
 		if vehicleDBFileStr, ok := vehicleDBFile.(string); ok {
 			// If a file path is provided, validate that it exists
 			if vehicleDBFileStr != "" {
-				if _, err := os.Stat(vehicleDBFileStr); err != nil {
+				_, err := os.Stat(vehicleDBFileStr)
+				if err != nil {
 					if os.IsNotExist(err) {
 						errors = append(errors, "vehicle database file not found: "+vehicleDBFileStr)
 					} else {
@@ -990,6 +1016,14 @@ func (w *WebUI) applySynthesizerConfig(config map[string]any) []string {
 		}
 	}
 
+	if masterGainMute, ok := config["masterGainMute"]; ok {
+		if mute, ok := masterGainMute.(bool); ok {
+			w.config.SetMasterGainMute(mute)
+		} else {
+			errors = append(errors, "invalid master gain mute value")
+		}
+	}
+
 	if chassisGain, ok := config["chassisGain"]; ok {
 		if gainFloat, ok := chassisGain.(float64); ok {
 			w.config.SetChassisGain(gainFloat)
@@ -998,11 +1032,27 @@ func (w *WebUI) applySynthesizerConfig(config map[string]any) []string {
 		}
 	}
 
+	if chassisGainMute, ok := config["chassisGainMute"]; ok {
+		if mute, ok := chassisGainMute.(bool); ok {
+			w.config.SetChassisGainMute(mute)
+		} else {
+			errors = append(errors, "invalid chassis gain mute value")
+		}
+	}
+
 	if transmissionGain, ok := config["transmissionGain"]; ok {
 		if gainFloat, ok := transmissionGain.(float64); ok {
 			w.config.SetTransmissionGain(gainFloat)
 		} else {
 			errors = append(errors, "invalid transmission gain value")
+		}
+	}
+
+	if transmissionGainMute, ok := config["transmissionGainMute"]; ok {
+		if mute, ok := transmissionGainMute.(bool); ok {
+			w.config.SetTransmissionGainMute(mute)
+		} else {
+			errors = append(errors, "invalid transmission gain mute value")
 		}
 	}
 
@@ -1030,6 +1080,14 @@ func (w *WebUI) applySynthesizerConfig(config map[string]any) []string {
 		}
 	}
 
+	if engineGainMute, ok := config["engineGainMute"]; ok {
+		if mute, ok := engineGainMute.(bool); ok {
+			w.config.SetEngineGainMute(mute)
+		} else {
+			errors = append(errors, "invalid engine gain mute value")
+		}
+	}
+
 	if gainIncrement, ok := config["gainIncrement"]; ok {
 		if incrementFloat, ok := gainIncrement.(float64); ok {
 			w.config.SetGainIncrement(incrementFloat)
@@ -1044,20 +1102,23 @@ func (w *WebUI) applySynthesizerConfig(config map[string]any) []string {
 			for name, profileData := range profilesMap {
 				if profileMap, ok := profileData.(map[string]any); ok {
 					profile := appHaptics.EngineProfile{}
-					
+
 					if pb, ok := profileMap["PrimaryBalance"].(float64); ok {
 						profile.PrimaryBalance = pb
 					}
+
 					if sb, ok := profileMap["SecondaryBalance"].(float64); ok {
 						profile.SecondaryBalance = sb
 					}
+
 					if g, ok := profileMap["Gain"].(float64); ok {
 						profile.Gain = g
 					}
+
 					if ps, ok := profileMap["PulseScale"].(float64); ok {
 						profile.PulseScale = ps
 					}
-					
+
 					w.config.SetEngineProfile(name, profile)
 				}
 			}
@@ -1066,22 +1127,46 @@ func (w *WebUI) applySynthesizerConfig(config map[string]any) []string {
 		}
 	}
 
-	// Handle EQ array
+	if eqEnabled, ok := config["eqEnabled"]; ok {
+		if enabled, ok := eqEnabled.(bool); ok {
+			w.config.SetEqEnabled(enabled)
+		} else {
+			errors = append(errors, "invalid EQ enabled value")
+		}
+	}
+
+	// Handle EQ bands
 	if eq, ok := config["eq"]; ok {
 		if eqArray, ok := eq.([]any); ok {
-			eqFloat := make([]float64, 0, len(eqArray))
-			for _, val := range eqArray {
-				if f, ok := val.(float64); ok {
-					eqFloat = append(eqFloat, f)
+			eqBands := make([]appconfig.EQBand, 0, len(eqArray))
+			for idx, val := range eqArray {
+				if bandMap, ok := val.(map[string]any); ok {
+					freq, freqOk := bandMap["frequency"].(float64)
+					gain, gainOk := bandMap["gain"].(float64)
+					qVal, qOk := bandMap["q"].(float64)
+
+					if !freqOk || !gainOk || !qOk {
+						errors = append(errors, fmt.Sprintf("invalid EQ band %d: missing or invalid fields", idx+1))
+
+						continue // Skip this band but continue processing others
+					}
+
+					eqBands = append(eqBands, appconfig.EQBand{
+						Frequency: freq,
+						Gain:      gain,
+						Q:         qVal,
+					})
 				} else {
-					errors = append(errors, "invalid EQ value")
-					break
+					errors = append(errors, fmt.Sprintf("invalid EQ band %d format", idx+1))
+
+					continue
 				}
 			}
-			if len(eqFloat) == 40 {
-				w.config.SetEq(eqFloat)
+
+			if len(eqBands) == 8 {
+				w.config.SetEq(eqBands)
 			} else {
-				errors = append(errors, "EQ array must have exactly 40 values")
+				errors = append(errors, fmt.Sprintf("EQ must have exactly 8 bands, got %d", len(eqBands)))
 			}
 		} else {
 			errors = append(errors, "invalid EQ format")
@@ -1286,7 +1371,9 @@ func (w *WebUI) applyTelemetryConfig(config map[string]any) []string {
 			// If source is a file:// path, validate that the file exists
 			if strings.HasPrefix(sourceStr, "file://") {
 				filePath := strings.TrimPrefix(sourceStr, "file://")
-				if _, err := os.Stat(filePath); err != nil {
+
+				_, err := os.Stat(filePath)
+				if err != nil {
 					if os.IsNotExist(err) {
 						errors = append(errors, "telemetry replay file not found: "+filePath)
 					} else {
@@ -1553,10 +1640,10 @@ func (w *WebUI) handleConfigImport(response http.ResponseWriter, request *http.R
 	}
 
 	// Load and validate the configuration using viper and our validation logic
-	v := viper.New()
-	v.SetConfigType("toml")
+	cfg := viper.New()
+	cfg.SetConfigType("toml")
 
-	err = v.ReadConfig(bytes.NewReader(fileContent))
+	err = cfg.ReadConfig(bytes.NewReader(fileContent))
 	if err != nil {
 		w.log.Error().Err(err).Msg("failed to parse config with viper")
 		response.WriteHeader(http.StatusBadRequest)
@@ -1566,9 +1653,9 @@ func (w *WebUI) handleConfigImport(response http.ResponseWriter, request *http.R
 	}
 
 	// Create a temporary config instance to validate the structure and values
-	tempConfig := &config.Config{}
+	tempConfig := &appconfig.Config{}
 
-	err = v.Unmarshal(tempConfig)
+	err = cfg.Unmarshal(tempConfig)
 	if err != nil {
 		w.log.Error().Err(err).Msg("failed to unmarshal config")
 		response.WriteHeader(http.StatusBadRequest)
@@ -1875,7 +1962,8 @@ func (w *WebUI) handleLogsAPI(response http.ResponseWriter, request *http.Reques
 	pageSize := 100
 
 	if pageStr := queryParams.Get("page"); pageStr != "" {
-		if p, err := fmt.Sscanf(pageStr, "%d", &page); err == nil && p == 1 {
+		p, err := fmt.Sscanf(pageStr, "%d", &page)
+		if err == nil && p == 1 {
 			if page < 1 {
 				page = 1
 			}
@@ -1883,7 +1971,8 @@ func (w *WebUI) handleLogsAPI(response http.ResponseWriter, request *http.Reques
 	}
 
 	if pageSizeStr := queryParams.Get("pageSize"); pageSizeStr != "" {
-		if ps, err := fmt.Sscanf(pageSizeStr, "%d", &pageSize); err == nil && ps == 1 {
+		ps, err := fmt.Sscanf(pageSizeStr, "%d", &pageSize)
+		if err == nil && ps == 1 {
 			if pageSize < 1 {
 				pageSize = 100
 			} else if pageSize > 1000 {
