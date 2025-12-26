@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pelletier/go-toml/v2"
@@ -136,9 +137,57 @@ type viperConfig struct {
 	Tyres       *tyres       `toml:"tyres"`
 }
 
+// ConfigSnapshot holds frequently-accessed configuration values for lock-free reads.
+type ConfigSnapshot struct {
+	// Synthesizer gain settings
+	MasterGain                float64
+	MasterGainMute            bool
+	ChassisGain               float64
+	ChassisGainMute           bool
+	TransmissionGain          float64
+	TransmissionGainMute      bool
+	TransmissionGainMinRace   float64
+	TransmissionGainMinStreet float64
+	EngineGain                float64
+	EngineGainMute            bool
+	GainIncrement             float64
+	InternalSampleRateHz      int
+	OutputSampleRateHz        int
+
+	// Haptics jerk settings (chassis amplitude)
+	JerkCurve float64
+	JerkMax   int
+	JerkScale float64
+
+	// Haptics snap settings (chassis frequency)
+	SnapCurve float64
+	SnapMax   int
+	SnapScale float64
+
+	// Haptics pulse settings
+	PulseMaxAmplitude   float64
+	PulseMaxFrequencyHz float64
+	PulseMinFrequencyHz float64
+	PulseWidthMin       float64
+	PulseWidthMax       float64
+
+	// Dynamic transmission settings
+	DynamicTransmissionFeedback  bool
+	DynamicTransmissionCurve     int
+	DynamicTransmissionGforceMax float64
+
+	// EQ settings
+	EqEnabled bool
+
+	// Monitoring flags
+	FuelMonitoringEnabled bool
+	TyreMonitoringEnabled bool
+}
+
 // Config holds the application configuration and provides methods for accessing and modifying the data.
 type Config struct {
 	viper                      *viperConfig
+	snapshot                   atomic.Pointer[ConfigSnapshot]
 	i18n                       *i18n.I18n
 	configFile                 string
 	lastSavedConfig            []byte // Last config written to disk (to avoid unnecessary writes)
@@ -211,6 +260,7 @@ func New(opts Options) *Config {
 	}
 
 	config.finalise()
+	config.rebuildSnapshot()
 
 	return config
 }
@@ -239,6 +289,7 @@ func NewFromJSON(json []byte, log zerolog.Logger) *Config {
 	log.Debug().Str("source", configSource).Msg("config loaded")
 
 	config.finalise()
+	config.rebuildSnapshot()
 
 	return config
 }
@@ -252,6 +303,7 @@ func (c *Config) SetDefault() {
 	c.mu.Unlock()
 
 	c.finalise()
+	c.rebuildSnapshot()
 }
 
 // SetI18n sets the i18n instance for the Config which is required for interaction with language settings.
@@ -606,20 +658,16 @@ func (c *Config) SetDiscordVoiceChannelID(voiceChannelID string) {
 
 // GetFuelMonitoringEnabled returns true if fuel monitoring is enabled.
 func (c *Config) GetFuelMonitoringEnabled() bool {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.Fuel.MonitoringEnabled
+	return c.snapshot.Load().FuelMonitoringEnabled
 }
 
 // SetFuelMonitoringEnabled sets whether fuel monitoring is enabled.
 func (c *Config) SetFuelMonitoringEnabled(value bool) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	c.viper.Fuel.MonitoringEnabled = value
-
+	c.rebuildSnapshot()
 	c.registerUpdate(false)
+	c.mu.Unlock()
 }
 
 // GetFuelPreWarnNotifyLaps returns the number of laps remaining before a fuel pre-warning is triggered.
@@ -788,132 +836,94 @@ func (c *Config) SetDynamicTransmissionFeedbackEnabled(value bool) {
 // Values closer to 0 produce a more linear response.
 // Values closer to 1 produce a more exponential response.
 func (c *Config) GetJerkCurve() float64 {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return float64(c.viper.Haptics.JerkCurve)
+	return c.snapshot.Load().JerkCurve
 }
 
 // SetJerkCurve sets the jerk curve value.
 // Values closer to 0 produce a more linear response.
 // Values closer to 1 produce a more exponential response.
 func (c *Config) SetJerkCurve(value int) {
-	c.mu.Lock()
-
 	value = min(value, 955)
 	value = max(value, 5)
 
+	c.mu.Lock()
 	c.viper.Haptics.JerkCurve = value
-
 	c.mu.Unlock()
-
 	c.updateJerkScale()
 }
 
 // IncreaseJerkCurve increases the jerk curve value in increments of 5.
 func (c *Config) IncreaseJerkCurve() int {
 	c.mu.Lock()
-
-	c.viper.Haptics.JerkCurve = min(
-		955,
-		c.viper.Haptics.JerkCurve+5,
-	)
-
+	c.viper.Haptics.JerkCurve = min(955, c.viper.Haptics.JerkCurve+5)
+	result := c.viper.Haptics.JerkCurve
 	c.mu.Unlock()
-
 	c.updateJerkScale()
 
-	return c.viper.Haptics.JerkCurve
+	return result
 }
 
 // DecreaseJerkCurve decreases the jerk curve value in increments of 5.
 func (c *Config) DecreaseJerkCurve() int {
 	c.mu.Lock()
-
-	c.viper.Haptics.JerkCurve = max(
-		5,
-		c.viper.Haptics.JerkCurve-5,
-	)
-
+	c.viper.Haptics.JerkCurve = max(5, c.viper.Haptics.JerkCurve-5)
+	result := c.viper.Haptics.JerkCurve
 	c.mu.Unlock()
-
 	c.updateJerkScale()
 
-	return c.viper.Haptics.JerkCurve
+	return result
 }
 
 // GetJerkScale returns the current jerk scale factor.
 func (c *Config) GetJerkScale() float64 {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.Haptics._jerkScale
+	return c.snapshot.Load().JerkScale
 }
 
 // GetJerkMax returns the maximum jerk value.
 // The jerk curve is applied over the range from 0 to this maximum value.
 // Any jerk vakues above this value are clamped to this maximum.
 func (c *Config) GetJerkMax() int {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.Haptics.JerkMax
+	return c.snapshot.Load().JerkMax
 }
 
 // SetJerkMax sets the maximum jerk value.
 // The jerk curve is applied over the range from 0 to this maximum value.
 // Any jerk vakues above this value are clamped to this maximum.
 func (c *Config) SetJerkMax(value int) {
-	c.mu.Lock()
-
 	value = min(value, 200)
 	value = max(value, 1)
 
+	c.mu.Lock()
 	c.viper.Haptics.JerkMax = value
-
 	c.mu.Unlock()
-
 	c.updateJerkScale()
 }
 
 // IncreaseJerkMax increases the maximum jerk value in increments of 1.
 func (c *Config) IncreaseJerkMax() int {
 	c.mu.Lock()
-
-	c.viper.Haptics.JerkMax = min(
-		100,
-		c.viper.Haptics.JerkMax+1,
-	)
-
+	c.viper.Haptics.JerkMax = min(100, c.viper.Haptics.JerkMax+1)
+	result := c.viper.Haptics.JerkMax
 	c.mu.Unlock()
-
 	c.updateJerkScale()
 
-	return c.viper.Haptics.JerkMax
+	return result
 }
 
 // DecreaseJerkMax decreases the maximum jerk value in increments of 1.
 func (c *Config) DecreaseJerkMax() int {
 	c.mu.Lock()
-
-	c.viper.Haptics.JerkMax = max(
-		1,
-		c.viper.Haptics.JerkMax-1,
-	)
-
+	c.viper.Haptics.JerkMax = max(1, c.viper.Haptics.JerkMax-1)
+	result := c.viper.Haptics.JerkMax
 	c.mu.Unlock()
-
 	c.updateJerkScale()
 
-	return c.viper.Haptics.JerkMax
+	return result
 }
 
 // GetSnapCurve returns the snap curve value.
 func (c *Config) GetSnapCurve() float64 {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return float64(c.viper.Haptics.SnapCurve)
+	return c.snapshot.Load().SnapCurve
 }
 
 // SetSnapCurve sets the snap curve value.
@@ -966,18 +976,12 @@ func (c *Config) DecreaseSnapCurve() int {
 
 // GetSnapScale returns the current snap scale factor.
 func (c *Config) GetSnapScale() float64 {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.Haptics._snapScale
+	return c.snapshot.Load().SnapScale
 }
 
 // GetSnapMax returns the maximum snap value.
 func (c *Config) GetSnapMax() int {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.Haptics.SnapMax
+	return c.snapshot.Load().SnapMax
 }
 
 // SetSnapMax sets the maximum snap value.
@@ -1031,63 +1035,50 @@ func (c *Config) DecreaseSnapMax() int {
 // GetTransmissionCurve returns the transmission curve value.
 // This curve is applied to the dynamic transmission feedback bsaed on the longitudinal vehicle g-force.
 func (c *Config) GetTransmissionCurve() float64 {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return float64(c.viper.Haptics.DynamicTransmissionCurve)
+	return float64(c.snapshot.Load().DynamicTransmissionCurve)
 }
 
 // SetTransmissionCurve sets the transmission curve value.
 // This curve is applied to the dynamic transmission feedback bsaed on the longitudinal vehicle g-force.
 func (c *Config) SetTransmissionCurve(value int) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 
 	value = min(value, 955)
 	value = max(value, 5)
-
 	c.viper.Haptics.DynamicTransmissionCurve = value
-
+	c.rebuildSnapshot()
 	c.registerUpdate(false)
+	c.mu.Unlock()
 }
 
 // IncreaseTransmissionCurve increases the transmission curve value in increments of 5.
 func (c *Config) IncreaseTransmissionCurve() int {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	c.viper.Haptics.DynamicTransmissionCurve = min(
-		955,
-		c.viper.Haptics.DynamicTransmissionCurve+5,
-	)
-
+	c.viper.Haptics.DynamicTransmissionCurve = min(955, c.viper.Haptics.DynamicTransmissionCurve+5)
+	c.rebuildSnapshot()
 	c.registerUpdate(false)
+	result := c.viper.Haptics.DynamicTransmissionCurve
+	c.mu.Unlock()
 
-	return c.viper.Haptics.DynamicTransmissionCurve
+	return result
 }
 
 // DecreaseTransmissionCurve decreases the transmission curve value in increments of 5.
 func (c *Config) DecreaseTransmissionCurve() int {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	c.viper.Haptics.DynamicTransmissionCurve = max(
-		5,
-		c.viper.Haptics.DynamicTransmissionCurve-5,
-	)
-
+	c.viper.Haptics.DynamicTransmissionCurve = max(5, c.viper.Haptics.DynamicTransmissionCurve-5)
+	c.rebuildSnapshot()
 	c.registerUpdate(false)
+	result := c.viper.Haptics.DynamicTransmissionCurve
+	c.mu.Unlock()
 
-	return c.viper.Haptics.DynamicTransmissionCurve
+	return result
 }
 
 // GetTransmissionGforceMax returns the maximum g-force for dynamic transmission feedback.
 // Any longitudinal g-force values above this are clamped to this maximum.
 func (c *Config) GetTransmissionGforceMax() float64 {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.Haptics.DynamicTransmissionGforceMax
+	return c.snapshot.Load().DynamicTransmissionGforceMax
 }
 
 // SetTransmissionGforceMax sets the maximum transmission G-force value.
@@ -1139,10 +1130,7 @@ func (c *Config) DecreaseTransmissionGforceMax() float64 {
 // GetMinHz returns the configured minimum pulse frequency in Hz.
 // This is the minimum frequency output for chassis bump haptics.
 func (c *Config) GetMinHz() float64 {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.Haptics.PulseMinFrequencyHz
+	return c.snapshot.Load().PulseMinFrequencyHz
 }
 
 // GetEngineProfile returns the currently selected engine profile.
@@ -1377,140 +1365,107 @@ func (c *Config) DecreaseEnginePulseScale() float64 {
 // This is the minimum frequency output for chassis bump haptics and is clamped to a maximum of 25Hz.
 func (c *Config) IncreaseMinHz() int {
 	c.mu.Lock()
-
 	c.viper.Haptics.PulseMinFrequencyHz = min(25, c.viper.Haptics.PulseMinFrequencyHz+1)
-
+	result := int(c.viper.Haptics.PulseMinFrequencyHz)
+	c.mu.Unlock()
 	c.updatePulseWidthExtents()
 
-	c.mu.Unlock()
-
-	c.registerUpdate(false)
-
-	return int(c.viper.Haptics.PulseMinFrequencyHz)
+	return result
 }
 
 // DecreaseMinHz decreases the minimum pulse frequency in 1 Hz increments.
 // This is the minimum frequency output for chassis bump haptics and is clamped to a minimum of 5Hz.
 func (c *Config) DecreaseMinHz() int {
 	c.mu.Lock()
-
 	c.viper.Haptics.PulseMinFrequencyHz = max(5, c.viper.Haptics.PulseMinFrequencyHz-1)
-
+	result := int(c.viper.Haptics.PulseMinFrequencyHz)
+	c.mu.Unlock()
 	c.updatePulseWidthExtents()
 
-	c.mu.Unlock()
-
-	c.registerUpdate(false)
-
-	return int(c.viper.Haptics.PulseMinFrequencyHz)
+	return result
 }
 
 // GetMaxHz returns the configured maximum pulse frequency in Hz.
 // This is the maximum frequency output for chassis bump haptics.
 func (c *Config) GetMaxHz() float64 {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	c.registerUpdate(false)
-
-	return c.viper.Haptics.PulseMaxFrequencyHz
+	return c.snapshot.Load().PulseMaxFrequencyHz
 }
 
 // IncreaseMaxHz increases the maximum pulse frequency in 1 Hz increments.
 // This is the maximum frequency output for chassis bump haptics and is clamped to a maximum of 100Hz.
 func (c *Config) IncreaseMaxHz() int {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	c.viper.Haptics.PulseMaxFrequencyHz = min(100, c.viper.Haptics.PulseMaxFrequencyHz+1)
-
+	result := int(c.viper.Haptics.PulseMaxFrequencyHz)
+	c.mu.Unlock()
 	c.updatePulseWidthExtents()
 
-	return int(c.viper.Haptics.PulseMaxFrequencyHz)
+	return result
 }
 
 // DecreaseMaxHz decreases the maximum pulse frequency in 1 Hz increments.
 // This is the maximum frequency output for chassis bump haptics and is clamped to a minimum of 26Hz.
 func (c *Config) DecreaseMaxHz() int {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	c.viper.Haptics.PulseMaxFrequencyHz = max(26, c.viper.Haptics.PulseMaxFrequencyHz-1)
-
+	result := int(c.viper.Haptics.PulseMaxFrequencyHz)
+	c.mu.Unlock()
 	c.updatePulseWidthExtents()
 
-	return int(c.viper.Haptics.PulseMaxFrequencyHz)
+	return result
 }
 
 // GetFrequencyHzRange returns the range between the configured minimum and maximum pulse frequencies in Hz.
 // This is the frequency range output for chassis bump haptics.
 func (c *Config) GetFrequencyHzRange() float64 {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	snap := c.snapshot.Load()
 
-	return c.viper.Haptics.PulseMaxFrequencyHz - c.viper.Haptics.PulseMinFrequencyHz
+	return snap.PulseMaxFrequencyHz - snap.PulseMinFrequencyHz
 }
 
 // GetPulseWidthMin returns the minimum pulse width in samples based on the current max frequency.
 func (c *Config) GetPulseWidthMin() float64 {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.Haptics._pulseWidthMin
+	return c.snapshot.Load().PulseWidthMin
 }
 
 // GetPulseWidthMax returns the maximum pulse width in samples based on the current min and max frequencies.
 func (c *Config) GetPulseWidthMax() float64 {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.Haptics._pulseWidthMax
+	return c.snapshot.Load().PulseWidthMax
 }
 
 // GetPulseMaxAmplitude returns the maximum pulse amplitude for chassis bump haptics.
 func (c *Config) GetPulseMaxAmplitude() float64 {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.Haptics.PulseMaxAmplitude
+	return c.snapshot.Load().PulseMaxAmplitude
 }
 
 // SetPulseMaxAmplitude sets the maximum pulse amplitude for chassis bump haptics.
 func (c *Config) SetPulseMaxAmplitude(value float64) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	c.viper.Haptics.PulseMaxAmplitude = value
-
+	c.rebuildSnapshot()
 	c.registerUpdate(false)
+	c.mu.Unlock()
 }
 
 // GetPulseMaxFrequencyHz returns the maximum pulse frequency in Hz for chassis bump haptics.
 func (c *Config) GetPulseMaxFrequencyHz() float64 {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.Haptics.PulseMaxFrequencyHz
+	return c.snapshot.Load().PulseMaxFrequencyHz
 }
 
 // SetPulseMaxFrequencyHz sets the maximum pulse frequency in Hz for chassis bump haptics.
 func (c *Config) SetPulseMaxFrequencyHz(value float64) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	c.viper.Haptics.PulseMaxFrequencyHz = value
-
 	c.updatePulseWidthExtents()
+	c.mu.Unlock()
 }
 
 // SetPulseMinFrequencyHz sets the minimum pulse frequency in Hz for chassis bump haptics.
 func (c *Config) SetPulseMinFrequencyHz(value float64) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	c.viper.Haptics.PulseMinFrequencyHz = value
-
 	c.updatePulseWidthExtents()
+	c.mu.Unlock()
 }
 
 // ****************************************************************************
@@ -1569,73 +1524,57 @@ func (c *Config) GetSynthesizer() *Synthesizer {
 // This is the sample rate at which the synthesizer processes audio.
 // Lower values reduce CPU load and 8000 Hz should be more than sufficient for the haptic frequency range.
 func (c *Config) GetInternalSampleRateHz() int {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.Synthesizer.InternalSampleRateHz
+	return c.snapshot.Load().InternalSampleRateHz
 }
 
 // GetOutputSampleRateHz returns the output sample rate of the synthesizer in Hz.
 // This is the sample rate at which audio is output to the audio device or file.
 // 32000 Hz is suitable for most common hardware but some may work at lower rates.
 func (c *Config) GetOutputSampleRateHz() int {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.Synthesizer.OutputSampleRateHz
+	return c.snapshot.Load().OutputSampleRateHz
 }
 
 // SetInternalSampleRateHz sets the internal sample rate of the synthesizer in Hz.
 func (c *Config) SetInternalSampleRateHz(value int) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	c.viper.Synthesizer.InternalSampleRateHz = value
-
 	c.updatePulseWidthExtents()
-
+	c.rebuildSnapshot()
 	c.registerUpdate(true)
+	c.mu.Unlock()
 }
 
 // SetOutputSampleRateHz sets the output sample rate of the synthesizer in Hz.
 func (c *Config) SetOutputSampleRateHz(value int) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	c.viper.Synthesizer.OutputSampleRateHz = value
-
+	c.rebuildSnapshot()
 	c.registerUpdate(true)
+	c.mu.Unlock()
 }
 
 // GetGainIncrement returns the gain increment value.
 func (c *Config) GetGainIncrement() float64 {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.Synthesizer.GainIncrement
+	return c.snapshot.Load().GainIncrement
 }
 
 // SetGainIncrement sets the gain increment value.
 func (c *Config) SetGainIncrement(value float64) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	c.mu.Lock()
 
 	value = max(0.01, value)
 	value = min(10, value)
-
-	c.registerUpdate(false)
-
 	c.viper.Synthesizer.GainIncrement = value
+	c.rebuildSnapshot()
+	c.registerUpdate(false)
+	c.mu.Unlock()
 }
 
 // GetMasterGain returns the master gain of the synthesizer (i.e. the overall volume level).
 // This is a global gain applied to all haptic feedback.
 // 0.0 is maximum gain and -60.0 will mute haptic output.
 func (c *Config) GetMasterGain() float64 {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.Synthesizer.MasterGain
+	return c.snapshot.Load().MasterGain
 }
 
 // SetMasterGain sets the master gain of the synthesizer.
@@ -1643,302 +1582,265 @@ func (c *Config) GetMasterGain() float64 {
 // 0.0 is maximum gain and -60.0 will mute haptic output.
 func (c *Config) SetMasterGain(value float64) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	c.registerUpdate(false)
-
 	c.viper.Synthesizer.MasterGain = max(MinimumGain, min(MaximumGain, value))
+	c.rebuildSnapshot()
+	c.registerUpdate(false)
+	c.mu.Unlock()
 }
 
 // GetMasterGainMute returns whether the master gain is muted.
 func (c *Config) GetMasterGainMute() bool {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.Synthesizer.MasterGainMute
+	return c.snapshot.Load().MasterGainMute
 }
 
 // SetMasterGainMute sets whether the master gain is muted.
 func (c *Config) SetMasterGainMute(mute bool) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	c.viper.Synthesizer.MasterGainMute = mute
-
+	c.rebuildSnapshot()
 	c.registerUpdate(false)
+	c.mu.Unlock()
 }
 
 // IncreaseMasterGain increases the master gain by the configured gain increment.
 func (c *Config) IncreaseMasterGain() float64 {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	c.viper.Synthesizer.MasterGain = min(
 		MaximumGain,
 		c.viper.Synthesizer.MasterGain+c.viper.Synthesizer.GainIncrement,
 	)
-
+	c.rebuildSnapshot()
 	c.registerUpdate(false)
+	result := c.viper.Synthesizer.MasterGain
+	c.mu.Unlock()
 
-	return c.viper.Synthesizer.MasterGain
+	return result
 }
 
 // DecreaseMasterGain decreases the master gain by the configured gain increment.
 func (c *Config) DecreaseMasterGain() float64 {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	c.viper.Synthesizer.MasterGain = max(
 		MinimumGain,
 		c.viper.Synthesizer.MasterGain-c.viper.Synthesizer.GainIncrement,
 	)
-
+	c.rebuildSnapshot()
 	c.registerUpdate(false)
+	result := c.viper.Synthesizer.MasterGain
+	c.mu.Unlock()
 
-	return c.viper.Synthesizer.MasterGain
+	return result
 }
 
 // GetChassisGain returns the chassis gain of the synthesizer (i.e. the volume level for chassis bump haptics).
 // 0.0 is maximum gain and -60.0 will mute chassis bump haptic output.
 func (c *Config) GetChassisGain() float64 {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.Synthesizer.ChassisGain
+	return c.snapshot.Load().ChassisGain
 }
 
 // GetChassisGainMute returns whether the chassis gain is muted.
 func (c *Config) GetChassisGainMute() bool {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.Synthesizer.ChassisGainMute
+	return c.snapshot.Load().ChassisGainMute
 }
 
 // SetChassisGainMute sets whether the chassis gain is muted.
 func (c *Config) SetChassisGainMute(mute bool) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	c.viper.Synthesizer.ChassisGainMute = mute
-
+	c.rebuildSnapshot()
 	c.registerUpdate(false)
+	c.mu.Unlock()
 }
 
 // SetChassisGain sets the chassis gain of the synthesizer.
 // 0.0 is maximum gain and -60.0 will mute chassis bump haptic output.
 func (c *Config) SetChassisGain(value float64) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	c.viper.Synthesizer.ChassisGain = max(MinimumGain, min(MaximumGain, value))
-
+	c.rebuildSnapshot()
 	c.registerUpdate(false)
+	c.mu.Unlock()
 }
 
 // IncreaseChassisGain increases the chassis gain by the configured gain increment.
 func (c *Config) IncreaseChassisGain() float64 {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	c.viper.Synthesizer.ChassisGain = min(
 		MaximumGain,
 		c.viper.Synthesizer.ChassisGain+c.viper.Synthesizer.GainIncrement,
 	)
-
+	c.rebuildSnapshot()
 	c.registerUpdate(false)
+	result := c.viper.Synthesizer.ChassisGain
+	c.mu.Unlock()
 
-	return c.viper.Synthesizer.ChassisGain
+	return result
 }
 
 // DecreaseChassisGain decreases the chassis gain by the configured gain increment.
 func (c *Config) DecreaseChassisGain() float64 {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	c.viper.Synthesizer.ChassisGain = max(
 		MinimumGain,
 		c.viper.Synthesizer.ChassisGain-c.viper.Synthesizer.GainIncrement,
 	)
-
+	c.rebuildSnapshot()
 	c.registerUpdate(false)
+	result := c.viper.Synthesizer.ChassisGain
+	c.mu.Unlock()
 
-	return c.viper.Synthesizer.ChassisGain
+	return result
 }
 
 // SetTransmissionGainMinRace sets the minimum transmission gain for race transmissions.
 func (c *Config) SetTransmissionGainMinRace(value float64) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	c.viper.Synthesizer.TransmissionGainMinRace = max(MinimumGain, min(MaximumGain, value))
-
+	c.rebuildSnapshot()
 	c.registerUpdate(false)
+	c.mu.Unlock()
 }
 
 // SetTransmissionGainMinStreet sets the minimum transmission gain for street transmissions.
 func (c *Config) SetTransmissionGainMinStreet(value float64) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	c.viper.Synthesizer.TransmissionGainMinStreet = max(MinimumGain, min(MaximumGain, value))
-
+	c.rebuildSnapshot()
 	c.registerUpdate(false)
+	c.mu.Unlock()
 }
 
 // GetTransmissionGain returns the transmission gain of the synthesizer (i.e. the volume level for transmission
 // haptics).
 // 0.0 is maximum gain and -60.0 will mute transmission haptic output.
 func (c *Config) GetTransmissionGain() float64 {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.Synthesizer.TransmissionGain
+	return c.snapshot.Load().TransmissionGain
 }
 
 // GetTransmissionGainMute returns whether the transmission gain is muted.
 func (c *Config) GetTransmissionGainMute() bool {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.Synthesizer.TransmissionGainMute
+	return c.snapshot.Load().TransmissionGainMute
 }
 
 // SetTransmissionGainMute sets whether the transmission gain is muted.
 func (c *Config) SetTransmissionGainMute(mute bool) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	c.viper.Synthesizer.TransmissionGainMute = mute
-
+	c.rebuildSnapshot()
 	c.registerUpdate(false)
+	c.mu.Unlock()
 }
 
 // SetTransmissionGain sets the transmission gain of the synthesizer.
 // 0.0 is maximum gain and -60.0 will mute transmission haptic output.
 func (c *Config) SetTransmissionGain(value float64) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	c.viper.Synthesizer.TransmissionGain = max(MinimumGain, min(MaximumGain, value))
-
+	c.rebuildSnapshot()
 	c.registerUpdate(false)
+	c.mu.Unlock()
 }
 
 // IncreaseTransmissionGain increases the transmission gain by the configured gain increment.
 func (c *Config) IncreaseTransmissionGain() float64 {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	c.viper.Synthesizer.TransmissionGain = min(
 		MaximumGain,
 		c.viper.Synthesizer.TransmissionGain+c.viper.Synthesizer.GainIncrement,
 	)
-
+	c.rebuildSnapshot()
 	c.registerUpdate(false)
+	result := c.viper.Synthesizer.TransmissionGain
+	c.mu.Unlock()
 
-	return c.viper.Synthesizer.TransmissionGain
+	return result
 }
 
 // DecreaseTransmissionGain decreases the transmission gain by the configured gain increment.
 func (c *Config) DecreaseTransmissionGain() float64 {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	c.viper.Synthesizer.TransmissionGain = max(
 		MinimumGain,
 		c.viper.Synthesizer.TransmissionGain-c.viper.Synthesizer.GainIncrement,
 	)
-
+	c.rebuildSnapshot()
 	c.registerUpdate(false)
+	result := c.viper.Synthesizer.TransmissionGain
+	c.mu.Unlock()
 
-	return c.viper.Synthesizer.TransmissionGain
+	return result
 }
 
 // GetTransmissionGainMinRace returns the minimum transmission gain for race vehicle types.
 // This is the transnmission haptic feebdack volume applied when the vehicle is stationary.
 func (c *Config) GetTransmissionGainMinRace() float64 {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.Synthesizer.TransmissionGainMinRace
+	return c.snapshot.Load().TransmissionGainMinRace
 }
 
 // GetTransmissionGainMinStreet returns the minimum transmission gain for street vehicle types.
 // This is the transmission haptic feedback volume applied when the vehicle is stationary.
 func (c *Config) GetTransmissionGainMinStreet() float64 {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.Synthesizer.TransmissionGainMinStreet
+	return c.snapshot.Load().TransmissionGainMinStreet
 }
 
 // GetEngineGain returns the gain fir the currently selected engine (i.e. the volume level for engine haptics).
 // 0.0 is maximum gain and -60.0 will mute engine haptic output.
 func (c *Config) GetEngineGain() float64 {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.Synthesizer.EngineGain
+	return c.snapshot.Load().EngineGain
 }
 
 // GetEngineGainMute returns whether the engine gain is muted.
 func (c *Config) GetEngineGainMute() bool {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.Synthesizer.EngineGainMute
+	return c.snapshot.Load().EngineGainMute
 }
 
 // SetEngineGainMute sets whether the engine gain is muted.
 func (c *Config) SetEngineGainMute(mute bool) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	c.viper.Synthesizer.EngineGainMute = mute
-
+	c.rebuildSnapshot()
 	c.registerUpdate(false)
+	c.mu.Unlock()
 }
 
 // SetEngineGain sets the engine gain of the synthesizer.
 // 0.0 is maximum gain and -60.0 will mute engine haptic output.
 func (c *Config) SetEngineGain(gain float64) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	c.viper.Synthesizer.EngineGain = max(MinimumGain, min(MaximumGain, gain))
-
+	c.rebuildSnapshot()
 	c.registerUpdate(false)
+	c.mu.Unlock()
 }
 
 // IncreaseEngineGain increases the gain of the currently selected engine by the configured gain increment.
 func (c *Config) IncreaseEngineGain() float64 {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	c.viper.Synthesizer.EngineGain = min(
 		MaximumGain,
 		c.viper.Synthesizer.EngineGain+c.viper.Synthesizer.GainIncrement,
 	)
-
+	c.rebuildSnapshot()
 	c.registerUpdate(false)
+	result := c.viper.Synthesizer.EngineGain
+	c.mu.Unlock()
 
-	return c.viper.Synthesizer.EngineGain
+	return result
 }
 
 // DecreaseEngineGain decreases the gain of the currently selected engine by the configured gain increment.
 func (c *Config) DecreaseEngineGain() float64 {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	c.viper.Synthesizer.EngineGain = max(
 		MinimumGain,
 		c.viper.Synthesizer.EngineGain-c.viper.Synthesizer.GainIncrement,
 	)
-
+	c.rebuildSnapshot()
 	c.registerUpdate(false)
+	result := c.viper.Synthesizer.EngineGain
+	c.mu.Unlock()
 
-	return c.viper.Synthesizer.EngineGain
+	return result
 }
 
 // GetOutputFile returns the synthesizer output file path.
@@ -1970,19 +1872,16 @@ func (c *Config) SetEngineProfile(name string, profile appHaptics.EngineProfile)
 
 // GetEqEnabled returns whether the equalizer is enabled.
 func (c *Config) GetEqEnabled() bool {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.Synthesizer.EqEnabled
+	return c.snapshot.Load().EqEnabled
 }
 
 // SetEqEnabled sets whether the equalizer is enabled.
 func (c *Config) SetEqEnabled(enabled bool) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	c.viper.Synthesizer.EqEnabled = enabled
+	c.rebuildSnapshot()
 	c.registerUpdate(false)
+	c.mu.Unlock()
 }
 
 // GetEq returns the equalizer bands.
@@ -2046,20 +1945,16 @@ func (c *Config) SetTelemetrySource(value string) {
 
 // GetTyreMonitoringEnabled returns whether tyre monitoring is enabled.
 func (c *Config) GetTyreMonitoringEnabled() bool {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.Tyres.MonitoringEnabled
+	return c.snapshot.Load().TyreMonitoringEnabled
 }
 
 // SetTyreMonitoringEnabled sets whether tyre monitoring is enabled.
 func (c *Config) SetTyreMonitoringEnabled(value bool) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	c.viper.Tyres.MonitoringEnabled = value
-
+	c.rebuildSnapshot()
 	c.registerUpdate(false)
+	c.mu.Unlock()
 }
 
 // GetTyreTemperatureOptimalCelsius returns the optimal (center) tyre temperature in Celsius.
@@ -2252,7 +2147,11 @@ func (c *Config) finalise() {
 	// Compute the EQ curve for efficient runtime application
 	c.computeEqCurve()
 
-	c.updatePulseWidthExtents()
+	// Update pulse width extents (inline since we hold the lock)
+	c.viper.Haptics._pulseWidthMin = float64(c.viper.Synthesizer.InternalSampleRateHz) /
+		(2 * c.viper.Haptics.PulseMaxFrequencyHz)
+	c.viper.Haptics._pulseWidthMax = float64(c.viper.Synthesizer.InternalSampleRateHz) /
+		(2 * c.viper.Haptics.PulseMinFrequencyHz)
 
 	c.mu.Unlock()
 
@@ -2262,24 +2161,24 @@ func (c *Config) finalise() {
 
 // updateJerkScale recalculates the jerk scale factor based on the current jerk curve, scale and maximum.
 func (c *Config) updateJerkScale() {
-	exponent := c.GetJerkCurve() / 1000
-
+	c.mu.Lock()
+	exponent := float64(c.viper.Haptics.JerkCurve) / 1000.0
 	jerkMax := 100 * float64(c.viper.Haptics.JerkMax)
-
 	c.viper.Haptics._jerkScale = 1 / math.Pow(jerkMax, exponent)
-
+	c.rebuildSnapshot()
 	c.registerUpdate(false)
+	c.mu.Unlock()
 }
 
 // updateSnapScale recalculates the snap scale factor based on the current snap curve, scale and maximum.
 func (c *Config) updateSnapScale() {
-	exponent := c.GetSnapCurve() / 1000
-
+	c.mu.Lock()
+	exponent := float64(c.viper.Haptics.SnapCurve) / 1000.0
 	snapMax := 1000 * float64(c.viper.Haptics.SnapMax)
-
 	c.viper.Haptics._snapScale = 1 / math.Pow(snapMax, exponent)
-
+	c.rebuildSnapshot()
 	c.registerUpdate(false)
+	c.mu.Unlock()
 }
 
 // computeEqCurve computes the EQ curve based on the current bands.
@@ -2350,13 +2249,61 @@ func (c *Config) registerUpdate(restartRequired bool) {
 	}
 }
 
+// rebuildSnapshot creates a new immutable snapshot for lock-free reads.
+// Assumes that the caller holds the write lock.
+func (c *Config) rebuildSnapshot() {
+	newSnap := &ConfigSnapshot{
+		MasterGain:                c.viper.Synthesizer.MasterGain,
+		MasterGainMute:            c.viper.Synthesizer.MasterGainMute,
+		ChassisGain:               c.viper.Synthesizer.ChassisGain,
+		ChassisGainMute:           c.viper.Synthesizer.ChassisGainMute,
+		TransmissionGain:          c.viper.Synthesizer.TransmissionGain,
+		TransmissionGainMute:      c.viper.Synthesizer.TransmissionGainMute,
+		TransmissionGainMinRace:   c.viper.Synthesizer.TransmissionGainMinRace,
+		TransmissionGainMinStreet: c.viper.Synthesizer.TransmissionGainMinStreet,
+		EngineGain:                c.viper.Synthesizer.EngineGain,
+		EngineGainMute:            c.viper.Synthesizer.EngineGainMute,
+		GainIncrement:             c.viper.Synthesizer.GainIncrement,
+		InternalSampleRateHz:      c.viper.Synthesizer.InternalSampleRateHz,
+		OutputSampleRateHz:        c.viper.Synthesizer.OutputSampleRateHz,
+
+		JerkCurve: float64(c.viper.Haptics.JerkCurve),
+		JerkMax:   c.viper.Haptics.JerkMax,
+		JerkScale: c.viper.Haptics._jerkScale,
+
+		SnapCurve: float64(c.viper.Haptics.SnapCurve),
+		SnapMax:   c.viper.Haptics.SnapMax,
+		SnapScale: c.viper.Haptics._snapScale,
+
+		PulseMaxAmplitude:   c.viper.Haptics.PulseMaxAmplitude,
+		PulseMaxFrequencyHz: c.viper.Haptics.PulseMaxFrequencyHz,
+		PulseMinFrequencyHz: c.viper.Haptics.PulseMinFrequencyHz,
+		PulseWidthMin:       c.viper.Haptics._pulseWidthMin,
+		PulseWidthMax:       c.viper.Haptics._pulseWidthMax,
+
+		DynamicTransmissionFeedback:  c.viper.Haptics.DynamicTransmissionFeedback,
+		DynamicTransmissionCurve:     c.viper.Haptics.DynamicTransmissionCurve,
+		DynamicTransmissionGforceMax: c.viper.Haptics.DynamicTransmissionGforceMax,
+
+		EqEnabled: c.viper.Synthesizer.EqEnabled,
+
+		FuelMonitoringEnabled: c.viper.Fuel.MonitoringEnabled,
+		TyreMonitoringEnabled: c.viper.Tyres.MonitoringEnabled,
+	}
+	c.snapshot.Store(newSnap)
+}
+
 // updatePulseWidthExtents recalculates the minimum and maximum pulse widths in samples.
+// Assumes the caller does NOT hold the lock.
 func (c *Config) updatePulseWidthExtents() {
+	c.mu.Lock()
 	c.viper.Haptics._pulseWidthMin = float64(c.viper.Synthesizer.InternalSampleRateHz) /
 		(2 * c.viper.Haptics.PulseMaxFrequencyHz)
 
 	c.viper.Haptics._pulseWidthMax = float64(c.viper.Synthesizer.InternalSampleRateHz) /
 		(2 * c.viper.Haptics.PulseMinFrequencyHz)
 
+	c.rebuildSnapshot()
 	c.registerUpdate(false)
+	c.mu.Unlock()
 }
