@@ -13,7 +13,7 @@ import (
 
 // Mixer handles multiple audio channels, mixing them into a master output channel.
 type Mixer struct {
-	configGainIncrement *float64
+	config *config.Config
 
 	channels     map[string]*MixerChannel
 	bufferLength time.Duration
@@ -33,30 +33,25 @@ type Mixer struct {
 // MixerChannel represents an individual audio channel within the mixer.
 type MixerChannel struct {
 	activeGain float64
-	configGain *float64
-	configMute *bool
 	buffer     Buffer
 }
 
 // MixerConfig holds configuration options for the Mixer.
 type MixerConfig struct {
-	MasterGain     *float64       // Pointer to the configuration master gain value
-	MasterGainMute *bool          // Pointer to the configuration master gain mute value
-	GainIncrement  *float64       // Pointer to the configuration gain increment value
-	BufferLength   time.Duration  // Duration of audio the buffer should hold
-	SampleRateHz   int            // Sample rate in Hz
-	Log            zerolog.Logger // Logger instance for logging
+	Config       *config.Config // Full config reference for lock-free reads
+	BufferLength time.Duration  // Duration of audio the buffer should hold
+	SampleRateHz int            // Sample rate in Hz
+	Log          zerolog.Logger // Logger instance for logging
 }
 
 // NewMixer creates a new Mixer instance with the provided configuration.
 func NewMixer(mixerConfig MixerConfig) (*Mixer, error) {
-	if mixerConfig.MasterGain == nil || mixerConfig.GainIncrement == nil {
-		return nil, errors.New("gain and gainIncrement must be valid pointers")
+	if mixerConfig.Config == nil {
+		return nil, errors.New("config must be a valid pointer")
 	}
 
-	// TODO: set gain and gainIncrement to defaults and add setters instead.
 	mixer := &Mixer{
-		configGainIncrement: mixerConfig.GainIncrement,
+		config: mixerConfig.Config,
 
 		bufferLength: mixerConfig.BufferLength,
 		sampleRateHz: mixerConfig.SampleRateHz,
@@ -71,7 +66,10 @@ func NewMixer(mixerConfig MixerConfig) (*Mixer, error) {
 		healthCheckInterval: 5 * time.Second,
 	}
 
-	err := mixer.AddChannel("_master", mixerConfig.MasterGain, mixerConfig.MasterGainMute)
+	// Initialize master with lock-free config read
+	masterGain := mixer.config.GetMasterGain()
+
+	err := mixer.AddChannel("_master", masterGain)
 	if err != nil {
 		return nil, fmt.Errorf("add master channel: %w", err)
 	}
@@ -92,7 +90,7 @@ func (m *Mixer) GetBufferCapacity() int {
 }
 
 // AddChannel adds a new channel to the mixer with the specified name and initial gain.
-func (m *Mixer) AddChannel(name string, gain *float64, mute *bool) error {
+func (m *Mixer) AddChannel(name string, initialGain float64) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -101,12 +99,8 @@ func (m *Mixer) AddChannel(name string, gain *float64, mute *bool) error {
 	}
 
 	m.channels[name] = &MixerChannel{
-		activeGain: *gain,
-		configGain: gain,
-		configMute: mute,
-		// buffer: NewLinearBuffer(m.bufferLength, m.sampleRateHz),
-		// buffer: NewRingBuffer(m.bufferLength, m.sampleRateHz),
-		buffer: NewAdaptiveBuffer(m.bufferLength, m.sampleRateHz),
+		activeGain: initialGain,
+		buffer:     NewAdaptiveBuffer(m.bufferLength, m.sampleRateHz),
 	}
 
 	return nil
@@ -149,8 +143,21 @@ func (m *Mixer) ReadChannel(name string, length int) []float64 {
 		return nil
 	}
 
-	// Check if channel is muted
-	if channel.configMute != nil && *channel.configMute {
+	// Check if channel is muted using lock-free config reads
+	var muted bool
+
+	switch name {
+	case "_master":
+		muted = m.config.GetMasterGainMute()
+	case "chassis":
+		muted = m.config.GetChassisGainMute()
+	case "transmission":
+		muted = m.config.GetTransmissionGainMute()
+	case "engine":
+		muted = m.config.GetEngineGainMute()
+	}
+
+	if muted {
 		// Return silence for muted channels
 		return make([]float64, length)
 	}
@@ -266,7 +273,10 @@ func (m *Mixer) FadeIn(period time.Duration) {
 	master := m.channels["_master"]
 	m.mu.RUnlock()
 
-	if master.activeGain == *master.configGain || m.fadeInActive {
+	// Lock-free config read
+	targetGain := m.config.GetMasterGain()
+
+	if master.activeGain == targetGain || m.fadeInActive {
 		return
 	}
 
@@ -276,11 +286,11 @@ func (m *Mixer) FadeIn(period time.Duration) {
 
 		fadeInInterval := 50 * time.Millisecond
 		incrementTime := float64(period.Milliseconds() / fadeInInterval.Milliseconds())
-		fadeInIncrement := (*master.configGain - m.faderGain) / incrementTime
+		fadeInIncrement := (targetGain - m.faderGain) / incrementTime
 
 		m.log.Debug().
 			Float64("current", m.faderGain).
-			Float64("target", *master.configGain).
+			Float64("target", targetGain).
 			Str("state", "begin").
 			Msg("fade in")
 
@@ -288,11 +298,11 @@ func (m *Mixer) FadeIn(period time.Duration) {
 			m.faderGain += fadeInIncrement
 
 			// fade in complete
-			if m.faderGain >= *master.configGain {
+			if m.faderGain >= targetGain {
 				m.mu.Lock()
-				m.faderGain = *master.configGain
+				m.faderGain = targetGain
 				m.mu.Unlock()
-				_ = m.SetChannelGain("_master", *master.configGain)
+				_ = m.SetChannelGain("_master", targetGain)
 
 				break
 			}
@@ -304,9 +314,13 @@ func (m *Mixer) FadeIn(period time.Duration) {
 
 		m.fadeInActive = false
 
+		m.mu.RLock()
+		master := m.channels["_master"]
+		m.mu.RUnlock()
+
 		m.log.Debug().
 			Float64("current", master.activeGain).
-			Float64("target", *master.configGain).
+			Float64("target", targetGain).
 			Str("state", "complete").
 			Msg("fade in")
 	}()
@@ -331,7 +345,15 @@ func (m *Mixer) MixToMaster(length int) {
 			continue
 		}
 
-		if channel.configMute != nil && *channel.configMute {
+		// Lock-free config reads for mute state
+		var muted bool
+		if name == "chassis" {
+			muted = m.config.GetChassisGainMute()
+		} else {
+			muted = m.config.GetTransmissionGainMute()
+		}
+
+		if muted {
 			continue
 		}
 
@@ -378,7 +400,8 @@ func (m *Mixer) mixEngineChannel(outSamples []float64, length int) {
 		return
 	}
 
-	if channel.configMute != nil && *channel.configMute {
+	// Lock-free config read for mute state
+	if m.config.GetEngineGainMute() {
 		return
 	}
 
@@ -437,7 +460,19 @@ func (m *Mixer) checkBufferHealth() {
 			continue
 		}
 
-		if channel.configMute != nil && *channel.configMute {
+		// Check if channel is muted using lock-free config reads
+		var muted bool
+
+		switch name {
+		case "chassis":
+			muted = m.config.GetChassisGainMute()
+		case "transmission":
+			muted = m.config.GetTransmissionGainMute()
+		case "engine":
+			muted = m.config.GetEngineGainMute()
+		}
+
+		if muted {
 			continue
 		}
 
@@ -458,10 +493,12 @@ func (m *Mixer) checkBufferHealth() {
 	}
 }
 
-// TODO: is there a better way to integrate config changes?
 // watchForConfigChanges monitors configuration changes and applies them to the mixer channels.
 func (m *Mixer) watchForConfigChanges() {
 	m.log.Debug().Str("event", "start").Msg("config watch")
+
+	// Track previous mute states to detect changes
+	previousMuteStates := make(map[string]bool)
 
 	for {
 		time.Sleep(200 * time.Millisecond)
@@ -473,12 +510,52 @@ func (m *Mixer) watchForConfigChanges() {
 		m.mu.RLock()
 
 		for name, channel := range m.channels {
-			if channel.activeGain == *channel.configGain {
+			// Lock-free config reads
+			var (
+				configGain float64
+				configMute bool
+			)
+
+			switch name {
+			case "_master":
+				configGain = m.config.GetMasterGain()
+				configMute = m.config.GetMasterGainMute()
+			case "chassis":
+				configGain = m.config.GetChassisGain()
+				configMute = m.config.GetChassisGainMute()
+			case "transmission":
+				configGain = m.config.GetTransmissionGain()
+				configMute = m.config.GetTransmissionGainMute()
+			case "engine":
+				configGain = m.config.GetEngineGain()
+				configMute = m.config.GetEngineGainMute()
+			default:
+				continue
+			}
+
+			// Check if mute state changed
+			prevMute, existed := previousMuteStates[name]
+			if !existed || prevMute != configMute {
+				previousMuteStates[name] = configMute
+
+				// Clear buffer immediately when channel is muted for instant response
+				if configMute {
+					m.mu.RUnlock()
+					m.mu.Lock()
+					channel.buffer.Clear()
+					m.mu.Unlock()
+					m.log.Debug().Str("channel", name).Bool("muted", configMute).Str("event", "mute").Msg("config watch")
+					m.mu.RLock()
+				}
+			}
+
+			// Check if gain changed
+			if channel.activeGain == configGain {
 				continue
 			}
 
 			m.mu.RUnlock()
-			_ = m.SetChannelGain(name, *channel.configGain)
+			_ = m.SetChannelGain(name, configGain)
 
 			if name == "_master" {
 				if m.faderGain != channel.activeGain {
@@ -488,7 +565,7 @@ func (m *Mixer) watchForConfigChanges() {
 				}
 			}
 
-			m.log.Debug().Str("channel", name).Float64("gain", *channel.configGain).Str("event", "change").Msg("config watch")
+			m.log.Debug().Str("channel", name).Float64("gain", configGain).Str("event", "change").Msg("config watch")
 			m.mu.RLock()
 		}
 

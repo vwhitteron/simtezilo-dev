@@ -129,6 +129,13 @@ class ConfigManager {
         if (indicator) {
             indicator.style.display = 'inline-block';
         }
+
+        // Update restart button to green
+        const restartBtn = document.getElementById('restart-app');
+        if (restartBtn) {
+            restartBtn.classList.remove('btn-outline-secondary');
+            restartBtn.classList.add('btn-success');
+        }
     }
 
     // Hide restart required indicator
@@ -136,6 +143,13 @@ class ConfigManager {
         const indicator = document.getElementById('restart-required-indicator');
         if (indicator) {
             indicator.style.display = 'none';
+        }
+
+        // Restore restart button to normal styling
+        const restartBtn = document.getElementById('restart-app');
+        if (restartBtn) {
+            restartBtn.classList.remove('btn-success');
+            restartBtn.classList.add('btn-outline-secondary');
         }
     }
 
@@ -439,7 +453,7 @@ class ConfigManager {
 
     async loadConfiguration() {
         try {
-            this.showStatus('Loading configuration...', 'info');
+            this.showStatus(t('runmode.settings.status.loading'), 'info');
 
             const response = await fetch('/api/config');
             if (!response.ok) {
@@ -466,7 +480,7 @@ class ConfigManager {
 
         } catch (error) {
             console.error('Failed to load configuration:', error);
-            this.showStatus('Failed to load configuration: ' + error.message, 'error');
+            this.showStatus(t('runmode.settings.error.loadconfigfailed') + error.message, 'error');
         }
     }
 
@@ -603,12 +617,17 @@ class ConfigManager {
     }
 
     async resetConfiguration() {
-        if (!confirm('Are you sure you want to reset all settings to their default values? This action cannot be undone.')) {
+        if (!confirm(t('runmode.settings.confirm.reset'))) {
             return;
         }
 
+        const resetBtn = document.getElementById('reset-config');
+
         try {
-            this.showStatus('Resetting configuration to defaults...', 'info');
+            resetBtn.disabled = true;
+            if (typeof window.showNavbarStatus === 'function') {
+                window.showNavbarStatus('saving');
+            }
 
             const response = await fetch('/api/config/reset', {
                 method: 'POST'
@@ -626,12 +645,14 @@ class ConfigManager {
                 window.showNavbarStatus('success');
             }
 
+            resetBtn.disabled = false;
         } catch (error) {
             console.error('Failed to reset configuration:', error);
             // Show error indicator for reset operation
             if (typeof window.showNavbarStatus === 'function') {
                 window.showNavbarStatus('error');
             }
+            resetBtn.disabled = false;
         }
     }
 
@@ -648,11 +669,13 @@ class ConfigManager {
             document.body.removeChild(link);
         } catch (error) {
             console.error('Failed to export configuration:', error);
-            alert('Failed to export configuration: ' + error.message);
+            alert(t('runmode.settings.error.exportfailed') + error.message);
         }
     }
 
     async importConfiguration(file) {
+        const importBtn = document.getElementById('import-config');
+
         try {
             // Validate file extension
             if (!file.name.endsWith('.conf') && !file.name.endsWith('.toml')) {
@@ -664,10 +687,10 @@ class ConfigManager {
             formData.append('config', file);
 
             // Show loading state
-            const importBtn = document.getElementById('import-config');
-            const originalText = importBtn.textContent;
             importBtn.disabled = true;
-            importBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Importing...';
+            if (typeof window.showNavbarStatus === 'function') {
+                window.showNavbarStatus('saving');
+            }
 
             // Send to server
             const response = await fetch('/api/config/import', {
@@ -676,10 +699,6 @@ class ConfigManager {
             });
 
             const result = await response.json();
-
-            // Restore button state
-            importBtn.disabled = false;
-            importBtn.textContent = originalText;
 
             if (!response.ok) {
                 // Handle validation errors specially
@@ -693,21 +712,34 @@ class ConfigManager {
                 throw new Error(result.error || 'Failed to import configuration');
             }
 
+            // Show success indicator
+            if (typeof window.showNavbarStatus === 'function') {
+                window.showNavbarStatus('success');
+            }
+
+            // Show restart required indicator
+            this.showRestartRequired();
+
             // Show success message
             alert(result.message + (result.backup ? '\n\nBackup created at: ' + result.backup : ''));
 
             // Reload the configuration
             await this.loadConfiguration();
+
+            // Re-enable button
+            importBtn.disabled = false;
         } catch (error) {
             console.error('Failed to import configuration:', error);
-            alert('Failed to import configuration: ' + error.message);
 
-            // Restore button state if error occurred
-            const importBtn = document.getElementById('import-config');
-            if (importBtn) {
-                importBtn.disabled = false;
-                importBtn.textContent = 'Import Configuration';
+            // Show error indicator
+            if (typeof window.showNavbarStatus === 'function') {
+                window.showNavbarStatus('error');
             }
+
+            alert(t('runmode.settings.error.importfailed') + error.message);
+
+            // Re-enable button
+            importBtn.disabled = false;
         }
     }
 
@@ -742,10 +774,17 @@ class ConfigManager {
             const response = await fetch('/api/system/info');
             if (response.ok) {
                 const result = await response.json();
+                console.log('Setup mode availability:', result.setupModeAvailable);
                 if (result.setupModeAvailable) {
                     // Show setup mode and factory reset buttons
-                    document.getElementById('setup-mode').style.display = '';
-                    document.getElementById('factory-reset').style.display = '';
+                    const setupBtn = document.getElementById('setup-mode');
+                    const resetBtn = document.getElementById('factory-reset');
+                    if (setupBtn) {
+                        setupBtn.style.display = 'inline-block';
+                    }
+                    if (resetBtn) {
+                        resetBtn.style.display = 'inline-block';
+                    }
                 }
             }
         } catch (error) {
@@ -754,11 +793,18 @@ class ConfigManager {
     }
 
     async restartApp() {
-        if (!confirm('Are you sure you want to restart the application?')) {
+        if (!confirm(t('runmode.settings.confirm.restart'))) {
             return;
         }
 
+        const restartBtn = document.getElementById('restart-app');
+
         try {
+            // Don't disable the button - let user restart
+            if (typeof window.showNavbarStatus === 'function') {
+                window.showNavbarStatus('saving');
+            }
+
             const response = await fetch('/api/restart', {
                 method: 'POST'
             });
@@ -767,21 +813,130 @@ class ConfigManager {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
 
-            // Disable the button after successful request
-            document.getElementById('restart-app').disabled = true;
+            // Show success indicator
+            if (typeof window.showNavbarStatus === 'function') {
+                window.showNavbarStatus('success');
+            }
+
+            // Hide restart required indicator since we're restarting
+            this.hideRestartRequired();
+
+            // Show restart overlay and start polling for reconnection
+            this.showRestartOverlay();
+            this.pollForReconnection();
 
         } catch (error) {
             console.error('Failed to restart application:', error);
-            alert('Failed to restart application: ' + error.message);
+            if (typeof window.showNavbarStatus === 'function') {
+                window.showNavbarStatus('error');
+            }
+            alert(t('runmode.settings.error.restartfailed') + error.message);
         }
     }
 
+    showRestartOverlay() {
+        // Create overlay if it doesn't exist
+        let overlay = document.getElementById('restart-overlay');
+        if (!overlay) {
+            overlay = document.createElement('div');
+            overlay.id = 'restart-overlay';
+            overlay.innerHTML = `
+                <div class="restart-message">
+                    <div style="display: flex; justify-content: center; margin-bottom: 1rem;">
+                        <div class="spinner-border text-light" role="status">
+                            <span class="visually-hidden">${t('runmode.settings.restart.overlay.restarting')}</span>
+                        </div>
+                    </div>
+                    <h3 style="text-align: center;">${t('runmode.settings.restart.overlay.title')}</h3>
+                    <p style="text-align: center;">${t('runmode.settings.restart.overlay.pleasewait')}</p>
+                </div>
+            `;
+            document.body.appendChild(overlay);
+        }
+
+        // Set inline styles to ensure they override everything
+        overlay.style.cssText = `
+            display: flex !important;
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            bottom: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            background-color: rgba(0, 0, 0, 0.9) !important;
+            z-index: 999999 !important;
+            justify-content: center !important;
+            align-items: center !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        `;
+
+        // Add blur class to body
+        document.body.classList.add('restart-blur');
+    }
+
+    hideRestartOverlay() {
+        const overlay = document.getElementById('restart-overlay');
+        if (overlay) {
+            overlay.style.display = 'none';
+        }
+
+        // Remove blur class from body
+        document.body.classList.remove('restart-blur');
+    }
+
+    async pollForReconnection() {
+        const maxAttempts = 60; // Try for 60 seconds
+        let attempts = 0;
+
+        const poll = async () => {
+            attempts++;
+
+            try {
+                const response = await fetch('/api/config/status', {
+                    method: 'GET',
+                    cache: 'no-cache'
+                });
+
+                if (response.ok) {
+                    // Successfully reconnected
+                    this.hideRestartOverlay();
+                    // Reload the page to ensure fresh state
+                    window.location.reload();
+                    return;
+                }
+            } catch (error) {
+                // Expected during restart - server is down
+            }
+
+            if (attempts < maxAttempts) {
+                // Try again in 1 second
+                setTimeout(poll, 1000);
+            } else {
+                // Give up after max attempts
+                this.hideRestartOverlay();
+                alert(t('runmode.settings.error.reconnectfailed'));
+            }
+        };
+
+        // Wait 2 seconds before first poll to give app time to start shutting down
+        setTimeout(poll, 2000);
+    }
+
     async enterSetupMode() {
-        if (!confirm('Are you sure you want to enter setup mode? The application will exit and restart in setup mode.')) {
+        if (!confirm(t('runmode.settings.confirm.setupmode'))) {
             return;
         }
 
+        const setupBtn = document.getElementById('setup-mode');
+
         try {
+            setupBtn.disabled = true;
+            if (typeof window.showNavbarStatus === 'function') {
+                window.showNavbarStatus('saving');
+            }
+
             const response = await fetch('/api/mode/setup', {
                 method: 'POST'
             });
@@ -790,12 +945,18 @@ class ConfigManager {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
 
-            // Disable the button after successful request
-            document.getElementById('setup-mode').disabled = true;
+            // Show success indicator
+            if (typeof window.showNavbarStatus === 'function') {
+                window.showNavbarStatus('success');
+            }
 
         } catch (error) {
             console.error('Failed to enter setup mode:', error);
-            alert('Failed to enter setup mode: ' + error.message);
+            if (typeof window.showNavbarStatus === 'function') {
+                window.showNavbarStatus('error');
+            }
+            alert(t('runmode.settings.error.setupmodefailed') + error.message);
+            setupBtn.disabled = false;
         }
     }
 
@@ -839,7 +1000,12 @@ class ConfigManager {
             confirmBtn.removeEventListener('click', handleConfirm);
 
             // Disable the factory reset button
-            document.getElementById('factory-reset').disabled = true;
+            const factoryResetBtn = document.getElementById('factory-reset');
+            factoryResetBtn.disabled = true;
+
+            if (typeof window.showNavbarStatus === 'function') {
+                window.showNavbarStatus('saving');
+            }
 
             try {
                 const response = await fetch('/api/factory-reset', {
@@ -850,13 +1016,21 @@ class ConfigManager {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
 
-                // Connection will be lost, no need to show progress
+                // Show success indicator
+                if (typeof window.showNavbarStatus === 'function') {
+                    window.showNavbarStatus('success');
+                }
+
+                // Connection will be lost, no need to show further progress
                 // The app will restart in setup mode
 
             } catch (error) {
                 console.error('Failed to perform factory reset:', error);
-                alert('Failed to perform factory reset: ' + error.message);
-                document.getElementById('factory-reset').disabled = false;
+                if (typeof window.showNavbarStatus === 'function') {
+                    window.showNavbarStatus('error');
+                }
+                alert(t('runmode.settings.error.factoryresetfailed') + error.message);
+                factoryResetBtn.disabled = false;
             }
         };
 
@@ -996,7 +1170,7 @@ class ConfigManager {
         }
 
         // Populate dropdown with engine profiles
-        profileSelect.innerHTML = '<option value="" disabled selected>Select an engine profile...</option>';
+        profileSelect.innerHTML = `<option value="" disabled selected>${t('runmode.settings.status.selectprofile')}</option>`;
 
         const profiles = this.config.synthesizer.engineProfiles;
 
@@ -1140,7 +1314,7 @@ class ConfigManager {
             if (typeof window.showNavbarStatus === 'function') {
                 window.showNavbarStatus('error');
             }
-            alert('Failed to save engine profile: ' + error.message);
+            alert(t('runmode.settings.error.saveprofilefailed') + error.message);
         }
     }
 
@@ -1290,7 +1464,7 @@ class ConfigManager {
             const freq = band.frequency !== undefined ? band.frequency : (band.Frequency !== undefined ? band.Frequency : 12);
             const option = document.createElement('option');
             option.value = index;
-            option.textContent = `Band ${index + 1} (${freq} Hz)`;
+            option.textContent = `${t('runmode.settings.synth.eqband')} ${index + 1} (${freq} Hz)`;
             if (index === this.currentBandIndex) {
                 option.selected = true;
             }

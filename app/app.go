@@ -249,6 +249,9 @@ func (a *App) Start() {
 func (a *App) Close() {
 	a.log.Info().Msg("Shutting down app")
 
+	// Stop HTTP server first to prevent new requests
+	a.stopHTTPServer()
+
 	err := a.synth.Close()
 	if err != nil {
 		a.log.Error().
@@ -285,6 +288,7 @@ func (a *App) Close() {
 			Msg("render splash screen")
 	}
 
+	// Give time for cleanup to complete before closing display
 	time.Sleep(1 * time.Second)
 	a.display.Close()
 }
@@ -638,14 +642,29 @@ func (a *App) initializeUI(opts Options, hidEvents chan ui.HIDInputEvent) error 
 		return fmt.Errorf("render splash screen: %w", err)
 	}
 
-	// Set up display orientation callback to update display immediately when orientation changes
-	a.config.SetDisplayOrientationCallback(func(orientation int) {
-		a.display.SetOrientation(orientation)
-		// Force redraw by marking data as requiring refresh
-		a.ui.ForceRedraw()
-	})
+	// Watch for display orientation changes and update display hardware
+	go a.watchDisplayOrientation()
 
 	return nil
+}
+
+// watchDisplayOrientation monitors for display orientation changes and updates the display hardware.
+func (a *App) watchDisplayOrientation() {
+	currentOrientation := a.config.GetDisplayOrientation()
+	a.display.SetOrientation(currentOrientation)
+
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		newOrientation := a.config.GetDisplayOrientation()
+		if newOrientation != currentOrientation {
+			currentOrientation = newOrientation
+			a.display.SetOrientation(currentOrientation)
+			a.ui.ForceRedraw()
+			a.log.Debug().Int("orientation", currentOrientation).Msg("display orientation changed")
+		}
+	}
 }
 
 // initializeComponents sets up synthesizer, GT client, and other core components.
@@ -655,6 +674,7 @@ func (a *App) initializeComponents(opts Options) error {
 	// initialise synthesizer
 	a.synth, err = synthesizer.New(&synthesizer.SynthOpts{
 		Config:     a.config.GetSynthesizer(),
+		BaseConfig: a.config,
 		Logger:     *opts.Logger,
 		Kinematics: &a.kinematics,
 	})

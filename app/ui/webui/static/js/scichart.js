@@ -234,6 +234,14 @@ let globalHandleWebSocketMessage = null;
 
 // WebSocket connection management
 function createWebSocketConnection() {
+    // Close existing connection if any
+    if (globalWebSocket) {
+        globalWebSocket.onclose = null; // Prevent reconnection logic
+        globalWebSocket.onerror = null;
+        globalWebSocket.close(1000, 'Creating new connection');
+        globalWebSocket = null;
+    }
+
     updateConnectionStatus('connecting');
 
     const ws = new WebSocket(CONFIG.WEBSOCKET_URL);
@@ -477,11 +485,8 @@ async function initSciChart() {
         }));
     };
 
-    const createStandardChart = async (containerId, title) => {
-        const { sciChartSurface, wasmContext } = await SciChart.SciChartSurface.create(containerId, {
-            title,
-            titleStyle: { fontSize: "16" }
-        });
+    const createStandardChart = async (containerId) => {
+        const { sciChartSurface, wasmContext } = await SciChart.SciChartSurface.create(containerId);
 
         const xAxis = createAxisWithOptions(wasmContext, { autoRange: SciChart.EAutoRange.Never });
         const yAxis = createAxisWithOptions(wasmContext, { autoRange: SciChart.EAutoRange.Always });
@@ -496,11 +501,9 @@ async function initSciChart() {
     const CHART_DEFINITIONS = {
         'rpm-speed': {
             title: 'RPM / Speed',
+            titleKey: 'runmode.telemetry.chart.rpmspeed',
             create: async (containerId) => {
-                const { sciChartSurface, wasmContext } = await SciChart.SciChartSurface.create(containerId, {
-                    title: 'RPM / Speed',
-                    titleStyle: { fontSize: "16" }
-                });
+                const { sciChartSurface, wasmContext } = await SciChart.SciChartSurface.create(containerId);
 
                 addZoomModifiers(sciChartSurface);
 
@@ -557,11 +560,9 @@ async function initSciChart() {
 
         'throttle-brake': {
             title: 'Throttle / Brake',
+            titleKey: 'runmode.telemetry.chart.throttlebrake',
             create: async (containerId) => {
-                const { sciChartSurface, wasmContext } = await SciChart.SciChartSurface.create(containerId, {
-                    title: 'Throttle / Brake',
-                    titleStyle: { fontSize: "16" }
-                });
+                const { sciChartSurface, wasmContext } = await SciChart.SciChartSurface.create(containerId);
 
                 addZoomModifiers(sciChartSurface);
 
@@ -605,11 +606,9 @@ async function initSciChart() {
 
         'tyre-temperature': {
             title: 'Tyre Temperature',
+            titleKey: 'runmode.telemetry.chart.tyretemperature',
             create: async (containerId) => {
-                const { sciChartSurface, wasmContext } = await SciChart.SciChartSurface.create(containerId, {
-                    title: 'Tyre Temperature',
-                    titleStyle: { fontSize: "16" }
-                });
+                const { sciChartSurface, wasmContext } = await SciChart.SciChartSurface.create(containerId);
 
                 addZoomModifiers(sciChartSurface);
 
@@ -658,11 +657,9 @@ async function initSciChart() {
 
         'fuel-range': {
             title: 'Fuel Range/Rate',
+            titleKey: 'runmode.telemetry.chart.fuelrange',
             create: async (containerId) => {
-                const { sciChartSurface, wasmContext } = await SciChart.SciChartSurface.create(containerId, {
-                    title: 'Fuel Range/Rate',
-                    titleStyle: { fontSize: "16" }
-                });
+                const { sciChartSurface, wasmContext } = await SciChart.SciChartSurface.create(containerId);
 
                 addZoomModifiers(sciChartSurface);
 
@@ -719,8 +716,9 @@ async function initSciChart() {
 
         'jerk': {
             title: '6DOF Jerk',
+            titleKey: 'runmode.telemetry.chart.jerk',
             create: async (containerId) => {
-                const { sciChartSurface, wasmContext } = await createStandardChart(containerId, '6DOF Jerk');
+                const { sciChartSurface, wasmContext } = await createStandardChart(containerId);
 
                 addZoomModifiers(sciChartSurface);
 
@@ -764,8 +762,9 @@ async function initSciChart() {
 
         'snap': {
             title: '6DOF Snap',
+            titleKey: 'runmode.telemetry.chart.snap',
             create: async (containerId) => {
-                const { sciChartSurface, wasmContext } = await createStandardChart(containerId, '6DOF Snap');
+                const { sciChartSurface, wasmContext } = await createStandardChart(containerId);
 
                 addZoomModifiers(sciChartSurface);
 
@@ -801,8 +800,9 @@ async function initSciChart() {
 
         'translational-acceleration': {
             title: '6DOF Translational Acceleration',
+            titleKey: 'runmode.telemetry.chart.translationalaccel',
             create: async (containerId) => {
-                const { sciChartSurface, wasmContext } = await createStandardChart(containerId, '6DOF Translational Acceleration');
+                const { sciChartSurface, wasmContext } = await createStandardChart(containerId);
 
                 addZoomModifiers(sciChartSurface);
 
@@ -846,8 +846,9 @@ async function initSciChart() {
 
         'rotational-acceleration': {
             title: '6DOF Rotational Acceleration',
+            titleKey: 'runmode.telemetry.chart.rotationalaccel',
             create: async (containerId) => {
-                const { sciChartSurface, wasmContext } = await createStandardChart(containerId, '6DOF Rotational Acceleration');
+                const { sciChartSurface, wasmContext } = await createStandardChart(containerId);
 
                 addZoomModifiers(sciChartSurface);
 
@@ -891,11 +892,9 @@ async function initSciChart() {
 
         'synthesizer-output': {
             title: 'Synthesizer Outputs',
+            titleKey: 'runmode.telemetry.chart.synthoutput',
             create: async (containerId) => {
-                const { sciChartSurface, wasmContext } = await SciChart.SciChartSurface.create(containerId, {
-                    title: 'Synthesizer Outputs',
-                    titleStyle: { fontSize: "16" }
-                });
+                const { sciChartSurface, wasmContext } = await SciChart.SciChartSurface.create(containerId);
 
                 addHorizontalZoomModifiers(sciChartSurface);
 
@@ -957,8 +956,9 @@ async function initSciChart() {
 
         'compute-time': {
             title: 'Compute Time (µs)',
+            titleKey: 'runmode.telemetry.chart.computetime',
             create: async (containerId) => {
-                const { sciChartSurface, wasmContext } = await createStandardChart(containerId, 'Compute Time (µs)');
+                const { sciChartSurface, wasmContext } = await createStandardChart(containerId);
 
                 addZoomModifiers(sciChartSurface);
 
@@ -1205,9 +1205,68 @@ async function initSciChart() {
     // Initialize WebSocket connection
     globalWebSocket = createWebSocketConnection();
     globalWebSocket.addEventListener('message', handleWebSocketMessage);
+
+    // Cleanup on page unload to prevent orphaned connections
+    const cleanup = () => {
+        console.log('Page unloading, cleaning up resources...');
+
+        // Close WebSocket connection
+        if (globalWebSocket) {
+            globalWebSocket.onclose = null; // Prevent reconnection attempts
+            globalWebSocket.onerror = null;
+            globalWebSocket.close(1000, 'Page unload');
+            globalWebSocket = null;
+        }
+
+        // Delete all charts to free resources
+        Object.values(charts).forEach(chart => {
+            if (chart && chart.surface) {
+                try {
+                    chart.surface.delete();
+                } catch (e) {
+                    console.error('Error deleting chart:', e);
+                }
+            }
+        });
+
+        // Clear global references
+        globalCharts = {};
+        globalAllDataSeries = {};
+        globalHandleWebSocketMessage = null;
+    };
+
+    // Use both events for better browser compatibility
+    window.addEventListener('beforeunload', cleanup);
+    window.addEventListener('pagehide', cleanup);
 }
 
-// Initialize the application
-initSciChart().catch(error => {
-    console.error('Failed to initialize SciChart:', error);
+// Initialize the application - wait for i18n to be loaded first
+let isInitialized = false;
+
+async function initializeWithi18n() {
+    // Prevent multiple initializations
+    if (isInitialized) {
+        console.log('SciChart already initialized, skipping...');
+        return;
+    }
+
+    // Check if i18n is already loaded
+    if (window.i18nLoaded) {
+        console.log('i18n already loaded, initializing SciChart...');
+        isInitialized = true;
+        await initSciChart();
+    } else {
+        console.log('Waiting for i18n to load before initializing SciChart...');
+        window.addEventListener('i18nLoaded', async () => {
+            if (!isInitialized) {
+                console.log('i18n loaded, now initializing SciChart...');
+                isInitialized = true;
+                await initSciChart();
+            }
+        }, { once: true });
+    }
+}
+
+initializeWithi18n().catch(error => {
+    console.error('Failed to initialize application:', error);
 });

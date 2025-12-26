@@ -25,7 +25,8 @@ type Synthesizer struct {
 
 // SynthOpts holds the options for creating a new Synthesizer.
 type SynthOpts struct {
-	Config     *config.Synthesizer // TODO: use base config pointer?
+	Config     *config.Synthesizer
+	BaseConfig *config.Config // Base config for lock-free reads in mixer
 	Logger     zerolog.Logger
 	Kinematics *kinematics.State
 }
@@ -43,21 +44,21 @@ func New(opts *SynthOpts) (*Synthesizer, error) {
 
 	bufferLength := 2 * time.Second
 
+	// Pass full config for lock-free reads
 	synthesizer.mixer, err = NewMixer(MixerConfig{
-		MasterGain:     &opts.Config.MasterGain,
-		MasterGainMute: &opts.Config.MasterGainMute,
-		GainIncrement:  &opts.Config.GainIncrement,
-		BufferLength:   bufferLength,
-		SampleRateHz:   opts.Config.InternalSampleRateHz,
-		Log:            opts.Logger.With().Str("package", "synth mixer").Logger(),
+		Config:       opts.BaseConfig,
+		BufferLength: bufferLength,
+		SampleRateHz: opts.Config.InternalSampleRateHz,
+		Log:          opts.Logger.With().Str("package", "synth mixer").Logger(),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create mixer: %w", err)
 	}
 
-	_ = synthesizer.mixer.AddChannel("transmission", &opts.Config.TransmissionGain, &opts.Config.TransmissionGainMute)
-	_ = synthesizer.mixer.AddChannel("chassis", &opts.Config.ChassisGain, &opts.Config.ChassisGainMute)
-	_ = synthesizer.mixer.AddChannel("engine", &opts.Config.EngineGain, &opts.Config.EngineGainMute)
+	// Add channels with initial values from config
+	_ = synthesizer.mixer.AddChannel("transmission", opts.Config.TransmissionGain)
+	_ = synthesizer.mixer.AddChannel("chassis", opts.Config.ChassisGain)
+	_ = synthesizer.mixer.AddChannel("engine", opts.Config.EngineGain)
 
 	synthesizer.outputDevice, err = NewOutputDevice(SynthOutDeviceOpts{
 		Log: opts.Logger.With().Str("package", "synth output device").Logger(),

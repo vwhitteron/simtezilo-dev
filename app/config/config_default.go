@@ -107,14 +107,14 @@ func defaultConfig() *viperConfig {
 			EngineGainMute:            false,
 			EqEnabled:                 false,
 			EqBands: []EQBand{
-				{Frequency: 12, Gain: 0.0, Q: 2.0}, // Sub-bass rumble
-				{Frequency: 16, Gain: 0.0, Q: 2.0}, // Deep bass
-				{Frequency: 20, Gain: 0.0, Q: 2.0}, // Bass
-				{Frequency: 25, Gain: 0.0, Q: 2.0}, // Low-mid
-				{Frequency: 30, Gain: 0.0, Q: 2.0}, // Mid
-				{Frequency: 38, Gain: 0.0, Q: 2.0}, // Upper-mid
-				{Frequency: 48, Gain: 0.0, Q: 2.0}, // High
-				{Frequency: 58, Gain: 0.0, Q: 2.0}, // Upper range
+				{Frequency: 12, Gain: 0.0, Q: 2.0},
+				{Frequency: 16, Gain: 0.0, Q: 2.0},
+				{Frequency: 20, Gain: 0.0, Q: 2.0},
+				{Frequency: 25, Gain: 0.0, Q: 2.0},
+				{Frequency: 30, Gain: 0.0, Q: 2.0},
+				{Frequency: 38, Gain: 0.0, Q: 2.0},
+				{Frequency: 48, Gain: 0.0, Q: 2.0},
+				{Frequency: 58, Gain: 0.0, Q: 2.0},
 			},
 		},
 		Telemetry: &Telemetry{

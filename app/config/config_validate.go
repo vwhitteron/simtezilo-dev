@@ -206,10 +206,10 @@ func validateSynthesizer(synth *Synthesizer, result *ValidationResult) {
 		addError(result, "synthesizer.outputSampleRateHz", fmt.Sprintf("sample rate %d is out of valid range (8000-192000)", synth.OutputSampleRateHz))
 	}
 
-	// Validate gains (0.0 to 2.0 is reasonable)
+	// Validate gain value
 	validateGain := func(field string, value float64) {
-		if value < 0.0 || value > 2.0 {
-			addError(result, field, fmt.Sprintf("gain %.2f is out of valid range (0.0-2.0)", value))
+		if value < -60.0 || value > 0.0 {
+			addError(result, field, fmt.Sprintf("gain %.2f is out of valid range (-60.0 - 0.0)", value))
 		}
 	}
 
@@ -248,26 +248,26 @@ func validateSynthesizer(synth *Synthesizer, result *ValidationResult) {
 
 // validateHaptics validates the haptics configuration section.
 func validateHaptics(hap *haptics, result *ValidationResult) {
-	// Validate curve types (0-3 are valid based on code inspection)
-	if hap.DynamicTransmissionCurve < 0 || hap.DynamicTransmissionCurve > 3 {
-		addError(result, "haptics.dynamicTransmissionCurve", fmt.Sprintf("curve %d is out of valid range (0-3)", hap.DynamicTransmissionCurve))
+	// Validate curve values
+	if hap.DynamicTransmissionCurve < 5 || hap.DynamicTransmissionCurve > 955 {
+		addError(result, "haptics.dynamicTransmissionCurve", fmt.Sprintf("curve %d is out of valid range (5-955)", hap.DynamicTransmissionCurve))
 	}
 
-	if hap.JerkCurve < 0 || hap.JerkCurve > 3 {
-		addError(result, "haptics.jerkCurve", fmt.Sprintf("curve %d is out of valid range (0-3)", hap.JerkCurve))
+	if hap.JerkCurve < 5 || hap.JerkCurve > 955 {
+		addError(result, "haptics.jerkCurve", fmt.Sprintf("curve %d is out of valid range (5-955)", hap.JerkCurve))
 	}
 
-	if hap.SnapCurve < 0 || hap.SnapCurve > 3 {
-		addError(result, "haptics.snapCurve", fmt.Sprintf("curve %d is out of valid range (0-3)", hap.SnapCurve))
+	if hap.SnapCurve < 5 || hap.SnapCurve > 955 {
+		addError(result, "haptics.snapCurve", fmt.Sprintf("curve %d is out of valid range (5-955)", hap.SnapCurve))
 	}
 
 	// Validate max values
-	if hap.JerkMax < 5 || hap.JerkMax > 955 {
-		addError(result, "haptics.jerkMax", fmt.Sprintf("jerkMax %d is out of valid range (5-955)", hap.JerkMax))
+	if hap.JerkMax < 1 || hap.JerkMax > 200 {
+		addError(result, "haptics.jerkMax", fmt.Sprintf("jerkMax %d is out of valid range (1-200)", hap.JerkMax))
 	}
 
-	if hap.SnapMax < 5 || hap.SnapMax > 955 {
-		addError(result, "haptics.snapMax", fmt.Sprintf("snapMax %d is out of valid range (5-955)", hap.SnapMax))
+	if hap.SnapMax < 1 || hap.SnapMax > 200 {
+		addError(result, "haptics.snapMax", fmt.Sprintf("snapMax %d is out of valid range (1-200)", hap.SnapMax))
 	}
 
 	// Validate pulse settings

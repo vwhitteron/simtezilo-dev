@@ -487,3 +487,59 @@
 #equalizer-controls .col-lg-2 {
     margin-bottom: 1rem;
 }
+
+/* Restart overlay */
+#restart-overlay {
+    display: none;
+    position: fixed;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    background-color: rgba(0, 0, 0, 0.9);
+    z-index: 999999;
+    justify-content: center;
+    align-items: center;
+    margin: 0;
+    padding: 0;
+}
+
+#restart-overlay .restart-message {
+    text-align: center;
+    color: white;
+    padding: 50px 60px;
+    background-color: rgba(33, 37, 41, 0.98);
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.8);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    max-width: 500px;
+    position: relative;
+    z-index: 100000;
+}
+
+#restart-overlay .restart-message h3 {
+    margin-bottom: 15px;
+    font-weight: 600;
+    font-size: 1.5rem;
+}
+
+#restart-overlay .restart-message p {
+    margin: 0;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 1rem;
+}
+
+/* Blur effect for page content when overlay is shown */
+body.restart-blur #navigation,
+body.restart-blur .settings-sidebar,
+body.restart-blur .settings-content {
+    filter: blur(8px);
+    -webkit-filter: blur(8px);
+    pointer-events: none;
+}
+
+body.restart-blur {
+    overflow: hidden;
+}

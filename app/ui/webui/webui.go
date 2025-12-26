@@ -144,9 +144,9 @@ func (w *WebUI) GetHTTPHandler() http.Handler {
 	mux.HandleFunc("/api/languages", w.handleLanguagesAPI)
 	mux.HandleFunc("/api/logs", w.handleLogsAPI)
 	mux.HandleFunc("/api/system/info", w.handleSystemInfo)
+	mux.HandleFunc("/api/restart", w.handleRestart)
 
 	if w.setupModeEnabled {
-		mux.HandleFunc("/api/restart", w.handleRestart)
 		mux.HandleFunc("/api/mode/setup", w.handleSetupMode)
 		mux.HandleFunc("/api/factory-reset", w.handleFactoryReset)
 	}
@@ -399,6 +399,9 @@ func (w *WebUI) vehicleInfoBroadcaster() {
 			// Send to all clients, remove failed ones
 			activeClients := make([]*websocket.Conn, 0, len(w.vehicleClients))
 			for _, client := range w.vehicleClients {
+				// Set aggressive write deadline (2 seconds)
+				_ = client.SetWriteDeadline(time.Now().Add(2 * time.Second))
+				
 				err := client.WriteMessage(websocket.TextMessage, encodedData)
 				if err != nil {
 					w.log.Debug().Err(err).Msg("failed to send vehicle info to client, removing")
@@ -582,6 +585,9 @@ func (w *WebUI) circuitInfoBroadcaster() {
 			// Send to all clients, remove failed ones
 			activeClients := make([]*websocket.Conn, 0, len(w.circuitClients))
 			for _, client := range w.circuitClients {
+				// Set aggressive write deadline (2 seconds)
+				_ = client.SetWriteDeadline(time.Now().Add(2 * time.Second))
+				
 				err := client.WriteMessage(websocket.TextMessage, encodedData)
 				if err != nil {
 					w.log.Debug().Err(err).Msg("failed to send circuit info to client, removing")
@@ -652,6 +658,9 @@ func (w *WebUI) raceInfoBroadcaster() {
 			// Send to all clients, remove failed ones
 			activeClients := make([]*websocket.Conn, 0, len(w.raceClients))
 			for _, client := range w.raceClients {
+				// Set aggressive write deadline (2 seconds)
+				_ = client.SetWriteDeadline(time.Now().Add(2 * time.Second))
+				
 				err := client.WriteMessage(websocket.TextMessage, encodedData)
 				if err != nil {
 					w.log.Debug().Err(err).Msg("failed to send race info to client, removing")
@@ -1545,6 +1554,19 @@ func (w *WebUI) handleConfigReset(response http.ResponseWriter, request *http.Re
 
 	w.config.SetDefault()
 
+	// Save the default configuration to disk
+	err := w.config.SaveConfigToFile()
+	if err != nil {
+		w.log.Error().Err(err).Msg("failed to save default configuration to file")
+		response.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(response).Encode(map[string]string{"error": "Failed to save configuration"}) //nolint:errchkjson // simple encoding
+
+		return
+	}
+
+	// Mark that a restart is required
+	w.config.MarkRestartRequired()
+
 	w.handleGetConfig(response, request)
 }
 
@@ -1698,6 +1720,9 @@ func (w *WebUI) handleConfigImport(response http.ResponseWriter, request *http.R
 	}
 
 	w.log.Info().Str("file", configFilePath).Msg("config file imported successfully")
+
+	// Mark that a restart is required
+	w.config.MarkRestartRequired()
 
 	// Return success response
 	_ = json.NewEncoder(response).Encode(map[string]interface{}{ //nolint:errchkjson // simple encoding
@@ -1917,18 +1942,51 @@ func (w *WebUI) handleSystemInfo(response http.ResponseWriter, request *http.Req
 
 	platform := hardware.Platform()
 
+	// Check current setup mode availability by calling setup binary
+	setupModeAvailable := w.setupModeEnabled // Default to cached value
+	setupBinPath := filepath.Join(w.config.GetAppBaseDir(), "bin", "setup")
+	cmd := exec.CommandContext(request.Context(), setupBinPath, "status")
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		w.log.Warn().
+			Err(err).
+			Str("path", setupBinPath).
+			Str("output", string(output)).
+			Msg("failed to check setup status, using cached value")
+	} else {
+		// Parse the JSON output to get the available status
+		var statusResponse struct {
+			Status struct {
+				Available bool `json:"available"`
+			} `json:"status"`
+		}
+		err := json.Unmarshal(output, &statusResponse)
+		if err != nil {
+			w.log.Warn().
+				Err(err).
+				Str("output", string(output)).
+				Msg("failed to parse setup status response")
+		} else {
+			setupModeAvailable = statusResponse.Status.Available
+			w.log.Debug().
+				Bool("available", setupModeAvailable).
+				Msg("successfully checked setup mode availability")
+		}
+	}
+
 	responseData := map[string]any{
 		"version":            w.buildVersion,
 		"buildTime":          w.buildTime,
 		"buildPlatform":      w.buildPlatform,
 		"hardware":           platform.String(),
-		"setupModeAvailable": w.setupModeEnabled,
+		"setupModeAvailable": setupModeAvailable,
 	}
 
 	response.Header().Set("Content-Type", "application/json")
-	response.Header().Set("Cache-Control", "public, max-age=3600")
+	response.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 
-	err := json.NewEncoder(response).Encode(responseData)
+	err = json.NewEncoder(response).Encode(responseData)
 	if err != nil {
 		w.log.Error().Err(err).Msg("failed to encode system info response")
 		http.Error(response, "error encoding system info", http.StatusInternalServerError)
@@ -1936,7 +1994,7 @@ func (w *WebUI) handleSystemInfo(response http.ResponseWriter, request *http.Req
 		return
 	}
 
-	w.log.Debug().Msg("served system info")
+	w.log.Debug().Bool("setupModeAvailable", setupModeAvailable).Msg("served system info")
 }
 
 // handleLogsAPI returns log entries from the in-memory store.

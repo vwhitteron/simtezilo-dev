@@ -172,6 +172,11 @@ document.addEventListener('DOMContentLoaded', function () {
                 </div>
             `;
             document.body.appendChild(popover);
+
+            // Apply translations to the popover content
+            if (typeof applyTranslations === 'function') {
+                applyTranslations();
+            }
         }
 
         // Handle Info nav link click

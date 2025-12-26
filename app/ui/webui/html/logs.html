@@ -156,7 +156,13 @@
             if (info) {
                 const start = (currentPage - 1) * pageSize + 1;
                 const end = Math.min(currentPage * pageSize, totalLogs);
-                info.textContent = `Showing ${start}-${end} of ${totalLogs} logs`;
+                const template = t('runmode.logs.showing');
+                if (template) {
+                    info.textContent = template.replace('{start}', start).replace('{end}', end).replace('{total}', totalLogs);
+                } else {
+                    // Fallback if i18n not loaded yet
+                    info.textContent = `Showing ${start}-${end} of ${totalLogs} logs`;
+                }
             }
         }
 
@@ -172,7 +178,13 @@
                 nextBtn.disabled = currentPage >= totalPages;
             }
             if (pageInfo) {
-                pageInfo.textContent = `Page ${currentPage} of ${totalPages}`;
+                const template = t('runmode.logs.pageinfo');
+                if (template) {
+                    pageInfo.textContent = template.replace('{current}', currentPage).replace('{total}', totalPages);
+                } else {
+                    // Fallback if i18n not loaded yet
+                    pageInfo.textContent = `Page ${currentPage} of ${totalPages}`;
+                }
             }
         }
 
@@ -255,6 +267,33 @@
             document.getElementById('auto-refresh-btn').addEventListener('click', toggleAutoRefresh);
         });
 
+        // Translate page size dropdown when i18n loads
+        window.addEventListener('i18nLoaded', function () {
+            updatePageSizeDropdown();
+            // Re-update pagination info with translations after i18n loads
+            updatePaginationInfo();
+            updatePaginationControls();
+        });
+
+        window.addEventListener('i18nLanguageChanged', function () {
+            updatePageSizeDropdown();
+            // Re-update pagination info when language changes
+            updatePaginationInfo();
+            updatePaginationControls();
+        });
+
+        function updatePageSizeDropdown() {
+            const select = document.getElementById('page-size');
+            if (select) {
+                const options = select.querySelectorAll('option[data-i18n-template]');
+                const template = t('runmode.logs.perpage');
+                options.forEach(option => {
+                    const count = option.value;
+                    option.textContent = template.replace('{count}', count);
+                });
+            }
+        }
+
         // Cleanup on page unload
         window.addEventListener('beforeunload', function () {
             if (refreshInterval) {
@@ -326,18 +365,19 @@
                         <span class="text-muted" style="font-size: 0.85rem;" id="pagination-info">Loading...</span>
                         <select id="page-size" class="form-select form-select-sm w-auto"
                             onchange="changePageSize(this.value)">
-                            <option value="20">20 per page</option>
-                            <option value="50">50 per page</option>
-                            <option value="100" selected>100 per page</option>
-                            <option value="500">500 per page</option>
-                            <option value="1000">1000 per page</option>
+                            <option value="20" data-i18n-template="runmode.logs.perpage">20 per page</option>
+                            <option value="50" data-i18n-template="runmode.logs.perpage">50 per page</option>
+                            <option value="100" selected data-i18n-template="runmode.logs.perpage">100 per page</option>
+                            <option value="500" data-i18n-template="runmode.logs.perpage">500 per page</option>
+                            <option value="1000" data-i18n-template="runmode.logs.perpage">1000 per page</option>
                         </select>
                     </div>
                     <div class="d-flex gap-10">
                         <div class="dropdown">
                             <button class="btn btn-sm btn-secondary dropdown-toggle" type="button"
                                 data-bs-toggle="dropdown" aria-expanded="false">
-                                <i class="fa-solid fa-filter"></i> Filter Levels
+                                <i class="fa-solid fa-filter"></i> <span data-i18n="runmode.logs.filterlevels">Filter
+                                    Levels</span>
                             </button>
                             <ul class="dropdown-menu" style="padding: 0.5rem;">
                                 <li>
@@ -403,12 +443,12 @@
                 <div class="d-flex align-items-center justify-content-center mt-15 mb-15" style="gap: 10px;">
                     <button id="prev-page" class="btn btn-sm btn-secondary" onclick="goToPage(currentPage - 1)"
                         disabled>
-                        <i class="fa-solid fa-chevron-left"></i> Previous
+                        <i class="fa-solid fa-chevron-left"></i> <span data-i18n="runmode.logs.previous">Previous</span>
                     </button>
                     <span class="text-muted" id="page-info">Page 1 of 1</span>
                     <button id="next-page" class="btn btn-sm btn-secondary" onclick="goToPage(currentPage + 1)"
                         disabled>
-                        Next <i class="fa-solid fa-chevron-right"></i>
+                        <span data-i18n="runmode.logs.next">Next</span> <i class="fa-solid fa-chevron-right"></i>
                     </button>
                 </div>
             </div>

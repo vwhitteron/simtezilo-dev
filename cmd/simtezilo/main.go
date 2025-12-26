@@ -95,9 +95,11 @@ func main() {
 		app.Close()
 
 		if exitCode == exitcode.RestartApp {
-			logger.Info().Msg("Restarting application with fresh configuration")
+			logger.Info().Msg("Restarting application - exiting to allow process restart")
 
-			continue
+			// Exit with success code so systemd will restart the process
+			// This ensures all resources (speaker, sockets) are properly released
+			exitCode = exitcode.Success
 		}
 
 		break

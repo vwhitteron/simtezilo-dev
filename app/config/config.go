@@ -182,18 +182,20 @@ type ConfigSnapshot struct {
 	// Monitoring flags
 	FuelMonitoringEnabled bool
 	TyreMonitoringEnabled bool
+
+	// Hardware settings
+	DisplayOrientation int
 }
 
 // Config holds the application configuration and provides methods for accessing and modifying the data.
 type Config struct {
-	viper                      *viperConfig
-	snapshot                   atomic.Pointer[ConfigSnapshot]
-	i18n                       *i18n.I18n
-	configFile                 string
-	lastSavedConfig            []byte // Last config written to disk (to avoid unnecessary writes)
-	status                     Status
-	displayOrientationCallback func(int)
-	mu                         sync.RWMutex
+	viper           *viperConfig
+	snapshot        atomic.Pointer[ConfigSnapshot]
+	i18n            *i18n.I18n
+	configFile      string
+	lastSavedConfig []byte // Last config written to disk (to avoid unnecessary writes)
+	status          Status
+	mu              sync.RWMutex
 }
 
 type Options struct {
@@ -298,6 +300,39 @@ func NewFromJSON(json []byte, log zerolog.Logger) *Config {
 func (c *Config) SetDefault() {
 	c.mu.Lock()
 
+	// Try to load default config from <baseDir>/etc/default.conf
+	baseDir := c.viper.App.BaseDir
+	if baseDir == "" {
+		baseDir = "."
+	}
+
+	defaultConfigPath := filepath.Join(baseDir, "etc", "default.conf")
+
+	// Check if the file exists
+	if _, err := os.Stat(defaultConfigPath); err == nil {
+		// File exists, try to load it
+		data, err := os.ReadFile(defaultConfigPath)
+		if err == nil {
+			// Create a new config structure
+			newConfig := defaultConfig()
+
+			err = toml.Unmarshal(data, newConfig)
+			if err == nil {
+				c.viper = newConfig
+				c.mu.Unlock()
+				c.finalise()
+				c.rebuildSnapshot()
+
+				return
+			}
+			// If unmarshal failed, fall through to default
+			log.Warn().Err(err).Str("file", defaultConfigPath).Msg("failed to unmarshal default config, using built-in defaults")
+		} else {
+			log.Warn().Err(err).Str("file", defaultConfigPath).Msg("failed to read default config, using built-in defaults")
+		}
+	}
+
+	// Fall back to built-in defaults
 	c.viper = defaultConfig()
 
 	c.mu.Unlock()
@@ -345,6 +380,15 @@ func (c *Config) RestartRequired() bool {
 	defer c.mu.RUnlock()
 
 	return c.status.RestartRequired
+}
+
+// MarkRestartRequired marks that a restart is required for configuration changes to take effect.
+func (c *Config) MarkRestartRequired() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.status.RestartRequired = true
+	c.status.LastUpdate = time.Now().Unix()
 }
 
 // ****************************************************************************
@@ -764,18 +808,16 @@ func (c *Config) SetHardwareModel(model string) {
 	c.registerUpdate(true)
 }
 
-// SetDisplayOrientationCallback sets a callback function to be invoked when display orientation changes.
-// This allows the display hardware to be updated immediately when orientation is changed.
-func (c *Config) SetDisplayOrientationCallback(callback func(int)) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	c.displayOrientationCallback = callback
-}
-
 // GetDisplayOrientation returns the configured display orientation in degrees.
 // Valid orientaitions are 0, 90, 180, and 270 degrees.
+// Uses lock-free atomic read from snapshot.
 func (c *Config) GetDisplayOrientation() int {
+	return c.snapshot.Load().DisplayOrientation
+}
+
+// getDisplayOrientationLocked returns the display orientation while holding the lock.
+// Used internally during initialization before snapshot is built.
+func (c *Config) getDisplayOrientationLocked() int {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
@@ -801,12 +843,7 @@ func (c *Config) SetDisplayOrientation(orientation int) {
 	}
 
 	c.viper.Hardware.DisplayOrientation = orientation
-
-	// Invoke callback if set to update display hardware immediately
-	if c.displayOrientationCallback != nil {
-		c.displayOrientationCallback(orientation)
-	}
-
+	c.rebuildSnapshot()
 	c.registerUpdate(false)
 }
 
@@ -2289,6 +2326,8 @@ func (c *Config) rebuildSnapshot() {
 
 		FuelMonitoringEnabled: c.viper.Fuel.MonitoringEnabled,
 		TyreMonitoringEnabled: c.viper.Tyres.MonitoringEnabled,
+
+		DisplayOrientation: c.viper.Hardware.DisplayOrientation,
 	}
 	c.snapshot.Store(newSnap)
 }
