@@ -1,5 +1,7 @@
 package app
 
+import gtmodels "github.com/zetetos/gt-telemetry/pkg/models"
+
 // checkForNewLap sends an event to the lapStartEvents channel when a new lap is detected.
 func (a *App) checkForNewLap() {
 	current := a.state.current.lapNumber
@@ -117,6 +119,15 @@ func (a *App) timeOfDayHasReset() bool {
 	return timeOfDayDelta.Milliseconds() < 0
 }
 
+// gameStateHasChanged checks if the game state has changed between updates.
+// For main menu state, requires 3 consecutive frames to avoid false positives from transient flickering.
+func (a *App) gameStateHasChanged() bool {
+	current := a.state.current.gameState
+	last := a.state.last.gameState
+
+	return current != last
+}
+
 // liveFlagHasChanged checks if the live flag has changed between live and replay modes.
 func (a *App) liveFlagHasChanged() bool {
 	return a.state.current.isLive != a.state.last.isLive
@@ -134,7 +145,19 @@ func (a *App) updateState() (didUpdate bool) {
 	a.state.last = a.state.current
 
 	// Game
-	a.state.current.gameState = a.getGameState()
+	gameState := a.gtClient.Telemetry.GameState()
+	if gameState == gtmodels.GameStateMainMenu {
+		// Main menu state changes are delayed to avoid flapping (switch vehicle, start replay, etc)
+		if a.state.mainMenuFrameCount >= 10 {
+			a.state.current.gameState = gtmodels.GameStateMainMenu
+		} else {
+			a.state.mainMenuFrameCount++
+		}
+	} else {
+		// Other game state changes are immediate
+		a.state.mainMenuFrameCount = 0
+		a.state.current.gameState = gameState
+	}
 
 	// Session
 	a.state.current.sequenceNumber = a.gtClient.Telemetry.SequenceID()

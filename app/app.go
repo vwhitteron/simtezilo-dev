@@ -38,7 +38,7 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/ui/webui"
 	"github.com/vwhitteron/simtezilo-dev/app/vehicle"
 	gttelemetry "github.com/zetetos/gt-telemetry"
-	"github.com/zetetos/gt-telemetry/pkg/models"
+	gtmodels "github.com/zetetos/gt-telemetry/pkg/models"
 )
 
 // lapEvent represents a single lap completion event.
@@ -49,15 +49,6 @@ type lapEvent struct {
 	Position int16
 	HasDelta bool
 }
-
-type gameState int
-
-const (
-	gameStateUnknown gameState = iota
-	gameStateMainMenu
-	gameStateRaceMenu
-	gameStateOnCircuit
-)
 
 // raceState holds transient race data for haptic generation and pit radio notifications.
 type raceState struct {
@@ -73,19 +64,20 @@ type raceState struct {
 	lapNumber   int16         // Current lap number
 	lastLapTime time.Duration // Last lap time duration
 	isLive      bool          // Flag to indicate if the telemetry is live or a replay
-	gameState   gameState
+	gameState   gtmodels.GameState
 }
 
 // appState holds the overall application state.
 type appState struct {
-	hapticsEnabled   bool           // Flag to indicate if haptics are enabled // TODO: move state to haptics?
-	telemetryActive  bool           // Flag to indicate if telemetry is active
-	sessionEnded     bool           // Flag to indicate if session end has been handled
-	raceCompleteTime time.Duration  // Time of day when the race was completed
-	current          raceState      // Race state at the current telemetry sequence
-	last             raceState      // Race state at the last telemetry sequence
-	engine           engineState    // Engine state for haptic generation
-	recorder         recordingState // Telemetry recording state
+	hapticsEnabled     bool           // Flag to indicate if haptics are enabled // TODO: move state to haptics?
+	telemetryActive    bool           // Flag to indicate if telemetry is active
+	sessionEnded       bool           // Flag to indicate if session end has been handled
+	raceCompleteTime   time.Duration  // Time of day when the race was completed
+	current            raceState      // Race state at the current telemetry sequence
+	last               raceState      // Race state at the last telemetry sequence
+	engine             engineState    // Engine state for haptic generation
+	recorder           recordingState // Telemetry recording state
+	mainMenuFrameCount int            // Counter for consecutive main menu frames
 }
 
 // App is the main application struct holding all components and state.
@@ -120,12 +112,13 @@ type App struct {
 	vehicle       vehicle.Characteristics // Current vehicle information
 	tyres         *tyres.Tyre             // Tyre monitoring
 
-	telemetryChartFeed chan map[string]float32     // Channel for sending telemetry data to web UI
-	vehicleInfoFeed    chan map[string]interface{} // Channel for sending vehicle info to web UI
-	circuitInfoFeed    chan map[string]string      // Channel for sending circuit info to web UI
-	raceInfoFeed       chan map[string]interface{} // Channel for sending race info to web UI
-	webUI              *webui.WebUI                // Web UI server and handler
-	webSequenceID      uint32                      // Last sequence ID sent to the web UI
+	telemetryChartFeed chan map[string]float32 // Channel for sending telemetry data to web UI
+	vehicleInfoFeed    chan map[string]any     // Channel for sending vehicle info to web UI
+	circuitInfoFeed    chan map[string]string  // Channel for sending circuit info to web UI
+	raceInfoFeed       chan map[string]any     // Channel for sending race info to web UI
+	gameStateFeed      chan string             // Channel for sending game state to web UI
+	webUI              *webui.WebUI            // Web UI server and handler
+	webSequenceID      uint32                  // Last sequence ID sent to the web UI
 
 	lapEvents      []lapEvent    // History of lap events
 	lapEventsMutex sync.Mutex    // Mutex for lap events slice
@@ -166,9 +159,10 @@ func New(opts Options) (*App, error) {
 		},
 		kinematics:         kinematics.NewKinematicsState(),
 		telemetryChartFeed: make(chan map[string]float32, 600),
-		vehicleInfoFeed:    make(chan map[string]interface{}, 10),
+		vehicleInfoFeed:    make(chan map[string]any, 10),
 		circuitInfoFeed:    make(chan map[string]string, 10),
-		raceInfoFeed:       make(chan map[string]interface{}, 10),
+		raceInfoFeed:       make(chan map[string]any, 10),
+		gameStateFeed:      make(chan string, 10),
 		lapStartEvents:     make(chan uint32),
 	}
 
@@ -355,6 +349,7 @@ func (a *App) runAppMode() RunResult {
 			VehicleInfoFeed:    a.vehicleInfoFeed,
 			CircuitInfoFeed:    a.circuitInfoFeed,
 			RaceInfoFeed:       a.raceInfoFeed,
+			GameStateFeed:      a.gameStateFeed,
 			Config:             a.config,
 			ShutdownChan:       a.done,
 			SetupModeAvailable: status.Available,
@@ -719,7 +714,7 @@ func (a *App) initializeComponents(opts Options) error {
 		a.config.GetTyreTemperatureOptimalCelsius(),
 		a.config.GetTyreTemperatureOperatingWindow(),
 		a.config.GetTyreTemperatureMarginCelsius(),
-		models.CornerSet{},
+		gtmodels.CornerSet{},
 	)
 
 	a.circuit, err = circuit.New(*a.gtClient.CircuitDB, *opts.Logger)
@@ -966,9 +961,7 @@ func (a *App) mainLoop() {
 	tickerEngineHaptics := time.NewTicker((1000 / engineHapticFrameRate) * time.Millisecond)
 	tickerDisplay := time.NewTicker((1000 / displayFrameRate) * time.Millisecond)
 	tickerPitRadio := time.NewTicker((1000 / pitRadioFrameRate) * time.Millisecond)
-	tickerVehicleInfo := time.NewTicker(2 * time.Second)
-	tickerCircuitInfo := time.NewTicker(1 * time.Second)
-	tickerRaceInfo := time.NewTicker(1 * time.Second)
+	tickerRaceData := time.NewTicker(500 * time.Millisecond)
 	tickerDebug := time.NewTicker(30 * time.Second)
 
 	a.log.Debug().Str("component", "app").Str("result", "success").Msg("main loop started")
@@ -994,12 +987,8 @@ func (a *App) mainLoop() {
 			a.handleDisplayTick()
 		case <-tickerPitRadio.C:
 			a.handlePitRadioTick()
-		case <-tickerVehicleInfo.C:
-			a.handleVehicleInfoTick()
-		case <-tickerCircuitInfo.C:
-			a.handleCircuitInfoTick()
-		case <-tickerRaceInfo.C:
-			a.handleRaceInfoTick()
+		case <-tickerRaceData.C:
+			a.handleRaceDataTick()
 		case <-tickerDebug.C:
 			a.handleDebugTick()
 		}
@@ -1008,7 +997,7 @@ func (a *App) mainLoop() {
 
 // handleHapticsTick processes haptics-related updates.
 func (a *App) handleHapticsTick() {
-	a.handleGameStateChange()
+	_ = a.handleGameStateChange()
 
 	stateChanged := a.updateState()
 
@@ -1059,32 +1048,26 @@ func (a *App) handlePitRadioTick() {
 	}
 }
 
-// handleVehicleInfoTick periodically pushes current vehicle info to ensure new clients receive data.
-func (a *App) handleVehicleInfoTick() {
+// handleRaceDataTick periodically pushes current game state to ensure UI stays updated.
+func (a *App) handleRaceDataTick() {
 	if a.webUI == nil || !a.webUI.HasActiveClients() {
 		return
 	}
 
-	// Only push if we have a valid vehicle
-	if a.vehicle.ID == 0 {
-		return
+	a.pushGameState()
+
+	if a.gtClient.Telemetry.IsOnCircuit() {
+		a.pushRaceInfo()
 	}
 
-	a.pushVehicleInfo()
-}
-
-// handleRaceInfoTick periodically pushes current race info to the web UI.
-func (a *App) handleRaceInfoTick() {
-	if a.webUI == nil || !a.webUI.HasActiveClients() {
-		return
+	if a.vehicle.ID > 0 {
+		a.pushVehicleInfo()
 	}
 
-	// Only push if on circuit
-	if !a.gtClient.Telemetry.IsOnCircuit() {
-		return
+	// Push circuit info if we have valid data OR if telemetry is active (to show "Analyzing...")
+	if a.circuit.Name() != "" || a.circuit.Variation() != "" || (a.state.telemetryActive && a.gtClient.Telemetry.IsOnCircuit()) {
+		a.pushCircuitInfo()
 	}
-
-	a.pushRaceInfo()
 }
 
 // handleDebugTick processes debug logging.
@@ -1142,7 +1125,7 @@ func (a *App) newLapHandler() bool {
 				a.addLapEvent(completedLap, lapTime, position)
 			}
 
-			didUpdate := a.circuit.UpdateCircuit(odometerReading, lap, lapTime, coordinate, models.CoordinateTypeStartLine)
+			didUpdate := a.circuit.UpdateCircuit(odometerReading, lap, lapTime, coordinate, gtmodels.CoordinateTypeStartLine)
 			if didUpdate {
 				a.log.Debug().Msg("lapStartEvents: circuit was updated, calling pushCircuitInfo")
 				a.state.last.lastLapTime = 0
@@ -1170,7 +1153,7 @@ func (a *App) resetAppState() {
 	a.state.current = raceState{
 		transmissionGear: kinematics.NullGear,
 		isLive:           true,
-		gameState:        a.getGameState(),
+		gameState:        a.gtClient.Telemetry.GameState(),
 	}
 
 	a.synth.Silence()
@@ -1178,131 +1161,140 @@ func (a *App) resetAppState() {
 	a.kinematics = kinematics.NewKinematicsState()
 
 	a.state.sessionEnded = false
+	a.state.mainMenuFrameCount = 0
 
 	a.log.Debug().Msg("App state reset")
-}
-
-func (a *App) getGameState() gameState {
-	switch {
-	case a.gtClient.Telemetry.IsInMainMenu():
-		return gameStateMainMenu
-
-	case a.gtClient.Telemetry.IsInRaceMenu():
-		return gameStateRaceMenu
-
-	case a.gtClient.Telemetry.IsOnCircuit():
-		return gameStateOnCircuit
-
-	default:
-		return gameStateUnknown
-	}
 }
 
 // getGameStateString returns the current game state as a string for the web UI.
 func (a *App) getGameStateString() string {
 	state := a.state.current.gameState
 
-	// Check for paused state (on circuit but paused)
-	if state == gameStateOnCircuit && a.gtClient.Telemetry.Flags().GamePaused {
-		return "paused"
-	}
-
-	// Check for replay mode
-	if !a.gtClient.Telemetry.Flags().Live {
-		return "replay"
-	}
-
 	switch state { //nolint:exhaustive // handled by default
-	case gameStateMainMenu:
+	case gtmodels.GameStateMainMenu:
 		return "main_menu"
-	case gameStateRaceMenu:
+	case gtmodels.GameStateRaceMenu:
 		return "race_menu"
-	case gameStateOnCircuit:
+	case gtmodels.GameStateLive:
+		if a.gtClient.Telemetry.Flags().GamePaused {
+			return "paused"
+		}
+
 		return "on_circuit"
+	case gtmodels.GameStateReplay:
+		return "replay"
 	default:
 		return "unknown"
 	}
 }
 
-func (a *App) handleGameStateChange() {
-	// Check if telemetry stream has ended (disconnect, crash, shutdown)
-	if a.gtClient.Finished {
-		// Only handle session completion once to prevent log spam
-		if !a.state.sessionEnded {
-			a.disableHaptics("telemetry stream ended")
-			a.resetPitRadioState()
-			a.vehicle = vehicle.Characteristics{}
-			a.clearVehicleInfo()
-			a.clearCircuitInfo()
-			a.clearRaceInfo()
-			a.odometer.Reset()
-			a.fuelRange.Reset()
-			a.circuit.Reset()
-			a.resetAppState()
-			a.stopRecording()
-			a.log.Info().Msg("Telemetry stream ended")
-			a.state.sessionEnded = true
+func (a *App) handleGameStateChange() bool {
+	if a.sessionFinished() {
+		return false
+	}
+
+	current := a.state.current.gameState
+	stateChanged := a.gameStateHasChanged() && current != gtmodels.GameStateUnknown
+	isOnCircuit := current == gtmodels.GameStateLive || current == gtmodels.GameStateReplay
+
+	if isOnCircuit {
+		a.handleContinuityFlags()
+	}
+
+	if !stateChanged {
+		return false
+	}
+
+	switch current {
+	case gtmodels.GameStateMainMenu:
+		a.resetAllState("entered main menu")
+	case gtmodels.GameStateRaceMenu:
+		a.resetRaceState("entered race menu")
+	case gtmodels.GameStateLive, gtmodels.GameStateReplay:
+		// Toggle fuel range estimation when switching between live and replay modes
+		if a.liveFlagHasChanged() {
+			a.fuelRange.SetLive(a.state.current.isLive)
 		}
-
-		return
+	case gtmodels.GameStateUnknown:
+		// do nothing
+	default:
+		a.log.Warn().
+			Int("game_state", int(current)).
+			Msg("unhandled game state change")
 	}
 
-	if a.state.current.gameState == a.state.last.gameState || a.state.current.gameState == gameStateUnknown {
-		return
+	return true
+}
+
+func (a *App) sessionFinished() bool {
+	if !a.gtClient.Finished {
+		return false
 	}
 
-	switch {
-	case a.state.current.gameState == gameStateMainMenu:
-		a.disableHaptics("main menu")
-		a.resetPitRadioState()
-		a.vehicle = vehicle.Characteristics{}
-		a.clearVehicleInfo()
-		a.clearCircuitInfo()
-		a.clearRaceInfo()
-		a.odometer.Reset()
-		a.fuelRange.Reset()
-		a.circuit.Reset()
-		a.resetAppState()
-		a.stopRecording()
+	if a.state.sessionEnded {
+		return true
+	}
 
-		a.log.Debug().Msg("Entered main menu")
+	a.resetAllState("telemetry stream ended")
+	a.state.sessionEnded = true
 
-	case a.state.current.gameState == gameStateRaceMenu:
-		a.disableHaptics("race menu")
-		a.resetPitRadioState()
-		a.odometer.Reset()
-		a.fuelRange.ResetEstimate()
-		a.circuit.ResetLapProgress()
-		a.stopRecording()
+	return true
+}
 
-		a.log.Debug().Msg("Entered race menu")
+func (a *App) resetAllState(reason string) {
+	// App states
+	a.disableHaptics(reason)
+	a.stopRecording()
+	a.resetAppState()
 
-	case a.state.current.gameState == gameStateOnCircuit:
-		a.log.Debug().Msg("Vehicle on circuit")
+	//	Vehicle states
+	a.vehicle = vehicle.Characteristics{}
+	a.clearVehicleInfo()
+	a.odometer.Reset()
+	a.fuelRange.Reset()
 
-	case a.liveFlagHasChanged():
-		a.resetPitRadioState()
-		a.vehicle = vehicle.Characteristics{}
-		a.clearVehicleInfo()
-		a.clearCircuitInfo()
-		a.clearRaceInfo()
-		a.fuelRange.ResetEstimate()
-		a.fuelRange.SetLive(a.state.current.isLive)
-		a.circuit.Reset()
-		a.resetAppState()
+	// Race states
+	a.resetPitRadioState()
+	a.circuit.Reset()
+	a.clearCircuitInfo()
+	a.clearRaceInfo()
 
-		a.log.Info().Bool("is_live", a.state.current.isLive).Msg("Live flag change")
+	a.log.Info().Str("reason", reason).Msg("Reset all state")
+}
 
-	case a.timeOfDayHasReset():
+func (a *App) resetRaceState(reason string) {
+	// App states
+	a.disableHaptics(reason)
+	a.stopRecording()
+
+	// Vehicle states
+	a.odometer.Reset()
+	a.fuelRange.ResetEstimate()
+
+	// Race states
+	a.resetPitRadioState()
+	a.circuit.ResetLapProgress()
+
+	a.log.Debug().Str("reason", reason).Msg("Reset race state")
+}
+
+func (a *App) handleContinuityFlags() {
+	if a.timeOfDayHasReset() {
+		// App state
 		a.disableHaptics("time of day reset")
-		a.resetPitRadioState()
+
+		// Vehicle state
 		a.fuelRange.ResetEstimate()
+
+		// Race state
+		a.resetPitRadioState()
 		a.circuit.ResetLapProgress()
 
 		a.log.Debug().Msg("Time of day reset")
+	}
 
-	// Assume vehicle pit stop
-	case a.gtClient.Telemetry.Flags().Loading:
+	if a.gtClient.Telemetry.Flags().Loading {
+		// Vehicle state
 		a.fuelRange.ResetEstimate()
 
 		a.log.Debug().Msg("Loading flag")
@@ -1491,18 +1483,14 @@ func (a *App) pushVehicleInfo() {
 	model := a.gtClient.Telemetry.VehicleModel()
 	carID := a.gtClient.Telemetry.VehicleID()
 
-	// Get game state as string
-	gameStateStr := a.getGameStateString()
-
 	if manufacturer == "" && model == "" {
 		return
 	}
 
-	vehicleInfo := map[string]interface{}{
+	vehicleInfo := map[string]any{
 		"manufacturer": manufacturer,
 		"model":        model,
 		"carID":        carID,
-		"gamestate":    gameStateStr,
 	}
 
 	select {
@@ -1517,13 +1505,31 @@ func (a *App) pushVehicleInfo() {
 	}
 }
 
+// pushGameState sends the current game state to the web UI.
+func (a *App) pushGameState() {
+	if a.webUI == nil || !a.webUI.HasActiveClients() {
+		return
+	}
+
+	gameStateStr := a.getGameStateString()
+
+	select {
+	case a.gameStateFeed <- gameStateStr:
+		a.log.Debug().
+			Str("gameState", gameStateStr).
+			Msg("pushed game state to web UI")
+	default:
+		a.log.Debug().Msg("game state feed channel full, skipping push")
+	}
+}
+
 // clearVehicleInfo sends empty vehicle info to the web UI to clear the display.
 func (a *App) clearVehicleInfo() {
 	if a.webUI == nil || !a.webUI.HasActiveClients() {
 		return
 	}
 
-	vehicleInfo := map[string]interface{}{
+	vehicleInfo := map[string]any{
 		"manufacturer": "",
 		"model":        "",
 		"carID":        uint32(0),
@@ -1600,18 +1606,6 @@ func (a *App) clearCircuitInfo() {
 		a.log.Debug().Msg("cleared circuit info in web UI")
 	default:
 		a.log.Debug().Msg("circuit info feed channel full, skipping clear")
-	}
-}
-
-// handleCircuitInfoTick periodically pushes current circuit info to ensure new clients receive data.
-func (a *App) handleCircuitInfoTick() {
-	if a.webUI == nil || !a.webUI.HasActiveClients() {
-		return
-	}
-
-	// Push circuit info if we have valid data OR if telemetry is active (to show "Analyzing...")
-	if a.circuit.Name() != "" || a.circuit.Variation() != "" || (a.state.telemetryActive && a.gtClient.Telemetry.IsOnCircuit()) {
-		a.pushCircuitInfo()
 	}
 }
 
@@ -1716,7 +1710,7 @@ func (a *App) pushRaceInfo() {
 	// Get lap events
 	a.lapEventsMutex.Lock()
 
-	lapEventsData := make([]map[string]interface{}, 0, len(a.lapEvents))
+	lapEventsData := make([]map[string]any, 0, len(a.lapEvents))
 	for _, event := range a.lapEvents {
 		// Format lap time as MM:SS.mmm
 		lapTimeStr := formatLapTime(event.LapTime)
@@ -1736,7 +1730,7 @@ func (a *App) pushRaceInfo() {
 			}
 		}
 
-		lapEventsData = append(lapEventsData, map[string]interface{}{
+		lapEventsData = append(lapEventsData, map[string]any{
 			"lap":      event.Lap,
 			"laptime":  lapTimeStr,
 			"delta":    deltaStr,
@@ -1746,7 +1740,7 @@ func (a *App) pushRaceInfo() {
 
 	a.lapEventsMutex.Unlock()
 
-	raceInfo := map[string]interface{}{
+	raceInfo := map[string]any{
 		"timeofday":  timeOfDayStr,
 		"currentlap": strconv.Itoa(int(currentLap)),
 		"racelaps":   strconv.Itoa(int(raceLaps)),
@@ -1789,13 +1783,13 @@ func (a *App) clearRaceInfo() {
 	a.bestLapTime = 0
 	a.lapEventsMutex.Unlock()
 
-	raceInfo := map[string]interface{}{
+	raceInfo := map[string]any{
 		"timeofday":  "",
 		"currentlap": "",
 		"racelaps":   "",
 		"position":   "",
 		"gridsize":   "",
-		"lapevents":  []map[string]interface{}{},
+		"lapevents":  []map[string]any{},
 	}
 
 	select {

@@ -33,20 +33,25 @@ type WebUI struct {
 	port               int
 	webSocketClients   int
 	telemetryChartFeed chan map[string]float32
-	vehicleInfoFeed    chan map[string]interface{}
-	currentVehicleInfo map[string]interface{}
+	vehicleInfoFeed    chan map[string]any
+	currentVehicleInfo map[string]any
 	vehicleInfoMutex   sync.RWMutex
 	vehicleClients     []*websocket.Conn
 	vehicleClientsChan chan *websocket.Conn
 	vehicleUnsubChan   chan *websocket.Conn
+	vehicleSessions    map[string]*websocket.Conn // Track sessions to prevent duplicates
+	vehicleSessionsMux sync.Mutex
+	gameStateFeed      chan string
+	currentGameState   string
+	gameStateMutex     sync.RWMutex
 	circuitInfoFeed    chan map[string]string
 	currentCircuitInfo map[string]string
 	circuitInfoMutex   sync.RWMutex
 	circuitClients     []*websocket.Conn
 	circuitClientsChan chan *websocket.Conn
 	circuitUnsubChan   chan *websocket.Conn
-	raceInfoFeed       chan map[string]interface{}
-	currentRaceInfo    map[string]interface{}
+	raceInfoFeed       chan map[string]any
+	currentRaceInfo    map[string]any
 	raceInfoMutex      sync.RWMutex
 	raceClients        []*websocket.Conn
 	raceClientsChan    chan *websocket.Conn
@@ -65,9 +70,10 @@ type Config struct {
 	Log                zerolog.Logger
 	Port               int
 	TelemetryChartFeed chan map[string]float32
-	VehicleInfoFeed    chan map[string]interface{}
+	VehicleInfoFeed    chan map[string]any
 	CircuitInfoFeed    chan map[string]string
-	RaceInfoFeed       chan map[string]interface{}
+	RaceInfoFeed       chan map[string]any
+	GameStateFeed      chan string
 	Config             *appconfig.Config
 	ShutdownChan       chan exitcode.Code
 	SetupModeAvailable bool
@@ -85,17 +91,20 @@ func New(config Config) *WebUI {
 		webSocketClients:   0,
 		telemetryChartFeed: config.TelemetryChartFeed,
 		vehicleInfoFeed:    config.VehicleInfoFeed,
-		currentVehicleInfo: make(map[string]interface{}),
+		currentVehicleInfo: make(map[string]any),
 		vehicleClients:     make([]*websocket.Conn, 0),
 		vehicleClientsChan: make(chan *websocket.Conn, 10),
 		vehicleUnsubChan:   make(chan *websocket.Conn, 10),
+		vehicleSessions:    make(map[string]*websocket.Conn),
+		gameStateFeed:      config.GameStateFeed,
+		currentGameState:   "unknown",
 		circuitInfoFeed:    config.CircuitInfoFeed,
 		currentCircuitInfo: make(map[string]string),
 		circuitClients:     make([]*websocket.Conn, 0),
 		circuitClientsChan: make(chan *websocket.Conn, 10),
 		circuitUnsubChan:   make(chan *websocket.Conn, 10),
 		raceInfoFeed:       config.RaceInfoFeed,
-		currentRaceInfo:    make(map[string]interface{}),
+		currentRaceInfo:    make(map[string]any),
 		raceClients:        make([]*websocket.Conn, 0),
 		raceClientsChan:    make(chan *websocket.Conn, 10),
 		raceUnsubChan:      make(chan *websocket.Conn, 10),
@@ -271,6 +280,56 @@ func (w *WebUI) handleWebSocketConnection(response http.ResponseWriter, request 
 	failCount := 0
 
 	maxFailures := 60 * 5
+
+	// Batch frames
+	batchFrameRate := 30
+	bufferSize := batchFrameRate / 60
+	batchInterval := time.Duration(1000/batchFrameRate) * time.Millisecond
+
+	batchBuffer := make([]map[string]float32, 0, bufferSize) // ~60fps * 0.25s = 15 frames
+
+	ticker := time.NewTicker(batchInterval)
+	defer ticker.Stop()
+
+	go func() {
+		for range ticker.C {
+			if len(batchBuffer) == 0 {
+				continue
+			}
+
+			// Send the batched frames
+			encodedData, err := json.Marshal(batchBuffer)
+			if err != nil {
+				w.log.Error().Err(err).Msg("failed to encode batched JSON data")
+
+				continue
+			}
+
+			// Set write deadline
+			_ = webSocket.SetWriteDeadline(time.Now().Add(3 * time.Second))
+
+			err = webSocket.WriteMessage(websocket.TextMessage, encodedData)
+			if err != nil {
+				failCount++
+
+				w.log.Debug().Err(err).Msg("failed to send batched data to websocket")
+
+				if failCount >= maxFailures {
+					w.log.Error().Err(err).Str("reason", "too many failures").Msg("dropping websocket connection")
+
+					_ = webSocket.Close()
+
+					return
+				}
+			} else {
+				failCount = 0
+			}
+
+			// Clear the buffer
+			batchBuffer = batchBuffer[:0]
+		}
+	}()
+
 	for data := range w.telemetryChartFeed {
 		if failCount >= maxFailures {
 			w.log.Error().Err(err).Str("reason", "too many failures").Msg("dropping websocket connection")
@@ -287,28 +346,31 @@ func (w *WebUI) handleWebSocketConnection(response http.ResponseWriter, request 
 
 		sid = int(data["seq"])
 
-		encodedData, err := json.Marshal(data)
-		if err != nil {
-			w.log.Error().Err(err).Msg("failed to encode JSON data")
-
-			continue
-		}
-
-		err = webSocket.WriteMessage(websocket.TextMessage, encodedData)
-		if err != nil {
-			failCount++
-
-			w.log.Debug().Err(err).Msg("failed to send data to websocket")
-
-			continue
-		}
-
-		failCount = 0
+		// Add to batch buffer instead of sending immediately
+		batchBuffer = append(batchBuffer, data)
 	}
 }
 
 // handleVehicleWebSocketConnection upgrades the HTTP connection to a WebSocket and streams vehicle info updates.
 func (w *WebUI) handleVehicleWebSocketConnection(response http.ResponseWriter, request *http.Request) {
+	// Get session ID from query parameter
+	sessionID := request.URL.Query().Get("session")
+
+	// Close any existing connection for this session
+	if sessionID != "" {
+		w.vehicleSessionsMux.Lock()
+
+		if oldConn, exists := w.vehicleSessions[sessionID]; exists {
+			w.log.Debug().Str("session", sessionID).Msg("closing old connection for session")
+
+			_ = oldConn.Close()
+			// Remove from clients list immediately
+			w.vehicleUnsubChan <- oldConn
+		}
+
+		w.vehicleSessionsMux.Unlock()
+	}
+
 	webSocket, err := w.upgrader.Upgrade(response, request, nil)
 	if err != nil {
 		w.log.Error().Err(err).Msg("error upgrading vehicle websocket connection")
@@ -316,12 +378,26 @@ func (w *WebUI) handleVehicleWebSocketConnection(response http.ResponseWriter, r
 		return
 	}
 
-	w.log.Debug().Msg("vehicle websocket connection established")
+	w.log.Debug().Str("session", sessionID).Msg("vehicle websocket connection established")
+
+	// Track this session
+	if sessionID != "" {
+		w.vehicleSessionsMux.Lock()
+		w.vehicleSessions[sessionID] = webSocket
+		w.vehicleSessionsMux.Unlock()
+	}
 
 	// Subscribe this client
 	w.vehicleClientsChan <- webSocket
 
 	defer func() {
+		// Remove from session map
+		if sessionID != "" {
+			w.vehicleSessionsMux.Lock()
+			delete(w.vehicleSessions, sessionID)
+			w.vehicleSessionsMux.Unlock()
+		}
+
 		// Unsubscribe on disconnect
 		w.vehicleUnsubChan <- webSocket
 
@@ -350,14 +426,80 @@ func (w *WebUI) handleVehicleWebSocketConnection(response http.ResponseWriter, r
 		w.vehicleInfoMutex.RUnlock()
 	}
 
+	// Send current game state immediately
+	w.gameStateMutex.RLock()
+	gameState := w.currentGameState
+	w.gameStateMutex.RUnlock()
+
+	if gameState != "" {
+		gameStateInfo := map[string]any{
+			"gamestate": gameState,
+		}
+
+		encodedData, err := json.Marshal(gameStateInfo)
+		if err == nil {
+			err = webSocket.WriteMessage(websocket.TextMessage, encodedData)
+			if err != nil {
+				w.log.Debug().Err(err).Msg("failed to send initial game state")
+			} else {
+				w.log.Debug().Msg("sent initial game state to new client")
+			}
+		}
+	}
+
 	// Keep connection alive - read messages (if any) to detect disconnects
+	// Set read deadline - if no pong received in 10 seconds, connection is dead
+	_ = webSocket.SetReadDeadline(time.Now().Add(10 * time.Second))
+
+	// Handle pong messages
+	webSocket.SetPongHandler(func(string) error {
+		_ = webSocket.SetReadDeadline(time.Now().Add(10 * time.Second))
+
+		return nil
+	})
+
+	// Handle close messages from client
+	webSocket.SetCloseHandler(func(code int, text string) error {
+		w.log.Debug().Int("code", code).Str("text", text).Msg("client sent close frame")
+
+		return nil
+	})
+
+	// Send pings every 5 seconds to detect dead connections
+	pingTicker := time.NewTicker(5 * time.Second)
+	defer pingTicker.Stop()
+
+	done := make(chan struct{})
+
+	// Goroutine to handle pings
+	go func() {
+		for {
+			select {
+			case <-pingTicker.C:
+				_ = webSocket.SetWriteDeadline(time.Now().Add(3 * time.Second))
+
+				err := webSocket.WriteMessage(websocket.PingMessage, nil)
+				if err != nil {
+					close(done)
+
+					return
+				}
+			case <-done:
+				return
+			}
+		}
+	}()
+
 	for {
 		_, _, err := webSocket.ReadMessage()
 		if err != nil {
 			w.log.Debug().Err(err).Msg("vehicle websocket read error, closing connection")
+			close(done)
 
 			break
 		}
+		// Reset read deadline on any message
+		_ = webSocket.SetReadDeadline(time.Now().Add(10 * time.Second))
 	}
 }
 
@@ -399,9 +541,9 @@ func (w *WebUI) vehicleInfoBroadcaster() {
 			// Send to all clients, remove failed ones
 			activeClients := make([]*websocket.Conn, 0, len(w.vehicleClients))
 			for _, client := range w.vehicleClients {
-				// Set aggressive write deadline (2 seconds)
-				_ = client.SetWriteDeadline(time.Now().Add(2 * time.Second))
-				
+				// Set reasonable write deadline for high-latency connections (3 seconds)
+				_ = client.SetWriteDeadline(time.Now().Add(3 * time.Second))
+
 				err := client.WriteMessage(websocket.TextMessage, encodedData)
 				if err != nil {
 					w.log.Debug().Err(err).Msg("failed to send vehicle info to client, removing")
@@ -426,6 +568,48 @@ func (w *WebUI) vehicleInfoBroadcaster() {
 					Int("clients", len(w.vehicleClients)).
 					Msg("broadcast vehicle info")
 			}
+
+		case gameState := <-w.gameStateFeed:
+			// Store current state with mutex protection
+			w.gameStateMutex.Lock()
+			w.currentGameState = gameState
+			w.gameStateMutex.Unlock()
+
+			// Create a message with just the game state
+			gameStateInfo := map[string]any{
+				"gamestate": gameState,
+			}
+
+			// Broadcast to all connected vehicle clients (game state goes through vehicle websocket)
+			encodedData, err := json.Marshal(gameStateInfo)
+			if err != nil {
+				w.log.Error().Err(err).Msg("failed to encode game state JSON")
+
+				continue
+			}
+
+			// Send to all vehicle clients, remove failed ones
+			activeClients := make([]*websocket.Conn, 0, len(w.vehicleClients))
+			for _, client := range w.vehicleClients {
+				// Set reasonable write deadline for high-latency connections (3 seconds)
+				_ = client.SetWriteDeadline(time.Now().Add(3 * time.Second))
+
+				err := client.WriteMessage(websocket.TextMessage, encodedData)
+				if err != nil {
+					w.log.Debug().Err(err).Msg("failed to send game state to client, removing")
+
+					_ = client.Close()
+				} else {
+					activeClients = append(activeClients, client)
+				}
+			}
+
+			w.vehicleClients = activeClients
+
+			w.log.Debug().
+				Str("gameState", gameState).
+				Int("clients", len(w.vehicleClients)).
+				Msg("broadcast game state")
 		}
 	}
 }
@@ -585,9 +769,9 @@ func (w *WebUI) circuitInfoBroadcaster() {
 			// Send to all clients, remove failed ones
 			activeClients := make([]*websocket.Conn, 0, len(w.circuitClients))
 			for _, client := range w.circuitClients {
-				// Set aggressive write deadline (2 seconds)
-				_ = client.SetWriteDeadline(time.Now().Add(2 * time.Second))
-				
+				// Set reasonable write deadline for high-latency connections (3 seconds)
+				_ = client.SetWriteDeadline(time.Now().Add(3 * time.Second))
+
 				err := client.WriteMessage(websocket.TextMessage, encodedData)
 				if err != nil {
 					w.log.Debug().Err(err).Msg("failed to send circuit info to client, removing")
@@ -658,9 +842,9 @@ func (w *WebUI) raceInfoBroadcaster() {
 			// Send to all clients, remove failed ones
 			activeClients := make([]*websocket.Conn, 0, len(w.raceClients))
 			for _, client := range w.raceClients {
-				// Set aggressive write deadline (2 seconds)
-				_ = client.SetWriteDeadline(time.Now().Add(2 * time.Second))
-				
+				// Set reasonable write deadline for high-latency connections (3 seconds)
+				_ = client.SetWriteDeadline(time.Now().Add(3 * time.Second))
+
 				err := client.WriteMessage(websocket.TextMessage, encodedData)
 				if err != nil {
 					w.log.Debug().Err(err).Msg("failed to send race info to client, removing")
@@ -1650,7 +1834,7 @@ func (w *WebUI) handleConfigImport(response http.ResponseWriter, request *http.R
 	}
 
 	// Validate the TOML content by attempting to unmarshal it
-	var testConfig map[string]interface{}
+	var testConfig map[string]any
 
 	err = toml.Unmarshal(fileContent, &testConfig)
 	if err != nil {
@@ -1691,7 +1875,7 @@ func (w *WebUI) handleConfigImport(response http.ResponseWriter, request *http.R
 	if !validationResult.Valid {
 		w.log.Warn().Interface("errors", validationResult.Errors).Msg("config validation failed")
 		response.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(response).Encode(map[string]interface{}{ //nolint:errchkjson // simple encoding
+		_ = json.NewEncoder(response).Encode(map[string]any{ //nolint:errchkjson // simple encoding
 			"error":            "Configuration validation failed",
 			"validationErrors": validationResult.Errors,
 		})
@@ -1725,7 +1909,7 @@ func (w *WebUI) handleConfigImport(response http.ResponseWriter, request *http.R
 	w.config.MarkRestartRequired()
 
 	// Return success response
-	_ = json.NewEncoder(response).Encode(map[string]interface{}{ //nolint:errchkjson // simple encoding
+	_ = json.NewEncoder(response).Encode(map[string]any{ //nolint:errchkjson // simple encoding
 		"status":  "success",
 		"message": "Configuration imported successfully. Please restart the application for changes to take effect.",
 		"backup":  backupPath,
@@ -1961,6 +2145,7 @@ func (w *WebUI) handleSystemInfo(response http.ResponseWriter, request *http.Req
 				Available bool `json:"available"`
 			} `json:"status"`
 		}
+
 		err := json.Unmarshal(output, &statusResponse)
 		if err != nil {
 			w.log.Warn().

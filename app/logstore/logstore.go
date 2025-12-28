@@ -10,7 +10,7 @@ import (
 )
 
 // LogEntry represents a single structured log entry.
-type LogEntry map[string]interface{}
+type LogEntry map[string]any
 
 // Store manages in-memory log entries with a circular buffer.
 type Store struct {

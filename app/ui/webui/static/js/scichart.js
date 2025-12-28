@@ -232,6 +232,16 @@ let globalCharts = {};
 let globalAllDataSeries = {};
 let globalHandleWebSocketMessage = null;
 
+// Generate or retrieve client session ID
+function getClientSessionId() {
+    let sessionId = sessionStorage.getItem('ws-session-id');
+    if (!sessionId) {
+        sessionId = 'session-' + Math.random().toString(36).substr(2, 9) + '-' + Date.now();
+        sessionStorage.setItem('ws-session-id', sessionId);
+    }
+    return sessionId;
+}
+
 // WebSocket connection management
 function createWebSocketConnection() {
     // Close existing connection if any
@@ -244,7 +254,10 @@ function createWebSocketConnection() {
 
     updateConnectionStatus('connecting');
 
-    const ws = new WebSocket(CONFIG.WEBSOCKET_URL);
+    // Add session ID to WebSocket URL
+    const sessionId = getClientSessionId();
+    const wsUrl = `${CONFIG.WEBSOCKET_URL}?session=${encodeURIComponent(sessionId)}`;
+    const ws = new WebSocket(wsUrl);
 
     // Handle connection timeouts
     const connectionTimeout = setTimeout(() => {
@@ -1101,62 +1114,75 @@ async function initSciChart() {
     let lastSeq = 0;
 
     const handleWebSocketMessage = (event) => {
-        const data = JSON.parse(event.data);
+        const receivedData = JSON.parse(event.data);
 
-        // Clear all data series if sequence number has reset (indicates new session)
-        if (data.seq < lastSeq) {
-            Object.values(allDataSeries).forEach(series => series.clear());
-            // Reset follow modes on new session
-            Object.keys(charts).forEach(chartId => {
-                chartFollowModes[chartId] = true;
-            });
-        }
+        // Check if this is a batch of frames (array) or single frame (object)
+        const dataFrames = Array.isArray(receivedData) ? receivedData : [receivedData];
 
-        const currentTime = data.seq;
-
-        // Create mapping between incoming data and data series
-        const dataFieldMappings = {};
-
-        // Build the mapping dynamically based on enabled charts
-        Object.values(charts).forEach(chart => {
-            chart.dataFields.forEach(fieldName => {
-                const seriesKey = Object.keys(chart.dataSeries).find(key => {
-                    // Map data field names to series keys
-                    const fieldMappings = {
-                        'fuelUsagePerKm': 'fuelRate',
-                        'fuelRangeKm': 'fuelRange',
-                        'SixDOFTranslationalJerkCalc': 'translationalJerkCalc',
-                        'SixDOFTranslationalJerk': 'translationalJerk',
-                        'SixDOFTranslationalSnapCalc': 'translationalSnapCalc',
-                        'SixDOFTranslationalSnap': 'translationalSnap',
-                        'SixDOFTranslationalAccelX': 'translationalAccelerationX',
-                        'SixDOFTranslationalAccelY': 'translationalAccelerationY',
-                        'SixDOFTranslationalAccelZ': 'translationalAccelerationZ',
-                        'SixDOFRotationalJerk': 'rotationalJerk',
-                        'SixDOFRotationalSnap': 'rotationalSnap',
-                        "SixDOFRotationalAccelX": 'rotationalAccelerationX',
-                        "SixDOFRotationalAccelY": 'rotationalAccelerationY',
-                        "SixDOFRotationalAccelZ": 'rotationalAccelerationZ',
-                        'synthOutputAmplitude': 'synthAmplitude',
-                        'synthOutputFrequency': 'synthFrequency'
-                    };
-                    return fieldMappings[fieldName] === key || fieldName === key;
+        // Process each frame in the batch
+        dataFrames.forEach(data => {
+            // Clear all data series if sequence number has reset (indicates new session)
+            if (data.seq < lastSeq) {
+                Object.values(allDataSeries).forEach(series => series.clear());
+                // Reset follow modes on new session
+                Object.keys(charts).forEach(chartId => {
+                    chartFollowModes[chartId] = true;
                 });
+            }
 
-                if (seriesKey && data[fieldName] !== undefined) {
-                    dataFieldMappings[seriesKey] = data[fieldName];
+            const currentTime = data.seq;
+
+            // Create mapping between incoming data and data series
+            const dataFieldMappings = {};
+
+            // Build the mapping dynamically based on enabled charts
+            Object.values(charts).forEach(chart => {
+                chart.dataFields.forEach(fieldName => {
+                    const seriesKey = Object.keys(chart.dataSeries).find(key => {
+                        // Map data field names to series keys
+                        const fieldMappings = {
+                            'fuelUsagePerKm': 'fuelRate',
+                            'fuelRangeKm': 'fuelRange',
+                            'SixDOFTranslationalJerkCalc': 'translationalJerkCalc',
+                            'SixDOFTranslationalJerk': 'translationalJerk',
+                            'SixDOFTranslationalSnapCalc': 'translationalSnapCalc',
+                            'SixDOFTranslationalSnap': 'translationalSnap',
+                            'SixDOFTranslationalAccelX': 'translationalAccelerationX',
+                            'SixDOFTranslationalAccelY': 'translationalAccelerationY',
+                            'SixDOFTranslationalAccelZ': 'translationalAccelerationZ',
+                            'SixDOFRotationalJerk': 'rotationalJerk',
+                            'SixDOFRotationalSnap': 'rotationalSnap',
+                            "SixDOFRotationalAccelX": 'rotationalAccelerationX',
+                            "SixDOFRotationalAccelY": 'rotationalAccelerationY',
+                            "SixDOFRotationalAccelZ": 'rotationalAccelerationZ',
+                            'synthOutputAmplitude': 'synthAmplitude',
+                            'synthOutputFrequency': 'synthFrequency'
+                        };
+                        return fieldMappings[fieldName] === key || fieldName === key;
+                    });
+
+                    if (seriesKey && data[fieldName] !== undefined) {
+                        dataFieldMappings[seriesKey] = data[fieldName];
+                    }
+                });
+            });
+
+            // Append data to all active series
+            Object.entries(dataFieldMappings).forEach(([seriesKey, value]) => {
+                if (allDataSeries[seriesKey] && value !== undefined) {
+                    allDataSeries[seriesKey].appendRange([currentTime], [value]);
                 }
             });
-        });
 
-        // Append data to all active series
-        Object.entries(dataFieldMappings).forEach(([seriesKey, value]) => {
-            if (allDataSeries[seriesKey] && value !== undefined) {
-                allDataSeries[seriesKey].appendRange([currentTime], [value]);
-            }
+            lastTimeOfDay = data.timeOfDay;
+            lastSeq = data.seq;
         });
 
         // Update visible range for smooth scrolling on all charts (if following live data)
+        // Do this once after processing all frames in the batch
+        const lastFrame = dataFrames[dataFrames.length - 1];
+        const currentTime = lastFrame.seq;
+
         isUpdatingRange = true; // Set flag before updating ranges
         Object.entries(charts).forEach(([chartId, chart]) => {
             if (chart && chart.xAxis) {
@@ -1192,9 +1218,6 @@ async function initSciChart() {
             }
         });
         isUpdatingRange = false; // Clear flag after updating ranges
-
-        lastTimeOfDay = data.timeOfDay;
-        lastSeq = data.seq;
     };
 
     // Store references globally for reconnection handling
@@ -1210,12 +1233,18 @@ async function initSciChart() {
     const cleanup = () => {
         console.log('Page unloading, cleaning up resources...');
 
-        // Close WebSocket connection
+        // Close WebSocket connection immediately and synchronously
         if (globalWebSocket) {
-            globalWebSocket.onclose = null; // Prevent reconnection attempts
-            globalWebSocket.onerror = null;
-            globalWebSocket.close(1000, 'Page unload');
-            globalWebSocket = null;
+            try {
+                globalWebSocket.onclose = null; // Prevent reconnection attempts
+                globalWebSocket.onerror = null;
+                globalWebSocket.onmessage = null;
+                // Send close frame synchronously
+                globalWebSocket.close(1000, 'Page unload');
+                globalWebSocket = null;
+            } catch (e) {
+                console.error('Error closing WebSocket:', e);
+            }
         }
 
         // Delete all charts to free resources
@@ -1235,9 +1264,32 @@ async function initSciChart() {
         globalHandleWebSocketMessage = null;
     };
 
-    // Use both events for better browser compatibility
-    window.addEventListener('beforeunload', cleanup);
-    window.addEventListener('pagehide', cleanup);
+    // Track if page is being unloaded
+    let isPageUnloading = false;
+
+    // Use visibility change to detect tab closing/navigation - more reliable than beforeunload
+    document.addEventListener('visibilitychange', () => {
+        // Only cleanup if page is becoming hidden AND we have an active WebSocket
+        if (document.visibilityState === 'hidden' && globalWebSocket) {
+            isPageUnloading = true;
+            cleanup();
+        }
+    });
+
+    // Also use pagehide as backup
+    window.addEventListener('pagehide', () => {
+        if (!isPageUnloading) {
+            isPageUnloading = true;
+            cleanup();
+        }
+    });
+
+    // Use unload as last resort (least reliable but covers some edge cases)
+    window.addEventListener('unload', () => {
+        if (!isPageUnloading) {
+            cleanup();
+        }
+    });
 }
 
 // Initialize the application - wait for i18n to be loaded first

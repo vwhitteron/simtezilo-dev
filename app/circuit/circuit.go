@@ -74,7 +74,7 @@ func (c *Circuit) Reset() {
 	c.seenCoordinates = make(map[string]uint16)
 	c.ResetLapProgress()
 
-	c.log.Debug().
+	c.log.Info().
 		Msg("Circuit reset")
 }
 
@@ -85,7 +85,7 @@ func (c *Circuit) ResetLapProgress() {
 	c.bestLapTime = 100 * time.Hour
 	c.lastCoordinate = models.Coordinate{}
 
-	c.log.Debug().
+	c.log.Info().
 		Msg("Lap progress reset")
 }
 

@@ -889,13 +889,13 @@ func (m *manager) saveNetworkConfiguration(config networkConfig) error {
 
 	// Build connection settings
 	settings := gonetworkmanager.ConnectionSettings{
-		"connection": map[string]interface{}{
+		"connection": map[string]any{
 			"id":             config.name,
 			"type":           "802-11-wireless",
 			"interface-name": wlanInterface,
 			"autoconnect":    config.autoconnect,
 		},
-		"802-11-wireless": map[string]interface{}{
+		"802-11-wireless": map[string]any{
 			"ssid": []byte(config.ssid),
 			"mode": config.mode,
 		},
@@ -903,7 +903,7 @@ func (m *manager) saveNetworkConfiguration(config networkConfig) error {
 
 	// Configure WiFi security based on security type
 	if config.security != "none" && config.psk != "" {
-		securitySettings := map[string]interface{}{
+		securitySettings := map[string]any{
 			"psk":       config.psk,
 			"psk-flags": uint32(0), // NM_SETTING_SECRET_FLAG_NONE - store password
 		}

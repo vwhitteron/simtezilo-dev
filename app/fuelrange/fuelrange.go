@@ -107,7 +107,7 @@ func (r *FuelRange) ResetEstimate() {
 		Msg("Fuel range estimate reset")
 }
 
-// SetLive sets the replaying flag to indicate if the current session is a replay.
+// SetLive sets the isLive flag to indicate if the current session is live or a replay.
 func (r *FuelRange) SetLive(isLive bool) {
 	if r.isLive == isLive {
 		return
@@ -115,11 +115,11 @@ func (r *FuelRange) SetLive(isLive bool) {
 
 	r.isLive = isLive
 
+	r.Reset()
+
 	r.log.Debug().
 		Bool("is_live", isLive).
-		Msg("Set fuel range sample granularity")
-
-	r.Reset()
+		Msg("Set fuel range live status")
 }
 
 // IsReady returns true if enough samples have been collected to provide a reliable range estimate.
