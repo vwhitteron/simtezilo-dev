@@ -1,6 +1,10 @@
 package app
 
-import gtmodels "github.com/zetetos/gt-telemetry/pkg/models"
+import (
+	"time"
+
+	gtmodels "github.com/zetetos/gt-telemetry/pkg/models"
+)
 
 // checkForNewLap sends an event to the lapStartEvents channel when a new lap is detected.
 func (a *App) checkForNewLap() {
@@ -39,21 +43,21 @@ func (a *App) checkRaceComplete() {
 
 	// TODO: handle endurance races, time trials and free practice sessions
 	if raceLaps == 0 {
-		a.state.raceCompleteTime = 0
+		a.state.raceCompleteTime = time.Time{}
 
 		return
 	}
 
 	// Invalid state
 	if lastLap > currentLap || lastLap >= raceLaps {
-		a.state.raceCompleteTime = 0
+		a.state.raceCompleteTime = time.Time{}
 
 		return
 	}
 
 	if currentLap >= raceLaps {
-		if a.state.raceCompleteTime == 0 {
-			a.state.raceCompleteTime = a.gtClient.Telemetry.TimeOfDay()
+		if a.state.raceCompleteTime.IsZero() {
+			a.state.raceCompleteTime = time.Now()
 		}
 
 		a.log.Info().

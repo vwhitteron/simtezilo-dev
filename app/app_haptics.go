@@ -9,7 +9,7 @@ import (
 // enableHaptics enables the haptic feedback system.
 func (a *App) enableHaptics() {
 	// speaker.Resume()
-	a.state.raceCompleteTime = 0
+	a.state.raceCompleteTime = time.Time{}
 
 	a.synth.FadeIn(config.FadeInDuration)
 	a.state.hapticsEnabled = true
@@ -36,7 +36,6 @@ func (a *App) generateForceHaptics() {
 	}
 
 	// Disable haptics when the telemetry inactive or race is complete
-	// Avoids haptics output after a race has finished and completion screens are yet to be dismissed
 	if !a.telemetryIsActive() || a.raceHasFinished() {
 		a.state.telemetryActive = false
 

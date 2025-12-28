@@ -72,7 +72,7 @@ type appState struct {
 	hapticsEnabled     bool           // Flag to indicate if haptics are enabled // TODO: move state to haptics?
 	telemetryActive    bool           // Flag to indicate if telemetry is active
 	sessionEnded       bool           // Flag to indicate if session end has been handled
-	raceCompleteTime   time.Duration  // Time of day when the race was completed
+	raceCompleteTime   time.Time      // Real-world time when the race was completed
 	current            raceState      // Race state at the current telemetry sequence
 	last               raceState      // Race state at the last telemetry sequence
 	engine             engineState    // Engine state for haptic generation
@@ -1466,11 +1466,13 @@ func (a *App) gearHasChanged() bool {
 	return true
 }
 
-// raceComplete returns true 5 seconds after the race has completed.
+// raceHasFinished returns true 5 seconds after the race has completed.
 func (a *App) raceHasFinished() bool {
-	currentTime := a.gtClient.Telemetry.TimeOfDay()
+	if a.state.raceCompleteTime.IsZero() {
+		return false
+	}
 
-	return a.state.raceCompleteTime > currentTime+5*time.Second
+	return time.Since(a.state.raceCompleteTime) >= 5*time.Second
 }
 
 // pushVehicleInfo sends the current vehicle manufacturer and model to the web UI.

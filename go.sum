@@ -147,6 +147,12 @@ github.com/zetetos/gt-telemetry v1.11.1-0.20251220064326-b666f8c9da83 h1:m128YX+
 github.com/zetetos/gt-telemetry v1.11.1-0.20251220064326-b666f8c9da83/go.mod h1:aXrdXG3D/CNtonuIUmGG8/YVPi/5MItIpqq34mjT2qQ=
 github.com/zetetos/gt-telemetry v1.11.1-0.20251228030903-d6982da77226 h1:Ze1ziesJZFORTnaTxmLkKaNjIyEHKVLxGNOr/VviZ+o=
 github.com/zetetos/gt-telemetry v1.11.1-0.20251228030903-d6982da77226/go.mod h1:aXrdXG3D/CNtonuIUmGG8/YVPi/5MItIpqq34mjT2qQ=
+github.com/zetetos/gt-telemetry v1.11.1-0.20251228062551-1408bd672d83 h1:fa06z+1dyNGlJCh2kMEjeyY8mz9ACBLuyrSt0DviGhA=
+github.com/zetetos/gt-telemetry v1.11.1-0.20251228062551-1408bd672d83/go.mod h1:aXrdXG3D/CNtonuIUmGG8/YVPi/5MItIpqq34mjT2qQ=
+github.com/zetetos/gt-telemetry v1.11.1-0.20251228063043-245cc7d5a8ce h1:NjoHLjQ7FEWTcMGzjXkb3dfMDGYm/ZGUVr5xj+SR1wI=
+github.com/zetetos/gt-telemetry v1.11.1-0.20251228063043-245cc7d5a8ce/go.mod h1:aXrdXG3D/CNtonuIUmGG8/YVPi/5MItIpqq34mjT2qQ=
+github.com/zetetos/gt-telemetry v1.11.1-0.20251228070146-73d9b4c65bb2 h1:hUY4LJnvfhO0Y2xhI/hq2YM1DkZpkQ3K/ktXN6BKUkk=
+github.com/zetetos/gt-telemetry v1.11.1-0.20251228070146-73d9b4c65bb2/go.mod h1:aXrdXG3D/CNtonuIUmGG8/YVPi/5MItIpqq34mjT2qQ=
 go.yaml.in/yaml/v3 v3.0.4 h1:tfq32ie2Jv2UxXFdLJdh3jXuOzWiL1fo0bu/FbuKpbc=
 go.yaml.in/yaml/v3 v3.0.4/go.mod h1:DhzuOOF2ATzADvBadXxruRBLzYTpT36CKvDb3+aBEFg=
 golang.org/x/crypto v0.0.0-20210421170649-83a5a9bb288b/go.mod h1:T9bdIzuCu7OtxOm1hfPfRQxPLYneinmdGuTeoZ9dtd4=
