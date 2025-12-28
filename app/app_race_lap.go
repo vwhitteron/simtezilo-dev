@@ -12,7 +12,7 @@ import (
 
 // notifyLapTime sends lap time notifications over the pit radio.
 func (a *App) notifyLapTime() {
-	if a.pitRadioState == nil {
+	if a.pitRadio == nil || a.pitRadioState == nil {
 		return
 	}
 
