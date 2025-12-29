@@ -92,6 +92,11 @@ func (a *App) shouldSendLapNotification() bool {
 		return false
 	}
 
+	// TODO: add config options for min race laps to notify
+	if a.gtClient.Telemetry.RaceLaps() == 1 {
+		return false
+	}
+
 	currentLap := a.state.current.lapNumber
 
 	return a.pitRadioState.lastNotifiedLapNumber < currentLap &&
@@ -129,6 +134,7 @@ func (a *App) getLapNotificationInfo() lapNotificationInfo {
 func (a *App) determineLapMessage(info lapNotificationInfo) string {
 	raceCompleted := info.lapsRemaining <= 0 && !info.alreadyNotified
 	finalLap := info.currentLap == info.raceLaps && !info.alreadyNotified
+	// TODO: add config option for final lap countdown range
 	lastFewLaps := info.lapsRemaining <= 3 && info.longRace && !info.alreadyNotified
 
 	switch {
