@@ -47,15 +47,32 @@ func (a *App) resetPitRadioState() {
 		Msg("pit radio state reset")
 }
 
-// sendPitRadioMessage sends pit radio messages based on fuel range, lap progress and position changes.
-func (a *App) sendPitRadioMessage() {
-	if a.pitRadio == nil {
-		return
+// pitRadioIsActive checks if the pit radio is active and ready for sending messages.
+func (a *App) pitRadioIsActive() bool {
+	// Pit radio functionality is disabled in config
+	if !a.config.PitRadioEnabled() {
+		return false
 	}
 
-	if a.pitRadioState == nil {
+	// Pit radio is not initialized
+	if a.pitRadio == nil {
+		return false
+	}
+
+	// Initialize pit radio state when not set
+	if a.pitRadio != nil && a.pitRadioState == nil {
 		a.resetPitRadioState()
 
+		return false
+	}
+
+	// Pit radio is active only during live sessions
+	return a.state.current.isLive
+}
+
+// sendPitRadioMessage sends pit radio messages based on fuel range, lap progress and position changes.
+func (a *App) sendPitRadioMessage() {
+	if !a.pitRadioIsActive() {
 		return
 	}
 
@@ -68,12 +85,8 @@ func (a *App) sendPitRadioMessage() {
 	}
 
 	a.notifyCircuitChange()
-
 	a.notifyFuelWarnings()
-
 	a.notifyRaceProgress()
-
 	a.notifyTyreTemperature()
-
 	a.notifyGridPositionChange()
 }

@@ -109,9 +109,9 @@ func (suite *TyreIntegrationTestSuite) TestTyreOptimalConditionNotificationMessa
 		suite.Run(testCase.name, func() {
 			// Create tyre attributes from the test temperatures
 			attributes := tyres.New(
-				suite.app.config.GetTyreTemperatureOptimalCelsius(),
-				suite.app.config.GetTyreTemperatureOperatingWindow(),
-				suite.app.config.GetTyreTemperatureMarginCelsius(),
+				suite.app.config.GetPitRadioTyreTemperatureOptimalCelsius(),
+				suite.app.config.GetPitRadioTyreTemperatureOperatingWindow(),
+				suite.app.config.GetPitRadioTyreTemperatureMarginCelsius(),
 				testCase.temps,
 			)
 
@@ -303,9 +303,9 @@ func (suite *TyreIntegrationTestSuite) TestTyreColdConditionNotificationMessages
 		suite.Run(testCase.name, func() {
 			// Create tyre attributes from the test temperatures
 			attributes := tyres.New(
-				suite.app.config.GetTyreTemperatureOptimalCelsius(),
-				suite.app.config.GetTyreTemperatureOperatingWindow(),
-				suite.app.config.GetTyreTemperatureMarginCelsius(),
+				suite.app.config.GetPitRadioTyreTemperatureOptimalCelsius(),
+				suite.app.config.GetPitRadioTyreTemperatureOperatingWindow(),
+				suite.app.config.GetPitRadioTyreTemperatureMarginCelsius(),
 				testCase.temps,
 			)
 
@@ -497,9 +497,9 @@ func (suite *TyreIntegrationTestSuite) TestTyreHotConditionNotificationMessages(
 		suite.Run(testCase.name, func() {
 			// Create tyre attributes from the test temperatures
 			attributes := tyres.New(
-				suite.app.config.GetTyreTemperatureOptimalCelsius(),
-				suite.app.config.GetTyreTemperatureOperatingWindow(),
-				suite.app.config.GetTyreTemperatureMarginCelsius(),
+				suite.app.config.GetPitRadioTyreTemperatureOptimalCelsius(),
+				suite.app.config.GetPitRadioTyreTemperatureOperatingWindow(),
+				suite.app.config.GetPitRadioTyreTemperatureMarginCelsius(),
 				testCase.temps,
 			)
 

@@ -60,7 +60,7 @@ func (a *App) generateEngineHaptic() {
 // shouldGenerateEngineHaptic checks if engine haptic generation should proceed.
 func (a *App) shouldGenerateEngineHaptic() bool {
 	// Engine haptics are silenced
-	if a.config.GetEngineGainMute() {
+	if a.config.GetSynthEngineMute() {
 		return false
 	}
 
@@ -194,7 +194,7 @@ func (a *App) getEngineCharacteristics(
 	}
 
 	for _, variation := range layoutVariations {
-		profile := a.config.GetEngineProfile(variation)
+		profile := a.config.GetHapticsEngineProfile(variation)
 		if profile == nil {
 			continue
 		}

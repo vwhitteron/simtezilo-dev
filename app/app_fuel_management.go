@@ -22,7 +22,7 @@ func (a *App) updateFuelRange() {
 
 // notifyFuelWarnings sends fuel warning notifications over the pit radio.
 func (a *App) notifyFuelWarnings() {
-	if !a.shouldProcessFuelWarnings() {
+	if !a.shouldNotifyFuelWarning() {
 		return
 	}
 
@@ -39,9 +39,13 @@ func (a *App) notifyFuelWarnings() {
 	a.sendFuelWarningMessage(message, context)
 }
 
-// shouldProcessFuelWarnings checks if fuel warnings should be processed.
-func (a *App) shouldProcessFuelWarnings() bool {
-	if !a.config.GetFuelMonitoringEnabled() {
+// shouldNotifyFuelWarning checks if conditions are met to send fuel warning notifications.
+func (a *App) shouldNotifyFuelWarning() bool {
+	if !a.pitRadioIsActive() {
+		return false
+	}
+
+	if !a.config.GetPitRadioFuelMonitoringEnabled() {
 		return false
 	}
 
@@ -83,14 +87,14 @@ func (a *App) buildFuelWarningContext() *fuelWarningContext {
 
 	fuelRangeLaps := a.fuelRange.DistanceLaps(circuitLengthMeters)
 	fuelRangeMeters := a.fuelRange.DistanceMeters()
-	safetyMarginMeters := a.config.GetFuelRangeSafetyMarginLaps() * circuitLengthMeters
+	safetyMarginMeters := a.config.GetPitRadioFuelRangeSafetyMarginLaps() * circuitLengthMeters
 	fuelRangeMetersSafe := fuelRangeMeters - safetyMarginMeters
 
 	lapProgressRemaining := a.circuit.LapProgressRemaining()
 	distanceToPitBox := lapProgressRemaining * circuitLengthMeters
 	distanceToPitBoxNextLap := distanceToPitBox + circuitLengthMeters
-	preWarnNotifyDistance := distanceToPitBox + ((a.config.GetFuelPreWarnNotifyLaps() + 1) * circuitLengthMeters)
-	preWarnNotifyLap := float64(currentLap) + a.config.GetFuelPreWarnNotifyLaps()
+	preWarnNotifyDistance := distanceToPitBox + ((a.config.GetPitRadioFuelPreWarnNotifyLaps() + 1) * circuitLengthMeters)
+	preWarnNotifyLap := float64(currentLap) + a.config.GetPitRadioFuelPreWarnNotifyLaps()
 	boxNotifyDistance := min(2000, circuitLengthMeters*0.2)
 
 	return &fuelWarningContext{
@@ -117,7 +121,7 @@ func (a *App) determineFuelWarningMessage(context *fuelWarningContext) (string, 
 	refuelPreWarn := context.fuelRangeMetersSafe <= context.preWarnNotifyDistance
 	fuelStrategyUpdate := a.fuelRange.IsReady() &&
 		context.remainingLaps > context.fuelRangeLaps &&
-		context.currentLap%int16(a.config.GetFuelStrategyNotifyLaps()) == 0
+		context.currentLap%int16(a.config.GetPitRadioFuelStrategyNotifyLaps()) == 0
 
 	switch {
 	case fuelEmpty:
@@ -137,10 +141,6 @@ func (a *App) determineFuelWarningMessage(context *fuelWarningContext) (string, 
 
 // sendFuelWarningMessage sends the fuel warning message via pit radio.
 func (a *App) sendFuelWarningMessage(message string, context *fuelWarningContext) {
-	if a.pitRadio == nil {
-		return
-	}
-
 	err := a.pitRadio.Send(pitradio.Message{
 		MessageType: pitradio.TextMessage,
 		Text:        message,

@@ -20,14 +20,14 @@ func Abs(value float64) float64 {
 // Uses a precomputed EQ curve for efficient lookup instead of calculating per-sample.
 func Equalize(value float64, pulseWidth float64, cfg *config.Config) float64 {
 	// Check if EQ is enabled
-	if !cfg.GetEqEnabled() {
+	if !cfg.GetSynthEqEnabled() {
 		return value
 	}
 
-	sampleRate := cfg.GetInternalSampleRateHz()
+	sampleRate := cfg.GetSynthInternalSampleRateHz()
 	freq := float64(sampleRate) / (2 * pulseWidth)
 
-	curve, minFreq, resolution := cfg.GetEqCurve()
+	curve, minFreq, resolution := cfg.GetSynthEqCurve()
 	if len(curve) == 0 {
 		return value // No EQ curve computed
 	}

@@ -8,7 +8,7 @@ import (
 )
 
 func (a *App) generateChassisHaptic() {
-	if a.config.GetChassisGainMute() {
+	if a.config.GetSynthChassisGainMute() {
 		return
 	}
 
@@ -16,7 +16,7 @@ func (a *App) generateChassisHaptic() {
 
 	pulseFrequencyHz := a.calculateChassisHapticPulseFrequency()
 
-	pulseWidth := math.Round(float64(a.config.GetInternalSampleRateHz()) / (2 * pulseFrequencyHz))
+	pulseWidth := math.Round(float64(a.config.GetSynthInternalSampleRateHz()) / (2 * pulseFrequencyHz))
 
 	pulseAmplitude := a.calculateChassisHapticPulseAmplitude()
 
@@ -34,11 +34,11 @@ func (a *App) generateChassisHaptic() {
 
 	// Calculate the duration of this pulse for peak hold
 	// This ensures peak hold matches the impact duration
-	pulseDuration := time.Duration(float64(pulseLength)/float64(a.config.GetInternalSampleRateHz())*1000) * time.Millisecond
+	pulseDuration := time.Duration(float64(pulseLength)/float64(a.config.GetSynthInternalSampleRateHz())*1000) * time.Millisecond
 	a.jerkPeakHoldDuration = pulseDuration
 
 	// Ensure minimum buffer size for very high frequency pulses
-	sampleRate := float64(a.config.GetInternalSampleRateHz())
+	sampleRate := float64(a.config.GetSynthInternalSampleRateHz())
 	minSamplesPerFrame := int(sampleRate / hapticFrameRate)
 
 	// Use the larger of: complete pulse length or minimum frame size
@@ -86,12 +86,12 @@ func (a *App) calculateChassisHapticPulseAmplitude() float64 {
 	)
 
 	// Process the signal normally first
-	pulseAmplitude := signal.Exponent(jerk, a.config.GetJerkCurve()/1000)
-	pulseAmplitude = signal.Scale(pulseAmplitude, a.config.GetJerkScale())
+	pulseAmplitude := signal.Exponent(jerk, a.config.GethapticsJerkCurve()/1000)
+	pulseAmplitude = signal.Scale(pulseAmplitude, a.config.GetHapticsJerkScale())
 
 	p1 := pulseAmplitude
 
-	pulseAmplitude, wasLimited := signal.LimitMax(pulseAmplitude, a.config.GetPulseMaxAmplitude())
+	pulseAmplitude, wasLimited := signal.LimitMax(pulseAmplitude, a.config.GetHapticsPulseMaxAmplitude())
 	if wasLimited {
 		a.log.Debug().Float64("pulse", p1).Msg("limiter")
 	}
@@ -188,14 +188,14 @@ func (a *App) calculateChassisHapticPulseFrequency() float64 {
 		a.kinematics.Current.SixDOFRotation.Snap,
 	)
 
-	pulseFrequencyScaler := signal.Abs(signal.Exponent(snap, a.config.GetSnapCurve()/1000))
-	pulseFrequencyScaler = signal.Scale(pulseFrequencyScaler, a.config.GetSnapScale())
-	pulseFrequencyHz := a.config.GetFrequencyHzRange() * pulseFrequencyScaler
+	pulseFrequencyScaler := signal.Abs(signal.Exponent(snap, a.config.GetHapticsSnapCurve()/1000))
+	pulseFrequencyScaler = signal.Scale(pulseFrequencyScaler, a.config.GetHapticsSnapScale())
+	pulseFrequencyHz := a.config.GetHapticePulseFrequencyHzRange() * pulseFrequencyScaler
 
-	if pulseFrequencyHz < a.config.GetMinHz() {
-		pulseFrequencyHz = a.config.GetMinHz()
-	} else if pulseFrequencyHz > a.config.GetMaxHz() {
-		pulseFrequencyHz = a.config.GetMaxHz()
+	if pulseFrequencyHz < a.config.GetHapticsPulseMinHz() {
+		pulseFrequencyHz = a.config.GetHapticsPulseMinHz()
+	} else if pulseFrequencyHz > a.config.GetHapticsPulseMaxHz() {
+		pulseFrequencyHz = a.config.GetHapticsPulseMaxHz()
 	}
 
 	a.kinematics.Last.SynthOutputFrequency = a.kinematics.Current.SynthOutputFrequency

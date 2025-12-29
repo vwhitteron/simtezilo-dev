@@ -35,11 +35,11 @@ func (a *App) handleChassisVolSetting(action string) string {
 
 	switch action {
 	case "increase": //nolint:goconst // no value as a const
-		value = a.config.IncreaseChassisGain()
+		value = a.config.IncreaseSynthChassisGain()
 	case "decrease": //nolint:goconst // no value as a const
-		value = a.config.DecreaseChassisGain()
+		value = a.config.DecreaseSynthChassisGain()
 	default:
-		value = a.config.GetChassisGain()
+		value = a.config.GetSynthChassisGain()
 	}
 
 	return strconv.FormatFloat(value, 'f', 2, 64)
@@ -50,11 +50,11 @@ func (a *App) handleEnginePulseVolSetting(action string) string {
 
 	switch action {
 	case "increase":
-		value = a.config.IncreaseEnginePulseGain()
+		value = a.config.IncreaseHapticsEnginePulseGain()
 	case "decrease":
-		value = a.config.DecreaseEnginePulseGain()
+		value = a.config.DecreaseHapticsEnginePulseGain()
 	default:
-		value = a.config.GetEnginePulseGain()
+		value = a.config.GetHapticsEnginePulseGain()
 	}
 
 	return strconv.FormatFloat(value, 'f', 2, 64)
@@ -65,11 +65,11 @@ func (a *App) handleEnginePrimarySetting(action string) string {
 
 	switch action {
 	case "increase":
-		value = a.config.IncreaseEnginePrimaryBalance()
+		value = a.config.IncreaseHapticsEnginePrimaryBalance()
 	case "decrease":
-		value = a.config.DecreaseEnginePrimaryBalance()
+		value = a.config.DecreaseHapticsEnginePrimaryBalance()
 	default:
-		value = a.config.GetEnginePrimaryBalance()
+		value = a.config.GetHapticesEnginePrimaryBalance()
 	}
 
 	return strconv.FormatFloat(value, 'f', 2, 64)
@@ -80,11 +80,11 @@ func (a *App) handleEnginePulseScaleSetting(action string) string {
 
 	switch action {
 	case "increase":
-		value = a.config.IncreaseEnginePulseScale()
+		value = a.config.IncreaseHapticsEnginePulseScale()
 	case "decrease":
-		value = a.config.DecreaseEnginePulseScale()
+		value = a.config.DecreasehapticsEnginePulseScale()
 	default:
-		value = a.config.GetEnginePulseScale()
+		value = a.config.GetHapticsEnginePulseScale()
 	}
 
 	return strconv.FormatFloat(value, 'f', 2, 64)
@@ -95,11 +95,11 @@ func (a *App) handleEngineSecondarySetting(action string) string {
 
 	switch action {
 	case "increase":
-		value = a.config.IncreaseEngineSecondaryBalance()
+		value = a.config.IncreaseHapticsEngineSecondaryBalance()
 	case "decrease":
-		value = a.config.DecreaseEngineSecondaryBalance()
+		value = a.config.DecreaseHapticsEngineSecondaryBalance()
 	default:
-		value = a.config.GetEngineSecondaryBalance()
+		value = a.config.GetHapticsEngineSecondaryBalance()
 	}
 
 	return strconv.FormatFloat(value, 'f', 2, 64)
@@ -110,11 +110,11 @@ func (a *App) handleEngineVolSetting(action string) string {
 
 	switch action {
 	case "increase":
-		value = a.config.IncreaseEngineGain()
+		value = a.config.IncreaseSynthEngineGain()
 	case "decrease":
-		value = a.config.DecreaseEngineGain()
+		value = a.config.DecreaseSynthEngineGain()
 	default:
-		value = a.config.GetEngineGain()
+		value = a.config.GetSynthEngineGain()
 	}
 
 	return strconv.FormatFloat(value, 'f', 2, 64)
@@ -125,11 +125,11 @@ func (a *App) handleForceCurveSetting(action string) string {
 
 	switch action {
 	case "increase":
-		value = a.config.IncreaseSnapCurve()
+		value = a.config.IncreaseHapticsSnapCurve()
 	case "decrease":
-		value = a.config.DecreaseSnapCurve()
+		value = a.config.DecreaseHapticsSnapCurve()
 	default:
-		value = int(a.config.GetSnapCurve())
+		value = int(a.config.GetHapticsSnapCurve())
 	}
 
 	return strconv.Itoa(value)
@@ -140,11 +140,11 @@ func (a *App) handleForceMaxSetting(action string) string {
 
 	switch action {
 	case "increase":
-		value = a.config.IncreaseMaxHz()
+		value = a.config.IncreaseHapticsPulseMaxHz()
 	case "decrease":
-		value = a.config.DecreaseMaxHz()
+		value = a.config.DecreasehapticsPulseMaxHz()
 	default:
-		value = int(a.config.GetMaxHz())
+		value = int(a.config.GetHapticsPulseMaxHz())
 	}
 
 	return strconv.Itoa(value)
@@ -155,11 +155,11 @@ func (a *App) handleForceMinSetting(action string) string {
 
 	switch action {
 	case "increase":
-		value = a.config.IncreaseMinHz()
+		value = a.config.IncreaseHapticsPulseMinHz()
 	case "decrease":
-		value = a.config.DecreaseMinHz()
+		value = a.config.DecreaseHapticsPulseMinHz()
 	default:
-		value = int(a.config.GetMinHz())
+		value = int(a.config.GetHapticsPulseMinHz())
 	}
 
 	return strconv.Itoa(value)
@@ -170,11 +170,11 @@ func (a *App) handleForceSatSetting(action string) string {
 
 	switch action {
 	case "increase":
-		value = a.config.IncreaseSnapMax()
+		value = a.config.IncreaseHapticsSnapMax()
 	case "decrease":
-		value = a.config.DecreaseSnapMax()
+		value = a.config.DecreaseHapticsSnapMax()
 	default:
-		value = a.config.GetSnapMax()
+		value = a.config.GetHapticsSnapMax()
 	}
 
 	return strconv.Itoa(value)
@@ -196,11 +196,11 @@ func (a *App) handleTransmissionCurveSetting(action string) string {
 
 	switch action {
 	case "increase":
-		value = a.config.IncreaseTransmissionCurve()
+		value = a.config.IncreaseHapticsTransmissionCurve()
 	case "decrease":
-		value = a.config.DecreaseTransmissionCurve()
+		value = a.config.DecreaseHapticsTransmissionCurve()
 	default:
-		value = int(a.config.GetTransmissionCurve())
+		value = int(a.config.GetHapticsTransmissionCurve())
 	}
 
 	return strconv.Itoa(value)
@@ -211,11 +211,11 @@ func (a *App) handleTransmissionSatSetting(action string) string {
 
 	switch action {
 	case "increase":
-		value = a.config.IncreaseTransmissionGforceMax()
+		value = a.config.IncreaseHapticsTransmissionGforceMax()
 	case "decrease":
-		value = a.config.DecreaseTransmissionGforceMax()
+		value = a.config.DecreasehapticsTransmissionGforceMax()
 	default:
-		value = a.config.GetTransmissionGforceMax()
+		value = a.config.GetHapticsTransmissionGforceMax()
 	}
 
 	return strconv.FormatFloat(value, 'f', 1, 64)
@@ -226,11 +226,11 @@ func (a *App) handleTransmissionVolSetting(action string) string {
 
 	switch action {
 	case "increase":
-		value = a.config.IncreaseTransmissionGain()
+		value = a.config.IncreaseSynthTransmissionGain()
 	case "decrease":
-		value = a.config.DecreaseTransmissionGain()
+		value = a.config.DecreaseSynthTransmissionGain()
 	default:
-		value = a.config.GetTransmissionGain()
+		value = a.config.GetSynthTransmissionGain()
 	}
 
 	return strconv.FormatFloat(value, 'f', 2, 64)
@@ -241,11 +241,11 @@ func (a *App) handleVibrationCurveSetting(action string) string {
 
 	switch action {
 	case "increase":
-		value = a.config.IncreaseJerkCurve()
+		value = a.config.IncreaseHapticsJerkCurve()
 	case "decrease":
-		value = a.config.DecreaseJerkCurve()
+		value = a.config.DecreaseHapticsJerkCurve()
 	default:
-		value = int(a.config.GetJerkCurve())
+		value = int(a.config.GethapticsJerkCurve())
 	}
 
 	return strconv.Itoa(value)
@@ -256,11 +256,11 @@ func (a *App) handleMasterVolSetting(action string) string {
 
 	switch action {
 	case "increase":
-		value = a.config.IncreaseMasterGain()
+		value = a.config.IncreaseSynthMasterGain()
 	case "decrease":
-		value = a.config.DecreaseMasterGain()
+		value = a.config.DecreaseSynthMasterGain()
 	default:
-		value = a.config.GetMasterGain()
+		value = a.config.GetSynthMasterGain()
 	}
 
 	return strconv.FormatFloat(value, 'f', 2, 64) + " dB"
@@ -271,11 +271,11 @@ func (a *App) handleVibrationSatSetting(action string) string {
 
 	switch action {
 	case "increase":
-		value = a.config.IncreaseJerkMax()
+		value = a.config.IncreaseHapticsJerkMax()
 	case "decrease":
-		value = a.config.DecreaseJerkMax()
+		value = a.config.DecreaseHapticsJerkMax()
 	default:
-		value = a.config.GetJerkMax()
+		value = a.config.GetHapticsJerkMax()
 	}
 
 	return strconv.Itoa(value)

@@ -1326,7 +1326,7 @@ class ConfigManager {
         const qSlider = document.getElementById('eq-q-slider');
         const frequencyValue = document.getElementById('eq-frequency-value');
         const gainValue = document.getElementById('eq-gain-value');
-        const qValue = document.getElementById('eq-q-value');
+        const qFactor = document.getElementById('eq-q-factor');
         const resetBtn = document.getElementById('eq-reset-btn');
         const eqEnabledCheckbox = document.getElementById('synth-eqenabled');
 
@@ -1403,7 +1403,7 @@ class ConfigManager {
         // Q slider events
         qSlider.addEventListener('input', (e) => {
             const value = parseFloat(e.target.value);
-            qValue.textContent = value.toFixed(1);
+            qFactor.textContent = value.toFixed(1);
             this.eqBands[this.currentBandIndex].q = value;
             this.debounceEqSave();
         });
@@ -1479,7 +1479,7 @@ class ConfigManager {
         const qSlider = document.getElementById('eq-q-slider');
         const frequencyValue = document.getElementById('eq-frequency-value');
         const gainValue = document.getElementById('eq-gain-value');
-        const qValue = document.getElementById('eq-q-value');
+        const qFactor = document.getElementById('eq-q-factor');
 
         if (!this.eqBands || index < 0 || index >= this.eqBands.length) return;
 
@@ -1500,7 +1500,7 @@ class ConfigManager {
 
         if (qSlider) {
             qSlider.value = q;
-            qValue.textContent = q.toFixed(1);
+            qFactor.textContent = q.toFixed(1);
         }
     }
 

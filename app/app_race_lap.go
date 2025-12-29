@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -12,17 +13,7 @@ import (
 
 // notifyLapTime sends lap time notifications over the pit radio.
 func (a *App) notifyLapTime() {
-	if a.pitRadio == nil || a.pitRadioState == nil {
-		return
-	}
-
-	if a.pitRadioState.lastNotifiedLapTime == a.state.current.lastLapTime {
-		return
-	}
-
-	a.pitRadioState.lastNotifiedLapTime = a.state.current.lastLapTime
-
-	if a.state.current.lastLapTime <= 0 {
+	if !a.shouldSendLapTimeNotification() {
 		return
 	}
 
@@ -38,9 +29,7 @@ func (a *App) notifyLapTime() {
 			a.i18n.GetString(languagedb.RadioLapRecord),
 		)
 	} else if a.state.current.lapNumber > 2 && a.state.current.lastLapTime > bestLapTime {
-		// TODO: either make this a translation or drop it
-		message = fmt.Sprintf("Down %s seconds",
-			formatDuration(a.state.current.lastLapTime-bestLapTime))
+		message = formatDeltaTime(a.state.current.lastLapTime - bestLapTime)
 	} else {
 		message = formatDuration(a.state.current.lastLapTime)
 	}
@@ -70,9 +59,24 @@ func (a *App) notifyLapTime() {
 		Msg("Send lap time message")
 }
 
+// shouldSendLapTimeNotification checks if conditions are met to send lap time notifications.
+func (a *App) shouldSendLapTimeNotification() bool {
+	if !a.pitRadioIsActive() {
+		return false
+	}
+
+	if a.pitRadioState.lastNotifiedLapTime == a.state.current.lastLapTime {
+		return false
+	}
+
+	a.pitRadioState.lastNotifiedLapTime = a.state.current.lastLapTime
+
+	return a.state.current.lastLapTime > 0
+}
+
 // notifyLapNumber sends lap number notifications over the pit radio.
 func (a *App) notifyLapNumber() {
-	if !a.shouldSendLapNotification() {
+	if !a.shouldSendLapNumberNotification() {
 		return
 	}
 
@@ -86,9 +90,9 @@ func (a *App) notifyLapNumber() {
 	a.sendLapNotification(message, lapInfo.currentLap)
 }
 
-// shouldSendLapNotification checks if a lap notification should be sent.
-func (a *App) shouldSendLapNotification() bool {
-	if a.pitRadioState == nil {
+// shouldSendLapTimeNotification checks if conditions are met to send lap time notifications.
+func (a *App) shouldSendLapNumberNotification() bool {
+	if !a.pitRadioIsActive() {
 		return false
 	}
 
@@ -180,7 +184,7 @@ func (a *App) sendLapNotification(message string, currentLap int16) {
 
 // notifyRaceProgress sends lap number notifications based on race progress over the pit radio.
 func (a *App) notifyRaceProgress() {
-	if a.pitRadioState == nil {
+	if !a.shouldNotifyRaceProgress() {
 		return
 	}
 
@@ -250,6 +254,54 @@ func (a *App) notifyRaceProgress() {
 			Int16("lap", a.state.current.lapNumber).
 			Msg("Send lap number message")
 	}
+}
+
+// shouldNotifyRaceProgress checks if conditions are met to send race progress notifications.
+func (a *App) shouldNotifyRaceProgress() bool {
+	return a.pitRadioIsActive()
+}
+
+// formatDeltaTime formats a time delta for slower laps in tenths, hundredths, or thousandths.
+func formatDeltaTime(delta time.Duration) string {
+	seconds := delta.Seconds()
+
+	if seconds >= 1.0 {
+		rounded := math.Round(seconds*10) / 10
+
+		unit := "seconds"
+		if rounded == 1.0 {
+			unit = "second"
+		}
+
+		if rounded == math.Floor(rounded) {
+			return fmt.Sprintf("down %.0f %s", rounded, unit)
+		}
+
+		return fmt.Sprintf("down %.1f %s", rounded, unit)
+	} else if seconds >= 0.1 {
+		return pluraliseNegativeDelta(seconds*10, "tenth")
+	} else if seconds >= 0.01 {
+		return pluraliseNegativeDelta(seconds*100, "hundredth")
+	}
+
+	return pluraliseNegativeDelta(float64(delta.Milliseconds()), "thou")
+}
+
+func pluraliseNegativeDelta(value float64, scale string) (format string) {
+	roundedValue := int(math.Ceil(value))
+
+	format = "down " + strconv.Itoa(roundedValue) + " " + scale
+
+	// Thousandths do not get pluralised
+	if scale == "thou" {
+		return format
+	}
+
+	if value > 1 {
+		format += "s"
+	}
+
+	return format
 }
 
 // formatDuration formats a time.Duration value for text and speech output.

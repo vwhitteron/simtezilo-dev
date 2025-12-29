@@ -7,9 +7,40 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/pitradio"
 )
 
-// positionHasChanged checks if the grid position has changed since the last update.
-func (a *App) positionHasChanged() bool {
-	if a.pitRadioState == nil {
+// notifyGridPositionChange sends position change notifications over the pit radio.
+func (a *App) notifyGridPositionChange() {
+	if !a.shouldNotifyPositionChange() {
+		return
+	}
+
+	message := fmt.Sprintf("P%d", a.pitRadioState.currentGridPosition)
+
+	if a.pitRadio != nil {
+		err := a.pitRadio.Send(pitradio.Message{
+			MessageType: pitradio.TextMessage,
+			Text:        message,
+			Lang:        a.i18n.LanguageCode(),
+			Accent:      a.config.GetAppAccent(),
+		})
+		if err != nil {
+			a.log.Error().
+				Err(err).
+				Str("message", message).
+				Msg("Send position change message")
+
+			return
+		}
+
+		a.log.Debug().
+			Str("message", message).
+			Int16("lap", a.state.current.lapNumber).
+			Msg("Send position change message")
+	}
+}
+
+// shouldNotifyPositionChange checks if conditions are met to send position change notifications.
+func (a *App) shouldNotifyPositionChange() bool {
+	if !a.pitRadioIsActive() {
 		return false
 	}
 
@@ -25,6 +56,11 @@ func (a *App) positionHasChanged() bool {
 		return false
 	}
 
+	return a.positionHasChanged()
+}
+
+// positionHasChanged checks if the grid position has changed since the last update.
+func (a *App) positionHasChanged() bool {
 	position := a.gtClient.Telemetry.GridPosition()
 
 	if position <= 0 {
@@ -53,35 +89,4 @@ func (a *App) positionHasChanged() bool {
 	a.pitRadioState.lastNotifiedGridPosition = a.pitRadioState.currentGridPosition
 
 	return true
-}
-
-// notifyGridPositionChange sends position change notifications over the pit radio.
-func (a *App) notifyGridPositionChange() {
-	if !a.positionHasChanged() {
-		return
-	}
-
-	message := fmt.Sprintf("P%d", a.pitRadioState.currentGridPosition)
-
-	if a.pitRadio != nil {
-		err := a.pitRadio.Send(pitradio.Message{
-			MessageType: pitradio.TextMessage,
-			Text:        message,
-			Lang:        a.i18n.LanguageCode(),
-			Accent:      a.config.GetAppAccent(),
-		})
-		if err != nil {
-			a.log.Error().
-				Err(err).
-				Str("message", message).
-				Msg("Send position change message")
-
-			return
-		}
-
-		a.log.Debug().
-			Str("message", message).
-			Int16("lap", a.state.current.lapNumber).
-			Msg("Send position change message")
-	}
 }

@@ -17,7 +17,7 @@ type tyreState struct {
 }
 
 func (a *App) updateTyreTemperature() {
-	if !a.config.GetTyreMonitoringEnabled() {
+	if !a.config.GetPitRadioTyreMonitoringEnabled() {
 		return
 	}
 
@@ -29,43 +29,43 @@ func (a *App) updateTyreTemperature() {
 // notifyTyreTemperature sends tyre temperature notifications over the pit radio.
 // Reports: all-tyres conditions (optimal/hot/cold) or individual/axle hot tyres only.
 func (a *App) notifyTyreTemperature() {
-	if a.tyreNotificationsDisabled() {
+	if !a.shoultNotifyTyreTemperature() {
 		return
 	}
 
 	tyreCondition := a.tyres.GeneralCondition()
 
-	if !a.shouldSendTyreNotification(tyreCondition) {
+	if !a.tyreConditionHasChanged(tyreCondition) {
 		return
 	}
 
 	a.sendTyreTemperatureMessage(tyreCondition)
 }
 
-// tyreNotificationsDisabled validates preconditions for tyre temperature monitoring.
-func (a *App) tyreNotificationsDisabled() bool {
-	if !a.config.GetTyreMonitoringEnabled() {
-		return true
+// shoultNotifyTyreTemperature checks if conditions are met to send tyre temperature notifications.
+func (a *App) shoultNotifyTyreTemperature() bool {
+	if !a.pitRadioIsActive() {
+		return false
 	}
 
-	if a.pitRadio == nil || a.pitRadioState == nil {
-		return true
+	if !a.config.GetPitRadioTyreMonitoringEnabled() {
+		return false
 	}
 
 	if a.tyres == nil {
-		return true
+		return false
 	}
 
 	if len(a.tyres.PositionsInCondition(tyres.ConditionInvalid)) > 0 {
-		return true
+		return false
 	}
 
-	return false
+	return true
 }
 
-// shouldSendTyreNotification checks if a tyre notification should be sent based on
+// tyreConditionHasChanged checks if a tyre notification should be sent based on
 // stabilization period, state changes, and rate limiting.
-func (a *App) shouldSendTyreNotification(tyreCondition tyres.Condition) bool {
+func (a *App) tyreConditionHasChanged(tyreCondition tyres.Condition) bool {
 	// Track state changes with stabilization period
 	if tyreCondition != a.pitRadioState.tyreState.pendingCondition {
 		a.pitRadioState.tyreState.pendingCondition = tyreCondition

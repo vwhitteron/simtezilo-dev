@@ -916,7 +916,7 @@ func (w *WebUI) handleGetConfig(response http.ResponseWriter, _ *http.Request) {
 			"accent":       w.config.GetAppAccent(),
 			"logLevel":     w.config.GetAppLogLevel(),
 			"baseDir":      w.config.GetAppBaseDir(),
-			"replayMode":   w.config.GetAppReplayMode(),
+			"replayMode":   w.config.GetHapticsReplayMode(),
 			"webUIEnabled": w.config.GetAppWebUIEnabled(),
 			"webUIPort":    w.config.GetAppWebUIPort(),
 		},
@@ -927,31 +927,31 @@ func (w *WebUI) handleGetConfig(response http.ResponseWriter, _ *http.Request) {
 			"voiceChannelID": w.config.GetDiscordVoiceChannelID(),
 		},
 		"fuel": map[string]any{
-			"monitoringEnabled":       w.config.GetFuelMonitoringEnabled(),
-			"preWarnNotifyLaps":       w.config.GetFuelPreWarnNotifyLaps(),
-			"strategyNotifyLaps":      w.config.GetFuelStrategyNotifyLaps(),
-			"rangeSafetyMarginLaps":   w.config.GetFuelRangeSafetyMarginLaps(),
-			"rangeSafetyMarginMeters": w.config.GetFuelRangeSafetyMarginMeters(),
+			"monitoringEnabled":       w.config.GetPitRadioFuelMonitoringEnabled(),
+			"preWarnNotifyLaps":       w.config.GetPitRadioFuelPreWarnNotifyLaps(),
+			"strategyNotifyLaps":      w.config.GetPitRadioFuelStrategyNotifyLaps(),
+			"rangeSafetyMarginLaps":   w.config.GetPitRadioFuelRangeSafetyMarginLaps(),
+			"rangeSafetyMarginMeters": w.config.GetPitRadioFuelRangeSafetyMarginMeters(),
 		},
 		"hardware": map[string]any{
 			"model":              w.config.GetHardwareModel(),
 			"displayOrientation": w.config.GetDisplayOrientation(),
 		},
 		"haptics": map[string]any{
-			"dynamicTransmissionFeedback":  w.config.DynamicTransmissionFeedbackEnabled(),
-			"dynamicTransmissionCurve":     w.config.GetTransmissionCurve(),
-			"dynamicTransmissionGforceMax": w.config.GetTransmissionGforceMax(),
-			"jerkCurve":                    w.config.GetJerkCurve(),
-			"jerkMax":                      w.config.GetJerkMax(),
-			"snapCurve":                    w.config.GetSnapCurve(),
-			"snapMax":                      w.config.GetSnapMax(),
-			"pulseMaxAmplitude":            w.config.GetPulseMaxAmplitude(),
-			"pulseMaxFrequencyHz":          w.config.GetMaxHz(),
-			"pulseMinFrequencyHz":          w.config.GetMinHz(),
+			"dynamicTransmissionFeedback":  w.config.GethapticsDynamicTransFeedbackEnabled(),
+			"dynamicTransmissionCurve":     w.config.GetHapticsTransmissionCurve(),
+			"dynamicTransmissionGforceMax": w.config.GetHapticsTransmissionGforceMax(),
+			"jerkCurve":                    w.config.GethapticsJerkCurve(),
+			"jerkMax":                      w.config.GetHapticsJerkMax(),
+			"snapCurve":                    w.config.GetHapticsSnapCurve(),
+			"snapMax":                      w.config.GetHapticsSnapMax(),
+			"pulseMaxAmplitude":            w.config.GetHapticsPulseMaxAmplitude(),
+			"pulseMaxFrequencyHz":          w.config.GetHapticsPulseMaxHz(),
+			"pulseMinFrequencyHz":          w.config.GetHapticsPulseMinHz(),
 		},
 		"pitRadio": map[string]any{
 			"enabled":               w.config.PitRadioEnabled(),
-			"messageSendIntervalMs": w.config.GetMessageSendIntervalMs(),
+			"messageSendIntervalMs": w.config.GetPitRadioMessageSendIntervalMs(),
 			"discord": map[string]any{
 				"token":          w.config.GetDiscordToken(),
 				"guildID":        w.config.GetDiscordGuildID(),
@@ -960,26 +960,26 @@ func (w *WebUI) handleGetConfig(response http.ResponseWriter, _ *http.Request) {
 			},
 		},
 		"synthesizer": map[string]any{
-			"internalSampleRateHz":      w.config.GetInternalSampleRateHz(),
-			"outputSampleRateHz":        w.config.GetOutputSampleRateHz(),
-			"outputFile":                w.config.GetOutputFile(),
-			"masterGain":                w.config.GetMasterGain(),
-			"masterGainMute":            w.config.GetMasterGainMute(),
-			"chassisGain":               w.config.GetChassisGain(),
-			"chassisGainMute":           w.config.GetChassisGainMute(),
-			"transmissionGain":          w.config.GetTransmissionGain(),
-			"transmissionGainMute":      w.config.GetTransmissionGainMute(),
-			"transmissionGainMinRace":   w.config.GetTransmissionGainMinRace(),
-			"transmissionGainMinStreet": w.config.GetTransmissionGainMinStreet(),
-			"engineGain":                w.config.GetEngineGain(),
-			"engineGainMute":            w.config.GetEngineGainMute(),
-			"gainIncrement":             w.config.GetGainIncrement(),
-			"engineProfiles":            w.config.GetEngineProfiles(),
-			"eqEnabled":                 w.config.GetEqEnabled(),
-			"eq":                        w.config.GetEq(),
+			"internalSampleRateHz":      w.config.GetSynthInternalSampleRateHz(),
+			"outputSampleRateHz":        w.config.GetSynthOutputSampleRateHz(),
+			"outputFile":                w.config.GetSynthOutputFile(),
+			"masterGain":                w.config.GetSynthMasterGain(),
+			"masterGainMute":            w.config.GetSynthMasterGainMute(),
+			"chassisGain":               w.config.GetSynthChassisGain(),
+			"chassisGainMute":           w.config.GetSynthChassisGainMute(),
+			"transmissionGain":          w.config.GetSynthTransmissionGain(),
+			"transmissionGainMute":      w.config.GetSynthTransmissionMute(),
+			"transmissionGainMinRace":   w.config.GetSynthTransmissionGainMinRace(),
+			"transmissionGainMinStreet": w.config.GetSynthTransmissionGainMinStreet(),
+			"engineGain":                w.config.GetSynthEngineGain(),
+			"engineGainMute":            w.config.GetSynthEngineMute(),
+			"gainIncrement":             w.config.GetSynthGainIncrement(),
+			"engineProfiles":            w.config.GetSynthEngineProfiles(),
+			"eqEnabled":                 w.config.GetSynthEqEnabled(),
+			"eq":                        w.config.GetSynthEq(),
 		},
 		"eqCurve": func() map[string]any {
-			curve, minFreq, resolution := w.config.GetEqCurve()
+			curve, minFreq, resolution := w.config.GetSynthEqCurve()
 
 			return map[string]any{
 				"curve":      curve,
@@ -991,10 +991,10 @@ func (w *WebUI) handleGetConfig(response http.ResponseWriter, _ *http.Request) {
 			"source": w.config.GetTelemetrySource(),
 		},
 		"tyres": map[string]any{
-			"monitoringEnabled":          w.config.GetTyreMonitoringEnabled(),
-			"temperatureOptimalCelsius":  w.config.GetTyreTemperatureOptimalCelsius(),
-			"temperatureOperatingWindow": w.config.GetTyreTemperatureOperatingWindow(),
-			"temperatureMarginCelsius":   w.config.GetTyreTemperatureMarginCelsius(),
+			"monitoringEnabled":          w.config.GetPitRadioTyreMonitoringEnabled(),
+			"temperatureOptimalCelsius":  w.config.GetPitRadioTyreTemperatureOptimalCelsius(),
+			"temperatureOperatingWindow": w.config.GetPitRadioTyreTemperatureOperatingWindow(),
+			"temperatureMarginCelsius":   w.config.GetPitRadioTyreTemperatureMarginCelsius(),
 		},
 	}
 
@@ -1061,7 +1061,7 @@ func (w *WebUI) handleSetConfig(response http.ResponseWriter, request *http.Requ
 		"restartRequired": restartRequired,
 		"config": map[string]any{
 			"eqCurve": func() map[string]any {
-				curve, minFreq, resolution := w.config.GetEqCurve()
+				curve, minFreq, resolution := w.config.GetSynthEqCurve()
 
 				return map[string]any{
 					"curve":      curve,
@@ -1174,7 +1174,7 @@ func (w *WebUI) applyAppConfig(config map[string]any) []string {
 
 	if replayMode, ok := config["replayMode"]; ok {
 		if replayBool, ok := replayMode.(bool); ok {
-			w.config.SetAppReplayMode(replayBool)
+			w.config.SetHapticsReplayMode(replayBool)
 		} else {
 			errors = append(errors, "invalid replay mode value")
 		}
@@ -1189,7 +1189,7 @@ func (w *WebUI) applySynthesizerConfig(config map[string]any) []string {
 
 	if internalSampleRate, ok := config["internalSampleRateHz"]; ok {
 		if rateFloat, ok := internalSampleRate.(float64); ok {
-			w.config.SetInternalSampleRateHz(int(rateFloat))
+			w.config.SetSynthInternalSampleRateHz(int(rateFloat))
 		} else {
 			errors = append(errors, "invalid internal sample rate value")
 		}
@@ -1197,7 +1197,7 @@ func (w *WebUI) applySynthesizerConfig(config map[string]any) []string {
 
 	if outputSampleRate, ok := config["outputSampleRateHz"]; ok {
 		if rateFloat, ok := outputSampleRate.(float64); ok {
-			w.config.SetOutputSampleRateHz(int(rateFloat))
+			w.config.SetSynthOutputSampleRateHz(int(rateFloat))
 		} else {
 			errors = append(errors, "invalid output sample rate value")
 		}
@@ -1205,7 +1205,7 @@ func (w *WebUI) applySynthesizerConfig(config map[string]any) []string {
 
 	if masterGain, ok := config["masterGain"]; ok {
 		if gainFloat, ok := masterGain.(float64); ok {
-			w.config.SetMasterGain(gainFloat)
+			w.config.SetSynthMasterGain(gainFloat)
 		} else {
 			errors = append(errors, "invalid master gain value")
 		}
@@ -1213,7 +1213,7 @@ func (w *WebUI) applySynthesizerConfig(config map[string]any) []string {
 
 	if masterGainMute, ok := config["masterGainMute"]; ok {
 		if mute, ok := masterGainMute.(bool); ok {
-			w.config.SetMasterGainMute(mute)
+			w.config.SetSynthMasterMute(mute)
 		} else {
 			errors = append(errors, "invalid master gain mute value")
 		}
@@ -1221,7 +1221,7 @@ func (w *WebUI) applySynthesizerConfig(config map[string]any) []string {
 
 	if chassisGain, ok := config["chassisGain"]; ok {
 		if gainFloat, ok := chassisGain.(float64); ok {
-			w.config.SetChassisGain(gainFloat)
+			w.config.SetSynthChassisGain(gainFloat)
 		} else {
 			errors = append(errors, "invalid chassis gain value")
 		}
@@ -1229,7 +1229,7 @@ func (w *WebUI) applySynthesizerConfig(config map[string]any) []string {
 
 	if chassisGainMute, ok := config["chassisGainMute"]; ok {
 		if mute, ok := chassisGainMute.(bool); ok {
-			w.config.SetChassisGainMute(mute)
+			w.config.SetSynthChassisGainMute(mute)
 		} else {
 			errors = append(errors, "invalid chassis gain mute value")
 		}
@@ -1237,7 +1237,7 @@ func (w *WebUI) applySynthesizerConfig(config map[string]any) []string {
 
 	if transmissionGain, ok := config["transmissionGain"]; ok {
 		if gainFloat, ok := transmissionGain.(float64); ok {
-			w.config.SetTransmissionGain(gainFloat)
+			w.config.SetSynthTransmissionGain(gainFloat)
 		} else {
 			errors = append(errors, "invalid transmission gain value")
 		}
@@ -1245,7 +1245,7 @@ func (w *WebUI) applySynthesizerConfig(config map[string]any) []string {
 
 	if transmissionGainMute, ok := config["transmissionGainMute"]; ok {
 		if mute, ok := transmissionGainMute.(bool); ok {
-			w.config.SetTransmissionGainMute(mute)
+			w.config.SetSynthTransmissionMute(mute)
 		} else {
 			errors = append(errors, "invalid transmission gain mute value")
 		}
@@ -1253,7 +1253,7 @@ func (w *WebUI) applySynthesizerConfig(config map[string]any) []string {
 
 	if transmissionGainMinRace, ok := config["transmissionGainMinRace"]; ok {
 		if gainFloat, ok := transmissionGainMinRace.(float64); ok {
-			w.config.SetTransmissionGainMinRace(gainFloat)
+			w.config.SetSynthTransmissionGainMinRace(gainFloat)
 		} else {
 			errors = append(errors, "invalid transmission gain min race value")
 		}
@@ -1261,7 +1261,7 @@ func (w *WebUI) applySynthesizerConfig(config map[string]any) []string {
 
 	if transmissionGainMinStreet, ok := config["transmissionGainMinStreet"]; ok {
 		if gainFloat, ok := transmissionGainMinStreet.(float64); ok {
-			w.config.SetTransmissionGainMinStreet(gainFloat)
+			w.config.SetSynthTransmissionGainMinStreet(gainFloat)
 		} else {
 			errors = append(errors, "invalid transmission gain min street value")
 		}
@@ -1269,7 +1269,7 @@ func (w *WebUI) applySynthesizerConfig(config map[string]any) []string {
 
 	if engineGain, ok := config["engineGain"]; ok {
 		if gainFloat, ok := engineGain.(float64); ok {
-			w.config.SetEngineGain(gainFloat)
+			w.config.SetSynthEngineGain(gainFloat)
 		} else {
 			errors = append(errors, "invalid engine gain value")
 		}
@@ -1277,7 +1277,7 @@ func (w *WebUI) applySynthesizerConfig(config map[string]any) []string {
 
 	if engineGainMute, ok := config["engineGainMute"]; ok {
 		if mute, ok := engineGainMute.(bool); ok {
-			w.config.SetEngineGainMute(mute)
+			w.config.SetSynthEngineMute(mute)
 		} else {
 			errors = append(errors, "invalid engine gain mute value")
 		}
@@ -1285,7 +1285,7 @@ func (w *WebUI) applySynthesizerConfig(config map[string]any) []string {
 
 	if gainIncrement, ok := config["gainIncrement"]; ok {
 		if incrementFloat, ok := gainIncrement.(float64); ok {
-			w.config.SetGainIncrement(incrementFloat)
+			w.config.SetSynthGainIncrement(incrementFloat)
 		} else {
 			errors = append(errors, "invalid gain increment value")
 		}
@@ -1314,7 +1314,7 @@ func (w *WebUI) applySynthesizerConfig(config map[string]any) []string {
 						profile.PulseScale = ps
 					}
 
-					w.config.SetEngineProfile(name, profile)
+					w.config.SetSynthEngineProfile(name, profile)
 				}
 			}
 		} else {
@@ -1324,7 +1324,7 @@ func (w *WebUI) applySynthesizerConfig(config map[string]any) []string {
 
 	if eqEnabled, ok := config["eqEnabled"]; ok {
 		if enabled, ok := eqEnabled.(bool); ok {
-			w.config.SetEqEnabled(enabled)
+			w.config.SetSynthEqEnabled(enabled)
 		} else {
 			errors = append(errors, "invalid EQ enabled value")
 		}
@@ -1359,7 +1359,7 @@ func (w *WebUI) applySynthesizerConfig(config map[string]any) []string {
 			}
 
 			if len(eqBands) == 8 {
-				w.config.SetEq(eqBands)
+				w.config.SetSynthEq(eqBands)
 			} else {
 				errors = append(errors, fmt.Sprintf("EQ must have exactly 8 bands, got %d", len(eqBands)))
 			}
@@ -1399,61 +1399,61 @@ func (w *WebUI) applyHapticsConfig(config map[string]any) []string {
 
 	if dynamicTransmission, ok := config["dynamicTransmissionFeedback"]; ok {
 		if dynamicBool, ok := parseBool(dynamicTransmission, "dynamic transmission feedback"); ok {
-			w.config.SetDynamicTransmissionFeedbackEnabled(dynamicBool)
+			w.config.SetHapticsDynamicTransFeedbackEnabled(dynamicBool)
 		}
 	}
 
 	if jerkCurve, ok := config["jerkCurve"]; ok {
 		if curveFloat, ok := parseFloat(jerkCurve, "jerk curve"); ok {
-			w.config.SetJerkCurve(int(curveFloat * 1000.0))
+			w.config.SetHapticsJerkCurve(int(curveFloat * 1000.0))
 		}
 	}
 
 	if jerkMax, ok := config["jerkMax"]; ok {
 		if maxFloat, ok := parseFloat(jerkMax, "jerk max"); ok {
-			w.config.SetJerkMax(int(maxFloat))
+			w.config.SetHapticsJerkMax(int(maxFloat))
 		}
 	}
 
 	if snapCurve, ok := config["snapCurve"]; ok {
 		if curveFloat, ok := parseFloat(snapCurve, "snap curve"); ok {
-			w.config.SetSnapCurve(int(curveFloat * 1000.0))
+			w.config.SetHapticsSnapCurve(int(curveFloat * 1000.0))
 		}
 	}
 
 	if snapMax, ok := config["snapMax"]; ok {
 		if maxFloat, ok := parseFloat(snapMax, "snap max"); ok {
-			w.config.SetSnapMax(int(maxFloat))
+			w.config.SetHapticsSnapMax(int(maxFloat))
 		}
 	}
 
 	if transmissionCurve, ok := config["dynamicTransmissionCurve"]; ok {
 		if curveFloat, ok := parseFloat(transmissionCurve, "transmission curve"); ok {
-			w.config.SetTransmissionCurve(int(curveFloat * 1000.0))
+			w.config.SetHapticsTransmissionCurve(int(curveFloat * 1000.0))
 		}
 	}
 
 	if transmissionGforceMax, ok := config["dynamicTransmissionGforceMax"]; ok {
 		if gforceFloat, ok := parseFloat(transmissionGforceMax, "transmission G-force max"); ok {
-			w.config.SetTransmissionGforceMax(gforceFloat)
+			w.config.SetHapticsTransmissionGforceMax(gforceFloat)
 		}
 	}
 
 	if pulseMaxAmplitude, ok := config["pulseMaxAmplitude"]; ok {
 		if amplitudeFloat, ok := parseFloat(pulseMaxAmplitude, "pulse max amplitude"); ok {
-			w.config.SetPulseMaxAmplitude(amplitudeFloat)
+			w.config.SetHapticsPulseMaxAmplitude(amplitudeFloat)
 		}
 	}
 
 	if pulseMaxFreq, ok := config["pulseMaxFrequencyHz"]; ok {
 		if freqFloat, ok := parseFloat(pulseMaxFreq, "pulse max frequency"); ok {
-			w.config.SetPulseMaxFrequencyHz(freqFloat)
+			w.config.SetHapticsPulseMaxFrequencyHz(freqFloat)
 		}
 	}
 
 	if pulseMinFreq, ok := config["pulseMinFrequencyHz"]; ok {
 		if freqFloat, ok := parseFloat(pulseMinFreq, "pulse min frequency"); ok {
-			w.config.SetPulseMinFrequencyHz(freqFloat)
+			w.config.SetHapticsPulseMinFrequencyHz(freqFloat)
 		}
 	}
 
@@ -1493,7 +1493,7 @@ func (w *WebUI) applyFuelConfig(config map[string]any) []string {
 
 	if monitoringEnabled, ok := config["monitoringEnabled"]; ok {
 		if enabledBool, ok := monitoringEnabled.(bool); ok {
-			w.config.SetFuelMonitoringEnabled(enabledBool)
+			w.config.SetPitRadioFuelMonitoringEnabled(enabledBool)
 		} else {
 			errors = append(errors, "invalid fuel monitoring enabled value")
 		}
@@ -1501,7 +1501,7 @@ func (w *WebUI) applyFuelConfig(config map[string]any) []string {
 
 	if preWarnLaps, ok := config["preWarnNotifyLaps"]; ok {
 		if lapsFloat, ok := preWarnLaps.(float64); ok {
-			w.config.SetFuelPreWarnNotifyLaps(lapsFloat)
+			w.config.SetPitRadioFuelPreWarnNotifyLaps(lapsFloat)
 		} else {
 			errors = append(errors, "invalid pre-warn notify laps value")
 		}
@@ -1509,7 +1509,7 @@ func (w *WebUI) applyFuelConfig(config map[string]any) []string {
 
 	if strategyLaps, ok := config["strategyNotifyLaps"]; ok {
 		if lapsFloat, ok := strategyLaps.(float64); ok {
-			w.config.SetFuelStrategyNotifyLaps(lapsFloat)
+			w.config.SetPitRadioFuelStrategyNotifyLaps(lapsFloat)
 		} else {
 			errors = append(errors, "invalid strategy notify laps value")
 		}
@@ -1517,7 +1517,7 @@ func (w *WebUI) applyFuelConfig(config map[string]any) []string {
 
 	if safetyMarginLaps, ok := config["rangeSafetyMarginLaps"]; ok {
 		if marginFloat, ok := safetyMarginLaps.(float64); ok {
-			w.config.SetFuelRangeSafetyMarginLaps(marginFloat)
+			w.config.SetPitRadioFuelRangeSafetyMarginLaps(marginFloat)
 		} else {
 			errors = append(errors, "invalid range safety margin laps value")
 		}
@@ -1525,7 +1525,7 @@ func (w *WebUI) applyFuelConfig(config map[string]any) []string {
 
 	if safetyMarginMeters, ok := config["rangeSafetyMarginMeters"]; ok {
 		if marginFloat, ok := safetyMarginMeters.(float64); ok {
-			w.config.SetFuelRangeSafetyMarginMeters(marginFloat)
+			w.config.SetPitRadioFuelRangeSafetyMarginMeters(marginFloat)
 		} else {
 			errors = append(errors, "invalid range safety margin meters value")
 		}
@@ -1641,7 +1641,7 @@ func (w *WebUI) applyPitRadioConfig(config map[string]any) []string {
 
 	if intervalMs, ok := config["messageSendIntervalMs"]; ok {
 		if intervalFloat, ok := intervalMs.(float64); ok {
-			w.config.SetMessageSendIntervalMs(int(intervalFloat))
+			w.config.SetPitRadioMessageSendIntervalMs(int(intervalFloat))
 		} else {
 			errors = append(errors, "invalid message send interval value")
 		}
@@ -1666,7 +1666,7 @@ func (w *WebUI) applyTyresConfig(config map[string]any) []string {
 
 	if monitoringEnabled, ok := config["monitoringEnabled"]; ok {
 		if enabledBool, ok := monitoringEnabled.(bool); ok {
-			w.config.SetTyreMonitoringEnabled(enabledBool)
+			w.config.SetPitRadioTyreMonitoringEnabled(enabledBool)
 		} else {
 			errors = append(errors, "invalid tyre monitoring enabled value")
 		}
@@ -1674,7 +1674,7 @@ func (w *WebUI) applyTyresConfig(config map[string]any) []string {
 
 	if tempOptimal, ok := config["temperatureOptimalCelsius"]; ok {
 		if tempFloat, ok := tempOptimal.(float64); ok {
-			w.config.SetTyreTemperatureOptimalCelsius(float32(tempFloat))
+			w.config.SetPitRadioTyreTemperatureOptimalCelsius(float32(tempFloat))
 		} else {
 			errors = append(errors, "invalid temperature optimal value")
 		}
@@ -1682,7 +1682,7 @@ func (w *WebUI) applyTyresConfig(config map[string]any) []string {
 
 	if tempWindow, ok := config["temperatureOperatingWindow"]; ok {
 		if windowFloat, ok := tempWindow.(float64); ok {
-			w.config.SetTyreTemperatureOperatingWindow(float32(windowFloat))
+			w.config.SetPitRadioTyreTemperatureOperatingWindow(float32(windowFloat))
 		} else {
 			errors = append(errors, "invalid temperature operating window value")
 		}
@@ -1690,7 +1690,7 @@ func (w *WebUI) applyTyresConfig(config map[string]any) []string {
 
 	if tempMargin, ok := config["temperatureMarginCelsius"]; ok {
 		if marginFloat, ok := tempMargin.(float64); ok {
-			w.config.SetTyreTemperatureMarginCelsius(float32(marginFloat))
+			w.config.SetPitRadioTyreTemperatureMarginCelsius(float32(marginFloat))
 		} else {
 			errors = append(errors, "invalid temperature margin value")
 		}

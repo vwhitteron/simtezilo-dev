@@ -28,13 +28,13 @@ func (a *App) playGearShiftHaptic() {
 func (a *App) determineGearShiftMagnitude() float64 {
 	synthMagnitude, _ := a.synth.GetChannelMagnitude("transmission")
 
-	if !a.config.DynamicTransmissionFeedbackEnabled() {
+	if !a.config.GethapticsDynamicTransFeedbackEnabled() {
 		return synthMagnitude
 	}
 
 	gForce := a.kinematics.GetSurgeGforce()
-	gforceMax := a.config.GetTransmissionGforceMax()
-	volumeCurve := a.config.GetTransmissionCurve() / 1000
+	gforceMax := a.config.GetHapticsTransmissionGforceMax()
+	volumeCurve := a.config.GetHapticsTransmissionCurve() / 1000
 
 	magnitudeMin := synthesizer.GainToPowerRatio(a.transmissionGainMin)
 

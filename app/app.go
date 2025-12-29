@@ -711,9 +711,9 @@ func (a *App) initializeComponents(opts Options) error {
 	a.fuelRange = fuelrange.New(*opts.Logger)
 
 	a.tyres = tyres.New(
-		a.config.GetTyreTemperatureOptimalCelsius(),
-		a.config.GetTyreTemperatureOperatingWindow(),
-		a.config.GetTyreTemperatureMarginCelsius(),
+		a.config.GetPitRadioTyreTemperatureOptimalCelsius(),
+		a.config.GetPitRadioTyreTemperatureOperatingWindow(),
+		a.config.GetPitRadioTyreTemperatureMarginCelsius(),
 		gtmodels.CornerSet{},
 	)
 
@@ -815,7 +815,7 @@ func (a *App) initializeDiscord(opts Options) {
 		ChannelID:      channelID,
 		VoiceChannelID: voiceChannelID,
 		GuildID:        guildID,
-		MessageGap:     time.Duration(a.config.GetMessageSendIntervalMs()) * time.Millisecond,
+		MessageGap:     time.Duration(a.config.GetPitRadioMessageSendIntervalMs()) * time.Millisecond,
 		Cache:          &a.cache,
 		SampleBank:     a.synth.EffectSampleBank(),
 		Logger:         *opts.Logger,
@@ -932,7 +932,7 @@ func (a *App) startBackgroundTasks() {
 }
 
 func (a *App) startAudioOutput() {
-	outputSampleRate := beep.SampleRate(a.config.GetOutputSampleRateHz())
+	outputSampleRate := beep.SampleRate(a.config.GetSynthOutputSampleRateHz())
 	hapticStreamer := synthesizer.NewHapticStream(a.synth, outputSampleRate)
 
 	err := speaker.Init(
@@ -1407,11 +1407,11 @@ func (a *App) normalizeRevLimit(revLimit uint16) uint16 {
 func (a *App) setTransmissionGain(vehicleType vehicle.TypeName) {
 	switch vehicleType {
 	case vehicle.TypeRace, vehicle.TypeTuned:
-		a.transmissionGainMin = a.config.GetTransmissionGain() + a.config.GetTransmissionGainMinRace()
+		a.transmissionGainMin = a.config.GetSynthTransmissionGain() + a.config.GetSynthTransmissionGainMinRace()
 	case vehicle.TypeStreet:
 		fallthrough
 	default:
-		a.transmissionGainMin = a.config.GetTransmissionGain() + a.config.GetTransmissionGainMinStreet()
+		a.transmissionGainMin = a.config.GetSynthTransmissionGain() + a.config.GetSynthTransmissionGainMinStreet()
 	}
 }
 
