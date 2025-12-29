@@ -16,13 +16,6 @@ func defaultConfig() *viperConfig {
 			WebUIEnabled:  true,
 			WebUIPort:     80,
 		},
-		Fuel: &fuel{
-			MonitoringEnabled:       true,
-			PreWarnNotifyLaps:       2.0,
-			StrategyNotifyLaps:      5.0,
-			RangeSafetyMarginLaps:   0.2,
-			RangeSafetyMarginMeters: 750,
-		},
 		Hardware: &hardware{
 			Model:              "none",
 			DisplayOrientation: 0,
@@ -89,6 +82,19 @@ func defaultConfig() *viperConfig {
 				ChannelID:      "",
 				VoiceChannelID: "",
 			},
+			FuelMonitoring: &fuelMonitoring{
+				Enabled:                 true,
+				PreWarnNotifyLaps:       2.0,
+				StrategyNotifyLaps:      5.0,
+				RangeSafetyMarginLaps:   0.2,
+				RangeSafetyMarginMeters: 750,
+			},
+			TyreMonitoring: &tyreMonitoring{
+				Enabled:                    true,
+				TemperatureOptimalCelsius:  81,
+				TemperatureOperatingWindow: 6,
+				TemperatureMarginCelsius:   3,
+			},
 		},
 		Synthesizer: &Synthesizer{
 			InternalSampleRateHz:      8000,
@@ -119,12 +125,6 @@ func defaultConfig() *viperConfig {
 		},
 		Telemetry: &Telemetry{
 			Source: "udp://255.255.255.255:33739",
-		},
-		Tyres: &tyres{
-			MonitoringEnabled:          true,
-			TemperatureOptimalCelsius:  81,
-			TemperatureOperatingWindow: 6,
-			TemperatureMarginCelsius:   3,
 		},
 	}
 }

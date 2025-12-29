@@ -40,13 +40,14 @@ type discord struct {
 	VoiceChannelID string `toml:"voiceChannelID"`
 }
 
-type fuel struct {
-	MonitoringEnabled       bool    `toml:"monitoringEnabled"`
+type fuelMonitoring struct {
+	Enabled                 bool    `toml:"monitoringEnabled"`
 	PreWarnNotifyLaps       float64 `toml:"preWarnNotifyLaps"`
 	StrategyNotifyLaps      float64 `toml:"strategyNotifyLaps"`
 	RangeSafetyMarginLaps   float64 `toml:"rangeSafetyMarginLaps"`
 	RangeSafetyMarginMeters float64 `toml:"rangeSafetyMarginMeters"`
 }
+
 type haptics struct {
 	DynamicTransmissionFeedback  bool                                `toml:"dynamicTransmissionFeedback"`
 	DynamicTransmissionCurve     int                                 `toml:"dynamicTransmissionCurve"`
@@ -72,9 +73,11 @@ type hardware struct {
 }
 
 type pitRadio struct {
-	Enabled               bool     `toml:"enabled"`
-	MessageSendIntervalMs int      `toml:"messageSendIntervalMs"`
-	Discord               *discord `toml:"discord"`
+	Enabled               bool            `toml:"enabled"`
+	MessageSendIntervalMs int             `toml:"messageSendIntervalMs"`
+	Discord               *discord        `toml:"discord"`
+	FuelMonitoring        *fuelMonitoring `toml:"fuelMonitoring"`
+	TyreMonitoring        *tyreMonitoring `toml:"tyreMonitoring"`
 }
 
 // EQBand represents a parametric equalizer band with center frequency, gain, and Q factor.
@@ -119,8 +122,8 @@ type Status struct {
 	RestartRequired bool
 }
 
-type tyres struct {
-	MonitoringEnabled          bool    `toml:"monitoringEnabled"`
+type tyreMonitoring struct {
+	Enabled                    bool    `toml:"enabled"`
 	TemperatureOptimalCelsius  float32 `toml:"temperatureOptimalCelsius"`
 	TemperatureOperatingWindow float32 `toml:"temperatureOperatingWindow"`
 	TemperatureMarginCelsius   float32 `toml:"temperatureMarginCelsius"`
@@ -128,13 +131,11 @@ type tyres struct {
 
 type viperConfig struct {
 	App         *app         `toml:"app"`
-	Fuel        *fuel        `toml:"fuel"`
 	Hardware    *hardware    `toml:"hardware"`
 	Haptics     *haptics     `toml:"haptics"`
 	PitRadio    *pitRadio    `toml:"pitRadio"`
 	Synthesizer *Synthesizer `toml:"synthesizer"`
 	Telemetry   *Telemetry   `toml:"telemetry"`
-	Tyres       *tyres       `toml:"tyres"`
 }
 
 // ConfigSnapshot holds frequently-accessed configuration values for lock-free reads.
@@ -708,7 +709,7 @@ func (c *Config) GetFuelMonitoringEnabled() bool {
 // SetFuelMonitoringEnabled sets whether fuel monitoring is enabled.
 func (c *Config) SetFuelMonitoringEnabled(value bool) {
 	c.mu.Lock()
-	c.viper.Fuel.MonitoringEnabled = value
+	c.viper.PitRadio.FuelMonitoring.Enabled = value
 	c.rebuildSnapshot()
 	c.registerUpdate(false)
 	c.mu.Unlock()
@@ -719,7 +720,7 @@ func (c *Config) GetFuelPreWarnNotifyLaps() float64 {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	return c.viper.Fuel.PreWarnNotifyLaps
+	return c.viper.PitRadio.FuelMonitoring.PreWarnNotifyLaps
 }
 
 // GetFuelStrategyNotifyLaps returns the number of laps remaining before a fuel strategy notification is triggered.
@@ -727,7 +728,7 @@ func (c *Config) GetFuelStrategyNotifyLaps() float64 {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	return c.viper.Fuel.StrategyNotifyLaps
+	return c.viper.PitRadio.FuelMonitoring.StrategyNotifyLaps
 }
 
 // GetFuelRangeSafetyMarginLaps returns the safety margin in laps to apply when calculating fuel range.
@@ -735,7 +736,7 @@ func (c *Config) GetFuelRangeSafetyMarginLaps() float64 {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	return c.viper.Fuel.RangeSafetyMarginLaps
+	return c.viper.PitRadio.FuelMonitoring.RangeSafetyMarginLaps
 }
 
 // GetFuelRangeSafetyMarginMeters returns the safety margin in meters to apply when calculating fuel range.
@@ -743,7 +744,7 @@ func (c *Config) GetFuelRangeSafetyMarginMeters() float64 {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	return c.viper.Fuel.RangeSafetyMarginMeters
+	return c.viper.PitRadio.FuelMonitoring.RangeSafetyMarginMeters
 }
 
 // SetFuelPreWarnNotifyLaps sets the number of laps remaining before a fuel pre-warning is triggered.
@@ -751,7 +752,7 @@ func (c *Config) SetFuelPreWarnNotifyLaps(value float64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.viper.Fuel.PreWarnNotifyLaps = value
+	c.viper.PitRadio.FuelMonitoring.PreWarnNotifyLaps = value
 
 	c.registerUpdate(false)
 }
@@ -761,7 +762,7 @@ func (c *Config) SetFuelStrategyNotifyLaps(value float64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.viper.Fuel.StrategyNotifyLaps = value
+	c.viper.PitRadio.FuelMonitoring.StrategyNotifyLaps = value
 
 	c.registerUpdate(false)
 }
@@ -771,7 +772,7 @@ func (c *Config) SetFuelRangeSafetyMarginLaps(value float64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.viper.Fuel.RangeSafetyMarginLaps = value
+	c.viper.PitRadio.FuelMonitoring.RangeSafetyMarginLaps = value
 
 	c.registerUpdate(false)
 }
@@ -781,7 +782,7 @@ func (c *Config) SetFuelRangeSafetyMarginMeters(value float64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.viper.Fuel.RangeSafetyMarginMeters = value
+	c.viper.PitRadio.FuelMonitoring.RangeSafetyMarginMeters = value
 
 	c.registerUpdate(false)
 }
@@ -1988,7 +1989,7 @@ func (c *Config) GetTyreMonitoringEnabled() bool {
 // SetTyreMonitoringEnabled sets whether tyre monitoring is enabled.
 func (c *Config) SetTyreMonitoringEnabled(value bool) {
 	c.mu.Lock()
-	c.viper.Tyres.MonitoringEnabled = value
+	c.viper.PitRadio.TyreMonitoring.Enabled = value
 	c.rebuildSnapshot()
 	c.registerUpdate(false)
 	c.mu.Unlock()
@@ -1999,7 +2000,7 @@ func (c *Config) GetTyreTemperatureOptimalCelsius() float32 {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	return c.viper.Tyres.TemperatureOptimalCelsius
+	return c.viper.PitRadio.TyreMonitoring.TemperatureOptimalCelsius
 }
 
 // SetTyreTemperatureOptimalCelsius sets the optimal (center) tyre temperature in Celsius.
@@ -2007,7 +2008,7 @@ func (c *Config) SetTyreTemperatureOptimalCelsius(value float32) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.viper.Tyres.TemperatureOptimalCelsius = value
+	c.viper.PitRadio.TyreMonitoring.TemperatureOptimalCelsius = value
 
 	c.registerUpdate(false)
 }
@@ -2018,7 +2019,7 @@ func (c *Config) GetTyreTemperatureOperatingWindow() float32 {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	return c.viper.Tyres.TemperatureOperatingWindow
+	return c.viper.PitRadio.TyreMonitoring.TemperatureOperatingWindow
 }
 
 // SetTyreTemperatureOperatingWindow sets the total operating window width around optimal temperature in Celsius.
@@ -2026,7 +2027,7 @@ func (c *Config) SetTyreTemperatureOperatingWindow(value float32) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.viper.Tyres.TemperatureOperatingWindow = value
+	c.viper.PitRadio.TyreMonitoring.TemperatureOperatingWindow = value
 
 	c.registerUpdate(false)
 }
@@ -2036,7 +2037,7 @@ func (c *Config) GetTyreTemperatureMarginCelsius() float32 {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	return c.viper.Tyres.TemperatureMarginCelsius
+	return c.viper.PitRadio.TyreMonitoring.TemperatureMarginCelsius
 }
 
 // SetTyreTemperatureMarginCelsius sets the margin beyond operating window for hot/cold thresholds in Celsius.
@@ -2044,7 +2045,7 @@ func (c *Config) SetTyreTemperatureMarginCelsius(value float32) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.viper.Tyres.TemperatureMarginCelsius = value
+	c.viper.PitRadio.TyreMonitoring.TemperatureMarginCelsius = value
 
 	c.registerUpdate(false)
 }
@@ -2324,8 +2325,8 @@ func (c *Config) rebuildSnapshot() {
 
 		EqEnabled: c.viper.Synthesizer.EqEnabled,
 
-		FuelMonitoringEnabled: c.viper.Fuel.MonitoringEnabled,
-		TyreMonitoringEnabled: c.viper.Tyres.MonitoringEnabled,
+		FuelMonitoringEnabled: c.viper.PitRadio.FuelMonitoring.Enabled,
+		TyreMonitoringEnabled: c.viper.PitRadio.TyreMonitoring.Enabled,
 
 		DisplayOrientation: c.viper.Hardware.DisplayOrientation,
 	}

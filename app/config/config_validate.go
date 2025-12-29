@@ -71,16 +71,6 @@ func (c *Config) Validate() ValidationResult {
 		validateHaptics(c.viper.Haptics, &result)
 	}
 
-	// Validate Fuel section
-	if c.viper.Fuel != nil {
-		validateFuel(c.viper.Fuel, &result)
-	}
-
-	// Validate Tyres section
-	if c.viper.Tyres != nil {
-		validateTyres(c.viper.Tyres, &result)
-	}
-
 	// Validate Telemetry section
 	if c.viper.Telemetry != nil {
 		validateTelemetry(c.viper.Telemetry, &result)
@@ -294,7 +284,7 @@ func validateHaptics(hap *haptics, result *ValidationResult) {
 }
 
 // validateFuel validates the fuel configuration section.
-func validateFuel(fuel *fuel, result *ValidationResult) {
+func validateFuel(fuel *fuelMonitoring, result *ValidationResult) {
 	// Validate lap values are non-negative
 	if fuel.PreWarnNotifyLaps < 0 {
 		addError(result, "fuel.preWarnNotifyLaps", "laps must be non-negative")
@@ -314,7 +304,7 @@ func validateFuel(fuel *fuel, result *ValidationResult) {
 }
 
 // validateTyres validates the tyres configuration section.
-func validateTyres(tyres *tyres, result *ValidationResult) {
+func validateTyres(tyres *tyreMonitoring, result *ValidationResult) {
 	// Validate temperature ranges (reasonable for racing tyres: 0-200°C)
 	if tyres.TemperatureOptimalCelsius < 0 || tyres.TemperatureOptimalCelsius > 200 {
 		addError(result, "tyres.temperatureOptimalCelsius", fmt.Sprintf("temperature %.1f is out of valid range (0-200)", tyres.TemperatureOptimalCelsius))
@@ -359,5 +349,13 @@ func validatePitRadio(radio *pitRadio, result *ValidationResult) {
 		if radio.Discord.Token != "" && radio.Discord.GuildID == "" {
 			addError(result, "pitRadio.discord.guildID", "guildID is required when token is set")
 		}
+	}
+
+	if radio.FuelMonitoring != nil {
+		validateFuel(radio.FuelMonitoring, result)
+	}
+
+	if radio.TyreMonitoring != nil {
+		validateTyres(radio.TyreMonitoring, result)
 	}
 }
