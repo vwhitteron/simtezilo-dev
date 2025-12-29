@@ -145,21 +145,21 @@ func (w *WebUI) GetHTTPHandler() http.Handler {
 	mux.HandleFunc("/ws/circuit", w.handleCircuitWebSocketConnection)
 	mux.HandleFunc("/ws/race", w.handleRaceWebSocketConnection)
 	mux.HandleFunc("/api/config", w.handleConfigAPI)
-	mux.HandleFunc("/api/config/status", w.handleConfigStatus)
-	mux.HandleFunc("/api/config/reset", w.handleConfigReset)
 	mux.HandleFunc("/api/config/export", w.handleConfigExport)
 	mux.HandleFunc("/api/config/import", w.handleConfigImport)
+	mux.HandleFunc("/api/config/reset", w.handleConfigReset)
+	mux.HandleFunc("/api/config/status", w.handleConfigStatus)
 	mux.HandleFunc("/api/i18n", w.handleI18nAPI)
 	mux.HandleFunc("/api/languages", w.handleLanguagesAPI)
 	mux.HandleFunc("/api/logs", w.handleLogsAPI)
 	mux.HandleFunc("/api/system/cache-clear", w.handleCacheClear)
 	mux.HandleFunc("/api/system/cache-size", w.handleCacheSize)
 	mux.HandleFunc("/api/system/info", w.handleSystemInfo)
-	mux.HandleFunc("/api/restart", w.handleRestart)
+	mux.HandleFunc("/api/system/restart", w.handleRestart)
 
 	if w.setupModeEnabled {
+		mux.HandleFunc("/api/system/factory-reset", w.handleFactoryReset)
 		mux.HandleFunc("/api/mode/setup", w.handleSetupMode)
-		mux.HandleFunc("/api/factory-reset", w.handleFactoryReset)
 	}
 
 	w.log.Debug().Msg("Web UI handler configured")

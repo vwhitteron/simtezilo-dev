@@ -805,7 +805,7 @@ class ConfigManager {
                 window.showNavbarStatus('saving');
             }
 
-            const response = await fetch('/api/restart', {
+            const response = await fetch('/api/system/restart', {
                 method: 'POST'
             });
 
@@ -1008,7 +1008,7 @@ class ConfigManager {
             }
 
             try {
-                const response = await fetch('/api/factory-reset', {
+                const response = await fetch('/api/system/factory-reset', {
                     method: 'POST'
                 });
 
