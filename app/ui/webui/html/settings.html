@@ -501,6 +501,17 @@
                             </div>
 
                             <h5 class="mt-5 mb-3"><span data-i18n="runmode.settings.system.title">System</span></h5>
+                            <div class="row mb-3">
+                                <div class="col-12">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <strong>Cached data:</strong>
+                                        <span id="cache-size" class="text-muted"
+                                            style="display: inline-block; min-width: 150px;">Loading...</span>
+                                        <button id="clear-cache" class="btn btn-sm btn-outline-secondary">Clear
+                                            Cache</button>
+                                    </div>
+                                </div>
+                            </div>
                             <div class="d-flex gap-2 flex-wrap">
                                 <button id="restart-app" class="btn btn-outline-secondary"><span
                                         data-i18n="runmode.settings.system.restart">Restart</span></button>
@@ -1259,6 +1270,52 @@
                 const input = document.getElementById('telemetry-source');
                 input.value = 'udp://255.255.255.255:33739';
                 input.dispatchEvent(new Event('change', { bubbles: true }));
+            });
+
+            // Cache info and clear functionality
+            function fetchCacheSize() {
+                fetch('/api/system/cache-size')
+                    .then(response => response.json())
+                    .then(data => {
+                        const sizeElement = document.getElementById('cache-size');
+                        if (data.success) {
+                            const itemText = data.count === 1 ? 'item' : 'items';
+                            sizeElement.textContent = `${data.size} (${data.count} ${itemText})`;
+                        } else {
+                            sizeElement.textContent = 'Error loading';
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error fetching cache size:', error);
+                        document.getElementById('cache-size').textContent = 'Error';
+                    });
+            }
+
+            // Load cache size on page load
+            fetchCacheSize();
+
+            // Clear cache button
+            document.getElementById('clear-cache')?.addEventListener('click', function () {
+                this.disabled = true;
+                this.textContent = 'Clearing...';
+
+                fetch('/api/system/cache-clear', { method: 'POST' })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            fetchCacheSize();
+                        } else {
+                            alert('Error clearing cache: ' + (data.message || 'Unknown error'));
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error clearing cache:', error);
+                        alert('Error clearing cache');
+                    })
+                    .finally(() => {
+                        this.disabled = false;
+                        this.textContent = 'Clear Cache';
+                    });
             });
             // Sidebar link click handler
             navLinks.forEach(link => {

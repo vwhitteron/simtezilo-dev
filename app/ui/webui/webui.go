@@ -152,6 +152,8 @@ func (w *WebUI) GetHTTPHandler() http.Handler {
 	mux.HandleFunc("/api/i18n", w.handleI18nAPI)
 	mux.HandleFunc("/api/languages", w.handleLanguagesAPI)
 	mux.HandleFunc("/api/logs", w.handleLogsAPI)
+	mux.HandleFunc("/api/system/cache-clear", w.handleCacheClear)
+	mux.HandleFunc("/api/system/cache-size", w.handleCacheSize)
 	mux.HandleFunc("/api/system/info", w.handleSystemInfo)
 	mux.HandleFunc("/api/restart", w.handleRestart)
 
@@ -2307,4 +2309,134 @@ func (w *WebUI) handleLogsAPI(response http.ResponseWriter, request *http.Reques
 	}
 
 	w.log.Debug().Int("log_count", len(logs)).Int("page", page).Msg("served logs")
+}
+
+// handleCacheSize returns the size of the cache directory.
+func (w *WebUI) handleCacheSize(response http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodGet {
+		response.WriteHeader(http.StatusMethodNotAllowed)
+
+		return
+	}
+
+	baseDir := w.config.GetAppBaseDir()
+	cacheDir := filepath.Join(baseDir, "data", "cache")
+
+	size, count, err := w.getDirSize(cacheDir)
+	if err != nil {
+		w.log.Error().Err(err).Str("cache_dir", cacheDir).Msg("failed to get cache size")
+		response.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(response).Encode(map[string]any{ //nolint:errchkjson // simple encoding
+			"success": false,
+			"message": "Failed to get cache size",
+			"size":    "Error",
+		})
+
+		return
+	}
+
+	response.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(response).Encode(map[string]any{ //nolint:errchkjson // simple encoding
+		"success": true,
+		"size":    formatBytes(size),
+		"bytes":   size,
+		"count":   count,
+	})
+}
+
+// handleCacheClear clears all files in the cache directory.
+func (w *WebUI) handleCacheClear(response http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodPost {
+		response.WriteHeader(http.StatusMethodNotAllowed)
+
+		return
+	}
+
+	baseDir := w.config.GetAppBaseDir()
+	cacheDir := filepath.Join(baseDir, "data", "cache")
+
+	w.log.Info().Str("cache_dir", cacheDir).Msg("clearing cache directory")
+
+	// Read directory contents
+	entries, err := os.ReadDir(cacheDir)
+	if err != nil {
+		w.log.Error().Err(err).Str("cache_dir", cacheDir).Msg("failed to read cache directory")
+		response.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(response).Encode(map[string]any{ //nolint:errchkjson // simple encoding
+			"success": false,
+			"message": "Failed to read cache directory",
+		})
+
+		return
+	}
+
+	// Delete all files and directories
+	deletedCount := 0
+	errorCount := 0
+
+	for _, entry := range entries {
+		entryPath := filepath.Join(cacheDir, entry.Name())
+
+		err := os.RemoveAll(entryPath)
+		if err != nil {
+			w.log.Error().Err(err).Str("path", entryPath).Msg("failed to delete cache entry")
+
+			errorCount++
+		} else {
+			deletedCount++
+		}
+	}
+
+	w.log.Info().Int("deleted", deletedCount).Int("errors", errorCount).Msg("cache clear completed")
+
+	response.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(response).Encode(map[string]any{ //nolint:errchkjson // simple encoding
+		"success": errorCount == 0,
+		"message": fmt.Sprintf("Deleted %d items", deletedCount),
+		"deleted": deletedCount,
+		"errors":  errorCount,
+	})
+}
+
+// getDirSize returns the total size of all files in a directory (recursive).
+func (w *WebUI) getDirSize(path string) (int64, int, error) {
+	var (
+		size  int64
+		count int
+	)
+
+	err := filepath.Walk(path, func(filePath string, info os.FileInfo, err error) error {
+		if err != nil {
+			w.log.Warn().Err(err).Str("path", filePath).Msg("Get directory size")
+
+			return nil // Skip files that can't be accessed
+		}
+
+		if !info.IsDir() {
+			size += info.Size()
+			count++
+		}
+
+		return nil
+	})
+
+	w.log.Debug().Int64("size_bytes", size).Int("count", count).Str("path", path).Msg("Get directory size")
+
+	return size, count, err
+}
+
+// formatBytes formats bytes into a human-readable string.
+func formatBytes(bytes int64) string {
+	const unit = 1024
+	if bytes < unit {
+		return fmt.Sprintf("%d B", bytes)
+	}
+
+	div, exp := int64(unit), 0
+	for n := bytes / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+
+	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
 }
