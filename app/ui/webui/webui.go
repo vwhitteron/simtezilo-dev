@@ -1463,7 +1463,7 @@ func (w *WebUI) applyHapticsConfig(config map[string]any) []string {
 // checkRestartRequired checks if any configuration changes require a restart.
 func (w *WebUI) checkRestartRequired(configData map[string]any) bool {
 	// Check if vehicleDBFile changed
-	if appConfig, ok := configData["app"].(map[string]any); ok {
+	if appConfig, ok := configData["app"].(map[string]any); ok { //nolint:nestif // compact nesting
 		if vehicleDBFile, ok := appConfig["vehicleDBFile"]; ok {
 			if vehicleDBFileStr, ok := vehicleDBFile.(string); ok {
 				if vehicleDBFileStr != w.config.GetAppVehicleDBFile() {
@@ -1474,7 +1474,7 @@ func (w *WebUI) checkRestartRequired(configData map[string]any) bool {
 	}
 
 	// Check if telemetry source changed
-	if telemetryConfig, ok := configData["telemetry"].(map[string]any); ok {
+	if telemetryConfig, ok := configData["telemetry"].(map[string]any); ok { //nolint:nestif // compact nesting
 		if source, ok := telemetryConfig["source"]; ok {
 			if sourceStr, ok := source.(string); ok {
 				if sourceStr != w.config.GetTelemetrySource() {
@@ -1561,29 +1561,35 @@ func (w *WebUI) applyHardwareConfig(config map[string]any) []string {
 func (w *WebUI) applyTelemetryConfig(config map[string]any) []string {
 	var errors []string
 
-	if source, ok := config["source"]; ok {
-		if sourceStr, ok := source.(string); ok {
-			// If source is a file:// path, validate that the file exists
-			if strings.HasPrefix(sourceStr, "file://") {
-				filePath := strings.TrimPrefix(sourceStr, "file://")
+	source, cfgOK := config["source"]
+	if !cfgOK {
+		return errors
+	}
 
-				_, err := os.Stat(filePath)
-				if err != nil {
-					if os.IsNotExist(err) {
-						errors = append(errors, "telemetry replay file not found: "+filePath)
-					} else {
-						errors = append(errors, "cannot access telemetry replay file: "+err.Error())
-					}
+	sourceStr, strOK := source.(string)
+	if !strOK {
+		errors = append(errors, "invalid telemetry source value")
 
-					return errors
-				}
+		return errors
+	}
+
+	// If source is a file:// path, validate that the file exists
+	if after, cutOK := strings.CutPrefix(sourceStr, "file://"); cutOK {
+		filePath := after
+
+		_, err := os.Stat(filePath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				errors = append(errors, "telemetry replay file not found: "+filePath)
+			} else {
+				errors = append(errors, "cannot access telemetry replay file: "+err.Error())
 			}
 
-			w.config.SetTelemetrySource(sourceStr)
-		} else {
-			errors = append(errors, "invalid telemetry source value")
+			return errors
 		}
 	}
+
+	w.config.SetTelemetrySource(sourceStr)
 
 	return errors
 }
@@ -2144,8 +2150,8 @@ func (w *WebUI) handleSystemInfo(response http.ResponseWriter, request *http.Req
 		// Parse the JSON output to get the available status
 		var statusResponse struct {
 			Status struct {
-				Available bool `json:"available"`
-			} `json:"status"`
+				Available bool `json:"available"` //nolint:tagliatelle // lowercase for interface simpicity
+			} `json:"status"` //nolint:tagliatelle
 		}
 
 		err := json.Unmarshal(output, &statusResponse)

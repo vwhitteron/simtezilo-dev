@@ -1638,7 +1638,6 @@ func (a *App) addLapEvent(lap int16, lapTime time.Duration, position int16) {
 	)
 
 	// Lap 1 has no delta (no previous lap to compare to)
-
 	if lap == 1 {
 		hasDelta = false
 

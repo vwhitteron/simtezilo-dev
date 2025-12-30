@@ -69,7 +69,7 @@ func NewMixer(mixerConfig MixerConfig) (*Mixer, error) {
 	// Initialize master with lock-free config read
 	masterGain := mixer.config.GetSynthMasterGain()
 
-	err := mixer.AddChannel("_master", masterGain)
+	err := mixer.AddChannel(ChannelMaster, masterGain)
 	if err != nil {
 		return nil, fmt.Errorf("add master channel: %w", err)
 	}
@@ -81,7 +81,7 @@ func NewMixer(mixerConfig MixerConfig) (*Mixer, error) {
 
 // Close gracefully shuts down the mixer, silencing output.
 func (m *Mixer) Close() {
-	_ = m.SetChannelGain("_master", config.MinimumGain)
+	_ = m.SetChannelGain(ChannelMaster, config.MinimumGain)
 }
 
 // GetBufferCapacity returns the configured buffer length duration in samples.
@@ -147,13 +147,13 @@ func (m *Mixer) ReadChannel(name string, length int) []float64 {
 	var muted bool
 
 	switch name {
-	case "_master":
+	case ChannelMaster:
 		muted = m.config.GetSynthMasterMute()
-	case "chassis":
+	case ChannelChassis:
 		muted = m.config.GetSynthChassisMute()
-	case "transmission":
+	case ChannelTransmission:
 		muted = m.config.GetSynthTransmissionMute()
-	case "engine":
+	case ChannelEngine:
 		muted = m.config.GetSynthEngineMute()
 	}
 
@@ -264,13 +264,13 @@ func (m *Mixer) SetFader(gain float64) {
 	m.faderGain = gain
 	m.mu.Unlock()
 
-	_ = m.SetChannelGain("_master", m.faderGain)
+	_ = m.SetChannelGain(ChannelMaster, m.faderGain)
 }
 
 // FadeIn gradually increases the master gain from minimum to the configured level over the specified period.
 func (m *Mixer) FadeIn(period time.Duration) {
 	m.mu.RLock()
-	master := m.channels["_master"]
+	master := m.channels[ChannelMaster]
 	m.mu.RUnlock()
 
 	// Lock-free config read
@@ -302,12 +302,12 @@ func (m *Mixer) FadeIn(period time.Duration) {
 				m.mu.Lock()
 				m.faderGain = targetGain
 				m.mu.Unlock()
-				_ = m.SetChannelGain("_master", targetGain)
+				_ = m.SetChannelGain(ChannelMaster, targetGain)
 
 				break
 			}
 
-			_ = m.SetChannelGain("_master", m.faderGain)
+			_ = m.SetChannelGain(ChannelMaster, m.faderGain)
 
 			time.Sleep(fadeInInterval)
 		}
@@ -315,7 +315,7 @@ func (m *Mixer) FadeIn(period time.Duration) {
 		m.fadeInActive = false
 
 		m.mu.RLock()
-		master := m.channels["_master"]
+		master := m.channels[ChannelMaster]
 		m.mu.RUnlock()
 
 		m.log.Debug().
@@ -335,7 +335,7 @@ func (m *Mixer) MixToMaster(length int) {
 
 	m.mu.RLock()
 
-	for _, name := range []string{"chassis", "transmission"} {
+	for _, name := range []string{ChannelChassis, ChannelTransmission} {
 		channel, ok := m.channels[name]
 		if !ok {
 			m.mu.RUnlock()
@@ -347,7 +347,7 @@ func (m *Mixer) MixToMaster(length int) {
 
 		// Lock-free config reads for mute state
 		var muted bool
-		if name == "chassis" {
+		if name == ChannelChassis {
 			muted = m.config.GetSynthChassisMute()
 		} else {
 			muted = m.config.GetSynthTransmissionMute()
@@ -371,7 +371,7 @@ func (m *Mixer) MixToMaster(length int) {
 	// mix in the engine channel with lower priority
 	m.mixEngineChannel(outSamples, length)
 
-	masterChannel := m.channels["_master"]
+	masterChannel := m.channels[ChannelMaster]
 	m.mu.RUnlock()
 
 	magnitude := 1.0
@@ -391,10 +391,10 @@ func (m *Mixer) ClearBuffers() {
 
 // mixEngineChannel mixes the engine channel into the output samples with lower priority.
 func (m *Mixer) mixEngineChannel(outSamples []float64, length int) {
-	channel, ok := m.channels["engine"]
+	channel, ok := m.channels[ChannelEngine]
 	if !ok {
 		m.mu.RUnlock()
-		m.log.Error().Str("channel", "engine").Msg("channel not found in mixer")
+		m.log.Error().Str("channel", ChannelEngine).Msg("channel not found in mixer")
 		m.mu.RLock()
 
 		return
@@ -456,7 +456,7 @@ func (m *Mixer) checkBufferHealth() {
 	m.lastHealthCheck = now
 
 	for name, channel := range m.channels {
-		if name == "_master" {
+		if name == ChannelMaster {
 			continue
 		}
 
@@ -464,11 +464,11 @@ func (m *Mixer) checkBufferHealth() {
 		var muted bool
 
 		switch name {
-		case "chassis":
+		case ChannelChassis:
 			muted = m.config.GetSynthChassisMute()
-		case "transmission":
+		case ChannelTransmission:
 			muted = m.config.GetSynthTransmissionMute()
-		case "engine":
+		case ChannelEngine:
 			muted = m.config.GetSynthEngineMute()
 		}
 
@@ -517,16 +517,16 @@ func (m *Mixer) watchForConfigChanges() {
 			)
 
 			switch name {
-			case "_master":
+			case ChannelMaster:
 				configGain = m.config.GetSynthMasterGain()
 				configMute = m.config.GetSynthMasterMute()
-			case "chassis":
+			case ChannelChassis:
 				configGain = m.config.GetSynthChassisGain()
 				configMute = m.config.GetSynthChassisMute()
-			case "transmission":
+			case ChannelTransmission:
 				configGain = m.config.GetSynthTransmissionGain()
 				configMute = m.config.GetSynthTransmissionMute()
-			case "engine":
+			case ChannelEngine:
 				configGain = m.config.GetSynthEngineGain()
 				configMute = m.config.GetSynthEngineMute()
 			default:
@@ -557,7 +557,7 @@ func (m *Mixer) watchForConfigChanges() {
 			m.mu.RUnlock()
 			_ = m.SetChannelGain(name, configGain)
 
-			if name == "_master" {
+			if name == ChannelMaster {
 				if m.faderGain != channel.activeGain {
 					m.mu.Lock()
 					m.faderGain = channel.activeGain

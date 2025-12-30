@@ -26,8 +26,8 @@ type EffectsSampleBank struct {
 func NewEffectsSampleBank() *EffectsSampleBank {
 	return &EffectsSampleBank{
 		samples: map[string]EffectSample{
-			"transmission": {
-				Name: "transmission",
+			"gearShift": {
+				Name: "gearShift",
 				Sample: map[int]codec.PCMFloat64{
 					effectsSampleRateHz: generateGearShiftSample(),
 				},

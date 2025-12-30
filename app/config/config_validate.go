@@ -17,7 +17,7 @@ type ValidationError struct {
 }
 
 // ValidationResult contains the result of configuration validation.
-type ValidationResult struct {
+type ValidationResult struct { //nolint:errname // not applicable
 	Valid  bool              `json:"valid"`            //nolint:tagliatelle // lowercase for easy compatibility
 	Errors []ValidationError `json:"errors,omitempty"` //nolint:tagliatelle
 }

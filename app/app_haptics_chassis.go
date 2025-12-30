@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/vwhitteron/simtezilo-dev/app/signal"
+	"github.com/vwhitteron/simtezilo-dev/app/synthesizer"
 )
 
 func (a *App) generateChassisHaptic() {
@@ -61,7 +62,7 @@ func (a *App) generateChassisHaptic() {
 		pulseBuffer[index] = ((pulseAmplitude * math.Sin(phase)) + pulseAmplitude) / 2
 	}
 
-	a.synth.WriteBuffer("chassis", pulseBuffer, 0)
+	a.synth.WriteBuffer(synthesizer.ChannelChassis, pulseBuffer, 0)
 
 	// log large amplitude values
 	if pulseAmplitude > 1.0 || pulseAmplitude < -1.0 {

@@ -322,7 +322,8 @@ func (c *Config) SetDefault() {
 	defaultConfigPath := filepath.Join(baseDir, "etc", "default.conf")
 
 	// Check if the file exists
-	if _, err := os.Stat(defaultConfigPath); err == nil {
+	_, err := os.Stat(defaultConfigPath)
+	if err == nil {
 		// File exists, try to load it
 		data, err := os.ReadFile(defaultConfigPath)
 		if err == nil {

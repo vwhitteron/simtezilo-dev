@@ -39,7 +39,7 @@ func (a *App) generateEngineHaptic() {
 
 	// No haptics when engine is not running
 	if rpm == 0 {
-		a.synth.OverwriteBuffer("engine", engineBuffer, offset)
+		a.synth.OverwriteBuffer(synthesizer.ChannelEngine, engineBuffer, offset)
 
 		return
 	}
@@ -54,7 +54,7 @@ func (a *App) generateEngineHaptic() {
 	// a.generateTorqueCurveWaveform(rpm, engineRoughness, &engineBuffer)
 
 	a.adjustEngineBufferPolarity(engineBuffer, lastPolarity)
-	a.synth.OverwriteBuffer("engine", engineBuffer, offset)
+	a.synth.OverwriteBuffer(synthesizer.ChannelEngine, engineBuffer, offset)
 }
 
 // shouldGenerateEngineHaptic checks if engine haptic generation should proceed.
@@ -111,7 +111,7 @@ func (a *App) prepareEngineBuffer() ([]float64, int, int) {
 	lookback := 20
 
 	// Stitch the new engine samples smoothly with the current buffer contents
-	inspectBuffer := a.synth.InspectChannelBuffer("engine", samplesPerFrame+lookback, -lookback)
+	inspectBuffer := a.synth.InspectChannelBuffer(synthesizer.ChannelEngine, samplesPerFrame+lookback, -lookback)
 	if inspectBuffer != nil && len(inspectBuffer) >= samplesPerFrame {
 		offset, lastPolarity = synthesizer.FindSampleZeroCrossing(inspectBuffer[lookback:samplesPerFrame])
 	}

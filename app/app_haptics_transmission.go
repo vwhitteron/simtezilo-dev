@@ -11,7 +11,7 @@ import (
 func (a *App) playGearShiftHaptic() {
 	magnitude := a.determineGearShiftMagnitude()
 
-	a.synth.PlayEffect("transmission", magnitude)
+	a.synth.PlayEffect("gearShift", magnitude, synthesizer.ChannelTransmission)
 
 	a.log.Debug().
 		Int("sequence_id", int(a.state.current.sequenceNumber)).
@@ -26,7 +26,7 @@ func (a *App) playGearShiftHaptic() {
 // A dynamic magnitude simulates the forces of the gear change mechanism combined with
 // the longitudinal g-force experienced during the gear change.
 func (a *App) determineGearShiftMagnitude() float64 {
-	synthMagnitude, _ := a.synth.GetChannelMagnitude("transmission")
+	synthMagnitude, _ := a.synth.GetChannelMagnitude(synthesizer.ChannelTransmission)
 
 	if !a.config.GethapticsDynamicTransFeedbackEnabled() {
 		return synthMagnitude

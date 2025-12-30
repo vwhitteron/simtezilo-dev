@@ -57,7 +57,7 @@ func OnGPIOButtonPressed(n int, handler func()) {
 }
 
 // setupGPIOPin prepares a GPIO pin for input with pull-up resistor.
-func setupGPIOPin(n int) gpio.PinIO {
+func setupGPIOPin(n int) gpio.PinIO { //nolint:ireturn // have to return an interface
 	pinName := fmt.Sprintf("GPIO%d", n)
 
 	// Try to get the pin from gpioioctl first (gpiod character device interface)

@@ -12,6 +12,14 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/kinematics"
 )
 
+// Mixer channel names.
+const (
+	ChannelMaster       = "_master"
+	ChannelChassis      = "chassis"
+	ChannelEngine       = "engine"
+	ChannelTransmission = "transmission"
+)
+
 // Synthesizer is the main synthesizer structure that holds the mixer, effects, and output device.
 type Synthesizer struct {
 	effects      *EffectsSampleBank
@@ -56,9 +64,9 @@ func New(opts *SynthOpts) (*Synthesizer, error) {
 	}
 
 	// Add channels with initial values from config
-	_ = synthesizer.mixer.AddChannel("transmission", opts.Config.TransmissionGain)
-	_ = synthesizer.mixer.AddChannel("chassis", opts.Config.ChassisGain)
-	_ = synthesizer.mixer.AddChannel("engine", opts.Config.EngineGain)
+	_ = synthesizer.mixer.AddChannel(ChannelTransmission, opts.Config.TransmissionGain)
+	_ = synthesizer.mixer.AddChannel(ChannelChassis, opts.Config.ChassisGain)
+	_ = synthesizer.mixer.AddChannel(ChannelEngine, opts.Config.EngineGain)
 
 	synthesizer.outputDevice, err = NewOutputDevice(SynthOutDeviceOpts{
 		Log: opts.Logger.With().Str("package", "synth output device").Logger(),
@@ -109,7 +117,7 @@ func (s *Synthesizer) InspectChannelBuffer(name string, length int, offset int) 
 func (s *Synthesizer) ReadBuffer(length int) []float64 {
 	s.mixer.MixToMaster(length)
 
-	return s.mixer.ReadChannel("_master", length)
+	return s.mixer.ReadChannel(ChannelMaster, length)
 }
 
 // WriteBuffer writes the provided sample data to the specified channel buffer at the given offset.
@@ -148,7 +156,7 @@ func (s *Synthesizer) FadeIn(period time.Duration) {
 
 // ApplyMasterGain applies the current master gain to the provided value and returns the adjusted value.
 func (s *Synthesizer) ApplyMasterGain(value float64) float64 {
-	outputGain, _ := s.mixer.GetChannelPowerRatio("_master")
+	outputGain, _ := s.mixer.GetChannelPowerRatio(ChannelMaster)
 
 	return value * outputGain
 }
@@ -173,9 +181,9 @@ func (s *Synthesizer) GetEffectSample(name string, sampleRate int) codec.PCMFloa
 	return effectSample
 }
 
-// PlayEffect plays the specified effect on its designated channel with the given magnitude.
-func (s *Synthesizer) PlayEffect(name string, magnitude float64) {
-	channelMagnitude, err := s.mixer.GetChannelPowerRatio(name)
+// PlayEffect plays an effect at a given magnitude on a given channel.
+func (s *Synthesizer) PlayEffect(name string, magnitude float64, channel string) {
+	channelMagnitude, err := s.mixer.GetChannelPowerRatio(channel)
 	if err != nil {
 		s.log.Error().Err(err).Str("channel", name).Msg("failed to get channel power ratio")
 
@@ -186,5 +194,5 @@ func (s *Synthesizer) PlayEffect(name string, magnitude float64) {
 
 	effectSample := s.effects.GetSample(name, s.sampleRate)
 
-	_ = s.mixer.WriteChannel(name, effectSample.Samples(), magnitude, 0, false)
+	_ = s.mixer.WriteChannel(channel, effectSample.Samples(), magnitude, 0, false)
 }

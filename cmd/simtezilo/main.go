@@ -77,32 +77,28 @@ func main() {
 
 	var exitCode exitcode.Code
 
-	for {
-		app, err := app.New(app.Options{
-			ConfigFile: configFile,
-			Done:       done,
-			Logger:     &logger,
-			LogStore:   loggerWithStore.Store,
-		})
-		if err != nil {
-			logger.Fatal().Err(err).Msg("Error creating app")
-		}
+	app, err := app.New(app.Options{
+		ConfigFile: configFile,
+		Done:       done,
+		Logger:     &logger,
+		LogStore:   loggerWithStore.Store,
+	})
+	if err != nil {
+		logger.Fatal().Err(err).Msg("Error creating app")
+	}
 
-		go app.Start()
+	go app.Start()
 
-		exitCode = <-done
+	exitCode = <-done
 
-		app.Close()
+	app.Close()
 
-		if exitCode == exitcode.RestartApp {
-			logger.Info().Msg("Restarting application - exiting to allow process restart")
+	if exitCode == exitcode.RestartApp {
+		logger.Info().Msg("Restarting application - exiting to allow process restart")
 
-			// Exit with success code so systemd will restart the process
-			// This ensures all resources (speaker, sockets) are properly released
-			exitCode = exitcode.Success
-		}
-
-		break
+		// Exit with success code so systemd will restart the process
+		// This ensures all resources (speaker, sockets) are properly released
+		exitCode = exitcode.Success
 	}
 
 	if profiler != nil {

@@ -158,7 +158,7 @@ func (a *App) getLapNotificationInfo() lapNotificationInfo {
 		currentLap:      currentLap,
 		raceLaps:        raceLaps,
 		lapsRemaining:   raceLaps - currentLap + 1,
-		longRace:        raceLaps > int16(a.config.GetPitRadioNotifyRaceProgressMinLaps()),
+		longRace:        raceLaps > int16(a.config.GetPitRadioNotifyRaceProgressMinLaps()), //nolint:gosec // race laps will not overflow
 		alreadyNotified: a.pitRadioState.lastNotifiedLapNumber == currentLap,
 	}
 }
@@ -167,7 +167,7 @@ func (a *App) getLapNotificationInfo() lapNotificationInfo {
 func (a *App) determineLapMessage(info lapNotificationInfo) string {
 	raceCompleted := info.lapsRemaining <= 0 && !info.alreadyNotified
 	finalLap := info.currentLap == info.raceLaps && !info.alreadyNotified
-	countdownLaps := int16(a.config.GetPitRadioNotifyRaceLapsCountdownLaps())
+	countdownLaps := int16(a.config.GetPitRadioNotifyRaceLapsCountdownLaps()) //nolint:gosec // lap count will not overflow
 	lastFewLaps := info.lapsRemaining <= countdownLaps && info.longRace && !info.alreadyNotified
 
 	switch {
@@ -243,7 +243,7 @@ func (a *App) notifyRaceProgress() {
 	raceProgressPercent := int8(100 * currentRaceDistanceMeters / totalRaceDistanceMeters)
 
 	// Calculate current progress interval based on progressInterval
-	currentProgressInterval := (raceProgressPercent / int8(progressIntervalPc)) * int8(progressIntervalPc)
+	currentProgressInterval := (raceProgressPercent / int8(progressIntervalPc)) * int8(progressIntervalPc) //nolint:gosec // percent value will not overflow
 
 	// Skip notifications at 0%
 	if raceProgressPercent <= 0 {
@@ -295,7 +295,7 @@ func (a *App) shouldNotifyRaceProgress() bool {
 		return false
 	}
 
-	if a.gtClient.Telemetry.RaceLaps() < int16(a.config.GetPitRadioNotifyRaceProgressMinLaps()) {
+	if a.gtClient.Telemetry.RaceLaps() < int16(a.config.GetPitRadioNotifyRaceProgressMinLaps()) { //nolint:gosec // race laps will not overflow
 		return false
 	}
 
@@ -306,7 +306,8 @@ func (a *App) shouldNotifyRaceProgress() bool {
 func formatDeltaTime(delta time.Duration) string {
 	seconds := delta.Seconds()
 
-	if seconds >= 1.0 {
+	switch {
+	case seconds >= 1.0:
 		rounded := math.Round(seconds*10) / 10
 
 		unit := "seconds"
@@ -319,13 +320,13 @@ func formatDeltaTime(delta time.Duration) string {
 		}
 
 		return fmt.Sprintf("down %.1f %s", rounded, unit)
-	} else if seconds >= 0.1 {
+	case seconds >= 0.1:
 		return pluraliseNegativeDelta(seconds*10, "tenth")
-	} else if seconds >= 0.01 {
+	case seconds >= 0.01:
 		return pluraliseNegativeDelta(seconds*100, "hundredth")
+	default:
+		return pluraliseNegativeDelta(float64(delta.Milliseconds()), "thou")
 	}
-
-	return pluraliseNegativeDelta(float64(delta.Milliseconds()), "thou")
 }
 
 func pluraliseNegativeDelta(value float64, scale string) (format string) {
