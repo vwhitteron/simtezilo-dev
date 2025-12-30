@@ -72,10 +72,22 @@ type hardware struct {
 	DisplayOrientation int    `toml:"displayOrientation"`
 }
 
+type notifications struct {
+	RaceProgressEnabled     bool    `toml:"raceProgressEnabled"`
+	RaceProgressMinLaps     int     `toml:"raceProgressMinLaps"`
+	RaceProgressIntervalPc  int     `toml:"raceProgressIntervalPc"`
+	RaceLapsEnabled         bool    `toml:"raceLapsEnabled"`
+	RaceLapsIntervalLaps    int     `toml:"raceLapsIntervalLaps"`
+	RaceLapsCountdownLaps   int     `toml:"raceLapsCountdownLaps"`
+	LapTimesEnabled         bool    `toml:"lapTimesEnabled"`
+	LapTimesMaxDeltaSeconds float64 `toml:"lapTimesMaxDeltaSeconds"`
+}
+
 type pitRadio struct {
 	Enabled               bool            `toml:"enabled"`
 	MessageSendIntervalMs int             `toml:"messageSendIntervalMs"`
 	Discord               *discord        `toml:"discord"`
+	Notifications         *notifications  `toml:"notifications"`
 	FuelMonitoring        *fuelMonitoring `toml:"fuelMonitoring"`
 	TyreMonitoring        *tyreMonitoring `toml:"tyreMonitoring"`
 }
@@ -138,8 +150,8 @@ type viperConfig struct {
 	Telemetry   *Telemetry   `toml:"telemetry"`
 }
 
-// ConfigSnapshot holds frequently-accessed configuration values for lock-free reads.
-type ConfigSnapshot struct {
+// Snapshot holds frequently-accessed configuration values for lock-free reads.
+type Snapshot struct {
 	// Synthesizer gain settings
 	MasterMute                bool
 	MasterGain                float64
@@ -191,7 +203,7 @@ type ConfigSnapshot struct {
 // Config holds the application configuration and provides methods for accessing and modifying the data.
 type Config struct {
 	viper           *viperConfig
-	snapshot        atomic.Pointer[ConfigSnapshot]
+	snapshot        atomic.Pointer[Snapshot]
 	i18n            *i18n.I18n
 	configFile      string
 	lastSavedConfig []byte // Last config written to disk (to avoid unnecessary writes)
@@ -604,82 +616,6 @@ func (c *Config) GetAppWebUIPort() int {
 }
 
 // ****************************************************************************
-// Discord section methods.
-// ****************************************************************************
-
-// GetDiscordToken returns the Discord API token.
-func (c *Config) GetDiscordToken() string {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.PitRadio.Discord.Token
-}
-
-// SetDiscordToken sets the Discord API token.
-func (c *Config) SetDiscordToken(token string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	c.viper.PitRadio.Discord.Token = token
-
-	c.registerUpdate(true)
-}
-
-// GetDiscordGuildID returns the Discord guild (server) ID.
-func (c *Config) GetDiscordGuildID() string {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.PitRadio.Discord.GuildID
-}
-
-// SetDiscordGuildID sets the Discord guild (server) ID.
-func (c *Config) SetDiscordGuildID(guildID string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	c.viper.PitRadio.Discord.GuildID = guildID
-
-	c.registerUpdate(true)
-}
-
-// GetDiscordChannelID returns the Discord text channel ID.
-func (c *Config) GetDiscordChannelID() string {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.PitRadio.Discord.ChannelID
-}
-
-// SetDiscordChannelID sets the Discord text channel ID.
-func (c *Config) SetDiscordChannelID(channelID string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	c.viper.PitRadio.Discord.ChannelID = channelID
-
-	c.registerUpdate(true)
-}
-
-// GetDiscordVoiceChannelID returns the Discord voice channel ID.
-func (c *Config) GetDiscordVoiceChannelID() string {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.PitRadio.Discord.VoiceChannelID
-}
-
-// SetDiscordVoiceChannelID sets the Discord voice channel ID.
-func (c *Config) SetDiscordVoiceChannelID(voiceChannelID string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	c.viper.PitRadio.Discord.VoiceChannelID = voiceChannelID
-
-	c.registerUpdate(true)
-}
-
-// ****************************************************************************
 // Hardware section methods.
 // ****************************************************************************
 
@@ -706,15 +642,6 @@ func (c *Config) SetHardwareModel(model string) {
 // Uses lock-free atomic read from snapshot.
 func (c *Config) GetDisplayOrientation() int {
 	return c.snapshot.Load().DisplayOrientation
-}
-
-// getDisplayOrientationLocked returns the display orientation while holding the lock.
-// Used internally during initialization before snapshot is built.
-func (c *Config) getDisplayOrientationLocked() int {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.Hardware.DisplayOrientation
 }
 
 // SetDisplayOrientation sets the display orientation in degrees.
@@ -1456,6 +1383,150 @@ func (c *Config) SetPitRadioMessageSendIntervalMs(value int) {
 	c.registerUpdate(false)
 }
 
+// GetPitRadioNotifyRaceProgressEnabled returns whether race progress notifications are enabled.
+func (c *Config) GetPitRadioNotifyRaceProgressEnabled() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.PitRadio.Notifications.RaceProgressEnabled
+}
+
+// SetPitRadioNotifyRaceProgressEnabled sets whether race progress notifications are enabled.
+func (c *Config) SetPitRadioNotifyRaceProgressEnabled(value bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.PitRadio.Notifications.RaceProgressEnabled = value
+
+	c.registerUpdate(false)
+}
+
+// GetPitRadioNotifyRaceProgressMinLaps returns the minimum number of laps before race progress notifications begin.
+func (c *Config) GetPitRadioNotifyRaceProgressMinLaps() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.PitRadio.Notifications.RaceProgressMinLaps
+}
+
+// SetPitRadioNotifyRaceProgressMinLaps sets the minimum number of laps before race progress notifications begin.
+func (c *Config) SetPitRadioNotifyRaceProgressMinLaps(value int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.PitRadio.Notifications.RaceProgressMinLaps = value
+
+	c.registerUpdate(false)
+}
+
+// GetPitRadioNotifyRaceProgressIntervalPc returns the race progress notification interval percentage.
+func (c *Config) GetPitRadioNotifyRaceProgressIntervalPc() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.PitRadio.Notifications.RaceProgressIntervalPc
+}
+
+// SetPitRadioNotifyRaceProgressIntervalPc sets the race progress notification interval percentage.
+func (c *Config) SetPitRadioNotifyRaceProgressIntervalPc(value int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.PitRadio.Notifications.RaceProgressIntervalPc = value
+
+	c.registerUpdate(false)
+}
+
+// GetPitRadioNotifyRaceLapsEnabled returns whether race lap notifications are enabled.
+func (c *Config) GetPitRadioNotifyRaceLapsEnabled() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.PitRadio.Notifications.RaceLapsEnabled
+}
+
+// SetPitRadioNotifyRaceLapsEnabled sets whether race lap notifications are enabled.
+func (c *Config) SetPitRadioNotifyRaceLapsEnabled(value bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.PitRadio.Notifications.RaceLapsEnabled = value
+
+	c.registerUpdate(false)
+}
+
+// GetPitRadioNotifyRaceLapsIntervalLaps returns the interval in laps for race lap notifications.
+func (c *Config) GetPitRadioNotifyRaceLapsIntervalLaps() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.PitRadio.Notifications.RaceLapsIntervalLaps
+}
+
+// SetPitRadioNotifyRaceLapsIntervalLaps sets the interval in laps for race lap notifications.
+func (c *Config) SetPitRadioNotifyRaceLapsIntervalLaps(value int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.PitRadio.Notifications.RaceLapsIntervalLaps = value
+
+	c.registerUpdate(false)
+}
+
+// GetPitRadioNotifyRaceLapsCountdownLaps returns the number of laps for countdown notifications.
+func (c *Config) GetPitRadioNotifyRaceLapsCountdownLaps() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.PitRadio.Notifications.RaceLapsCountdownLaps
+}
+
+// SetPitRadioNotifyRaceLapsCountdownLaps sets the number of laps for countdown notifications.
+func (c *Config) SetPitRadioNotifyRaceLapsCountdownLaps(value int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.PitRadio.Notifications.RaceLapsCountdownLaps = value
+
+	c.registerUpdate(false)
+}
+
+// GetPitRadioNotifyLapTimesEnabled returns whether lap time notifications are enabled.
+func (c *Config) GetPitRadioNotifyLapTimesEnabled() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.PitRadio.Notifications.LapTimesEnabled
+}
+
+// SetPitRadioNotifyLapTimesEnabled sets whether lap time notifications are enabled.
+func (c *Config) SetPitRadioNotifyLapTimesEnabled(value bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.PitRadio.Notifications.LapTimesEnabled = value
+
+	c.registerUpdate(false)
+}
+
+// GetPitRadioNotifyLapTimesMaxDeltaSeconds returns the maximum delta in seconds for lap time notifications.
+func (c *Config) GetPitRadioNotifyLapTimesMaxDeltaSeconds() float64 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.PitRadio.Notifications.LapTimesMaxDeltaSeconds
+}
+
+// SetPitRadioNotifyLapTimesMaxDeltaSeconds sets the maximum delta in seconds for lap time notifications.
+func (c *Config) SetPitRadioNotifyLapTimesMaxDeltaSeconds(value float64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.PitRadio.Notifications.LapTimesMaxDeltaSeconds = value
+
+	c.registerUpdate(false)
+}
+
 // GetPitRadioFuelMonitoringEnabled returns true if fuel monitoring is enabled.
 func (c *Config) GetPitRadioFuelMonitoringEnabled() bool {
 	return c.snapshot.Load().FuelMonitoringEnabled
@@ -1609,6 +1680,82 @@ func (c *Config) SetPitRadioTyreTemperatureMarginCelsius(value float32) {
 	c.viper.PitRadio.TyreMonitoring.TemperatureMarginCelsius = value
 
 	c.registerUpdate(false)
+}
+
+// ****************************************************************************
+// Discord pit radio sub-section methods.
+// ****************************************************************************
+
+// GetDiscordToken returns the Discord API token.
+func (c *Config) GetDiscordToken() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.PitRadio.Discord.Token
+}
+
+// SetDiscordToken sets the Discord API token.
+func (c *Config) SetDiscordToken(token string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.PitRadio.Discord.Token = token
+
+	c.registerUpdate(true)
+}
+
+// GetDiscordGuildID returns the Discord guild (server) ID.
+func (c *Config) GetDiscordGuildID() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.PitRadio.Discord.GuildID
+}
+
+// SetDiscordGuildID sets the Discord guild (server) ID.
+func (c *Config) SetDiscordGuildID(guildID string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.PitRadio.Discord.GuildID = guildID
+
+	c.registerUpdate(true)
+}
+
+// GetDiscordChannelID returns the Discord text channel ID.
+func (c *Config) GetDiscordChannelID() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.PitRadio.Discord.ChannelID
+}
+
+// SetDiscordChannelID sets the Discord text channel ID.
+func (c *Config) SetDiscordChannelID(channelID string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.PitRadio.Discord.ChannelID = channelID
+
+	c.registerUpdate(true)
+}
+
+// GetDiscordVoiceChannelID returns the Discord voice channel ID.
+func (c *Config) GetDiscordVoiceChannelID() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.PitRadio.Discord.VoiceChannelID
+}
+
+// SetDiscordVoiceChannelID sets the Discord voice channel ID.
+func (c *Config) SetDiscordVoiceChannelID(voiceChannelID string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.PitRadio.Discord.VoiceChannelID = voiceChannelID
+
+	c.registerUpdate(true)
 }
 
 // ****************************************************************************
@@ -2282,7 +2429,7 @@ func (c *Config) registerUpdate(restartRequired bool) {
 // rebuildSnapshot creates a new immutable snapshot for lock-free reads.
 // Assumes that the caller holds the write lock.
 func (c *Config) rebuildSnapshot() {
-	newSnap := &ConfigSnapshot{
+	newSnap := &Snapshot{
 		MasterMute:                c.viper.Synthesizer.MasterMute,
 		MasterGain:                c.viper.Synthesizer.MasterGain,
 		ChassisMute:               c.viper.Synthesizer.ChassisMute,
