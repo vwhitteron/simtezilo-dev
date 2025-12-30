@@ -315,7 +315,9 @@ func (d *Discord) isConnected() bool {
 
 // isReady returns true if the voice connection is ready to send audio.
 func (d *Discord) isReady() bool {
-	return d.voiceConn != nil && d.voiceConn.Status == discordgo.VoiceConnectionStatusReady
+	return d.voiceConn != nil &&
+		d.voiceConn.Status == discordgo.VoiceConnectionStatusReady &&
+		d.voiceConn.OpusSend != nil
 }
 
 // isDead returns true if the voice connection is in a dead state.
@@ -328,7 +330,18 @@ func (d *Discord) isDead() bool {
 		d.log.Error().
 			Err(d.voiceConn.Err).
 			Int("status", int(d.voiceConn.Status)).
-			Msg("voice connection")
+			Str("error_type", fmt.Sprintf("%T", d.voiceConn.Err)).
+			Msg("voice connection error detected")
+
+		return true
+	}
+
+	// Check if status indicates a problem (not ready)
+	if d.voiceConn.Status != discordgo.VoiceConnectionStatusReady {
+		d.log.Warn().
+			Int("status", int(d.voiceConn.Status)).
+			Bool("has_opus_send", d.voiceConn.OpusSend != nil).
+			Msg("voice connection not in ready state")
 
 		return true
 	}
@@ -362,7 +375,12 @@ func (d *Discord) joinVoiceChannel() error {
 		case <-ctx.Done():
 			return fmt.Errorf("timeout waiting for voice connection to be ready: %w", ctx.Err())
 		default:
-			if d.voiceConn.Status == discordgo.VoiceConnectionStatusReady {
+			if d.voiceConn.Status == discordgo.VoiceConnectionStatusReady && d.voiceConn.OpusSend != nil {
+				d.log.Debug().
+					Str("guild_id", d.guildID).
+					Str("channel_id", d.voiceChannelID).
+					Msg("voice connection ready")
+
 				return nil
 			}
 
@@ -376,6 +394,11 @@ func (d *Discord) leaveVoiceChannel() error {
 	if d.voiceConn == nil {
 		return nil
 	}
+
+	d.log.Debug().
+		Int("status", int(d.voiceConn.Status)).
+		Bool("has_error", d.voiceConn.Err != nil).
+		Msg("leaving voice channel")
 
 	err := d.voiceConn.Disconnect(context.Background())
 	if err != nil {
@@ -394,7 +417,9 @@ func (d *Discord) sessionIsConnected() bool {
 
 // voiceChannelIsConnected returns true if the bot is connected to a voice channel.
 func (d *Discord) voiceChannelIsConnected() bool {
-	return d.voiceConn != nil && d.voiceConn.Status == discordgo.VoiceConnectionStatusReady
+	return d.voiceConn != nil &&
+		d.voiceConn.Status == discordgo.VoiceConnectionStatusReady &&
+		d.voiceConn.OpusSend != nil
 }
 
 // voiceMessageSend sends the given DCA audio data to the voice channel.
@@ -405,6 +430,10 @@ func (d *Discord) voiceMessageSend(dcaData []byte) error {
 
 	if d.voiceConn.Status != discordgo.VoiceConnectionStatusReady {
 		return errors.New("voice connection not ready")
+	}
+
+	if d.voiceConn.OpusSend == nil {
+		return errors.New("voice connection opus channel not available")
 	}
 
 	return d.sendVoiceAudio(dcaData)
@@ -420,6 +449,10 @@ func (d *Discord) sendVoiceAudio(dca []byte) error {
 		return errors.New("voice connection not ready")
 	}
 
+	if d.voiceConn.OpusSend == nil {
+		return errors.New("voice connection opus channel not available")
+	}
+
 	if len(dca) == 0 {
 		return errors.New("no audio data to send")
 	}
@@ -427,6 +460,13 @@ func (d *Discord) sendVoiceAudio(dca []byte) error {
 	// Send speaking packet
 	err := d.voiceConn.Speaking(true)
 	if err != nil {
+		d.log.Error().
+			Err(err).
+			Int("status", int(d.voiceConn.Status)).
+			Bool("has_opus_send", d.voiceConn.OpusSend != nil).
+			Bool("has_error", d.voiceConn.Err != nil).
+			Msg("failed to start speaking - connection state details")
+
 		return fmt.Errorf("start speaking: %w", err)
 	}
 
