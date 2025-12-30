@@ -1407,8 +1407,11 @@ func (a *App) normalizeRevLimit(revLimit uint16) uint16 {
 // setTransmissionGain sets the transmission gain based on vehicle type.
 func (a *App) setTransmissionGain(vehicleType vehicle.TypeName) {
 	switch vehicleType {
-	case vehicle.TypeRace, vehicle.TypeTuned:
+	case vehicle.TypeRace:
 		a.transmissionGainMin = a.config.GetSynthTransmissionGain() + a.config.GetSynthTransmissionGainMinRace()
+	case vehicle.TypeTuned:
+		minGain := (a.config.GetSynthTransmissionGainMinStreet() + a.config.GetSynthTransmissionGainMinRace()) / 2
+		a.transmissionGainMin = a.config.GetSynthTransmissionGain() + minGain
 	case vehicle.TypeStreet:
 		fallthrough
 	default:
