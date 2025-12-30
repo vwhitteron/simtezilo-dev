@@ -48,7 +48,7 @@ type fuelMonitoring struct {
 }
 
 type haptics struct {
-	ReplayMode                   bool                                `toml:"replayMode"`
+	EnableReplay                 bool                                `toml:"enableReplay"`
 	DynamicTransmissionFeedback  bool                                `toml:"dynamicTransmissionFeedback"`
 	DynamicTransmissionCurve     int                                 `toml:"dynamicTransmissionCurve"`
 	DynamicTransmissionGforceMax float64                             `toml:"dynamicTransmissionGforceMax"`
@@ -92,16 +92,16 @@ type Synthesizer struct {
 	InternalSampleRateHz      int       `toml:"internalSampleRateHz"`
 	OutputSampleRateHz        int       `toml:"outputSampleRateHz"`
 	OutputFile                string    `toml:"outputFile"`
+	MasterMute                bool      `toml:"masterMute"`
 	MasterGain                float64   `toml:"masterGain"`
-	MasterMute                bool      `toml:"masterGainMute"`
+	ChassisMute               bool      `toml:"chassisMute"`
 	ChassisGain               float64   `toml:"chassisGain"`
-	ChassisGainMute           bool      `toml:"chassisGainMute"`
+	TransmissionMute          bool      `toml:"transmissionMute"`
 	TransmissionGain          float64   `toml:"transmissionGain"`
-	TransmissionMute          bool      `toml:"transmissionGainMute"`
 	TransmissionGainMinRace   float64   `toml:"transmissionGainMinRace"`
 	TransmissionGainMinStreet float64   `toml:"transmissionGainMinStreet"`
+	EngineMute                bool      `toml:"engineMute"`
 	EngineGain                float64   `toml:"engineGain"`
-	EngineMute                bool      `toml:"engineGainMute"`
 	GainIncrement             float64   `toml:"gainIncrement"`
 	EqEnabled                 bool      `toml:"eqEnabled"`
 	EqBands                   []EQBand  `toml:"eqBands"`
@@ -141,16 +141,16 @@ type viperConfig struct {
 // ConfigSnapshot holds frequently-accessed configuration values for lock-free reads.
 type ConfigSnapshot struct {
 	// Synthesizer gain settings
-	MasterGain                float64
 	MasterMute                bool
+	MasterGain                float64
+	ChassisMute               bool
 	ChassisGain               float64
-	ChassisGainMute           bool
-	TransmissionGain          float64
 	TransmissionMute          bool
+	TransmissionGain          float64
 	TransmissionGainMinRace   float64
 	TransmissionGainMinStreet float64
-	EngineGain                float64
 	EngineMute                bool
+	EngineGain                float64
 	GainIncrement             float64
 	InternalSampleRateHz      int
 	OutputSampleRateHz        int
@@ -851,20 +851,20 @@ func (c *Config) DecreaseHapticsJerkMax() int {
 	return result
 }
 
-// GetHapticsReplayMode returns true if replay mode is enabled.
-func (c *Config) GetHapticsReplayMode() bool {
+// GetHapticsEnableReplay returns true if replay mode is enabled.
+func (c *Config) GetHapticsEnableReplay() bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	return c.viper.Haptics.ReplayMode
+	return c.viper.Haptics.EnableReplay
 }
 
-// SetHapticsReplayMode sets whether replay mode is enabled.
-func (c *Config) SetHapticsReplayMode(value bool) {
+// SetHapticsEnableReplay sets whether haptics are generated for replays.
+func (c *Config) SetHapticsEnableReplay(value bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.viper.Haptics.ReplayMode = value
+	c.viper.Haptics.EnableReplay = value
 
 	c.registerUpdate(true)
 }
@@ -1691,8 +1691,8 @@ func (c *Config) SetSynthMasterGain(value float64) {
 	c.mu.Unlock()
 }
 
-// GetSynthMasterGainMute returns whether the master gain is muted.
-func (c *Config) GetSynthMasterGainMute() bool {
+// GetSynthMasterMute returns whether the master gain is muted.
+func (c *Config) GetSynthMasterMute() bool {
 	return c.snapshot.Load().MasterMute
 }
 
@@ -1741,15 +1741,15 @@ func (c *Config) GetSynthChassisGain() float64 {
 	return c.snapshot.Load().ChassisGain
 }
 
-// GetSynthChassisGainMute returns whether the chassis gain is muted.
-func (c *Config) GetSynthChassisGainMute() bool {
-	return c.snapshot.Load().ChassisGainMute
+// GetSynthChassisMute returns whether the chassis gain is muted.
+func (c *Config) GetSynthChassisMute() bool {
+	return c.snapshot.Load().ChassisMute
 }
 
-// SetSynthChassisGainMute sets whether the chassis gain is muted.
-func (c *Config) SetSynthChassisGainMute(mute bool) {
+// SetSynthChassisMute sets whether the chassis gain is muted.
+func (c *Config) SetSynthChassisMute(mute bool) {
 	c.mu.Lock()
-	c.viper.Synthesizer.ChassisGainMute = mute
+	c.viper.Synthesizer.ChassisMute = mute
 	c.rebuildSnapshot()
 	c.registerUpdate(false)
 	c.mu.Unlock()
@@ -2283,16 +2283,16 @@ func (c *Config) registerUpdate(restartRequired bool) {
 // Assumes that the caller holds the write lock.
 func (c *Config) rebuildSnapshot() {
 	newSnap := &ConfigSnapshot{
-		MasterGain:                c.viper.Synthesizer.MasterGain,
 		MasterMute:                c.viper.Synthesizer.MasterMute,
+		MasterGain:                c.viper.Synthesizer.MasterGain,
+		ChassisMute:               c.viper.Synthesizer.ChassisMute,
 		ChassisGain:               c.viper.Synthesizer.ChassisGain,
-		ChassisGainMute:           c.viper.Synthesizer.ChassisGainMute,
-		TransmissionGain:          c.viper.Synthesizer.TransmissionGain,
 		TransmissionMute:          c.viper.Synthesizer.TransmissionMute,
+		TransmissionGain:          c.viper.Synthesizer.TransmissionGain,
 		TransmissionGainMinRace:   c.viper.Synthesizer.TransmissionGainMinRace,
 		TransmissionGainMinStreet: c.viper.Synthesizer.TransmissionGainMinStreet,
-		EngineGain:                c.viper.Synthesizer.EngineGain,
 		EngineMute:                c.viper.Synthesizer.EngineMute,
+		EngineGain:                c.viper.Synthesizer.EngineGain,
 		GainIncrement:             c.viper.Synthesizer.GainIncrement,
 		InternalSampleRateHz:      c.viper.Synthesizer.InternalSampleRateHz,
 		OutputSampleRateHz:        c.viper.Synthesizer.OutputSampleRateHz,

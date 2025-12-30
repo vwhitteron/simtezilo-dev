@@ -186,7 +186,7 @@
 
         "runmode.settings.app.basedir": "ベースディレクトリ",
         "runmode.settings.app.vehicledbfile": "車両データベースファイル",
-        "runmode.settings.app.replaymode": "リプレイモード",
+        "runmode.settings.app.enablereplay": "出力モード",
 
         "runmode.settings.discord.title": "Discord",
         "runmode.settings.discord.token": "ボットトークン",

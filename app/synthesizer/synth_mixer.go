@@ -148,9 +148,9 @@ func (m *Mixer) ReadChannel(name string, length int) []float64 {
 
 	switch name {
 	case "_master":
-		muted = m.config.GetSynthMasterGainMute()
+		muted = m.config.GetSynthMasterMute()
 	case "chassis":
-		muted = m.config.GetSynthChassisGainMute()
+		muted = m.config.GetSynthChassisMute()
 	case "transmission":
 		muted = m.config.GetSynthTransmissionMute()
 	case "engine":
@@ -348,7 +348,7 @@ func (m *Mixer) MixToMaster(length int) {
 		// Lock-free config reads for mute state
 		var muted bool
 		if name == "chassis" {
-			muted = m.config.GetSynthChassisGainMute()
+			muted = m.config.GetSynthChassisMute()
 		} else {
 			muted = m.config.GetSynthTransmissionMute()
 		}
@@ -465,7 +465,7 @@ func (m *Mixer) checkBufferHealth() {
 
 		switch name {
 		case "chassis":
-			muted = m.config.GetSynthChassisGainMute()
+			muted = m.config.GetSynthChassisMute()
 		case "transmission":
 			muted = m.config.GetSynthTransmissionMute()
 		case "engine":
@@ -519,10 +519,10 @@ func (m *Mixer) watchForConfigChanges() {
 			switch name {
 			case "_master":
 				configGain = m.config.GetSynthMasterGain()
-				configMute = m.config.GetSynthMasterGainMute()
+				configMute = m.config.GetSynthMasterMute()
 			case "chassis":
 				configGain = m.config.GetSynthChassisGain()
-				configMute = m.config.GetSynthChassisGainMute()
+				configMute = m.config.GetSynthChassisMute()
 			case "transmission":
 				configGain = m.config.GetSynthTransmissionGain()
 				configMute = m.config.GetSynthTransmissionMute()

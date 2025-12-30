@@ -16,9 +16,6 @@ The output log level. Defaults to `warn` and can be set to any of the following:
 
 `trace`, `debug`, `info`, `warn`, `error`, `fatal`, `panic` and `off`
 
-#### replayMode
-
-Enable output of haptics during replays or only live racing. Defaults to `false`
 
 ### Telemetry Section
 
@@ -33,11 +30,12 @@ Gran Turismo 7. If this doesn't work for any reason replace the IP address with 
 PlayStation device.
 
 Filesystem locations should always be prefixed with `file://`. When setting a file location you will also
-need to set `replayMode = true` for haptics to be output.
+need to set `enableReplay = true` for haptics to be output.
 
 For Windows paths make sure to use double forward slashes for all directory delimeters.
 
 An example replay file named `replay.gtz` is included in the Simtezilo directory.
+
 
 ### Synthesizer section
 
@@ -72,6 +70,14 @@ however many audio devices do not accept sample rates below 32kHz.
 
 The haptics signal outputs frequencies between 16Hz and 60Hz so a sample rate as low as 8kHz is more than
 adequate if the audio device supports it.
+
+
+### Haptics section
+
+#### enableReplay
+
+Enable output of haptics during replays or only live racing. Defaults to `false`
+
 
 ## Running the App
 

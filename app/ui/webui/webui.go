@@ -265,7 +265,7 @@ func (w *WebUI) handleWebSocketConnection(response http.ResponseWriter, request 
 	defer func() {
 		err := webSocket.Close()
 		if err != nil {
-			w.log.Error().Err(err).Msg("closing websocket connection")
+			w.log.Debug().Err(err).Msg("closing websocket connection")
 		}
 	}()
 
@@ -317,7 +317,7 @@ func (w *WebUI) handleWebSocketConnection(response http.ResponseWriter, request 
 				w.log.Debug().Err(err).Msg("failed to send batched data to websocket")
 
 				if failCount >= maxFailures {
-					w.log.Error().Err(err).Str("reason", "too many failures").Msg("dropping websocket connection")
+					w.log.Info().Err(err).Str("reason", "too many failures").Msg("dropping websocket connection")
 
 					_ = webSocket.Close()
 
@@ -334,7 +334,7 @@ func (w *WebUI) handleWebSocketConnection(response http.ResponseWriter, request 
 
 	for data := range w.telemetryChartFeed {
 		if failCount >= maxFailures {
-			w.log.Error().Err(err).Str("reason", "too many failures").Msg("dropping websocket connection")
+			w.log.Info().Err(err).Str("reason", "too many failures").Msg("dropping websocket connection")
 
 			break
 		}
@@ -916,7 +916,7 @@ func (w *WebUI) handleGetConfig(response http.ResponseWriter, _ *http.Request) {
 			"accent":       w.config.GetAppAccent(),
 			"logLevel":     w.config.GetAppLogLevel(),
 			"baseDir":      w.config.GetAppBaseDir(),
-			"replayMode":   w.config.GetHapticsReplayMode(),
+			"enableReplay": w.config.GetHapticsEnableReplay(),
 			"webUIEnabled": w.config.GetAppWebUIEnabled(),
 			"webUIPort":    w.config.GetAppWebUIPort(),
 		},
@@ -963,16 +963,16 @@ func (w *WebUI) handleGetConfig(response http.ResponseWriter, _ *http.Request) {
 			"internalSampleRateHz":      w.config.GetSynthInternalSampleRateHz(),
 			"outputSampleRateHz":        w.config.GetSynthOutputSampleRateHz(),
 			"outputFile":                w.config.GetSynthOutputFile(),
+			"masterMute":                w.config.GetSynthMasterMute(),
 			"masterGain":                w.config.GetSynthMasterGain(),
-			"masterGainMute":            w.config.GetSynthMasterGainMute(),
+			"chassisMute":               w.config.GetSynthChassisMute(),
 			"chassisGain":               w.config.GetSynthChassisGain(),
-			"chassisGainMute":           w.config.GetSynthChassisGainMute(),
+			"transmissionMute":          w.config.GetSynthTransmissionMute(),
 			"transmissionGain":          w.config.GetSynthTransmissionGain(),
-			"transmissionGainMute":      w.config.GetSynthTransmissionMute(),
 			"transmissionGainMinRace":   w.config.GetSynthTransmissionGainMinRace(),
 			"transmissionGainMinStreet": w.config.GetSynthTransmissionGainMinStreet(),
+			"engineMute":                w.config.GetSynthEngineMute(),
 			"engineGain":                w.config.GetSynthEngineGain(),
-			"engineGainMute":            w.config.GetSynthEngineMute(),
 			"gainIncrement":             w.config.GetSynthGainIncrement(),
 			"engineProfiles":            w.config.GetSynthEngineProfiles(),
 			"eqEnabled":                 w.config.GetSynthEqEnabled(),
@@ -1172,9 +1172,9 @@ func (w *WebUI) applyAppConfig(config map[string]any) []string {
 		}
 	}
 
-	if replayMode, ok := config["replayMode"]; ok {
-		if replayBool, ok := replayMode.(bool); ok {
-			w.config.SetHapticsReplayMode(replayBool)
+	if enableReplay, ok := config["enableReplay"]; ok {
+		if replayBool, ok := enableReplay.(bool); ok {
+			w.config.SetHapticsEnableReplay(replayBool)
 		} else {
 			errors = append(errors, "invalid replay mode value")
 		}
@@ -1211,8 +1211,8 @@ func (w *WebUI) applySynthesizerConfig(config map[string]any) []string {
 		}
 	}
 
-	if masterGainMute, ok := config["masterGainMute"]; ok {
-		if mute, ok := masterGainMute.(bool); ok {
+	if masterMute, ok := config["masterMute"]; ok {
+		if mute, ok := masterMute.(bool); ok {
 			w.config.SetSynthMasterMute(mute)
 		} else {
 			errors = append(errors, "invalid master gain mute value")
@@ -1227,9 +1227,9 @@ func (w *WebUI) applySynthesizerConfig(config map[string]any) []string {
 		}
 	}
 
-	if chassisGainMute, ok := config["chassisGainMute"]; ok {
-		if mute, ok := chassisGainMute.(bool); ok {
-			w.config.SetSynthChassisGainMute(mute)
+	if chassisMute, ok := config["chassisMute"]; ok {
+		if mute, ok := chassisMute.(bool); ok {
+			w.config.SetSynthChassisMute(mute)
 		} else {
 			errors = append(errors, "invalid chassis gain mute value")
 		}
@@ -1243,8 +1243,8 @@ func (w *WebUI) applySynthesizerConfig(config map[string]any) []string {
 		}
 	}
 
-	if transmissionGainMute, ok := config["transmissionGainMute"]; ok {
-		if mute, ok := transmissionGainMute.(bool); ok {
+	if transmissionMute, ok := config["transmissionMute"]; ok {
+		if mute, ok := transmissionMute.(bool); ok {
 			w.config.SetSynthTransmissionMute(mute)
 		} else {
 			errors = append(errors, "invalid transmission gain mute value")
@@ -1275,8 +1275,8 @@ func (w *WebUI) applySynthesizerConfig(config map[string]any) []string {
 		}
 	}
 
-	if engineGainMute, ok := config["engineGainMute"]; ok {
-		if mute, ok := engineGainMute.(bool); ok {
+	if engineMute, ok := config["engineMute"]; ok {
+		if mute, ok := engineMute.(bool); ok {
 			w.config.SetSynthEngineMute(mute)
 		} else {
 			errors = append(errors, "invalid engine gain mute value")

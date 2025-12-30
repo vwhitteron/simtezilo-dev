@@ -22,6 +22,7 @@ import (
 
 // Config holds the configuration for creating a new Discord bot.
 type Config struct {
+	Enabled        bool                           // Indicates if the bot is enabled
 	Token          string                         // Discord bot token
 	GuildID        string                         // Discord guild ID
 	ChannelID      string                         // Optional Discord channel ID for text messages
@@ -50,7 +51,7 @@ type Discord struct {
 // New creates a new Discord bot instance.
 func New(config Config) (*Discord, error) {
 	bot := Discord{
-		enabled:        true,
+		enabled:        config.Enabled,
 		channelID:      config.ChannelID,
 		voiceChannelID: config.VoiceChannelID,
 		guildID:        config.GuildID,

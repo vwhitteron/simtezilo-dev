@@ -811,6 +811,7 @@ func (a *App) initializeDiscord(opts Options) {
 	}
 
 	discordBotConfig := discord.Config{
+		Enabled:        a.config.PitRadioEnabled(),
 		Token:          token,
 		ChannelID:      channelID,
 		VoiceChannelID: voiceChannelID,

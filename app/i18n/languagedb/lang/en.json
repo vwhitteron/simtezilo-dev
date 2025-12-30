@@ -182,7 +182,7 @@
         "runmode.settings.app.loglevel": "Log Level",
         "runmode.settings.app.basedir": "Base Directory",
         "runmode.settings.app.vehicledbfile": "Vehicle Database File",
-        "runmode.settings.app.replaymode": "Replay Mode",
+        "runmode.settings.app.enablereplay": "Output mode",
 
         "runmode.settings.discord.title": "Discord",
         "runmode.settings.discord.token": "Bot Token",
@@ -217,9 +217,9 @@
         "runmode.settings.haptics.jerkmax": "Jerk Max",
         "runmode.settings.haptics.snapcurve": "Snap Curve",
         "runmode.settings.haptics.snapmax": "Snap Max",
-        "runmode.settings.haptics.pulseamplitude": "Max Amplitude",
-        "runmode.settings.haptics.pulseminfreq": "Min Frequency (Hz)",
-        "runmode.settings.haptics.pulsemaxfreq": "Max Frequency (Hz)",
+        "runmode.settings.haptics.pulseamplitude": "Pulse Max Amplitude",
+        "runmode.settings.haptics.pulseminfreq": "Pulse Min Freq (Hz)",
+        "runmode.settings.haptics.pulsemaxfreq": "Pulse Max Freq (Hz)",
 
         "runmode.settings.pitradio.title": "Pit Radio",
         "runmode.settings.pitradio.enabled": "Enable",

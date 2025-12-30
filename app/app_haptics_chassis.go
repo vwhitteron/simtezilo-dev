@@ -8,7 +8,7 @@ import (
 )
 
 func (a *App) generateChassisHaptic() {
-	if a.config.GetSynthChassisGainMute() {
+	if a.config.GetSynthChassisMute() {
 		return
 	}
 
