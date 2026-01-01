@@ -236,8 +236,11 @@ class ConfigManager {
             // Checkboxes and selects should save immediately on change
             if (input.type === 'checkbox' || input.tagName === 'SELECT' || input.type === 'radio') {
                 input.addEventListener('change', () => {
+                    console.log('[DEBUG] Change event fired for:', input.id, input.dataset.config, 'value:', input.value);
+
                     // Don't process changes during form population
                     if (this.isPopulating) {
+                        console.log('[DEBUG] Skipping - form is populating');
                         return;
                     }
 
@@ -270,11 +273,9 @@ class ConfigManager {
                     }
                 });
 
-                // For gain inputs, haptics, fuel, tyres, and pitRadio inputs, also save immediately on change (spinner buttons)
+                // For gain inputs, haptics, and pitRadio inputs, also save immediately on change (spinner buttons)
                 if (input.classList.contains('gain-input') ||
                     configPath.startsWith('haptics.') ||
-                    configPath.startsWith('fuel.') ||
-                    configPath.startsWith('tyres.') ||
                     configPath.startsWith('pitRadio.')) {
                     input.addEventListener('change', () => {
                         this.saveInputConfiguration(input);
@@ -300,8 +301,11 @@ class ConfigManager {
 
     // Save configuration for a specific input
     async saveInputConfiguration(input) {
+        console.log('[DEBUG] saveInputConfiguration called for:', input.id, input.dataset.config);
+
         // Skip saves during initial load or form population
         if (this.isInitializing || this.isPopulating) {
+            console.log('[DEBUG] Skipping save - initializing:', this.isInitializing, 'populating:', this.isPopulating);
             return;
         }
 
@@ -347,28 +351,68 @@ class ConfigManager {
             const formData = {};
             this.setNestedValue(formData, configPath, newValue);
 
-            // Send to server
-            const updateResponse = await fetch('/api/config', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(formData)
+            // Debug logging
+            console.log(`[DEBUG] Saving ${configPath}:`, {
+                configPath,
+                newValue,
+                attemptedValue,
+                inputType: input.type,
+                inputTagName: input.tagName,
+                hasDataType: !!input.dataset.type,
+                dataType: input.dataset.type,
+                formData
             });
 
-            if (!updateResponse.ok) {
-                throw new Error(`HTTP error! status: ${updateResponse.status}`);
-            }
+            // Send to server
+            console.log('[DEBUG] About to send fetch request to /api/config');
+            console.log('[DEBUG] Request body:', JSON.stringify(formData));
 
-            // Update successful
-            this.showInputStatus(input, 'success');
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+
+                const updateResponse = await fetch('/api/config', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(formData),
+                    signal: controller.signal
+                });
+
+                clearTimeout(timeoutId);
+                console.log(`[DEBUG] Save response status: ${updateResponse.status}`);
+
+                if (!updateResponse.ok) {
+                    // Try to parse error details
+                    try {
+                        const errorData = await updateResponse.json();
+                        console.error(`[DEBUG] Save failed with errors:`, errorData);
+                        throw new Error(`HTTP error! status: ${updateResponse.status}, details: ${JSON.stringify(errorData)}`);
+                    } catch (parseError) {
+                        throw new Error(`HTTP error! status: ${updateResponse.status}`);
+                    }
+                }
+
+                // Update successful
+                this.showInputStatus(input, 'success');
+            } catch (fetchError) {
+                if (fetchError.name === 'AbortError') {
+                    console.error('[DEBUG] Fetch request timed out after 5 seconds');
+                    throw new Error('Request timed out');
+                } else {
+                    console.error('[DEBUG] Fetch error:', fetchError);
+                    throw fetchError;
+                }
+            }
             this.previousValues.set(configPath, attemptedValue);
 
             // Update local config
             this.setNestedValue(this.config, configPath, newValue);
 
         } catch (error) {
-            console.error(`Failed to save ${configPath}:`, error);
+            console.error(`[DEBUG] Failed to save ${configPath}:`, error);
+            console.error('[DEBUG] Error stack:', error.stack);
             this.showInputStatus(input, 'error');
 
             // Keep the attempted value visible while error icon is showing
@@ -479,6 +523,13 @@ class ConfigManager {
             }
 
             this.config = await response.json();
+
+            // Debug logging
+            console.log('[DEBUG] Loaded configuration:', {
+                synthesizer: this.config.synthesizer,
+                pitRadio: this.config.pitRadio
+            });
+
             this.populateForm();
             // Configuration loaded successfully (no need to show indicator)
 
@@ -588,23 +639,42 @@ class ConfigManager {
         const inputs = document.querySelectorAll('[data-config]');
         const formData = {};
 
+        console.log('[DEBUG] Collecting form data from', inputs.length, 'inputs');
+
         inputs.forEach(input => {
             const configPath = input.dataset.config;
             let value;
 
-            if (input.type === 'checkbox') {
+            if (input.type === 'radio') {
+                // Only process checked radio button
+                if (!input.checked) {
+                    return;
+                }
+                // Handle radio buttons with data-radio-value
+                if (input.dataset.radioValue !== undefined) {
+                    value = input.dataset.radioValue === 'true' ? true :
+                        input.dataset.radioValue === 'false' ? false :
+                            input.dataset.radioValue;
+                    console.log(`[DEBUG] Collected radio field ${configPath}:`, value);
+                } else {
+                    value = input.value;
+                }
+            } else if (input.type === 'checkbox') {
                 value = input.checked;
-            } else if (input.type === 'number') {
+            } else if (input.type === 'number' || input.dataset.type === 'number') {
                 value = parseFloat(input.value);
                 if (isNaN(value)) {
                     value = 0;
                 }
+                console.log(`[DEBUG] Collected number field ${configPath}:`, value, 'from', input.value);
             } else {
                 value = input.value;
             }
 
             this.setNestedValue(formData, configPath, value);
         });
+
+        console.log('[DEBUG] Collected form data:', formData);
 
         return formData;
     }

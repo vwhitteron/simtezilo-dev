@@ -828,13 +828,6 @@ func (w *WebUI) handleGetConfig(response http.ResponseWriter, _ *http.Request) {
 			"channelID":      w.config.GetDiscordChannelID(),
 			"voiceChannelID": w.config.GetDiscordVoiceChannelID(),
 		},
-		"fuel": map[string]any{
-			"monitoringEnabled":       w.config.GetPitRadioFuelMonitoringEnabled(),
-			"preWarnNotifyLaps":       w.config.GetPitRadioFuelPreWarnNotifyLaps(),
-			"strategyNotifyLaps":      w.config.GetPitRadioFuelStrategyNotifyLaps(),
-			"rangeSafetyMarginLaps":   w.config.GetPitRadioFuelRangeSafetyMarginLaps(),
-			"rangeSafetyMarginMeters": w.config.GetPitRadioFuelRangeSafetyMarginMeters(),
-		},
 		"hardware": map[string]any{
 			"model":              w.config.GetHardwareModel(),
 			"displayOrientation": w.config.GetDisplayOrientation(),
@@ -863,6 +856,19 @@ func (w *WebUI) handleGetConfig(response http.ResponseWriter, _ *http.Request) {
 				"raceLapsCountdownLaps":   w.config.GetPitRadioNotifyRaceLapsCountdownLaps(),
 				"lapTimesEnabled":         w.config.GetPitRadioNotifyLapTimesEnabled(),
 				"lapTimesMaxDeltaSeconds": w.config.GetPitRadioNotifyLapTimesMaxDeltaSeconds(),
+			},
+			"fuelMonitoring": map[string]any{
+				"monitoringEnabled":       w.config.GetPitRadioFuelMonitoringEnabled(),
+				"preWarnNotifyLaps":       w.config.GetPitRadioFuelPreWarnNotifyLaps(),
+				"strategyNotifyLaps":      w.config.GetPitRadioFuelStrategyNotifyLaps(),
+				"rangeSafetyMarginLaps":   w.config.GetPitRadioFuelRangeSafetyMarginLaps(),
+				"rangeSafetyMarginMeters": w.config.GetPitRadioFuelRangeSafetyMarginMeters(),
+			},
+			"tyreMonitoring": map[string]any{
+				"enabled":                    w.config.GetPitRadioTyreMonitoringEnabled(),
+				"temperatureOptimalCelsius":  w.config.GetPitRadioTyreTemperatureOptimalCelsius(),
+				"temperatureOperatingWindow": w.config.GetPitRadioTyreTemperatureOperatingWindow(),
+				"temperatureMarginCelsius":   w.config.GetPitRadioTyreTemperatureMarginCelsius(),
 			},
 			"discord": map[string]any{
 				"token":          w.config.GetDiscordToken(),
@@ -902,12 +908,6 @@ func (w *WebUI) handleGetConfig(response http.ResponseWriter, _ *http.Request) {
 		"telemetry": map[string]any{
 			"source": w.config.GetTelemetrySource(),
 		},
-		"tyres": map[string]any{
-			"monitoringEnabled":          w.config.GetPitRadioTyreMonitoringEnabled(),
-			"temperatureOptimalCelsius":  w.config.GetPitRadioTyreTemperatureOptimalCelsius(),
-			"temperatureOperatingWindow": w.config.GetPitRadioTyreTemperatureOperatingWindow(),
-			"temperatureMarginCelsius":   w.config.GetPitRadioTyreTemperatureMarginCelsius(),
-		},
 	}
 
 	err := json.NewEncoder(response).Encode(configData)
@@ -930,6 +930,9 @@ func (w *WebUI) handleSetConfig(response http.ResponseWriter, request *http.Requ
 
 		return
 	}
+
+	// Debug: Log the incoming configuration data
+	w.log.Debug().Interface("configData", configData).Msg("received config update request")
 
 	// Check if restart is required BEFORE applying changes
 	restartRequired := w.checkRestartRequired(configData)
@@ -1005,8 +1008,6 @@ func (w *WebUI) applyConfigChanges(configData map[string]any) []string {
 			errors = append(errors, w.applySynthesizerConfig(sectionMap)...)
 		case "haptics":
 			errors = append(errors, w.applyHapticsConfig(sectionMap)...)
-		case "fuel":
-			errors = append(errors, w.applyFuelConfig(sectionMap)...)
 		case "hardware":
 			errors = append(errors, w.applyHardwareConfig(sectionMap)...)
 		case "telemetry":
@@ -1015,8 +1016,6 @@ func (w *WebUI) applyConfigChanges(configData map[string]any) []string {
 			errors = append(errors, w.applyDiscordConfig(sectionMap)...)
 		case "pitRadio":
 			errors = append(errors, w.applyPitRadioConfig(sectionMap)...)
-		case "tyres":
-			errors = append(errors, w.applyTyresConfig(sectionMap)...)
 		// Add more sections as needed
 		default:
 			w.log.Debug().Str("section", section).Msg("configuration section not implemented for updates")
@@ -1084,14 +1083,6 @@ func (w *WebUI) applyAppConfig(config map[string]any) []string {
 		}
 	}
 
-	if enableReplay, ok := config["enableReplay"]; ok {
-		if replayBool, ok := enableReplay.(bool); ok {
-			w.config.SetHapticsEnableReplay(replayBool)
-		} else {
-			errors = append(errors, "invalid replay mode value")
-		}
-	}
-
 	return errors
 }
 
@@ -1099,19 +1090,27 @@ func (w *WebUI) applyAppConfig(config map[string]any) []string {
 func (w *WebUI) applySynthesizerConfig(config map[string]any) []string {
 	var errors []string
 
+	w.log.Debug().Interface("synthConfig", config).Msg("applying synthesizer configuration")
+
 	if internalSampleRate, ok := config["internalSampleRateHz"]; ok {
+		w.log.Debug().Interface("value", internalSampleRate).Type("type", internalSampleRate).Msg("processing internalSampleRateHz")
 		if rateFloat, ok := internalSampleRate.(float64); ok {
 			w.config.SetSynthInternalSampleRateHz(int(rateFloat))
+			w.log.Debug().Int("rate", int(rateFloat)).Msg("set internal sample rate")
 		} else {
 			errors = append(errors, "invalid internal sample rate value")
+			w.log.Error().Interface("value", internalSampleRate).Msg("invalid internal sample rate value type")
 		}
 	}
 
 	if outputSampleRate, ok := config["outputSampleRateHz"]; ok {
+		w.log.Debug().Interface("value", outputSampleRate).Type("type", outputSampleRate).Msg("processing outputSampleRateHz")
 		if rateFloat, ok := outputSampleRate.(float64); ok {
 			w.config.SetSynthOutputSampleRateHz(int(rateFloat))
+			w.log.Debug().Int("rate", int(rateFloat)).Msg("set output sample rate")
 		} else {
 			errors = append(errors, "invalid output sample rate value")
+			w.log.Error().Interface("value", outputSampleRate).Msg("invalid output sample rate value type")
 		}
 	}
 
@@ -1369,6 +1368,12 @@ func (w *WebUI) applyHapticsConfig(config map[string]any) []string {
 		}
 	}
 
+	if enableReplay, ok := config["enableReplay"]; ok {
+		if replayBool, ok := parseBool(enableReplay, "enable replay"); ok {
+			w.config.SetHapticsEnableReplay(replayBool)
+		}
+	}
+
 	return errors
 }
 
@@ -1613,6 +1618,14 @@ func (w *WebUI) applyNotificationsConfig(config map[string]any) []string {
 		}
 	}
 
+	if circuitMatchingEnabled, ok := config["circuitMatchingEnabled"]; ok {
+		if enabledBool, ok := circuitMatchingEnabled.(bool); ok {
+			w.config.SetPitRadioNotifyCircuitMatchingEnabled(enabledBool)
+		} else {
+			errors = append(errors, "invalid circuit matching enabled value")
+		}
+	}
+
 	return errors
 }
 
@@ -1653,6 +1666,26 @@ func (w *WebUI) applyPitRadioConfig(config map[string]any) []string {
 			errors = append(errors, discordErrors...)
 		} else {
 			errors = append(errors, "invalid discord configuration structure")
+		}
+	}
+
+	// Handle nested fuel monitoring configuration
+	if fuelMonitoringConfig, ok := config["fuelMonitoring"]; ok {
+		if fuelMap, ok := fuelMonitoringConfig.(map[string]any); ok {
+			fuelErrors := w.applyFuelConfig(fuelMap)
+			errors = append(errors, fuelErrors...)
+		} else {
+			errors = append(errors, "invalid fuel monitoring configuration structure")
+		}
+	}
+
+	// Handle nested tyre monitoring configuration
+	if tyreMonitoringConfig, ok := config["tyreMonitoring"]; ok {
+		if tyreMap, ok := tyreMonitoringConfig.(map[string]any); ok {
+			tyreErrors := w.applyTyresConfig(tyreMap)
+			errors = append(errors, tyreErrors...)
+		} else {
+			errors = append(errors, "invalid tyre monitoring configuration structure")
 		}
 	}
 

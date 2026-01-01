@@ -2495,7 +2495,7 @@ func (c *Config) rebuildSnapshot() {
 // updatePulseWidthExtents recalculates the minimum and maximum pulse widths in samples.
 // Assumes the caller does NOT hold the lock.
 func (c *Config) updatePulseWidthExtents() {
-	c.mu.Lock()
+	// Assumes caller holds c.mu.Lock()
 	c.viper.Haptics._pulseWidthMin = float64(c.viper.Synthesizer.InternalSampleRateHz) /
 		(2 * c.viper.Haptics.PulseMaxFrequencyHz)
 
@@ -2504,5 +2504,4 @@ func (c *Config) updatePulseWidthExtents() {
 
 	c.rebuildSnapshot()
 	c.registerUpdate(false)
-	c.mu.Unlock()
 }
