@@ -117,6 +117,7 @@ type App struct {
 	circuitInfoFeed    chan map[string]string  // Channel for sending circuit info to web UI
 	raceInfoFeed       chan map[string]any     // Channel for sending race info to web UI
 	gameStateFeed      chan string             // Channel for sending game state to web UI
+	logStatsFeed       chan map[string]any     // Channel for sending log stats to web UI
 	webUI              *webui.WebUI            // Web UI server and handler
 	webSequenceID      uint32                  // Last sequence ID sent to the web UI
 
@@ -163,6 +164,7 @@ func New(opts Options) (*App, error) {
 		circuitInfoFeed:    make(chan map[string]string, 10),
 		raceInfoFeed:       make(chan map[string]any, 10),
 		gameStateFeed:      make(chan string, 10),
+		logStatsFeed:       make(chan map[string]any, 10),
 		lapStartEvents:     make(chan uint32),
 	}
 
@@ -350,6 +352,7 @@ func (a *App) runAppMode() RunResult {
 			CircuitInfoFeed:    a.circuitInfoFeed,
 			RaceInfoFeed:       a.raceInfoFeed,
 			GameStateFeed:      a.gameStateFeed,
+			LogStatsFeed:       a.logStatsFeed,
 			Config:             a.config,
 			ShutdownChan:       a.done,
 			SetupModeAvailable: status.Available,
@@ -904,6 +907,11 @@ func (a *App) startBackgroundTasks() {
 
 	if a.pitRadio != nil {
 		go a.pitRadio.BackgroundTask()
+	}
+
+	// Start log stats broadcaster for WebUI
+	if a.config.GetAppWebUIEnabled() && a.logStore != nil {
+		go a.logStatsBroadcaster()
 	}
 
 	go func() {
@@ -1802,5 +1810,42 @@ func (a *App) clearRaceInfo() {
 		a.log.Debug().Msg("cleared race info in web UI")
 	default:
 		a.log.Debug().Msg("race info feed channel full, skipping clear")
+	}
+}
+
+// logStatsBroadcaster periodically sends log statistics to the WebUI.
+func (a *App) logStatsBroadcaster() {
+	ticker := time.NewTicker(2 * time.Second) // Update stats every 2 seconds
+	defer ticker.Stop()
+
+	for range ticker.C {
+		if a.webUI == nil || !a.webUI.HasActiveClients() || a.logStore == nil {
+			continue
+		}
+
+		stats := a.logStore.GetStats()
+		allLogs := a.logStore.GetAll()
+		totalCount := len(allLogs)
+
+		// Calculate total pages based on default page size of 100
+		pageSize := 100
+
+		totalPages := (totalCount + pageSize - 1) / pageSize
+		if totalPages < 1 {
+			totalPages = 1
+		}
+
+		logStats := map[string]any{
+			"stats":      stats,
+			"totalCount": totalCount,
+			"totalPages": totalPages,
+		}
+
+		select {
+		case a.logStatsFeed <- logStats:
+			a.log.Debug().Int("totalCount", totalCount).Msg("broadcast log stats to web UI")
+		default:
+			a.log.Debug().Msg("log stats feed channel full; log stats not sent to web UI")
+		}
 	}
 }

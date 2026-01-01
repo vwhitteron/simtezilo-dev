@@ -2,11 +2,11 @@
 function updateConnectionStatus(connected) {
     const statusElement = document.getElementById('raceStatus');
     if (statusElement) {
-        statusElement.className = connected 
-            ? 'status-indicator status-connected' 
+        statusElement.className = connected
+            ? 'status-indicator status-connected'
             : 'status-indicator status-disconnected';
     }
-    
+
     if (!connected) {
         clearRaceInfo();
     }
@@ -133,13 +133,13 @@ function initRaceInfo() {
     if (window.SharedWebSocket) {
         // Subscribe to race messages
         window.SharedWebSocket.subscribe('race', updateRaceInfo);
-        
+
         // Listen for connection status changes
         window.SharedWebSocket.addConnectionListener(updateConnectionStatus);
-        
+
         // Set initial connection status
         updateConnectionStatus(window.SharedWebSocket.isConnected);
-        
+
         console.log('Race info subscribed to SharedWebSocket');
     } else {
         console.error('SharedWebSocket not available');

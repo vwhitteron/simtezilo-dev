@@ -63,6 +63,9 @@ type WebUI struct {
 	shutdownChan       chan exitcode.Code
 	setupModeEnabled   bool
 	logStore           *logstore.Store
+	logStatsFeed       chan map[string]any
+	currentLogStats    map[string]any
+	logStatsMutex      sync.RWMutex
 	buildVersion       string
 	buildTime          string
 	buildPlatform      string
@@ -89,6 +92,7 @@ type Config struct {
 	ShutdownChan       chan exitcode.Code
 	SetupModeAvailable bool
 	LogStore           *logstore.Store
+	LogStatsFeed       chan map[string]any
 	BuildVersion       string
 	BuildTime          string
 	BuildPlatform      string
@@ -116,6 +120,8 @@ func New(config Config) *WebUI {
 		shutdownChan:        config.ShutdownChan,
 		setupModeEnabled:    config.SetupModeAvailable,
 		logStore:            config.LogStore,
+		logStatsFeed:        config.LogStatsFeed,
+		currentLogStats:     make(map[string]any),
 		buildVersion:        config.BuildVersion,
 		buildTime:           config.BuildTime,
 		buildPlatform:       config.BuildPlatform,
@@ -384,6 +390,25 @@ func (w *WebUI) handleWebSocketConnection(response http.ResponseWriter, request 
 
 	w.raceInfoMutex.RUnlock()
 
+	// Send current log stats immediately
+	w.logStatsMutex.RLock()
+
+	if len(w.currentLogStats) > 0 {
+		msg := WSMessage{
+			Type:      "logStats",
+			Timestamp: time.Now().UnixMilli(),
+			Data:      w.currentLogStats,
+		}
+
+		encodedData, err := json.Marshal(msg)
+		if err == nil {
+			_ = webSocket.SetWriteDeadline(time.Now().Add(3 * time.Second))
+			_ = webSocket.WriteMessage(websocket.TextMessage, encodedData)
+		}
+	}
+
+	w.logStatsMutex.RUnlock()
+
 	// Keep connection alive - read messages (if any) to detect disconnects
 	// Set read deadline - if no pong received in 10 seconds, connection is dead
 	_ = webSocket.SetReadDeadline(time.Now().Add(10 * time.Second))
@@ -486,6 +511,7 @@ func (w *WebUI) unifiedWebSocketBroadcaster() {
 				"gameState": true,
 				"circuit":   true,
 				"race":      true,
+				"logStats":  true,
 				"telemetry": false, // Telemetry off by default
 			}
 			w.subscriptionsMutex.Unlock()
@@ -687,6 +713,34 @@ func (w *WebUI) unifiedWebSocketBroadcaster() {
 					Int("clients", len(w.unifiedClients)).
 					Msg("broadcast race info to unified clients")
 			}
+
+		case logStats := <-w.logStatsFeed:
+			// Store current state with mutex protection
+			w.logStatsMutex.Lock()
+			w.currentLogStats = logStats
+			w.logStatsMutex.Unlock()
+
+			// Broadcast log stats
+			msg := WSMessage{
+				Type:      "logStats",
+				Timestamp: time.Now().UnixMilli(),
+				Data:      logStats,
+			}
+
+			encodedData, err := json.Marshal(msg)
+			if err != nil {
+				w.log.Error().Err(err).Msg("failed to encode log stats JSON")
+
+				continue
+			}
+
+			w.broadcastToUnifiedClients(encodedData, "logStats")
+
+			totalCount, _ := logStats["totalCount"].(int)
+			w.log.Debug().
+				Int("totalCount", totalCount).
+				Int("clients", len(w.unifiedClients)).
+				Msg("broadcast log stats to unified clients")
 		}
 	}
 }
