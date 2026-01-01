@@ -229,6 +229,18 @@
         "runmode.settings.pitradio.enabled": "ピットラジオ有効",
         "runmode.settings.pitradio.interval": "メッセージ送信間隔（ms）",
 
+        "runmode.settings.notifications.title": "通知",
+        "runmode.settings.notifications.enable": "有効",
+        "runmode.settings.notifications.laptimes.title": "ラップタイム",
+        "runmode.settings.notifications.laptimes.maxdelta": "最大デルタ（秒）",
+        "runmode.settings.notifications.circuitmatching.title": "サーキットマッチング",
+        "runmode.settings.notifications.racelaps.title": "レースラップ",
+        "runmode.settings.notifications.racelaps.intervallaps": "インターバル（ラップ）",
+        "runmode.settings.notifications.racelaps.countdownlaps": "カウントダウン（ラップ）",
+        "runmode.settings.notifications.raceprogress.title": "レース進行状況",
+        "runmode.settings.notifications.raceprogress.minlaps": "最小ラップ数",
+        "runmode.settings.notifications.raceprogress.intervalpc": "インターバル（%）",
+
         "runmode.settings.synth.title": "シンセサイザー",
         "runmode.settings.synth.samplerates_title": "サンプルレート",
         "runmode.settings.synth.gains_title": "ゲインコントロール",
