@@ -9,6 +9,7 @@ class ConfigManager {
         this.configTimestamp = 0; // Backend config timestamp
         this.statusCheckInterval = null; // Interval for checking config status
         this.isInitializing = true; // Flag to prevent saves during initial load
+        this.isPopulating = false; // Flag to prevent saves during form population
         this.init();
     }
 
@@ -233,13 +234,22 @@ class ConfigManager {
             this.previousValues.set(configPath, currentValue);
 
             // Checkboxes and selects should save immediately on change
-            if (input.type === 'checkbox' || input.tagName === 'SELECT') {
+            if (input.type === 'checkbox' || input.tagName === 'SELECT' || input.type === 'radio') {
                 input.addEventListener('change', () => {
+                    // Don't process changes during form population
+                    if (this.isPopulating) {
+                        return;
+                    }
+
                     // Check if language changed to reload translations
                     if (input.id === 'app-language') {
                         this.handleLanguageChange(input.value);
                     } else {
                         this.saveInputConfiguration(input);
+                        // Update transmission disabled state when transmission mode changes
+                        if (input.name === 'transmission-mode') {
+                            this.updateTransmissionDisabledState();
+                        }
                     }
                 });
             } else {
@@ -290,15 +300,23 @@ class ConfigManager {
 
     // Save configuration for a specific input
     async saveInputConfiguration(input) {
-        // Skip saves during initial load
-        if (this.isInitializing) {
+        // Skip saves during initial load or form population
+        if (this.isInitializing || this.isPopulating) {
             return;
         }
 
         const configPath = input.dataset.config;
         let newValue;
 
-        if (input.type === 'checkbox') {
+        if (input.type === 'radio' && input.dataset.radioValue !== undefined) {
+            // Handle radio buttons with data-radio-value
+            if (!input.checked) {
+                return; // Only save when a radio is checked, not unchecked
+            }
+            newValue = input.dataset.radioValue === 'true' ? true :
+                input.dataset.radioValue === 'false' ? false :
+                    input.dataset.radioValue;
+        } else if (input.type === 'checkbox') {
             newValue = input.checked;
         } else if (input.type === 'number' || input.dataset.type === 'number') {
             newValue = parseFloat(input.value);
@@ -485,6 +503,8 @@ class ConfigManager {
     }
 
     populateForm() {
+        this.isPopulating = true; // Set flag to prevent saves during population
+
         const inputs = document.querySelectorAll('[data-config]');
 
         inputs.forEach(input => {
@@ -497,7 +517,13 @@ class ConfigManager {
             const value = this.getNestedValue(this.config, configPath);
 
             if (value !== undefined) {
-                if (input.type === 'checkbox') {
+                if (input.type === 'radio' && input.dataset.radioValue !== undefined) {
+                    // Handle radio buttons with data-radio-value
+                    const radioValue = input.dataset.radioValue === 'true' ? true :
+                        input.dataset.radioValue === 'false' ? false :
+                            input.dataset.radioValue;
+                    input.checked = (value === radioValue);
+                } else if (input.type === 'checkbox') {
                     input.checked = value;
                 } else {
                     input.value = value;
@@ -509,6 +535,11 @@ class ConfigManager {
 
         // After populating all inputs, update all mute icons based on checkbox states
         this.updateAllMuteIcons();
+
+        // Update transmission disabled state based on radio selection
+        this.updateTransmissionDisabledState();
+
+        this.isPopulating = false; // Clear flag after population complete
     }
 
     // Update all mute icons based on their corresponding checkbox states
@@ -519,18 +550,35 @@ class ConfigManager {
         });
     }
 
+    // Update transmission curve and g-force inputs disabled state based on mode
+    updateTransmissionDisabledState() {
+        const dynamicRadio = document.getElementById('transmission-dynamic-radio');
+        const transmissionCurveInput = document.getElementById('haptics-transmissioncurve');
+        const gForceMaxInput = document.getElementById('haptics-gforcemax');
+
+        if (dynamicRadio && transmissionCurveInput && gForceMaxInput) {
+            const isDynamic = dynamicRadio.checked;
+            transmissionCurveInput.disabled = !isDynamic;
+            gForceMaxInput.disabled = !isDynamic;
+        }
+    }
+
     // Helper to update mute icon based on checkbox state
-    updateMuteIconForCheckbox(checkbox) {
+    async updateMuteIconForCheckbox(checkbox) {
         // Find the icon associated with this checkbox
         const icon = document.querySelector(`[data-mute-checkbox="${checkbox.id}"]`);
-        if (icon) {
+        if (icon && typeof IconHelper !== 'undefined') {
             if (checkbox.checked) {
-                icon.classList.remove('fa-volume-high');
-                icon.classList.add('fa-volume-xmark');
+                const svg = await IconHelper.loadIcon('volume-xmark');
+                if (svg) {
+                    icon.innerHTML = svg;
+                }
                 icon.style.color = '#dc3545';
             } else {
-                icon.classList.remove('fa-volume-xmark');
-                icon.classList.add('fa-volume-high');
+                const svg = await IconHelper.loadIcon('volume-high');
+                if (svg) {
+                    icon.innerHTML = svg;
+                }
                 icon.style.color = '';
             }
         }

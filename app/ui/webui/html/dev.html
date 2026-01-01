@@ -7,13 +7,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <!-- Halfmoon CSS -->
     <link rel="stylesheet" href="/css/halfmoon.min.css">
-    <!-- Font Awesome -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Icons CSS -->
+    <link rel="stylesheet" href="/css/icons.css?v=3">
     <!-- Include SciChart.js v4 -->
     <script src="https://cdn.jsdelivr.net/npm/scichart@4/_wasm/scichart.browser.js" crossorigin="anonymous"></script>
     <script>
         const currentPageId = 'dev';
     </script>
+    <script src="/js/icons.js"></script>
     <script src="/js/i18n.js"></script>
     <script src="/js/navigation.js"></script>
     <title>Simtezilo</title>
@@ -92,6 +93,29 @@
     </div>
     <!-- The JavaScript to create a SciChartSurface -->
     <script src="/js/scichart.js" data-chart-config="dev"></script>
+
+    <script>
+        // Replace all Font Awesome icons with SVG icons
+        document.addEventListener('DOMContentLoaded', function () {
+            if (typeof IconHelper !== 'undefined') {
+                // Map Font Awesome classes to SVG icon names
+                const iconMap = {
+                    'fa-arrows-left-right-to-line': 'arrows-left-right-to-line'
+                };
+
+                // Find all Font Awesome icons
+                document.querySelectorAll('[class*="fa-"]').forEach(element => {
+                    // Check which icon it has
+                    for (const [faClass, iconName] of Object.entries(iconMap)) {
+                        if (element.classList.contains(faClass)) {
+                            IconHelper.replaceIcon(element, iconName);
+                            break;
+                        }
+                    }
+                });
+            }
+        });
+    </script>
 
     <!-- Bootstrap Bundle JS -->
     <script src="/js/bootstrap.bundle.min.js"></script>

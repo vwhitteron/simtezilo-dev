@@ -7,8 +7,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <!-- Halfmoon CSS -->
     <link rel="stylesheet" href="/css/halfmoon.min.css">
-    <!-- Font Awesome -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Icons CSS -->
+    <link rel="stylesheet" href="/css/icons.css?v=4">
     <style>
         /* Fixed navbar at top */
         #navigation {
@@ -352,6 +352,7 @@
     <script>
         const currentPageId = 'settings';
     </script>
+    <script src="/js/icons.js"></script>
     <script src="/js/i18n.js"></script>
     <script src="/js/navigation.js"></script>
     <script src="/js/settings.js"></script>
@@ -381,31 +382,31 @@
                         <ul class="settings-nav">
                             <li class="settings-nav-item">
                                 <a class="settings-nav-link active" data-section="application">
-                                    <i class="fa-solid fa-box-open"></i>
+                                    <span class="icon" data-icon="box-open"></span>
                                     <span data-i18n="runmode.settings.app.title">Application</span>
                                 </a>
                             </li>
                             <li class="settings-nav-item">
                                 <a class="settings-nav-link" data-section="hardware">
-                                    <i class="fa-solid fa-microchip"></i>
+                                    <span class="icon" data-icon="microchip"></span>
                                     <span data-i18n="runmode.settings.hardware.title">Hardware</span>
                                 </a>
                             </li>
                             <li class="settings-nav-item">
                                 <a class="settings-nav-link" data-section="synthesizer">
-                                    <i class="fa-solid fa-sliders"></i>
+                                    <span class="icon" data-icon="sliders"></span>
                                     <span data-i18n="runmode.settings.synth.title">Synthesizer</span>
                                 </a>
                             </li>
                             <li class="settings-nav-item">
                                 <a class="settings-nav-link" data-section="haptics">
-                                    <i class="fa-solid fa-wave-square"></i>
+                                    <span class="icon" data-icon="wave-square"></span>
                                     <span data-i18n="runmode.settings.haptics.title">Haptics</span>
                                 </a>
                             </li>
                             <li class="settings-nav-item">
                                 <a class="settings-nav-link" data-section="pitradio">
-                                    <i class="fa-solid fa-walkie-talkie"></i>
+                                    <span class="icon" data-icon="walkie-talkie"></span>
                                     <span data-i18n="runmode.settings.pitradio.title">Pit Radio</span>
                                 </a>
                             </li>
@@ -420,6 +421,8 @@
                 <div class="settings-section-card active" data-section-content="application">
                     <div class="card">
                         <div class="card-body">
+                            <h5 class="mb-3"><span class="icon" data-icon="gear"></span><span
+                                    data-i18n="runmode.settings.general">General</span></h5>
                             <div class="row g-3">
                                 <div class="col-md-6">
                                     <label for="app-language" class="form-label"
@@ -480,8 +483,8 @@
                                 </div>
                             </div>
 
-                            <h5 class="mt-5 mb-3"><span data-i18n="runmode.settings.config.title">Configuration</span>
-                            </h5>
+                            <h5 class="mt-5 mb-3"><span class="icon" data-icon="file-code"></span><span
+                                    data-i18n="runmode.settings.config.title">Configuration</span></h5>
                             <div class="d-flex gap-2 flex-wrap">
                                 <button id="export-config" class="btn btn-outline-secondary"
                                     data-i18n="runmode.settings.config.export">Export</button>
@@ -492,7 +495,8 @@
                                     data-i18n="runmode.settings.config.reset">Reset to Defaults</button>
                             </div>
 
-                            <h5 class="mt-5 mb-3"><span data-i18n="runmode.settings.system.title">System</span></h5>
+                            <h5 class="mt-5 mb-3"><span class="icon" data-icon="power-off"></span><span
+                                    data-i18n="runmode.settings.system.title">System</span></h5>
                             <div class="row mb-3">
                                 <div class="col-12">
                                     <div class="d-flex align-items-center gap-2">
@@ -549,8 +553,8 @@
                 <div class="settings-section-card" data-section-content="synthesizer">
                     <div class="card">
                         <div class="card-body">
-                            <h5 class="mb-3" data-i18n="runmode.settings.synth.samplerates_title">Sample
-                                Rates</h5>
+                            <h5 class="mb-3"><span class="icon" data-icon="caret-square-right"></span><span
+                                    data-i18n="runmode.settings.synth.samplerates_title">Sample Rates</span></h5>
                             <div class="row g-3 mb-4">
                                 <div class="col-md-6">
                                     <label for="synth-internalsamplerate" class="form-label">
@@ -590,8 +594,8 @@
                                 </div>
                             </div>
 
-                            <h5 class="mt-5 mb-3" data-i18n="runmode.settings.synth.gains_title">Gain Controls</h5>
-                            </h5>
+                            <h5 class="mt-5 mb-3"><span class="icon" data-icon="gauge-high"></span><span
+                                    data-i18n="runmode.settings.synth.gains_title">Gain Controls</span></h5>
                             <div class="row g-3">
                                 <div class="col-md-6 col-lg-4">
                                     <label for="synth-mastergain" class="form-label">
@@ -713,21 +717,23 @@
                             <!-- Advanced Settings Toggle -->
                             <div class="mt-5">
                                 <div class="d-flex align-items-center mb-3" data-bs-toggle="collapse"
-                                    data-bs-target="#advancedSettings" aria-expanded="false"
-                                    aria-controls="advancedSettings" style="cursor: pointer;">
+                                    data-bs-target="#advancedSettingsSynth" aria-expanded="false"
+                                    aria-controls="advancedSettingsSynth" style="cursor: pointer;">
                                     <h5 class="mb-0 me-3">
-                                        <span data-i18n="runmode.settings.synth.advanced">Advanced Settings</span>
+                                        <span class="icon" data-icon="tools"></span><span
+                                            data-i18n="runmode.settings.synth.advanced">Advanced Settings</span>
                                     </h5>
-                                    <i class="fa-solid fa-chevron-right" id="advanced-settings-chevron"
+                                    <i class="fa-solid fa-chevron-right" id="advanced-settings-chevron-synth"
                                         style="transition: transform 0.3s ease;"></i>
                                 </div>
 
-                                <div id="advancedSettings" class="collapse">
+                                <div id="advancedSettingsSynth" class="collapse">
                                     <!-- Equalizer Card -->
                                     <div class="card">
                                         <div class="card-body">
                                             <h5 class="card-title mb-3">
-                                                <span data-i18n="runmode.settings.synth.equalizer">Equalizer</span>
+                                                <span class="icon" data-icon="chart-simple"></span><span
+                                                    data-i18n="runmode.settings.synth.equalizer">Equalizer</span>
                                             </h5>
                                             <div class="mb-3">
                                                 <div class="form-check form-switch">
@@ -807,6 +813,8 @@
                 <div class="settings-section-card" data-section-content="haptics">
                     <div class="card">
                         <div class="card-body">
+                            <h5 class="mb-3"><span class="icon" data-icon="gear"></span><span
+                                    data-i18n="runmode.settings.general">General</span></h5>
                             <div class="d-flex align-items-center gap-3 mb-4">
                                 <div class="d-flex align-items-center gap-1">
                                     <span data-i18n="runmode.settings.haptics.enablereplay">Output Mode</span>
@@ -825,8 +833,8 @@
                                     style="display: none;">
                             </div>
 
-                            <h5 class="mt-5 mb-3" data-i18n="runmode.settings.haptics.chassis_title">Chassis
-                                Feedback</h5>
+                            <h5 class="mt-5 mb-3"><span class="icon" data-icon="car-burst"></span><span
+                                    data-i18n="runmode.settings.haptics.chassis_title">Chassis Feedback</span></h5>
                             <div class="row g-3 mb-4">
                                 <div class="col-md-6 col-lg-3">
                                     <label for="haptics-jerkcurve" class="form-label">
@@ -906,8 +914,9 @@
                                 </div>
                             </div>
 
-                            <h5 class="mt-5 mb-3" data-i18n="runmode.settings.haptics.transmission_title">
-                                Transmission Feedback</h5>
+                            <h5 class="mt-5 mb-3"><span class="icon" data-icon="gears"></span><span
+                                    data-i18n="runmode.settings.haptics.transmission_title">Transmission Feedback</span>
+                            </h5>
                             <div class="row g-3 mb-4">
                                 <div class="col-md-6">
                                     <div class="d-flex align-items-center gap-3">
@@ -963,22 +972,24 @@
                             <!-- Advanced Settings Toggle -->
                             <div class="mt-5">
                                 <div class="d-flex align-items-center mb-3" data-bs-toggle="collapse"
-                                    data-bs-target="#advancedSettings" aria-expanded="false"
-                                    aria-controls="advancedSettings" style="cursor: pointer;">
+                                    data-bs-target="#advancedSettingsHaptics" aria-expanded="false"
+                                    aria-controls="advancedSettingsHaptics" style="cursor: pointer;">
                                     <h5 class="mb-0 me-3">
-                                        <span data-i18n="runmode.settings.synth.advanced">Advanced Settings</span>
+                                        <span class="icon" data-icon="tools"></span><span
+                                            data-i18n="runmode.settings.synth.advanced">Advanced Settings</span>
                                     </h5>
-                                    <i class="fa-solid fa-chevron-right" id="advanced-settings-chevron"
+                                    <i class="fa-solid fa-chevron-right" id="advanced-settings-chevron-haptics"
                                         style="transition: transform 0.3s ease;"></i>
                                 </div>
 
-                                <div id="advancedSettings" class="collapse">
+                                <div id="advancedSettingsHaptics" class="collapse">
 
                                     <!-- Engine Profiles Card -->
                                     <div class="card mb-3">
                                         <div class="card-body">
                                             <h5 class="card-title mb-3">
-                                                <span data-i18n="runmode.settings.synth.engineprofiles">Engine
+                                                <span class="icon" data-icon="explosion"></span><span
+                                                    data-i18n="runmode.settings.synth.engineprofiles">Engine
                                                     Profiles</span>
                                             </h5>
                                             <div class="row g-3 mb-3">
@@ -1052,6 +1063,8 @@
                 <div class="settings-section-card" data-section-content="pitradio">
                     <div class="card">
                         <div class="card-body">
+                            <h5 class="mb-3"><span class="icon" data-icon="gear"></span><span
+                                    data-i18n="runmode.settings.general">General</span></h5>
                             <div class="form-check form-switch mb-2">
                                 <input type="checkbox" class="form-check-input" id="pitradio-enabled"
                                     data-config="pitRadio.enabled" role="switch">
@@ -1574,6 +1587,71 @@
                 }
             });
         });
+
+        // Replace all Font Awesome icons with SVG icons
+        document.addEventListener('DOMContentLoaded', function () {
+            if (typeof IconHelper !== 'undefined') {
+                // Map Font Awesome classes to SVG icon names
+                const iconMap = {
+                    'fa-circle-question': 'circle-question',
+                    'fa-volume-high': 'volume-high',
+                    'fa-volume-xmark': 'volume-xmark',
+                    'fa-chevron-right': 'chevron-right',
+                    'fa-chevron-down': 'chevron-down',
+                    'fa-rotate-left': 'rotate-left',
+                    'fa-gas-pump': 'gas-pump',
+                    'fa-message': 'message',
+                    'fa-discord': 'discord',
+                    'fa-circle-notch': 'circle-notch'
+                };
+
+                // Find all Font Awesome icons
+                document.querySelectorAll('[class*="fa-"]').forEach(element => {
+                    // Check which icon it has
+                    for (const [faClass, iconName] of Object.entries(iconMap)) {
+                        if (element.classList.contains(faClass)) {
+                            IconHelper.replaceIcon(element, iconName);
+                            break;
+                        }
+                    }
+                });
+
+                // Load icons for navigation items
+                document.querySelectorAll('[data-icon]').forEach(async (element) => {
+                    const iconName = element.getAttribute('data-icon');
+                    if (iconName) {
+                        const svgContent = await IconHelper.loadIcon(iconName);
+                        if (svgContent) {
+                            element.innerHTML = svgContent;
+                        }
+                    }
+                });
+            }
+        });
+
+        // Handle chevron rotation for Advanced Settings collapse
+        const advancedSettingsSynth = document.getElementById('advancedSettingsSynth');
+        const advancedSettingsHaptics = document.getElementById('advancedSettingsHaptics');
+        const chevronSynth = document.getElementById('advanced-settings-chevron-synth');
+        const chevronHaptics = document.getElementById('advanced-settings-chevron-haptics');
+
+        if (advancedSettingsSynth && chevronSynth) {
+            advancedSettingsSynth.addEventListener('show.bs.collapse', function () {
+                IconHelper.replaceIcon(chevronSynth, 'chevron-down');
+            });
+            advancedSettingsSynth.addEventListener('hide.bs.collapse', function () {
+                IconHelper.replaceIcon(chevronSynth, 'chevron-right');
+            });
+        }
+
+        if (advancedSettingsHaptics && chevronHaptics) {
+            advancedSettingsHaptics.addEventListener('show.bs.collapse', function () {
+                IconHelper.replaceIcon(chevronHaptics, 'chevron-down');
+            });
+            advancedSettingsHaptics.addEventListener('hide.bs.collapse', function () {
+                IconHelper.replaceIcon(chevronHaptics, 'chevron-right');
+            });
+        }
     </script>
 
     <!-- Bootstrap Bundle JS -->

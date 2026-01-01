@@ -176,6 +176,7 @@
         "runmode.telemetry.chart.synthoutput": "Synthesizer Outputs",
         "runmode.telemetry.chart.computetime": "Compute Time",
 
+        "runmode.settings.general": "General",
         "runmode.settings.app.title": "Application",
         "runmode.settings.app.language": "Language",
         "runmode.settings.app.accent": "Accent",

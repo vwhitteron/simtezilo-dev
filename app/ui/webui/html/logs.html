@@ -7,8 +7,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <!-- Halfmoon CSS -->
     <link rel="stylesheet" href="/css/halfmoon.min.css">
-    <!-- Font Awesome -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Icons CSS -->
+    <link rel="stylesheet" href="/css/icons.css?v=4">
     <style>
         #logs-container {
             max-height: calc(100vh - 200px);
@@ -301,6 +301,7 @@
             }
         });
     </script>
+    <script src="/js/icons.js"></script>
     <script src="/js/i18n.js"></script>
     <script src="/js/navigation.js"></script>
     <title>Logs - Simtezilo</title>
@@ -454,6 +455,33 @@
             </div>
         </div>
     </div>
+
+    <script>
+        // Replace all Font Awesome icons with SVG icons
+        document.addEventListener('DOMContentLoaded', function () {
+            if (typeof IconHelper !== 'undefined') {
+                // Map Font Awesome classes to SVG icon names
+                const iconMap = {
+                    'fa-chevron-right': 'chevron-right',
+                    'fa-chevron-down': 'chevron-down',
+                    'fa-chevron-left': 'chevron-left',
+                    'fa-filter': 'filter',
+                    'fa-arrows-rotate': 'arrows-rotate'
+                };
+
+                // Find all Font Awesome icons
+                document.querySelectorAll('[class*="fa-"]').forEach(element => {
+                    // Check which icon it has
+                    for (const [faClass, iconName] of Object.entries(iconMap)) {
+                        if (element.classList.contains(faClass)) {
+                            IconHelper.replaceIcon(element, iconName);
+                            break;
+                        }
+                    }
+                });
+            }
+        });
+    </script>
 
     <!-- Bootstrap Bundle JS -->
     <script src="/js/bootstrap.bundle.min.js"></script>

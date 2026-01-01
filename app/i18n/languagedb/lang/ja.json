@@ -179,6 +179,7 @@
         "runmode.telemetry.chart.synthoutput": "シンセサイザー出力",
         "runmode.telemetry.chart.computetime": "計算時間",
 
+        "runmode.settings.general": "全般",
         "runmode.settings.app.title": "アプリケーション",
         "runmode.settings.app.language": "言語",
         "runmode.settings.app.accent": "アクセントカラー",

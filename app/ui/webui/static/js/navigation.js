@@ -13,8 +13,6 @@ function createNavigation(currentPage) {
     const telemetryActive = telemetryDropdown.some(item => item.id === currentPage);
 
     let navHTML = `
-        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-        
         <nav class="navbar navbar-expand-lg" style="background-color: var(--bs-content-bg); border-bottom: var(--bs-border-width) solid var(--bs-content-border-color);">
             <div class="container-fluid">
                 <a class="navbar-brand" href="/">
@@ -74,8 +72,8 @@ function createNavigation(currentPage) {
                             <div id="nav-spinner" class="spinner-border spinner-border-sm text-warning" role="status" style="display: none;">
                                 <span class="visually-hidden">Loading...</span>
                             </div>
-                            <i id="nav-success-icon" class="fas fa-circle-check text-success" style="display: none; font-size: 1.25rem;"></i>
-                            <i id="nav-error-icon" class="fas fa-circle-xmark text-danger" style="display: none; font-size: 1.25rem;"></i>
+                            <span id="nav-success-icon" class="icon text-success" style="display: none; font-size: 1.25rem;"></span>
+                            <span id="nav-error-icon" class="icon text-danger" style="display: none; font-size: 1.25rem;"></span>
                         </div>
                     </div>`;
 
@@ -256,5 +254,21 @@ document.addEventListener('DOMContentLoaded', function () {
                 applyTranslations();
             }
         });
+
+        // Initialize navigation icons
+        if (typeof IconHelper !== 'undefined') {
+            IconHelper.loadIcon('circle-check').then(svg => {
+                const successIcon = document.getElementById('nav-success-icon');
+                if (successIcon && svg) {
+                    successIcon.innerHTML = svg;
+                }
+            });
+            IconHelper.loadIcon('circle-xmark').then(svg => {
+                const errorIcon = document.getElementById('nav-error-icon');
+                if (errorIcon && svg) {
+                    errorIcon.innerHTML = svg;
+                }
+            });
+        }
     }
 });
