@@ -68,7 +68,7 @@ func (a *App) shouldNotifyCircuitChange() bool {
 		return false
 	}
 
-	if !a.config.GetPitRadioNotifyCircuitChangesEnabled() {
+	if !a.config.GetPitRadioNotifyCircuitMatchingEnabled() {
 		return false
 	}
 

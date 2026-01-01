@@ -29,9 +29,9 @@ import (
 
 // WSMessage represents a typed message envelope for the unified WebSocket.
 type WSMessage struct {
-	Type      string `json:"type"`      // "telemetry", "vehicle", "circuit", "race", "gameState"
-	Timestamp int64  `json:"timestamp"` // Unix timestamp in milliseconds
-	Data      any    `json:"data"`      // Payload data
+	Type      string `json:"type"`      //nolint:tagliatelle // Message type
+	Timestamp int64  `json:"timestamp"` //nolint:tagliatelle // Unix timestamp in milliseconds
+	Data      any    `json:"data"`      //nolint:tagliatelle // Message data
 }
 
 // subscriptionUpdate represents a client's subscription preferences.
@@ -437,17 +437,14 @@ func (w *WebUI) handleWebSocketConnection(response http.ResponseWriter, request 
 	go func() {
 		defer close(done)
 
-		for {
-			select {
-			case <-pingTicker.C:
-				_ = webSocket.SetWriteDeadline(time.Now().Add(3 * time.Second))
+		for range pingTicker.C {
+			_ = webSocket.SetWriteDeadline(time.Now().Add(3 * time.Second))
 
-				err := webSocket.WriteMessage(websocket.PingMessage, nil)
-				if err != nil {
-					w.log.Debug().Err(err).Msg("failed to send ping on unified websocket")
+			err := webSocket.WriteMessage(websocket.PingMessage, nil)
+			if err != nil {
+				w.log.Debug().Err(err).Msg("failed to send ping on unified websocket")
 
-					return
-				}
+				return
 			}
 		}
 	}()
@@ -466,11 +463,12 @@ func (w *WebUI) handleWebSocketConnection(response http.ResponseWriter, request 
 
 		// Try to parse as subscription message
 		var subMsg struct {
-			Type          string          `json:"type"`
-			Subscriptions map[string]bool `json:"subscriptions"`
+			Type          string          `json:"type"`          //nolint:tagliatelle
+			Subscriptions map[string]bool `json:"subscriptions"` //nolint:tagliatelle
 		}
 
-		if err := json.Unmarshal(message, &subMsg); err == nil && subMsg.Type == "subscribe" {
+		err = json.Unmarshal(message, &subMsg)
+		if err == nil && subMsg.Type == "subscribe" {
 			// Send subscription update to broadcaster
 			w.subscriptionChan <- subscriptionUpdate{
 				client:        webSocket,
@@ -1061,27 +1059,33 @@ func (w *WebUI) applyAppConfig(config map[string]any) []string {
 		}
 	}
 
-	if vehicleDBFile, ok := config["vehicleDBFile"]; ok {
-		if vehicleDBFileStr, ok := vehicleDBFile.(string); ok {
-			// If a file path is provided, validate that it exists
-			if vehicleDBFileStr != "" {
-				_, err := os.Stat(vehicleDBFileStr)
-				if err != nil {
-					if os.IsNotExist(err) {
-						errors = append(errors, "vehicle database file not found: "+vehicleDBFileStr)
-					} else {
-						errors = append(errors, "cannot access vehicle database file: "+err.Error())
-					}
+	vehicleDBFile, fileOK := config["vehicleDBFile"]
+	if !fileOK {
+		return errors
+	}
 
-					return errors
-				}
+	vehicleDBFileStr, strOK := vehicleDBFile.(string)
+	if !strOK {
+		errors = append(errors, "invalid vehicle database file value")
+
+		return errors
+	}
+
+	// If a file path is provided, validate that it exists
+	if vehicleDBFileStr != "" {
+		_, err := os.Stat(vehicleDBFileStr)
+		if err != nil {
+			if os.IsNotExist(err) {
+				errors = append(errors, "vehicle database file not found: "+vehicleDBFileStr)
+			} else {
+				errors = append(errors, "cannot access vehicle database file: "+err.Error())
 			}
 
-			w.config.SetAppVehicleDBFile(vehicleDBFileStr)
-		} else {
-			errors = append(errors, "invalid vehicle database file value")
+			return errors
 		}
 	}
+
+	w.config.SetAppVehicleDBFile(vehicleDBFileStr)
 
 	return errors
 }
@@ -1094,22 +1098,26 @@ func (w *WebUI) applySynthesizerConfig(config map[string]any) []string {
 
 	if internalSampleRate, ok := config["internalSampleRateHz"]; ok {
 		w.log.Debug().Interface("value", internalSampleRate).Type("type", internalSampleRate).Msg("processing internalSampleRateHz")
+
 		if rateFloat, ok := internalSampleRate.(float64); ok {
 			w.config.SetSynthInternalSampleRateHz(int(rateFloat))
 			w.log.Debug().Int("rate", int(rateFloat)).Msg("set internal sample rate")
 		} else {
 			errors = append(errors, "invalid internal sample rate value")
+
 			w.log.Error().Interface("value", internalSampleRate).Msg("invalid internal sample rate value type")
 		}
 	}
 
 	if outputSampleRate, ok := config["outputSampleRateHz"]; ok {
 		w.log.Debug().Interface("value", outputSampleRate).Type("type", outputSampleRate).Msg("processing outputSampleRateHz")
+
 		if rateFloat, ok := outputSampleRate.(float64); ok {
 			w.config.SetSynthOutputSampleRateHz(int(rateFloat))
 			w.log.Debug().Int("rate", int(rateFloat)).Msg("set output sample rate")
 		} else {
 			errors = append(errors, "invalid output sample rate value")
+
 			w.log.Error().Interface("value", outputSampleRate).Msg("invalid output sample rate value type")
 		}
 	}

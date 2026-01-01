@@ -1529,16 +1529,16 @@ func (c *Config) SetPitRadioNotifyLapTimesMaxDeltaSeconds(value float64) {
 	c.registerUpdate(false)
 }
 
-// GetPitRadioNotifyCircuitChangesEnabled returns whether circuit change notifications are enabled.
-func (c *Config) GetPitRadioNotifyCircuitChangesEnabled() bool {
+// GetPitRadioNotifyCircuitMatchingEnabled returns whether circuit change notifications are enabled.
+func (c *Config) GetPitRadioNotifyCircuitMatchingEnabled() bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
 	return c.viper.PitRadio.Notifications.CircuitMatchingEnabled
 }
 
-// SetPitRadioNotifyCircuitChangesEnabled sets whether circuit change notifications are enabled.
-func (c *Config) SetPitRadioNotifyCircuitChangesEnabled(value bool) {
+// SetPitRadioNotifyCircuitMatchingEnabled sets whether circuit change notifications are enabled.
+func (c *Config) SetPitRadioNotifyCircuitMatchingEnabled(value bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
