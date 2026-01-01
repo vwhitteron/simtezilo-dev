@@ -857,6 +857,7 @@ func (w *WebUI) handleGetConfig(response http.ResponseWriter, _ *http.Request) {
 				"raceLapsCountdownLaps":   w.config.GetPitRadioNotifyRaceLapsCountdownLaps(),
 				"lapTimesEnabled":         w.config.GetPitRadioNotifyLapTimesEnabled(),
 				"lapTimesMaxDeltaSeconds": w.config.GetPitRadioNotifyLapTimesMaxDeltaSeconds(),
+				"circuitMatchingEnabled":  w.config.GetPitRadioNotifyCircuitMatchingEnabled(),
 			},
 			"fuelMonitoring": map[string]any{
 				"monitoringEnabled":       w.config.GetPitRadioFuelMonitoringEnabled(),
