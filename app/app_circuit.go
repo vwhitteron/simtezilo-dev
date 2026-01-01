@@ -1,6 +1,9 @@
 package app
 
 import (
+	"fmt"
+
+	"github.com/vwhitteron/simtezilo-dev/app/i18n/languagedb"
 	"github.com/vwhitteron/simtezilo-dev/app/pitradio"
 	"github.com/zetetos/gt-telemetry/pkg/models"
 )
@@ -35,7 +38,7 @@ func (a *App) notifyCircuitChange() {
 
 	a.pitRadioState.circuitName = circuitName
 
-	message := "Circuit updated to " + circuitName
+	message := fmt.Sprintf(a.i18n.GetString(languagedb.RadioCircuitUpdatedFmt), circuitName)
 	if a.pitRadio != nil {
 		err := a.pitRadio.Send(pitradio.Message{
 			MessageType: pitradio.TextMessage,

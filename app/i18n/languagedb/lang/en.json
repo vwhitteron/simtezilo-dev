@@ -62,6 +62,7 @@
         "radio.outoffuel": "Out of fuel, switch to reserve and limp to box",
         "radio.lapsremainingfmt": "%d laps remaining",
         "radio.finallap": "Final lap",
+        "radio.circuitupdatedfmt": "Circuit updated to %s",
         "radio.raceprogressfmt": "Race progress %d%%",
         "radio.racefinish": "Race complete",
         "radio.tyresundertemp": "Tyres under temp",
