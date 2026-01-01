@@ -76,6 +76,17 @@ func defaultConfig() *viperConfig {
 		PitRadio: &pitRadio{
 			Enabled:               false,
 			MessageSendIntervalMs: 2000,
+			Notifications: &notifications{
+				RaceProgressEnabled:     true,
+				RaceProgressMinLaps:     10,
+				RaceProgressIntervalPc:  25,
+				RaceLapsEnabled:         true,
+				RaceLapsIntervalLaps:    1,
+				RaceLapsCountdownLaps:   3,
+				LapTimesEnabled:         true,
+				LapTimesMaxDeltaSeconds: 2.0,
+				CircuitMatchingEnabled:  false,
+			},
 			Discord: &discord{
 				Token:          "",
 				GuildID:        "",

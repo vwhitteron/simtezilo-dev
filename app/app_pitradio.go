@@ -84,9 +84,9 @@ func (a *App) sendPitRadioMessage() {
 		return
 	}
 
-	a.notifyCircuitChange()
 	a.notifyFuelWarnings()
 	a.notifyRaceProgress()
 	a.notifyTyreTemperature()
 	a.notifyGridPositionChange()
+	a.notifyCircuitChange()
 }

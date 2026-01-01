@@ -952,6 +952,16 @@ func (w *WebUI) handleGetConfig(response http.ResponseWriter, _ *http.Request) {
 		"pitRadio": map[string]any{
 			"enabled":               w.config.PitRadioEnabled(),
 			"messageSendIntervalMs": w.config.GetPitRadioMessageSendIntervalMs(),
+			"notifications": map[string]any{
+				"raceProgressEnabled":     w.config.GetPitRadioNotifyRaceProgressEnabled(),
+				"raceProgressMinLaps":     w.config.GetPitRadioNotifyRaceProgressMinLaps(),
+				"raceProgressIntervalPc":  w.config.GetPitRadioNotifyRaceProgressIntervalPc(),
+				"raceLapsEnabled":         w.config.GetPitRadioNotifyRaceLapsEnabled(),
+				"raceLapsIntervalLaps":    w.config.GetPitRadioNotifyRaceLapsIntervalLaps(),
+				"raceLapsCountdownLaps":   w.config.GetPitRadioNotifyRaceLapsCountdownLaps(),
+				"lapTimesEnabled":         w.config.GetPitRadioNotifyLapTimesEnabled(),
+				"lapTimesMaxDeltaSeconds": w.config.GetPitRadioNotifyLapTimesMaxDeltaSeconds(),
+			},
 			"discord": map[string]any{
 				"token":          w.config.GetDiscordToken(),
 				"guildID":        w.config.GetDiscordGuildID(),
@@ -1633,6 +1643,77 @@ func (w *WebUI) applyDiscordConfig(config map[string]any) []string {
 	return errors
 }
 
+// applyNotificationsConfig applies notifications configuration changes.
+func (w *WebUI) applyNotificationsConfig(config map[string]any) []string {
+	var errors []string
+
+	if raceProgressEnabled, ok := config["raceProgressEnabled"]; ok {
+		if enabledBool, ok := raceProgressEnabled.(bool); ok {
+			w.config.SetPitRadioNotifyRaceProgressEnabled(enabledBool)
+		} else {
+			errors = append(errors, "invalid race progress enabled value")
+		}
+	}
+
+	if raceProgressMinLaps, ok := config["raceProgressMinLaps"]; ok {
+		if lapsFloat, ok := raceProgressMinLaps.(float64); ok {
+			w.config.SetPitRadioNotifyRaceProgressMinLaps(int(lapsFloat))
+		} else {
+			errors = append(errors, "invalid race progress min laps value")
+		}
+	}
+
+	if raceProgressIntervalPc, ok := config["raceProgressIntervalPc"]; ok {
+		if intervalFloat, ok := raceProgressIntervalPc.(float64); ok {
+			w.config.SetPitRadioNotifyRaceProgressIntervalPc(int(intervalFloat))
+		} else {
+			errors = append(errors, "invalid race progress interval percentage value")
+		}
+	}
+
+	if raceLapsEnabled, ok := config["raceLapsEnabled"]; ok {
+		if enabledBool, ok := raceLapsEnabled.(bool); ok {
+			w.config.SetPitRadioNotifyRaceLapsEnabled(enabledBool)
+		} else {
+			errors = append(errors, "invalid race laps enabled value")
+		}
+	}
+
+	if raceLapsIntervalLaps, ok := config["raceLapsIntervalLaps"]; ok {
+		if intervalFloat, ok := raceLapsIntervalLaps.(float64); ok {
+			w.config.SetPitRadioNotifyRaceLapsIntervalLaps(int(intervalFloat))
+		} else {
+			errors = append(errors, "invalid race laps interval laps value")
+		}
+	}
+
+	if raceLapsCountdownLaps, ok := config["raceLapsCountdownLaps"]; ok {
+		if countdownFloat, ok := raceLapsCountdownLaps.(float64); ok {
+			w.config.SetPitRadioNotifyRaceLapsCountdownLaps(int(countdownFloat))
+		} else {
+			errors = append(errors, "invalid race laps countdown laps value")
+		}
+	}
+
+	if lapTimesEnabled, ok := config["lapTimesEnabled"]; ok {
+		if enabledBool, ok := lapTimesEnabled.(bool); ok {
+			w.config.SetPitRadioNotifyLapTimesEnabled(enabledBool)
+		} else {
+			errors = append(errors, "invalid lap times enabled value")
+		}
+	}
+
+	if lapTimesMaxDelta, ok := config["lapTimesMaxDeltaSeconds"]; ok {
+		if deltaFloat, ok := lapTimesMaxDelta.(float64); ok {
+			w.config.SetPitRadioNotifyLapTimesMaxDeltaSeconds(deltaFloat)
+		} else {
+			errors = append(errors, "invalid lap times max delta seconds value")
+		}
+	}
+
+	return errors
+}
+
 // applyPitRadioConfig applies pit radio configuration changes.
 func (w *WebUI) applyPitRadioConfig(config map[string]any) []string {
 	var errors []string
@@ -1650,6 +1731,16 @@ func (w *WebUI) applyPitRadioConfig(config map[string]any) []string {
 			w.config.SetPitRadioMessageSendIntervalMs(int(intervalFloat))
 		} else {
 			errors = append(errors, "invalid message send interval value")
+		}
+	}
+
+	// Handle nested notifications configuration
+	if notificationsConfig, ok := config["notifications"]; ok {
+		if notificationsMap, ok := notificationsConfig.(map[string]any); ok {
+			notificationsErrors := w.applyNotificationsConfig(notificationsMap)
+			errors = append(errors, notificationsErrors...)
+		} else {
+			errors = append(errors, "invalid notifications configuration structure")
 		}
 	}
 

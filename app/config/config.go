@@ -81,13 +81,14 @@ type notifications struct {
 	RaceLapsCountdownLaps   int     `toml:"raceLapsCountdownLaps"`
 	LapTimesEnabled         bool    `toml:"lapTimesEnabled"`
 	LapTimesMaxDeltaSeconds float64 `toml:"lapTimesMaxDeltaSeconds"`
+	CircuitMatchingEnabled  bool    `toml:"circuitMatchingEnabled"`
 }
 
 type pitRadio struct {
 	Enabled               bool            `toml:"enabled"`
 	MessageSendIntervalMs int             `toml:"messageSendIntervalMs"`
-	Discord               *discord        `toml:"discord"`
 	Notifications         *notifications  `toml:"notifications"`
+	Discord               *discord        `toml:"discord"`
 	FuelMonitoring        *fuelMonitoring `toml:"fuelMonitoring"`
 	TyreMonitoring        *tyreMonitoring `toml:"tyreMonitoring"`
 }
@@ -1524,6 +1525,24 @@ func (c *Config) SetPitRadioNotifyLapTimesMaxDeltaSeconds(value float64) {
 	defer c.mu.Unlock()
 
 	c.viper.PitRadio.Notifications.LapTimesMaxDeltaSeconds = value
+
+	c.registerUpdate(false)
+}
+
+// GetPitRadioNotifyCircuitChangesEnabled returns whether circuit change notifications are enabled.
+func (c *Config) GetPitRadioNotifyCircuitChangesEnabled() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.PitRadio.Notifications.CircuitMatchingEnabled
+}
+
+// SetPitRadioNotifyCircuitChangesEnabled sets whether circuit change notifications are enabled.
+func (c *Config) SetPitRadioNotifyCircuitChangesEnabled(value bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.PitRadio.Notifications.CircuitMatchingEnabled = value
 
 	c.registerUpdate(false)
 }

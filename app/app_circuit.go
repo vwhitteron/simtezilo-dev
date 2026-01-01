@@ -20,7 +20,7 @@ func (a *App) updateCircuit() {
 
 // notifyCircuitChange sends a circuit change notification over the pit radio.
 func (a *App) notifyCircuitChange() {
-	if a.pitRadioState == nil {
+	if !a.shouldNotifyCircuitChange() {
 		return
 	}
 
@@ -57,4 +57,17 @@ func (a *App) notifyCircuitChange() {
 			Int16("lap", a.state.current.lapNumber).
 			Msg("Send circuit change message")
 	}
+}
+
+// shouldNotifyCircuitChange determines if a circuit change notification should be sent.
+func (a *App) shouldNotifyCircuitChange() bool {
+	if a.pitRadioState == nil {
+		return false
+	}
+
+	if !a.config.GetPitRadioNotifyCircuitChangesEnabled() {
+		return false
+	}
+
+	return true
 }
