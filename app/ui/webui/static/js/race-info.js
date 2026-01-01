@@ -1,54 +1,19 @@
-let raceWebSocket = null;
-let raceReconnectInterval = null;
-
-function connectRaceWebSocket() {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/ws/race`;
-
-    raceWebSocket = new WebSocket(wsUrl);
-
-    raceWebSocket.onopen = function () {
-        console.log('Race WebSocket connected');
-        document.getElementById('raceStatus').className = 'status-indicator status-connected';
-
-        if (raceReconnectInterval) {
-            clearInterval(raceReconnectInterval);
-            raceReconnectInterval = null;
-        }
-
-        window.dispatchEvent(new CustomEvent('raceConnectionChange', {
-            detail: { connected: true }
-        }));
-    };
-
-    raceWebSocket.onmessage = function (event) {
-        const data = JSON.parse(event.data);
-        updateRaceInfo(data);
-    };
-
-    raceWebSocket.onerror = function (error) {
-        console.error('Race WebSocket error:', error);
-        document.getElementById('raceStatus').className = 'status-indicator status-disconnected';
-        window.dispatchEvent(new CustomEvent('raceConnectionChange', {
-            detail: { connected: false }
-        }));
-    };
-
-    raceWebSocket.onclose = function () {
-        console.log('Race WebSocket disconnected');
-        document.getElementById('raceStatus').className = 'status-indicator status-disconnected';
-
-        // Clear current data
+// Track connection status
+function updateConnectionStatus(connected) {
+    const statusElement = document.getElementById('raceStatus');
+    if (statusElement) {
+        statusElement.className = connected 
+            ? 'status-indicator status-connected' 
+            : 'status-indicator status-disconnected';
+    }
+    
+    if (!connected) {
         clearRaceInfo();
+    }
 
-        // Attempt to reconnect after 2 seconds
-        if (!raceReconnectInterval) {
-            raceReconnectInterval = setInterval(function () {
-                console.log('Attempting to reconnect race WebSocket...');
-                connectRaceWebSocket();
-            }, 2000);
-        }
-    };
+    window.dispatchEvent(new CustomEvent('raceConnectionChange', {
+        detail: { connected: connected }
+    }));
 }
 
 function updateRaceInfo(data) {
@@ -159,10 +124,31 @@ function clearRaceInfo() {
 
     // Clear lap events table
     const tbody = document.getElementById('lapEventsBody');
+    const waitingText = document.querySelector('[data-i18n="runmode.home.race.waiting"]')?.textContent || 'In progress...';
     tbody.innerHTML = `<tr><td colspan="4" class="lap-events-empty">${waitingText}</td></tr>`;
 }
 
-// Initialize WebSocket connection when page loads
-document.addEventListener('DOMContentLoaded', function () {
-    connectRaceWebSocket();
-});
+// Initialize when SharedWebSocket is available
+function initRaceInfo() {
+    if (window.SharedWebSocket) {
+        // Subscribe to race messages
+        window.SharedWebSocket.subscribe('race', updateRaceInfo);
+        
+        // Listen for connection status changes
+        window.SharedWebSocket.addConnectionListener(updateConnectionStatus);
+        
+        // Set initial connection status
+        updateConnectionStatus(window.SharedWebSocket.isConnected);
+        
+        console.log('Race info subscribed to SharedWebSocket');
+    } else {
+        console.error('SharedWebSocket not available');
+    }
+}
+
+// Initialize when page loads
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initRaceInfo);
+} else {
+    initRaceInfo();
+}

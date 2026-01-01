@@ -1,9 +1,8 @@
-// vehicle-info.js - WebSocket client for receiving vehicle information updates
+// vehicle-info.js - Vehicle information display using SharedWebSocket
 
 (function () {
     'use strict';
 
-    let vehicleSocket = null;
     let reconnectAttempts = 0;
     const maxReconnectAttempts = 10;
     const reconnectDelay = 3000; // 3 seconds
@@ -54,15 +53,6 @@
             console.log('Vehicle updated:', currentManufacturer || '(cleared)', currentModel || '(cleared)');
         }
 
-        // Dispatch game state update if present
-        if (data.gamestate !== undefined) {
-            window.dispatchEvent(new CustomEvent('gameStateUpdate', {
-                detail: {
-                    state: data.gamestate
-                }
-            }));
-        }
-
         // Dispatch event for overlay manager
         window.dispatchEvent(new CustomEvent('vehicleDataUpdate', {
             detail: {
@@ -73,69 +63,41 @@
         }));
     }
 
-    function connectVehicleWebSocket() {
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${protocol}//${window.location.host}/ws/vehicle`;
-
-        try {
-            vehicleSocket = new WebSocket(wsUrl);
-
-            vehicleSocket.onopen = function () {
-                console.log('Vehicle WebSocket connected');
-                updateConnectionStatus(true);
-                reconnectAttempts = 0;
-                window.dispatchEvent(new CustomEvent('vehicleConnectionChange', {
-                    detail: { connected: true }
-                }));
-            };
-
-            vehicleSocket.onmessage = function (event) {
-                try {
-                    const vehicleData = JSON.parse(event.data);
-                    updateVehicleInfo(vehicleData);
-                } catch (error) {
-                    console.error('Error parsing vehicle data:', error);
+    function handleGameState(data) {
+        if (data.gamestate !== undefined) {
+            window.dispatchEvent(new CustomEvent('gameStateUpdate', {
+                detail: {
+                    state: data.gamestate
                 }
-            };
-
-            vehicleSocket.onerror = function (error) {
-                console.error('Vehicle WebSocket error:', error);
-                updateConnectionStatus(false);
-                window.dispatchEvent(new CustomEvent('vehicleConnectionChange', {
-                    detail: { connected: false }
-                }));
-            };
-
-            vehicleSocket.onclose = function () {
-                console.log('Vehicle WebSocket disconnected');
-                updateConnectionStatus(false);
-
-                // Attempt to reconnect
-                if (reconnectAttempts < maxReconnectAttempts) {
-                    reconnectAttempts++;
-                    console.log(`Attempting to reconnect (${reconnectAttempts}/${maxReconnectAttempts})...`);
-                    setTimeout(connectVehicleWebSocket, reconnectDelay);
-                } else {
-                    console.error('Max reconnection attempts reached');
-                }
-            };
-        } catch (error) {
-            console.error('Failed to create vehicle WebSocket:', error);
-            updateConnectionStatus(false);
+            }));
         }
     }
 
-    // Initialize connection when DOM is ready
+    // Initialize when SharedWebSocket is available
+    function initVehicleInfo() {
+        if (window.SharedWebSocket) {
+            // Subscribe to vehicle and gameState messages
+            window.SharedWebSocket.subscribe('vehicle', updateVehicleInfo);
+            window.SharedWebSocket.subscribe('gameState', handleGameState);
+
+            // Listen for connection status changes
+            window.SharedWebSocket.addConnectionListener(updateConnectionStatus);
+
+            // Dispatch initial connection status
+            window.dispatchEvent(new CustomEvent('vehicleConnectionChange', {
+                detail: { connected: window.SharedWebSocket.isConnected }
+            }));
+
+            console.log('Vehicle info subscribed to SharedWebSocket');
+        } else {
+            console.error('SharedWebSocket not available');
+        }
+    }
+
+    // Initialize when DOM is ready
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', connectVehicleWebSocket);
+        document.addEventListener('DOMContentLoaded', initVehicleInfo);
     } else {
-        connectVehicleWebSocket();
+        initVehicleInfo();
     }
-
-    // Clean up on page unload
-    window.addEventListener('beforeunload', function () {
-        if (vehicleSocket) {
-            vehicleSocket.close();
-        }
-    });
 })();

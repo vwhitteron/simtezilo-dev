@@ -275,6 +275,19 @@ function createWebSocketConnection() {
         connectionState.reconnectDelay = CONFIG.RECONNECT_DELAY;
         updateConnectionStatus('connected');
 
+        // Subscribe to telemetry data when connection opens
+        ws.send(JSON.stringify({
+            type: 'subscribe',
+            subscriptions: {
+                telemetry: true,
+                vehicle: true,
+                gameState: true,
+                circuit: true,
+                race: true
+            }
+        }));
+        console.log('Sent telemetry subscription request');
+
         // Attach message handler if available
         if (globalHandleWebSocketMessage) {
             ws.addEventListener('message', globalHandleWebSocketMessage);
@@ -1116,8 +1129,18 @@ async function initSciChart() {
     const handleWebSocketMessage = (event) => {
         const receivedData = JSON.parse(event.data);
 
-        // Check if this is a batch of frames (array) or single frame (object)
-        const dataFrames = Array.isArray(receivedData) ? receivedData : [receivedData];
+        // Check if this is a unified WebSocket message with type envelope
+        let dataFrames;
+        if (receivedData.type === 'telemetry') {
+            // New unified format: extract data from envelope
+            dataFrames = Array.isArray(receivedData.data) ? receivedData.data : [receivedData.data];
+        } else if (receivedData.type) {
+            // Other message types (vehicle, circuit, race, gameState) - ignore for charts
+            return;
+        } else {
+            // Legacy format: direct data (array or single frame)
+            dataFrames = Array.isArray(receivedData) ? receivedData : [receivedData];
+        }
 
         // Process each frame in the batch
         dataFrames.forEach(data => {
@@ -1236,6 +1259,16 @@ async function initSciChart() {
         // Close WebSocket connection immediately and synchronously
         if (globalWebSocket) {
             try {
+                // Unsubscribe from telemetry before closing
+                if (globalWebSocket.readyState === WebSocket.OPEN) {
+                    globalWebSocket.send(JSON.stringify({
+                        type: 'subscribe',
+                        subscriptions: {
+                            telemetry: false
+                        }
+                    }));
+                }
+
                 globalWebSocket.onclose = null; // Prevent reconnection attempts
                 globalWebSocket.onerror = null;
                 globalWebSocket.onmessage = null;

@@ -1,12 +1,7 @@
-// circuit-info.js - WebSocket client for receiving circuit information updates
+// circuit-info.js - Circuit information display using SharedWebSocket
 
 (function () {
     'use strict';
-
-    let circuitSocket = null;
-    let reconnectAttempts = 0;
-    const maxReconnectAttempts = 10;
-    const reconnectDelay = 3000; // 3 seconds
 
     const statusIndicator = document.getElementById('circuitStatus');
     const circuitTextElement = document.getElementById('circuitText');
@@ -169,62 +164,30 @@
         }));
     }
 
-    function connectCircuitWebSocket() {
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${protocol}//${window.location.host}/ws/circuit`;
+    // Initialize when SharedWebSocket is available
+    function initCircuitInfo() {
+        if (window.SharedWebSocket) {
+            // Subscribe to circuit messages
+            window.SharedWebSocket.subscribe('circuit', updateCircuitInfo);
 
-        try {
-            circuitSocket = new WebSocket(wsUrl);
+            // Listen for connection status changes
+            window.SharedWebSocket.addConnectionListener(updateConnectionStatus);
 
-            circuitSocket.onopen = function () {
-                console.log('Circuit WebSocket connected');
-                updateConnectionStatus(true);
-                reconnectAttempts = 0;
-                window.dispatchEvent(new CustomEvent('circuitConnectionChange', {
-                    detail: { connected: true }
-                }));
-            };
+            // Dispatch initial connection status
+            window.dispatchEvent(new CustomEvent('circuitConnectionChange', {
+                detail: { connected: window.SharedWebSocket.isConnected }
+            }));
 
-            circuitSocket.onmessage = function (event) {
-                try {
-                    const circuitData = JSON.parse(event.data);
-                    updateCircuitInfo(circuitData);
-                } catch (error) {
-                    console.error('Error parsing circuit data:', error);
-                }
-            };
-
-            circuitSocket.onerror = function (error) {
-                console.error('Circuit WebSocket error:', error);
-                updateConnectionStatus(false);
-                window.dispatchEvent(new CustomEvent('circuitConnectionChange', {
-                    detail: { connected: false }
-                }));
-            };
-
-            circuitSocket.onclose = function () {
-                console.log('Circuit WebSocket disconnected');
-                updateConnectionStatus(false);
-
-                // Attempt to reconnect
-                if (reconnectAttempts < maxReconnectAttempts) {
-                    reconnectAttempts++;
-                    console.log(`Attempting to reconnect circuit WebSocket (${reconnectAttempts}/${maxReconnectAttempts})...`);
-                    setTimeout(connectCircuitWebSocket, reconnectDelay);
-                } else {
-                    console.error('Max reconnection attempts reached for circuit WebSocket');
-                }
-            };
-        } catch (error) {
-            console.error('Failed to create circuit WebSocket:', error);
-            updateConnectionStatus(false);
+            console.log('Circuit info subscribed to SharedWebSocket');
+        } else {
+            console.error('SharedWebSocket not available');
         }
     }
 
-    // Initialize connection when page loads
+    // Initialize when page loads
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', connectCircuitWebSocket);
+        document.addEventListener('DOMContentLoaded', initCircuitInfo);
     } else {
-        connectCircuitWebSocket();
+        initCircuitInfo();
     }
 })();

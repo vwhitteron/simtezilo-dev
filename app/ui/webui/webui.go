@@ -27,6 +27,19 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/logstore"
 )
 
+// WSMessage represents a typed message envelope for the unified WebSocket.
+type WSMessage struct {
+	Type      string `json:"type"`      // "telemetry", "vehicle", "circuit", "race", "gameState"
+	Timestamp int64  `json:"timestamp"` // Unix timestamp in milliseconds
+	Data      any    `json:"data"`      // Payload data
+}
+
+// subscriptionUpdate represents a client's subscription preferences.
+type subscriptionUpdate struct {
+	client        *websocket.Conn
+	subscriptions map[string]bool // map of data type to subscribed status
+}
+
 // WebUI defines the web user interface.
 type WebUI struct {
 	log                zerolog.Logger
@@ -36,26 +49,15 @@ type WebUI struct {
 	vehicleInfoFeed    chan map[string]any
 	currentVehicleInfo map[string]any
 	vehicleInfoMutex   sync.RWMutex
-	vehicleClients     []*websocket.Conn
-	vehicleClientsChan chan *websocket.Conn
-	vehicleUnsubChan   chan *websocket.Conn
-	vehicleSessions    map[string]*websocket.Conn // Track sessions to prevent duplicates
-	vehicleSessionsMux sync.Mutex
 	gameStateFeed      chan string
 	currentGameState   string
 	gameStateMutex     sync.RWMutex
 	circuitInfoFeed    chan map[string]string
 	currentCircuitInfo map[string]string
 	circuitInfoMutex   sync.RWMutex
-	circuitClients     []*websocket.Conn
-	circuitClientsChan chan *websocket.Conn
-	circuitUnsubChan   chan *websocket.Conn
 	raceInfoFeed       chan map[string]any
 	currentRaceInfo    map[string]any
 	raceInfoMutex      sync.RWMutex
-	raceClients        []*websocket.Conn
-	raceClientsChan    chan *websocket.Conn
-	raceUnsubChan      chan *websocket.Conn
 	config             *appconfig.Config
 	upgrader           websocket.Upgrader
 	shutdownChan       chan exitcode.Code
@@ -64,6 +66,15 @@ type WebUI struct {
 	buildVersion       string
 	buildTime          string
 	buildPlatform      string
+	// Unified WebSocket support
+	unifiedClients      []*websocket.Conn
+	unifiedClientsChan  chan *websocket.Conn
+	unifiedUnsubChan    chan *websocket.Conn
+	unifiedSessions     map[string]*websocket.Conn // Track sessions to prevent duplicates
+	unifiedSessionsMux  sync.Mutex
+	clientSubscriptions map[*websocket.Conn]map[string]bool // Track what data types each client wants
+	subscriptionsMutex  sync.RWMutex
+	subscriptionChan    chan subscriptionUpdate
 }
 
 type Config struct {
@@ -92,42 +103,32 @@ func New(config Config) *WebUI {
 		telemetryChartFeed: config.TelemetryChartFeed,
 		vehicleInfoFeed:    config.VehicleInfoFeed,
 		currentVehicleInfo: make(map[string]any),
-		vehicleClients:     make([]*websocket.Conn, 0),
-		vehicleClientsChan: make(chan *websocket.Conn, 10),
-		vehicleUnsubChan:   make(chan *websocket.Conn, 10),
-		vehicleSessions:    make(map[string]*websocket.Conn),
 		gameStateFeed:      config.GameStateFeed,
 		currentGameState:   "unknown",
 		circuitInfoFeed:    config.CircuitInfoFeed,
 		currentCircuitInfo: make(map[string]string),
-		circuitClients:     make([]*websocket.Conn, 0),
-		circuitClientsChan: make(chan *websocket.Conn, 10),
-		circuitUnsubChan:   make(chan *websocket.Conn, 10),
 		raceInfoFeed:       config.RaceInfoFeed,
 		currentRaceInfo:    make(map[string]any),
-		raceClients:        make([]*websocket.Conn, 0),
-		raceClientsChan:    make(chan *websocket.Conn, 10),
-		raceUnsubChan:      make(chan *websocket.Conn, 10),
 		config:             config.Config,
 		upgrader: websocket.Upgrader{
 			CheckOrigin: func(_ *http.Request) bool { return true },
 		},
-		shutdownChan:     config.ShutdownChan,
-		setupModeEnabled: config.SetupModeAvailable,
-		logStore:         config.LogStore,
-		buildVersion:     config.BuildVersion,
-		buildTime:        config.BuildTime,
-		buildPlatform:    config.BuildPlatform,
+		shutdownChan:        config.ShutdownChan,
+		setupModeEnabled:    config.SetupModeAvailable,
+		logStore:            config.LogStore,
+		buildVersion:        config.BuildVersion,
+		buildTime:           config.BuildTime,
+		buildPlatform:       config.BuildPlatform,
+		unifiedClients:      make([]*websocket.Conn, 0),
+		unifiedClientsChan:  make(chan *websocket.Conn, 10),
+		unifiedUnsubChan:    make(chan *websocket.Conn, 10),
+		unifiedSessions:     make(map[string]*websocket.Conn),
+		clientSubscriptions: make(map[*websocket.Conn]map[string]bool),
+		subscriptionChan:    make(chan subscriptionUpdate, 10),
 	}
 
-	// Start vehicle info broadcaster
-	go webUI.vehicleInfoBroadcaster()
-
-	// Start circuit info broadcaster
-	go webUI.circuitInfoBroadcaster()
-
-	// Start race info broadcaster
-	go webUI.raceInfoBroadcaster()
+	// Start unified websocket broadcaster
+	go webUI.unifiedWebSocketBroadcaster()
 
 	return webUI
 }
@@ -141,9 +142,6 @@ func (w *WebUI) GetHTTPHandler() http.Handler {
 	mux.HandleFunc("/images/", w.imagesHandlerFunc())
 	mux.HandleFunc("/js/", w.sciChartJSHandlerFunc())
 	mux.HandleFunc("/ws", w.handleWebSocketConnection)
-	mux.HandleFunc("/ws/vehicle", w.handleVehicleWebSocketConnection)
-	mux.HandleFunc("/ws/circuit", w.handleCircuitWebSocketConnection)
-	mux.HandleFunc("/ws/race", w.handleRaceWebSocketConnection)
 	mux.HandleFunc("/api/config", w.handleConfigAPI)
 	mux.HandleFunc("/api/config/export", w.handleConfigExport)
 	mux.HandleFunc("/api/config/import", w.handleConfigImport)
@@ -169,7 +167,7 @@ func (w *WebUI) GetHTTPHandler() http.Handler {
 
 // HasActiveClients returns true if there are active WebSocket clients connected.
 func (w *WebUI) HasActiveClients() bool {
-	return w.webSocketClients > 0 || len(w.vehicleClients) > 0 || len(w.circuitClients) > 0 || len(w.raceClients) > 0
+	return len(w.unifiedClients) > 0 || w.webSocketClients > 0
 }
 
 //go:embed html/*
@@ -253,159 +251,60 @@ func (w *WebUI) cssHandlerFunc() func(w http.ResponseWriter, r *http.Request) {
 	return w.staticFileHandlerFunc("CSS")
 }
 
-// handleWebSocketConnection upgrades the HTTP connection to a WebSocket and streams telemetry data.
+// handleWebSocketConnection upgrades the HTTP connection to a unified WebSocket
+// that can handle multiple message types: telemetry, vehicle, circuit, race, and gameState.
 func (w *WebUI) handleWebSocketConnection(response http.ResponseWriter, request *http.Request) {
-	webSocket, err := w.upgrader.Upgrade(response, request, nil)
-	if err != nil {
-		w.log.Error().Err(err).Msg("error upgrading connection")
-
-		return
-	}
-
-	defer func() {
-		err := webSocket.Close()
-		if err != nil {
-			w.log.Debug().Err(err).Msg("closing websocket connection")
-		}
-	}()
-
-	w.webSocketClients++
-
-	defer func() {
-		w.webSocketClients--
-		w.log.Debug().Int("clients", w.webSocketClients).Msg("websocket connection closed")
-	}()
-
-	w.log.Debug().Int("clients", w.webSocketClients).Msg("websocket connection established")
-
-	sid := 0
-	failCount := 0
-
-	maxFailures := 60 * 5
-
-	// Batch frames
-	batchFrameRate := 30
-	bufferSize := batchFrameRate / 60
-	batchInterval := time.Duration(1000/batchFrameRate) * time.Millisecond
-
-	batchBuffer := make([]map[string]float32, 0, bufferSize) // ~60fps * 0.25s = 15 frames
-
-	ticker := time.NewTicker(batchInterval)
-	defer ticker.Stop()
-
-	go func() {
-		for range ticker.C {
-			if len(batchBuffer) == 0 {
-				continue
-			}
-
-			// Send the batched frames
-			encodedData, err := json.Marshal(batchBuffer)
-			if err != nil {
-				w.log.Error().Err(err).Msg("failed to encode batched JSON data")
-
-				continue
-			}
-
-			// Set write deadline
-			_ = webSocket.SetWriteDeadline(time.Now().Add(3 * time.Second))
-
-			err = webSocket.WriteMessage(websocket.TextMessage, encodedData)
-			if err != nil {
-				failCount++
-
-				w.log.Debug().Err(err).Msg("failed to send batched data to websocket")
-
-				if failCount >= maxFailures {
-					w.log.Info().Err(err).Str("reason", "too many failures").Msg("dropping websocket connection")
-
-					_ = webSocket.Close()
-
-					return
-				}
-			} else {
-				failCount = 0
-			}
-
-			// Clear the buffer
-			batchBuffer = batchBuffer[:0]
-		}
-	}()
-
-	for data := range w.telemetryChartFeed {
-		if failCount >= maxFailures {
-			w.log.Info().Err(err).Str("reason", "too many failures").Msg("dropping websocket connection")
-
-			break
-		}
-
-		if sid != 0 {
-			diff := int(data["seq"]) - sid
-			if diff == 0 {
-				continue
-			}
-		}
-
-		sid = int(data["seq"])
-
-		// Add to batch buffer instead of sending immediately
-		batchBuffer = append(batchBuffer, data)
-	}
-}
-
-// handleVehicleWebSocketConnection upgrades the HTTP connection to a WebSocket and streams vehicle info updates.
-func (w *WebUI) handleVehicleWebSocketConnection(response http.ResponseWriter, request *http.Request) {
 	// Get session ID from query parameter
 	sessionID := request.URL.Query().Get("session")
 
 	// Close any existing connection for this session
 	if sessionID != "" {
-		w.vehicleSessionsMux.Lock()
+		w.unifiedSessionsMux.Lock()
 
-		if oldConn, exists := w.vehicleSessions[sessionID]; exists {
-			w.log.Debug().Str("session", sessionID).Msg("closing old connection for session")
+		if oldConn, exists := w.unifiedSessions[sessionID]; exists {
+			w.log.Debug().Str("session", sessionID).Msg("closing old unified connection for session")
 
 			_ = oldConn.Close()
 			// Remove from clients list immediately
-			w.vehicleUnsubChan <- oldConn
+			w.unifiedUnsubChan <- oldConn
 		}
 
-		w.vehicleSessionsMux.Unlock()
+		w.unifiedSessionsMux.Unlock()
 	}
 
 	webSocket, err := w.upgrader.Upgrade(response, request, nil)
 	if err != nil {
-		w.log.Error().Err(err).Msg("error upgrading vehicle websocket connection")
+		w.log.Error().Err(err).Msg("error upgrading unified websocket connection")
 
 		return
 	}
 
-	w.log.Debug().Str("session", sessionID).Msg("vehicle websocket connection established")
+	w.log.Debug().Str("session", sessionID).Msg("unified websocket connection established")
 
 	// Track this session
 	if sessionID != "" {
-		w.vehicleSessionsMux.Lock()
-		w.vehicleSessions[sessionID] = webSocket
-		w.vehicleSessionsMux.Unlock()
+		w.unifiedSessionsMux.Lock()
+		w.unifiedSessions[sessionID] = webSocket
+		w.unifiedSessionsMux.Unlock()
 	}
 
 	// Subscribe this client
-	w.vehicleClientsChan <- webSocket
+	w.unifiedClientsChan <- webSocket
 
 	defer func() {
 		// Remove from session map
 		if sessionID != "" {
-			w.vehicleSessionsMux.Lock()
-			delete(w.vehicleSessions, sessionID)
-			w.vehicleSessionsMux.Unlock()
+			w.unifiedSessionsMux.Lock()
+			delete(w.unifiedSessions, sessionID)
+			w.unifiedSessionsMux.Unlock()
 		}
 
 		// Unsubscribe on disconnect
-		w.vehicleUnsubChan <- webSocket
+		w.unifiedUnsubChan <- webSocket
 
 		err := webSocket.Close()
 		if err != nil {
-			w.log.Error().Err(err).Msg("closing vehicle websocket connection")
+			w.log.Debug().Err(err).Msg("closing unified websocket connection")
 		}
 	}()
 
@@ -413,20 +312,20 @@ func (w *WebUI) handleVehicleWebSocketConnection(response http.ResponseWriter, r
 	w.vehicleInfoMutex.RLock()
 
 	if len(w.currentVehicleInfo) > 0 {
-		encodedData, err := json.Marshal(w.currentVehicleInfo)
-		w.vehicleInfoMutex.RUnlock()
-
-		if err == nil {
-			err = webSocket.WriteMessage(websocket.TextMessage, encodedData)
-			if err != nil {
-				w.log.Debug().Err(err).Msg("failed to send initial vehicle info")
-			} else {
-				w.log.Debug().Msg("sent initial vehicle info to new client")
-			}
+		msg := WSMessage{
+			Type:      "vehicle",
+			Timestamp: time.Now().UnixMilli(),
+			Data:      w.currentVehicleInfo,
 		}
-	} else {
-		w.vehicleInfoMutex.RUnlock()
+
+		encodedData, err := json.Marshal(msg)
+		if err == nil {
+			_ = webSocket.SetWriteDeadline(time.Now().Add(3 * time.Second))
+			_ = webSocket.WriteMessage(websocket.TextMessage, encodedData)
+		}
 	}
+
+	w.vehicleInfoMutex.RUnlock()
 
 	// Send current game state immediately
 	w.gameStateMutex.RLock()
@@ -434,20 +333,56 @@ func (w *WebUI) handleVehicleWebSocketConnection(response http.ResponseWriter, r
 	w.gameStateMutex.RUnlock()
 
 	if gameState != "" {
-		gameStateInfo := map[string]any{
-			"gamestate": gameState,
+		msg := WSMessage{
+			Type:      "gameState",
+			Timestamp: time.Now().UnixMilli(),
+			Data:      map[string]any{"gamestate": gameState},
 		}
 
-		encodedData, err := json.Marshal(gameStateInfo)
+		encodedData, err := json.Marshal(msg)
 		if err == nil {
-			err = webSocket.WriteMessage(websocket.TextMessage, encodedData)
-			if err != nil {
-				w.log.Debug().Err(err).Msg("failed to send initial game state")
-			} else {
-				w.log.Debug().Msg("sent initial game state to new client")
-			}
+			_ = webSocket.SetWriteDeadline(time.Now().Add(3 * time.Second))
+			_ = webSocket.WriteMessage(websocket.TextMessage, encodedData)
 		}
 	}
+
+	// Send current circuit info immediately
+	w.circuitInfoMutex.RLock()
+
+	if len(w.currentCircuitInfo) > 0 {
+		msg := WSMessage{
+			Type:      "circuit",
+			Timestamp: time.Now().UnixMilli(),
+			Data:      w.currentCircuitInfo,
+		}
+
+		encodedData, err := json.Marshal(msg)
+		if err == nil {
+			_ = webSocket.SetWriteDeadline(time.Now().Add(3 * time.Second))
+			_ = webSocket.WriteMessage(websocket.TextMessage, encodedData)
+		}
+	}
+
+	w.circuitInfoMutex.RUnlock()
+
+	// Send current race info immediately
+	w.raceInfoMutex.RLock()
+
+	if len(w.currentRaceInfo) > 0 {
+		msg := WSMessage{
+			Type:      "race",
+			Timestamp: time.Now().UnixMilli(),
+			Data:      w.currentRaceInfo,
+		}
+
+		encodedData, err := json.Marshal(msg)
+		if err == nil {
+			_ = webSocket.SetWriteDeadline(time.Now().Add(3 * time.Second))
+			_ = webSocket.WriteMessage(websocket.TextMessage, encodedData)
+		}
+	}
+
+	w.raceInfoMutex.RUnlock()
 
 	// Keep connection alive - read messages (if any) to detect disconnects
 	// Set read deadline - if no pong received in 10 seconds, connection is dead
@@ -462,7 +397,7 @@ func (w *WebUI) handleVehicleWebSocketConnection(response http.ResponseWriter, r
 
 	// Handle close messages from client
 	webSocket.SetCloseHandler(func(code int, text string) error {
-		w.log.Debug().Int("code", code).Str("text", text).Msg("client sent close frame")
+		w.log.Debug().Int("code", code).Str("text", text).Msg("unified websocket close message received")
 
 		return nil
 	})
@@ -475,6 +410,8 @@ func (w *WebUI) handleVehicleWebSocketConnection(response http.ResponseWriter, r
 
 	// Goroutine to handle pings
 	go func() {
+		defer close(done)
+
 		for {
 			select {
 			case <-pingTicker.C:
@@ -482,49 +419,146 @@ func (w *WebUI) handleVehicleWebSocketConnection(response http.ResponseWriter, r
 
 				err := webSocket.WriteMessage(websocket.PingMessage, nil)
 				if err != nil {
-					close(done)
+					w.log.Debug().Err(err).Msg("failed to send ping on unified websocket")
 
 					return
 				}
-			case <-done:
-				return
 			}
 		}
 	}()
 
+	// Handle incoming messages (subscription updates)
 	for {
-		_, _, err := webSocket.ReadMessage()
+		_, message, err := webSocket.ReadMessage()
 		if err != nil {
-			w.log.Debug().Err(err).Msg("vehicle websocket read error, closing connection")
-			close(done)
+			w.log.Debug().Err(err).Msg("unified websocket read error, closing connection")
 
 			break
 		}
+
 		// Reset read deadline on any message
 		_ = webSocket.SetReadDeadline(time.Now().Add(10 * time.Second))
+
+		// Try to parse as subscription message
+		var subMsg struct {
+			Type          string          `json:"type"`
+			Subscriptions map[string]bool `json:"subscriptions"`
+		}
+
+		if err := json.Unmarshal(message, &subMsg); err == nil && subMsg.Type == "subscribe" {
+			// Send subscription update to broadcaster
+			w.subscriptionChan <- subscriptionUpdate{
+				client:        webSocket,
+				subscriptions: subMsg.Subscriptions,
+			}
+
+			w.log.Debug().
+				Interface("subscriptions", subMsg.Subscriptions).
+				Msg("client updated subscriptions")
+		}
 	}
 }
 
-// vehicleInfoBroadcaster manages vehicle info broadcasting to all connected clients.
-func (w *WebUI) vehicleInfoBroadcaster() {
+// unifiedWebSocketBroadcaster manages the unified websocket, handling all message types.
+func (w *WebUI) unifiedWebSocketBroadcaster() {
+	// Batch configuration for telemetry
+	batchFrameRate := 30
+	bufferSize := batchFrameRate / 60
+	batchInterval := time.Duration(1000/batchFrameRate) * time.Millisecond
+	batchBuffer := make([]map[string]float32, 0, bufferSize)
+
+	// Track sequence ID for telemetry deduplication
+	sid := 0
+
+	// Ticker for batched telemetry sends
+	ticker := time.NewTicker(batchInterval)
+	defer ticker.Stop()
+
 	for {
 		select {
-		case client := <-w.vehicleClientsChan:
-			// Add new client
-			w.vehicleClients = append(w.vehicleClients, client)
-			w.log.Debug().Int("vehicle_clients", len(w.vehicleClients)).Msg("vehicle client subscribed")
+		case client := <-w.unifiedClientsChan:
+			// Add new client with default subscriptions (all enabled except telemetry)
+			w.unifiedClients = append(w.unifiedClients, client)
 
-		case client := <-w.vehicleUnsubChan:
+			w.subscriptionsMutex.Lock()
+			w.clientSubscriptions[client] = map[string]bool{
+				"vehicle":   true,
+				"gameState": true,
+				"circuit":   true,
+				"race":      true,
+				"telemetry": false, // Telemetry off by default
+			}
+			w.subscriptionsMutex.Unlock()
+
+			w.log.Debug().Int("unified_clients", len(w.unifiedClients)).Msg("unified client subscribed")
+
+		case client := <-w.unifiedUnsubChan:
 			// Remove client
-			for i, c := range w.vehicleClients {
+			for i, c := range w.unifiedClients {
 				if c == client {
-					w.vehicleClients = append(w.vehicleClients[:i], w.vehicleClients[i+1:]...)
+					w.unifiedClients = append(w.unifiedClients[:i], w.unifiedClients[i+1:]...)
 
 					break
 				}
 			}
 
-			w.log.Debug().Int("vehicle_clients", len(w.vehicleClients)).Msg("vehicle client unsubscribed")
+			// Remove subscriptions
+			w.subscriptionsMutex.Lock()
+			delete(w.clientSubscriptions, client)
+			w.subscriptionsMutex.Unlock()
+
+			w.log.Debug().Int("unified_clients", len(w.unifiedClients)).Msg("unified client unsubscribed")
+
+		case subUpdate := <-w.subscriptionChan:
+			// Update client subscriptions
+			w.subscriptionsMutex.Lock()
+
+			if _, exists := w.clientSubscriptions[subUpdate.client]; exists {
+				for dataType, subscribed := range subUpdate.subscriptions {
+					w.clientSubscriptions[subUpdate.client][dataType] = subscribed
+				}
+			}
+
+			w.subscriptionsMutex.Unlock()
+
+		case data := <-w.telemetryChartFeed:
+			// Handle telemetry data - add to batch buffer
+			if sid != 0 {
+				diff := int(data["seq"]) - sid
+				if diff == 0 {
+					continue // Skip duplicate
+				}
+			}
+
+			sid = int(data["seq"])
+			batchBuffer = append(batchBuffer, data)
+
+		case <-ticker.C:
+			// Send batched telemetry data
+			if len(batchBuffer) == 0 {
+				continue
+			}
+
+			msg := WSMessage{
+				Type:      "telemetry",
+				Timestamp: time.Now().UnixMilli(),
+				Data:      batchBuffer,
+			}
+
+			encodedData, err := json.Marshal(msg)
+			if err != nil {
+				w.log.Error().Err(err).Msg("failed to encode batched telemetry JSON")
+
+				batchBuffer = batchBuffer[:0]
+
+				continue
+			}
+
+			// Broadcast to all unified clients
+			w.broadcastToUnifiedClients(encodedData, "telemetry")
+
+			// Clear buffer
+			batchBuffer = batchBuffer[:0]
 
 		case vehicleInfo := <-w.vehicleInfoFeed:
 			// Store current state with mutex protection
@@ -532,31 +566,21 @@ func (w *WebUI) vehicleInfoBroadcaster() {
 			w.currentVehicleInfo = vehicleInfo
 			w.vehicleInfoMutex.Unlock()
 
-			// Broadcast to all connected clients
-			encodedData, err := json.Marshal(vehicleInfo)
+			// Broadcast vehicle info
+			msg := WSMessage{
+				Type:      "vehicle",
+				Timestamp: time.Now().UnixMilli(),
+				Data:      vehicleInfo,
+			}
+
+			encodedData, err := json.Marshal(msg)
 			if err != nil {
 				w.log.Error().Err(err).Msg("failed to encode vehicle info JSON")
 
 				continue
 			}
 
-			// Send to all clients, remove failed ones
-			activeClients := make([]*websocket.Conn, 0, len(w.vehicleClients))
-			for _, client := range w.vehicleClients {
-				// Set reasonable write deadline for high-latency connections (3 seconds)
-				_ = client.SetWriteDeadline(time.Now().Add(3 * time.Second))
-
-				err := client.WriteMessage(websocket.TextMessage, encodedData)
-				if err != nil {
-					w.log.Debug().Err(err).Msg("failed to send vehicle info to client, removing")
-
-					_ = client.Close()
-				} else {
-					activeClients = append(activeClients, client)
-				}
-			}
-
-			w.vehicleClients = activeClients
+			w.broadcastToUnifiedClients(encodedData, "vehicle")
 
 			if len(vehicleInfo) > 0 {
 				manufacturer, _ := vehicleInfo["manufacturer"].(string)
@@ -567,8 +591,8 @@ func (w *WebUI) vehicleInfoBroadcaster() {
 					Str("manufacturer", manufacturer).
 					Str("model", model).
 					Uint32("carID", carID).
-					Int("clients", len(w.vehicleClients)).
-					Msg("broadcast vehicle info")
+					Int("clients", len(w.unifiedClients)).
+					Msg("broadcast vehicle info to unified clients")
 			}
 
 		case gameState := <-w.gameStateFeed:
@@ -577,309 +601,133 @@ func (w *WebUI) vehicleInfoBroadcaster() {
 			w.currentGameState = gameState
 			w.gameStateMutex.Unlock()
 
-			// Create a message with just the game state
-			gameStateInfo := map[string]any{
-				"gamestate": gameState,
+			// Broadcast game state
+			msg := WSMessage{
+				Type:      "gameState",
+				Timestamp: time.Now().UnixMilli(),
+				Data:      map[string]any{"gamestate": gameState},
 			}
 
-			// Broadcast to all connected vehicle clients (game state goes through vehicle websocket)
-			encodedData, err := json.Marshal(gameStateInfo)
+			encodedData, err := json.Marshal(msg)
 			if err != nil {
 				w.log.Error().Err(err).Msg("failed to encode game state JSON")
 
 				continue
 			}
 
-			// Send to all vehicle clients, remove failed ones
-			activeClients := make([]*websocket.Conn, 0, len(w.vehicleClients))
-			for _, client := range w.vehicleClients {
-				// Set reasonable write deadline for high-latency connections (3 seconds)
-				_ = client.SetWriteDeadline(time.Now().Add(3 * time.Second))
-
-				err := client.WriteMessage(websocket.TextMessage, encodedData)
-				if err != nil {
-					w.log.Debug().Err(err).Msg("failed to send game state to client, removing")
-
-					_ = client.Close()
-				} else {
-					activeClients = append(activeClients, client)
-				}
-			}
-
-			w.vehicleClients = activeClients
+			w.broadcastToUnifiedClients(encodedData, "gameState")
 
 			w.log.Debug().
 				Str("gameState", gameState).
-				Int("clients", len(w.vehicleClients)).
-				Msg("broadcast game state")
-		}
-	}
-}
-
-// handleCircuitWebSocketConnection upgrades the HTTP connection to a WebSocket and streams circuit info updates.
-func (w *WebUI) handleCircuitWebSocketConnection(response http.ResponseWriter, request *http.Request) {
-	webSocket, err := w.upgrader.Upgrade(response, request, nil)
-	if err != nil {
-		w.log.Error().Err(err).Msg("error upgrading circuit websocket connection")
-
-		return
-	}
-
-	w.log.Debug().Msg("circuit websocket connection established")
-
-	// Subscribe this client
-	w.circuitClientsChan <- webSocket
-
-	defer func() {
-		// Unsubscribe on disconnect
-		w.circuitUnsubChan <- webSocket
-
-		err := webSocket.Close()
-		if err != nil {
-			w.log.Error().Err(err).Msg("closing circuit websocket connection")
-		}
-	}()
-
-	// Send current circuit info immediately (with mutex protection)
-	w.circuitInfoMutex.RLock()
-
-	if len(w.currentCircuitInfo) > 0 {
-		encodedData, err := json.Marshal(w.currentCircuitInfo)
-		w.circuitInfoMutex.RUnlock()
-
-		if err == nil {
-			err = webSocket.WriteMessage(websocket.TextMessage, encodedData)
-			if err != nil {
-				w.log.Debug().Err(err).Msg("failed to send initial circuit info")
-			} else {
-				w.log.Debug().Msg("sent initial circuit info to new client")
-			}
-		}
-	} else {
-		w.circuitInfoMutex.RUnlock()
-	}
-
-	// Keep connection alive - read messages (if any) to detect disconnects
-	for {
-		_, _, err := webSocket.ReadMessage()
-		if err != nil {
-			w.log.Debug().Err(err).Msg("circuit websocket read error, closing connection")
-
-			break
-		}
-	}
-}
-
-// handleRaceWebSocketConnection handles WebSocket connections for race info updates.
-func (w *WebUI) handleRaceWebSocketConnection(response http.ResponseWriter, request *http.Request) {
-	webSocket, err := w.upgrader.Upgrade(response, request, nil)
-	if err != nil {
-		w.log.Error().Err(err).Msg("error upgrading race websocket connection")
-
-		return
-	}
-
-	w.log.Debug().Msg("race websocket connection established")
-
-	// Subscribe this client
-	w.raceClientsChan <- webSocket
-
-	defer func() {
-		// Unsubscribe on disconnect
-		w.raceUnsubChan <- webSocket
-
-		err := webSocket.Close()
-		if err != nil {
-			w.log.Error().Err(err).Msg("closing race websocket connection")
-		}
-	}()
-
-	// Send current race info immediately (with mutex protection)
-	w.raceInfoMutex.RLock()
-
-	if len(w.currentRaceInfo) > 0 {
-		encodedData, err := json.Marshal(w.currentRaceInfo)
-		w.raceInfoMutex.RUnlock()
-
-		if err == nil {
-			err = webSocket.WriteMessage(websocket.TextMessage, encodedData)
-			if err != nil {
-				w.log.Debug().Err(err).Msg("failed to send initial race info")
-			} else {
-				w.log.Debug().Msg("sent initial race info to new client")
-			}
-		}
-	} else {
-		w.raceInfoMutex.RUnlock()
-	}
-
-	// Keep connection alive - read messages (if any) to detect disconnects
-	for {
-		_, _, err := webSocket.ReadMessage()
-		if err != nil {
-			w.log.Debug().Err(err).Msg("race websocket read error, closing connection")
-
-			break
-		}
-	}
-}
-
-// circuitInfoBroadcaster manages circuit info broadcasting to all connected clients.
-func (w *WebUI) circuitInfoBroadcaster() {
-	for {
-		select {
-		case client := <-w.circuitClientsChan:
-			// Add new client
-			w.circuitClients = append(w.circuitClients, client)
-			w.log.Debug().Int("circuit_clients", len(w.circuitClients)).Msg("circuit client subscribed")
-
-		case client := <-w.circuitUnsubChan:
-			// Remove client
-			for i, c := range w.circuitClients {
-				if c == client {
-					w.circuitClients = append(w.circuitClients[:i], w.circuitClients[i+1:]...)
-
-					break
-				}
-			}
-
-			w.log.Debug().Int("circuit_clients", len(w.circuitClients)).Msg("circuit client unsubscribed")
+				Int("clients", len(w.unifiedClients)).
+				Msg("broadcast game state to unified clients")
 
 		case circuitInfo := <-w.circuitInfoFeed:
-			w.log.Debug().
-				Interface("circuitInfo", circuitInfo).
-				Int("num_clients", len(w.circuitClients)).
-				Msg("circuitInfoBroadcaster: received circuit info")
-
 			// Store current state with mutex protection
 			w.circuitInfoMutex.Lock()
 			w.currentCircuitInfo = circuitInfo
 			w.circuitInfoMutex.Unlock()
 
-			// Broadcast to all connected clients
-			encodedData, err := json.Marshal(circuitInfo)
+			// Broadcast circuit info
+			msg := WSMessage{
+				Type:      "circuit",
+				Timestamp: time.Now().UnixMilli(),
+				Data:      circuitInfo,
+			}
+
+			encodedData, err := json.Marshal(msg)
 			if err != nil {
 				w.log.Error().Err(err).Msg("failed to encode circuit info JSON")
 
 				continue
 			}
 
-			w.log.Debug().
-				Str("json_data", string(encodedData)).
-				Msg("circuitInfoBroadcaster: marshaled JSON")
-
-			// Send to all clients, remove failed ones
-			activeClients := make([]*websocket.Conn, 0, len(w.circuitClients))
-			for _, client := range w.circuitClients {
-				// Set reasonable write deadline for high-latency connections (3 seconds)
-				_ = client.SetWriteDeadline(time.Now().Add(3 * time.Second))
-
-				err := client.WriteMessage(websocket.TextMessage, encodedData)
-				if err != nil {
-					w.log.Debug().Err(err).Msg("failed to send circuit info to client, removing")
-
-					_ = client.Close()
-				} else {
-					activeClients = append(activeClients, client)
-				}
-			}
-
-			w.circuitClients = activeClients
+			w.broadcastToUnifiedClients(encodedData, "circuit")
 
 			if len(circuitInfo) > 0 {
+				name := circuitInfo["name"]
+				length := circuitInfo["length"]
+
 				w.log.Debug().
-					Str("circuit", circuitInfo["name"]).
-					Str("variation", circuitInfo["variation"]).
-					Int("clients", len(w.circuitClients)).
-					Msg("broadcast circuit info")
+					Str("circuit", name).
+					Str("length", length).
+					Int("clients", len(w.unifiedClients)).
+					Msg("broadcast circuit info to unified clients")
 			}
-		}
-	}
-}
-
-// raceInfoBroadcaster listens for race info updates and broadcasts them to all connected clients.
-func (w *WebUI) raceInfoBroadcaster() {
-	for {
-		select {
-		case client := <-w.raceClientsChan:
-			// Add new client
-			w.raceClients = append(w.raceClients, client)
-			w.log.Debug().Int("race_clients", len(w.raceClients)).Msg("race client subscribed")
-
-		case client := <-w.raceUnsubChan:
-			// Remove client
-			for i, c := range w.raceClients {
-				if c == client {
-					w.raceClients = append(w.raceClients[:i], w.raceClients[i+1:]...)
-
-					break
-				}
-			}
-
-			w.log.Debug().Int("race_clients", len(w.raceClients)).Msg("race client unsubscribed")
 
 		case raceInfo := <-w.raceInfoFeed:
-			w.log.Debug().
-				Interface("raceInfo", raceInfo).
-				Int("num_clients", len(w.raceClients)).
-				Msg("raceInfoBroadcaster: received race info")
-
 			// Store current state with mutex protection
 			w.raceInfoMutex.Lock()
 			w.currentRaceInfo = raceInfo
 			w.raceInfoMutex.Unlock()
 
-			// Broadcast to all connected clients
-			encodedData, err := json.Marshal(raceInfo)
+			// Broadcast race info
+			msg := WSMessage{
+				Type:      "race",
+				Timestamp: time.Now().UnixMilli(),
+				Data:      raceInfo,
+			}
+
+			encodedData, err := json.Marshal(msg)
 			if err != nil {
 				w.log.Error().Err(err).Msg("failed to encode race info JSON")
 
 				continue
 			}
 
-			w.log.Debug().
-				Str("json_data", string(encodedData)).
-				Msg("raceInfoBroadcaster: marshaled JSON")
-
-			// Send to all clients, remove failed ones
-			activeClients := make([]*websocket.Conn, 0, len(w.raceClients))
-			for _, client := range w.raceClients {
-				// Set reasonable write deadline for high-latency connections (3 seconds)
-				_ = client.SetWriteDeadline(time.Now().Add(3 * time.Second))
-
-				err := client.WriteMessage(websocket.TextMessage, encodedData)
-				if err != nil {
-					w.log.Debug().Err(err).Msg("failed to send race info to client, removing")
-
-					_ = client.Close()
-				} else {
-					activeClients = append(activeClients, client)
-				}
-			}
-
-			w.raceClients = activeClients
+			w.broadcastToUnifiedClients(encodedData, "race")
 
 			if len(raceInfo) > 0 {
-				currentLap := ""
-				position := ""
-
-				if val, ok := raceInfo["currentlap"].(string); ok {
-					currentLap = val
-				}
-
-				if val, ok := raceInfo["position"].(string); ok {
-					position = val
-				}
+				lap, _ := raceInfo["lap"].(int)
+				totalLaps, _ := raceInfo["totalLaps"].(int)
 
 				w.log.Debug().
-					Str("currentlap", currentLap).
-					Str("position", position).
-					Int("clients", len(w.raceClients)).
-					Msg("broadcast race info")
+					Int("lap", lap).
+					Int("totalLaps", totalLaps).
+					Int("clients", len(w.unifiedClients)).
+					Msg("broadcast race info to unified clients")
 			}
 		}
 	}
 }
+
+// broadcastToUnifiedClients sends a message to subscribed unified websocket clients.
+// messageType specifies what type of data is being sent (e.g., "telemetry", "vehicle", etc.)
+func (w *WebUI) broadcastToUnifiedClients(encodedData []byte, messageType string) {
+	activeClients := make([]*websocket.Conn, 0, len(w.unifiedClients))
+
+	w.subscriptionsMutex.RLock()
+	defer w.subscriptionsMutex.RUnlock()
+
+	for _, client := range w.unifiedClients {
+		// Check if client is subscribed to this message type
+		if subs, exists := w.clientSubscriptions[client]; exists && !subs[messageType] {
+			// Client not subscribed to this type, skip
+			activeClients = append(activeClients, client)
+
+			continue
+		}
+
+		// Set reasonable write deadline for high-latency connections (3 seconds)
+		_ = client.SetWriteDeadline(time.Now().Add(3 * time.Second))
+
+		err := client.WriteMessage(websocket.TextMessage, encodedData)
+		if err != nil {
+			w.log.Debug().Err(err).Msg("failed to send message to unified client, removing")
+
+			_ = client.Close()
+		} else {
+			activeClients = append(activeClients, client)
+		}
+	}
+
+	w.unifiedClients = activeClients
+}
+
+// raceInfoBroadcaster was removed - race data is now sent through unified WebSocket broadcaster.
+// Race info broadcasts are handled in unifiedWebSocketBroadcaster via the raceInfoFeed channel.
+
+// handleRaceWebSocketConnection was removed - race data is now sent through unified /ws endpoint.
 
 // getContentType returns the appropriate MIME type based on file extension using the standard library.
 func getContentType(filename string) string {
