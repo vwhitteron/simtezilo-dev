@@ -134,6 +134,9 @@ type App struct {
 	jerkPeakHold         float64       // Peak hold value for jerk to prevent cancellation
 	jerkPeakHoldTime     time.Time     // Time when peak hold was last updated
 	jerkPeakHoldDuration time.Duration // Duration to hold peak based on pulse length
+
+	// TODO: fix menu nav and remove this
+	activeBuildInfoItem int // Active build info item index
 }
 
 // Options holds configuration options for initializing the App.
@@ -358,6 +361,7 @@ func (a *App) runAppMode() RunResult {
 			SetupModeAvailable: status.Available,
 			LogStore:           a.logStore,
 			BuildVersion:       Version,
+			BuildCommitHash:    CommitHash,
 			BuildTime:          BuildTime,
 			BuildPlatform:      Platform,
 		})

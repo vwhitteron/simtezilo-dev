@@ -1,5 +1,7 @@
 package ui
 
+import "github.com/vwhitteron/simtezilo-dev/app/ui/gui"
+
 // ScreenMode provides a limited set of modes for the screen.
 type ScreenMode int
 
@@ -19,5 +21,5 @@ type Screen interface {
 	RenderSplashScreen(value string)
 	RenderErrorScreen(value string)
 	RenderLiveScreen(gear int)
-	RenderSettingScreen(title string, value string)
+	RenderSettingScreen(layout gui.Layout, title string, value string)
 }

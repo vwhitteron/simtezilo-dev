@@ -6,6 +6,7 @@ import (
 
 	"github.com/vwhitteron/simtezilo-dev/app/exitcode"
 	"github.com/vwhitteron/simtezilo-dev/app/i18n/languagedb"
+	"github.com/vwhitteron/simtezilo-dev/app/ui/gui"
 )
 
 type HIDInputEvent int
@@ -42,8 +43,14 @@ func (u *UserInterface) HIDEventHandler() {
 			continue
 		}
 
-		menuPage, value := u.handleMenuNavigation(key)
-		u.renderSettingScreen(menuPage, value)
+		title, value := u.handleMenuNavigation(key)
+
+		layout := gui.LayoutSetting
+		if title == "info" {
+			layout = gui.LayoutInfo
+		}
+
+		u.renderSettingScreen(layout, title, value)
 	}
 }
 
@@ -114,14 +121,14 @@ func (u *UserInterface) handlePowerKey() {
 }
 
 // handleMenuNavigation handles menu navigation keys and returns the menu page and value.
-func (u *UserInterface) handleMenuNavigation(key HIDInputEvent) (string, string) {
-	menuPage := u.menuSystem.GetCurrentMenuPage()
+func (u *UserInterface) handleMenuNavigation(key HIDInputEvent) (title string, value string) {
+	title = u.menuSystem.GetCurrentMenuPage()
 
 	switch key { //nolint:exhaustive // no need to handle all keys
 	case HIDInputUp:
-		return u.handleUpKey(menuPage)
+		return u.handleUpKey(title)
 	case HIDInputDown:
-		return u.handleDownKey(menuPage)
+		return u.handleDownKey(title)
 	case HIDInputLeft:
 		return u.handleLeftKey()
 	case HIDInputRight:
@@ -129,13 +136,13 @@ func (u *UserInterface) handleMenuNavigation(key HIDInputEvent) (string, string)
 	default:
 		u.log.Debug().Msgf("HID Input: Unknown (%d)", key)
 
-		return menuPage, ""
+		return title, ""
 	}
 }
 
 // handleUpKey handles the up key for increasing values.
-func (u *UserInterface) handleUpKey(menuPage string) (string, string) {
-	value := u.SettingAction(menuPage, "increase")
+func (u *UserInterface) handleUpKey(menuPage string) (title string, value string) {
+	value = u.SettingAction(menuPage, "increase")
 	u.log.Debug().
 		Str("key", "up").
 		Str("action", "increase").
@@ -147,8 +154,8 @@ func (u *UserInterface) handleUpKey(menuPage string) (string, string) {
 }
 
 // handleDownKey handles the down key for decreasing values.
-func (u *UserInterface) handleDownKey(menuPage string) (string, string) {
-	value := u.SettingAction(menuPage, "decrease")
+func (u *UserInterface) handleDownKey(menuPage string) (title string, value string) {
+	value = u.SettingAction(menuPage, "decrease")
 	u.log.Debug().
 		Str("key", "down").
 		Str("action", "decrease").
@@ -160,13 +167,13 @@ func (u *UserInterface) handleDownKey(menuPage string) (string, string) {
 }
 
 // handleLeftKey handles the left key for previous menu page.
-func (u *UserInterface) handleLeftKey() (string, string) {
+func (u *UserInterface) handleLeftKey() (title string, value string) {
 	menuPage := u.menuSystem.GetCurrentMenuPage()
 	if u.display.IsAwake() {
 		menuPage = u.menuSystem.PreviousMenuPage()
 	}
 
-	value := u.SettingAction(menuPage, "get")
+	value = u.SettingAction(menuPage, "get")
 	u.log.Debug().
 		Str("key", "left").
 		Str("action", "previous").
@@ -178,13 +185,13 @@ func (u *UserInterface) handleLeftKey() (string, string) {
 }
 
 // handleRightKey handles the right key for next menu page.
-func (u *UserInterface) handleRightKey() (string, string) {
+func (u *UserInterface) handleRightKey() (title string, value string) {
 	menuPage := u.menuSystem.GetCurrentMenuPage()
 	if u.display.IsAwake() {
 		menuPage = u.menuSystem.NextMenuPage()
 	}
 
-	value := u.SettingAction(menuPage, "get")
+	value = u.SettingAction(menuPage, "get")
 	u.log.Debug().
 		Str("key", "right").
 		Str("action", "next").
@@ -196,7 +203,7 @@ func (u *UserInterface) handleRightKey() (string, string) {
 }
 
 // renderSettingScreen renders the setting screen with the given title and value.
-func (u *UserInterface) renderSettingScreen(menuPage, value string) {
+func (u *UserInterface) renderSettingScreen(layout gui.Layout, menuPage string, value string) {
 	title := "???"
 
 	key, err := languagedb.StringToKey("ui.menu." + menuPage)
@@ -209,5 +216,5 @@ func (u *UserInterface) renderSettingScreen(menuPage, value string) {
 		title = u.i18n.GetString(key)
 	}
 
-	_ = u.Screen.RenderSettingScreen(title, value)
+	_ = u.Screen.RenderSettingScreen(layout, title, value)
 }

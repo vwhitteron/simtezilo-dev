@@ -41,6 +41,7 @@ const (
 	UIMenuTSat       Key = "ui.menu.tsat"
 	UIMenuMix        Key = "ui.menu.mix"
 	UIMenuLang       Key = "ui.menu.lang"
+	UIMenuInfo       Key = "ui.menu.info"
 
 	RadioOnline            Key = "radio.online"
 	RadioLapRecord         Key = "radio.laprecord"

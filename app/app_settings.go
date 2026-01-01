@@ -1,6 +1,8 @@
 package app
 
-import "strconv"
+import (
+	"strconv"
+)
 
 func (a *App) settingAction(setting string, action string) string {
 	handlers := map[string]func(string) string{
@@ -21,6 +23,7 @@ func (a *App) settingAction(setting string, action string) string {
 		"vCurve":     a.handleVibrationCurveSetting,
 		"vol":        a.handleMasterVolSetting,
 		"vSat":       a.handleVibrationSatSetting,
+		"info":       a.handleInfoScreen,
 	}
 
 	if handler, exists := handlers[setting]; exists {
@@ -279,4 +282,17 @@ func (a *App) handleVibrationSatSetting(action string) string {
 	}
 
 	return strconv.Itoa(value)
+}
+
+func (a *App) handleInfoScreen(action string) (value string) {
+	switch action {
+	case "increase":
+		value = a.GetNextBuildInfoItem()
+	case "decrease":
+		value = a.GetPreviousBuildInfoItem()
+	default:
+		value = a.GetBuildInfoItem()
+	}
+
+	return value
 }

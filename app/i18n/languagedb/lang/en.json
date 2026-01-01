@@ -50,6 +50,7 @@
         "ui.menu.tsat": "Trans Saturation",
         "ui.menu.mix": "Mix Algo",
         "ui.menu.lang": "Language",
+        "ui.menu.info": "Info",
 
         "radio.online": "Radio check",
         "radio.laprecord": "Lap record",

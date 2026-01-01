@@ -26,6 +26,7 @@ func NewMenuSystem() *MenuSystem {
 			"ePVol",
 			"ePScale",
 			"lang",
+			"info",
 		},
 	}
 }

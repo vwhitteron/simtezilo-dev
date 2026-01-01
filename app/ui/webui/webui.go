@@ -67,6 +67,7 @@ type WebUI struct {
 	currentLogStats    map[string]any
 	logStatsMutex      sync.RWMutex
 	buildVersion       string
+	buildCommitHash    string
 	buildTime          string
 	buildPlatform      string
 	// Unified WebSocket support
@@ -94,6 +95,7 @@ type Config struct {
 	LogStore           *logstore.Store
 	LogStatsFeed       chan map[string]any
 	BuildVersion       string
+	BuildCommitHash    string
 	BuildTime          string
 	BuildPlatform      string
 }
@@ -123,6 +125,7 @@ func New(config Config) *WebUI {
 		logStatsFeed:        config.LogStatsFeed,
 		currentLogStats:     make(map[string]any),
 		buildVersion:        config.BuildVersion,
+		buildCommitHash:     config.BuildCommitHash,
 		buildTime:           config.BuildTime,
 		buildPlatform:       config.BuildPlatform,
 		unifiedClients:      make([]*websocket.Conn, 0),
@@ -2204,6 +2207,7 @@ func (w *WebUI) handleSystemInfo(response http.ResponseWriter, request *http.Req
 
 	responseData := map[string]any{
 		"version":            w.buildVersion,
+		"commitHash":         w.buildCommitHash,
 		"buildTime":          w.buildTime,
 		"buildPlatform":      w.buildPlatform,
 		"hardware":           platform.String(),

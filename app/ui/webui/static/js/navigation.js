@@ -156,6 +156,10 @@ document.addEventListener('DOMContentLoaded', function () {
                         <div id="info-version" class="fw-semibold">-</div>
                     </div>
                     <div class="mb-2">
+                        <small class="text-muted" data-i18n="runmode.info.commitHash">Commit Hash:</small>
+                        <div id="info-commit-hash" class="fw-semibold">-</div>
+                    </div>
+                    <div class="mb-2">
                         <small class="text-muted" data-i18n="runmode.info.buildDate">Build Date:</small>
                         <div id="info-build-date" class="fw-semibold">-</div>
                     </div>
@@ -202,6 +206,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         .then(response => response.json())
                         .then(data => {
                             document.getElementById('info-version').textContent = data.version || '-';
+                            document.getElementById('info-commit-hash').textContent = data.commitHash || '-';
                             document.getElementById('info-build-date').textContent = data.buildTime || '-';
                             document.getElementById('info-build-platform').textContent = data.buildPlatform || '-';
                             document.getElementById('info-hardware').textContent = data.hardware || '-';
