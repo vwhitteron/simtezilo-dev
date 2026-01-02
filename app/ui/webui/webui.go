@@ -779,11 +779,6 @@ func (w *WebUI) broadcastToUnifiedClients(encodedData []byte, messageType string
 	w.unifiedClients = activeClients
 }
 
-// raceInfoBroadcaster was removed - race data is now sent through unified WebSocket broadcaster.
-// Race info broadcasts are handled in unifiedWebSocketBroadcaster via the raceInfoFeed channel.
-
-// handleRaceWebSocketConnection was removed - race data is now sent through unified /ws endpoint.
-
 // getContentType returns the appropriate MIME type based on file extension using the standard library.
 func getContentType(filename string) string {
 	ext := filepath.Ext(filename)
@@ -815,13 +810,13 @@ func (w *WebUI) handleConfigAPI(response http.ResponseWriter, request *http.Requ
 func (w *WebUI) handleGetConfig(response http.ResponseWriter, _ *http.Request) {
 	configData := map[string]any{
 		"app": map[string]any{
-			"language":     *w.config.GetAppLanguage(),
-			"accent":       w.config.GetAppAccent(),
-			"logLevel":     w.config.GetAppLogLevel(),
-			"baseDir":      w.config.GetAppBaseDir(),
-			"enableReplay": w.config.GetHapticsEnableReplay(),
-			"webUIEnabled": w.config.GetAppWebUIEnabled(),
-			"webUIPort":    w.config.GetAppWebUIPort(),
+			"language":      *w.config.GetAppLanguage(),
+			"accent":        w.config.GetAppAccent(),
+			"logLevel":      w.config.GetAppLogLevel(),
+			"baseDir":       w.config.GetAppBaseDir(),
+			"vehicleDBFile": w.config.GetAppVehicleDBFile(),
+			"webUIEnabled":  w.config.GetAppWebUIEnabled(),
+			"webUIPort":     w.config.GetAppWebUIPort(),
 		},
 		"discord": map[string]any{
 			"token":          w.config.GetDiscordToken(),
@@ -834,6 +829,7 @@ func (w *WebUI) handleGetConfig(response http.ResponseWriter, _ *http.Request) {
 			"displayOrientation": w.config.GetDisplayOrientation(),
 		},
 		"haptics": map[string]any{
+			"enableReplay":                 w.config.GetHapticsEnableReplay(),
 			"dynamicTransmissionFeedback":  w.config.GethapticsDynamicTransFeedbackEnabled(),
 			"dynamicTransmissionCurve":     w.config.GetHapticsTransmissionCurve(),
 			"dynamicTransmissionGforceMax": w.config.GetHapticsTransmissionGforceMax(),
