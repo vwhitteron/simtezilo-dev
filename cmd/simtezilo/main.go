@@ -66,6 +66,7 @@ func main() {
 
 	logger.Info().
 		Str("Version", app.Version).
+		Str("CommitHash", app.CommitHash).
 		Str("BuildTime", app.BuildTime).
 		Str("Platform", app.Platform).
 		Msg("Starting Simtezilo")
