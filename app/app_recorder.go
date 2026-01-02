@@ -65,7 +65,7 @@ func (a *App) detectRecordingTrigger() {
 	a.state.recorder.trigger.toggleHistory = validToggles
 	a.state.recorder.trigger.toggleCount = len(validToggles)
 
-	a.log.Debug().
+	a.log.Info().
 		Int("toggle_count", a.state.recorder.trigger.toggleCount).
 		Uint32("sequence_id", currentSequenceID).
 		Bool("high_beam_active", currentTriggerState).

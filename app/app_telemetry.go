@@ -36,6 +36,7 @@ func (a *App) checkForNewLap() {
 	}
 }
 
+// checkRaceComplete checks if the race has been completed.
 func (a *App) checkRaceComplete() {
 	lastLap := a.state.last.lapNumber
 	currentLap := a.state.current.lapNumber
@@ -67,6 +68,60 @@ func (a *App) checkRaceComplete() {
 
 		return
 	}
+}
+
+// checkInPostRaceMenu checks if the game is currently in the post-race menu based on telemetry data.
+// This state is signified by the vehicle RPM and angular velocity is static. When the vehicle is on
+// circuit these values will be constantly changing to a small degree, even when the vehicle is at a
+// complete stop.
+func (a *App) checkInPostRaceMenu() {
+	// Reset state if not in appropriate game state
+	if a.state.current.gameState != gtmodels.GameStateLive || a.gtClient.Telemetry.Flags().GamePaused {
+		a.state.postRaceMenuFrameCount = 0
+		if a.state.isInPostRaceMenu {
+			a.log.Info().Msg("Exited race complete menu")
+			a.state.isInPostRaceMenu = false
+		}
+
+		return
+	}
+
+	// Check if telemetry values are static
+	currentRPM := float64(a.state.current.engineRPM)
+	lastRPM := float64(a.state.last.engineRPM)
+	rpmIsStatic := abs(currentRPM-lastRPM) == 0 && currentRPM > 0 // RPM must be > 0 to avoid false positives when engine has stalled
+	rotationIsStatic := a.kinematics.Current.SixDOFRotation.AccelMag == 0
+	telemetryIsStatic := rpmIsStatic && rotationIsStatic
+
+	// Use frame counting to debounce state changes
+	const stableFrameCount = 60
+
+	if !telemetryIsStatic {
+		// Only exit if when enough consecutive non-static frames have been seen
+		if a.state.postRaceMenuFrameCount > 0 {
+			a.state.postRaceMenuFrameCount--
+		} else if a.state.isInPostRaceMenu {
+			a.state.SetPostRaceMenuState(false)
+		}
+
+		return
+	}
+
+	// Enter post-race menu state after consecutive static frames have stabilized
+	if a.state.postRaceMenuFrameCount >= stableFrameCount {
+		a.state.SetPostRaceMenuState(true)
+	} else {
+		a.state.postRaceMenuFrameCount++
+	}
+}
+
+// abs returns the absolute value of a float64.
+func abs(x float64) float64 {
+	if x < 0 {
+		return -x
+	}
+
+	return x
 }
 
 // sequenceHasAdvanced checks if the telemetry sequence number has advanced.
@@ -171,6 +226,7 @@ func (a *App) updateState() (didUpdate bool) {
 
 	// Vehicle
 	a.state.current.transmissionGear = a.gtClient.Telemetry.CurrentGear()
+	a.state.current.engineRPM = a.gtClient.Telemetry.EngineRPM()
 
 	// Race
 	a.state.current.lapNumber = a.gtClient.Telemetry.CurrentLap()

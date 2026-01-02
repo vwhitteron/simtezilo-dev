@@ -29,6 +29,23 @@ type CalculatedTranslationalDerivatives struct {
 	AccelMag     float64
 }
 
+// CalculatedRotationalDerivatives holds 6DOF rotational derivatives provided by the telemetry data.
+type CalculatedRotationalDerivatives struct {
+	PositionalDerivatives
+
+	Velocity     models.Vector
+	Acceleration models.Vector
+	AccelMag     float64
+}
+
+// TranslationalDerivatives holds 6DOF translational derivatives calculated from the telemetry data.
+type TranslationalDerivatives struct {
+	PositionalDerivatives
+
+	Acceleration models.TranslationalEnvelope
+	AccelMag     float64
+}
+
 // RotationalDerivatives holds 6DOF rotational derivatives provided by the telemetry data.
 type RotationalDerivatives struct {
 	PositionalDerivatives
@@ -38,23 +55,20 @@ type RotationalDerivatives struct {
 	AccelMag     float64
 }
 
-// TranslationalDerivatives holds 6DOF translational derivatives provided by the telemetry data.
-type TranslationalDerivatives struct {
-	PositionalDerivatives
-
-	Acceleration models.TranslationalEnvelope
-	AccelMag     float64
-}
-
 // Kinematics holds the kinematic state of the vehicle.
 type Kinematics struct {
 	SequenceID  uint32 // TODO: probably should rely on a.state.current instead of tracking separately here
 	ComputeTime time.Duration
 	Format      string
 
-	SixDOFTranslationCalc CalculatedTranslationalDerivatives
+	AngularVelocity     models.Vector
+	AngularAcceleration models.Vector
+	AngularAccelMag     float64
+
 	SixDOFTranslation     TranslationalDerivatives
+	SixDOFTranslationCalc CalculatedTranslationalDerivatives
 	SixDOFRotation        RotationalDerivatives
+	SixDOFRotationCalc    CalculatedRotationalDerivatives
 
 	TransmissionGear int // TODO: probably should rely on a.state.current instead of tracking separately here
 
@@ -84,7 +98,7 @@ func newKinematics() Kinematics {
 	return Kinematics{
 		SixDOFTranslationCalc: CalculatedTranslationalDerivatives{},
 		SixDOFTranslation:     TranslationalDerivatives{},
-		SixDOFRotation:        RotationalDerivatives{},
+		SixDOFRotationCalc:    CalculatedRotationalDerivatives{},
 		ComputeTime:           0,
 		TransmissionGear:      -100,
 		GroundSpeed:           0,
@@ -106,6 +120,12 @@ func (k *State) Update(windowSeconds float64, vehicleDimensions vehicle.Dimensio
 
 	accelFactor := float32(1.0 / windowSeconds)
 
+	// 6DOF translational envelope - provided by telemetry
+	k.Current.SixDOFTranslation.Acceleration = gtclient.Telemetry.TranslationEnvelope()
+	k.Current.SixDOFTranslation.AccelMag = translationalenvelope.Magnitude(k.Current.SixDOFTranslation.Acceleration)
+	k.Current.SixDOFTranslation.Jerk = (k.Current.SixDOFTranslation.AccelMag - k.Last.SixDOFTranslation.AccelMag) / windowSeconds
+	k.Current.SixDOFTranslation.Snap = (k.Current.SixDOFTranslation.Jerk - k.Last.SixDOFTranslation.Jerk) / windowSeconds
+
 	// 6DOF translational envelope - calculated from velocity vector
 	k.Current.SixDOFTranslationCalc.Velocity = gtclient.Telemetry.VelocityVector()
 	translationCalcVelocityDelta := vector.Delta(k.Current.SixDOFTranslationCalc.Velocity, k.Last.SixDOFTranslationCalc.Velocity)
@@ -115,29 +135,28 @@ func (k *State) Update(windowSeconds float64, vehicleDimensions vehicle.Dimensio
 	k.Current.SixDOFTranslationCalc.Snap = (k.Current.SixDOFTranslationCalc.Jerk - k.Last.SixDOFTranslationCalc.Jerk) / windowSeconds
 	k.Current.SixDOFTranslationCalc.Crackle = (k.Current.SixDOFTranslationCalc.Snap - k.Last.SixDOFTranslationCalc.Snap) / windowSeconds
 
-	// 6DOF translational envelope - provided by telemetry
-	k.Current.SixDOFTranslation.Acceleration = gtclient.Telemetry.TranslationEnvelope()
-	k.Current.SixDOFTranslation.AccelMag = translationalenvelope.Magnitude(k.Current.SixDOFTranslation.Acceleration)
-	k.Current.SixDOFTranslation.Jerk = (k.Current.SixDOFTranslation.AccelMag - k.Last.SixDOFTranslation.AccelMag) / windowSeconds
-	k.Current.SixDOFTranslation.Snap = (k.Current.SixDOFTranslation.Jerk - k.Last.SixDOFTranslation.Jerk) / windowSeconds
+	// 6DOF rotational envelope - provided by telemetry
+	k.Current.SixDOFRotation.Velocity = gtclient.Telemetry.AngularVelocityVector()
+	k.Current.SixDOFRotation.Acceleration = vector.Delta(k.Current.AngularVelocity, k.Last.AngularVelocity)
+	k.Current.SixDOFRotation.AccelMag = vector.Magnitude(k.Current.AngularAcceleration)
 
-	// 6DOF rotational envelope - angular velocity vector
+	// 6DOF rotational envelope - calculated angular velocity vector
 	// Convert from radians to meters at the wheels using vehicle dimensions
-	k.Current.SixDOFRotation.Velocity = vector.Scale(
-		gtclient.Telemetry.AngularVelocityVector(),
+	k.Current.SixDOFRotationCalc.Velocity = vector.Scale(
+		k.Current.AngularVelocity,
 		vehicleDimensions.LongitudinalRadius,
 		vehicleDimensions.LongitudinalRadius,
 		vehicleDimensions.TransverseRadius,
 	)
-	rotationVelocityDelta := vector.Delta(k.Current.SixDOFRotation.Velocity, k.Last.SixDOFRotation.Velocity)
-	k.Current.SixDOFRotation.Acceleration = vector.Scale(rotationVelocityDelta, accelFactor, accelFactor, accelFactor)
-	k.Current.SixDOFRotation.AccelMag = vector.Magnitude(k.Current.SixDOFRotation.Acceleration)
-	k.Current.SixDOFRotation.Jerk = (k.Current.SixDOFRotation.AccelMag - k.Last.SixDOFRotation.AccelMag) / windowSeconds
-	k.Current.SixDOFRotation.Snap = (k.Current.SixDOFRotation.Jerk - k.Last.SixDOFRotation.Jerk) / windowSeconds
+	rotationVelocityDelta := vector.Delta(k.Current.SixDOFRotationCalc.Velocity, k.Last.SixDOFRotationCalc.Velocity)
+	k.Current.SixDOFRotationCalc.Acceleration = vector.Scale(rotationVelocityDelta, accelFactor, accelFactor, accelFactor)
+	k.Current.SixDOFRotationCalc.AccelMag = vector.Magnitude(k.Current.SixDOFRotationCalc.Acceleration)
+	k.Current.SixDOFRotationCalc.Jerk = (k.Current.SixDOFRotationCalc.AccelMag - k.Last.SixDOFRotationCalc.AccelMag) / windowSeconds
+	k.Current.SixDOFRotationCalc.Snap = (k.Current.SixDOFRotationCalc.Jerk - k.Last.SixDOFRotationCalc.Jerk) / windowSeconds
 
 	k.Current.GroundSpeed = float64(gtclient.Telemetry.GroundSpeedMetersPerSecond())
 	k.Current.TransmissionGear = gtclient.Telemetry.CurrentGear()
-	k.Current.SurgeCalculated = signal.Abs(float64(k.Current.SixDOFRotation.Acceleration.X))
+	k.Current.SurgeCalculated = signal.Abs(float64(k.Current.SixDOFRotationCalc.Acceleration.X))
 }
 
 // GetSurgeGforce calculates and returns the translational envelope surge G-force based on the current kinematic state.

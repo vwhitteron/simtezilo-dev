@@ -83,7 +83,7 @@ func (a *App) generateChassisHaptic() {
 func (a *App) calculateChassisHapticPulseAmplitude() float64 {
 	jerk := signal.LargestMagnitude(
 		a.kinematics.Current.SixDOFTranslationCalc.Jerk,
-		a.kinematics.Current.SixDOFRotation.Jerk,
+		a.kinematics.Current.SixDOFRotationCalc.Jerk,
 	)
 
 	// Process the signal normally first
@@ -186,7 +186,7 @@ func (a *App) detectInverseJerk(currentJerk float64) bool {
 func (a *App) calculateChassisHapticPulseFrequency() float64 {
 	snap := signal.LargestMagnitude(
 		a.kinematics.Current.SixDOFTranslationCalc.Snap,
-		a.kinematics.Current.SixDOFRotation.Snap,
+		a.kinematics.Current.SixDOFRotationCalc.Snap,
 	)
 
 	pulseFrequencyScaler := signal.Abs(signal.Exponent(snap, a.config.GetHapticsSnapCurve()/1000))

@@ -9,6 +9,7 @@ import (
 
 	"github.com/vwhitteron/simtezilo-dev/app/i18n/languagedb"
 	"github.com/vwhitteron/simtezilo-dev/app/pitradio"
+	"github.com/zetetos/gt-telemetry/pkg/models"
 )
 
 // notifyLapTime sends lap time notifications over the pit radio.
@@ -20,14 +21,16 @@ func (a *App) notifyLapTime() {
 	var message string
 
 	bestLapTime := a.gtClient.Telemetry.BestLaptime()
-	delta := a.state.current.lastLapTime - bestLapTime
-	minNotifyDelta := time.Duration(a.config.GetPitRadioNotifyLapTimesMaxDeltaSeconds() * float64(time.Second))
+	maxNotifyDelta := time.Duration(a.config.GetPitRadioNotifyLapTimesMaxDeltaSeconds() * float64(time.Second))
 
-	bestLapTimeSet := bestLapTime > 0
 	firstLapCompleted := a.state.current.lapNumber == 2 // notification will occur at the start of lap 2
 	secondLapCompleted := a.state.current.lapNumber > 2 // notifcation will occur at the start of lap 3
-	newLapRecord := secondLapCompleted && bestLapTimeSet && a.state.current.lastLapTime < bestLapTime
-	reportableDelta := secondLapCompleted && delta >= minNotifyDelta
+
+	bestLapTimeSet := bestLapTime > 0
+	newLapRecord := secondLapCompleted && bestLapTimeSet && a.state.current.lastLapTime <= bestLapTime
+
+	delta := a.state.current.lastLapTime - bestLapTime
+	reportableDelta := secondLapCompleted && bestLapTimeSet && delta > 0 && delta <= maxNotifyDelta
 
 	switch {
 	case firstLapCompleted:
@@ -96,6 +99,10 @@ func (a *App) notifyLapNumber() {
 
 	lapInfo := a.getLapNotificationInfo()
 
+	if lapInfo.alreadyNotified {
+		return
+	}
+
 	message := a.determineLapMessage(lapInfo)
 	if message == "" {
 		return
@@ -114,8 +121,14 @@ func (a *App) shouldSendLapNumberNotification() bool {
 		return false
 	}
 
+	raceType := a.gtClient.Telemetry.RaceType()
 	raceLaps := a.gtClient.Telemetry.RaceLaps()
 	currentLap := a.state.current.lapNumber
+
+	// Do not notify for time trial sessiopns
+	if raceType == models.RaceTypeTimeTrial {
+		return false
+	}
 
 	// Do not notify for single lap sprint races
 	if raceLaps == 1 {
@@ -154,21 +167,29 @@ func (a *App) getLapNotificationInfo() lapNotificationInfo {
 	currentLap := a.state.current.lapNumber
 	raceLaps := a.gtClient.Telemetry.RaceLaps()
 
+	lapsRemaining := int16(-1)
+	if raceLaps > 0 {
+		lapsRemaining = raceLaps - currentLap + 1
+	}
+
+	// Notifications are more sparse for longer races
+	longRace := raceLaps > int16(a.config.GetPitRadioNotifyRaceProgressMinLaps()) //nolint:gosec // race laps will not overflow
+
 	return lapNotificationInfo{
 		currentLap:      currentLap,
 		raceLaps:        raceLaps,
-		lapsRemaining:   raceLaps - currentLap + 1,
-		longRace:        raceLaps > int16(a.config.GetPitRadioNotifyRaceProgressMinLaps()), //nolint:gosec // race laps will not overflow
+		lapsRemaining:   lapsRemaining,
+		longRace:        longRace,
 		alreadyNotified: a.pitRadioState.lastNotifiedLapNumber == currentLap,
 	}
 }
 
 // determineLapMessage determines what lap message to send based on race conditions.
 func (a *App) determineLapMessage(info lapNotificationInfo) string {
-	raceCompleted := info.lapsRemaining <= 0 && !info.alreadyNotified
-	finalLap := info.currentLap == info.raceLaps && !info.alreadyNotified
+	raceCompleted := info.raceLaps > 0 && info.lapsRemaining == 0
+	finalLap := info.currentLap == info.raceLaps
 	countdownLaps := int16(a.config.GetPitRadioNotifyRaceLapsCountdownLaps()) //nolint:gosec // lap count will not overflow
-	lastFewLaps := info.lapsRemaining <= countdownLaps && info.longRace && !info.alreadyNotified
+	lastFewLaps := info.lapsRemaining <= countdownLaps && info.longRace
 
 	switch {
 	case raceCompleted:

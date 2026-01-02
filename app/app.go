@@ -58,26 +58,14 @@ type raceState struct {
 	timeOfDay      time.Duration // Time of day in the telemetry session
 
 	// Vehicle information
-	transmissionGear int // Current transmission gear
+	transmissionGear int     // Current transmission gear
+	engineRPM        float32 // Current engine RPM
 
 	// Race timing information
 	lapNumber   int16         // Current lap number
 	lastLapTime time.Duration // Last lap time duration
 	isLive      bool          // Flag to indicate if the telemetry is live or a replay
 	gameState   gtmodels.GameState
-}
-
-// appState holds the overall application state.
-type appState struct {
-	hapticsEnabled     bool           // Flag to indicate if haptics are enabled // TODO: move state to haptics?
-	telemetryActive    bool           // Flag to indicate if telemetry is active
-	sessionEnded       bool           // Flag to indicate if session end has been handled
-	raceCompleteTime   time.Time      // Real-world time when the race was completed
-	current            raceState      // Race state at the current telemetry sequence
-	last               raceState      // Race state at the last telemetry sequence
-	engine             engineState    // Engine state for haptic generation
-	recorder           recordingState // Telemetry recording state
-	mainMenuFrameCount int            // Counter for consecutive main menu frames
 }
 
 // App is the main application struct holding all components and state.
@@ -150,17 +138,10 @@ type Options struct {
 // New creates a new App instance and sets up all components based on the provided options.
 func New(opts Options) (*App, error) {
 	newApp := &App{
-		log:      opts.Logger.With().Str("package", "app").Logger(),
-		logStore: opts.LogStore,
-		done:     opts.Done,
-		state: appState{
-			current: raceState{
-				transmissionGear: kinematics.NullGear,
-			},
-			last: raceState{
-				transmissionGear: kinematics.NullGear,
-			},
-		},
+		log:                opts.Logger.With().Str("package", "app").Logger(),
+		logStore:           opts.LogStore,
+		done:               opts.Done,
+		state:              NewAppState(opts.Logger),
 		kinematics:         kinematics.NewKinematicsState(),
 		telemetryChartFeed: make(chan map[string]float32, 600),
 		vehicleInfoFeed:    make(chan map[string]any, 10),
@@ -1025,6 +1006,7 @@ func (a *App) handleHapticsTick() {
 	}
 
 	a.checkRaceComplete()
+	a.checkInPostRaceMenu()
 	a.checkForNewLap()
 }
 
@@ -1484,6 +1466,10 @@ func (a *App) gearHasChanged() bool {
 
 // raceHasFinished returns true 5 seconds after the race has completed.
 func (a *App) raceHasFinished() bool {
+	if a.state.isInPostRaceMenu {
+		return true
+	}
+
 	if a.state.raceCompleteTime.IsZero() {
 		return false
 	}
