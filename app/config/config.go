@@ -86,6 +86,7 @@ type notifications struct {
 
 type pitRadio struct {
 	Enabled               bool            `toml:"enabled"`
+	Output                string          `toml:"output"`
 	MessageSendIntervalMs int             `toml:"messageSendIntervalMs"`
 	Notifications         *notifications  `toml:"notifications"`
 	Discord               *discord        `toml:"discord"`
@@ -1365,6 +1366,28 @@ func (c *Config) SetPitRadioEnabled(value bool) {
 	c.viper.PitRadio.Enabled = value
 
 	c.registerUpdate(true)
+}
+
+func (c *Config) GetPitRadioOutput() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.PitRadio.Output
+}
+
+// SetPitRadioOutput sets the pit radio output device.
+func (c *Config) SetPitRadioOutput(value string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	switch value {
+	case "discord", "log":
+		c.viper.PitRadio.Output = value
+	default:
+		c.viper.PitRadio.Output = ""
+	}
+
+	c.registerUpdate(false)
 }
 
 // GetPitRadioMessageSendIntervalMs returns the interval in milliseconds between sending of pit radio messages.

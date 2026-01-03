@@ -193,7 +193,7 @@ func (suite *PitRadioTestSuite) SetupTest() {
 	suite.app = &App{
 		config:   nil,
 		gtClient: gtClient,
-		state: appState{
+		state: gameState{
 			current: raceState{},
 			last:    raceState{},
 		},

@@ -50,24 +50,6 @@ type lapEvent struct {
 	HasDelta bool
 }
 
-// raceState holds transient race data for haptic generation and pit radio notifications.
-type raceState struct {
-	// Telemetry session information
-	sequenceNumber uint32        // Current telemetry sequence number
-	sequenceDelta  uint32        // Delta between current and last telemetry sequence number
-	timeOfDay      time.Duration // Time of day in the telemetry session
-
-	// Vehicle information
-	transmissionGear int     // Current transmission gear
-	engineRPM        float32 // Current engine RPM
-
-	// Race timing information
-	lapNumber   int16         // Current lap number
-	lastLapTime time.Duration // Last lap time duration
-	isLive      bool          // Flag to indicate if the telemetry is live or a replay
-	gameState   gtmodels.GameState
-}
-
 // App is the main application struct holding all components and state.
 type App struct {
 	log      zerolog.Logger     // Application logger
@@ -95,7 +77,7 @@ type App struct {
 
 	transmissionGainMin float64 // Minimum transmission gain based on vehicle type
 
-	state         appState                // Application state tracker
+	state         gameState               // Application state tracker
 	pitRadioState *pitRadioState          // Current pit radio state
 	vehicle       vehicle.Characteristics // Current vehicle information
 	tyres         *tyres.Tyre             // Tyre monitoring
@@ -141,7 +123,7 @@ func New(opts Options) (*App, error) {
 		log:                opts.Logger.With().Str("package", "app").Logger(),
 		logStore:           opts.LogStore,
 		done:               opts.Done,
-		state:              NewAppState(opts.Logger),
+		state:              NewGameState(opts.Logger),
 		kinematics:         kinematics.NewKinematicsState(),
 		telemetryChartFeed: make(chan map[string]float32, 600),
 		vehicleInfoFeed:    make(chan map[string]any, 10),
@@ -184,7 +166,7 @@ func New(opts Options) (*App, error) {
 		return nil, err
 	}
 
-	newApp.initializeDiscord(opts)
+	newApp.initializePitRadio(opts)
 
 	newApp.log.Debug().
 		Str("component", "app").
@@ -718,54 +700,44 @@ func (a *App) initializeComponents(opts Options) error {
 	return nil
 }
 
-// reinitializeGTClient reinitializes the GT telemetry client with current config settings.
-func (a *App) reinitializeGTClient() error {
-	gtClientLogger := a.log.With().Str("component", "gt client").Logger()
-
-	var err error
-
-	a.gtClient, err = gttelemetry.New(gttelemetry.Options{
-		Source:    a.config.GetTelemetrySource(),
-		Logger:    &gtClientLogger,
-		LogLevel:  a.config.GetAppLogLevel(),
-		VehicleDB: a.config.GetAppVehicleDBFile(),
-	})
-	if err != nil {
-		a.log.Error().
-			Err(err).
-			Str("component", "gt client").
-			Str("result", "failure").
-			Msg("reinit")
-
-		_ = a.ui.Screen.RenderErrorScreen("GT client reinit")
-
-		return err
-	}
-
-	// Reinitialize circuit with new GT client
-	a.circuit, err = circuit.New(*a.gtClient.CircuitDB, a.log)
-	if err != nil {
-		a.log.Error().
-			Err(err).
-			Str("package", "circuit").
-			Str("result", "failure").
-			Msg("reinit")
-	}
-
-	a.log.Info().
-		Str("source", a.config.GetTelemetrySource()).
-		Msg("GT client reinitialized")
-
-	return nil
-}
-
-// initializeDiscord sets up Discord pit radio if PitRadio is enabled.
-func (a *App) initializeDiscord(opts Options) {
+// initializePitRadio sets up pit radio notification service based on configuration.
+func (a *App) initializePitRadio(opts Options) {
 	if !a.config.PitRadioEnabled() {
 		return
 	}
 
-	// Validate Discord configuration
+	pitRadioOutput := a.config.GetPitRadioOutput()
+	switch pitRadioOutput {
+	case "discord":
+		a.initialiseDiscord(opts)
+	case "log":
+		var err error
+
+		a.pitRadio, err = pitradio.NewLogOutput(&a.log)
+		if err != nil {
+			a.log.Error().
+				Err(err).
+				Str("component", "pit radio log output").
+				Str("result", "failure").
+				Msg("init")
+		}
+	default:
+		a.config.SetPitRadioEnabled(false)
+
+		a.log.Warn().
+			Str("component", "pit radio").
+			Str("output", pitRadioOutput).
+			Str("state", "disabled").
+			Msg("Invalid output type")
+
+		return
+	}
+
+	a.resetPitRadioState()
+}
+
+// initialiseDiscord sets up Discord pit radio bot.
+func (a *App) initialiseDiscord(opts Options) {
 	token := a.config.GetDiscordToken()
 	guildID := a.config.GetDiscordGuildID()
 	channelID := a.config.GetDiscordChannelID()
@@ -820,8 +792,47 @@ func (a *App) initializeDiscord(opts Options) {
 			Str("result", "failure").
 			Msg("init")
 	}
+}
 
-	a.resetPitRadioState()
+// reinitializeGTClient reinitializes the GT telemetry client with current config settings.
+func (a *App) reinitializeGTClient() error {
+	gtClientLogger := a.log.With().Str("component", "gt client").Logger()
+
+	var err error
+
+	a.gtClient, err = gttelemetry.New(gttelemetry.Options{
+		Source:    a.config.GetTelemetrySource(),
+		Logger:    &gtClientLogger,
+		LogLevel:  a.config.GetAppLogLevel(),
+		VehicleDB: a.config.GetAppVehicleDBFile(),
+	})
+	if err != nil {
+		a.log.Error().
+			Err(err).
+			Str("component", "gt client").
+			Str("result", "failure").
+			Msg("reinit")
+
+		_ = a.ui.Screen.RenderErrorScreen("GT client reinit")
+
+		return err
+	}
+
+	// Reinitialize circuit with new GT client
+	a.circuit, err = circuit.New(*a.gtClient.CircuitDB, a.log)
+	if err != nil {
+		a.log.Error().
+			Err(err).
+			Str("package", "circuit").
+			Str("result", "failure").
+			Msg("reinit")
+	}
+
+	a.log.Info().
+		Str("source", a.config.GetTelemetrySource()).
+		Msg("GT client reinitialized")
+
+	return nil
 }
 
 // startHTTPServer creates and starts the HTTP server.

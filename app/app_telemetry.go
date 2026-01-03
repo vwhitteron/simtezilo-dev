@@ -59,12 +59,12 @@ func (a *App) checkRaceComplete() {
 	if currentLap >= raceLaps {
 		if a.state.raceCompleteTime.IsZero() {
 			a.state.raceCompleteTime = time.Now()
-		}
 
-		a.log.Info().
-			Int16("current_lap", currentLap).
-			Int16("race_laps", raceLaps).
-			Msg("Race complete")
+			a.log.Info().
+				Int16("current_lap", currentLap).
+				Int16("race_laps", raceLaps).
+				Msg("Race complete")
+		}
 
 		return
 	}

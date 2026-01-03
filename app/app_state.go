@@ -5,10 +5,29 @@ import (
 
 	"github.com/rs/zerolog"
 	"github.com/vwhitteron/simtezilo-dev/app/kinematics"
+	gtmodels "github.com/zetetos/gt-telemetry/pkg/models"
 )
 
-// appState holds the overall application state.
-type appState struct {
+// raceState holds transient race data for haptic generation and pit radio notifications.
+type raceState struct {
+	// Telemetry session information
+	sequenceNumber uint32        // Current telemetry sequence number
+	sequenceDelta  uint32        // Delta between current and last telemetry sequence number
+	timeOfDay      time.Duration // Time of day in the telemetry session
+
+	// Vehicle information
+	transmissionGear int     // Current transmission gear
+	engineRPM        float32 // Current engine RPM
+
+	// Race timing information
+	lapNumber   int16         // Current lap number
+	lastLapTime time.Duration // Last lap time duration
+	isLive      bool          // Flag to indicate if the telemetry is live or a replay
+	gameState   gtmodels.GameState
+}
+
+// gameState holds the overall application state.
+type gameState struct {
 	log                    zerolog.Logger
 	hapticsEnabled         bool           // Flag to indicate if haptics are enabled // TODO: move state to haptics?
 	telemetryActive        bool           // Flag to indicate if telemetry is active
@@ -23,9 +42,9 @@ type appState struct {
 	postRaceMenuFrameCount int            // Counter for consecutive post-race menu static telemetry frames
 }
 
-// NewAppState creates and initializes a new appState instance.
-func NewAppState(logger *zerolog.Logger) appState {
-	return appState{
+// NewGameState creates and initializes a new appState instance.
+func NewGameState(logger *zerolog.Logger) gameState { //nolint:revive // app is top-level so unexported gameState is fine
+	return gameState{
 		log: logger.With().Str("component", "appState").Logger(),
 		current: raceState{
 			transmissionGear: kinematics.NullGear,
@@ -37,7 +56,7 @@ func NewAppState(logger *zerolog.Logger) appState {
 }
 
 // SetPostRaceMenuState updates the post-race menu state.
-func (a *appState) SetPostRaceMenuState(isInMenu bool) {
+func (a *gameState) SetPostRaceMenuState(isInMenu bool) {
 	if a.isInPostRaceMenu == isInMenu {
 		return
 	}

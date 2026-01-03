@@ -52,7 +52,7 @@ func (suite *TyreIntegrationTestSuite) SetupTest() {
 	suite.app = &App{
 		config:   config.NewFromJSON(configJSON, zerolog.Nop()),
 		gtClient: gtClient,
-		state: appState{
+		state: gameState{
 			current: raceState{lapNumber: 5},
 			last:    raceState{},
 		},

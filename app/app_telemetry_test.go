@@ -28,7 +28,7 @@ func (suite *TelemetryTestSuite) SetupTest() {
 
 	suite.app = &App{
 		gtClient: gtClient,
-		state: appState{
+		state: gameState{
 			current: raceState{},
 			last:    raceState{},
 		},

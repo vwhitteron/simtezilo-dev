@@ -75,6 +75,7 @@ func defaultConfig() *viperConfig {
 		},
 		PitRadio: &pitRadio{
 			Enabled:               false,
+			Output:                "",
 			MessageSendIntervalMs: 2000,
 			Notifications: &notifications{
 				RaceProgressEnabled:     true,

@@ -116,8 +116,7 @@ func (a *App) manageRecordingState() {
 
 // detectRecordingTrigger processes high beam state changes and triggers recording when toggled 3 times quickly.
 func (a *App) detectRecordingTrigger() {
-	// Ignore recording triggers for replays
-	if !a.gtClient.Telemetry.Flags().Live {
+	if !a.shouldDetectTrigger() {
 		return
 	}
 
@@ -140,6 +139,25 @@ func (a *App) detectRecordingTrigger() {
 	if a.state.recorder.triggerActive() {
 		a.toggleRecording()
 	}
+}
+
+// shouldDetectTrigger checks if conditions are met to monitor for recording triggers.
+func (a *App) shouldDetectTrigger() bool {
+	isReplaySource, err := a.gtClient.IsReplaySource()
+	if err != nil {
+		a.log.Error().
+			Err(err).
+			Msg("GT Client replay source check")
+
+		return false
+	}
+
+	// Ignore recording triggers for replays
+	if !a.gtClient.Telemetry.Flags().Live || isReplaySource {
+		return false
+	}
+
+	return true
 }
 
 // toggleRecording starts or stops telemetry recording.
@@ -225,6 +243,10 @@ func (a *App) stopRecording() {
 
 // notifyRecordingEvent sends a pitRadio notification for recording events.
 func (a *App) notifyRecordingEvent(event string) {
+	if !a.config.PitRadioEnabled() || a.pitRadio == nil {
+		return
+	}
+
 	var sample string
 
 	switch event {
