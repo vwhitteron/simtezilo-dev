@@ -7,6 +7,7 @@ import (
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+	"github.com/vwhitteron/simtezilo-dev/app/calibrator"
 	"github.com/vwhitteron/simtezilo-dev/app/codec"
 	"github.com/vwhitteron/simtezilo-dev/app/config"
 	"github.com/vwhitteron/simtezilo-dev/app/kinematics"
@@ -18,6 +19,7 @@ const (
 	ChannelChassis      = "chassis"
 	ChannelEngine       = "engine"
 	ChannelTransmission = "transmission"
+	ChannelCalibrator   = "calibration"
 )
 
 // Synthesizer is the main synthesizer structure that holds the mixer, effects, and output device.
@@ -29,6 +31,11 @@ type Synthesizer struct {
 	kinematics   *kinematics.State
 	sampleRate   int
 	outFile      *os.File
+
+	// Calibration mode state
+	calibrator         *calibrator.Calibrator
+	wasCalibrating     bool
+	originalMasterGain float64
 }
 
 // SynthOpts holds the options for creating a new Synthesizer.
@@ -37,15 +44,19 @@ type SynthOpts struct {
 	BaseConfig *config.Config // Base config for lock-free reads in mixer
 	Logger     zerolog.Logger
 	Kinematics *kinematics.State
+	Calibrator *calibrator.Calibrator
 }
 
 // New creates a new Synthesizer instance with the provided options.
 func New(opts *SynthOpts) (*Synthesizer, error) {
 	synthesizer := &Synthesizer{
-		effects:    NewEffectsSampleBank(),
-		kinematics: opts.Kinematics,
-		sampleRate: opts.Config.InternalSampleRateHz,
-		log:        opts.Logger.With().Str("package", "synth").Logger(),
+		effects:            NewEffectsSampleBank(),
+		kinematics:         opts.Kinematics,
+		sampleRate:         opts.Config.InternalSampleRateHz,
+		log:                opts.Logger.With().Str("package", "synth").Logger(),
+		calibrator:         opts.Calibrator,
+		wasCalibrating:     false,
+		originalMasterGain: 0,
 	}
 
 	var err error
@@ -55,6 +66,7 @@ func New(opts *SynthOpts) (*Synthesizer, error) {
 	// Pass full config for lock-free reads
 	synthesizer.mixer, err = NewMixer(MixerConfig{
 		Config:       opts.BaseConfig,
+		Calibrator:   opts.Calibrator,
 		BufferLength: bufferLength,
 		SampleRateHz: opts.Config.InternalSampleRateHz,
 		Log:          opts.Logger.With().Str("package", "synth mixer").Logger(),
@@ -67,6 +79,7 @@ func New(opts *SynthOpts) (*Synthesizer, error) {
 	_ = synthesizer.mixer.AddChannel(ChannelTransmission, opts.Config.TransmissionGain)
 	_ = synthesizer.mixer.AddChannel(ChannelChassis, opts.Config.ChassisGain)
 	_ = synthesizer.mixer.AddChannel(ChannelEngine, opts.Config.EngineGain)
+	_ = synthesizer.mixer.AddChannel(ChannelCalibrator, 0)
 
 	synthesizer.outputDevice, err = NewOutputDevice(SynthOutDeviceOpts{
 		Log: opts.Logger.With().Str("package", "synth output device").Logger(),
@@ -195,4 +208,62 @@ func (s *Synthesizer) PlayEffect(name string, magnitude float64, channel string)
 	effectSample := s.effects.GetSample(name, s.sampleRate)
 
 	_ = s.mixer.WriteChannel(channel, effectSample.Samples(), magnitude, 0, false)
+}
+
+// UpdateCalibrator checks calibration state and manages channel switching.
+func (s *Synthesizer) UpdateCalibrator() {
+	isCalibrating := s.calibrator.IsEnabled()
+
+	// Handle calibrator state transitions
+	if isCalibrating && !s.wasCalibrating {
+		// Entering calibration mode - flush all haptic buffers first, then change master gain
+		s.log.Info().Msg("Entering calibration mode")
+		s.wasCalibrating = true
+
+		// Clear all haptic channel buffers first to prevent volume spike
+		s.mixer.ClearChannelBuffer(ChannelChassis)
+		s.mixer.ClearChannelBuffer(ChannelEngine)
+		s.mixer.ClearChannelBuffer(ChannelTransmission)
+		s.log.Debug().Msg("Flushed haptic channel buffers")
+
+		// Clear calibrator buffer to start fresh
+		s.mixer.ClearChannelBuffer(ChannelCalibrator)
+		s.log.Debug().Msg("Cleared calibrator buffer")
+
+		// Reset sine wave phase to start from zero
+		s.mixer.ResetSineWavePhase()
+
+		// Store original master gain
+		if currentGain, err := s.mixer.GetChannelGain(ChannelMaster); err == nil {
+			s.originalMasterGain = currentGain
+
+			// Clear master buffer to remove any previously mixed audio before gain change
+			s.mixer.ClearChannelBuffer(ChannelMaster)
+			s.log.Debug().Msg("Flushed master channel buffer")
+
+			// Set master gain to calibration volume (in dB, not converted)
+			calibrationVolume := s.calibrator.GetVolume()
+			_ = s.mixer.SetChannelGain(ChannelMaster, calibrationVolume)
+			s.log.Debug().Float64("original_gain", currentGain).Float64("calibration_volume_db", calibrationVolume).Msg("Set master gain to calibration volume")
+		}
+	} else if !isCalibrating && s.wasCalibrating {
+		// Exiting calibration mode - clear calibrator buffer and restore master gain
+		s.log.Info().Msg("Exiting calibration mode")
+		s.wasCalibrating = false
+
+		// Clear the calibrator channel buffer
+		s.mixer.ClearChannelBuffer(ChannelCalibrator)
+
+		// Restore original master gain
+		if s.originalMasterGain > 0 {
+			_ = s.mixer.SetChannelGain(ChannelMaster, s.originalMasterGain)
+			s.log.Debug().Float64("restored_gain", s.originalMasterGain).Msg("Restored original master gain")
+		}
+	}
+
+	if isCalibrating {
+		// Update master gain to match calibration volume in real-time (in dB)
+		calibrationVolume := s.calibrator.GetVolume()
+		_ = s.mixer.SetChannelGain(ChannelMaster, calibrationVolume)
+	}
 }

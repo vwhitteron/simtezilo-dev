@@ -20,7 +20,7 @@ import (
 	"github.com/pelletier/go-toml/v2"
 	"github.com/rs/zerolog"
 	"github.com/spf13/viper"
-	"github.com/vwhitteron/simtezilo-dev/app/calibrate"
+	"github.com/vwhitteron/simtezilo-dev/app/calibrator"
 	appconfig "github.com/vwhitteron/simtezilo-dev/app/config"
 	"github.com/vwhitteron/simtezilo-dev/app/exitcode"
 	appHaptics "github.com/vwhitteron/simtezilo-dev/app/haptics"
@@ -60,7 +60,7 @@ type WebUI struct {
 	currentRaceInfo    map[string]any
 	raceInfoMutex      sync.RWMutex
 	config             *appconfig.Config
-	calibration        *calibrate.Calibration
+	calibrator         *calibrator.Calibrator
 	upgrader           websocket.Upgrader
 	shutdownChan       chan exitcode.Code
 	setupModeEnabled   bool
@@ -92,7 +92,7 @@ type Config struct {
 	RaceInfoFeed       chan map[string]any
 	GameStateFeed      chan string
 	Config             *appconfig.Config
-	Calibration        *calibrate.Calibration
+	Calibrator         *calibrator.Calibrator
 	ShutdownChan       chan exitcode.Code
 	SetupModeAvailable bool
 	LogStore           *logstore.Store
@@ -119,7 +119,7 @@ func New(config Config) *WebUI {
 		raceInfoFeed:       config.RaceInfoFeed,
 		currentRaceInfo:    make(map[string]any),
 		config:             config.Config,
-		calibration:        config.Calibration,
+		calibrator:         config.Calibrator,
 		upgrader: websocket.Upgrader{
 			CheckOrigin: func(_ *http.Request) bool { return true },
 		},
@@ -1397,7 +1397,7 @@ func (w *WebUI) applyCalibrationConfig(config map[string]any) []string {
 
 	if enabled, ok := config["enabled"]; ok {
 		if enabledBool, ok := enabled.(bool); ok {
-			w.calibration.SetEnabled(enabledBool)
+			w.calibrator.SetEnabled(enabledBool)
 		} else {
 			errors = append(errors, "invalid calibration enabled value")
 		}
@@ -1405,7 +1405,7 @@ func (w *WebUI) applyCalibrationConfig(config map[string]any) []string {
 
 	if frequency, ok := config["frequency"]; ok {
 		if freqFloat, ok := frequency.(float64); ok {
-			w.calibration.SetFrequency(freqFloat)
+			w.calibrator.SetFrequency(freqFloat)
 		} else {
 			errors = append(errors, "invalid calibration frequency value")
 		}
@@ -1413,7 +1413,7 @@ func (w *WebUI) applyCalibrationConfig(config map[string]any) []string {
 
 	if volume, ok := config["volume"]; ok {
 		if volFloat, ok := volume.(float64); ok {
-			w.calibration.SetVolume(volFloat)
+			w.calibrator.SetVolume(volFloat)
 		} else {
 			errors = append(errors, "invalid calibration volume value")
 		}

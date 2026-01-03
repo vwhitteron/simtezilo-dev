@@ -3,10 +3,12 @@ package synthesizer
 import (
 	"errors"
 	"fmt"
+	"math"
 	"sync"
 	"time"
 
 	"github.com/rs/zerolog"
+	"github.com/vwhitteron/simtezilo-dev/app/calibrator"
 	"github.com/vwhitteron/simtezilo-dev/app/config"
 	"github.com/vwhitteron/simtezilo-dev/app/signal"
 )
@@ -23,6 +25,10 @@ type Mixer struct {
 	fadeInActive bool
 	silenced     bool
 
+	// Calibration mode state
+	calibrator    *calibrator.Calibrator
+	sineWavePhase float64
+
 	// Buffer monitoring
 	lastHealthCheck     time.Time
 	healthCheckInterval time.Duration
@@ -38,10 +44,11 @@ type MixerChannel struct {
 
 // MixerConfig holds configuration options for the Mixer.
 type MixerConfig struct {
-	Config       *config.Config // Full config reference for lock-free reads
-	BufferLength time.Duration  // Duration of audio the buffer should hold
-	SampleRateHz int            // Sample rate in Hz
-	Log          zerolog.Logger // Logger instance for logging
+	Config       *config.Config         // Full config reference for lock-free reads
+	Calibrator   *calibrator.Calibrator // Calibration mode signal manager
+	BufferLength time.Duration          // Duration of audio the buffer should hold
+	SampleRateHz int                    // Sample rate in Hz
+	Log          zerolog.Logger         // Logger instance for logging
 }
 
 // NewMixer creates a new Mixer instance with the provided configuration.
@@ -53,13 +60,15 @@ func NewMixer(mixerConfig MixerConfig) (*Mixer, error) {
 	mixer := &Mixer{
 		config: mixerConfig.Config,
 
-		bufferLength: mixerConfig.BufferLength,
-		sampleRateHz: mixerConfig.SampleRateHz,
-		channels:     map[string]*MixerChannel{},
-		log:          mixerConfig.Log,
-		faderGain:    config.MinimumGain,
-		fadeInActive: false,
-		silenced:     true,
+		bufferLength:  mixerConfig.BufferLength,
+		sampleRateHz:  mixerConfig.SampleRateHz,
+		channels:      map[string]*MixerChannel{},
+		log:           mixerConfig.Log,
+		faderGain:     config.MinimumGain,
+		fadeInActive:  false,
+		silenced:      true,
+		calibrator:    mixerConfig.Calibrator,
+		sineWavePhase: 0,
 
 		// Initialize buffer monitoring
 		lastHealthCheck:     time.Now(),
@@ -155,6 +164,8 @@ func (m *Mixer) ReadChannel(name string, length int) []float64 {
 		muted = m.config.GetSynthTransmissionMute()
 	case ChannelEngine:
 		muted = m.config.GetSynthEngineMute()
+	case ChannelCalibrator:
+		muted = false
 	}
 
 	if muted {
@@ -178,6 +189,18 @@ func (m *Mixer) InspectChannelBuffer(name string, length int, offset int) []floa
 	}
 
 	return nil
+}
+
+// GetChannelBufferLength returns the current length of samples in the specified channel's buffer.
+func (m *Mixer) GetChannelBufferLength(name string) int {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if channel, ok := m.channels[name]; ok {
+		return channel.buffer.Length()
+	}
+
+	return 0
 }
 
 // GetChannelNames returns a list of all channel names configured in the mixer.
@@ -330,10 +353,35 @@ func (m *Mixer) FadeIn(period time.Duration) {
 func (m *Mixer) MixToMaster(length int) {
 	outSamples := make([]float64, length)
 
+	m.mu.RLock()
+
+	// Check if calibration mode is enabled
+	if m.calibrator != nil && m.calibrator.IsEnabled() {
+		frequency := m.calibrator.GetFrequency()
+
+		// Generate sine wave samples directly into output buffer
+		for i := range outSamples {
+			outSamples[i] = math.Sin(m.sineWavePhase)
+
+			// Increment phase
+			m.sineWavePhase += 2 * math.Pi * frequency / float64(m.sampleRateHz)
+
+			// Keep phase in reasonable range
+			if m.sineWavePhase > 2*math.Pi {
+				m.sineWavePhase -= 2 * math.Pi
+			}
+		}
+
+		masterChannel := m.channels[ChannelMaster]
+		m.mu.RUnlock()
+		masterChannel.Write(outSamples, 1.0, 0, true)
+
+		return
+	}
+
+	// Normal haptic mode - mix chassis, transmission, and engine
 	// mix in the chassis and transmission channels with equal priority
 	var peak float64
-
-	m.mu.RLock()
 
 	for _, name := range []string{ChannelChassis, ChannelTransmission} {
 		channel, ok := m.channels[name]
@@ -387,6 +435,24 @@ func (m *Mixer) ClearBuffers() {
 	for _, channel := range m.channels {
 		channel.buffer.Clear()
 	}
+}
+
+// ClearChannelBuffer clears a specific channel's buffer.
+func (m *Mixer) ClearChannelBuffer(name string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if channel, ok := m.channels[name]; ok {
+		channel.buffer.Clear()
+	}
+}
+
+// ResetSineWavePhase resets the sine wave phase to zero for the calibrator.
+func (m *Mixer) ResetSineWavePhase() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.sineWavePhase = 0
 }
 
 // mixEngineChannel mixes the engine channel into the output samples with lower priority.
@@ -518,6 +584,11 @@ func (m *Mixer) watchForConfigChanges() {
 
 			switch name {
 			case ChannelMaster:
+				// Master gain updates are skipped during calibration mode
+				if m.calibrator != nil && m.calibrator.IsEnabled() {
+					continue
+				}
+
 				configGain = m.config.GetSynthMasterGain()
 				configMute = m.config.GetSynthMasterMute()
 			case ChannelChassis:

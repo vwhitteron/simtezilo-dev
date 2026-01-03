@@ -15,7 +15,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/vwhitteron/simtezilo-dev/app/cache"
-	"github.com/vwhitteron/simtezilo-dev/app/calibrate"
+	"github.com/vwhitteron/simtezilo-dev/app/calibrator"
 	"github.com/vwhitteron/simtezilo-dev/app/circuit"
 	"github.com/vwhitteron/simtezilo-dev/app/config"
 	"github.com/vwhitteron/simtezilo-dev/app/exitcode"
@@ -67,11 +67,11 @@ type App struct {
 	i18n    *i18n.I18n       // Language translations
 	display hardware.Display // Hardware display interface
 
-	gtClient    *gttelemetry.Client      // GT telemetry client
-	pitRadio    pitradio.PitRadio        // Pit radio notification service
-	kinematics  kinematics.State         // Vehicle kinematics tracker
-	synth       *synthesizer.Synthesizer // Audio synthesizer for haptic feedback
-	calibration *calibrate.Calibration   // Calibration mode manager
+	gtClient   *gttelemetry.Client      // GT telemetry client
+	pitRadio   pitradio.PitRadio        // Pit radio notification service
+	kinematics kinematics.State         // Vehicle kinematics tracker
+	synth      *synthesizer.Synthesizer // Audio synthesizer for haptic feedback
+	calibrator *calibrator.Calibrator   // Calibration mode manager
 
 	odometer  *odometer.Odometer  // Odometer for distance tracking
 	fuelRange fuelrange.Estimator // Fuel range estimator
@@ -127,7 +127,7 @@ func New(opts Options) (*App, error) {
 		done:               opts.Done,
 		state:              NewGameState(opts.Logger),
 		kinematics:         kinematics.NewKinematicsState(),
-		calibration:        calibrate.New(),
+		calibrator:         calibrator.New(),
 		telemetryChartFeed: make(chan map[string]float32, 600),
 		vehicleInfoFeed:    make(chan map[string]any, 10),
 		circuitInfoFeed:    make(chan map[string]string, 10),
@@ -323,7 +323,7 @@ func (a *App) runAppMode() RunResult {
 			GameStateFeed:      a.gameStateFeed,
 			LogStatsFeed:       a.logStatsFeed,
 			Config:             a.config,
-			Calibration:        a.calibration,
+			Calibrator:         a.calibrator,
 			ShutdownChan:       a.done,
 			SetupModeAvailable: status.Available,
 			LogStore:           a.logStore,
@@ -646,6 +646,7 @@ func (a *App) initializeComponents(opts Options) error {
 		BaseConfig: a.config,
 		Logger:     *opts.Logger,
 		Kinematics: &a.kinematics,
+		Calibrator: a.calibrator,
 	})
 	if err != nil {
 		a.log.Error().
@@ -945,10 +946,6 @@ func (a *App) startAudioOutput() {
 
 	hapticStreamer := synthesizer.NewHapticStream(a.synth, outputSampleRate)
 
-	// Create sine wave and mixer for calibration
-	sineWave := calibrate.NewSineWave(outputSampleRate, a.calibration)
-	mixer := calibrate.NewMixer(a.calibration, hapticStreamer, sineWave)
-
 	err := speaker.Init(
 		outputSampleRate,
 		outputSampleRate.N(time.Second/15),
@@ -964,7 +961,7 @@ func (a *App) startAudioOutput() {
 		return
 	}
 
-	go speaker.Play(mixer)
+	go speaker.Play(hapticStreamer)
 }
 
 // mainLoop is the primary application loop handling telemetry updates, haptics, UI updates, and pit radio
@@ -1012,6 +1009,9 @@ func (a *App) mainLoop() {
 // handleHapticsTick processes haptics-related updates.
 func (a *App) handleHapticsTick() {
 	_ = a.handleGameStateChange()
+
+	// Update calibrator state and generate sine wave if needed
+	a.synth.UpdateCalibrator()
 
 	stateChanged := a.updateState()
 
