@@ -11,19 +11,107 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/pitradio"
 )
 
-// recordingTriggerState tracks trigger toggles for start/stop of the recording.
-type recordingTriggerState struct {
-	lastTriggerState bool     // Previous state of the triggering input
-	lastToggle       uint32   // Sequence ID of last toggle
-	toggleCount      int      // Number of toggles in detection window
-	toggleHistory    []uint32 // Sequence IDs of recent toggles
-}
-
 // recordingState tracks telemetry recording state.
 type recordingState struct {
-	startTime time.Time // When recording started
-	filepath  string    // Current recording file path and name
-	trigger   recordingTriggerState
+	startTime        time.Time // When recording started
+	filepath         string    // Current recording file path and name
+	lastTriggerState bool      // Previous state of the trigger input
+	lastTriggerID    uint32    // Sequence ID of last trigger change
+	triggerCount     int       // Number of trigger changes in detection window
+	triggerHistory   []uint32  // Sequence IDs of recent trigger changes
+}
+
+// resetRecording resets the recording state to a non-recording state.
+func (r *recordingState) resetRecording() {
+	r.startTime = time.Time{}
+	r.filepath = ""
+}
+
+// resetTrigger resets the recording trigger state.
+func (r *recordingState) resetTrigger() {
+	r.triggerHistory = []uint32{}
+	r.triggerCount = 0
+}
+
+// filePath returns the current recording file path.
+func (r *recordingState) getFilePath() string {
+	return r.filepath
+}
+
+// triggerCount returns the number of trigger events in the detection window.
+func (r *recordingState) getTriggerCount() int {
+	return r.triggerCount
+}
+
+// triggerStateHasChanged checks if the trigger state has changed since the last check.
+func (r *recordingState) triggerStateHasChanged(triggerState bool) bool {
+	if triggerState == r.lastTriggerState {
+		return false
+	}
+
+	r.lastTriggerState = triggerState
+
+	return true
+}
+
+// addTriggerEvent adds a trigger event to the recording trigger history.
+func (r *recordingState) addTriggerEvent(sequenceID uint32) {
+	r.lastTriggerID = sequenceID
+	r.triggerHistory = append(r.triggerHistory, sequenceID)
+	r.triggerCount = len(r.triggerHistory)
+
+	r.pruneTriggerHistory(sequenceID)
+}
+
+// pruneTriggerHistory determines which trigger events are within the detection window.
+func (r *recordingState) pruneTriggerHistory(currentSequenceID uint32) {
+	toggleWindowSeconds := uint32(1) // Remove toggles older than 2 seconds
+	cutoffSequenceID := currentSequenceID - (toggleWindowSeconds * frameRate)
+
+	triggersInWindow := []uint32{}
+
+	for _, triggerSequenceID := range r.triggerHistory {
+		if triggerSequenceID > cutoffSequenceID {
+			triggersInWindow = append(triggersInWindow, triggerSequenceID)
+		}
+	}
+
+	r.triggerHistory = triggersInWindow
+	r.triggerCount = len(triggersInWindow)
+}
+
+// triggerActive checks if the recording trigger condition is met.
+func (r *recordingState) triggerActive() bool {
+	requiredToggles := 3
+
+	return r.triggerCount >= requiredToggles
+}
+
+// setStart sets the start time and file path for the recording.
+func (r *recordingState) setStart(startTime time.Time, filePath string) {
+	r.startTime = startTime
+	r.filepath = filePath
+}
+
+// setStop stops the recording and returns the total duration.
+func (r *recordingState) setStop() (duration time.Duration) {
+	duration = time.Since(r.startTime)
+
+	r.resetRecording()
+
+	return duration
+}
+
+// manageRecordingState handles recording state based on application conditions.
+func (a *App) manageRecordingState() {
+	// Stop recording when entering the post-race menu
+	if a.state.isInPostRaceMenu {
+		a.stopRecording()
+
+		return
+	}
+
+	a.detectRecordingTrigger()
 }
 
 // detectRecordingTrigger processes high beam state changes and triggers recording when toggled 3 times quickly.
@@ -33,45 +121,23 @@ func (a *App) detectRecordingTrigger() {
 		return
 	}
 
-	currentTriggerState := a.gtClient.Telemetry.Flags().HighBeamActive
+	triggerState := a.gtClient.Telemetry.Flags().HighBeamActive
+
+	if !a.state.recorder.triggerStateHasChanged(triggerState) {
+		return
+	}
+
 	currentSequenceID := a.state.current.sequenceNumber
 
-	// Check if the trigger state has changed
-	if currentTriggerState == a.state.recorder.trigger.lastTriggerState {
-		return
-	}
-
-	// Update the last state to current state
-	a.state.recorder.trigger.lastTriggerState = currentTriggerState
-
-	// Only count toggles when the trigger transitions to high/on/true (OFF->ON)
-	if !currentTriggerState {
-		return
-	}
-
-	a.state.recorder.trigger.lastToggle = currentSequenceID
-	a.state.recorder.trigger.toggleHistory = append(a.state.recorder.trigger.toggleHistory, currentSequenceID)
-
-	toggleWindowSeconds := uint32(1) // Remove toggles older than 2 seconds
-	cutoffSequenceID := currentSequenceID - (toggleWindowSeconds * frameRate)
-	validToggles := []uint32{}
-
-	for _, toggleSequenceID := range a.state.recorder.trigger.toggleHistory {
-		if toggleSequenceID > cutoffSequenceID {
-			validToggles = append(validToggles, toggleSequenceID)
-		}
-	}
-
-	a.state.recorder.trigger.toggleHistory = validToggles
-	a.state.recorder.trigger.toggleCount = len(validToggles)
+	a.state.recorder.addTriggerEvent(currentSequenceID)
 
 	a.log.Info().
-		Int("toggle_count", a.state.recorder.trigger.toggleCount).
+		Int("toggle_count", a.state.recorder.getTriggerCount()).
 		Uint32("sequence_id", currentSequenceID).
-		Bool("high_beam_active", currentTriggerState).
+		Bool("high_beam_active", triggerState).
 		Msg("Recording trigger toggle detected")
 
-	if a.state.recorder.trigger.toggleCount >= 3 {
+	if a.state.recorder.triggerActive() {
 		a.toggleRecording()
 	}
 }
@@ -96,7 +162,6 @@ func (a *App) startRecording() {
 	}
 
 	timestamp := time.Now()
-	a.state.recorder.startTime = timestamp
 
 	filepath := filepath.Join(
 		a.config.GetAppBaseDir(),
@@ -105,11 +170,11 @@ func (a *App) startRecording() {
 		a.generateRecordingFilename(timestamp),
 	)
 
-	a.state.recorder.filepath = filepath
+	a.state.recorder.setStart(timestamp, filepath)
 
 	err := a.gtClient.StartRecording(filepath)
 	if err != nil {
-		a.state.recorder.filepath = ""
+		a.state.recorder.resetRecording()
 
 		a.notifyRecordingEvent("error")
 
@@ -130,12 +195,13 @@ func (a *App) startRecording() {
 
 // stopRecording ends telemetry capture.
 func (a *App) stopRecording() {
-	a.state.recorder.trigger.toggleHistory = []uint32{}
-	a.state.recorder.trigger.toggleCount = 0
+	a.state.recorder.resetTrigger()
 
 	if !a.gtClient.IsRecording() {
 		return
 	}
+
+	filePath := a.state.recorder.getFilePath()
 
 	err := a.gtClient.StopRecording()
 	if err != nil {
@@ -143,19 +209,16 @@ func (a *App) stopRecording() {
 
 		a.log.Error().
 			Err(err).
-			Str("file", a.state.recorder.filepath).
+			Str("file", filePath).
 			Msg("Stop recording")
 	}
 
-	duration := time.Since(a.state.recorder.startTime)
-	filepath := a.state.recorder.filepath
-
-	a.state.recorder.filepath = ""
+	duration := a.state.recorder.setStop()
 
 	a.notifyRecordingEvent("stop")
 
 	a.log.Info().
-		Str("file", filepath).
+		Str("file", filePath).
 		Dur("duration", duration).
 		Msg("Stop recording")
 }
@@ -186,9 +249,8 @@ func (a *App) notifyRecordingEvent(event string) {
 		err := a.pitRadio.Send(pitradio.Message{
 			MessageType: pitradio.AudioMessage,
 			Text:        "recording " + event,
-			// Accent:      a.config.GetAppAccent(),
-			Audio:   dcaData,
-			NoCache: false,
+			Audio:       dcaData,
+			NoCache:     false,
 		})
 		if err != nil {
 			a.log.Error().

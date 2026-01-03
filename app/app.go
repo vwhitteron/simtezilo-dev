@@ -1002,7 +1002,7 @@ func (a *App) handleHapticsTick() {
 	if stateChanged {
 		a.handleVehicleChange()
 		a.generateForceHaptics()
-		a.detectRecordingTrigger()
+		a.manageRecordingState()
 	}
 
 	a.checkRaceComplete()
