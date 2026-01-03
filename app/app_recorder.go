@@ -58,20 +58,19 @@ func (r *recordingState) triggerStateHasChanged(triggerState bool) bool {
 func (r *recordingState) addTriggerEvent(sequenceID uint32) {
 	r.lastTriggerID = sequenceID
 	r.triggerHistory = append(r.triggerHistory, sequenceID)
-	r.triggerCount = len(r.triggerHistory)
 
-	r.pruneTriggerHistory(sequenceID)
+	r.assessTriggerWindow(sequenceID)
 }
 
-// pruneTriggerHistory determines which trigger events are within the detection window.
-func (r *recordingState) pruneTriggerHistory(currentSequenceID uint32) {
+// assessTriggerWindow determines which trigger events are within the detection window.
+func (r *recordingState) assessTriggerWindow(currentSequenceID uint32) {
 	toggleWindowSeconds := uint32(1) // Remove toggles older than 2 seconds
-	cutoffSequenceID := currentSequenceID - (toggleWindowSeconds * frameRate)
+	windowMinID := currentSequenceID - (toggleWindowSeconds * frameRate)
 
 	triggersInWindow := []uint32{}
 
 	for _, triggerSequenceID := range r.triggerHistory {
-		if triggerSequenceID > cutoffSequenceID {
+		if triggerSequenceID > windowMinID {
 			triggersInWindow = append(triggersInWindow, triggerSequenceID)
 		}
 	}
@@ -126,6 +125,11 @@ func (a *App) detectRecordingTrigger() {
 		return
 	}
 
+	// Only trigger on high state
+	if !triggerState {
+		return
+	}
+
 	currentSequenceID := a.state.current.sequenceNumber
 
 	a.state.recorder.addTriggerEvent(currentSequenceID)
@@ -138,6 +142,7 @@ func (a *App) detectRecordingTrigger() {
 
 	if a.state.recorder.triggerActive() {
 		a.toggleRecording()
+		a.state.recorder.resetTrigger()
 	}
 }
 
