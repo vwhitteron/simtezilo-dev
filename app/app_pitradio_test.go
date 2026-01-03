@@ -138,9 +138,13 @@ func createBasicConfig() *config.Config {
 			"accent": "us"
 		},
 		"pitRadio": {
-			"fuelRangeSafetyMarginLaps": 0.3,
-			"fuelPreWarnNotifyLaps": 2.0,
-			"fuelStrategyNotifyLaps": 5.0
+			"enabled": true,
+			"fuelMonitoring": {
+				"monitoringEnabled": true,
+				"rangeSafetyMarginLaps": 0.3,
+				"preWarnNotifyLaps": 2.0,
+				"strategyNotifyLaps": 5.0
+			}
 		}
 	}`)
 
@@ -191,7 +195,7 @@ func (suite *PitRadioTestSuite) SetupTest() {
 
 	// Use interface types with proper mock implementations
 	suite.app = &App{
-		config:   nil,
+		config:   createBasicConfig(),
 		gtClient: gtClient,
 		state: gameState{
 			current: raceState{},
@@ -399,7 +403,14 @@ func (suite *PitRadioTestSuite) TestFuelWarningsWithRealData() {
 
 func (suite *PitRadioTestSuite) TestNotifyCircuitChange() {
 	// Arrange - Set up circuit change scenario
-	configJSON := []byte(`{"app": {"language": "en", "accent": "us"}}`)
+	configJSON := []byte(`{
+		"app": {"language": "en", "accent": "us"},
+		"pitRadio": {
+			"notifications": {
+				"circuitMatchingEnabled": true
+			}
+		}
+	}`)
 	suite.app.config = config.NewFromJSON(configJSON, zerolog.Nop())
 	suite.app.pitRadioState.circuitName = "Old Circuit"
 	suite.circuit.name = "New Circuit"
@@ -418,6 +429,15 @@ func (suite *PitRadioTestSuite) TestNotifyCircuitChange() {
 
 func (suite *PitRadioTestSuite) TestNotifyCircuitChangeNotSentForSameCircuit() {
 	// Arrange - Same circuit name
+	configJSON := []byte(`{
+		"app": {"language": "en", "accent": "us"},
+		"pitRadio": {
+			"notifications": {
+				"circuitMatchingEnabled": true
+			}
+		}
+	}`)
+	suite.app.config = config.NewFromJSON(configJSON, zerolog.Nop())
 	suite.app.pitRadioState.circuitName = "Same Circuit"
 	suite.circuit.name = "Same Circuit"
 
@@ -520,6 +540,9 @@ func (suite *PitRadioTestSuite) setupDistanceBasedScenario(
 	suite.app.gtClient.Telemetry.RawTelemetry.RaceLaps = totalLaps
 	suite.app.gtClient.Telemetry.RawTelemetry.FuelLevel = 50.0
 	suite.app.gtClient.Telemetry.RawTelemetry.FuelCapacity = 100.0
+
+	// Mark the race as live so pit radio is active
+	suite.app.state.current.isLive = true
 
 	// Set up circuit with specified parameters
 	suite.circuit.name = "Test Circuit"
