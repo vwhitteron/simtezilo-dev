@@ -30,6 +30,7 @@ type raceState struct {
 type gameState struct {
 	log                    zerolog.Logger
 	hapticsEnabled         bool           // Flag to indicate if haptics are enabled // TODO: move state to haptics?
+	calibrationEnabled     bool           // Flag to indicate if calibration mode is enabled
 	telemetryActive        bool           // Flag to indicate if telemetry is active
 	sessionEnded           bool           // Flag to indicate if session end has been handled
 	raceCompleteTime       time.Time      // Real-world time when the race was completed

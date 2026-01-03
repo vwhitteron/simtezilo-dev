@@ -20,6 +20,7 @@ import (
 	"github.com/pelletier/go-toml/v2"
 	"github.com/rs/zerolog"
 	"github.com/spf13/viper"
+	"github.com/vwhitteron/simtezilo-dev/app/calibrate"
 	appconfig "github.com/vwhitteron/simtezilo-dev/app/config"
 	"github.com/vwhitteron/simtezilo-dev/app/exitcode"
 	appHaptics "github.com/vwhitteron/simtezilo-dev/app/haptics"
@@ -59,6 +60,7 @@ type WebUI struct {
 	currentRaceInfo    map[string]any
 	raceInfoMutex      sync.RWMutex
 	config             *appconfig.Config
+	calibration        *calibrate.Calibration
 	upgrader           websocket.Upgrader
 	shutdownChan       chan exitcode.Code
 	setupModeEnabled   bool
@@ -90,6 +92,7 @@ type Config struct {
 	RaceInfoFeed       chan map[string]any
 	GameStateFeed      chan string
 	Config             *appconfig.Config
+	Calibration        *calibrate.Calibration
 	ShutdownChan       chan exitcode.Code
 	SetupModeAvailable bool
 	LogStore           *logstore.Store
@@ -116,6 +119,7 @@ func New(config Config) *WebUI {
 		raceInfoFeed:       config.RaceInfoFeed,
 		currentRaceInfo:    make(map[string]any),
 		config:             config.Config,
+		calibration:        config.Calibration,
 		upgrader: websocket.Upgrader{
 			CheckOrigin: func(_ *http.Request) bool { return true },
 		},
@@ -1012,6 +1016,8 @@ func (w *WebUI) applyConfigChanges(configData map[string]any) []string {
 			errors = append(errors, w.applyTelemetryConfig(sectionMap)...)
 		case "discord":
 			errors = append(errors, w.applyDiscordConfig(sectionMap)...)
+		case "calibration":
+			errors = append(errors, w.applyCalibrationConfig(sectionMap)...)
 		case "pitRadio":
 			errors = append(errors, w.applyPitRadioConfig(sectionMap)...)
 		// Add more sections as needed
@@ -1379,6 +1385,37 @@ func (w *WebUI) applyHapticsConfig(config map[string]any) []string {
 	if enableReplay, ok := config["enableReplay"]; ok {
 		if replayBool, ok := parseBool(enableReplay, "enable replay"); ok {
 			w.config.SetHapticsEnableReplay(replayBool)
+		}
+	}
+
+	return errors
+}
+
+// applyCalibrationConfig applies calibration configuration changes.
+func (w *WebUI) applyCalibrationConfig(config map[string]any) []string {
+	var errors []string
+
+	if enabled, ok := config["enabled"]; ok {
+		if enabledBool, ok := enabled.(bool); ok {
+			w.calibration.SetEnabled(enabledBool)
+		} else {
+			errors = append(errors, "invalid calibration enabled value")
+		}
+	}
+
+	if frequency, ok := config["frequency"]; ok {
+		if freqFloat, ok := frequency.(float64); ok {
+			w.calibration.SetFrequency(freqFloat)
+		} else {
+			errors = append(errors, "invalid calibration frequency value")
+		}
+	}
+
+	if volume, ok := config["volume"]; ok {
+		if volFloat, ok := volume.(float64); ok {
+			w.calibration.SetVolume(volFloat)
+		} else {
+			errors = append(errors, "invalid calibration volume value")
 		}
 	}
 

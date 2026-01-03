@@ -225,6 +225,52 @@ class ConfigManager {
             this.factoryReset();
         });
 
+        // Calibration frequency buttons
+        const calibrationFrequencyUp = document.getElementById('calibration-frequency-up');
+        const calibrationFrequencyDown = document.getElementById('calibration-frequency-down');
+        const calibrationFrequencyInput = document.getElementById('calibration-frequency');
+
+        if (calibrationFrequencyUp && calibrationFrequencyDown && calibrationFrequencyInput) {
+            calibrationFrequencyUp.addEventListener('click', () => {
+                const currentValue = parseFloat(calibrationFrequencyInput.value) || 5;
+                const step = parseFloat(calibrationFrequencyInput.step) || 1;
+                const max = parseFloat(calibrationFrequencyInput.max) || 160;
+                calibrationFrequencyInput.value = Math.min(currentValue + step, max);
+                calibrationFrequencyInput.dispatchEvent(new Event('change', { bubbles: true }));
+            });
+
+            calibrationFrequencyDown.addEventListener('click', () => {
+                const currentValue = parseFloat(calibrationFrequencyInput.value) || 5;
+                const step = parseFloat(calibrationFrequencyInput.step) || 1;
+                const min = parseFloat(calibrationFrequencyInput.min) || 5;
+                calibrationFrequencyInput.value = Math.max(currentValue - step, min);
+                calibrationFrequencyInput.dispatchEvent(new Event('change', { bubbles: true }));
+            });
+        }
+
+        // Calibration volume buttons
+        const calibrationVolumeUp = document.getElementById('calibration-volume-up');
+        const calibrationVolumeDown = document.getElementById('calibration-volume-down');
+        const calibrationVolumeInput = document.getElementById('calibration-volume');
+
+        if (calibrationVolumeUp && calibrationVolumeDown && calibrationVolumeInput) {
+            calibrationVolumeUp.addEventListener('click', () => {
+                const currentValue = parseFloat(calibrationVolumeInput.value) || -30;
+                const step = parseFloat(calibrationVolumeInput.step) || 0.25;
+                const max = parseFloat(calibrationVolumeInput.max) || 0;
+                calibrationVolumeInput.value = Math.min(currentValue + step, max);
+                calibrationVolumeInput.dispatchEvent(new Event('change', { bubbles: true }));
+            });
+
+            calibrationVolumeDown.addEventListener('click', () => {
+                const currentValue = parseFloat(calibrationVolumeInput.value) || -30;
+                const step = parseFloat(calibrationVolumeInput.step) || 0.25;
+                const min = parseFloat(calibrationVolumeInput.min) || -60;
+                calibrationVolumeInput.value = Math.max(currentValue - step, min);
+                calibrationVolumeInput.dispatchEvent(new Event('change', { bubbles: true }));
+            });
+        }
+
         // Auto-save on blur or Enter key for inputs
         const inputs = document.querySelectorAll('[data-config]');
         inputs.forEach(input => {
@@ -273,10 +319,11 @@ class ConfigManager {
                     }
                 });
 
-                // For gain inputs, haptics, and pitRadio inputs, also save immediately on change (spinner buttons)
+                // For gain inputs, haptics, pitRadio, and calibration inputs, also save immediately on change (spinner buttons)
                 if (input.classList.contains('gain-input') ||
                     configPath.startsWith('haptics.') ||
-                    configPath.startsWith('pitRadio.')) {
+                    configPath.startsWith('pitRadio.') ||
+                    configPath.startsWith('calibration.')) {
                     input.addEventListener('change', () => {
                         this.saveInputConfiguration(input);
                     });
