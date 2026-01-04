@@ -406,12 +406,6 @@
                                 </a>
                             </li>
                             <li class="settings-nav-item">
-                                <a class="settings-nav-link" data-section="calibration">
-                                    <span class="icon" data-icon="wrench"></span>
-                                    <span data-i18n="runmode.settings.calibration.title">Calibration</span>
-                                </a>
-                            </li>
-                            <li class="settings-nav-item">
                                 <a class="settings-nav-link" data-section="pitradio">
                                     <span class="icon" data-icon="walkie-talkie"></span>
                                     <span data-i18n="runmode.settings.pitradio.title">Pit Radio</span>
@@ -529,8 +523,10 @@
 
                 <!-- Hardware Settings -->
                 <div class="settings-section-card" data-section-content="hardware">
-                    <div class="card">
+                    <div class="card mb-3" id="hardware-settings-card">
                         <div class="card-body">
+                            <h5 class="mb-3"><span class="icon" data-icon="microchip"></span><span
+                                    data-i18n="runmode.settings.hardware.title">Hardware</span></h5>
                             <div class="mb-3">
                                 <label for="hardware-model" class="form-label"
                                     data-i18n="runmode.settings.hardware.model">Hardware Model</label>
@@ -551,6 +547,60 @@
                                     <option value="180">180°</option>
                                     <option value="270">270°</option>
                                 </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Calibration Settings -->
+                    <div class="card">
+                        <div class="card-body">
+                            <h5 class="mb-3"><span class="icon" data-icon="wrench"></span><span
+                                    data-i18n="runmode.settings.calibration.title">Calibration Mode</span></h5>
+                            <div class="form-check form-switch mb-4">
+                                <input type="checkbox" class="form-check-input" id="calibration-enabled"
+                                    data-config="calibration.enabled" role="switch">
+                                <label class="form-check-label" for="calibration-enabled">
+                                    <span data-i18n="runmode.settings.calibration.enabled">Enable</span>
+                                    <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted" role="button"
+                                        data-tooltip="When calibration mode is enabled,
+                                    all haptic feedback will be disabled and replaced with a calibration tone. Use this
+                                    mode to test and configure your audio output system."></i>
+                                </label>
+                            </div>
+
+                            <div id="calibration-controls">
+                                <div class="row g-3 mb-4">
+                                    <div class="col-md-6 col-lg-3">
+                                        <label for="calibration-frequency" class="form-label">
+                                            <span data-i18n="runmode.settings.calibration.frequency">Frequency
+                                                (Hz)</span>
+                                            <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
+                                                role="button"
+                                                data-tooltip="The frequency of the calibration tone. Use arrow keys or adjust to test different frequencies in your haptic systems response range."></i>
+                                        </label>
+                                        <input type="number" id="calibration-frequency" class="form-control text-center"
+                                            data-config="calibration.frequency" min="5" max="160" step="1" value="5">
+                                    </div>
+                                    <div class="col-md-6 col-lg-3">
+                                        <label for="calibration-volume" class="form-label">
+                                            <span data-i18n="runmode.settings.calibration.volume">Volume (dB)</span>
+                                            <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
+                                                role="button"
+                                                data-tooltip="The volume level of the calibration tone in decibels (0 dB is maximum output). Start with a low value and increase carefully while monitoring the output of the haptic system."></i>
+                                        </label>
+                                        <input type="number" id="calibration-volume" class="form-control text-center"
+                                            data-config="calibration.volume" min="-60" max="0" step="0.25" value="-30">
+                                    </div>
+                                </div>
+
+                                <div class="mt-3">
+                                    <small class="text-muted">
+                                        <i class="fa-solid fa-info-circle me-1"></i>
+                                        <span data-i18n="runmode.settings.calibration.hint">Adjust the frequency and
+                                            volume to find the optimal settings for your haptic system. The calibration
+                                            tone will play continuously while this mode is enabled.</span>
+                                    </small>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1062,89 +1112,6 @@
                                 </div>
                             </div>
 
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Calibration Settings -->
-                <div class="settings-section-card" data-section-content="calibration">
-                    <div class="card">
-                        <div class="card-body">
-                            <h5 class="mb-3"><span class="icon" data-icon="wrench"></span><span
-                                    data-i18n="runmode.settings.calibration.title">Calibration</span></h5>
-
-                            <div class="alert alert-warning mb-3" role="alert">
-                                <i class="fa-solid fa-triangle-exclamation me-2"></i>
-                                <span data-i18n="runmode.settings.calibration.warning">When calibration mode is enabled,
-                                    all haptic feedback will be disabled and replaced with a calibration tone. Use this
-                                    mode to test and configure your audio output system.</span>
-                            </div>
-
-                            <div class="form-check form-switch mb-4">
-                                <input type="checkbox" class="form-check-input" id="calibration-enabled"
-                                    data-config="calibration.enabled" role="switch">
-                                <label class="form-check-label" for="calibration-enabled">
-                                    <span data-i18n="runmode.settings.calibration.enabled">Enable Calibration
-                                        Mode</span>
-                                </label>
-                            </div>
-
-                            <div id="calibration-controls">
-                                <div class="row g-3">
-                                    <div class="col-md-6">
-                                        <label for="calibration-frequency" class="form-label">
-                                            <span data-i18n="runmode.settings.calibration.frequency">Frequency
-                                                (Hz)</span>
-                                            <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
-                                                role="button"
-                                                data-tooltip="The frequency of the calibration tone. Use arrow keys or adjust to test different frequencies in your system's response range."></i>
-                                        </label>
-                                        <div class="input-group">
-                                            <button class="btn btn-outline-secondary" type="button"
-                                                id="calibration-frequency-down">
-                                                <i class="fa-solid fa-minus"></i>
-                                            </button>
-                                            <input type="number" id="calibration-frequency"
-                                                class="form-control text-center" data-config="calibration.frequency"
-                                                min="5" max="160" step="1" value="5">
-                                            <button class="btn btn-outline-secondary" type="button"
-                                                id="calibration-frequency-up">
-                                                <i class="fa-solid fa-plus"></i>
-                                            </button>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <label for="calibration-volume" class="form-label">
-                                            <span data-i18n="runmode.settings.calibration.volume">Volume (dB)</span>
-                                            <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
-                                                role="button"
-                                                data-tooltip="The volume level of the calibration tone in decibels. 0 dB is maximum output. Start with a low value and increase carefully."></i>
-                                        </label>
-                                        <div class="input-group">
-                                            <button class="btn btn-outline-secondary" type="button"
-                                                id="calibration-volume-down">
-                                                <i class="fa-solid fa-minus"></i>
-                                            </button>
-                                            <input type="number" id="calibration-volume"
-                                                class="form-control text-center" data-config="calibration.volume"
-                                                min="-60" max="0" step="0.25" value="-30">
-                                            <button class="btn btn-outline-secondary" type="button"
-                                                id="calibration-volume-up">
-                                                <i class="fa-solid fa-plus"></i>
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div class="mt-3">
-                                    <small class="text-muted">
-                                        <i class="fa-solid fa-info-circle me-1"></i>
-                                        <span data-i18n="runmode.settings.calibration.hint">Adjust the frequency and
-                                            volume to find the optimal settings for your haptic system. The calibration
-                                            tone will play continuously while this mode is enabled.</span>
-                                    </small>
-                                </div>
-                            </div>
                         </div>
                     </div>
                 </div>

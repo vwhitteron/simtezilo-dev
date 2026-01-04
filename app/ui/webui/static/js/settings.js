@@ -57,16 +57,11 @@ class ConfigManager {
             }
             const data = await response.json();
 
-            // Hide hardware navigation item if not on RPI platform
+            // Hide hardware settings card if not on RPI platform
             if (data.hardware !== 'rpi') {
-                const hardwareNavItem = document.querySelector('.settings-nav-link[data-section="hardware"]');
-                if (hardwareNavItem) {
-                    hardwareNavItem.parentElement.style.display = 'none';
-                }
-
-                const hardwareOption = document.querySelector('#sectionSelect option[value="hardware"]');
-                if (hardwareOption) {
-                    hardwareOption.style.display = 'none';
+                const hardwareSettingsCard = document.getElementById('hardware-settings-card');
+                if (hardwareSettingsCard) {
+                    hardwareSettingsCard.style.display = 'none';
                 }
             }
         } catch (error) {
