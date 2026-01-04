@@ -33,7 +33,7 @@ type gameState struct {
 	calibrationEnabled     bool           // Flag to indicate if calibration mode is enabled
 	telemetryActive        bool           // Flag to indicate if telemetry is active
 	sessionEnded           bool           // Flag to indicate if session end has been handled
-	raceCompleteTime       time.Time      // Real-world time when the race was completed
+	raceComplete           bool           // Flag to indicate if race is complete
 	current                raceState      // Race state at the current telemetry sequence
 	last                   raceState      // Race state at the last telemetry sequence
 	engine                 engineState    // Engine state for haptic generation
@@ -56,13 +56,20 @@ func NewGameState(logger *zerolog.Logger) gameState { //nolint:revive // app is 
 	}
 }
 
+// ResetRaceComplete clears the race complete flag.
+func (g *gameState) ResetRaceComplete() {
+	if g.raceComplete {
+		g.raceComplete = false
+	}
+}
+
 // SetPostRaceMenuState updates the post-race menu state.
-func (a *gameState) SetPostRaceMenuState(isInMenu bool) {
-	if a.isInPostRaceMenu == isInMenu {
+func (g *gameState) SetPostRaceMenuState(isInMenu bool) {
+	if g.isInPostRaceMenu == isInMenu {
 		return
 	}
 
-	a.isInPostRaceMenu = isInMenu
+	g.isInPostRaceMenu = isInMenu
 
-	a.log.Debug().Bool("isInPostRaceMenu", isInMenu).Msg("Post-race menu state changed")
+	g.log.Debug().Bool("isInPostRaceMenu", isInMenu).Msg("Post-race menu state changed")
 }

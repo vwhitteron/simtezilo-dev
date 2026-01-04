@@ -1058,9 +1058,11 @@ func (a *App) handleDisplayTick() {
 
 // handlePitRadioTick processes pit radio updates.
 func (a *App) handlePitRadioTick() {
-	if a.gtClient.Telemetry.IsOnCircuit() {
-		a.sendPitRadioMessage()
+	if !a.gtClient.Telemetry.IsOnCircuit() {
+		return
 	}
+
+	a.sendPitRadioMessage()
 }
 
 // handleRaceDataTick periodically pushes current game state to ensure UI stays updated.
@@ -1270,6 +1272,7 @@ func (a *App) resetAllState(reason string) {
 
 	// Race states
 	a.resetPitRadioState()
+	a.state.ResetRaceComplete()
 	a.circuit.Reset()
 	a.clearCircuitInfo()
 	a.clearRaceInfo()
@@ -1288,6 +1291,7 @@ func (a *App) resetRaceState(reason string) {
 
 	// Race states
 	a.resetPitRadioState()
+	a.state.ResetRaceComplete()
 	a.circuit.ResetLapProgress()
 
 	a.log.Debug().Str("reason", reason).Msg("Reset race state")
@@ -1304,6 +1308,7 @@ func (a *App) handleContinuityFlags() {
 		// Race state
 		a.resetPitRadioState()
 		a.circuit.ResetLapProgress()
+		a.state.ResetRaceComplete()
 
 		a.log.Debug().Msg("Time of day reset")
 	}
@@ -1490,11 +1495,11 @@ func (a *App) raceHasFinished() bool {
 		return true
 	}
 
-	if a.state.raceCompleteTime.IsZero() {
-		return false
+	if a.state.raceComplete {
+		return true
 	}
 
-	return time.Since(a.state.raceCompleteTime) >= 5*time.Second
+	return false
 }
 
 // pushVehicleInfo sends the current vehicle manufacturer and model to the web UI.

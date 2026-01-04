@@ -1,8 +1,6 @@
 package app
 
 import (
-	"time"
-
 	gtmodels "github.com/zetetos/gt-telemetry/pkg/models"
 )
 
@@ -38,35 +36,19 @@ func (a *App) checkForNewLap() {
 
 // checkRaceComplete checks if the race has been completed.
 func (a *App) checkRaceComplete() {
-	lastLap := a.state.last.lapNumber
-	currentLap := a.state.current.lapNumber
-	raceLaps := a.gtClient.Telemetry.RaceLaps()
+	currentState := a.gtClient.Telemetry.RaceComplete()
 
-	// TODO: handle endurance races, time trials and free practice sessions
-	if raceLaps == 0 {
-		a.state.raceCompleteTime = time.Time{}
-
+	if a.state.raceComplete == currentState {
 		return
 	}
 
-	// Invalid state
-	if lastLap > currentLap || lastLap >= raceLaps {
-		a.state.raceCompleteTime = time.Time{}
+	a.state.raceComplete = currentState
 
-		return
-	}
-
-	if currentLap >= raceLaps {
-		if a.state.raceCompleteTime.IsZero() {
-			a.state.raceCompleteTime = time.Now()
-
-			a.log.Info().
-				Int16("current_lap", currentLap).
-				Int16("race_laps", raceLaps).
-				Msg("Race complete")
-		}
-
-		return
+	if a.state.raceComplete {
+		a.log.Info().
+			Int16("current_lap", a.state.current.lapNumber).
+			Int16("race_laps", a.gtClient.Telemetry.RaceLaps()).
+			Msg("Race complete")
 	}
 }
 

@@ -84,6 +84,10 @@ func (a *App) sendPitRadioMessage() {
 		return
 	}
 
+	if a.raceHasFinished() {
+		return
+	}
+
 	a.notifyFuelWarnings()
 	a.notifyRaceProgress()
 	a.notifyTyreTemperature()
