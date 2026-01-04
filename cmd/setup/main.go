@@ -74,17 +74,23 @@ func main() {
 	mgr := newManager(zerolog.InfoLevel)
 
 	var (
+		action   string
+		help     bool
 		logLevel string
 		version  bool
-		action   string
 	)
 
+	flag.BoolVar(&help, "h", false, "Show help message")
 	flag.StringVar(&logLevel, "l", "info", "Log level. Default is 'info'")
-	flag.BoolVar(&version, "v", false, "Print version information and exit")
+	flag.BoolVar(&version, "v", false, "Print version information")
 	flag.Parse()
 
 	if version {
 		action = "version"
+	}
+
+	if help {
+		action = "help"
 	}
 
 	if logLevel != "" {
@@ -127,6 +133,8 @@ func main() {
 		exitCode = mgr.status()
 	case "version":
 		exitCode = printVersion()
+	case "help":
+		fallthrough
 	default:
 		exitCode = printUsage()
 	}
@@ -164,7 +172,7 @@ func printUsage() exitcode.Code {
 }
 
 func printVersion() exitcode.Code {
-	fmt.Printf("Version: %s  Build Time: %s  Platform: %s\n", app.Version, app.BuildTime, app.Platform) //nolint:forbidigo // Allow for version output
+	fmt.Printf("Version: %s  Commit Hash: %s  Build Time: %s  Platform: %s\n", app.Version, app.CommitHash, app.BuildTime, app.Platform) //nolint:forbidigo // Allow for version output
 
 	return exitcode.Success
 }
