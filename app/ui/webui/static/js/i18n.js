@@ -78,6 +78,16 @@ function applyTranslations() {
             element.placeholder = translation;
         }
     });
+
+    // Find all elements with data-i18n-tooltip attribute
+    document.querySelectorAll('[data-i18n-tooltip]').forEach(element => {
+        const key = element.getAttribute('data-i18n-tooltip');
+        const translation = t(key);
+
+        if (translation) {
+            element.setAttribute('data-tooltip', translation);
+        }
+    });
 }
 
 // Initialize i18n when DOM is loaded
