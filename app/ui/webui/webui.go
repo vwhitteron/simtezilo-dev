@@ -26,6 +26,7 @@ import (
 	appHaptics "github.com/vwhitteron/simtezilo-dev/app/haptics"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware"
 	"github.com/vwhitteron/simtezilo-dev/app/logstore"
+	"github.com/vwhitteron/simtezilo-dev/app/ui/webui/common"
 )
 
 // WSMessage represents a typed message envelope for the unified WebSocket.
@@ -223,16 +224,22 @@ func (w *WebUI) htmlRouterHandlerFunc() func(w http.ResponseWriter, r *http.Requ
 var staticFiles embed.FS
 
 // staticFileHandlerFunc serves static files with automatic content type detection.
+// It first tries to load from webui-specific static files, then falls back to shared files.
 func (w *WebUI) staticFileHandlerFunc(fileType string) func(w http.ResponseWriter, r *http.Request) {
 	return func(response http.ResponseWriter, request *http.Request) {
 		filename := "static" + request.URL.Path
 
+		// Try webui-specific files first
 		content, err := staticFiles.ReadFile(filename)
 		if err != nil {
-			response.WriteHeader(http.StatusNotFound)
-			w.log.Error().Err(err).Str("type", fileType).Msg("Invalid file")
+			// Fall back to shared files
+			content, err = common.StaticFiles.ReadFile(filename)
+			if err != nil {
+				response.WriteHeader(http.StatusNotFound)
+				w.log.Error().Err(err).Str("type", fileType).Msg("Invalid file")
 
-			return
+				return
+			}
 		}
 
 		contentType := getContentType(filename)

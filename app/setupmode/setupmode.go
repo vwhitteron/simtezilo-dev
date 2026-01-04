@@ -2,7 +2,7 @@ package setupmode
 
 import (
 	"context"
-	"embed"
+	_ "embed"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -24,6 +24,7 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/i18n"
 	"github.com/vwhitteron/simtezilo-dev/app/ui/gui"
 	"github.com/vwhitteron/simtezilo-dev/app/ui/sprites"
+	"github.com/vwhitteron/simtezilo-dev/app/ui/webui/common"
 )
 
 type SetupMode struct {
@@ -195,13 +196,11 @@ func handleRoot(writer http.ResponseWriter, _ *http.Request) {
 	fmt.Fprint(writer, indexHTML)
 }
 
-//go:embed static/*
-var staticFiles embed.FS
-
 func handleStaticFiles(writer http.ResponseWriter, request *http.Request, logger *zerolog.Logger) {
 	filename := "static" + request.URL.Path
 
-	content, err := staticFiles.ReadFile(filename)
+	// Load from shared files
+	content, err := common.StaticFiles.ReadFile(filename)
 	if err != nil {
 		writer.WriteHeader(http.StatusNotFound)
 		logger.Error().Err(err).Str("file", filename).Msg("Static file not found")
