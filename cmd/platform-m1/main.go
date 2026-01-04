@@ -111,11 +111,9 @@ func main() {
 	var exitCode exitcode.Code
 
 	switch action {
-	case "access":
-		exitCode = mgr.wifiDetails()
-	case "disable":
+	case "setup-disable":
 		exitCode = mgr.disableSetupModeFlag()
-	case "enable":
+	case "setup-enable":
 		exitCode = mgr.enableSetupModeFlag()
 	case "init":
 		exitCode = mgr.init()
@@ -123,14 +121,16 @@ func main() {
 		exitCode = mgr.enterRunMode()
 	case "mode-setup":
 		exitCode = mgr.enterSetupMode()
-	case "provision":
-		exitCode = mgr.provisionRunModeConnection()
 	case "reset":
 		exitCode = mgr.reset()
-	case "scan":
-		exitCode = mgr.scanWiFi()
 	case "status":
 		exitCode = mgr.status()
+	case "wifi-access":
+		exitCode = mgr.wifiDetails()
+	case "wifi-provision":
+		exitCode = mgr.provisionRunModeConnection()
+	case "wifi-scan":
+		exitCode = mgr.scanWiFi()
 	case "version":
 		exitCode = printVersion()
 	case "help":
@@ -145,17 +145,17 @@ func main() {
 func printUsage() exitcode.Code {
 	fmt.Fprintf(os.Stderr, "Usage: %s <command>\n", os.Args[0])
 	fmt.Fprintf(os.Stderr, "Commands:\n")
-	fmt.Fprintf(os.Stderr, "  access       Provide the network access detaisl for the setup mode network\n")
-	fmt.Fprintf(os.Stderr, "  disable      Disable setup mode flag\n")
-	fmt.Fprintf(os.Stderr, "  enable       Enable setup mode flag\n")
-	fmt.Fprintf(os.Stderr, "  init         Initialize setup mode connection if not present\n")
-	fmt.Fprintf(os.Stderr, "  mode-run     Enter run mode\n")
-	fmt.Fprintf(os.Stderr, "  mode-setup   Enter setup mode\n")
-	fmt.Fprintf(os.Stderr, "  provision    Provision network connection\n")
-	fmt.Fprintf(os.Stderr, "  reset        Delete all connections and reinitialize setup mode\n")
-	fmt.Fprintf(os.Stderr, "  scan         Scan for available WiFi networks\n")
-	fmt.Fprintf(os.Stderr, "  status       Check current environment status\n")
-	fmt.Fprintf(os.Stderr, "  version      Print version information\n")
+	fmt.Fprintf(os.Stderr, "  setup-disable     Disable setup mode flag\n")
+	fmt.Fprintf(os.Stderr, "  setup-enable      Enable setup mode flag\n")
+	fmt.Fprintf(os.Stderr, "  init              Initialize setup mode connection if not present\n")
+	fmt.Fprintf(os.Stderr, "  mode-run          Enter run mode\n")
+	fmt.Fprintf(os.Stderr, "  mode-setup        Enter setup mode\n")
+	fmt.Fprintf(os.Stderr, "  reset             Delete all connections and reinitialize setup mode\n")
+	fmt.Fprintf(os.Stderr, "  status            Check current environment status\n")
+	fmt.Fprintf(os.Stderr, "  wifi-access       Provide the network access detaisl for the setup mode network\n")
+	fmt.Fprintf(os.Stderr, "  wifi-provision    Provision network connection\n")
+	fmt.Fprintf(os.Stderr, "  wifi-scan         Scan for available WiFi networks\n")
+	fmt.Fprintf(os.Stderr, "  version           Print version information\n")
 	fmt.Fprintf(os.Stderr, "\n  provision takes JSON on stdin with the following format:\n")
 	fmt.Fprintf(os.Stderr, "  [{\n")
 	fmt.Fprintf(os.Stderr, `    "ssid":"<string>",`+"\n")

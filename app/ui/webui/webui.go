@@ -3,6 +3,7 @@ package webui
 
 import (
 	"bytes"
+	"context"
 	"embed"
 	"encoding/json"
 	"fmt"
@@ -10,7 +11,6 @@ import (
 	"mime"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -26,6 +26,7 @@ import (
 	appHaptics "github.com/vwhitteron/simtezilo-dev/app/haptics"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware"
 	"github.com/vwhitteron/simtezilo-dev/app/logstore"
+	"github.com/vwhitteron/simtezilo-dev/app/setupmode"
 	"github.com/vwhitteron/simtezilo-dev/app/ui/webui/webcommon"
 )
 
@@ -64,7 +65,7 @@ type WebUI struct {
 	calibrator         *calibrator.Calibrator
 	upgrader           websocket.Upgrader
 	shutdownChan       chan exitcode.Code
-	setupModeEnabled   bool
+	setupMode          *setupmode.SetupMode
 	logStore           *logstore.Store
 	logStatsFeed       chan map[string]any
 	currentLogStats    map[string]any
@@ -95,7 +96,7 @@ type Config struct {
 	Config             *appconfig.Config
 	Calibrator         *calibrator.Calibrator
 	ShutdownChan       chan exitcode.Code
-	SetupModeAvailable bool
+	SetupMode          *setupmode.SetupMode
 	LogStore           *logstore.Store
 	LogStatsFeed       chan map[string]any
 	BuildVersion       string
@@ -125,7 +126,7 @@ func New(config Config) *WebUI {
 			CheckOrigin: func(_ *http.Request) bool { return true },
 		},
 		shutdownChan:        config.ShutdownChan,
-		setupModeEnabled:    config.SetupModeAvailable,
+		setupMode:           config.SetupMode,
 		logStore:            config.LogStore,
 		logStatsFeed:        config.LogStatsFeed,
 		currentLogStats:     make(map[string]any),
@@ -169,7 +170,7 @@ func (w *WebUI) GetHTTPHandler() http.Handler {
 	mux.HandleFunc("/api/system/info", w.handleSystemInfo)
 	mux.HandleFunc("/api/system/restart", w.handleRestart)
 
-	if w.setupModeEnabled {
+	if w.setupMode != nil && w.setupMode.IsAvailable() {
 		mux.HandleFunc("/api/system/factory-reset", w.handleFactoryReset)
 		mux.HandleFunc("/api/mode/setup", w.handleSetupMode)
 	}
@@ -2040,13 +2041,13 @@ func (w *WebUI) handleSetupMode(response http.ResponseWriter, request *http.Requ
 
 	w.log.Info().Msg("setup mode requested")
 
-	// Execute setup binary to enable setup mode
-	setupBinPath := filepath.Join(w.config.GetAppBaseDir(), "bin", "setup")
-	cmd := exec.CommandContext(request.Context(), setupBinPath, "enable")
+	// Enable setup mode using SetupMode.RunPlatformCommand
+	ctx, cancel := context.WithTimeout(request.Context(), 10*time.Second)
+	defer cancel()
 
-	output, err := cmd.CombinedOutput()
+	_, err := w.setupMode.RunPlatformCommand(ctx, setupmode.CmdActionSetupEnable, nil)
 	if err != nil {
-		w.log.Error().Err(err).Str("output", string(output)).Msg("failed to enable setup mode")
+		w.log.Error().Err(err).Msg("failed to enable setup mode")
 		response.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(response).Encode(map[string]string{ //nolint:errchkjson // simple encoding
 			"status":  "error",
@@ -2056,7 +2057,7 @@ func (w *WebUI) handleSetupMode(response http.ResponseWriter, request *http.Requ
 		return
 	}
 
-	w.log.Info().Str("output", string(output)).Msg("setup mode enabled")
+	w.log.Info().Msg("setup mode enabled")
 
 	// Return success response
 	_ = json.NewEncoder(response).Encode(map[string]string{ //nolint:errchkjson // simple encoding
@@ -2083,19 +2084,19 @@ func (w *WebUI) handleFactoryReset(response http.ResponseWriter, request *http.R
 
 	w.log.Warn().Msg("factory reset requested - all settings and network configurations will be deleted")
 
-	// Execute setup binary with reset action to delete all connections and reinitialize
+	// Execute factory reset using SetupMode.RunPlatformCommand
 	// Note: No response is sent as the network will disconnect during the reset
-	setupBinPath := filepath.Join(w.config.GetAppBaseDir(), "bin", "setup")
-	cmd := exec.CommandContext(request.Context(), setupBinPath, "reset")
+	ctx, cancel := context.WithTimeout(request.Context(), 30*time.Second)
+	defer cancel()
 
-	output, err := cmd.CombinedOutput()
+	_, err := w.setupMode.RunPlatformCommand(ctx, setupmode.CmdActionReset, nil)
 	if err != nil {
-		w.log.Error().Err(err).Str("output", string(output)).Msg("failed to perform factory reset")
+		w.log.Error().Err(err).Msg("failed to perform factory reset")
 
 		return
 	}
 
-	w.log.Info().Str("output", string(output)).Msg("factory reset completed successfully")
+	w.log.Info().Msg("factory reset completed successfully")
 
 	// Trigger application shutdown to restart in setup mode
 	w.log.Info().Msg("initiating shutdown for setup mode after factory reset")
@@ -2212,38 +2213,9 @@ func (w *WebUI) handleSystemInfo(response http.ResponseWriter, request *http.Req
 
 	platform := hardware.Platform()
 
-	// Check current setup mode availability by calling setup binary
-	setupModeAvailable := w.setupModeEnabled // Default to cached value
-	setupBinPath := filepath.Join(w.config.GetAppBaseDir(), "bin", "setup")
-	cmd := exec.CommandContext(request.Context(), setupBinPath, "status")
-
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		w.log.Warn().
-			Err(err).
-			Str("path", setupBinPath).
-			Str("output", string(output)).
-			Msg("failed to check setup status, using cached value")
-	} else {
-		// Parse the JSON output to get the available status
-		var statusResponse struct {
-			Status struct {
-				Available bool `json:"available"` //nolint:tagliatelle // lowercase for interface simpicity
-			} `json:"status"` //nolint:tagliatelle
-		}
-
-		err := json.Unmarshal(output, &statusResponse)
-		if err != nil {
-			w.log.Warn().
-				Err(err).
-				Str("output", string(output)).
-				Msg("failed to parse setup status response")
-		} else {
-			setupModeAvailable = statusResponse.Status.Available
-			w.log.Debug().
-				Bool("available", setupModeAvailable).
-				Msg("successfully checked setup mode availability")
-		}
+	setupModeAvailable := false
+	if w.setupMode != nil {
+		setupModeAvailable = w.setupMode.IsAvailable()
 	}
 
 	responseData := map[string]any{
@@ -2258,7 +2230,7 @@ func (w *WebUI) handleSystemInfo(response http.ResponseWriter, request *http.Req
 	response.Header().Set("Content-Type", "application/json")
 	response.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 
-	err = json.NewEncoder(response).Encode(responseData)
+	err := json.NewEncoder(response).Encode(responseData)
 	if err != nil {
 		w.log.Error().Err(err).Msg("failed to encode system info response")
 		http.Error(response, "error encoding system info", http.StatusInternalServerError)

@@ -43,7 +43,7 @@ RUN --mount=type=cache,target=/go/pkg/mod/ \
 RUN --mount=type=cache,target=/go/pkg/mod/ \
     --mount=type=bind,target=. \
     GOOS=${GOOS} GOARCH=arm \
-    go build -ldflags "-X '${BUILDMODULE}/app.Version=${BUILDVERSION}' -X '${BUILDMODULE}/app.CommitHash=${BUILDCOMMIT}' -X '${BUILDMODULE}/app.BuildTime=${BUILDTIME}' -X '${BUILDMODULE}/app.Platform=${PLATFORM}'" -o /out/setup-${GOOS}-armhf ./cmd/setup/main.go
+    go build -ldflags "-X '${BUILDMODULE}/app.Version=${BUILDVERSION}' -X '${BUILDMODULE}/app.CommitHash=${BUILDCOMMIT}' -X '${BUILDMODULE}/app.BuildTime=${BUILDTIME}' -X '${BUILDMODULE}/app.Platform=${PLATFORM}'" -o /out/platform-m1-${GOOS}-armhf ./cmd/platform-m1/main.go
 FROM base-armel AS build-app-armel
 WORKDIR /src
 ARG CGO_ENABLED=1
@@ -64,7 +64,7 @@ RUN --mount=type=cache,target=/go/pkg/mod/ \
 RUN --mount=type=cache,target=/go/pkg/mod/ \
     --mount=type=bind,target=. \
     GOOS=${GOOS} GOARCH=arm GOARM=${GOARM} \
-    go build -ldflags "-X '${BUILDMODULE}/app.Version=${BUILDVERSION}' -X '${BUILDMODULE}/app.CommitHash=${BUILDCOMMIT}' -X '${BUILDMODULE}/app.BuildTime=${BUILDTIME}' -X '${BUILDMODULE}/app.Platform=${PLATFORM}'" -o /out/setup-${GOOS}-armel-${GOARM} ./cmd/setup/main.go
+    go build -ldflags "-X '${BUILDMODULE}/app.Version=${BUILDVERSION}' -X '${BUILDMODULE}/app.CommitHash=${BUILDCOMMIT}' -X '${BUILDMODULE}/app.BuildTime=${BUILDTIME}' -X '${BUILDMODULE}/app.Platform=${PLATFORM}'" -o /out/platform-m1-${GOOS}-armel-${GOARM} ./cmd/platform-m1/main.go
 FROM base-armel AS build-app-armel-8
 WORKDIR /src
 ARG CGO_ENABLED=1
@@ -84,7 +84,7 @@ RUN --mount=type=cache,target=/go/pkg/mod/ \
 RUN --mount=type=cache,target=/go/pkg/mod/ \
     --mount=type=bind,target=. \
     GOOS=${GOOS} GOARCH=arm \
-    go build -ldflags "-X '${BUILDMODULE}/app.Version=${BUILDVERSION}' -X '${BUILDMODULE}/app.CommitHash=${BUILDCOMMIT}' -X '${BUILDMODULE}/app.BuildTime=${BUILDTIME}' -X '${BUILDMODULE}/app.Platform=${PLATFORM}'" -o /out/setup-${GOOS}-armel-8 ./cmd/setup/main.go
+    go build -ldflags "-X '${BUILDMODULE}/app.Version=${BUILDVERSION}' -X '${BUILDMODULE}/app.CommitHash=${BUILDCOMMIT}' -X '${BUILDMODULE}/app.BuildTime=${BUILDTIME}' -X '${BUILDMODULE}/app.Platform=${PLATFORM}'" -o /out/platform-m1-${GOOS}-armel-8 ./cmd/platform-m1/main.go
 FROM base-arm64 AS build-app-arm64-8
 WORKDIR /src
 ARG CGO_ENABLED=1
@@ -102,27 +102,27 @@ RUN --mount=type=cache,target=/go/pkg/mod/ \
 RUN --mount=type=cache,target=/go/pkg/mod/ \
     --mount=type=bind,target=. \
     GOOS=${GOOS} GOARCH=arm64 \
-    go build -ldflags "-X '${BUILDMODULE}/app.Version=${BUILDVERSION}' -X '${BUILDMODULE}/app.CommitHash=${BUILDCOMMIT}' -X '${BUILDMODULE}/app.BuildTime=${BUILDTIME}' -X '${BUILDMODULE}/app.Platform=${PLATFORM}'" -o /out/setup-${GOOS}-arm64-8 ./cmd/setup/main.go
+    go build -ldflags "-X '${BUILDMODULE}/app.Version=${BUILDVERSION}' -X '${BUILDMODULE}/app.CommitHash=${BUILDCOMMIT}' -X '${BUILDMODULE}/app.BuildTime=${BUILDTIME}' -X '${BUILDMODULE}/app.Platform=${PLATFORM}'" -o /out/platform-m1-${GOOS}-arm64-8 ./cmd/platform-m1/main.go
 
 
 FROM scratch AS binaries-armhf
 ARG GOOS
 ARG GOARM
 COPY --from=build-app-armhf /out/simtezilo-${GOOS}-armhf /
-COPY --from=build-app-armhf /out/setup-${GOOS}-armhf /
+COPY --from=build-app-armhf /out/platform-m1-${GOOS}-armhf /
 
 FROM scratch AS binaries-armel
 ARG GOOS
 ARG GOARM
 COPY --from=build-app-armel /out/simtezilo-${GOOS}-armel-${GOARM} /
-COPY --from=build-app-armel /out/setup-${GOOS}-armel-${GOARM} /
+COPY --from=build-app-armel /out/platform-m1-${GOOS}-armel-${GOARM} /
 
 FROM scratch AS binaries-armel-8
 ARG GOOS
 COPY --from=build-app-armel-8 /out/simtezilo-${GOOS}-armel-8 /
-COPY --from=build-app-armel-8 /out/setup-${GOOS}-armel-8 /  
+COPY --from=build-app-armel-8 /out/platform-m1-${GOOS}-armel-8 /  
 
 FROM scratch AS binaries-arm64-8
 ARG GOOS
 COPY --from=build-app-arm64-8 /out/simtezilo-${GOOS}-arm64-8 /
-COPY --from=build-app-arm64-8 /out/setup-${GOOS}-arm64-8 /
+COPY --from=build-app-arm64-8 /out/platform-m1-${GOOS}-arm64-8 /

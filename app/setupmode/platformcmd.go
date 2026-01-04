@@ -40,10 +40,17 @@ const (
 type CmdAction string
 
 const (
-	CmdActionStatus CmdAction = "status"
-	CmdActionSetup  CmdAction = "setup"
-	CmdActionWiFi   CmdAction = "wifi"
-	CmdActionScan   CmdAction = "scan"
+	CmdActionSetupEnable   CmdAction = "setup-enable"
+	CmdActionSetupDisable  CmdAction = "setup-disable"
+	CmdActionInit          CmdAction = "init"
+	CmdActionModeRun       CmdAction = "mode-run"
+	CmdActionModeSetup     CmdAction = "mode-setup"
+	CmdActionReset         CmdAction = "reset"
+	CmdActionStatus        CmdAction = "status"
+	CmdActionWifiAccess    CmdAction = "wifi-access"
+	CmdActionWifiScan      CmdAction = "wifi-scan"
+	CmdActionWifiProvision CmdAction = "wifi-provision"
+	CmdActionVersion       CmdAction = "version"
 )
 
 // CmdResponse represents a response from the setup CLI tool.
@@ -78,7 +85,7 @@ func (s *SetupMode) Status(ctx context.Context) (status CmdStatus) {
 	}
 
 	// Run the status action
-	response, err := s.RunSetupCommand(ctx, "status", nil)
+	response, err := s.RunPlatformCommand(ctx, CmdActionStatus, nil)
 	if err != nil {
 		s.log.Error().Err(err).Msg("Failed to run status command")
 
@@ -94,8 +101,8 @@ func (s *SetupMode) Status(ctx context.Context) (status CmdStatus) {
 	return *response.Status
 }
 
-// RunSetupCommand executes a setup command with optional input and unmarshals the response.
-func (s *SetupMode) RunSetupCommand(ctx context.Context, action string, stdin []byte) (*CmdResponse, error) {
+// RunPlatformCommand executes a platform management command with optional input and unmarshals the response.
+func (s *SetupMode) RunPlatformCommand(ctx context.Context, action CmdAction, stdin []byte) (*CmdResponse, error) {
 	// Apply 10-second maximum timeout as safety net, or use existing if shorter
 	var (
 		cmdCtx context.Context
@@ -115,7 +122,7 @@ func (s *SetupMode) RunSetupCommand(ctx context.Context, action string, stdin []
 		defer cancel()
 	}
 
-	cmd := exec.CommandContext(cmdCtx, s.command, action) //nolint:gosec // path is trusted
+	cmd := exec.CommandContext(cmdCtx, s.command, action.String()) //nolint:gosec // path is trusted
 
 	if stdin != nil {
 		cmd.Stdin = strings.NewReader(string(stdin))
@@ -143,4 +150,9 @@ func (s *SetupMode) RunSetupCommand(ctx context.Context, action string, stdin []
 	}
 
 	return &response, nil
+}
+
+// String returns the string representation of the CmdAction.
+func (c *CmdAction) String() string {
+	return string(*c)
 }

@@ -85,7 +85,7 @@ build:
 	go build -ldflags "X '$(buildmodule)/app.Version=$(buildversion)' -X '$(buildmodule)/app.CommitHash=$(buildcommit)' -X '$(buildmodule)/app.BuildTime=$(buildtime)' -X '$(buildmodule)/app.Platform=local'" \
 	-o ./out/simtezilo-local ./cmd/simtezilo/main.go
 	go build -ldflags "-X '$(buildmodule)/app.Version=$(buildversion)' -X '$(buildmodule)/app.CommitHash=$(buildcommit)' -X '$(buildmodule)/app.BuildTime=$(buildtime)' -X '$(buildmodule)/app.Platform=local'" \
-	-o ./out/setup-local ./cmd/setup/main.go
+	-o ./out/platform-local ./cmd/platform-m1/main.go
 
 ## build/darwin/silicon: build the application for Apple Silicon
 .PHONY: build/darwin/silicon

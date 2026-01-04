@@ -311,8 +311,6 @@ func (a *App) runAppMode() RunResult {
 
 	// Ensure webUI is initialized before setting handler
 	if a.config.GetAppWebUIEnabled() && a.webUI == nil {
-		status := a.setupMode.Status(context.Background())
-
 		a.webUI = webui.New(webui.Config{
 			Log:                a.log,
 			Port:               a.config.GetAppWebUIPort(),
@@ -325,7 +323,7 @@ func (a *App) runAppMode() RunResult {
 			Config:             a.config,
 			Calibrator:         a.calibrator,
 			ShutdownChan:       a.done,
-			SetupModeAvailable: status.Available,
+			SetupMode:          a.setupMode,
 			LogStore:           a.logStore,
 			BuildVersion:       Version,
 			BuildCommitHash:    CommitHash,
@@ -965,7 +963,7 @@ func (a *App) switchToSetupMode() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	_, err := a.setupMode.RunSetupCommand(ctx, "enable", nil)
+	_, err := a.setupMode.RunPlatformCommand(ctx, setupmode.CmdActionSetupEnable, nil)
 	if err != nil {
 		_ = a.ui.Screen.RenderErrorScreen("Setup enable")
 
