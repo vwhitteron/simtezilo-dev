@@ -266,6 +266,21 @@ class ConfigManager {
             });
         }
 
+        // Pit Radio output change handler to show/hide Discord settings
+        const pitRadioOutput = document.getElementById('pitradio-output');
+        if (pitRadioOutput) {
+            const updateDiscordVisibility = () => {
+                const discordSection = document.getElementById('discord-settings-section');
+                if (discordSection) {
+                    discordSection.style.display = pitRadioOutput.value === 'discord' ? 'block' : 'none';
+                }
+            };
+            // Update on change
+            pitRadioOutput.addEventListener('change', updateDiscordVisibility);
+            // Update on initial load
+            updateDiscordVisibility();
+        }
+
         // Auto-save on blur or Enter key for inputs
         const inputs = document.querySelectorAll('[data-config]');
         inputs.forEach(input => {

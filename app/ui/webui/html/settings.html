@@ -1120,15 +1120,28 @@
                 <div class="settings-section-card" data-section-content="pitradio">
                     <div class="card">
                         <div class="card-body">
+
+                            <!-- General -->
                             <h5 class="mb-3"><span class="icon" data-icon="gear"></span><span
                                     data-i18n="runmode.settings.general">General</span></h5>
-                            <div class="form-check form-switch mb-2">
+                            <div class="form-check form-switch mb-3">
                                 <input type="checkbox" class="form-check-input" id="pitradio-enabled"
                                     data-config="pitRadio.enabled" role="switch">
                                 <label class="form-check-label" for="pitradio-enabled"
                                     data-i18n="runmode.settings.pitradio.enabled">Enable</label>
                             </div>
-                            <div class="row g-3">
+
+                            <div class="row g-3 mb-3">
+                                <div class="col-md-6 col-lg-4">
+                                    <label for="pitradio-output" class="form-label">
+                                        <span data-i18n="runmode.settings.pitradio.output">Output</span>
+                                    </label>
+                                    <select id="pitradio-output" class="form-select"
+                                        data-config="haptics.pitRadioOutput">
+                                        <option value="log">Log</option>
+                                        <option value="discord">Discord</option>
+                                    </select>
+                                </div>
                                 <div class="col-md-6 col-lg-4">
                                     <label for="pitradio-interval" class="form-label"
                                         data-i18n="runmode.settings.pitradio.interval">Message Send Interval
@@ -1138,6 +1151,48 @@
                                 </div>
                             </div>
 
+                            <!-- Discord -->
+                            <div id="discord-settings-section" style="display: none;">
+                                <h5 class="mt-5 mb-3"><i class="fa-brands fa-discord me-2"></i><span
+                                        data-i18n="runmode.settings.discord.title">Discord</span></h5>
+                                <div class="mb-3">
+                                    <label for="discord-token" class="form-label"
+                                        data-i18n="runmode.settings.discord.token">Bot Token</label>
+                                    <input type="password" id="discord-token" class="form-control"
+                                        data-config="pitRadio.discord.token"
+                                        data-i18n-placeholder="runmode.settings.discord.token.placeholder"
+                                        placeholder="Enter Discord bot token">
+                                </div>
+                                <div class="row g-3 mb-3">
+                                    <div class="col-md-4">
+                                        <label for="discord-guildid" class="form-label"
+                                            data-i18n="runmode.settings.discord.guildid">Guild ID</label>
+                                        <input type="text" id="discord-guildid" class="form-control"
+                                            data-config="pitRadio.discord.guildID"
+                                            data-i18n-placeholder="runmode.settings.discord.guildid.placeholder"
+                                            placeholder="Discord server ID">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label for="discord-channelid" class="form-label"
+                                            data-i18n="runmode.settings.discord.channelid">Channel ID</label>
+                                        <input type="text" id="discord-channelid" class="form-control"
+                                            data-config="pitRadio.discord.channelID"
+                                            data-i18n-placeholder="runmode.settings.discord.channelid.placeholder"
+                                            placeholder="Text channel ID">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label for="discord-voicechannelid" class="form-label"
+                                            data-i18n="runmode.settings.discord.voicechannelid">Voice Channel ID</label>
+                                        <input type="text" id="discord-voicechannelid" class="form-control"
+                                            data-config="pitRadio.discord.voiceChannelID"
+                                            data-i18n-placeholder="runmode.settings.discord.voicechannelid.placeholder"
+                                            placeholder="Voice channel ID">
+                                    </div>
+                                </div>
+                            </div>
+
+
+                            <!-- Notifications -->
                             <h5 class="mt-5 mb-3"><i class="fa-solid fa-message me-2"></i><span
                                     data-i18n="runmode.settings.notifications.title">Notifications</span></h5>
 
@@ -1254,43 +1309,7 @@
                                 </div>
                             </div>
 
-                            <h5 class="mt-5 mb-3"><i class="fa-brands fa-discord me-2"></i><span
-                                    data-i18n="runmode.settings.discord.title">Discord</span></h5>
-                            <div class="mb-3">
-                                <label for="discord-token" class="form-label"
-                                    data-i18n="runmode.settings.discord.token">Bot Token</label>
-                                <input type="password" id="discord-token" class="form-control"
-                                    data-config="pitRadio.discord.token"
-                                    data-i18n-placeholder="runmode.settings.discord.token.placeholder"
-                                    placeholder="Enter Discord bot token">
-                            </div>
-                            <div class="row g-3 mb-3">
-                                <div class="col-md-4">
-                                    <label for="discord-guildid" class="form-label"
-                                        data-i18n="runmode.settings.discord.guildid">Guild ID</label>
-                                    <input type="text" id="discord-guildid" class="form-control"
-                                        data-config="pitRadio.discord.guildID"
-                                        data-i18n-placeholder="runmode.settings.discord.guildid.placeholder"
-                                        placeholder="Discord server ID">
-                                </div>
-                                <div class="col-md-4">
-                                    <label for="discord-channelid" class="form-label"
-                                        data-i18n="runmode.settings.discord.channelid">Channel ID</label>
-                                    <input type="text" id="discord-channelid" class="form-control"
-                                        data-config="pitRadio.discord.channelID"
-                                        data-i18n-placeholder="runmode.settings.discord.channelid.placeholder"
-                                        placeholder="Text channel ID">
-                                </div>
-                                <div class="col-md-4">
-                                    <label for="discord-voicechannelid" class="form-label"
-                                        data-i18n="runmode.settings.discord.voicechannelid">Voice Channel ID</label>
-                                    <input type="text" id="discord-voicechannelid" class="form-control"
-                                        data-config="pitRadio.discord.voiceChannelID"
-                                        data-i18n-placeholder="runmode.settings.discord.voicechannelid.placeholder"
-                                        placeholder="Voice channel ID">
-                                </div>
-                            </div>
-
+                            <!-- Fuel Monitoring -->
                             <h5 class="mt-5 mb-3"><i class="fa-solid fa-gas-pump me-2"></i><span
                                     data-i18n="runmode.settings.fuel.title">Fuel Management</span></h5>
                             <div class="row g-3">
@@ -1333,6 +1352,7 @@
                                 </div>
                             </div>
 
+                            <!-- Tyre Monitoring -->
                             <h5 class="mt-5 mb-3"><i class="fa-solid fa-circle-notch me-2"></i><span
                                     data-i18n="runmode.settings.tyres.title">Tyre Management</span></h5>
                             <div class="row g-3">

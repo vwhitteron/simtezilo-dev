@@ -842,6 +842,7 @@ func (w *WebUI) handleGetConfig(response http.ResponseWriter, _ *http.Request) {
 		},
 		"haptics": map[string]any{
 			"enableReplay":                 w.config.GetHapticsEnableReplay(),
+			"pitRadioOutput":               w.config.GetPitRadioOutput(),
 			"dynamicTransmissionFeedback":  w.config.GethapticsDynamicTransFeedbackEnabled(),
 			"dynamicTransmissionCurve":     w.config.GetHapticsTransmissionCurve(),
 			"dynamicTransmissionGforceMax": w.config.GetHapticsTransmissionGforceMax(),
@@ -1393,6 +1394,14 @@ func (w *WebUI) applyHapticsConfig(config map[string]any) []string {
 	if enableReplay, ok := config["enableReplay"]; ok {
 		if replayBool, ok := parseBool(enableReplay, "enable replay"); ok {
 			w.config.SetHapticsEnableReplay(replayBool)
+		}
+	}
+
+	if pitRadioOutput, ok := config["pitRadioOutput"]; ok {
+		if outputStr, ok := pitRadioOutput.(string); ok {
+			w.config.SetPitRadioOutput(outputStr)
+		} else {
+			errors = append(errors, "invalid pit radio output value")
 		}
 	}
 

@@ -1372,6 +1372,10 @@ func (c *Config) GetPitRadioOutput() string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
+	if c.viper.PitRadio.Output == "" {
+		c.viper.PitRadio.Output = "log"
+	}
+
 	return c.viper.PitRadio.Output
 }
 
@@ -1381,13 +1385,13 @@ func (c *Config) SetPitRadioOutput(value string) {
 	defer c.mu.Unlock()
 
 	switch value {
-	case "discord", "log":
+	case "discord":
 		c.viper.PitRadio.Output = value
 	default:
-		c.viper.PitRadio.Output = ""
+		c.viper.PitRadio.Output = "log"
 	}
 
-	c.registerUpdate(false)
+	c.registerUpdate(true)
 }
 
 // GetPitRadioMessageSendIntervalMs returns the interval in milliseconds between sending of pit radio messages.
