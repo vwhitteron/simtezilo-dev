@@ -939,7 +939,8 @@ func (m *manager) saveNetworkConfiguration(config networkConfig) error {
 	}
 
 	// Configure IP settings
-	if config.method == "static" {
+	switch config.method {
+	case "static":
 		// Parse DNS servers - convert to uint32 array (network byte order)
 		var dnsAddr []uint32
 
@@ -984,10 +985,12 @@ func (m *manager) saveNetworkConfiguration(config networkConfig) error {
 		}
 
 		settings["ipv4"] = ipv4Settings
-	} else {
+	case "dhcp":
 		settings["ipv4"] = map[string]any{
 			"method": "auto",
 		}
+	default:
+		return fmt.Errorf("unsupported IP method: %s", config.method)
 	}
 
 	// Add the connection

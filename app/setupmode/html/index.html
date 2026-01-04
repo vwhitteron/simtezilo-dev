@@ -956,6 +956,9 @@
                 document.querySelector('.radio-group label:nth-of-type(2)').innerHTML =
                     '<input type="radio" name="ip-config" value="static"> ' + t('setupmode.network.ipmode.static');
 
+                // Re-attach event listeners to the newly created radio buttons
+                attachIpConfigListeners();
+
                 // Static IP fields
                 document.querySelector('label[for="ip-address"]').textContent = t('setupmode.network.ipaddress');
                 document.getElementById('ip-address').placeholder = t('setupmode.network.ipaddressexample') + ' 192.168.1.100';
@@ -983,7 +986,6 @@
             const manualSsidConfig = document.getElementById('manual-ssid-config');
             const manualSsidInput = document.getElementById('manual-ssid');
             const staticIpConfig = document.getElementById('static-ip-config');
-            const ipConfigRadios = document.querySelectorAll('input[name="ip-config"]');
             const saveBtn = document.getElementById('save-btn');
             const backBtn = document.getElementById('back-btn');
             const returnLink = document.getElementById('return-link');
@@ -1447,22 +1449,28 @@
                 updateSaveButtonState();
             });
 
-            // Toggle static IP fields based on radio selection
-            ipConfigRadios.forEach(radio => {
-                radio.addEventListener('change', function () {
-                    if (this.value === 'static') {
-                        staticIpConfig.classList.remove('hidden');
-                    } else {
-                        staticIpConfig.classList.add('hidden');
-                        // Clear validation errors when switching to DHCP
-                        document.getElementById('ip-address-error').textContent = '';
-                        document.getElementById('prefix-error').textContent = '';
-                        document.getElementById('gateway-error').textContent = '';
-                        document.getElementById('dns-error').textContent = '';
-                    }
-                    updateSaveButtonState();
+            // Function to attach IP config radio button listeners
+            function attachIpConfigListeners() {
+                const ipConfigRadios = document.querySelectorAll('input[name="ip-config"]');
+                ipConfigRadios.forEach(radio => {
+                    radio.addEventListener('change', function () {
+                        if (this.value === 'static') {
+                            staticIpConfig.classList.remove('hidden');
+                        } else {
+                            staticIpConfig.classList.add('hidden');
+                            // Clear validation errors when switching to DHCP
+                            document.getElementById('ip-address-error').textContent = '';
+                            document.getElementById('prefix-error').textContent = '';
+                            document.getElementById('gateway-error').textContent = '';
+                            document.getElementById('dns-error').textContent = '';
+                        }
+                        updateSaveButtonState();
+                    });
                 });
-            });
+            }
+
+            // Toggle static IP fields based on radio selection
+            attachIpConfigListeners();
 
             // Save button handler - navigate to confirmation page
             saveBtn.addEventListener('click', function () {
@@ -1529,7 +1537,7 @@
                 formData.append('ssid', ssid);
                 formData.append('password', document.getElementById('password').value);
                 formData.append('security', security);
-                formData.append('ipConfig', document.querySelector('input[name="ip-config"]:checked').value);
+                formData.append('method', document.querySelector('input[name="ip-config"]:checked').value);
                 formData.append('ipAddress', document.getElementById('ip-address').value);
                 formData.append('prefix', document.getElementById('prefix').value);
                 formData.append('gateway', document.getElementById('gateway').value);

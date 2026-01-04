@@ -48,6 +48,15 @@ function handle_disable() {
     return_success
 }
 
+function handle_provision() {
+    # Read input JSON
+    input=$(cat)
+
+    echo "${input}" > /opt/simtezilo/etc/provision.json
+
+    return_success
+}
+
 function handle_scan() {
     echo '{"networks":[{"ssid":"yarn","psk":"","security":"wpa2"},{"ssid":"Firetooth","psk":"","security":"wpa3"}],"result":"success"}'
 
@@ -83,7 +92,7 @@ case $action in
         return_success
         ;;
     "provision")
-        return_success
+        handle_provision
         ;;
     "reset")
         return_success
