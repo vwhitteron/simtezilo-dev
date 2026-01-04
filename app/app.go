@@ -4,6 +4,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"path/filepath"
 	"strconv"
@@ -92,6 +93,7 @@ type App struct {
 	logStatsFeed       chan map[string]any     // Channel for sending log stats to web UI
 	webUI              *webui.WebUI            // Web UI server and handler
 	webSequenceID      uint32                  // Last sequence ID sent to the web UI
+	ipAddress          string                  // Local IP address for web UI access
 
 	lapEvents      []lapEvent    // History of lap events
 	lapEventsMutex sync.Mutex    // Mutex for lap events slice
@@ -608,6 +610,44 @@ func (a *App) initializeUI(opts Options, hidEvents chan ui.HIDInputEvent) error 
 	return nil
 }
 
+// getIPAddress retrieves the local IP address of the host machine.
+// Currently returns the first non-loopback IPv4 address found.
+func getIPAddress() string {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return ""
+	}
+
+	for _, addr := range addrs {
+		// Check if the address is an IP address (not a network address)
+		if ipNet, ok := addr.(*net.IPNet); ok && !ipNet.IP.IsLoopback() {
+			// Check if it's an IPv4 address
+			if ipNet.IP.To4() != nil {
+				return ipNet.IP.String()
+			}
+		}
+	}
+
+	return ""
+}
+
+// updateIPAddress periodically updates the application's IP address.
+// This handles cases where the IP is not available on startup or changes via DHCP.
+func (a *App) updateIPAddress() {
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		newIP := getIPAddress()
+		if newIP != "" && newIP != a.ipAddress {
+			a.ipAddress = newIP
+			a.log.Info().
+				Str("ip", newIP).
+				Msg("IP address updated")
+		}
+	}
+}
+
 // watchDisplayOrientation monitors for display orientation changes and updates the display hardware.
 func (a *App) watchDisplayOrientation() {
 	currentOrientation := a.config.GetDisplayOrientation()
@@ -905,6 +945,9 @@ func (a *App) startBackgroundTasks() {
 	if a.config.GetAppWebUIEnabled() && a.logStore != nil {
 		go a.logStatsBroadcaster()
 	}
+
+	// Start IP address updater
+	go a.updateIPAddress()
 
 	go func() {
 		for {

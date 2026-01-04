@@ -42,5 +42,6 @@ func (a *App) buildInfoItems() []string {
 		"Commit Hash\n" + CommitHash,
 		"Build Time\n" + BuildTime,
 		"Platform\n" + Platform,
+		"IP Address\n" + a.ipAddress,
 	}
 }
