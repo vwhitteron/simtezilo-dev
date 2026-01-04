@@ -22,7 +22,7 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/i18n"
 	"github.com/vwhitteron/simtezilo-dev/app/ui/gui"
 	"github.com/vwhitteron/simtezilo-dev/app/ui/sprites"
-	"github.com/vwhitteron/simtezilo-dev/app/ui/webui/common"
+	"github.com/vwhitteron/simtezilo-dev/app/ui/webui/webcommon"
 )
 
 type SetupMode struct {
@@ -160,7 +160,7 @@ func handleStaticFiles(writer http.ResponseWriter, request *http.Request, logger
 	filename := "static" + request.URL.Path
 
 	// Load from shared files
-	content, err := common.StaticFiles.ReadFile(filename)
+	content, err := webcommon.StaticFiles.ReadFile(filename)
 	if err != nil {
 		writer.WriteHeader(http.StatusNotFound)
 		logger.Error().Err(err).Str("file", filename).Msg("Static file not found")

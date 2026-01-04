@@ -234,7 +234,8 @@ func (s *Synthesizer) UpdateCalibrator() {
 		s.mixer.ResetSineWavePhase()
 
 		// Store original master gain
-		if currentGain, err := s.mixer.GetChannelGain(ChannelMaster); err == nil {
+		currentGain, err := s.mixer.GetChannelGain(ChannelMaster)
+		if err == nil {
 			s.originalMasterGain = currentGain
 
 			// Clear master buffer to remove any previously mixed audio before gain change

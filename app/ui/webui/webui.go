@@ -26,7 +26,7 @@ import (
 	appHaptics "github.com/vwhitteron/simtezilo-dev/app/haptics"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware"
 	"github.com/vwhitteron/simtezilo-dev/app/logstore"
-	"github.com/vwhitteron/simtezilo-dev/app/ui/webui/common"
+	"github.com/vwhitteron/simtezilo-dev/app/ui/webui/webcommon"
 )
 
 // WSMessage represents a typed message envelope for the unified WebSocket.
@@ -233,7 +233,7 @@ func (w *WebUI) staticFileHandlerFunc(fileType string) func(w http.ResponseWrite
 		content, err := staticFiles.ReadFile(filename)
 		if err != nil {
 			// Fall back to shared files
-			content, err = common.StaticFiles.ReadFile(filename)
+			content, err = webcommon.StaticFiles.ReadFile(filename)
 			if err != nil {
 				response.WriteHeader(http.StatusNotFound)
 				w.log.Error().Err(err).Str("type", fileType).Msg("Invalid file")
