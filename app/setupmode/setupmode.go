@@ -14,8 +14,6 @@ import (
 	"strings"
 	"time"
 
-	"atomicgo.dev/keyboard"
-	"atomicgo.dev/keyboard/keys"
 	"github.com/rs/zerolog"
 	"github.com/skip2/go-qrcode"
 	"github.com/vwhitteron/simtezilo-dev/app/config"
@@ -140,46 +138,8 @@ func (s *SetupMode) Run() {
 		s.log.Info().Msg("Setup mode connection activated")
 	}
 
-	// Handle keyboard input
-	go func() {
-		_ = keyboard.Listen(func(key keys.Key) (stop bool, err error) {
-			switch key.Code { //nolint:exhaustive
-			case keys.CtrlC, keys.Escape:
-				s.log.Info().Msg("Escape key pressed, shutting down")
-
-				s.done <- exitcode.GeneralErr
-
-				close(s.shutdown)
-
-				return true, nil
-			}
-
-			return false, nil
-		})
-	}()
-
-	code, err := s.generateQRcode()
-	if err != nil {
-		s.log.Error().Err(err).Msg("Failed to generate QR code")
-
-		s.showErrorSprite()
-
-		s.done <- exitcode.GeneralErr
-
-		close(s.shutdown)
-	}
-
-	// display the qrcode image on the lcd
-	canvas := gui.ImageToRGBA(code)
-	content := &display.Content{
-		Canvas: canvas,
-	}
-
-	err = s.lcd.Write(content)
-	if err != nil {
-		s.log.Error().Err(err).Msg("Failed to write to display")
-	} else {
-		s.lcd.Wakeup()
+	if status.LCDPresent {
+		s.displayQRCode()
 	}
 
 	// Wait for shutdown signal
@@ -564,6 +524,33 @@ func getContentType(filename string) string {
 	}
 
 	return contentType
+}
+
+// displayQRCode generates and displays the QR code for joining the setup mode access point network.
+func (s *SetupMode) displayQRCode() {
+	code, err := s.generateQRcode()
+	if err != nil {
+		s.log.Error().Err(err).Msg("Failed to generate QR code")
+
+		s.showErrorSprite()
+
+		s.done <- exitcode.GeneralErr
+
+		close(s.shutdown)
+	}
+
+	// display the qrcode image on the lcd
+	canvas := gui.ImageToRGBA(code)
+	content := &display.Content{
+		Canvas: canvas,
+	}
+
+	err = s.lcd.Write(content)
+	if err != nil {
+		s.log.Error().Err(err).Msg("Failed to write to display")
+	} else {
+		s.lcd.Wakeup()
+	}
 }
 
 // showErrorSprite displays the error sprite on the LCD before exiting.

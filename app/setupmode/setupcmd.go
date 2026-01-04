@@ -19,6 +19,7 @@ type CmdStatus struct {
 	RunModePresent   bool   `json:"runModePresent"`      //nolint:tagliatelle
 	SetupModePresent bool   `json:"setupModePresent"`    //nolint:tagliatelle
 	SetupRequired    bool   `json:"setupRequired"`       //nolint:tagliatelle
+	LCDPresent       bool   `json:"lcdPresent"`          //nolint:tagliatelle
 }
 
 // CmdNetworkInfo represents WiFi network information returned by the setup CLI tool.

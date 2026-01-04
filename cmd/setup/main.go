@@ -240,6 +240,7 @@ func (m *manager) status() exitcode.Code {
 		SetupModePresent: false,
 		SetupRequired:    true,
 		Ready:            m.isNetworkManagerReady(),
+		LCDPresent:       true,
 	}
 
 	// Check if setup mode flag file exists
