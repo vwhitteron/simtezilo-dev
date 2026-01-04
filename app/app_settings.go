@@ -23,6 +23,7 @@ func (a *App) settingAction(setting string, action string) string {
 		"vCurve":     a.handleVibrationCurveSetting,
 		"vol":        a.handleMasterVolSetting,
 		"vSat":       a.handleVibrationSatSetting,
+		"setupMode":  a.handleSetupModeCountdown,
 		"info":       a.handleInfoScreen,
 	}
 
@@ -295,4 +296,26 @@ func (a *App) handleInfoScreen(action string) (value string) {
 	}
 
 	return value
+}
+
+func (a *App) handleSetupModeCountdown(action string) string {
+	switch action {
+	case "increase":
+		value := a.ui.ResetSetupModeCountdown()
+
+		return strconv.Itoa(value)
+	case "decrease":
+		value := a.ui.DecrementSetupModeCountdown()
+
+		if value == 0 {
+			a.log.Info().Msg("Setup mode countdown reached zero, triggering setup mode")
+			a.switchToSetupMode()
+		}
+
+		return strconv.Itoa(value)
+	default:
+		countdown := a.ui.GetSetupModeCountdown()
+
+		return strconv.Itoa(countdown)
+	}
 }

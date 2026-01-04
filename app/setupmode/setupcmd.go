@@ -78,7 +78,7 @@ func (s *SetupMode) Status(ctx context.Context) (status CmdStatus) {
 	}
 
 	// Run the status action
-	response, err := s.runSetupCommand(ctx, "status", nil)
+	response, err := s.RunSetupCommand(ctx, "status", nil)
 	if err != nil {
 		s.log.Error().Err(err).Msg("Failed to run status command")
 
@@ -94,8 +94,8 @@ func (s *SetupMode) Status(ctx context.Context) (status CmdStatus) {
 	return *response.Status
 }
 
-// runSetupCommand executes a setup command with optional input and unmarshals the response.
-func (s *SetupMode) runSetupCommand(ctx context.Context, action string, stdin []byte) (*CmdResponse, error) {
+// RunSetupCommand executes a setup command with optional input and unmarshals the response.
+func (s *SetupMode) RunSetupCommand(ctx context.Context, action string, stdin []byte) (*CmdResponse, error) {
 	// Apply 10-second maximum timeout as safety net, or use existing if shorter
 	var (
 		cmdCtx context.Context

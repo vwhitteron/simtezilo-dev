@@ -198,6 +198,26 @@ func (u *UserInterface) UpdateDisplay(data LiveData) {
 	u.displayData = data
 }
 
+// GetSetupModeCountdown returns the current setup mode countdown value.
+func (u *UserInterface) GetSetupModeCountdown() int {
+	return u.menuSystem.GetSetupModeCountdown()
+}
+
+// ResetSetupModeCountdown resets the setup mode countdown to 5.
+func (u *UserInterface) ResetSetupModeCountdown() int {
+	return u.menuSystem.ResetSetupModeCountdown()
+}
+
+// DecrementSetupModeCountdown decrements the setup countdown by 1.
+func (u *UserInterface) DecrementSetupModeCountdown() int {
+	return u.menuSystem.DecrementSetupModeCountdown()
+}
+
+// IsSetupModeCountdownZero returns true if setup countdown has reached zero.
+func (u *UserInterface) IsSetupModeCountdownZero() bool {
+	return u.menuSystem.IsSetupModeCountdownZero()
+}
+
 // handleSettingsMode handles display updates in settings mode.
 func (u *UserInterface) handleSettingsMode(data LiveData) {
 	if u.displayInactiveTimeoutReached() {

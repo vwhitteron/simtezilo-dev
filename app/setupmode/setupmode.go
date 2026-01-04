@@ -110,7 +110,7 @@ func (s *SetupMode) Run() {
 		initCtx, initCancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer initCancel()
 
-		_, err := s.runSetupCommand(initCtx, "init", nil)
+		_, err := s.RunSetupCommand(initCtx, "init", nil)
 		if err != nil {
 			s.log.Error().Err(err).Msg("Failed to initialize setup mode")
 			s.showErrorSprite()
@@ -131,7 +131,7 @@ func (s *SetupMode) Run() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	_, err := s.runSetupCommand(ctx, "mode-setup", nil)
+	_, err := s.RunSetupCommand(ctx, "mode-setup", nil)
 	if err != nil {
 		s.log.Error().Err(err).Msg("Failed to activate setup mode, attempting to continue")
 	} else {
@@ -336,7 +336,7 @@ func (s *SetupMode) handleAPIConfigSave(writer http.ResponseWriter, request *htt
 
 	s.log.Info().Msg("Configuration saved successfully, switching to run mode")
 
-	_, err = s.runSetupCommand(ctx, "mode-run", nil)
+	_, err = s.RunSetupCommand(ctx, "mode-run", nil)
 	if err != nil {
 		writer.Header().Set("Content-Type", "application/json")
 		fmt.Fprintf(writer, `{"success":false,"error":"Failed to enter run mode: %v"}`, err)
@@ -346,7 +346,7 @@ func (s *SetupMode) handleAPIConfigSave(writer http.ResponseWriter, request *htt
 		return
 	}
 
-	_, err = s.runSetupCommand(ctx, "disable", nil)
+	_, err = s.RunSetupCommand(ctx, "disable", nil)
 	if err != nil {
 		writer.Header().Set("Content-Type", "application/json")
 		fmt.Fprintf(writer, `{"success":false,"error":"Failed to disable setup mode: %v"}`, err)
@@ -379,7 +379,7 @@ func (s *SetupMode) handleModeRun(writer http.ResponseWriter, request *http.Requ
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	_, err := s.runSetupCommand(ctx, "mode-run", nil)
+	_, err := s.RunSetupCommand(ctx, "mode-run", nil)
 	if err != nil {
 		s.log.Error().Err(err).Msg("Failed to enter run mode")
 		writer.Header().Set("Content-Type", "application/json")
@@ -388,7 +388,7 @@ func (s *SetupMode) handleModeRun(writer http.ResponseWriter, request *http.Requ
 		return
 	}
 
-	_, err = s.runSetupCommand(ctx, "disable", nil)
+	_, err = s.RunSetupCommand(ctx, "disable", nil)
 	if err != nil {
 		s.log.Error().Err(err).Msg("Failed to disable setup mode flag")
 		writer.Header().Set("Content-Type", "application/json")
@@ -445,7 +445,7 @@ func (s *SetupMode) getAvailableNetworks(ctx context.Context) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	response, err := s.runSetupCommand(ctx, "scan", nil)
+	response, err := s.RunSetupCommand(ctx, "scan", nil)
 	if err != nil {
 		s.log.Error().Err(err).Msg("Failed to scan WiFi networks")
 
@@ -467,7 +467,7 @@ func (s *SetupMode) getNetworkAccessDetails() (string, string, string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	response, err := s.runSetupCommand(ctx, "access", nil)
+	response, err := s.RunSetupCommand(ctx, "access", nil)
 	if err != nil {
 		return "", "", "", fmt.Errorf("run setup access command: %w", err)
 	}
@@ -503,7 +503,7 @@ func (s *SetupMode) saveNetworkConfiguration(ctx context.Context, ssid, password
 	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 
-	_, err = s.runSetupCommand(ctx, "provision", configJSON)
+	_, err = s.RunSetupCommand(ctx, "provision", configJSON)
 	if err != nil {
 		s.log.Error().Err(err).Msg("Failed to provision network")
 

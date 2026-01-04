@@ -51,6 +51,7 @@
         "ui.menu.mix": "Mix Algo",
         "ui.menu.lang": "Language",
         "ui.menu.info": "Info",
+        "ui.menu.setupmode": "Setup Mode",
 
         "radio.online": "Radio check",
         "radio.laprecord": "Lap record",

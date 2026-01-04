@@ -957,6 +957,36 @@ func (a *App) startAudioOutput() {
 	go speaker.Play(hapticStreamer)
 }
 
+// switchToSetupMode creates the setup mode flag file and signals the app to exit for restart in setup mode.
+func (a *App) switchToSetupMode() {
+	a.log.Info().Msg("Setup mode requested")
+
+	// Run the setup command to enable setup mode
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	_, err := a.setupMode.RunSetupCommand(ctx, "enable", nil)
+	if err != nil {
+		_ = a.ui.Screen.RenderErrorScreen("Setup enable")
+
+		a.log.Error().
+			Err(err).
+			Msg("Failed to enable setup mode")
+
+		return
+	}
+
+	// Display message and trigger exit for restart
+	_ = a.ui.Screen.RenderSplashScreen("Restarting")
+
+	a.log.Info().Msg("Setup mode enabled, exiting for restart")
+
+	time.Sleep(2 * time.Second)
+
+	// Signal exit with setup mode code
+	a.done <- exitcode.SetupMode
+}
+
 // mainLoop is the primary application loop handling telemetry updates, haptics, UI updates, and pit radio
 // notifications.
 func (a *App) mainLoop() {
