@@ -452,7 +452,7 @@ func (a *App) initializeHardware(hidEvents chan ui.HIDInputEvent) error {
 	case "waveshare":
 		err = a.initializeWaveshare(hidEvents)
 	default:
-		a.initializeConsole(hidEvents)
+		a.initializeConsole()
 	}
 
 	return err
@@ -571,19 +571,12 @@ func (a *App) initializeWaveshare(hidEvents chan ui.HIDInputEvent) error {
 }
 
 // initializeConsole sets up console display.
-func (a *App) initializeConsole(hidEvents chan ui.HIDInputEvent) {
+func (a *App) initializeConsole() {
 	a.display = console.New()
 	a.log.Debug().
 		Str("component", "console").
 		Str("sub", "display").
 		Str("result", "success").
-		Msg("init")
-
-	go console.SetupHID(hidEvents)
-
-	a.log.Debug().
-		Str("component", "console").
-		Str("sub", "hid").
 		Msg("init")
 }
 
