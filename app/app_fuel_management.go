@@ -156,7 +156,7 @@ func (a *App) sendFuelWarningMessage(message string, context *fuelWarningContext
 		return
 	}
 
-	a.log.Info().
+	a.log.Debug().
 		Str("message", message).
 		Int16("lap", a.state.current.lapNumber).
 		Float32("fuel_percent", a.gtClient.Telemetry.FuelLevelPercent()).

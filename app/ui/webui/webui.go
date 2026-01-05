@@ -253,7 +253,7 @@ func (w *WebUI) staticFileHandlerFunc(fileType string) func(w http.ResponseWrite
 			return
 		}
 
-		w.log.Debug().Str("file", filename).Str("mime-type", contentType).Msg("returned file")
+		w.log.Debug().Str("file", filename).Str("mime-type", contentType).Msg("static file served")
 	}
 }
 

@@ -11,9 +11,44 @@
     <link rel="stylesheet" href="/css/icons.css?v=4">
     <style>
         #logs-container {
-            max-height: calc(100vh - 200px);
+            max-height: calc(100vh - 220px);
             overflow-y: auto;
             overflow-x: hidden;
+        }
+
+        .pagination-numbers {
+            display: flex;
+            gap: 5px;
+            align-items: center;
+        }
+
+        .page-number {
+            min-width: 32px;
+            height: 32px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            border-radius: 4px;
+            padding: 0 8px;
+            font-size: 0.875rem;
+            transition: all 0.2s;
+        }
+
+        .page-number:hover:not(.active):not(.ellipsis) {
+            background: var(--bs-secondary-bg);
+        }
+
+        .page-number.active {
+            background: var(--bs-primary);
+            color: white;
+            font-weight: 600;
+            cursor: default;
+        }
+
+        .page-number.ellipsis {
+            cursor: default;
+            user-select: none;
         }
     </style>
     <script>
@@ -23,6 +58,7 @@
         let statsData = {};
         let autoRefresh = false;
         let refreshInterval = null;
+        let autoUpdateInterval = null;
         let currentPage = 1;
         let pageSize = 100;
         let totalLogs = 0;
@@ -78,12 +114,20 @@
 
             if (detailsElement.style.display === 'none') {
                 detailsElement.style.display = 'block';
-                icon.classList.remove('fa-chevron-right');
-                icon.classList.add('fa-chevron-down');
+                if (typeof IconHelper !== 'undefined') {
+                    IconHelper.replaceIcon(icon, 'chevron-down');
+                } else {
+                    icon.classList.remove('fa-chevron-right');
+                    icon.classList.add('fa-chevron-down');
+                }
             } else {
                 detailsElement.style.display = 'none';
-                icon.classList.remove('fa-chevron-down');
-                icon.classList.add('fa-chevron-right');
+                if (typeof IconHelper !== 'undefined') {
+                    IconHelper.replaceIcon(icon, 'chevron-right');
+                } else {
+                    icon.classList.remove('fa-chevron-down');
+                    icon.classList.add('fa-chevron-right');
+                }
             }
         }
 
@@ -138,6 +182,18 @@
                 </div>
             `).join('');
 
+            // Replace Font Awesome icons with SVG icons for dynamically rendered log entries
+            if (typeof IconHelper !== 'undefined') {
+                logsData.forEach((log, index) => {
+                    if (hasAdditionalFields(log)) {
+                        const iconElement = document.getElementById(`log-icon-${index}`);
+                        if (iconElement) {
+                            IconHelper.replaceIcon(iconElement, 'chevron-right');
+                        }
+                    }
+                });
+            }
+
             // Scroll to bottom to show latest logs
             logsContainer.scrollTop = logsContainer.scrollHeight;
         }
@@ -169,7 +225,7 @@
         function updatePaginationControls() {
             const prevBtn = document.getElementById('prev-page');
             const nextBtn = document.getElementById('next-page');
-            const pageInfo = document.getElementById('page-info');
+            const numbersContainer = document.getElementById('pagination-numbers');
 
             if (prevBtn) {
                 prevBtn.disabled = currentPage <= 1;
@@ -177,15 +233,69 @@
             if (nextBtn) {
                 nextBtn.disabled = currentPage >= totalPages;
             }
-            if (pageInfo) {
-                const template = t('runmode.logs.pageinfo');
-                if (template) {
-                    pageInfo.textContent = template.replace('{current}', currentPage).replace('{total}', totalPages);
-                } else {
-                    // Fallback if i18n not loaded yet
-                    pageInfo.textContent = `Page ${currentPage} of ${totalPages}`;
-                }
+
+            // Generate elided page number list
+            if (numbersContainer) {
+                const pageNumbers = generatePageNumbers(currentPage, totalPages);
+                numbersContainer.innerHTML = pageNumbers.map(page => {
+                    if (page === '...') {
+                        return `<span class="page-number ellipsis">...</span>`;
+                    }
+                    const isActive = page === currentPage;
+                    return `<span class="page-number ${isActive ? 'active' : ''}" data-page="${page}">${page}</span>`;
+                }).join('');
+
+                // Add click handlers to page numbers
+                numbersContainer.querySelectorAll('.page-number:not(.ellipsis)').forEach(el => {
+                    el.addEventListener('click', function () {
+                        const page = parseInt(this.dataset.page);
+                        if (!isNaN(page) && page !== currentPage) {
+                            goToPage(page);
+                        }
+                    });
+                });
             }
+        }
+
+        function generatePageNumbers(current, total) {
+            // Always show first, last, current, and pages around current
+            // Show ellipsis when there are gaps
+            const pages = [];
+            const delta = 1; // Number of pages to show on each side of current
+
+            if (total <= 7) {
+                // Show all pages if 7 or fewer
+                for (let i = 1; i <= total; i++) {
+                    pages.push(i);
+                }
+            } else {
+                // Always add first page
+                pages.push(1);
+
+                // Calculate range around current page
+                const rangeStart = Math.max(2, current - delta);
+                const rangeEnd = Math.min(total - 1, current + delta);
+
+                // Add ellipsis after first page if needed
+                if (rangeStart > 2) {
+                    pages.push('...');
+                }
+
+                // Add pages around current
+                for (let i = rangeStart; i <= rangeEnd; i++) {
+                    pages.push(i);
+                }
+
+                // Add ellipsis before last page if needed
+                if (rangeEnd < total - 1) {
+                    pages.push('...');
+                }
+
+                // Always add last page
+                pages.push(total);
+            }
+
+            return pages;
         }
 
         function goToPage(page) {
@@ -240,6 +350,44 @@
             }
         }
 
+        function startAutoUpdate() {
+            // Clear any existing interval
+            if (autoUpdateInterval) {
+                clearInterval(autoUpdateInterval);
+            }
+
+            // Check for new logs every 2 seconds when page is not full
+            autoUpdateInterval = setInterval(async () => {
+                // Only auto-update if we're on the last page and it's not full
+                if (currentPage === totalPages && logsData.length < pageSize) {
+                    try {
+                        const levels = Array.from(selectedLevels).join(',');
+                        const url = `/api/logs?page=${currentPage}&pageSize=${pageSize}${levels ? '&levels=' + levels : ''}`;
+
+                        const response = await fetch(url);
+                        if (response.ok) {
+                            const data = await response.json();
+                            const newTotalLogs = data.totalCount || 0;
+
+                            // If new logs are available, refresh
+                            if (newTotalLogs > totalLogs) {
+                                fetchLogs();
+                            }
+                        }
+                    } catch (error) {
+                        console.error('Error checking for new logs:', error);
+                    }
+                }
+            }, 2000);
+        }
+
+        function stopAutoUpdate() {
+            if (autoUpdateInterval) {
+                clearInterval(autoUpdateInterval);
+                autoUpdateInterval = null;
+            }
+        }
+
         function toggleAutoRefresh() {
             autoRefresh = !autoRefresh;
             const button = document.getElementById('auto-refresh-btn');
@@ -263,8 +411,20 @@
             // Initial fetch
             fetchLogs();
 
+            // Start auto-update for new logs
+            startAutoUpdate();
+
             // Auto-refresh toggle button
             document.getElementById('auto-refresh-btn').addEventListener('click', toggleAutoRefresh);
+
+            // Pagination buttons
+            document.getElementById('prev-page').addEventListener('click', function () {
+                goToPage(currentPage - 1);
+            });
+
+            document.getElementById('next-page').addEventListener('click', function () {
+                goToPage(currentPage + 1);
+            });
         });
 
         // Translate page size dropdown when i18n loads
@@ -299,6 +459,7 @@
             if (refreshInterval) {
                 clearInterval(refreshInterval);
             }
+            stopAutoUpdate();
         });
     </script>
     <script src="/js/icons.js"></script>
@@ -442,14 +603,14 @@
 
                 <!-- Pagination Controls -->
                 <div class="d-flex align-items-center justify-content-center mt-15 mb-15" style="gap: 10px;">
-                    <button id="prev-page" class="btn btn-sm btn-secondary" onclick="goToPage(currentPage - 1)"
-                        disabled>
-                        <i class="fa-solid fa-chevron-left"></i> <span data-i18n="runmode.logs.previous">Previous</span>
+                    <button id="prev-page" class="btn btn-sm btn-secondary" disabled title="Previous page">
+                        <i class="fa-solid fa-chevron-left"></i>
                     </button>
-                    <span class="text-muted" id="page-info">Page 1 of 1</span>
-                    <button id="next-page" class="btn btn-sm btn-secondary" onclick="goToPage(currentPage + 1)"
-                        disabled>
-                        <span data-i18n="runmode.logs.next">Next</span> <i class="fa-solid fa-chevron-right"></i>
+                    <div id="pagination-numbers" class="pagination-numbers">
+                        <!-- Page numbers will be populated by JavaScript -->
+                    </div>
+                    <button id="next-page" class="btn btn-sm btn-secondary" disabled title="Next page">
+                        <i class="fa-solid fa-chevron-right"></i>
                     </button>
                 </div>
             </div>

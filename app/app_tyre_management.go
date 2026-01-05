@@ -125,7 +125,7 @@ func (a *App) sendTyreTemperatureMessage(tyreCondition tyres.Condition) {
 func (a *App) logTyreTemperatureMessage(message string, tyreCondition tyres.Condition) {
 	tyreTemps := a.gtClient.Telemetry.TyreTemperatureCelsius()
 
-	a.log.Info().
+	a.log.Debug().
 		Str("message", message).
 		Int16("lap", a.state.current.lapNumber).
 		Str("condition", tyreCondition.String()).

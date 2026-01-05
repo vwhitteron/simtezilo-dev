@@ -167,9 +167,6 @@
         "runmode.logs.showing": "{start}-{end}件を表示（全{total}件）",
         "runmode.logs.perpage": "{count}件／ページ",
         "runmode.logs.filterlevels": "レベルフィルター",
-        "runmode.logs.previous": "前へ",
-        "runmode.logs.next": "次へ",
-        "runmode.logs.pageinfo": "{current}ページ／{total}ページ",
 
         "runmode.telemetry.chart.rpmspeed": "RPM / 速度",
         "runmode.telemetry.chart.throttlebrake": "スロットル / ブレーキ",

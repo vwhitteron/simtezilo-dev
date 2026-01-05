@@ -164,9 +164,6 @@
         "runmode.logs.showing": "Showing {start}-{end} of {total} logs",
         "runmode.logs.perpage": "{count} per page",
         "runmode.logs.filterlevels": "Filter Levels",
-        "runmode.logs.previous": "Previous",
-        "runmode.logs.next": "Next",
-        "runmode.logs.pageinfo": "Page {current} of {total}",
 
         "runmode.telemetry.chart.rpmspeed": "RPM / Speed",
         "runmode.telemetry.chart.throttlebrake": "Throttle / Brake",
