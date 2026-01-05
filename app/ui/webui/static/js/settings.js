@@ -539,10 +539,10 @@ class ConfigManager {
             this.showInputStatus(languageInput, 'success');
             this.previousValues.set('app.language', newLanguage);
 
-            // Reload with aggressive cache busting
+            // Reload after small delay
             setTimeout(() => {
                 window.location.reload(true);
-            }, 2000);
+            }, 250);
 
         } catch (error) {
             console.error('Failed to change language:', error);
