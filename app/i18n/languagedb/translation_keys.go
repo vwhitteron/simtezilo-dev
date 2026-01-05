@@ -44,7 +44,8 @@ const (
 	UIMenuInfo       Key = "ui.menu.info"
 
 	RadioOnline            Key = "radio.online"
-	RadioLapRecord         Key = "radio.laprecord"
+	RadioLapRecordFmt      Key = "radio.laprecordfmt"
+	RadioSlowerLapFmt      Key = "radio.slowerlapfmt"
 	RadioFuelRangeFmt      Key = "radio.fuelrangefmt"
 	RadioFuelPreWarnFmt    Key = "radio.fuelprewarnfmt"
 	RadioBoxThisLap        Key = "radio.boxthislap"

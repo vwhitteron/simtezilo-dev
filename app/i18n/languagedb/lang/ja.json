@@ -55,7 +55,8 @@
         "ui.menu.setupmode": "セットアップモード",
         
         "radio.online": "無線チェック",
-        "radio.laprecord": "最速ラップ",
+        "radio.laprecordfmt": "アップ %s。%s.",
+        "radio.slowerlapfmt": "ダウン %s",
         "radio.fuelrangefmt": "燃料範囲は%d周。残り%d周",
         "radio.fuelprewarnfmt": "%d周目に燃料補給",
         "radio.boxthislap": "ボックスこのラップ。ボックスボックスボックス",

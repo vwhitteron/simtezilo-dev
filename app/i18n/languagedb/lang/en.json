@@ -55,7 +55,8 @@
         "ui.menu.setupmode": "Setup Mode",
 
         "radio.online": "Radio check",
-        "radio.laprecord": "Lap record",
+        "radio.laprecordfmt": "Up %s. %s",
+        "radio.slowerlapfmt": "Down %s",
         "radio.fuelrangefmt": "Fuel range %d laps. %d laps remaining",
         "radio.fuelprewarnfmt": "Refuel on lap %d",
         "radio.boxthislap": "Box this lap. boxboxbox",

@@ -32,6 +32,7 @@ type gameState struct {
 	hapticsEnabled         bool           // Flag to indicate if haptics are enabled // TODO: move state to haptics?
 	telemetryActive        bool           // Flag to indicate if telemetry is active
 	sessionEnded           bool           // Flag to indicate if session end has been handled
+	bestLapTime            time.Duration  // Best lap time duration
 	raceComplete           bool           // Flag to indicate if race is complete
 	current                raceState      // Race state at the current telemetry sequence
 	last                   raceState      // Race state at the last telemetry sequence
@@ -59,6 +60,7 @@ func NewGameState(logger *zerolog.Logger) gameState { //nolint:revive // app is 
 func (g *gameState) ResetRaceComplete() {
 	if g.raceComplete {
 		g.raceComplete = false
+		g.bestLapTime = 0
 	}
 }
 

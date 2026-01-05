@@ -30,18 +30,26 @@ func (a *App) notifyLapTime() {
 	newLapRecord := secondLapCompleted && bestLapTimeSet && a.state.current.lastLapTime <= bestLapTime
 
 	delta := a.state.current.lastLapTime - bestLapTime
-	reportableDelta := secondLapCompleted && bestLapTimeSet && delta > 0 && delta <= maxNotifyDelta
+	reportableNegativeDelta := secondLapCompleted && bestLapTimeSet && delta > 0 && delta <= maxNotifyDelta
 
 	switch {
 	case firstLapCompleted:
 		message = formatDuration(a.state.current.lastLapTime)
+
+		a.state.bestLapTime = a.state.current.lastLapTime
 	case newLapRecord:
-		suffix := a.i18n.GetString(languagedb.RadioLapRecord)
+		format := a.i18n.GetString(languagedb.RadioLapRecordFmt)
+		delta := formatDeltaTime(a.state.bestLapTime - a.state.current.lastLapTime)
 		duration := formatDuration(a.state.current.lastLapTime)
 
-		message = duration + ". " + suffix
-	case reportableDelta:
-		message = formatDeltaTime(a.state.current.lastLapTime - bestLapTime)
+		message = fmt.Sprintf(format, delta, duration)
+
+		a.state.bestLapTime = bestLapTime
+	case reportableNegativeDelta:
+		format := a.i18n.GetString(languagedb.RadioSlowerLapFmt)
+		delta := formatDeltaTime(a.state.current.lastLapTime - bestLapTime)
+
+		message = fmt.Sprintf(format, delta)
 	default:
 		// Non-reportable lap time
 		return
@@ -325,11 +333,16 @@ func (a *App) shouldNotifyRaceProgress() bool {
 
 // formatDeltaTime formats a time delta for slower laps in tenths, hundredths, or thousandths.
 func formatDeltaTime(delta time.Duration) string {
-	seconds := delta.Seconds()
+	absSeconds := math.Abs(delta.Seconds())
+
+	var (
+		value float64
+		units string
+	)
 
 	switch {
-	case seconds >= 1.0:
-		rounded := math.Round(seconds*10) / 10
+	case absSeconds >= 1.0:
+		rounded := math.Round(absSeconds*10) / 10
 
 		unit := "seconds"
 		if rounded == 1.0 {
@@ -337,30 +350,44 @@ func formatDeltaTime(delta time.Duration) string {
 		}
 
 		if rounded == math.Floor(rounded) {
-			return fmt.Sprintf("down %.0f %s", rounded, unit)
+			return fmt.Sprintf("%.0f %s", rounded, unit)
 		}
 
-		return fmt.Sprintf("down %.1f %s", rounded, unit)
-	case seconds >= 0.1:
-		return pluraliseNegativeDelta(seconds*10, "tenth")
-	case seconds >= 0.01:
-		return pluraliseNegativeDelta(seconds*100, "hundredth")
+		return fmt.Sprintf("%.1f %s", rounded, unit)
+	case absSeconds >= 0.1:
+		value = delta.Seconds() * 10
+		units = "tenth"
+	case absSeconds >= 0.01:
+		value = delta.Seconds() * 100
+		units = "hundredth"
 	default:
-		return pluraliseNegativeDelta(float64(delta.Milliseconds()), "thou")
+		value = float64(delta.Milliseconds())
+		units = "thou"
 	}
+
+	return pluraliseDelta(roundDelta(value), units)
 }
 
-func pluraliseNegativeDelta(value float64, scale string) (format string) {
-	roundedValue := int(math.Ceil(value))
+// roundDelta rounds the delta value up or down based on whether it's faster or slower.
+func roundDelta(value float64) float64 {
+	if value < 0 {
+		return math.Abs(math.Floor(value))
+	}
 
-	format = "down " + strconv.Itoa(roundedValue) + " " + scale
+	return math.Abs(math.Ceil(value))
+}
+
+func pluraliseDelta(value float64, scale string) (format string) {
+	roundedValue := int(value)
+
+	format = strconv.Itoa(roundedValue) + " " + scale
 
 	// Thousandths do not get pluralised
 	if scale == "thou" {
 		return format
 	}
 
-	if value > 1 {
+	if roundedValue != 1 {
 		format += "s"
 	}
 
@@ -408,9 +435,9 @@ func pronounceTime(minutes string, seconds string, milliseconds string, includeU
 	}
 
 	announce = append(announce, seconds)
-	// if includeUnits {
-	announce = append(announce, "point")
-	// }
+	if includeUnits {
+		announce = append(announce, "point")
+	}
 
 	for _, r := range milliseconds {
 		char := string(r)
