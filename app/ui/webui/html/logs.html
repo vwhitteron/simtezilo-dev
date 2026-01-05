@@ -64,6 +64,7 @@
         let totalLogs = 0;
         let totalPages = 1;
         let selectedLevels = new Set(['error', 'warn', 'info', 'debug', 'trace']);
+        let expandedLogs = new Set(); // Track expanded log indices for current page
 
         function getLevelBadgeClass(level) {
             const levelMap = {
@@ -114,6 +115,7 @@
 
             if (detailsElement.style.display === 'none') {
                 detailsElement.style.display = 'block';
+                expandedLogs.add(index); // Track expanded state
                 if (typeof IconHelper !== 'undefined') {
                     IconHelper.replaceIcon(icon, 'chevron-down');
                 } else {
@@ -122,6 +124,7 @@
                 }
             } else {
                 detailsElement.style.display = 'none';
+                expandedLogs.delete(index); // Remove from expanded state
                 if (typeof IconHelper !== 'undefined') {
                     IconHelper.replaceIcon(icon, 'chevron-right');
                 } else {
@@ -156,12 +159,14 @@
                 return;
             }
 
-            logsContainer.innerHTML = logsData.map((log, index) => `
+            logsContainer.innerHTML = logsData.map((log, index) => {
+                const isExpanded = expandedLogs.has(index);
+                return `
                 <div class="card p-10" style="margin-bottom: 2px; font-size: 0.7rem;">
                     <div class="d-flex align-items-start">
                         ${hasAdditionalFields(log) ? `
                         <div class="text-center" style="width: 2ch; flex-shrink: 0; cursor: pointer;" onclick="toggleLogDetails(${index})" title="Expand/collapse details">
-                            <i id="log-icon-${index}" class="fa-solid fa-chevron-right text-muted" style="font-size: 0.6rem;"></i>
+                            <i id="log-icon-${index}" class="fa-solid ${isExpanded ? 'fa-chevron-down' : 'fa-chevron-right'} text-muted" style="font-size: 0.6rem;"></i>
                         </div>
                         ` : '<div style="width: 2ch; flex-shrink: 0;"></div>'}
                         <div class="font-monospace" style="width: 23ch; flex-shrink: 0; margin-left: 0.5em;">
@@ -175,12 +180,13 @@
                         </div>
                     </div>
                     ${hasAdditionalFields(log) ? `
-                    <div id="log-details-${index}" class="mt-10 ps-4 font-monospace" style="display: none; font-size: 0.65rem; border-left: 2px solid rgba(255,255,255,0.1); padding-left: 1em;">
+                    <div id="log-details-${index}" class="mt-10 ps-4 font-monospace" style="display: ${isExpanded ? 'block' : 'none'}; font-size: 0.65rem; border-left: 2px solid rgba(255,255,255,0.1); padding-left: 1em;">
                         ${formatLogDetails(log)}
                     </div>
                     ` : ''}
                 </div>
-            `).join('');
+            `;
+            }).join('');
 
             // Replace Font Awesome icons with SVG icons for dynamically rendered log entries
             if (typeof IconHelper !== 'undefined') {
@@ -188,7 +194,8 @@
                     if (hasAdditionalFields(log)) {
                         const iconElement = document.getElementById(`log-icon-${index}`);
                         if (iconElement) {
-                            IconHelper.replaceIcon(iconElement, 'chevron-right');
+                            const isExpanded = expandedLogs.has(index);
+                            IconHelper.replaceIcon(iconElement, isExpanded ? 'chevron-down' : 'chevron-right');
                         }
                     }
                 });
@@ -301,12 +308,14 @@
         function goToPage(page) {
             if (page < 1 || page > totalPages) return;
             currentPage = page;
+            expandedLogs.clear(); // Clear expanded state when navigating to a new page
             fetchLogs();
         }
 
         function changePageSize(newSize) {
             pageSize = parseInt(newSize);
             currentPage = 1; // Reset to first page when changing page size
+            expandedLogs.clear(); // Clear expanded state when changing page size
             fetchLogs();
         }
 
@@ -318,6 +327,7 @@
                 selectedLevels.delete(level);
             }
             currentPage = 1; // Reset to first page when filter changes
+            expandedLogs.clear(); // Clear expanded state when filter changes
             fetchLogs();
         }
 
