@@ -14,8 +14,9 @@ import (
 
 // LanguageMetadata holds the metadata for a language.
 type LanguageMetadata struct {
-	Code string `json:"Code"`
-	Name string `json:"Name"`
+	Code           string `json:"Code"`
+	DefaultCountry string `json:"DefaultCountry"`
+	Name           string `json:"Name"`
 }
 
 // languageFont holds the font file name and size for a language.

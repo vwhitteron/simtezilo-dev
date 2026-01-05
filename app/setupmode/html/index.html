@@ -831,6 +831,8 @@
         <script>
             // Global i18n object to store translations
             let i18n = null;
+            // Store language metadata including default countries
+            let languageMetadata = {};
 
             // Detect browser language and match with available languages
             function detectBrowserLanguage(availableLanguages) {
@@ -884,6 +886,12 @@
                             option.selected = true;
                         }
                         languageSelect.appendChild(option);
+
+                        // Store language metadata including default country
+                        languageMetadata[lang.code] = {
+                            name: lang.name,
+                            defaultCountry: lang.defaultCountry
+                        };
                     });
 
                     // Enable continue button if a language is selected
@@ -1533,6 +1541,10 @@
                 // Get security type from the security type dropdown (same for both modes)
                 const security = securityTypeSelect.value;
 
+                // Get selected language and its default country
+                const selectedLanguage = languageSelect.value;
+                const defaultCountry = languageMetadata[selectedLanguage]?.defaultCountry || '';
+
                 const formData = new FormData();
                 formData.append('ssid', ssid);
                 formData.append('password', document.getElementById('password').value);
@@ -1542,6 +1554,8 @@
                 formData.append('prefix', document.getElementById('prefix').value);
                 formData.append('gateway', document.getElementById('gateway').value);
                 formData.append('dns', document.getElementById('dns').value);
+                formData.append('language', selectedLanguage);
+                formData.append('accent', defaultCountry);
 
                 fetch('/api/config/save', {
                     method: 'POST',

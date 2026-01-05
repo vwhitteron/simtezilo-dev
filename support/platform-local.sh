@@ -5,17 +5,17 @@ SETUPMODEFLAG="/opt/simtezilo/etc/setupmode"
 function handle_usage() {
     echo 'Usage: /opt/simtezilo/bin/setup <command>'
     echo 'Commands:'
-    echo '  access       Provide the network access detaisl for the setup mode network'
-    echo '  disable      Disable setup mode flag'
-    echo '  enable       Enable setup mode flag'
-    echo '  init         Initialize setup mode connection if not present'
-    echo '  mode-run     Enter run mode'
-    echo '  mode-setup   Enter setup mode'
-    echo '  provision    Provision network connection'
-    echo '  reset        Delete all connections and reinitialize setup mode'
-    echo '  scan         Scan for available WiFi networks'
-    echo '  status       Check current environment status'
-    echo '  version      Print version information'
+    echo '  init            Initialize setup mode connection if not present'
+    echo '  mode-run        Enter run mode'
+    echo '  mode-setup      Enter setup mode'
+    echo '  reset           Delete all connections and reinitialize setup mode'
+    echo '  setup-disable   Disable setup mode flag'
+    echo '  setup-enable    Enable setup mode flag'
+    echo '  status          Check current environment status'
+    echo '  version         Print version information'
+    echo '  wifi-access     Provide the network access detaisl for the setup mode network'
+    echo '  wifi-provision  Provision network connection'
+    echo '  wifi-scan       Scan for available WiFi networks'
     echo
     echo 'provision takes JSON on stdin with the following format:'
     echo '[{'
@@ -73,15 +73,6 @@ function handle_status() {
 action=$1
 
 case $action in
- 	"access")
-        handle_access
-        ;;
- 	"disable")
- 		handle_disable
- 		;;
- 	"enable")
- 		handle_enable
- 		;;
     "init")
         return_success
         ;;
@@ -91,21 +82,30 @@ case $action in
     "mode-setup")
         return_success
         ;;
-    "provision")
-        handle_provision
-        ;;
     "reset")
         return_success
         ;;
-    "scan")
-        handle_scan
-        ;;
+ 	"setup-disable")
+ 		handle_disable
+ 		;;
+ 	"setup-enable")
+ 		handle_enable
+ 		;;
  	"status")
  		handle_status
  		;;
  	"version")
  		handle_version
  		;;
+ 	"wifi-access")
+        handle_access
+        ;;
+    "wifi-provision")
+        handle_provision
+        ;;
+    "wifi-scan")
+        handle_scan
+        ;;
  	*)
  		handle_usage
  		;;

@@ -10,6 +10,7 @@ class ConfigManager {
         this.statusCheckInterval = null; // Interval for checking config status
         this.isInitializing = true; // Flag to prevent saves during initial load
         this.isPopulating = false; // Flag to prevent saves during form population
+        this.languageMetadata = {}; // Store language metadata including default countries
         this.init();
     }
 
@@ -29,24 +30,8 @@ class ConfigManager {
 
     // Initialize advanced settings toggle
     initAdvancedToggle() {
-        const advancedSettings = document.getElementById('advancedSettings');
-        const advancedChevron = document.getElementById('advanced-settings-chevron');
-
-        if (advancedSettings && advancedChevron) {
-            // Listen to Bootstrap collapse events to rotate chevron
-            advancedSettings.addEventListener('show.bs.collapse', () => {
-                advancedChevron.style.transform = 'rotate(90deg)';
-            });
-
-            advancedSettings.addEventListener('hide.bs.collapse', () => {
-                advancedChevron.style.transform = 'rotate(0deg)';
-            });
-        } else {
-            console.error('Advanced settings or chevron not found:', {
-                settings: !!advancedSettings,
-                chevron: !!advancedChevron
-            });
-        }
+        // Advanced settings toggles are handled in the HTML file
+        // (advancedSettingsSynth and advancedSettingsHaptics)
     }
 
     async checkHardwarePlatform() {
@@ -165,12 +150,18 @@ class ConfigManager {
                 // Sort languages alphabetically by name
                 languages.sort((a, b) => a.name.localeCompare(b.name));
 
-                // Populate language select with fetched languages
+                // Populate language select with fetched languages and store metadata
                 languages.forEach(lang => {
                     const option = document.createElement('option');
                     option.value = lang.code;
                     option.textContent = lang.name;
                     languageSelect.appendChild(option);
+
+                    // Store language metadata including default country
+                    this.languageMetadata[lang.code] = {
+                        name: lang.name,
+                        defaultCountry: lang.defaultCountry
+                    };
                 });
             }
         } catch (error) {
@@ -491,14 +482,19 @@ class ConfigManager {
 
     async handleLanguageChange(newLanguage) {
         const languageInput = document.getElementById('app-language');
+        const accentInput = document.getElementById('app-accent');
 
         try {
             // Show saving indicator
             this.showInputStatus(languageInput, 'saving');
 
-            // Build the config update with just the language change
+            // Get the default country for the selected language
+            const defaultCountry = this.languageMetadata[newLanguage]?.defaultCountry || '';
+
+            // Build the config update with language and accent changes
             const formData = {};
             this.setNestedValue(formData, 'app.language', newLanguage);
+            this.setNestedValue(formData, 'app.accent', defaultCountry);
 
             // Update in-memory config
             const updateResponse = await fetch('/api/config', {
@@ -521,6 +517,7 @@ class ConfigManager {
                 const verifyResponse = await fetch('/api/config?t=' + Date.now());
                 if (verifyResponse.ok) {
                     const config = await verifyResponse.json();
+                    // Verify language changed (accent will be updated but may still show default on first read)
                     if (config.app && config.app.language === newLanguage) {
                         verified = true;
                         break;
@@ -538,6 +535,7 @@ class ConfigManager {
             // Show success briefly before reload
             this.showInputStatus(languageInput, 'success');
             this.previousValues.set('app.language', newLanguage);
+            this.previousValues.set('app.accent', defaultCountry);
 
             // Reload after small delay
             setTimeout(() => {
@@ -580,12 +578,6 @@ class ConfigManager {
             }
 
             this.config = await response.json();
-
-            // Debug logging
-            console.log('[DEBUG] Loaded configuration:', {
-                synthesizer: this.config.synthesizer,
-                pitRadio: this.config.pitRadio
-            });
 
             this.populateForm();
             // Configuration loaded successfully (no need to show indicator)
@@ -949,7 +941,6 @@ class ConfigManager {
             const response = await fetch('/api/system/info');
             if (response.ok) {
                 const result = await response.json();
-                console.log('Setup mode availability:', result.setupModeAvailable);
                 if (result.setupModeAvailable) {
                     // Show setup mode and factory reset buttons
                     const setupBtn = document.getElementById('setup-mode');

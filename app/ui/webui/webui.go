@@ -2179,15 +2179,17 @@ func (w *WebUI) handleLanguagesAPI(response http.ResponseWriter, request *http.R
 
 	// Build response as array of language objects
 	type languageInfo struct {
-		Code string `json:"code"` //nolint:tagliatelle // lowercase for interface simpicity
-		Name string `json:"name"` //nolint:tagliatelle
+		Code           string `json:"code"`           //nolint:tagliatelle // lowercase for interface simpicity
+		Name           string `json:"name"`           //nolint:tagliatelle
+		DefaultCountry string `json:"defaultCountry"` //nolint:tagliatelle
 	}
 
 	languages := make([]languageInfo, 0, len(languagesMap))
 	for code, metadata := range languagesMap {
 		languages = append(languages, languageInfo{
-			Code: code,
-			Name: metadata.Name,
+			Code:           code,
+			Name:           metadata.Name,
+			DefaultCountry: metadata.DefaultCountry,
 		})
 	}
 

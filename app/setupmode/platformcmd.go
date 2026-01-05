@@ -40,17 +40,17 @@ const (
 type CmdAction string
 
 const (
-	CmdActionSetupEnable   CmdAction = "setup-enable"
-	CmdActionSetupDisable  CmdAction = "setup-disable"
 	CmdActionInit          CmdAction = "init"
 	CmdActionModeRun       CmdAction = "mode-run"
 	CmdActionModeSetup     CmdAction = "mode-setup"
 	CmdActionReset         CmdAction = "reset"
+	CmdActionSetupEnable   CmdAction = "setup-enable"
+	CmdActionSetupDisable  CmdAction = "setup-disable"
 	CmdActionStatus        CmdAction = "status"
+	CmdActionVersion       CmdAction = "version"
 	CmdActionWifiAccess    CmdAction = "wifi-access"
 	CmdActionWifiScan      CmdAction = "wifi-scan"
 	CmdActionWifiProvision CmdAction = "wifi-provision"
-	CmdActionVersion       CmdAction = "version"
 )
 
 // CmdResponse represents a response from the setup CLI tool.

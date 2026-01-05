@@ -222,15 +222,17 @@ func handleAPIGetLanguages(writer http.ResponseWriter, _ *http.Request, logger *
 
 	// Build response as array of language objects
 	type languageInfo struct {
-		Code string `json:"code"` //nolint:tagliatelle
-		Name string `json:"name"` //nolint:tagliatelle
+		Code           string `json:"code"`           //nolint:tagliatelle
+		Name           string `json:"name"`           //nolint:tagliatelle
+		DefaultCountry string `json:"defaultCountry"` //nolint:tagliatelle
 	}
 
 	languages := make([]languageInfo, 0, len(languagesMap))
 	for code, metadata := range languagesMap {
 		languages = append(languages, languageInfo{
-			Code: code,
-			Name: metadata.Name,
+			Code:           code,
+			Name:           metadata.Name,
+			DefaultCountry: metadata.DefaultCountry,
 		})
 	}
 
@@ -337,6 +339,34 @@ func (s *SetupMode) handleAPIConfigSave(writer http.ResponseWriter, request *htt
 
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
+
+	// Save language and accent to config if provided
+	language := request.FormValue("language")
+	accent := request.FormValue("accent")
+
+	if language != "" {
+		s.config.SetAppLanguage(language)
+		s.log.Info().Str("language", language).Msg("Language set")
+	}
+
+	if accent != "" {
+		s.config.SetAppAccent(accent)
+		s.log.Info().Str("accent", accent).Msg("Accent set")
+	}
+
+	// Save config to file to persist language and accent changes
+	if language != "" || accent != "" {
+		err := s.config.SaveConfigToFile()
+		if err != nil {
+			s.log.Error().Err(err).Msg("Failed to save config file")
+			writer.Header().Set("Content-Type", "application/json")
+			fmt.Fprintf(writer, `{"success":false,"error":"Failed to save language settings: %v"}`, err)
+
+			return
+		}
+
+		s.log.Info().Msg("Language and accent saved to config file")
+	}
 
 	err := s.saveNetworkConfiguration(
 		ctx,
