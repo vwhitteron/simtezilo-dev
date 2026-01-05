@@ -475,9 +475,11 @@
                                     <div class="input-group mb-3">
                                         <input type="text" id="telemetry-source" class="form-control"
                                             data-config="telemetry.source" placeholder="udp://255.255.255.255:33739">
-                                        <button type="button" class="btn btn-primary rounded-end"
-                                            id="telemetry-auto-btn"
+                                        <button type="button" class="btn btn-secondary" id="telemetry-auto-btn"
                                             data-i18n="runmode.settings.telemetry.auto">Auto</button>
+                                        <button type="button" class="btn btn-secondary rounded-end"
+                                            id="telemetry-demo-btn"
+                                            data-i18n="runmode.settings.telemetry.demo">Demo</button>
                                     </div>
                                 </div>
                             </div>
@@ -1319,7 +1321,7 @@
                                 <div class="col-12">
                                     <div class="form-check form-switch">
                                         <input type="checkbox" class="form-check-input" id="fuel-enabled"
-                                            data-config="pitRadio.fuelMonitoring.monitoringEnabled" role="switch">
+                                            data-config="pitRadio.fuelMonitoring.enabled" role="switch">
                                         <label class="form-check-label" for="fuel-enabled"
                                             data-i18n="runmode.settings.fuel.enabled">Enable</label>
                                     </div>
@@ -1506,12 +1508,69 @@
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                 }
             }
+            // Function to update telemetry button styles based on input value
+            function updateTelemetryButtonStyles() {
+                const input = document.getElementById('telemetry-source');
+                const autoBtn = document.getElementById('telemetry-auto-btn');
+                const demoBtn = document.getElementById('telemetry-demo-btn');
+
+                if (!input || !autoBtn || !demoBtn) return;
+
+                const baseDir = window.configManager?.config?.app?.baseDir || '';
+                const autoValue = 'udp://255.255.255.255:33739';
+                const demoValue = `file://${baseDir}/data/replays/demo.gtz`;
+                const currentValue = input.value;
+
+                // Update auto button
+                if (currentValue === autoValue) {
+                    autoBtn.classList.remove('btn-secondary');
+                    autoBtn.classList.add('btn-primary');
+                } else {
+                    autoBtn.classList.remove('btn-primary');
+                    autoBtn.classList.add('btn-secondary');
+                }
+
+                // Update demo button
+                if (currentValue === demoValue) {
+                    demoBtn.classList.remove('btn-secondary');
+                    demoBtn.classList.add('btn-primary');
+                } else {
+                    demoBtn.classList.remove('btn-primary');
+                    demoBtn.classList.add('btn-secondary');
+                }
+            }
+
             // Telemetry auto-fill button
-            document.getElementById('telemetry-auto-btn')?.addEventListener('click', function () {
+            document.getElementById('telemetry-auto-btn')?.addEventListener('click', async function () {
                 const input = document.getElementById('telemetry-source');
                 input.value = 'udp://255.255.255.255:33739';
                 input.dispatchEvent(new Event('change', { bubbles: true }));
+                updateTelemetryButtonStyles();
+                // Save immediately
+                if (window.configManager) {
+                    await window.configManager.saveInputConfiguration(input);
+                }
             });
+
+            // Telemetry demo-fill button
+            document.getElementById('telemetry-demo-btn')?.addEventListener('click', async function () {
+                const input = document.getElementById('telemetry-source');
+                const baseDir = window.configManager?.config?.app?.baseDir || '';
+                input.value = `file://${baseDir}/data/replays/demo.gtz`;
+                input.dispatchEvent(new Event('change', { bubbles: true }));
+                updateTelemetryButtonStyles();
+                // Save immediately
+                if (window.configManager) {
+                    await window.configManager.saveInputConfiguration(input);
+                }
+            });
+
+            // Update button styles when input changes
+            document.getElementById('telemetry-source')?.addEventListener('input', updateTelemetryButtonStyles);
+            document.getElementById('telemetry-source')?.addEventListener('change', updateTelemetryButtonStyles);
+
+            // Initial button style update (call after config is loaded)
+            setTimeout(updateTelemetryButtonStyles, 500);
 
             // Cache info and clear functionality
             function fetchCacheSize() {

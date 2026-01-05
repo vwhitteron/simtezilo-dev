@@ -40,7 +40,7 @@ type discord struct {
 }
 
 type fuelMonitoring struct {
-	Enabled                 bool    `toml:"monitoringEnabled"`
+	Enabled                 bool    `toml:"enabled"`
 	PreWarnNotifyLaps       float64 `toml:"preWarnNotifyLaps"`
 	StrategyNotifyLaps      float64 `toml:"strategyNotifyLaps"`
 	RangeSafetyMarginLaps   float64 `toml:"rangeSafetyMarginLaps"`

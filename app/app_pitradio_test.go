@@ -140,7 +140,7 @@ func createBasicConfig() *config.Config {
 		"pitRadio": {
 			"enabled": true,
 			"fuelMonitoring": {
-				"monitoringEnabled": true,
+				"enabled": true,
 				"rangeSafetyMarginLaps": 0.3,
 				"preWarnNotifyLaps": 2.0,
 				"strategyNotifyLaps": 5.0

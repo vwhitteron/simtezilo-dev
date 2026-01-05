@@ -869,7 +869,7 @@ func (w *WebUI) handleGetConfig(response http.ResponseWriter, _ *http.Request) {
 				"circuitMatchingEnabled":  w.config.GetPitRadioNotifyCircuitMatchingEnabled(),
 			},
 			"fuelMonitoring": map[string]any{
-				"monitoringEnabled":       w.config.GetPitRadioFuelMonitoringEnabled(),
+				"enabled":                 w.config.GetPitRadioFuelMonitoringEnabled(),
 				"preWarnNotifyLaps":       w.config.GetPitRadioFuelPreWarnNotifyLaps(),
 				"strategyNotifyLaps":      w.config.GetPitRadioFuelStrategyNotifyLaps(),
 				"rangeSafetyMarginLaps":   w.config.GetPitRadioFuelRangeSafetyMarginLaps(),
@@ -1470,7 +1470,7 @@ func (w *WebUI) checkRestartRequired(configData map[string]any) bool {
 func (w *WebUI) applyFuelConfig(config map[string]any) []string {
 	var errors []string
 
-	if monitoringEnabled, ok := config["monitoringEnabled"]; ok {
+	if monitoringEnabled, ok := config["enabled"]; ok {
 		if enabledBool, ok := monitoringEnabled.(bool); ok {
 			w.config.SetPitRadioFuelMonitoringEnabled(enabledBool)
 		} else {
@@ -1758,7 +1758,7 @@ func (w *WebUI) applyPitRadioConfig(config map[string]any) []string {
 func (w *WebUI) applyTyresConfig(config map[string]any) []string {
 	var errors []string
 
-	if monitoringEnabled, ok := config["monitoringEnabled"]; ok {
+	if monitoringEnabled, ok := config["enabled"]; ok {
 		if enabledBool, ok := monitoringEnabled.(bool); ok {
 			w.config.SetPitRadioTyreMonitoringEnabled(enabledBool)
 		} else {
