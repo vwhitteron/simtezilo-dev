@@ -52,7 +52,7 @@ func (a *App) shouldNotifyPositionChange() bool {
 		return false
 	}
 
-	if a.gtClient.Telemetry.RaceLaps() <= 0 {
+	if a.gtClient.Telemetry.RaceLaps() < 0 {
 		return false
 	}
 

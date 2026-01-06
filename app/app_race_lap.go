@@ -208,10 +208,10 @@ func (a *App) determineLapMessage(info lapNotificationInfo) string {
 		format := a.i18n.GetString(languagedb.RadioLapsRemainingFmt)
 
 		return fmt.Sprintf(format, info.lapsRemaining)
-	case info.currentLap <= 1:
-		return ""
-	default:
+	case info.currentLap > 1:
 		return fmt.Sprintf("Lap %d", info.currentLap)
+	default:
+		return ""
 	}
 }
 
