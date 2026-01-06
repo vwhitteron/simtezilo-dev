@@ -10,7 +10,9 @@ const IconHelper = {
         }
 
         try {
-            const response = await fetch(`/images/icons/${name}.svg?v=${Date.now()}`);
+            // Strip 'fa-' prefix from the filename if present
+            const filename = name.startsWith('fa-') ? name.substring(3) : name;
+            const response = await fetch(`/images/icons/${filename}.svg?v=${Date.now()}`);
             if (!response.ok) {
                 console.error(`Failed to load icon: ${name}`);
                 return null;
@@ -70,58 +72,9 @@ const IconHelper = {
         }
     },
 
-    // Preload common icons
+    // Preload common icons (optional - can be called to eagerly load specific icons)
     async preloadIcons(iconNames) {
         const promises = iconNames.map(name => this.loadIcon(name));
         await Promise.all(promises);
     }
 };
-
-// Preload commonly used icons
-IconHelper.preloadIcons([
-    'arrows-left-right-to-line',
-    'arrows-rotate',
-    'box-open',
-    'bullseye',
-    'car-burst',
-    'caret-square-right',
-    'chart-simple',
-    'check-circle-regular',
-    'chevron-down',
-    'chevron-left',
-    'chevron-right',
-    'circle-check',
-    'circle-left-regular',
-    'circle-notch',
-    'circle-question',
-    'circle-right-regular',
-    'circle-xmark-regular',
-    'circle-xmark',
-    'discord',
-    'explosion',
-    'eye-slash',
-    'eye',
-    'file-code',
-    'filter',
-    'gas-pump',
-    'gauge-high',
-    'gear',
-    'gears',
-    'language',
-    'message',
-    'microchip',
-    'power-off',
-    'right-from-bracket',
-    'right-to-bracket',
-    'rotate-left',
-    'sliders',
-    'square-minus-regular',
-    'square-plus-regular',
-    'tools',
-    'volume-high',
-    'volume-up',
-    'volume-xmark',
-    'walkie-talkie',
-    'wave-square',
-    'wifi'
-]);

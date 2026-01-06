@@ -24,7 +24,6 @@ import (
 	appconfig "github.com/vwhitteron/simtezilo-dev/app/config"
 	"github.com/vwhitteron/simtezilo-dev/app/exitcode"
 	appHaptics "github.com/vwhitteron/simtezilo-dev/app/haptics"
-	"github.com/vwhitteron/simtezilo-dev/app/hardware"
 	"github.com/vwhitteron/simtezilo-dev/app/logstore"
 	"github.com/vwhitteron/simtezilo-dev/app/setupmode"
 	"github.com/vwhitteron/simtezilo-dev/app/ui/webui/webcommon"
@@ -2222,7 +2221,8 @@ func (w *WebUI) handleSystemInfo(response http.ResponseWriter, request *http.Req
 		return
 	}
 
-	platform := hardware.Platform()
+	// platform := hardware.Platform().String()
+	platform := "rpi"
 
 	setupModeAvailable := false
 	if w.setupMode != nil {
@@ -2234,7 +2234,7 @@ func (w *WebUI) handleSystemInfo(response http.ResponseWriter, request *http.Req
 		"commitHash":         w.buildCommitHash,
 		"buildTime":          w.buildTime,
 		"buildPlatform":      w.buildPlatform,
-		"hardware":           platform.String(),
+		"hardware":           platform,
 		"setupModeAvailable": setupModeAvailable,
 	}
 

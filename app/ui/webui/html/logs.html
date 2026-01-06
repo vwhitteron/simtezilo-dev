@@ -117,7 +117,7 @@
                 detailsElement.style.display = 'block';
                 expandedLogs.add(index); // Track expanded state
                 if (typeof IconHelper !== 'undefined') {
-                    IconHelper.replaceIcon(icon, 'chevron-down');
+                    IconHelper.replaceIcon(icon, 'fa-chevron-down');
                 } else {
                     icon.classList.remove('fa-chevron-right');
                     icon.classList.add('fa-chevron-down');
@@ -126,7 +126,7 @@
                 detailsElement.style.display = 'none';
                 expandedLogs.delete(index); // Remove from expanded state
                 if (typeof IconHelper !== 'undefined') {
-                    IconHelper.replaceIcon(icon, 'chevron-right');
+                    IconHelper.replaceIcon(icon, 'fa-chevron-right');
                 } else {
                     icon.classList.remove('fa-chevron-down');
                     icon.classList.add('fa-chevron-right');
@@ -195,7 +195,7 @@
                         const iconElement = document.getElementById(`log-icon-${index}`);
                         if (iconElement) {
                             const isExpanded = expandedLogs.has(index);
-                            IconHelper.replaceIcon(iconElement, isExpanded ? 'chevron-down' : 'chevron-right');
+                            IconHelper.replaceIcon(iconElement, isExpanded ? 'fa-chevron-down' : 'fa-chevron-right');
                         }
                     }
                 });
@@ -633,11 +633,11 @@
             if (typeof IconHelper !== 'undefined') {
                 // Map Font Awesome classes to SVG icon names
                 const iconMap = {
-                    'fa-chevron-right': 'chevron-right',
-                    'fa-chevron-down': 'chevron-down',
-                    'fa-chevron-left': 'chevron-left',
-                    'fa-filter': 'filter',
-                    'fa-arrows-rotate': 'arrows-rotate'
+                    'fa-chevron-right': 'fa-chevron-right',
+                    'fa-chevron-down': 'fa-chevron-down',
+                    'fa-chevron-left': 'fa-chevron-left',
+                    'fa-filter': 'fa-filter',
+                    'fa-arrows-rotate': 'fa-arrows-rotate'
                 };
 
                 // Find all Font Awesome icons

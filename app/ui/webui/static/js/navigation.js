@@ -262,13 +262,13 @@ document.addEventListener('DOMContentLoaded', function () {
 
         // Initialize navigation icons
         if (typeof IconHelper !== 'undefined') {
-            IconHelper.loadIcon('circle-check').then(svg => {
+            IconHelper.loadIcon('fa-circle-check').then(svg => {
                 const successIcon = document.getElementById('nav-success-icon');
                 if (successIcon && svg) {
                     successIcon.innerHTML = svg;
                 }
             });
-            IconHelper.loadIcon('circle-xmark').then(svg => {
+            IconHelper.loadIcon('fa-circle-xmark').then(svg => {
                 const errorIcon = document.getElementById('nav-error-icon');
                 if (errorIcon && svg) {
                     errorIcon.innerHTML = svg;

@@ -669,13 +669,13 @@ class ConfigManager {
         const icon = document.querySelector(`[data-mute-checkbox="${checkbox.id}"]`);
         if (icon && typeof IconHelper !== 'undefined') {
             if (checkbox.checked) {
-                const svg = await IconHelper.loadIcon('volume-xmark');
+                const svg = await IconHelper.loadIcon('fa-volume-xmark');
                 if (svg) {
                     icon.innerHTML = svg;
                 }
                 icon.style.color = '#dc3545';
             } else {
-                const svg = await IconHelper.loadIcon('volume-high');
+                const svg = await IconHelper.loadIcon('fa-volume-high');
                 if (svg) {
                     icon.innerHTML = svg;
                 }

@@ -368,7 +368,7 @@
             <div class="col-12 mb-3 d-lg-none">
                 <select id="sectionSelect" class="form-select">
                     <option value="application" selected>Application</option>
-                    <option value="hardware">Hardware</option>
+                    <option value="system">System</option>
                     <option value="synthesizer">Synthesizer</option>
                     <option value="haptics">Haptics</option>
                     <option value="pitradio">Pit Radio</option>
@@ -387,9 +387,9 @@
                                 </a>
                             </li>
                             <li class="settings-nav-item">
-                                <a class="settings-nav-link" data-section="hardware">
-                                    <span class="icon" data-icon="microchip"></span>
-                                    <span data-i18n="runmode.settings.hardware.title">Hardware</span>
+                                <a class="settings-nav-link" data-section="system">
+                                    <span class="icon" data-icon="layer-group"></span>
+                                    <span data-i18n="runmode.settings.system.title">System</span>
                                 </a>
                             </li>
                             <li class="settings-nav-item">
@@ -497,7 +497,7 @@
                             </div>
 
                             <h5 class="mt-5 mb-3"><span class="icon" data-icon="power-off"></span><span
-                                    data-i18n="runmode.settings.system.title">System</span></h5>
+                                    data-i18n="runmode.settings.control.title">Control</span></h5>
                             <div class="row mb-3">
                                 <div class="col-12">
                                     <div class="d-flex align-items-center gap-2">
@@ -511,18 +511,18 @@
                             </div>
                             <div class="d-flex gap-2 flex-wrap">
                                 <button id="restart-app" class="btn btn-outline-secondary"><span
-                                        data-i18n="runmode.settings.system.restart">Restart</span></button>
+                                        data-i18n="runmode.settings.control.restart">Restart</span></button>
                                 <button id="setup-mode" class="btn btn-outline-primary" style="display: none;"><span
-                                        data-i18n="runmode.settings.system.setupmode">Enter Setup Mode</span></button>
+                                        data-i18n="runmode.settings.control.setupmode">Enter Setup Mode</span></button>
                                 <button id="factory-reset" class="btn btn-outline-danger" style="display: none;"><span
-                                        data-i18n="runmode.settings.system.factoryreset">Factory Reset</span></button>
+                                        data-i18n="runmode.settings.control.factoryreset">Factory Reset</span></button>
                             </div>
                         </div>
                     </div>
                 </div>
 
                 <!-- Hardware Settings -->
-                <div class="settings-section-card" data-section-content="hardware">
+                <div class="settings-section-card" data-section-content="system">
                     <div class="card mb-3" id="hardware-settings-card">
                         <div class="card-body">
                             <h5 class="mb-3"><span class="icon" data-icon="microchip"></span><span
@@ -1358,7 +1358,7 @@
                             </div>
 
                             <!-- Tyre Monitoring -->
-                            <h5 class="mt-5 mb-3"><i class="fa-solid fa-circle-notch me-2"></i><span
+                            <h5 class="mt-5 mb-3"><i class="fa-solid fa-circle-dot me-2"></i><span
                                     data-i18n="runmode.settings.tyres.title">Tyre Management</span></h5>
                             <div class="row g-3">
                                 <div class="col-12">
@@ -1739,16 +1739,16 @@
             if (typeof IconHelper !== 'undefined') {
                 // Map Font Awesome classes to SVG icon names
                 const iconMap = {
-                    'fa-circle-question': 'circle-question',
-                    'fa-volume-high': 'volume-high',
-                    'fa-volume-xmark': 'volume-xmark',
-                    'fa-chevron-right': 'chevron-right',
-                    'fa-chevron-down': 'chevron-down',
-                    'fa-rotate-left': 'rotate-left',
-                    'fa-gas-pump': 'gas-pump',
-                    'fa-message': 'message',
-                    'fa-discord': 'discord',
-                    'fa-circle-notch': 'circle-notch'
+                    'fa-circle-question': 'fa-circle-question',
+                    'fa-volume-high': 'fa-volume-high',
+                    'fa-volume-xmark': 'fa-volume-xmark',
+                    'fa-chevron-right': 'fa-chevron-right',
+                    'fa-chevron-down': 'fa-chevron-down',
+                    'fa-rotate-left': 'fa-rotate-left',
+                    'fa-gas-pump': 'fa-gas-pump',
+                    'fa-message': 'fa-message',
+                    'fa-discord': 'fa-discord',
+                    'fa-circle-dot': 'fa-circle-dot'
                 };
 
                 // Find all Font Awesome icons
@@ -1783,19 +1783,19 @@
 
         if (advancedSettingsSynth && chevronSynth) {
             advancedSettingsSynth.addEventListener('show.bs.collapse', function () {
-                IconHelper.replaceIcon(chevronSynth, 'chevron-down');
+                IconHelper.replaceIcon(chevronSynth, 'fa-chevron-down');
             });
             advancedSettingsSynth.addEventListener('hide.bs.collapse', function () {
-                IconHelper.replaceIcon(chevronSynth, 'chevron-right');
+                IconHelper.replaceIcon(chevronSynth, 'fa-chevron-right');
             });
         }
 
         if (advancedSettingsHaptics && chevronHaptics) {
             advancedSettingsHaptics.addEventListener('show.bs.collapse', function () {
-                IconHelper.replaceIcon(chevronHaptics, 'chevron-down');
+                IconHelper.replaceIcon(chevronHaptics, 'fa-chevron-down');
             });
             advancedSettingsHaptics.addEventListener('hide.bs.collapse', function () {
-                IconHelper.replaceIcon(chevronHaptics, 'chevron-right');
+                IconHelper.replaceIcon(chevronHaptics, 'fa-chevron-right');
             });
         }
     </script>
