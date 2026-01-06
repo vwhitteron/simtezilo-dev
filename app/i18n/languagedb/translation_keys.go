@@ -366,6 +366,15 @@ const (
 	RunmodeSettingsSystemCalibrationChannelRight     Key = "runmode.settings.system.calibration.channel.right"
 	RunmodeSettingsSystemCalibrationHint             Key = "runmode.settings.system.calibration.hint"
 
+	// Run Mode - Settings System Access.
+	RunmodeSettingsSystemSSHAccessTitle            Key = "runmode.settings.system.sshaccess.title"
+	RunmodeSettingsSystemSSHAccessEnabled          Key = "runmode.settings.system.sshaccess.enabled"
+	RunmodeSettingsSystemSSHAccessEnabledTooltip   Key = "runmode.settings.system.sshaccess.enabled.tooltip"
+	RunmodeSettingsSystemSSHAccessPublickey        Key = "runmode.settings.system.sshaccess.publickey"
+	RunmodeSettingsSystemSSHAccessPublickeyTooltip Key = "runmode.settings.system.sshaccess.publickey.tooltip"
+	RunmodeSettingsSystemSSHAccessProvision        Key = "runmode.settings.system.sshaccess.provision"
+	RunmodeSettingsSystemSSHAccessHint             Key = "runmode.settings.system.sshaccess.hint"
+
 	// Run Mode - Settings System Advanced.
 	RunmodeSettingsSystemAdvancedTitle Key = "runmode.settings.system.advanced.title"
 
@@ -414,6 +423,10 @@ const (
 	RunmodeSettingsErrorFactoryresetfailed Key = "runmode.settings.error.factoryresetfailed"
 	RunmodeSettingsErrorSaveprofilefailed  Key = "runmode.settings.error.saveprofilefailed"
 	RunmodeSettingsErrorLoadconfigfailed   Key = "runmode.settings.error.loadconfigfailed"
+	RunmodeSettingsErrorSshkeyrequired     Key = "runmode.settings.error.sshkeyrequired"
+
+	// Run Mode - Settings Success.
+	RunmodeSettingsSuccessSshprovisioned Key = "runmode.settings.success.sshprovisioned"
 
 	// Run Mode - Settings Status.
 	RunmodeSettingsStatusLoading       Key = "runmode.settings.status.loading"

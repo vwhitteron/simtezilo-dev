@@ -6,6 +6,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"maps"
 	"net"
 	"os"
@@ -20,6 +21,7 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app"
 	"github.com/vwhitteron/simtezilo-dev/app/exitcode"
 	"github.com/vwhitteron/simtezilo-dev/app/setupmode"
+	"golang.org/x/crypto/ssh"
 )
 
 type (
@@ -31,9 +33,14 @@ const (
 	runModeProfile   = "RunMode"
 	setupModeProfile = "SetupMode"
 	setupModeFlag    = "/boot/firmware/simtezilo/SETUPMODE"
+	sshUser          = "admin"
 
-	dnsmasqStart systemctlCmd = "start"
-	dnsmasqStop  systemctlCmd = "stop"
+	sysctlEnable    systemctlCmd = "enable"
+	sysctlDisable   systemctlCmd = "disable"
+	sysctlStart     systemctlCmd = "start"
+	sysctlStop      systemctlCmd = "stop"
+	sysctlIsActive  systemctlCmd = "is-active"
+	sysctlIsEnabled systemctlCmd = "is-enabled"
 
 	securityNone = "none"
 	securityWEP  = "wep"
@@ -70,7 +77,7 @@ type manager struct {
 	setupModeFlag    string
 }
 
-func main() {
+func main() { //nolint:cyclop // easy enough to understand
 	mgr := newManager(zerolog.InfoLevel)
 
 	var (
@@ -125,6 +132,12 @@ func main() {
 		exitCode = mgr.reset()
 	case "status":
 		exitCode = mgr.status()
+	case "ssh-enable":
+		exitCode = mgr.enableSSH()
+	case "ssh-disable":
+		exitCode = mgr.disableSSH()
+	case "ssh-provision":
+		exitCode = mgr.provisionSSH()
 	case "wifi-access":
 		exitCode = mgr.wifiDetails()
 	case "wifi-provision":
@@ -144,13 +157,20 @@ func main() {
 
 func printUsage() exitcode.Code {
 	fmt.Fprintf(os.Stderr, "Usage: %s <command>\n", os.Args[0])
-	fmt.Fprintf(os.Stderr, "Commands:\n")
+	fmt.Fprintf(os.Stderr, "\nOptions:\n")
+	fmt.Fprintf(os.Stderr, "  -h                Show this help message\n")
+	fmt.Fprintf(os.Stderr, "  -l <level>        Set log level (debug, info, warn, error)\n")
+	fmt.Fprintf(os.Stderr, "  -v                Show version information\n")
+	fmt.Fprintf(os.Stderr, "\nCommands:\n")
 	fmt.Fprintf(os.Stderr, "  init              Initialize setup mode connection if not present\n")
 	fmt.Fprintf(os.Stderr, "  mode-run          Enter run mode\n")
 	fmt.Fprintf(os.Stderr, "  mode-setup        Enter setup mode\n")
 	fmt.Fprintf(os.Stderr, "  reset             Delete all connections and reinitialize setup mode\n")
 	fmt.Fprintf(os.Stderr, "  setup-disable     Disable setup mode flag\n")
 	fmt.Fprintf(os.Stderr, "  setup-enable      Enable setup mode flag\n")
+	fmt.Fprintf(os.Stderr, "  ssh-enable		Enable SSH service\n")
+	fmt.Fprintf(os.Stderr, "  ssh-disable		Disable SSH service\n")
+	fmt.Fprintf(os.Stderr, "  ssh-provision		Provision SSH access\n")
 	fmt.Fprintf(os.Stderr, "  status            Check current environment status\n")
 	fmt.Fprintf(os.Stderr, "  version           Print version information\n")
 	fmt.Fprintf(os.Stderr, "  wifi-access       Provide the network access detaisl for the setup mode network\n")
@@ -223,7 +243,8 @@ func (m *manager) waitForNetworkManager() (ok bool) {
 
 		if attempt == maxWaitAttempts {
 			errMsg := "NetworkManager not available after waiting"
-			m.log.Error().Msg(errMsg)
+			m.log.Debug().Msg(errMsg)
+
 			outputJSON(map[string]any{
 				"error":  errMsg,
 				"result": setupmode.ResultFailure,
@@ -233,6 +254,7 @@ func (m *manager) waitForNetworkManager() (ok bool) {
 		}
 
 		m.log.Debug().Int("attempt", attempt).Int("max_attempts", maxWaitAttempts).Msg("Waiting for NetworkManager to start")
+
 		time.Sleep(waitInterval)
 	}
 
@@ -249,6 +271,7 @@ func (m *manager) status() exitcode.Code {
 		SetupRequired:    true,
 		Ready:            m.isNetworkManagerReady(),
 		LCDPresent:       true,
+		SSHEnabled:       m.isSSHEnabled(),
 	}
 
 	// Check if setup mode flag file exists
@@ -262,7 +285,8 @@ func (m *manager) status() exitcode.Code {
 	connections, err := m.getConnections()
 	if err != nil {
 		errMsg := "failed to get network connections: " + err.Error()
-		m.log.Error().Err(err).Msg(errMsg)
+		m.log.Debug().Err(err).Msg(errMsg)
+
 		outputJSON(map[string]any{
 			"error":  errMsg,
 			"status": status,
@@ -304,6 +328,126 @@ func (m *manager) status() exitcode.Code {
 	return exitcode.Success
 }
 
+func (m *manager) isSSHEnabled() bool {
+	enabled, _ := m.controlSystemd("ssh.service", sysctlIsEnabled)
+	active, _ := m.controlSystemd("ssh.service", sysctlIsActive)
+
+	return enabled == "enabled" && active == "active"
+}
+
+func (m *manager) enableSSH() exitcode.Code {
+	return m.controlSSH([]systemctlCmd{sysctlEnable, sysctlStart})
+}
+
+func (m *manager) disableSSH() exitcode.Code {
+	return m.controlSSH([]systemctlCmd{sysctlStop, sysctlDisable})
+}
+
+func (m *manager) controlSSH(actions []systemctlCmd) exitcode.Code {
+	for _, action := range actions {
+		_, err := m.controlSystemd("ssh.service", sysctlStart)
+		if err != nil {
+			m.log.Debug().Err(err).Msgf("failed to %s sshd service", action)
+
+			outputJSON(map[string]any{
+				"result": setupmode.ResultFailure,
+				"error":  fmt.Errorf("failed to %s sshd service", action),
+			})
+
+			return exitcode.GeneralErr
+		}
+	}
+
+	outputJSON(map[string]any{"result": setupmode.ResultSuccess})
+
+	return exitcode.Success
+}
+
+func (m *manager) provisionSSH() exitcode.Code {
+	// Read public key from stdin
+	data, err := io.ReadAll(os.Stdin)
+	if err != nil {
+		errMsg := "failed to read SSH key from stdin"
+		m.log.Debug().Err(err).Msg(errMsg)
+
+		outputJSON(map[string]any{
+			"error":  errMsg,
+			"result": setupmode.ResultFailure,
+		})
+
+		return exitcode.DataFormatErr
+	}
+
+	sshKey := strings.TrimSpace(string(data))
+	if sshKey == "" {
+		errMsg := "no SSH key provided"
+		m.log.Debug().Msg(errMsg)
+
+		outputJSON(map[string]any{
+			"error":  errMsg,
+			"result": setupmode.ResultFailure,
+		})
+
+		return exitcode.DataFormatErr
+	}
+
+	// Validate the SSH public key
+	_, _, _, _, err = ssh.ParseAuthorizedKey([]byte(sshKey)) //nolint:dogsled // validation only
+	if err != nil {
+		errMsg := "invalid SSH public key format"
+		m.log.Debug().Err(err).Msg(errMsg)
+
+		outputJSON(map[string]any{
+			"error":  errMsg,
+			"result": setupmode.ResultFailure,
+		})
+
+		return exitcode.DataFormatErr
+	}
+
+	// Ensure the .ssh directory exists
+	sshDir := "/home/" + sshUser + "/.ssh"
+
+	err = os.MkdirAll(sshDir, 0o700)
+	if err != nil {
+		m.log.Debug().
+			Err(err).
+			Str("path", sshDir).
+			Msg("Create .ssh directory")
+
+		outputJSON(map[string]any{
+			"error":  "failed to create .ssh directory",
+			"result": setupmode.ResultFailure,
+		})
+
+		return exitcode.GeneralErr
+	}
+
+	// Write the authorized_keys file
+	authorizedKeysPath := "/home/" + sshUser + "/.ssh/authorized_keys"
+
+	err = os.WriteFile(authorizedKeysPath, []byte(sshKey+"\n"), 0o600)
+	if err != nil {
+		m.log.Debug().
+			Err(err).
+			Str("path", authorizedKeysPath).
+			Msg("Write authorized_keys file")
+
+		outputJSON(map[string]any{
+			"error":  "failed to write authorized_keys file",
+			"result": setupmode.ResultFailure,
+		})
+
+		return exitcode.GeneralErr
+	}
+
+	m.log.Debug().Str("path", authorizedKeysPath).Msg("SSH key provisioned successfully")
+
+	outputJSON(map[string]any{"result": setupmode.ResultSuccess})
+
+	return exitcode.Success
+}
+
 func (m *manager) init() exitcode.Code {
 	if ok := m.waitForNetworkManager(); !ok {
 		return exitcode.GeneralErr
@@ -312,7 +456,8 @@ func (m *manager) init() exitcode.Code {
 	connections, err := m.getConnections()
 	if err != nil {
 		errMsg := "failed to get network connections"
-		m.log.Error().Err(err).Msg(errMsg)
+		m.log.Debug().Err(err).Msg(errMsg)
+
 		outputJSON(map[string]any{
 			"error":  errMsg,
 			"result": setupmode.ResultFailure,
@@ -329,7 +474,8 @@ func (m *manager) init() exitcode.Code {
 		err := m.provisionSetupModeConnection()
 		if err != nil {
 			errMsg := "failed to provision SetupMode connection"
-			m.log.Error().Err(err).Msg(errMsg)
+			m.log.Debug().Err(err).Msg(errMsg)
+
 			outputJSON(map[string]any{
 				"error":  errMsg,
 				"result": setupmode.ResultFailure,
@@ -339,6 +485,7 @@ func (m *manager) init() exitcode.Code {
 		}
 
 		m.log.Debug().Msg("SetupMode connection provisioned successfully")
+
 		outputJSON(map[string]any{
 			"result": setupmode.ResultSuccess,
 			"action": "create",
@@ -363,12 +510,12 @@ func (m *manager) reset() exitcode.Code {
 
 	err := m.deleteConnectionProfile(setupModeProfile)
 	if err != nil {
-		m.log.Warn().Err(err).Msgf("Failed to delete %s connection", setupModeProfile)
+		m.log.Debug().Err(err).Msgf("Failed to delete %s connection", setupModeProfile)
 	}
 
 	err = m.deleteConnectionProfile(runModeProfile)
 	if err != nil {
-		m.log.Warn().Err(err).Msgf("Failed to delete %s connection", runModeProfile)
+		m.log.Debug().Err(err).Msgf("Failed to delete %s connection", runModeProfile)
 	}
 
 	m.log.Debug().Msgf("Connections deleted, reinitializing %s connection", setupModeProfile)
@@ -380,7 +527,8 @@ func (m *manager) disableSetupModeFlag() exitcode.Code {
 	err := os.Remove(setupModeFlag)
 	if err != nil && !os.IsNotExist(err) {
 		errMsg := "failed to remove setup mode flag"
-		m.log.Error().Err(err).Msg(errMsg)
+		m.log.Debug().Err(err).Msg(errMsg)
+
 		outputJSON(map[string]any{
 			"error":  errMsg,
 			"result": setupmode.ResultFailure,
@@ -398,7 +546,8 @@ func (m *manager) enableSetupModeFlag() exitcode.Code {
 	file, err := os.Create(setupModeFlag)
 	if err != nil {
 		errMsg := "failed to create setup mode flag"
-		m.log.Error().Err(err).Msg(errMsg)
+		m.log.Debug().Err(err).Msg(errMsg)
+
 		outputJSON(map[string]any{
 			"error":  errMsg,
 			"result": setupmode.ResultFailure,
@@ -410,7 +559,8 @@ func (m *manager) enableSetupModeFlag() exitcode.Code {
 	err = file.Close()
 	if err != nil {
 		errMsg := "failed to close setup mode flag file"
-		m.log.Error().Err(err).Msg(errMsg)
+		m.log.Debug().Err(err).Msg(errMsg)
+
 		outputJSON(map[string]any{
 			"error":  errMsg,
 			"result": setupmode.ResultFailure,
@@ -432,7 +582,8 @@ func (m *manager) enterRunMode() exitcode.Code {
 	err := m.activateConnection(runModeProfile)
 	if err != nil {
 		errMsg := "failed to activate RunMode connection"
-		m.log.Error().Err(err).Msg(errMsg)
+		m.log.Debug().Err(err).Msg(errMsg)
+
 		outputJSON(map[string]any{
 			"error":  errMsg,
 			"result": setupmode.ResultFailure,
@@ -442,9 +593,9 @@ func (m *manager) enterRunMode() exitcode.Code {
 	}
 
 	// Stop dnsmasq service when entering run mode
-	err = m.controlDNSMasq(dnsmasqStop)
+	_, err = m.controlSystemd("dnsmasq.service", sysctlStop)
 	if err != nil {
-		m.log.Warn().Err(err).Msg("failed to stop dnsmasq service")
+		m.log.Debug().Err(err).Msg("failed to stop dnsmasq service")
 	}
 
 	outputJSON(map[string]any{"result": setupmode.ResultSuccess})
@@ -460,7 +611,8 @@ func (m *manager) enterSetupMode() exitcode.Code {
 	err := m.activateConnection(setupModeProfile)
 	if err != nil {
 		errMsg := "failed to activate SetupMode connection"
-		m.log.Error().Err(err).Msg(errMsg)
+		m.log.Debug().Err(err).Msg(errMsg)
+
 		outputJSON(map[string]any{
 			"error":  errMsg,
 			"result": setupmode.ResultFailure,
@@ -473,9 +625,9 @@ func (m *manager) enterSetupMode() exitcode.Code {
 	time.Sleep(2 * time.Second)
 
 	// Start dnsmasq service when entering setup mode
-	err = m.controlDNSMasq(dnsmasqStart)
+	_, err = m.controlSystemd("dnsmasq.service", sysctlStart)
 	if err != nil {
-		m.log.Warn().Err(err).Msg("failed to start dnsmasq service")
+		m.log.Debug().Err(err).Msg("failed to start dnsmasq service")
 	}
 
 	outputJSON(map[string]any{"result": setupmode.ResultSuccess})
@@ -516,7 +668,8 @@ func (m *manager) provisionRunModeConnection() exitcode.Code {
 	err := decoder.Decode(&inputConfig)
 	if err != nil {
 		errMsg := "failed to parse JSON input"
-		m.log.Error().Err(err).Msg(errMsg)
+		m.log.Debug().Err(err).Msg(errMsg)
+
 		outputJSON(map[string]any{
 			"error":  errMsg,
 			"result": setupmode.ResultFailure,
@@ -527,7 +680,8 @@ func (m *manager) provisionRunModeConnection() exitcode.Code {
 
 	if len(inputConfig) == 0 {
 		errMsg := "no network configuration provided"
-		m.log.Error().Msg(errMsg)
+		m.log.Debug().Msg(errMsg)
+
 		outputJSON(map[string]any{
 			"error":  errMsg,
 			"result": setupmode.ResultFailure,
@@ -556,7 +710,8 @@ func (m *manager) provisionRunModeConnection() exitcode.Code {
 	err = m.saveNetworkConfiguration(config)
 	if err != nil {
 		errMsg := "failed to provision RunMode connection"
-		m.log.Error().Err(err).Msg(errMsg)
+		m.log.Debug().Err(err).Msg(errMsg)
+
 		outputJSON(map[string]any{
 			"error":  errMsg,
 			"result": setupmode.ResultFailure,
@@ -578,7 +733,8 @@ func (m *manager) scanWiFi() exitcode.Code {
 	networks, err := m.getAvailableNetworks()
 	if err != nil {
 		errMsg := "failed to scan WiFi networks"
-		m.log.Error().Err(err).Msg(errMsg)
+		m.log.Debug().Err(err).Msg(errMsg)
+
 		outputJSON(map[string]any{
 			"error":  errMsg,
 			"result": setupmode.ResultFailure,
@@ -603,7 +759,8 @@ func (m *manager) wifiDetails() exitcode.Code {
 	connections, err := m.getConnections()
 	if err != nil {
 		errMsg := "failed to get connections"
-		m.log.Error().Err(err).Msg(errMsg)
+		m.log.Debug().Err(err).Msg(errMsg)
+
 		outputJSON(map[string]any{
 			"error":  errMsg,
 			"result": setupmode.ResultFailure,
@@ -616,7 +773,8 @@ func (m *manager) wifiDetails() exitcode.Code {
 	isActive, exists := connections[m.setupModeProfile]
 	if !exists || !isActive {
 		errMsg := "SetupMode profile is not active"
-		m.log.Error().Msg(errMsg)
+		m.log.Debug().Msg(errMsg)
+
 		outputJSON(map[string]any{
 			"error":  errMsg,
 			"result": setupmode.ResultFailure,
@@ -739,16 +897,6 @@ func (m *manager) getConnections() (map[string]bool, error) {
 	return connIDs, nil
 }
 
-// func (m *manager) getAvailableNetworks() (string, error) {
-// 	m.log.Debug().Msg("Scanning for available WiFi networks")
-
-// 	return `[
-// 		{"ssid":"Network1","security":"none"},
-// 		{"ssid":"Network2","security":"wpa2"},
-// 		{"ssid":"Network3","security":"wpa3"}
-// 	]`, nil
-// }
-
 func (m *manager) getAvailableNetworks() ([]setupmode.CmdNetworkInfo, error) {
 	m.log.Debug().Msg("Scanning for available WiFi networks")
 
@@ -834,12 +982,12 @@ func (m *manager) getAvailableNetworks() ([]setupmode.CmdNetworkInfo, error) {
 func detectSecurityType(accessPoint gonetworkmanager.AccessPoint) string {
 	wpaFlags, err := accessPoint.GetPropertyWPAFlags()
 	if err != nil {
-		log.Warn().Err(err).Msg("Failed to get WPA flags")
+		log.Debug().Err(err).Msg("Failed to get WPA flags")
 	}
 
 	rsnFlags, err := accessPoint.GetPropertyRSNFlags()
 	if err != nil {
-		log.Warn().Err(err).Msg("Failed to get RSN flags")
+		log.Debug().Err(err).Msg("Failed to get RSN flags")
 	}
 
 	// Check for WPA3 (SAE)
@@ -878,7 +1026,7 @@ func (m *manager) saveNetworkConfiguration(config networkConfig) error {
 	// Validate static IP configuration if provided
 	err := m.validateIPConfiguration(config)
 	if err != nil {
-		log.Error().Err(err).Msg("IP configuration validation failed")
+		log.Debug().Err(err).Msg("IP configuration validation failed")
 
 		return fmt.Errorf("invalid IP configuration: %w", err)
 	}
@@ -1153,14 +1301,14 @@ func (m *manager) restoreConnectionProfile(profileName string) {
 
 	settings, err := gonetworkmanager.NewSettings()
 	if err != nil {
-		m.log.Warn().Err(err).Str("profile", profileName).Msg("Failed to restore connection profile")
+		m.log.Debug().Err(err).Str("profile", profileName).Msg("Failed to restore connection profile")
 
 		return
 	}
 
 	connections, err := settings.ListConnections()
 	if err != nil {
-		m.log.Warn().Err(err).Msg("Failed to list connections for restore")
+		m.log.Debug().Err(err).Msg("Failed to list connections for restore")
 
 		return
 	}
@@ -1195,14 +1343,14 @@ func (m *manager) restoreConnectionProfile(profileName string) {
 	// Get backup settings
 	backupSettings, err := backupConn.GetSettings()
 	if err != nil {
-		log.Warn().Err(err).Msg("Failed to get backup settings")
+		m.log.Debug().Err(err).Msg("Failed to get backup settings")
 
 		return
 	}
 
 	err = m.deleteConnectionProfile(profileName)
 	if err != nil {
-		m.log.Warn().Err(err).Str("profile", profileName).Msg("Delete connection profile")
+		m.log.Debug().Err(err).Str("profile", profileName).Msg("Delete connection profile")
 	}
 
 	// Rename backup back to target profile name
@@ -1214,7 +1362,7 @@ func (m *manager) restoreConnectionProfile(profileName string) {
 	// Create the restored connection
 	_, err = settings.AddConnection(backupSettings)
 	if err != nil {
-		m.log.Warn().Err(err).Str("profile", profileName).Msg("Restore connection profile")
+		m.log.Debug().Err(err).Str("profile", profileName).Msg("Restore connection profile")
 
 		return
 	}
@@ -1222,7 +1370,7 @@ func (m *manager) restoreConnectionProfile(profileName string) {
 	// Delete the backup
 	err = backupConn.Delete()
 	if err != nil {
-		m.log.Warn().Err(err).Str("profile", backupName).Msg("Delete connection profile")
+		m.log.Debug().Err(err).Str("profile", backupName).Msg("Delete connection profile")
 	}
 }
 
@@ -1272,7 +1420,7 @@ func (m *manager) getSerial() string {
 
 	data, err := os.ReadFile("/proc/cpuinfo")
 	if err != nil {
-		m.log.Warn().Err(err).Msg("Failed to read /proc/cpuinfo")
+		m.log.Debug().Err(err).Msg("Failed to read /proc/cpuinfo")
 
 		return defaultSerial
 	}
@@ -1296,7 +1444,7 @@ func (m *manager) getSerial() string {
 		}
 	}
 
-	m.log.Warn().Msg("Serial number not found in /proc/cpuinfo")
+	m.log.Debug().Msg("Serial number not found in /proc/cpuinfo")
 
 	return defaultSerial
 }
@@ -1326,37 +1474,45 @@ func (m *manager) validateIPConfiguration(config networkConfig) error {
 	return nil
 }
 
-func (m *manager) controlDNSMasq(command systemctlCmd) error {
-	m.log.Debug().Str("action", string(command)).Msg("Managing dnsmasq service")
+func (m *manager) controlSystemd(service string, command systemctlCmd) (stdout string, err error) {
+	m.log.Debug().
+		Str("service", service).
+		Str("action", string(command)).
+		Msg("Controlling systemd service")
 
 	const maxAttempts = 5
 
 	var lastErr error
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		cmd := exec.CommandContext(context.Background(), "systemctl", string(command), "dnsmasq") //nolint:gosec // action is controlled internally
+		cmd := exec.CommandContext(context.Background(), "systemctl", string(command), service) //nolint:gosec // action is controlled internally
 
-		err := cmd.Run()
+		output, err := cmd.Output()
 		if err == nil {
-			m.log.Debug().Str("action", string(command)).Msg("Successfully managed dnsmasq service")
+			m.log.Debug().
+				Str("service", service).
+				Str("action", string(command)).
+				Msg("Successfully controlled systemd service")
 
-			return nil
+			return strings.TrimSpace(string(output)), nil
 		}
 
 		lastErr = err
-		m.log.Warn().
+		stdout = strings.TrimSpace(string(output))
+		m.log.Debug().
 			Err(err).
+			Str("service", service).
 			Str("action", string(command)).
 			Int("attempt", attempt).
 			Int("max_attempts", maxAttempts).
-			Msgf("Failed to %s dnsmasq, retrying...", command)
+			Msg("Failed to control service, retrying...")
 
 		if attempt < maxAttempts {
 			time.Sleep(1 * time.Second)
 		}
 	}
 
-	return fmt.Errorf("failed to %s dnsmasq after %d attempts: %w", string(command), maxAttempts, lastErr)
+	return stdout, fmt.Errorf("failed to %s %s after %d attempts: %w", string(command), service, maxAttempts, lastErr)
 }
 
 func outputJSON(v any) {

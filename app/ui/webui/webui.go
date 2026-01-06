@@ -171,6 +171,9 @@ func (w *WebUI) GetHTTPHandler() http.Handler {
 
 	if w.setupMode != nil && w.setupMode.IsAvailable() {
 		mux.HandleFunc("/api/system/factory-reset", w.handleFactoryReset)
+		mux.HandleFunc("/api/system/ssh/enable", w.handleSSHEnable)
+		mux.HandleFunc("/api/system/ssh/disable", w.handleSSHDisable)
+		mux.HandleFunc("/api/system/ssh/provision", w.handleSSHProvision)
 		mux.HandleFunc("/api/mode/setup", w.handleSetupMode)
 	}
 
@@ -2096,6 +2099,121 @@ func (w *WebUI) handleSetupMode(response http.ResponseWriter, request *http.Requ
 	}()
 }
 
+// handleSSHEnable handles POST requests to enable SSH.
+func (w *WebUI) handleSSHEnable(response http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodPost {
+		response.WriteHeader(http.StatusMethodNotAllowed)
+
+		return
+	}
+
+	response.Header().Set("Content-Type", "application/json")
+
+	w.log.Info().Msg("SSH enable requested")
+
+	ctx, cancel := context.WithTimeout(request.Context(), 10*time.Second)
+	defer cancel()
+
+	_, err := w.setupMode.RunPlatformCommand(ctx, setupmode.CmdActionSSHEnable, nil)
+	if err != nil {
+		w.log.Error().Err(err).Msg("failed to enable SSH")
+		response.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(response).Encode(map[string]string{ //nolint:errchkjson // simple encoding
+			"status": "error",
+			"error":  "Failed to enable SSH: " + err.Error(),
+		})
+
+		return
+	}
+
+	w.log.Info().Msg("SSH enabled successfully")
+
+	_ = json.NewEncoder(response).Encode(map[string]string{ //nolint:errchkjson // simple encoding
+		"status": "success",
+	})
+}
+
+// handleSSHDisable handles POST requests to disable SSH.
+func (w *WebUI) handleSSHDisable(response http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodPost {
+		response.WriteHeader(http.StatusMethodNotAllowed)
+
+		return
+	}
+
+	response.Header().Set("Content-Type", "application/json")
+
+	w.log.Info().Msg("SSH disable requested")
+
+	ctx, cancel := context.WithTimeout(request.Context(), 10*time.Second)
+	defer cancel()
+
+	_, err := w.setupMode.RunPlatformCommand(ctx, setupmode.CmdActionSSHDisable, nil)
+	if err != nil {
+		w.log.Error().Err(err).Msg("failed to disable SSH")
+		response.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(response).Encode(map[string]string{ //nolint:errchkjson // simple encoding
+			"status": "error",
+			"error":  "Failed to disable SSH: " + err.Error(),
+		})
+
+		return
+	}
+
+	w.log.Info().Msg("SSH disabled successfully")
+
+	_ = json.NewEncoder(response).Encode(map[string]string{ //nolint:errchkjson // simple encoding
+		"status": "success",
+	})
+}
+
+// handleSSHProvision handles POST requests to provision an SSH public key.
+func (w *WebUI) handleSSHProvision(response http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodPost {
+		response.WriteHeader(http.StatusMethodNotAllowed)
+
+		return
+	}
+
+	response.Header().Set("Content-Type", "application/json")
+
+	// Read the SSH public key from the request body
+	publicKey, err := io.ReadAll(request.Body)
+	if err != nil {
+		w.log.Error().Err(err).Msg("failed to read SSH public key from request")
+		response.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(response).Encode(map[string]string{ //nolint:errchkjson // simple encoding
+			"status": "error",
+			"error":  "Failed to read SSH public key",
+		})
+
+		return
+	}
+
+	w.log.Info().Msg("SSH key provision requested")
+
+	ctx, cancel := context.WithTimeout(request.Context(), 10*time.Second)
+	defer cancel()
+
+	_, err = w.setupMode.RunPlatformCommand(ctx, setupmode.CmdActionSSHProvision, publicKey)
+	if err != nil {
+		w.log.Error().Err(err).Msg("failed to provision SSH key")
+		response.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(response).Encode(map[string]string{ //nolint:errchkjson // simple encoding
+			"status": "error",
+			"error":  "Failed to provision SSH key: " + err.Error(),
+		})
+
+		return
+	}
+
+	w.log.Info().Msg("SSH key provisioned successfully")
+
+	_ = json.NewEncoder(response).Encode(map[string]string{ //nolint:errchkjson // simple encoding
+		"status": "success",
+	})
+}
+
 // handleFactoryReset handles POST requests to perform a factory reset.
 func (w *WebUI) handleFactoryReset(response http.ResponseWriter, request *http.Request) {
 	if request.Method != http.MethodPost {
@@ -2239,8 +2357,23 @@ func (w *WebUI) handleSystemInfo(response http.ResponseWriter, request *http.Req
 	platform := "rpi"
 
 	setupModeAvailable := false
+	sshEnabled := false
+
 	if w.setupMode != nil {
 		setupModeAvailable = w.setupMode.IsAvailable()
+
+		// Get SSH status if setup mode is available
+		if setupModeAvailable {
+			ctx, cancel := context.WithTimeout(request.Context(), 5*time.Second)
+			defer cancel()
+
+			status := w.setupMode.Status(ctx)
+			sshEnabled = status.SSHEnabled
+			w.log.Debug().
+				Bool("available", status.Available).
+				Bool("sshEnabled", status.SSHEnabled).
+				Msg("Retrieved SSH status from platform")
+		}
 	}
 
 	responseData := map[string]any{
@@ -2250,6 +2383,7 @@ func (w *WebUI) handleSystemInfo(response http.ResponseWriter, request *http.Req
 		"buildPlatform":      w.buildPlatform,
 		"hardware":           platform,
 		"setupModeAvailable": setupModeAvailable,
+		"sshEnabled":         sshEnabled,
 	}
 
 	response.Header().Set("Content-Type", "application/json")

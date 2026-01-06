@@ -2,8 +2,27 @@
 
 SETUPMODEFLAG="/opt/simtezilo/etc/setupmode"
 
+# Status results
+RESULT='success'
+ACTIVECONN='SetupMode'
+AVAILABLE='true'
+FLAGENABLED='true'
+READY='true'
+RUNMODEPRESENT='true'
+SETUPMODEPRESENT='true'
+SETUPREQUIRED='false'
+LCDPRESENT='true'
+SSHENABLED='true'
+
+
+
 function handle_usage() {
-    echo 'Usage: /opt/simtezilo/bin/setup <command>'
+    echo 'Usage: /opt/simtezilo/bin/setup [options] <command>'
+    echo 'Options:'
+    echo '  -h              Show this help message'
+    echo '  -l <level>      Set log level (debug, info, warn, error)'
+    echo '  -v              Show version information'
+    echo
     echo 'Commands:'
     echo '  init            Initialize setup mode connection if not present'
     echo '  mode-run        Enter run mode'
@@ -11,6 +30,9 @@ function handle_usage() {
     echo '  reset           Delete all connections and reinitialize setup mode'
     echo '  setup-disable   Disable setup mode flag'
     echo '  setup-enable    Enable setup mode flag'
+    echo '  ssh-enable      Enable SSH access'
+    echo '  ssh-disable     Disable SSH access'
+    echo '  ssh-provision   Provision SSH access'
     echo '  status          Check current environment status'
     echo '  version         Print version information'
     echo '  wifi-access     Provide the network access detaisl for the setup mode network'
@@ -28,27 +50,38 @@ function handle_usage() {
     echo '  "gateway":"<address>",'
     echo '  "dns":"<address>"'
     echo '}]'
+
+    exit 1
 }
 
 function return_success() {
     echo '{"result":"success"}'
 }
 
-function handle_access() {
-    return ""
-}
-
-function handle_enable() {
+function handle_setup_enable() {
     touch ${SETUPMODEFLAG}
     return_success
 }
 
-function handle_disable() {
+function handle_setup_disable() {
     rm ${SETUPMODEFLAG}
     return_success
 }
 
-function handle_provision() {
+function handle_ssh_provision() {
+    # Read input JSON
+    input=$(cat)
+
+    echo "${input}" > /opt/simtezilo/etc/ssh_provision.json
+
+    return_success
+}
+
+function handle_wifi_access() {
+    return ""
+}
+
+function handle_wifi_provision() {
     # Read input JSON
     input=$(cat)
 
@@ -57,22 +90,31 @@ function handle_provision() {
     return_success
 }
 
-function handle_scan() {
+function handle_wifi_scan() {
     echo '{"networks":[{"ssid":"yarn","psk":"","security":"wpa2"},{"ssid":"Firetooth","psk":"","security":"wpa3"}],"result":"success"}'
 
 }
 
 function handle_status() {
-    if [ -f ${SETUPMODEFLAG} ]; then
-        echo '{"result":"success","status":{"activeConn":"SetupMode","available":true,"flagEnabled":true,"ready":true,"runModePresent":true,"setupModePresent":true,"setupRequired":false, "lcdPresent":false}}'
-    else
-        echo '{"result":"success","status":{"activeConn":"RunMode","available":true,"flagEnabled":false,"ready":true,"runModePresent":true,"setupModePresent":true,"setupRequired":false, "lcdPresent":false}}'
-    fi
+    echo '{"result":"'${RESULT}'",status":{activeConn":"'${ACTIVECONN}'","available":"'${AVAILABLE}'","flagEnabled":"'${FLAGENABLED}'","ready":"'${READY}'","runModePresent":"'${RUNMODEPRESENT}'","setupModePresent":"'${SETUPMODEPRESENT}'","setupRequired":"'${SETUPREQUIRED}'","lcdPresent":"'${LCDPRESENT}'","sshEnabled":"'${SSHENABLED}'"}}'
 }
 
-action=$1
+while getopts "hl:v" Option
+do
+  case $Option in
+    l ) LOGLEVEL=$OPTARG;;
+    v ) echo "simtezilo-platform-local version 1.0.0"
+        exit 0
+        ;;
+    * ) handle_usage;;
+  esac
+done
 
-case $action in
+shift $(($OPTIND - 1))
+
+ACTION=$1
+
+case $ACTION in
     "init")
         return_success
         ;;
@@ -86,11 +128,20 @@ case $action in
         return_success
         ;;
  	"setup-disable")
- 		handle_disable
+ 		handle_setup_disable
  		;;
  	"setup-enable")
- 		handle_enable
+ 		handle_setup_enable
  		;;
+    "ssh-enable")
+        return_success
+        ;;
+    "ssh-disable")
+        return_success
+        ;;
+    "ssh-provision")
+        handle_ssh_provision
+        ;;
  	"status")
  		handle_status
  		;;

@@ -50,6 +50,7 @@ linters:
             - github.com/stretchr/testify
             - github.com/vwhitteron/simtezilo-dev
             - github.com/zetetos/gt-telemetry
+            - golang.org/x/crypto/ssh
             - golang.org/x/image
             - layeh.com/gopus
             - periph.io/x/conn/v3

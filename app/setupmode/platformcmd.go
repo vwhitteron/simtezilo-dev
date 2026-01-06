@@ -20,6 +20,7 @@ type CmdStatus struct {
 	SetupModePresent bool   `json:"setupModePresent"`    //nolint:tagliatelle
 	SetupRequired    bool   `json:"setupRequired"`       //nolint:tagliatelle
 	LCDPresent       bool   `json:"lcdPresent"`          //nolint:tagliatelle
+	SSHEnabled       bool   `json:"sshEnabled"`          //nolint:tagliatelle
 }
 
 // CmdNetworkInfo represents WiFi network information returned by the setup CLI tool.
@@ -46,6 +47,9 @@ const (
 	CmdActionReset         CmdAction = "reset"
 	CmdActionSetupEnable   CmdAction = "setup-enable"
 	CmdActionSetupDisable  CmdAction = "setup-disable"
+	CmdActionSSHEnable     CmdAction = "ssh-enable"
+	CmdActionSSHDisable    CmdAction = "ssh-disable"
+	CmdActionSSHProvision  CmdAction = "ssh-provision"
 	CmdActionStatus        CmdAction = "status"
 	CmdActionVersion       CmdAction = "version"
 	CmdActionWifiAccess    CmdAction = "wifi-access"
@@ -122,7 +126,9 @@ func (s *SetupMode) RunPlatformCommand(ctx context.Context, action CmdAction, st
 		defer cancel()
 	}
 
-	cmd := exec.CommandContext(cmdCtx, s.command, action.String()) //nolint:gosec // path is trusted
+	// Get the current log level and pass it to the platform command
+	logLevel := s.log.GetLevel().String()
+	cmd := exec.CommandContext(cmdCtx, s.command, "-l", logLevel, action.String()) //nolint:gosec // path is trusted
 
 	if stdin != nil {
 		cmd.Stdin = strings.NewReader(string(stdin))

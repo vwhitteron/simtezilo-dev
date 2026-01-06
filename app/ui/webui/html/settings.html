@@ -530,7 +530,7 @@
 
                 <!-- Hardware Settings -->
                 <div class="settings-section-card" data-section-content="system">
-                    <div class="card mb-3" id="hardware-settings-card">
+                    <div class="card">
                         <div class="card-body">
                             <h5 class="mb-3"><span class="icon" data-icon="microchip"></span><span
                                     data-i18n="runmode.settings.system.hardware.title">Hardware</span></h5>
@@ -556,13 +556,9 @@
                                     <option value="270">270°</option>
                                 </select>
                             </div>
-                        </div>
-                    </div>
 
-                    <!-- Calibration Settings -->
-                    <div class="card">
-                        <div class="card-body">
-                            <h5 class="mb-3"><span class="icon" data-icon="bullseye"></span><span
+                            <!-- Calibration Settings -->
+                            <h5 class="mb-3 mt-5"><span class="icon" data-icon="bullseye"></span><span
                                     data-i18n="runmode.settings.system.calibration.title">Calibration Mode</span></h5>
                             <div class="form-check form-switch mb-4">
                                 <input type="checkbox" class="form-check-input" id="calibration-enabled"
@@ -663,83 +659,123 @@
 
                                 <div id="advancedSettingsSynth" class="collapse">
                                     <!-- Equalizer Card -->
-                                    <div class="card">
-                                        <div class="card-body">
-                                            <h5 class="card-title mb-3">
-                                                <span class="icon" data-icon="chart-simple"></span><span
-                                                    data-i18n="runmode.settings.system.equalizer.title">Equalizer</span>
-                                            </h5>
-                                            <div class="mb-3">
-                                                <div class="form-check form-switch">
-                                                    <input type="checkbox" class="form-check-input" id="synth-eqenabled"
-                                                        role="switch">
-                                                    <label class="form-check-label" for="synth-eqenabled">
-                                                        <span
-                                                            data-i18n="runmode.settings.system.equalizer.enabled">Enable</span>
-                                                    </label>
-                                                </div>
-                                            </div>
-                                            <!-- EQ Curve Visualization -->
-                                            <div class="mb-3">
-                                                <canvas id="eq-curve-canvas" width="800" height="150"
-                                                    style="width: 100%; height: 150px; background: rgba(0,0,0,0.2); border-radius: 4px;"></canvas>
-                                            </div>
-                                            <!-- EQ Band Selection and Reset -->
-                                            <div class="mb-3 d-flex justify-content-between align-items-center">
-                                                <div class="d-flex align-items-center gap-2">
-                                                    <select id="eq-band-select" class="form-select"
-                                                        style="width: auto; display: inline-block;">
-                                                        <!-- Options populated by JavaScript -->
-                                                    </select>
-                                                    <i class="fa-solid fa-circle-question tooltip-trigger text-muted"
-                                                        role="button"
-                                                        data-i18n-tooltip="runmode.settings.system.equalizer.tooltip"></i>
-                                                </div>
-                                                <button type="button" class="btn btn-sm btn-secondary"
-                                                    id="eq-reset-btn">
-                                                    <i class="fa-solid fa-rotate-left me-1"></i>
-                                                    <span
-                                                        data-i18n="runmode.settings.system.equalizer.reset">Reset</span>
-                                                </button>
-                                            </div>
-                                            <!-- EQ Band Controls -->
-                                            <div class="eq-band-controls" id="equalizer-controls">
-                                                <!-- Frequency Slider -->
-                                                <div class="mb-3 d-flex align-items-center gap-3">
-                                                    <label for="eq-frequency-slider" class="form-label mb-0"
-                                                        style="min-width: 180px; padding-left: 24px;">
-                                                        <span
-                                                            data-i18n="runmode.settings.system.equalizer.frequency">Frequency</span>
-                                                        <span id="eq-frequency-value" class="ms-2 text-muted">12
-                                                            Hz</span>
-                                                    </label>
-                                                    <input type="range" class="form-range" id="eq-frequency-slider"
-                                                        min="10" max="70" step="0.5" value="12">
-                                                </div>
-                                                <!-- Gain Slider -->
-                                                <div class="mb-3 d-flex align-items-center gap-3">
-                                                    <label for="eq-gain-slider" class="form-label mb-0"
-                                                        style="min-width: 180px; padding-left: 24px;">
-                                                        <span
-                                                            data-i18n="runmode.settings.system.equalizer.gain">Gain</span>
-                                                        <span id="eq-gain-value" class="ms-2 text-muted">0.0 dB</span>
-                                                    </label>
-                                                    <input type="range" class="form-range" id="eq-gain-slider" min="-12"
-                                                        max="6" step="0.5" value="0">
-                                                </div>
-                                                <!-- Q Factor Slider -->
-                                                <div class="mb-3 d-flex align-items-center gap-3">
-                                                    <label for="eq-q-slider" class="form-label mb-0"
-                                                        style="min-width: 180px; padding-left: 24px;">
-                                                        <span data-i18n="runmode.settings.system.equalizer.qfactor">Q
-                                                            Factor</span>
-                                                        <span id="eq-q-factor" class="ms-2 text-muted">2.0</span>
-                                                    </label>
-                                                    <input type="range" class="form-range" id="eq-q-slider" min="0.1"
-                                                        max="20" step="0.1" value="2">
-                                                </div>
-                                            </div>
+                                    <h5 class="card-title mb-3 mt-3">
+                                        <span class="icon" data-icon="chart-simple"></span><span
+                                            data-i18n="runmode.settings.system.equalizer.title">Equalizer</span>
+                                    </h5>
+                                    <div class="mb-3">
+                                        <div class="form-check form-switch">
+                                            <input type="checkbox" class="form-check-input" id="synth-eqenabled"
+                                                role="switch">
+                                            <label class="form-check-label" for="synth-eqenabled">
+                                                <span
+                                                    data-i18n="runmode.settings.system.equalizer.enabled">Enable</span>
+                                            </label>
                                         </div>
+                                    </div>
+                                    <!-- EQ Curve Visualization -->
+                                    <div class="mb-3">
+                                        <canvas id="eq-curve-canvas" width="800" height="150"
+                                            style="width: 100%; height: 150px; background: rgba(0,0,0,0.2); border-radius: 4px;"></canvas>
+                                    </div>
+                                    <!-- EQ Band Selection and Reset -->
+                                    <div class="mb-3 d-flex justify-content-between align-items-center">
+                                        <div class="d-flex align-items-center gap-2">
+                                            <select id="eq-band-select" class="form-select"
+                                                style="width: auto; display: inline-block;">
+                                                <!-- Options populated by JavaScript -->
+                                            </select>
+                                            <i class="fa-solid fa-circle-question tooltip-trigger text-muted"
+                                                role="button"
+                                                data-i18n-tooltip="runmode.settings.system.equalizer.tooltip"></i>
+                                        </div>
+                                        <button type="button" class="btn btn-sm btn-secondary" id="eq-reset-btn">
+                                            <i class="fa-solid fa-rotate-left me-1"></i>
+                                            <span data-i18n="runmode.settings.system.equalizer.reset">Reset</span>
+                                        </button>
+                                    </div>
+                                    <!-- EQ Band Controls -->
+                                    <div class="eq-band-controls" id="equalizer-controls">
+                                        <!-- Frequency Slider -->
+                                        <div class="mb-3 d-flex align-items-center gap-3">
+                                            <label for="eq-frequency-slider" class="form-label mb-0"
+                                                style="min-width: 180px; padding-left: 24px;">
+                                                <span
+                                                    data-i18n="runmode.settings.system.equalizer.frequency">Frequency</span>
+                                                <span id="eq-frequency-value" class="ms-2 text-muted">12
+                                                    Hz</span>
+                                            </label>
+                                            <input type="range" class="form-range" id="eq-frequency-slider" min="10"
+                                                max="70" step="0.5" value="12">
+                                        </div>
+                                        <!-- Gain Slider -->
+                                        <div class="mb-3 d-flex align-items-center gap-3">
+                                            <label for="eq-gain-slider" class="form-label mb-0"
+                                                style="min-width: 180px; padding-left: 24px;">
+                                                <span data-i18n="runmode.settings.system.equalizer.gain">Gain</span>
+                                                <span id="eq-gain-value" class="ms-2 text-muted">0.0 dB</span>
+                                            </label>
+                                            <input type="range" class="form-range" id="eq-gain-slider" min="-12" max="6"
+                                                step="0.5" value="0">
+                                        </div>
+                                        <!-- Q Factor Slider -->
+                                        <div class="mb-3 d-flex align-items-center gap-3">
+                                            <label for="eq-q-slider" class="form-label mb-0"
+                                                style="min-width: 180px; padding-left: 24px;">
+                                                <span data-i18n="runmode.settings.system.equalizer.qfactor">Q
+                                                    Factor</span>
+                                                <span id="eq-q-factor" class="ms-2 text-muted">2.0</span>
+                                            </label>
+                                            <input type="range" class="form-range" id="eq-q-slider" min="0.1" max="20"
+                                                step="0.1" value="2">
+                                        </div>
+                                    </div>
+
+                                    <!-- Access Settings -->
+                                    <h5 class="mb-3 mt-5">
+                                        <span class="icon" data-icon="terminal"></span><span
+                                            data-i18n="runmode.settings.system.access.title">SSH Access</span>
+                                    </h5>
+
+                                    <!-- SSH Enable Toggle -->
+                                    <div class="form-check form-switch mb-4">
+                                        <input type="checkbox" class="form-check-input" id="ssh-enabled" role="switch">
+                                        <label class="form-check-label" for="ssh-enabled">
+                                            <span data-i18n="runmode.settings.system.sshaccess.enabled">Enable</span>
+                                            <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
+                                                role="button"
+                                                data-i18n-tooltip="runmode.settings.system.sshaccess.enabled.tooltip"></i>
+                                        </label>
+                                    </div>
+
+                                    <!-- SSH Public Key -->
+                                    <div id="ssh-controls">
+                                        <div class="mb-3">
+                                            <label for="ssh-public-key" class="form-label">
+                                                <span data-i18n="runmode.settings.system.sshaccess.publickey">Public
+                                                    Key</span>
+                                                <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
+                                                    role="button"
+                                                    data-i18n-tooltip="runmode.settings.system.sshaccess.publickey.tooltip"></i>
+                                            </label>
+                                            <textarea class="form-control font-monospace" id="ssh-public-key" rows="3"
+                                                data-i18n-placeholder="runmode.settings.system.sshaccess.hint"
+                                                style="font-size: 0.875rem;"></textarea>
+                                        </div>
+                                        <div class="d-flex justify-content-center">
+                                            <button type="button" class="btn btn-sm btn-primary" id="provision-ssh-btn">
+                                                <span data-i18n="runmode.settings.system.sshaccess.provision">Install
+                                                    SSH Key</span>
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <!-- SSH Note -->
+                                    <div class="alert alert-info mt-3 mb-0 text-center" role="alert">
+                                        <i class="fa-solid fa-circle-info me-2"></i>
+                                        <span data-i18n="runmode.settings.system.sshaccess.note">SSH settings are not
+                                            saved to the config file and are not included in config import or
+                                            export.</span>
                                     </div>
                                 </div>
                             </div>
@@ -1464,11 +1500,8 @@
                         </div>
                     </div>
                 </div>
-
             </div>
-
         </div>
-    </div>
     </div>
 
     <!-- Factory Reset Confirmation Modal -->

@@ -211,6 +211,22 @@ class ConfigManager {
             this.factoryReset();
         });
 
+        // SSH enable/disable toggle
+        const sshEnabledToggle = document.getElementById('ssh-enabled');
+        if (sshEnabledToggle) {
+            sshEnabledToggle.addEventListener('change', () => {
+                this.toggleSSH(sshEnabledToggle.checked);
+            });
+        }
+
+        // SSH provision button
+        const provisionSSHBtn = document.getElementById('provision-ssh-btn');
+        if (provisionSSHBtn) {
+            provisionSSHBtn.addEventListener('click', () => {
+                this.provisionSSH();
+            });
+        }
+
         // Calibration frequency buttons
         const calibrationFrequencyUp = document.getElementById('calibration-frequency-up');
         const calibrationFrequencyDown = document.getElementById('calibration-frequency-down');
@@ -951,6 +967,12 @@ class ConfigManager {
                     if (resetBtn) {
                         resetBtn.style.display = 'inline-block';
                     }
+
+                    // Set SSH toggle state from the API response
+                    const sshToggle = document.getElementById('ssh-enabled');
+                    if (sshToggle && typeof result.sshEnabled === 'boolean') {
+                        sshToggle.checked = result.sshEnabled;
+                    }
                 }
             }
         } catch (error) {
@@ -1123,6 +1145,92 @@ class ConfigManager {
             }
             alert(t('runmode.settings.error.setupmodefailed') + error.message);
             setupBtn.disabled = false;
+        }
+    }
+
+    async toggleSSH(enabled) {
+        const action = enabled ? 'enable' : 'disable';
+        const toggle = document.getElementById('ssh-enabled');
+
+        try {
+            toggle.disabled = true;
+            if (typeof window.showNavbarStatus === 'function') {
+                window.showNavbarStatus('saving');
+            }
+
+            const response = await fetch(`/api/system/ssh/${action}`, {
+                method: 'POST'
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            // Show success indicator
+            if (typeof window.showNavbarStatus === 'function') {
+                window.showNavbarStatus('success');
+            }
+
+        } catch (error) {
+            console.error(`Failed to ${action} SSH:`, error);
+            if (typeof window.showNavbarStatus === 'function') {
+                window.showNavbarStatus('error');
+            }
+            alert(`Failed to ${action} SSH: ${error.message}`);
+            // Revert toggle state on error
+            toggle.checked = !enabled;
+        } finally {
+            toggle.disabled = false;
+        }
+    }
+
+    async provisionSSH() {
+        const publicKeyInput = document.getElementById('ssh-public-key');
+        const provisionBtn = document.getElementById('provision-ssh-btn');
+        const publicKey = publicKeyInput.value.trim();
+
+        if (!publicKey) {
+            alert(t('runmode.settings.error.sshkeyrequired') || 'Please enter an SSH public key');
+            return;
+        }
+
+        try {
+            provisionBtn.disabled = true;
+            if (typeof window.showNavbarStatus === 'function') {
+                window.showNavbarStatus('saving');
+            }
+
+            const response = await fetch('/api/system/ssh/provision', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'text/plain'
+                },
+                body: publicKey
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+            }
+
+            // Show success indicator
+            if (typeof window.showNavbarStatus === 'function') {
+                window.showNavbarStatus('success');
+            }
+
+            alert(t('runmode.settings.success.sshprovisioned') || 'SSH key provisioned successfully');
+
+            // Clear the input field
+            publicKeyInput.value = '';
+
+        } catch (error) {
+            console.error('Failed to provision SSH key:', error);
+            if (typeof window.showNavbarStatus === 'function') {
+                window.showNavbarStatus('error');
+            }
+            alert(`Failed to provision SSH key: ${error.message}`);
+        } finally {
+            provisionBtn.disabled = false;
         }
     }
 
