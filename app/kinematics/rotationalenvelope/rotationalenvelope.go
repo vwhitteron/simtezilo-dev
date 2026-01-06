@@ -1,5 +1,5 @@
 // Package rotataionalenvelope provides utilities for 6DOF rotational envelope operations.
-package rotataionalenvelope
+package rotationalenvelope
 
 import (
 	"math"
