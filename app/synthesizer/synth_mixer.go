@@ -26,8 +26,10 @@ type Mixer struct {
 	silenced     bool
 
 	// Calibration mode state
-	calibrator    *calibrator.Calibrator
-	sineWavePhase float64
+	calibrator        *calibrator.Calibrator
+	sineWavePhaseL    float64
+	sineWavePhaseR    float64
+	calibrationStereo bool
 
 	// Buffer monitoring
 	lastHealthCheck     time.Time
@@ -60,15 +62,17 @@ func NewMixer(mixerConfig MixerConfig) (*Mixer, error) {
 	mixer := &Mixer{
 		config: mixerConfig.Config,
 
-		bufferLength:  mixerConfig.BufferLength,
-		sampleRateHz:  mixerConfig.SampleRateHz,
-		channels:      map[string]*MixerChannel{},
-		log:           mixerConfig.Log,
-		faderGain:     config.MinimumGain,
-		fadeInActive:  false,
-		silenced:      true,
-		calibrator:    mixerConfig.Calibrator,
-		sineWavePhase: 0,
+		bufferLength:      mixerConfig.BufferLength,
+		sampleRateHz:      mixerConfig.SampleRateHz,
+		channels:          map[string]*MixerChannel{},
+		log:               mixerConfig.Log,
+		faderGain:         config.MinimumGain,
+		fadeInActive:      false,
+		silenced:          true,
+		calibrator:        mixerConfig.Calibrator,
+		sineWavePhaseL:    0,
+		sineWavePhaseR:    0,
+		calibrationStereo: false,
 
 		// Initialize buffer monitoring
 		lastHealthCheck:     time.Now(),
@@ -358,26 +362,41 @@ func (m *Mixer) MixToMaster(length int) {
 	// Check if calibration mode is enabled
 	if m.calibrator != nil && m.calibrator.IsEnabled() {
 		frequency := m.calibrator.GetFrequency()
+		channel := m.calibrator.GetChannel()
 
-		// Generate sine wave samples directly into output buffer
+		// Generate sine wave samples
 		for i := range outSamples {
-			outSamples[i] = math.Sin(m.sineWavePhase)
+			// For mono (both channels), use phase L only
+			outSamples[i] = math.Sin(m.sineWavePhaseL)
 
 			// Increment phase
-			m.sineWavePhase += 2 * math.Pi * frequency / float64(m.sampleRateHz)
+			m.sineWavePhaseL += 2 * math.Pi * frequency / float64(m.sampleRateHz)
 
 			// Keep phase in reasonable range
-			if m.sineWavePhase > 2*math.Pi {
-				m.sineWavePhase -= 2 * math.Pi
+			if m.sineWavePhaseL > 2*math.Pi {
+				m.sineWavePhaseL -= 2 * math.Pi
 			}
 		}
 
 		masterChannel := m.channels[ChannelMaster]
 		m.mu.RUnlock()
+
+		// Update stereo flag after releasing read lock
+		m.mu.Lock()
+		m.calibrationStereo = (channel != calibrator.OutputChannelBoth)
+		m.mu.Unlock()
+
 		masterChannel.Write(outSamples, 1.0, 0, true)
 
 		return
 	}
+
+	// Reset calibration stereo mode when not calibrating
+	m.mu.RUnlock()
+	m.mu.Lock()
+	m.calibrationStereo = false
+	m.mu.Unlock()
+	m.mu.RLock()
 
 	// Normal haptic mode - mix chassis, transmission, and engine
 	// mix in the chassis and transmission channels with equal priority
@@ -452,7 +471,28 @@ func (m *Mixer) ResetSineWavePhase() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.sineWavePhase = 0
+	m.sineWavePhaseL = 0
+	m.sineWavePhaseR = 0
+}
+
+// IsCalibrationStereo returns whether calibration mode is outputting stereo.
+func (m *Mixer) IsCalibrationStereo() bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	return m.calibrationStereo
+}
+
+// GetCalibrationChannel returns the current calibration output channel setting.
+func (m *Mixer) GetCalibrationChannel() calibrator.OutputChannel {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if m.calibrator == nil {
+		return calibrator.OutputChannelBoth
+	}
+
+	return m.calibrator.GetChannel()
 }
 
 // mixEngineChannel mixes the engine channel into the output samples with lower priority.

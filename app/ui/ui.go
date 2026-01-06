@@ -8,6 +8,7 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/exitcode"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware"
 	"github.com/vwhitteron/simtezilo-dev/app/i18n"
+	"github.com/vwhitteron/simtezilo-dev/app/i18n/languagedb"
 	"github.com/vwhitteron/simtezilo-dev/app/kinematics"
 	"github.com/vwhitteron/simtezilo-dev/app/ui/gui"
 )
@@ -138,7 +139,7 @@ func (u *UserInterface) DrawReadyDisplay() {
 		return
 	}
 
-	_ = u.Screen.RenderSplashScreen(u.i18n.GetString("ui.ready"))
+	_ = u.Screen.RenderSplashScreen(u.i18n.GetString(languagedb.UIReady))
 
 	u.mode = ScreenModeWait
 

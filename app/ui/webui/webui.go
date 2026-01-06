@@ -918,6 +918,12 @@ func (w *WebUI) handleGetConfig(response http.ResponseWriter, _ *http.Request) {
 		"telemetry": map[string]any{
 			"source": w.config.GetTelemetrySource(),
 		},
+		"calibration": map[string]any{
+			"enabled":   w.calibrator.IsEnabled(),
+			"frequency": w.calibrator.GetFrequency(),
+			"volume":    w.calibrator.GetVolume(),
+			"channel":   string(w.calibrator.GetChannel()),
+		},
 	}
 
 	err := json.NewEncoder(response).Encode(configData)
@@ -1432,6 +1438,14 @@ func (w *WebUI) applyCalibrationConfig(config map[string]any) []string {
 			w.calibrator.SetVolume(volFloat)
 		} else {
 			errors = append(errors, "invalid calibration volume value")
+		}
+	}
+
+	if channel, ok := config["channel"]; ok {
+		if channelStr, ok := channel.(string); ok {
+			w.calibrator.SetChannel(calibrator.OutputChannel(channelStr))
+		} else {
+			errors = append(errors, "invalid calibration channel value")
 		}
 	}
 

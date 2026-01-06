@@ -422,11 +422,11 @@
                     <div class="card">
                         <div class="card-body">
                             <h5 class="mb-3"><span class="icon" data-icon="gear"></span><span
-                                    data-i18n="runmode.settings.general">General</span></h5>
+                                    data-i18n="runmode.settings.app.general.title">General</span></h5>
                             <div class="row g-3">
                                 <div class="col-md-6">
                                     <label for="app-language" class="form-label"
-                                        data-i18n="runmode.settings.app.language">Language</label>
+                                        data-i18n="runmode.settings.app.general.language">Language</label>
                                     <select id="app-language" class="form-select" data-config="app.language">
                                         <option value="en">English</option>
                                         <option value="ja">日本語</option>
@@ -434,16 +434,17 @@
                                 </div>
                                 <div class="col-md-6">
                                     <label for="app-accent" class="form-label">
-                                        <span data-i18n="runmode.settings.app.accent">Accent</span>
+                                        <span data-i18n="runmode.settings.app.general.accent">Accent</span>
                                         <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
-                                            role="button" data-i18n-tooltip="runmode.settings.app.accent.tooltip"></i>
+                                            role="button"
+                                            data-i18n-tooltip="runmode.settings.app.general.accent.tooltip"></i>
                                     </label>
                                     <input type="text" id="app-accent" class="form-control" data-config="app.accent"
                                         placeholder="e.g., us, uk, au">
                                 </div>
                                 <div class="col-md-6">
                                     <label for="app-loglevel" class="form-label"
-                                        data-i18n="runmode.settings.app.loglevel">Log Level</label>
+                                        data-i18n="runmode.settings.app.general.loglevel">Log Level</label>
                                     <select id="app-loglevel" class="form-select" data-config="app.logLevel">
                                         <option value="trace">Trace</option>
                                         <option value="debug">Debug</option>
@@ -455,67 +456,73 @@
                                 </div>
                                 <div class="col-md-6">
                                     <label for="app-basedir" class="form-label"
-                                        data-i18n="runmode.settings.app.basedir">Base Directory</label>
+                                        data-i18n="runmode.settings.app.general.basedir">Base Directory</label>
                                     <input type="text" id="app-basedir" class="form-control" data-config="app.baseDir"
                                         placeholder="/path/to/simtezilo">
                                 </div>
                                 <div class="col-md-6">
                                     <label for="app-vehicledbfile" class="form-label"
-                                        data-i18n="runmode.settings.app.vehicledbfile">Vehicle Database File</label>
+                                        data-i18n="runmode.settings.app.general.vehicledbfile">Vehicle Database
+                                        File</label>
                                     <input type="text" id="app-vehicledbfile" class="form-control"
                                         data-config="app.vehicleDBFile" placeholder="/path/to/vehicle.db">
                                 </div>
                                 <div class="col-12">
                                     <label for="telemetry-source" class="form-label">
-                                        <span data-i18n="runmode.settings.telemetry.source">Telemetry Source</span>
+                                        <span data-i18n="runmode.settings.app.general.telemetry.source">Telemetry
+                                            Source</span>
                                         <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
                                             role="button"
-                                            data-i18n-tooltip="runmode.settings.telemetry.source.tooltip"></i>
+                                            data-i18n-tooltip="runmode.settings.app.general.telemetry.source.tooltip"></i>
                                     </label>
                                     <div class="input-group mb-3">
                                         <input type="text" id="telemetry-source" class="form-control"
                                             data-config="telemetry.source" placeholder="udp://255.255.255.255:33739">
                                         <button type="button" class="btn btn-secondary" id="telemetry-auto-btn"
-                                            data-i18n="runmode.settings.telemetry.auto">Auto</button>
+                                            data-i18n="runmode.settings.app.general.telemetry.auto">Auto</button>
                                         <button type="button" class="btn btn-secondary rounded-end"
                                             id="telemetry-demo-btn"
-                                            data-i18n="runmode.settings.telemetry.demo">Demo</button>
+                                            data-i18n="runmode.settings.app.general.telemetry.demo">Demo</button>
                                     </div>
                                 </div>
                             </div>
 
                             <h5 class="mt-5 mb-3"><span class="icon" data-icon="file-code"></span><span
-                                    data-i18n="runmode.settings.config.title">Configuration</span></h5>
+                                    data-i18n="runmode.settings.app.config.title">Configuration</span></h5>
                             <div class="d-flex gap-2 flex-wrap">
                                 <button id="export-config" class="btn btn-outline-secondary"
-                                    data-i18n="runmode.settings.config.export">Export</button>
+                                    data-i18n="runmode.settings.app.config.export">Export</button>
                                 <button id="import-config" class="btn btn-outline-secondary"
-                                    data-i18n="runmode.settings.config.import">Import</button>
+                                    data-i18n="runmode.settings.app.config.import">Import</button>
                                 <input type="file" id="import-file-input" accept=".conf,.toml" style="display: none;">
                                 <button id="reset-config" class="btn btn-outline-danger"
-                                    data-i18n="runmode.settings.config.reset">Reset to Defaults</button>
+                                    data-i18n="runmode.settings.app.config.reset">Reset to Defaults</button>
                             </div>
 
                             <h5 class="mt-5 mb-3"><span class="icon" data-icon="power-off"></span><span
-                                    data-i18n="runmode.settings.control.title">Control</span></h5>
+                                    data-i18n="runmode.settings.app.control.title">Control</span></h5>
                             <div class="row mb-3">
                                 <div class="col-12">
                                     <div class="d-flex align-items-center gap-2">
-                                        <strong>Cached data:</strong>
+                                        <strong><span data-i18n="runmode.settings.app.control.cacheddata">Cached
+                                                data</span>:</strong>
                                         <span id="cache-size" class="text-muted"
                                             style="display: inline-block; min-width: 150px;">Loading...</span>
-                                        <button id="clear-cache" class="btn btn-sm btn-outline-secondary">Clear
-                                            Cache</button>
+                                        <button id="clear-cache" class="btn btn-sm btn-outline-secondary"><span
+                                                data-i18n="runmode.settings.app.control.clearcache">Clear
+                                                Cache</span></button>
                                     </div>
                                 </div>
                             </div>
                             <div class="d-flex gap-2 flex-wrap">
                                 <button id="restart-app" class="btn btn-outline-secondary"><span
-                                        data-i18n="runmode.settings.control.restart">Restart</span></button>
+                                        data-i18n="runmode.settings.app.control.restart">Restart</span></button>
                                 <button id="setup-mode" class="btn btn-outline-primary" style="display: none;"><span
-                                        data-i18n="runmode.settings.control.setupmode">Enter Setup Mode</span></button>
+                                        data-i18n="runmode.settings.app.control.setupmode">Enter Setup
+                                        Mode</span></button>
                                 <button id="factory-reset" class="btn btn-outline-danger" style="display: none;"><span
-                                        data-i18n="runmode.settings.control.factoryreset">Factory Reset</span></button>
+                                        data-i18n="runmode.settings.app.control.factoryreset">Factory
+                                        Reset</span></button>
                             </div>
                         </div>
                     </div>
@@ -526,10 +533,10 @@
                     <div class="card mb-3" id="hardware-settings-card">
                         <div class="card-body">
                             <h5 class="mb-3"><span class="icon" data-icon="microchip"></span><span
-                                    data-i18n="runmode.settings.hardware.title">Hardware</span></h5>
+                                    data-i18n="runmode.settings.system.hardware.title">Hardware</span></h5>
                             <div class="mb-3">
                                 <label for="hardware-model" class="form-label"
-                                    data-i18n="runmode.settings.hardware.model">Hardware Model</label>
+                                    data-i18n="runmode.settings.system.hardware.model">Hardware Model</label>
                                 <select id="hardware-model" class="form-select" data-config="hardware.model">
                                     <option value="none">None</option>
                                     <option value="pirateaudio">Pimoroni Pirate Audio</option>
@@ -539,7 +546,8 @@
                             </div>
                             <div class="mb-0">
                                 <label for="hardware-displayorientation" class="form-label"
-                                    data-i18n="runmode.settings.hardware.displayorientation">Display Orientation</label>
+                                    data-i18n="runmode.settings.system.hardware.displayorientation">Display
+                                    Orientation</label>
                                 <select id="hardware-displayorientation" class="form-select"
                                     data-config="hardware.displayOrientation" data-type="number">
                                     <option value="0">0°</option>
@@ -555,14 +563,14 @@
                     <div class="card">
                         <div class="card-body">
                             <h5 class="mb-3"><span class="icon" data-icon="bullseye"></span><span
-                                    data-i18n="runmode.settings.hardware.calibration.title">Calibration Mode</span></h5>
+                                    data-i18n="runmode.settings.system.calibration.title">Calibration Mode</span></h5>
                             <div class="form-check form-switch mb-4">
                                 <input type="checkbox" class="form-check-input" id="calibration-enabled"
                                     data-config="calibration.enabled" role="switch">
                                 <label class="form-check-label" for="calibration-enabled">
-                                    <span data-i18n="runmode.settings.calibration.enabled">Enable</span>
+                                    <span data-i18n="runmode.settings.system.calibration.enabled">Enable</span>
                                     <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted" role="button"
-                                        data-i18n-tooltip="runmode.settings.calibration.enabled.tooltip"></i>
+                                        data-i18n-tooltip="runmode.settings.system.calibration.enabled.tooltip"></i>
                                 </label>
                             </div>
 
@@ -570,32 +578,69 @@
                                 <div class="row g-3 mb-4">
                                     <div class="col-md-6 col-lg-3">
                                         <label for="calibration-frequency" class="form-label">
-                                            <span data-i18n="runmode.settings.hardware.calibration.frequency">Frequency
+                                            <span data-i18n="runmode.settings.system.calibration.frequency">Frequency
                                                 (Hz)</span>
                                             <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
                                                 role="button"
-                                                data-i18n-tooltip="runmode.settings.hardware.calibration.frequency.tooltip"></i>
+                                                data-i18n-tooltip="runmode.settings.system.calibration.frequency.tooltip"></i>
                                         </label>
                                         <input type="number" id="calibration-frequency" class="form-control text-center"
                                             data-config="calibration.frequency" min="5" max="160" step="1" value="5">
                                     </div>
                                     <div class="col-md-6 col-lg-3">
                                         <label for="calibration-volume" class="form-label">
-                                            <span data-i18n="runmode.settings.hardware.calibration.volume">Volume
+                                            <span data-i18n="runmode.settings.system.calibration.volume">Volume
                                                 (dB)</span>
                                             <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
                                                 role="button"
-                                                data-i18n-tooltip="runmode.settings.hardware.calibration.volume.tooltip"></i>
+                                                data-i18n-tooltip="runmode.settings.system.calibration.volume.tooltip"></i>
                                         </label>
                                         <input type="number" id="calibration-volume" class="form-control text-center"
                                             data-config="calibration.volume" min="-60" max="0" step="0.25" value="-30">
+                                    </div>
+                                    <div class="col-md-12 col-lg-6">
+                                        <label for="calibration-channel" class="form-label">
+                                            <span data-i18n="runmode.settings.system.calibration.channel">Output
+                                                Channel</span>
+                                            <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
+                                                role="button"
+                                                data-i18n-tooltip="runmode.settings.system.calibration.channel.tooltip"></i>
+                                        </label>
+                                        <div class="btn-group w-100" role="group">
+                                            <input type="radio" class="btn-check" name="calibration-channel"
+                                                id="calibration-channel-both" data-config="calibration.channel"
+                                                data-radio-value="both" autocomplete="off" checked>
+                                            <label class="btn btn-sm btn-outline-primary"
+                                                for="calibration-channel-both">
+                                                <span
+                                                    data-i18n="runmode.settings.system.calibration.channel.both">Both</span>
+                                            </label>
+
+                                            <input type="radio" class="btn-check" name="calibration-channel"
+                                                id="calibration-channel-left" data-config="calibration.channel"
+                                                data-radio-value="left" autocomplete="off">
+                                            <label class="btn btn-sm btn-outline-primary"
+                                                for="calibration-channel-left">
+                                                <span
+                                                    data-i18n="runmode.settings.system.calibration.channel.left">Left</span>
+                                            </label>
+
+                                            <input type="radio" class="btn-check" name="calibration-channel"
+                                                id="calibration-channel-right" data-config="calibration.channel"
+                                                data-radio-value="right" autocomplete="off">
+                                            <label class="btn btn-sm btn-outline-primary"
+                                                for="calibration-channel-right">
+                                                <span
+                                                    data-i18n="runmode.settings.system.calibration.channel.right">Right</span>
+                                            </label>
+                                        </div>
                                     </div>
                                 </div>
 
                                 <div class="mt-3">
                                     <small class="text-muted">
                                         <i class="fa-solid fa-info-circle me-1"></i>
-                                        <span data-i18n="runmode.settings.hardware.calibration.hint">Adjust the
+                                        <span data-i18n="runmode.settings.system.calibration.hint">Adjust the
                                             frequency and
                                             volume to find the optimal settings for your haptic system. The calibration
                                             tone will play continuously while this mode is enabled.</span>
@@ -610,7 +655,7 @@
                                     aria-controls="advancedSettingsSynth" style="cursor: pointer;">
                                     <h5 class="mb-0 me-3">
                                         <span class="icon" data-icon="tools"></span><span
-                                            data-i18n="runmode.settings.hardware.advanced">Advanced Settings</span>
+                                            data-i18n="runmode.settings.system.advanced.title">Advanced Settings</span>
                                     </h5>
                                     <i class="fa-solid fa-chevron-right" id="advanced-settings-chevron-synth"
                                         style="transition: transform 0.3s ease;"></i>
@@ -622,7 +667,7 @@
                                         <div class="card-body">
                                             <h5 class="card-title mb-3">
                                                 <span class="icon" data-icon="chart-simple"></span><span
-                                                    data-i18n="runmode.settings.hardware.equalizer">Equalizer</span>
+                                                    data-i18n="runmode.settings.system.equalizer.title">Equalizer</span>
                                             </h5>
                                             <div class="mb-3">
                                                 <div class="form-check form-switch">
@@ -630,7 +675,7 @@
                                                         role="switch">
                                                     <label class="form-check-label" for="synth-eqenabled">
                                                         <span
-                                                            data-i18n="runmode.settings.hardware.eqenabled">Enable</span>
+                                                            data-i18n="runmode.settings.system.equalizer.enabled">Enable</span>
                                                     </label>
                                                 </div>
                                             </div>
@@ -648,12 +693,13 @@
                                                     </select>
                                                     <i class="fa-solid fa-circle-question tooltip-trigger text-muted"
                                                         role="button"
-                                                        data-i18n-tooltip="runmode.settings.hardware.equalizer.tooltip"></i>
+                                                        data-i18n-tooltip="runmode.settings.system.equalizer.tooltip"></i>
                                                 </div>
                                                 <button type="button" class="btn btn-sm btn-secondary"
                                                     id="eq-reset-btn">
                                                     <i class="fa-solid fa-rotate-left me-1"></i>
-                                                    <span data-i18n="runmode.settings.hardware.reseteq">Reset</span>
+                                                    <span
+                                                        data-i18n="runmode.settings.system.equalizer.reset">Reset</span>
                                                 </button>
                                             </div>
                                             <!-- EQ Band Controls -->
@@ -663,7 +709,7 @@
                                                     <label for="eq-frequency-slider" class="form-label mb-0"
                                                         style="min-width: 180px; padding-left: 24px;">
                                                         <span
-                                                            data-i18n="runmode.settings.hardware.frequency">Frequency</span>
+                                                            data-i18n="runmode.settings.system.equalizer.frequency">Frequency</span>
                                                         <span id="eq-frequency-value" class="ms-2 text-muted">12
                                                             Hz</span>
                                                     </label>
@@ -674,7 +720,8 @@
                                                 <div class="mb-3 d-flex align-items-center gap-3">
                                                     <label for="eq-gain-slider" class="form-label mb-0"
                                                         style="min-width: 180px; padding-left: 24px;">
-                                                        <span data-i18n="runmode.settings.hardware.gain">Gain</span>
+                                                        <span
+                                                            data-i18n="runmode.settings.system.equalizer.gain">Gain</span>
                                                         <span id="eq-gain-value" class="ms-2 text-muted">0.0 dB</span>
                                                     </label>
                                                     <input type="range" class="form-range" id="eq-gain-slider" min="-12"
@@ -684,7 +731,7 @@
                                                 <div class="mb-3 d-flex align-items-center gap-3">
                                                     <label for="eq-q-slider" class="form-label mb-0"
                                                         style="min-width: 180px; padding-left: 24px;">
-                                                        <span data-i18n="runmode.settings.hardware.qfactor">Q
+                                                        <span data-i18n="runmode.settings.system.equalizer.qfactor">Q
                                                             Factor</span>
                                                         <span id="eq-q-factor" class="ms-2 text-muted">2.0</span>
                                                     </label>
@@ -705,15 +752,16 @@
                     <div class="card">
                         <div class="card-body">
                             <h5 class="mb-3"><span class="icon" data-icon="caret-square-right"></span><span
-                                    data-i18n="runmode.settings.synth.samplerates_title">Sample Rates</span></h5>
+                                    data-i18n="runmode.settings.synth.samplerates.title">Sample Rates</span></h5>
                             <div class="row g-3 mb-4">
                                 <div class="col-md-6">
                                     <label for="synth-internalsamplerate" class="form-label">
-                                        <span data-i18n="runmode.settings.synth.internalsamplerate">Internal Sample Rate
+                                        <span data-i18n="runmode.settings.synth.samplerates.internal">Internal Sample
+                                            Rate
                                             (Hz)</span>
                                         <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
                                             role="button"
-                                            data-i18n-tooltip="runmode.settings.synth.internalsamplerate.tooltip"></i>
+                                            data-i18n-tooltip="runmode.settings.synth.samplerates.internal.tooltip"></i>
                                     </label>
                                     <select id="synth-internalsamplerate" class="form-select"
                                         data-config="synthesizer.internalSampleRateHz" data-type="number">
@@ -727,11 +775,11 @@
                                 </div>
                                 <div class="col-md-6">
                                     <label for="synth-outputsamplerate" class="form-label">
-                                        <span data-i18n="runmode.settings.synth.outputsamplerate">Output Sample Rate
+                                        <span data-i18n="runmode.settings.synth.samplerates.output">Output Sample Rate
                                             (Hz)</span>
                                         <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
                                             role="button"
-                                            data-i18n-tooltip="runmode.settings.synth.outputsamplerate.tooltip"></i>
+                                            data-i18n-tooltip="runmode.settings.synth.samplerates.output.tooltip"></i>
                                     </label>
                                     <select id="synth-outputsamplerate" class="form-select"
                                         data-config="synthesizer.outputSampleRateHz" data-type="number">
@@ -746,14 +794,14 @@
                             </div>
 
                             <h5 class="mt-5 mb-3"><span class="icon" data-icon="gauge-high"></span><span
-                                    data-i18n="runmode.settings.synth.gains_title">Gain Controls</span></h5>
+                                    data-i18n="runmode.settings.synth.gaincontrols.title">Gain Controls</span></h5>
                             <div class="row g-3">
                                 <div class="col-md-6 col-lg-4">
                                     <label for="synth-mastergain" class="form-label">
-                                        <span data-i18n="runmode.settings.synth.mastergain">Master (dB)</span>
+                                        <span data-i18n="runmode.settings.synth.gaincontrols.master">Master (dB)</span>
                                         <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
                                             role="button"
-                                            data-i18n-tooltip="runmode.settings.synth.mastergain.tooltip"></i>
+                                            data-i18n-tooltip="runmode.settings.synth.gaincontrols.master.tooltip"></i>
                                     </label>
                                     <div style="position: relative;">
                                         <input type="number" id="synth-mastergain" class="form-control gain-input"
@@ -767,10 +815,11 @@
                                 </div>
                                 <div class="col-md-6 col-lg-4">
                                     <label for="synth-chassisgain" class="form-label">
-                                        <span data-i18n="runmode.settings.synth.chassisgain">Chassis (dB)</span>
+                                        <span data-i18n="runmode.settings.synth.gaincontrols.chassis">Chassis
+                                            (dB)</span>
                                         <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
                                             role="button"
-                                            data-i18n-tooltip="runmode.settings.synth.chassisgain.tooltip"></i>
+                                            data-i18n-tooltip="runmode.settings.synth.gaincontrols.chassis.tooltip"></i>
                                     </label>
                                     <div style="position: relative;">
                                         <input type="number" id="synth-chassisgain" class="form-control gain-input"
@@ -784,10 +833,10 @@
                                 </div>
                                 <div class="col-md-6 col-lg-4">
                                     <label for="synth-enginegain" class="form-label">
-                                        <span data-i18n="runmode.settings.synth.enginegain">Engine (dB)</span>
+                                        <span data-i18n="runmode.settings.synth.gaincontrols.engine">Engine (dB)</span>
                                         <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
                                             role="button"
-                                            data-i18n-tooltip="runmode.settings.synth.enginegain.tooltip"></i>
+                                            data-i18n-tooltip="runmode.settings.synth.gaincontrols.engine.tooltip"></i>
                                     </label>
                                     <div style="position: relative;">
                                         <input type="number" id="synth-enginegain" class="form-control gain-input"
@@ -801,11 +850,11 @@
                                 </div>
                                 <div class="col-md-6 col-lg-4">
                                     <label for="synth-transmissiongain" class="form-label">
-                                        <span data-i18n="runmode.settings.synth.transmissiongain">Transmission
+                                        <span data-i18n="runmode.settings.synth.gaincontrols.transmission">Transmission
                                             (dB)</span>
                                         <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
                                             role="button"
-                                            data-i18n-tooltip="runmode.settings.synth.transmissiongain.tooltip"></i>
+                                            data-i18n-tooltip="runmode.settings.synth.gaincontrols.transmission.tooltip"></i>
                                     </label>
                                     <div style="position: relative;">
                                         <input type="number" id="synth-transmissiongain" class="form-control gain-input"
@@ -820,12 +869,13 @@
                                 </div>
                                 <div class="col-md-6 col-lg-4">
                                     <label for="synth-transmissiongainminrace" class="form-label">
-                                        <span data-i18n="runmode.settings.synth.transmissiongainminrace">Transmission
+                                        <span
+                                            data-i18n="runmode.settings.synth.gaincontrols.transmissionminrace">Transmission
                                             Min
                                             Race (dB)</span>
                                         <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
                                             role="button"
-                                            data-i18n-tooltip="runmode.settings.synth.transmissiongainminrace.tooltip"></i>
+                                            data-i18n-tooltip="runmode.settings.synth.gaincontrols.transmissionminrace.tooltip"></i>
                                     </label>
                                     <div style="position: relative;">
                                         <input type="number" id="synth-transmissiongainminrace"
@@ -838,11 +888,12 @@
                                 </div>
                                 <div class="col-md-6 col-lg-4">
                                     <label for="synth-transmissiongainminstreet" class="form-label">
-                                        <span data-i18n="runmode.settings.synth.transmissiongainminstreet">Transmission
+                                        <span
+                                            data-i18n="runmode.settings.synth.gaincontrols.transmissionminstreet">Transmission
                                             Min Street (dB)</span>
                                         <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
                                             role="button"
-                                            data-i18n-tooltip="runmode.settings.synth.transmissiongainminstreet.tooltip"></i>
+                                            data-i18n-tooltip="runmode.settings.synth.gaincontrols.transmissionminstreet.tooltip"></i>
                                     </label>
                                     <div style="position: relative;">
                                         <input type="number" id="synth-transmissiongainminstreet"
@@ -855,10 +906,11 @@
                                 </div>
                                 <div class="col-md-6 col-lg-4">
                                     <label for="synth-gainincrement" class="form-label">
-                                        <span data-i18n="runmode.settings.synth.gainincrement">Gain Increment</span>
+                                        <span data-i18n="runmode.settings.synth.gaincontrols.increment">Gain
+                                            Increment</span>
                                         <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
                                             role="button"
-                                            data-i18n-tooltip="runmode.settings.synth.gainincrement.tooltip"></i>
+                                            data-i18n-tooltip="runmode.settings.synth.gaincontrols.increment.tooltip"></i>
                                     </label>
                                     <input type="number" id="synth-gainincrement" class="form-control gain-input"
                                         data-config="synthesizer.gainIncrement" min="0.05" max="1.0" step="0.05">
@@ -873,10 +925,10 @@
                     <div class="card">
                         <div class="card-body">
                             <h5 class="mb-3"><span class="icon" data-icon="gear"></span><span
-                                    data-i18n="runmode.settings.general">General</span></h5>
+                                    data-i18n="runmode.settings.haptics.general.title">General</span></h5>
                             <div class="d-flex align-items-center gap-3 mb-4">
                                 <div class="d-flex align-items-center gap-1">
-                                    <span data-i18n="runmode.settings.haptics.enablereplay">Output Mode</span>
+                                    <span data-i18n="runmode.settings.haptics.outputmode">Output Mode</span>
                                 </div>
                                 <div class="btn-group" role="group">
                                     <input type="radio" class="btn-check" name="replay-mode" id="replay-live-radio"
@@ -894,14 +946,14 @@
                             </div>
 
                             <h5 class="mt-5 mb-3"><span class="icon" data-icon="car-burst"></span><span
-                                    data-i18n="runmode.settings.haptics.chassis_title">Chassis Feedback</span></h5>
+                                    data-i18n="runmode.settings.haptics.chassis.title">Chassis Feedback</span></h5>
                             <div class="row g-3 mb-4">
                                 <div class="col-md-6 col-lg-3">
                                     <label for="haptics-jerkcurve" class="form-label">
-                                        <span data-i18n="runmode.settings.haptics.jerkcurve">Jerk Curve</span>
+                                        <span data-i18n="runmode.settings.haptics.chassis.jerkcurve">Jerk Curve</span>
                                         <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
                                             role="button"
-                                            data-i18n-tooltip="runmode.settings.haptics.jerkcurve.tooltip"></i>
+                                            data-i18n-tooltip="runmode.settings.haptics.chassis.jerkcurve.tooltip"></i>
                                     </label>
                                     <input type="number" id="haptics-jerkcurve" class="form-control"
                                         data-config="haptics.jerkCurve" min="5" max="955" step="1">
@@ -911,27 +963,27 @@
                                         <span data-i18n="runmode.settings.haptics.jerkmax">Jerk Max</span>
                                         <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
                                             role="button"
-                                            data-i18n-tooltip="runmode.settings.haptics.jerkmax.tooltip"></i>
+                                            data-i18n-tooltip="runmode.settings.haptics.chassis.jerkmax.tooltip"></i>
                                     </label>
                                     <input type="number" id="haptics-jerkmax" class="form-control"
                                         data-config="haptics.jerkMax" min="5" max="955" step="1">
                                 </div>
                                 <div class="col-md-6 col-lg-3">
                                     <label for="haptics-snapcurve" class="form-label">
-                                        <span data-i18n="runmode.settings.haptics.snapcurve">Snap Curve</span>
+                                        <span data-i18n="runmode.settings.haptics.chassis.snapcurve">Snap Curve</span>
                                         <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
                                             role="button"
-                                            data-i18n-tooltip="runmode.settings.haptics.snapcurve.tooltip"></i>
+                                            data-i18n-tooltip="runmode.settings.haptics.chassis.snapcurve.tooltip"></i>
                                     </label>
                                     <input type="number" id="haptics-snapcurve" class="form-control"
                                         data-config="haptics.snapCurve" min="5" max="955" step="1">
                                 </div>
                                 <div class="col-md-6 col-lg-3">
                                     <label for="haptics-snapmax" class="form-label">
-                                        <span data-i18n="runmode.settings.haptics.snapmax">Snap Max</span>
+                                        <span data-i18n="runmode.settings.haptics.chassis.snapmax">Snap Max</span>
                                         <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
                                             role="button"
-                                            data-i18n-tooltip="runmode.settings.haptics.snapmax.tooltip"></i>
+                                            data-i18n-tooltip="runmode.settings.haptics.chassis.snapmax.tooltip"></i>
                                     </label>
                                     <input type="number" id="haptics-snapmax" class="form-control"
                                         data-config="haptics.snapMax" min="10" max="100" step="1">
@@ -941,33 +993,35 @@
                             <div class="row g-3">
                                 <div class="col-md-6 col-lg-4">
                                     <label for="haptics-pulseamplitude" class="form-label">
-                                        <span data-i18n="runmode.settings.haptics.pulseamplitude">Pulse Max
+                                        <span data-i18n="runmode.settings.haptics.chassis.pulsemaxamplitude">Pulse Max
                                             Amplitude</span>
                                         <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
                                             role="button"
-                                            data-i18n-tooltip="runmode.settings.haptics.pulseamplitude.tooltip"></i>
+                                            data-i18n-tooltip="runmode.settings.haptics.chassis.pulsemaxamplitude.tooltip"></i>
                                     </label>
                                     <input type="number" id="haptics-pulseamplitude" class="form-control"
                                         data-config="haptics.pulseMaxAmplitude" min="0.05" max="1.0" step="0.05">
                                 </div>
                                 <div class="col-md-6 col-lg-4">
                                     <label for="haptics-pulseminfreq" class="form-label">
-                                        <span data-i18n="runmode.settings.haptics.pulseminfreq">Pulse Min Frequency
+                                        <span data-i18n="runmode.settings.haptics.chassis.pulseminfreq">Pulse Min
+                                            Frequency
                                             (Hz)</span>
                                         <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
                                             role="button"
-                                            data-i18n-tooltip="runmode.settings.haptics.pulseminfreq.tooltip"></i>
+                                            data-i18n-tooltip="runmode.settings.haptics.chassis.pulseminfreq.tooltip"></i>
                                     </label>
                                     <input type="number" id="haptics-pulseminfreq" class="form-control"
                                         data-config="haptics.pulseMinFrequencyHz" min="5" max="150" step="1">
                                 </div>
                                 <div class="col-md-6 col-lg-4">
                                     <label for="haptics-pulsemaxfreq" class="form-label">
-                                        <span data-i18n="runmode.settings.haptics.pulsemaxfreq">Pulse Max Frequency
+                                        <span data-i18n="runmode.settings.haptics.chassis.pulsemaxfreq">Pulse Max
+                                            Frequency
                                             (Hz)</span>
                                         <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
                                             role="button"
-                                            data-i18n-tooltip="runmode.settings.haptics.pulsemaxfreq.tooltip"></i>
+                                            data-i18n-tooltip="runmode.settings.haptics.chassis.pulsemaxfreq.tooltip"></i>
                                     </label>
                                     <input type="number" id="haptics-pulsemaxfreq" class="form-control"
                                         data-config="haptics.pulseMaxFrequencyHz" min="20" max="160" step="1">
@@ -975,29 +1029,30 @@
                             </div>
 
                             <h5 class="mt-5 mb-3"><span class="icon" data-icon="gears"></span><span
-                                    data-i18n="runmode.settings.haptics.transmission_title">Transmission Feedback</span>
+                                    data-i18n="runmode.settings.haptics.transmission.title">Transmission Feedback</span>
                             </h5>
                             <div class="row g-3 mb-4">
                                 <div class="col-md-6">
                                     <div class="d-flex align-items-center gap-3">
                                         <div class="d-flex align-items-center gap-1">
-                                            <span data-i18n="runmode.settings.haptics.dynamictransmission">Feedback
+                                            <span
+                                                data-i18n="runmode.settings.haptics.transmission.feedbackstrength">Feedback
                                                 strength</span>
                                             <i class="fa-solid fa-circle-question tooltip-trigger text-muted"
                                                 role="button"
-                                                data-i18n-tooltip="runmode.settings.haptics.dynamictransmission.tooltip"></i>
+                                                data-i18n-tooltip="runmode.settings.haptics.transmission.feedbackstrength.tooltip"></i>
                                         </div>
                                         <div class="btn-group" role="group">
                                             <input type="radio" class="btn-check" name="transmission-mode"
                                                 id="transmission-fixed-radio" autocomplete="off" checked>
                                             <label class="btn btn-sm btn-outline-primary" for="transmission-fixed-radio"
-                                                data-i18n="runmode.settings.haptics.dynamictransmission.fixed">Fixed</label>
+                                                data-i18n="runmode.settings.haptics.transmission.feedbackstrength.fixed">Fixed</label>
 
                                             <input type="radio" class="btn-check" name="transmission-mode"
                                                 id="transmission-dynamic-radio" autocomplete="off">
                                             <label class="btn btn-sm btn-outline-primary"
                                                 for="transmission-dynamic-radio"
-                                                data-i18n="runmode.settings.haptics.dynamictransmission.dynamic">Dynamic</label>
+                                                data-i18n="runmode.settings.haptics.transmission.feedbackstrength.dynamic">Dynamic</label>
                                         </div>
                                         <input type="checkbox" id="haptics-dynamictransmission"
                                             data-config="haptics.dynamicTransmissionFeedback" style="display: none;">
@@ -1007,21 +1062,22 @@
                             <div class="row g-3 mb-4">
                                 <div class="col-md-6 col-lg-3">
                                     <label for="haptics-transmissioncurve" class="form-label">
-                                        <span data-i18n="runmode.settings.haptics.transmissioncurve">Transmission
+                                        <span data-i18n="runmode.settings.haptics.transmission.curve">Transmission
                                             Curve</span>
                                         <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
                                             role="button"
-                                            data-i18n-tooltip="runmode.settings.haptics.transmissioncurve.tooltip"></i>
+                                            data-i18n-tooltip="runmode.settings.haptics.transmission.curve.tooltip"></i>
                                     </label>
                                     <input type="number" id="haptics-transmissioncurve" class="form-control"
                                         data-config="haptics.dynamicTransmissionCurve" min="5" max="955" step="1">
                                 </div>
                                 <div class="col-md-6 col-lg-3">
                                     <label for="haptics-gforcemax" class="form-label" style="white-space: nowrap;">
-                                        <span data-i18n="runmode.settings.haptics.gforcemax">G-Force Max</span>
+                                        <span data-i18n="runmode.settings.haptics.transmission.gforcemax">G-Force
+                                            Max</span>
                                         <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
                                             role="button"
-                                            data-i18n-tooltip="runmode.settings.haptics.gforcemax.tooltip"></i>
+                                            data-i18n-tooltip="runmode.settings.haptics.transmission.gforcemax.tooltip"></i>
                                     </label>
                                     <input type="number" id="haptics-gforcemax" class="form-control"
                                         data-config="haptics.dynamicTransmissionGforceMax" min="0.1" max="5.0"
@@ -1036,7 +1092,7 @@
                                     aria-controls="advancedSettingsHaptics" style="cursor: pointer;">
                                     <h5 class="mb-0 me-3">
                                         <span class="icon" data-icon="tools"></span><span
-                                            data-i18n="runmode.settings.hardware.advanced">Advanced Settings</span>
+                                            data-i18n="runmode.settings.haptics.advanced.title">Advanced Settings</span>
                                     </h5>
                                     <i class="fa-solid fa-chevron-right" id="advanced-settings-chevron-haptics"
                                         style="transition: transform 0.3s ease;"></i>
@@ -1049,7 +1105,7 @@
                                         <div class="card-body">
                                             <h5 class="card-title mb-3">
                                                 <span class="icon" data-icon="explosion"></span><span
-                                                    data-i18n="runmode.settings.synth.engineprofiles">Engine
+                                                    data-i18n="runmode.settings.haptics.engineprofiles.title">Engine
                                                     Profiles</span>
                                             </h5>
                                             <div class="row g-3 mb-3">
@@ -1064,11 +1120,11 @@
                                                     <div class="col-md-6">
                                                         <label for="engine-primarybalance" class="form-label">
                                                             <span
-                                                                data-i18n="runmode.settings.synth.primarybalance">Primary
+                                                                data-i18n="runmode.settings.haptics.engineprofiles.primarybalance">Primary
                                                                 Balance</span>
                                                             <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
                                                                 role="button"
-                                                                data-tooltip="Primary balance of the engine (0.0 = unbalanced, 1.0 = perfectly balanced). Affects the fundamental vibration character."></i>
+                                                                data-i18n-tooltip="runmode.settings.haptics.engineprofiles.primarybalance.tooltip"></i>
                                                         </label>
                                                         <input type="number" id="engine-primarybalance"
                                                             class="form-control" min="0" max="1" step="0.01">
@@ -1076,11 +1132,11 @@
                                                     <div class="col-md-6">
                                                         <label for="engine-secondarybalance" class="form-label">
                                                             <span
-                                                                data-i18n="runmode.settings.synth.secondarybalance">Secondary
+                                                                data-i18n="runmode.settings.haptics.engineprofiles.secondarybalance">Secondary
                                                                 Balance</span>
                                                             <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
                                                                 role="button"
-                                                                data-tooltip="Secondary balance of the engine (0.0 = unbalanced, 1.0 = perfectly balanced). Affects harmonic vibrations. Note that this setting doesn't currently have any noticeable effect."></i>
+                                                                data-i18n-tooltip="runmode.settings.haptics.engineprofiles.secondarybalance.tooltip"></i>
                                                         </label>
                                                         <input type="number" id="engine-secondarybalance"
                                                             class="form-control" min="0" max="1" step="0.01">
@@ -1088,22 +1144,23 @@
                                                     <div class="col-md-6">
                                                         <label for="engine-gain" class="form-label">
                                                             <span
-                                                                data-i18n="runmode.settings.synth.engineprofilegain">Gain
+                                                                data-i18n="runmode.settings.haptics.engineprofiles.gain">Gain
                                                                 (dB)</span>
                                                             <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
                                                                 role="button"
-                                                                data-tooltip="Additional gain offset applied to this engine profile. Use negative values to reduce intensity."></i>
+                                                                data-i18n-tooltip="runmode.settings.haptics.engineprofiles.gain.tooltip"></i>
                                                         </label>
                                                         <input type="number" id="engine-gain" class="form-control"
                                                             min="-20" max="20" step="0.25">
                                                     </div>
                                                     <div class="col-md-6">
                                                         <label for="engine-pulsescale" class="form-label">
-                                                            <span data-i18n="runmode.settings.synth.pulsescale">Pulse
+                                                            <span
+                                                                data-i18n="runmode.settings.haptics.engineprofiles.pulsescale">Pulse
                                                                 Scale</span>
                                                             <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
                                                                 role="button"
-                                                                data-tooltip="Scales the pulse rate (1.0 = normal, <1.0 = reduced rate). Useful for high-RPM or multi-cylinder engines to keep feedback in the tactile range."></i>
+                                                                data-i18n-tooltip="runmode.settings.haptics.engineprofiles.pulsescale.tooltip"></i>
                                                         </label>
                                                         <input type="number" id="engine-pulsescale" class="form-control"
                                                             min="0.1" max="1.0" step="0.01">
@@ -1126,12 +1183,12 @@
 
                             <!-- General -->
                             <h5 class="mb-3"><span class="icon" data-icon="gear"></span><span
-                                    data-i18n="runmode.settings.general">General</span></h5>
+                                    data-i18n="runmode.settings.pitradio.general.title">General</span></h5>
                             <div class="form-check form-switch mb-3">
                                 <input type="checkbox" class="form-check-input" id="pitradio-enabled"
                                     data-config="pitRadio.enabled" role="switch">
                                 <label class="form-check-label" for="pitradio-enabled"
-                                    data-i18n="runmode.settings.pitradio.enabled">Enable</label>
+                                    data-i18n="runmode.settings.pitradio.enable">Enable</label>
                             </div>
 
                             <div class="row g-3 mb-3">
@@ -1141,15 +1198,13 @@
                                     </label>
                                     <select id="pitradio-output" class="form-select"
                                         data-config="haptics.pitRadioOutput">
-                                        <option value="log" data-i18n="runmode.settings.pitradio.output.log">Log
-                                        </option>
-                                        <option value="discord" data-i18n="runmode.settings.pitradio.output.discord">
-                                            Discord</option>
+                                        <option value="log">Log</option>
+                                        <option value="discord">Discord</option>
                                     </select>
                                 </div>
                                 <div class="col-md-6 col-lg-4">
                                     <label for="pitradio-interval" class="form-label"
-                                        data-i18n="runmode.settings.pitradio.interval">Message Send Interval
+                                        data-i18n="runmode.settings.pitradio.messageinterval">Message Send Interval
                                         (ms)</label>
                                     <input type="number" id="pitradio-interval" class="form-control"
                                         data-config="pitRadio.messageSendIntervalMs" min="500" max="10000" step="100">
@@ -1159,13 +1214,13 @@
                             <!-- Discord -->
                             <div id="discord-settings-section" style="display: none;">
                                 <h5 class="mt-5 mb-3"><i class="fa-brands fa-discord me-2"></i><span
-                                        data-i18n="runmode.settings.discord.title">Discord</span></h5>
+                                        data-i18n="runmode.settings.pitradio.discord.title">Discord</span></h5>
                                 <div class="mb-3">
                                     <label for="discord-token" class="form-label"
-                                        data-i18n="runmode.settings.discord.token">Bot Token</label>
+                                        data-i18n="runmode.settings.pitradio.discord.bottoken">Bot Token</label>
                                     <input type="password" id="discord-token" class="form-control"
                                         data-config="pitRadio.discord.token"
-                                        data-i18n-placeholder="runmode.settings.discord.token.placeholder"
+                                        data-i18n-placeholder="runmode.settings.pitradio.discord.bottoken.placeholder"
                                         placeholder="Enter Discord bot token">
                                 </div>
                                 <div class="row g-3 mb-3">
@@ -1174,23 +1229,24 @@
                                             data-i18n="runmode.settings.discord.guildid">Guild ID</label>
                                         <input type="text" id="discord-guildid" class="form-control"
                                             data-config="pitRadio.discord.guildID"
-                                            data-i18n-placeholder="runmode.settings.discord.guildid.placeholder"
+                                            data-i18n-placeholder="runmode.settings.pitradio.discord.guildid.placeholder"
                                             placeholder="Discord server ID">
                                     </div>
                                     <div class="col-md-4">
                                         <label for="discord-channelid" class="form-label"
-                                            data-i18n="runmode.settings.discord.channelid">Channel ID</label>
+                                            data-i18n="runmode.settings.pitradio.discord.channelid">Channel ID</label>
                                         <input type="text" id="discord-channelid" class="form-control"
                                             data-config="pitRadio.discord.channelID"
-                                            data-i18n-placeholder="runmode.settings.discord.channelid.placeholder"
+                                            data-i18n-placeholder="runmode.settings.pitradio.discord.channelid.placeholder"
                                             placeholder="Text channel ID">
                                     </div>
                                     <div class="col-md-4">
                                         <label for="discord-voicechannelid" class="form-label"
-                                            data-i18n="runmode.settings.discord.voicechannelid">Voice Channel ID</label>
+                                            data-i18n="runmode.settings.pitradio.discord.voicechannelid">Voice Channel
+                                            ID</label>
                                         <input type="text" id="discord-voicechannelid" class="form-control"
                                             data-config="pitRadio.discord.voiceChannelID"
-                                            data-i18n-placeholder="runmode.settings.discord.voicechannelid.placeholder"
+                                            data-i18n-placeholder="runmode.settings.pitradio.discord.voicechannelid.placeholder"
                                             placeholder="Voice channel ID">
                                     </div>
                                 </div>
@@ -1199,17 +1255,17 @@
 
                             <!-- Notifications -->
                             <h5 class="mt-5 mb-3"><i class="fa-solid fa-message me-2"></i><span
-                                    data-i18n="runmode.settings.notifications.title">Notifications</span></h5>
+                                    data-i18n="runmode.settings.pitradio.notifications.title">Notifications</span></h5>
 
                             <!-- Lap Times & Circuit Matching Notifications -->
                             <div class="mb-3">
                                 <div class="row g-3 align-items-end">
                                     <div class="col-md-6 col-lg-3">
                                         <h6 class="mb-2"><span
-                                                data-i18n="runmode.settings.notifications.laptimes.title">Lap
+                                                data-i18n="runmode.settings.pitradio.notifications.laptimes.title">Lap
                                                 Times</span></h6>
                                         <label class="form-label"
-                                            data-i18n="runmode.settings.notifications.enable">Enable</label>
+                                            data-i18n="runmode.settings.pitradio.notifications.laptimes.enable">Enable</label>
                                         <div class="form-check form-switch">
                                             <input type="checkbox" class="form-check-input" id="notify-laptimes-enabled"
                                                 data-config="pitRadio.notifications.lapTimesEnabled" role="switch">
@@ -1217,7 +1273,8 @@
                                     </div>
                                     <div class="col-md-6 col-lg-3">
                                         <label for="notify-laptimes-maxdelta" class="form-label"
-                                            data-i18n="runmode.settings.notifications.laptimes.maxdelta">Max Delta
+                                            data-i18n="runmode.settings.pitradio.notifications.laptimes.maxdelta">Max
+                                            Delta
                                             (Seconds)</label>
                                         <input type="number" id="notify-laptimes-maxdelta" class="form-control"
                                             data-config="pitRadio.notifications.lapTimesMaxDeltaSeconds" min="0.1"
@@ -1225,10 +1282,10 @@
                                     </div>
                                     <div class="col-md-6 col-lg-3">
                                         <h6 class="mb-2"><span
-                                                data-i18n="runmode.settings.notifications.circuitmatching.title">Circuit
+                                                data-i18n="runmode.settings.pitradio.notifications.circuitmatching.title">Circuit
                                                 Matching</span></h6>
                                         <label class="form-label"
-                                            data-i18n="runmode.settings.notifications.enable">Enable</label>
+                                            data-i18n="runmode.settings.pitradio.notifications.circuitmatching.enable">Enable</label>
                                         <div class="form-check form-switch">
                                             <input type="checkbox" class="form-check-input"
                                                 id="notify-circuitmatching-enabled"
@@ -1244,12 +1301,13 @@
 
                             <!-- Race Laps Notifications -->
                             <div class="mb-3">
-                                <h6 class="mb-2"><span data-i18n="runmode.settings.notifications.racelaps.title">Race
+                                <h6 class="mb-2"><span
+                                        data-i18n="runmode.settings.pitradio.notifications.racelaps.title">Race
                                         Laps</span></h6>
                                 <div class="row g-3 align-items-end">
                                     <div class="col-md-6 col-lg-3">
                                         <label class="form-label"
-                                            data-i18n="runmode.settings.notifications.enable">Enable</label>
+                                            data-i18n="runmode.settings.pitradio.notifications.racelaps.enable">Enable</label>
                                         <div class="form-check form-switch">
                                             <input type="checkbox" class="form-check-input" id="notify-racelaps-enabled"
                                                 data-config="pitRadio.notifications.raceLapsEnabled" role="switch">
@@ -1257,7 +1315,7 @@
                                     </div>
                                     <div class="col-md-6 col-lg-3">
                                         <label for="notify-racelaps-intervallaps" class="form-label"
-                                            data-i18n="runmode.settings.notifications.racelaps.intervallaps">Interval
+                                            data-i18n="runmode.settings.pitradio.notifications.racelaps.interval">Interval
                                             (Laps)</label>
                                         <input type="number" id="notify-racelaps-intervallaps" class="form-control"
                                             data-config="pitRadio.notifications.raceLapsIntervalLaps" min="1" max="20"
@@ -1265,11 +1323,11 @@
                                     </div>
                                     <div class="col-md-6 col-lg-3">
                                         <label for="notify-racelaps-countdownlaps" class="form-label"
-                                            data-i18n="runmode.settings.notifications.racelaps.countdownlaps">Countdown
+                                            data-i18n="runmode.settings.pitradio.notifications.racelaps.countdown">Countdown
                                             (Laps)</label>
                                         <input type="number" id="notify-racelaps-countdownlaps" class="form-control"
-                                            data-config="pitRadio.notifications.raceLapsCountdownLaps" min="1" max="10"
-                                            step="1">
+                                            data-config="pitRadio.pitradio.notifications.raceLaps.countdown" min="1"
+                                            max="10" step="1">
                                     </div>
                                     <div class="col-md-6 col-lg-3">
                                         <!-- Empty column -->
@@ -1280,12 +1338,12 @@
                             <!-- Race Progress Notifications -->
                             <div class="mb-3">
                                 <h6 class="mb-2"><span
-                                        data-i18n="runmode.settings.notifications.raceprogress.title">Race
+                                        data-i18n="runmode.settings.pitradio.notifications.raceprogress.title">Race
                                         Progress</span></h6>
                                 <div class="row g-3 align-items-end">
                                     <div class="col-md-6 col-lg-3">
                                         <label class="form-label"
-                                            data-i18n="runmode.settings.notifications.enable">Enable</label>
+                                            data-i18n="runmode.settings.pitradio.notifications.enable">Enable</label>
                                         <div class="form-check form-switch">
                                             <input type="checkbox" class="form-check-input"
                                                 id="notify-raceprogress-enabled"
@@ -1294,7 +1352,7 @@
                                     </div>
                                     <div class="col-md-6 col-lg-3">
                                         <label for="notify-raceprogress-minlaps" class="form-label"
-                                            data-i18n="runmode.settings.notifications.raceprogress.minlaps">Minimum
+                                            data-i18n="runmode.settings.pitradio.notifications.raceprogress.minlaps">Minimum
                                             Laps</label>
                                         <input type="number" id="notify-raceprogress-minlaps" class="form-control"
                                             data-config="pitRadio.notifications.raceProgressMinLaps" min="1" max="50"
@@ -1302,7 +1360,7 @@
                                     </div>
                                     <div class="col-md-6 col-lg-3">
                                         <label for="notify-raceprogress-intervalpc" class="form-label"
-                                            data-i18n="runmode.settings.notifications.raceprogress.intervalpc">Interval
+                                            data-i18n="runmode.settings.pitradio.notifications.raceprogress.interval">Interval
                                             (%)</label>
                                         <input type="number" id="notify-raceprogress-intervalpc" class="form-control"
                                             data-config="pitRadio.notifications.raceProgressIntervalPc" min="5" max="50"
@@ -1316,40 +1374,45 @@
 
                             <!-- Fuel Monitoring -->
                             <h5 class="mt-5 mb-3"><i class="fa-solid fa-gas-pump me-2"></i><span
-                                    data-i18n="runmode.settings.fuel.title">Fuel Management</span></h5>
+                                    data-i18n="runmode.settings.pitradio.notifications.fuel.title">Fuel
+                                    Management</span></h5>
                             <div class="row g-3">
                                 <div class="col-12">
                                     <div class="form-check form-switch">
                                         <input type="checkbox" class="form-check-input" id="fuel-enabled"
                                             data-config="pitRadio.fuelMonitoring.enabled" role="switch">
                                         <label class="form-check-label" for="fuel-enabled"
-                                            data-i18n="runmode.settings.fuel.enabled">Enable</label>
+                                            data-i18n="runmode.settings.pitradio.notifications.fuel.enable">Enable</label>
                                     </div>
                                 </div>
                                 <div class="col-md-6 col-lg-3">
                                     <label for="fuel-prewarnlaps" class="form-label"
-                                        data-i18n="runmode.settings.fuel.prewarnlaps">Pre-warn Notify Laps</label>
+                                        data-i18n="runmode.settings.pitradio.notifications.fuel.prewarnlaps">Pre-warn
+                                        Notify Laps</label>
                                     <input type="number" id="fuel-prewarnlaps" class="form-control"
                                         data-config="pitRadio.fuelMonitoring.preWarnNotifyLaps" min="0" max="10"
                                         step="0.1">
                                 </div>
                                 <div class="col-md-6 col-lg-3">
                                     <label for="fuel-strategylaps" class="form-label"
-                                        data-i18n="runmode.settings.fuel.strategylaps">Strategy Notify Laps</label>
+                                        data-i18n="runmode.settings.pitradio.notifications.fuel.strategylaps">Strategy
+                                        Notify Laps</label>
                                     <input type="number" id="fuel-strategylaps" class="form-control"
                                         data-config="pitRadio.fuelMonitoring.strategyNotifyLaps" min="0" max="20"
                                         step="0.1">
                                 </div>
                                 <div class="col-md-6 col-lg-3">
                                     <label for="fuel-safetymarginlaps" class="form-label"
-                                        data-i18n="runmode.settings.fuel.safetymarginlaps">Safety Margin (Laps)</label>
+                                        data-i18n="runmode.settings.pitradio.notifications.fuel.safetymarginlaps">Safety
+                                        Margin (Laps)</label>
                                     <input type="number" id="fuel-safetymarginlaps" class="form-control"
                                         data-config="pitRadio.fuelMonitoring.rangeSafetyMarginLaps" min="0" max="2"
                                         step="0.05">
                                 </div>
                                 <div class="col-md-6 col-lg-3">
                                     <label for="fuel-safetymarginmeters" class="form-label"
-                                        data-i18n="runmode.settings.fuel.safetymarginmeters">Safety Margin
+                                        data-i18n="runmode.settings.pitradio.notifications.fuel.safetymarginmeters">Safety
+                                        Margin
                                         (Meters)</label>
                                     <input type="number" id="fuel-safetymarginmeters" class="form-control"
                                         data-config="pitRadio.fuelMonitoring.rangeSafetyMarginMeters" min="0" max="2000"
@@ -1359,33 +1422,40 @@
 
                             <!-- Tyre Monitoring -->
                             <h5 class="mt-5 mb-3"><i class="fa-solid fa-circle-dot me-2"></i><span
-                                    data-i18n="runmode.settings.tyres.title">Tyre Management</span></h5>
+                                    data-i18n="runmode.settings.pitradio.notifications.tyres.title">Tyre
+                                    Management</span></h5>
                             <div class="row g-3">
                                 <div class="col-12">
                                     <div class="form-check form-switch">
                                         <input type="checkbox" class="form-check-input" id="tyres-enabled"
                                             data-config="pitRadio.tyreMonitoring.enabled" role="switch">
                                         <label class="form-check-label" for="tyres-enabled"
-                                            data-i18n="runmode.settings.tyres.enabled">Enable</label>
+                                            data-i18n="runmode.settings.pitradio.notifications.tyres.enable">Enable</label>
                                     </div>
                                 </div>
                                 <div class="col-md-6 col-lg-4">
                                     <label for="tyres-tempoptimal" class="form-label"
-                                        data-i18n="runmode.settings.tyres.tempoptimal">Temperature Optimal (°C)</label>
+                                        data-i18n="runmode.settings.pitradio.notifications.tyres.tempoptimal">Temperature
+                                        Optimal
+                                        (°C)</label>
                                     <input type="number" id="tyres-tempoptimal" class="form-control"
                                         data-config="pitRadio.tyreMonitoring.temperatureOptimalCelsius" min="60"
                                         max="120" step="1">
                                 </div>
                                 <div class="col-md-6 col-lg-4">
                                     <label for="tyres-tempwindow" class="form-label"
-                                        data-i18n="runmode.settings.tyres.tempwindow">Operating Window (°C)</label>
+                                        data-i18n="runmode.settings.pitradio.notifications.tyres.tempwindow">Operating
+                                        Window
+                                        (°C)</label>
                                     <input type="number" id="tyres-tempwindow" class="form-control"
                                         data-config="pitRadio.tyreMonitoring.temperatureOperatingWindow" min="2"
                                         max="20" step="0.5">
                                 </div>
                                 <div class="col-md-6 col-lg-4">
                                     <label for="tyres-tempmargin" class="form-label"
-                                        data-i18n="runmode.settings.tyres.tempmargin">Temperature Margin (°C)</label>
+                                        data-i18n="runmode.settings.pitradio.notifications.tyres.tempmargin">Temperature
+                                        Margin
+                                        (°C)</label>
                                     <input type="number" id="tyres-tempmargin" class="form-control"
                                         data-config="pitRadio.tyreMonitoring.temperatureMarginCelsius" min="1" max="10"
                                         step="0.5">
@@ -1416,9 +1486,9 @@
                         <p class="mb-2" data-i18n="runmode.settings.modal.warning"><strong>This will permanently
                                 delete:</strong></p>
                         <ul class="mb-0">
-                            <li data-i18n="runmode.settings.modal.item1">All application settings</li>
-                            <li data-i18n="runmode.settings.modal.item2">All network configurations</li>
-                            <li data-i18n="runmode.settings.modal.item3">All saved data</li>
+                            <li data-i18n="runmode.settings.modal.allappsettings">All application settings</li>
+                            <li data-i18n="runmode.settings.modal.allnetworkconfigs">All network configurations</li>
+                            <li data-i18n="runmode.settings.modal.allsaveddata">All saved data</li>
                         </ul>
                     </div>
                     <p><strong data-i18n="runmode.settings.modal.cannotundo">The changes made by this action cannot be
@@ -1579,15 +1649,16 @@
                     .then(data => {
                         const sizeElement = document.getElementById('cache-size');
                         if (data.success) {
-                            const itemText = data.count === 1 ? 'item' : 'items';
+                            const itemKey = data.count === 1 ? 'runmode.settings.app.control.cacheitem' : 'runmode.settings.app.control.cacheitems';
+                            const itemText = t(itemKey) || (data.count === 1 ? 'item' : 'items');
                             sizeElement.textContent = `${data.size} (${data.count} ${itemText})`;
                         } else {
-                            sizeElement.textContent = 'Error loading';
+                            sizeElement.textContent = t('runmode.settings.app.control.errorloading') || 'Error loading';
                         }
                     })
                     .catch(error => {
                         console.error('Error fetching cache size:', error);
-                        document.getElementById('cache-size').textContent = 'Error';
+                        document.getElementById('cache-size').textContent = t('runmode.settings.app.control.error') || 'Error';
                     });
             }
 
@@ -1596,8 +1667,12 @@
 
             // Clear cache button
             document.getElementById('clear-cache')?.addEventListener('click', function () {
-                this.disabled = true;
-                this.textContent = 'Clearing...';
+                const button = this;
+                const buttonText = button.querySelector('span');
+                button.disabled = true;
+                if (buttonText) {
+                    buttonText.textContent = t('runmode.settings.app.control.clearing') || 'Clearing...';
+                }
 
                 fetch('/api/system/cache-clear', { method: 'POST' })
                     .then(response => response.json())
@@ -1613,8 +1688,10 @@
                         alert('Error clearing cache');
                     })
                     .finally(() => {
-                        this.disabled = false;
-                        this.textContent = 'Clear Cache';
+                        button.disabled = false;
+                        if (buttonText) {
+                            buttonText.textContent = t('runmode.settings.app.control.clearcache') || 'Clear Cache';
+                        }
                     });
             });
             // Sidebar link click handler

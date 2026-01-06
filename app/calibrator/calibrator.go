@@ -4,11 +4,26 @@ import (
 	"sync"
 )
 
+// OutputChannel represents which audio channels should receive the calibration tone.
+type OutputChannel string
+
+const (
+	// OutputChannelBoth sends calibration tone to both left and right channels.
+	OutputChannelBoth OutputChannel = "both"
+
+	// OutputChannelLeft sends calibration tone to left channel only.
+	OutputChannelLeft OutputChannel = "left"
+
+	// OutputChannelRight sends calibration tone to right channel only.
+	OutputChannelRight OutputChannel = "right"
+)
+
 // Calibrator manages tone generation state for calibration mode.
 type Calibrator struct {
 	enabled   bool
 	frequency float64
 	volume    float64
+	channel   OutputChannel
 	mu        sync.RWMutex
 }
 
@@ -18,6 +33,7 @@ func New() *Calibrator {
 		enabled:   false,
 		frequency: 5,
 		volume:    -30,
+		channel:   OutputChannelBoth,
 	}
 }
 
@@ -85,4 +101,26 @@ func (c *Calibrator) SetVolume(volume float64) {
 	}
 
 	c.volume = volume
+}
+
+// GetChannel returns the calibrator output channel selection.
+func (c *Calibrator) GetChannel() OutputChannel {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.channel
+}
+
+// SetChannel sets the calibrator output channel selection.
+func (c *Calibrator) SetChannel(channel OutputChannel) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// Validate channel value
+	switch channel {
+	case OutputChannelBoth, OutputChannelLeft, OutputChannelRight:
+		c.channel = channel
+	default:
+		c.channel = OutputChannelBoth
+	}
 }

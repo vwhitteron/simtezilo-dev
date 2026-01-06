@@ -133,6 +133,16 @@ func (s *Synthesizer) ReadBuffer(length int) []float64 {
 	return s.mixer.ReadChannel(ChannelMaster, length)
 }
 
+// IsCalibrationStereo returns whether calibration mode is outputting in stereo.
+func (s *Synthesizer) IsCalibrationStereo() bool {
+	return s.mixer.IsCalibrationStereo()
+}
+
+// GetCalibrationChannel returns the current calibration output channel setting.
+func (s *Synthesizer) GetCalibrationChannel() calibrator.OutputChannel {
+	return s.mixer.GetCalibrationChannel()
+}
+
 // WriteBuffer writes the provided sample data to the specified channel buffer at the given offset.
 func (s *Synthesizer) WriteBuffer(channel string, sample []float64, offset int) {
 	magnitude, err := s.mixer.GetChannelPowerRatio(channel)

@@ -28,6 +28,7 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/spotpear"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/waveshare"
 	"github.com/vwhitteron/simtezilo-dev/app/i18n"
+	"github.com/vwhitteron/simtezilo-dev/app/i18n/languagedb"
 	"github.com/vwhitteron/simtezilo-dev/app/kinematics"
 	"github.com/vwhitteron/simtezilo-dev/app/logstore"
 	"github.com/vwhitteron/simtezilo-dev/app/odometer"
@@ -245,7 +246,7 @@ func (a *App) Close() {
 			Msg("close")
 	}
 
-	err = a.ui.Screen.RenderSplashScreen(a.i18n.GetString("ui.quit"))
+	err = a.ui.Screen.RenderSplashScreen(a.i18n.GetString(languagedb.UIQuit))
 	if err != nil {
 		a.log.Error().
 			Err(err).

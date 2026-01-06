@@ -3,6 +3,7 @@ package synthesizer
 import (
 	"github.com/gopxl/beep"
 	"github.com/rs/zerolog"
+	"github.com/vwhitteron/simtezilo-dev/app/calibrator"
 )
 
 type OutputDevice struct {
@@ -57,9 +58,32 @@ type Streamer struct {
 func (s *Streamer) Stream(samples [][2]float64) (n int, ok bool) {
 	buffer := s.synth.ReadBuffer(len(samples))
 
-	for i := range samples {
-		samples[i][0] = s.synth.ApplyMasterGain(buffer[i])
-		samples[i][1] = s.synth.ApplyMasterGain(buffer[i])
+	// Check if we're in calibration mode
+	if s.synth.calibrator != nil && s.synth.calibrator.IsEnabled() {
+		channel := s.synth.GetCalibrationChannel()
+
+		for i := range samples {
+			sample := s.synth.ApplyMasterGain(buffer[i])
+
+			// Apply channel selection
+			switch channel {
+			case calibrator.OutputChannelLeft:
+				samples[i][0] = sample
+				samples[i][1] = 0 // Mute right channel
+			case calibrator.OutputChannelRight:
+				samples[i][0] = 0 // Mute left channel
+				samples[i][1] = sample
+			default: // OutputChannelBoth
+				samples[i][0] = sample
+				samples[i][1] = sample
+			}
+		}
+	} else {
+		// Normal mode - duplicate mono to both channels
+		for i := range samples {
+			samples[i][0] = s.synth.ApplyMasterGain(buffer[i])
+			samples[i][1] = s.synth.ApplyMasterGain(buffer[i])
+		}
 	}
 
 	return len(samples), true
