@@ -151,7 +151,9 @@ func New(opts Options) (*App, error) {
 
 	err = newApp.initializeHardware(hidEvents)
 	if err != nil {
-		return nil, err
+		newApp.log.Error().
+			Err(err).
+			Msg("Initialize hardware failed, fallback to console display")
 	}
 
 	// Initialize setupMode after display is created
@@ -453,6 +455,11 @@ func (a *App) initializeHardware(hidEvents chan ui.HIDInputEvent) error {
 	case "waveshare":
 		err = a.initializeWaveshare(hidEvents)
 	default:
+		a.initializeConsole()
+	}
+
+	// fallback to console display on error
+	if err != nil {
 		a.initializeConsole()
 	}
 
