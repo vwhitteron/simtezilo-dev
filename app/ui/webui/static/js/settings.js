@@ -14,6 +14,19 @@ class ConfigManager {
         this.init();
     }
 
+    // Format gain value to 2 decimal places with minus prefix (even for 0.00)
+    formatGainValue(value) {
+        const num = parseFloat(value) || 0;
+        const formatted = Math.abs(num).toFixed(2);
+        return '-' + formatted;
+    }
+
+    // Format decimal value to 2 decimal places (no prefix)
+    formatDecimalValue(value) {
+        const num = parseFloat(value) || 0;
+        return num.toFixed(2);
+    }
+
     async init() {
         await this.loadLanguages();
         await this.loadConfiguration(); // This calls populateForm() internally
@@ -427,6 +440,26 @@ class ConfigManager {
             sweepMaxInput.addEventListener('input', () => this.updateSweepPresetHighlights());
         }
 
+        // Mute toggle button click handlers
+        const muteToggleButtons = document.querySelectorAll('button[data-mute-checkbox]');
+        muteToggleButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                const checkboxId = button.dataset.muteCheckbox;
+                const checkbox = document.getElementById(checkboxId);
+                if (checkbox) {
+                    // Toggle the checkbox
+                    checkbox.checked = !checkbox.checked;
+                    // Update icon and button styling
+                    this.updateMuteIconForCheckbox(checkbox);
+                    // Trigger the change event to save the setting
+                    checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+            });
+        });
+
+        // Note: Mute button icons are initialized by updateAllMuteIcons() in populateForm()
+        // which runs before setupEventListeners(), so no need to call initializeMuteButtonIcons() here
+
         // Pit Radio output change handler to show/hide Discord settings
         const pitRadioOutput = document.getElementById('pitradio-output');
         if (pitRadioOutput) {
@@ -480,6 +513,14 @@ class ConfigManager {
                     } else {
                         this.saveInputConfiguration(input);
                     }
+                    // Format gain inputs after editing
+                    if (input.classList.contains('gain-input')) {
+                        input.value = this.formatGainValue(input.value);
+                    }
+                    // Format decimal inputs after editing
+                    if (input.classList.contains('decimal-input')) {
+                        input.value = this.formatDecimalValue(input.value);
+                    }
                 });
 
                 // Also save on Enter key press
@@ -492,11 +533,20 @@ class ConfigManager {
 
                 // For gain inputs, haptics, pitRadio, and calibration inputs, also save immediately on change (spinner buttons)
                 if (input.classList.contains('gain-input') ||
+                    input.classList.contains('decimal-input') ||
                     configPath.startsWith('haptics.') ||
                     configPath.startsWith('pitRadio.') ||
                     configPath.startsWith('calibration.')) {
                     input.addEventListener('change', () => {
                         this.saveInputConfiguration(input);
+                        // Format gain inputs after change
+                        if (input.classList.contains('gain-input')) {
+                            input.value = this.formatGainValue(input.value);
+                        }
+                        // Format decimal inputs after change
+                        if (input.classList.contains('decimal-input')) {
+                            input.value = this.formatDecimalValue(input.value);
+                        }
                     });
                 }
             }
@@ -795,6 +845,12 @@ class ConfigManager {
                     input.checked = (value === radioValue);
                 } else if (input.type === 'checkbox') {
                     input.checked = value;
+                } else if (input.classList.contains('gain-input')) {
+                    // Format gain inputs with 2 decimal places and minus prefix
+                    input.value = this.formatGainValue(value);
+                } else if (input.classList.contains('decimal-input')) {
+                    // Format decimal inputs with 2 decimal places
+                    input.value = this.formatDecimalValue(value);
                 } else {
                     input.value = value;
                 }
@@ -879,23 +935,44 @@ class ConfigManager {
         }
     }
 
-    // Helper to update mute icon based on checkbox state
+    // Helper to update mute icon and button styling based on checkbox state
     async updateMuteIconForCheckbox(checkbox) {
-        // Find the icon associated with this checkbox
-        const icon = document.querySelector(`[data-mute-checkbox="${checkbox.id}"]`);
-        if (icon && typeof IconHelper !== 'undefined') {
+        // Find the button associated with this checkbox
+        const button = document.querySelector(`button[data-mute-checkbox="${checkbox.id}"]`);
+        if (button && typeof IconHelper !== 'undefined') {
             if (checkbox.checked) {
+                // Muted state - show xmark icon and red outline
                 const svg = await IconHelper.loadIcon('fa-volume-xmark');
                 if (svg) {
-                    icon.innerHTML = svg;
+                    button.innerHTML = svg;
                 }
-                icon.style.color = '#dc3545';
+                button.classList.remove('btn-outline-primary');
+                button.classList.add('btn-outline-danger');
             } else {
+                // Unmuted state - show volume icon and secondary outline
                 const svg = await IconHelper.loadIcon('fa-volume-high');
                 if (svg) {
-                    icon.innerHTML = svg;
+                    button.innerHTML = svg;
                 }
-                icon.style.color = '';
+                button.classList.remove('btn-outline-danger');
+                button.classList.add('btn-outline-primary');
+            }
+        }
+    }
+
+    // Initialize mute button icons on page load (before config is loaded)
+    async initializeMuteButtonIcons() {
+        const muteButtons = document.querySelectorAll('button[data-mute-checkbox]');
+        for (const button of muteButtons) {
+            if (typeof IconHelper !== 'undefined') {
+                // Default to volume-high (unmuted) icon and primary outline
+                const svg = await IconHelper.loadIcon('fa-volume-high');
+                if (svg) {
+                    button.innerHTML = svg;
+                }
+                // Ensure button has the correct unmuted styling
+                button.classList.remove('btn-outline-secondary', 'btn-outline-danger');
+                button.classList.add('btn-outline-primary');
             }
         }
     }
@@ -1567,9 +1644,9 @@ class ConfigManager {
 
         // RPM category names
         const rpmCategories = {
-            'rstd': 'standard RPM',
+            'rstd': 'std RPM',
             'rhigh': 'high RPM',
-            'rmed': 'medium RPM'
+            'rmed': 'med RPM'
         };
 
         // Parse the key
@@ -1585,7 +1662,7 @@ class ConfigManager {
         if (layout.toLowerCase() === 'v' && cylinders === '6' && bank === '15') {
             let name = 'VR6';
             if (crank) {
-                name += `, ${crank}º crank plane`;
+                name += `, ${crank}º crank`;
             }
             if (rpm) {
                 name += `, ${rpmCategories[rpm] || rpm}`;
@@ -1624,7 +1701,7 @@ class ConfigManager {
         }
 
         if (crank) {
-            name += `, ${crank}º crank plane`;
+            name += `, ${crank}º crank`;
         }
 
         if (rpm) {
@@ -1719,10 +1796,10 @@ class ConfigManager {
 
     // Load engine profile data into form
     loadEngineProfile(profileName, profile) {
-        document.getElementById('engine-primarybalance').value = profile.PrimaryBalance;
-        document.getElementById('engine-secondarybalance').value = profile.SecondaryBalance;
+        document.getElementById('engine-primarybalance').value = this.formatDecimalValue(profile.PrimaryBalance);
+        document.getElementById('engine-secondarybalance').value = this.formatDecimalValue(profile.SecondaryBalance);
         document.getElementById('engine-gain').value = profile.Gain;
-        document.getElementById('engine-pulsescale').value = profile.PulseScale;
+        document.getElementById('engine-pulsescale').value = this.formatDecimalValue(profile.PulseScale);
     }
 
     // Debounce save for engine profile

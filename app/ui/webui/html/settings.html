@@ -348,6 +348,72 @@
                 font-size: 9px;
             }
         }
+
+        /* Center dropdown values */
+        .form-select.text-center {
+            text-align: center;
+            text-align-last: center;
+        }
+
+        /* Input with suffix styling */
+        .input-with-suffix {
+            position: relative;
+            display: inline-block;
+            width: 100%;
+        }
+
+        .input-with-suffix input {
+            padding-right: 35px;
+        }
+
+        .input-suffix {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--bs-secondary-color);
+            font-size: 0.875rem;
+            pointer-events: none;
+            user-select: none;
+        }
+
+        /* Hide number input spinners for all inputs with inline suffix */
+        .input-with-suffix input[type="number"]::-webkit-outer-spin-button,
+        .input-with-suffix input[type="number"]::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+
+        .input-with-suffix input[type="number"] {
+            -moz-appearance: textfield;
+            appearance: textfield;
+        }
+
+        /* Hide spinners on number inputs without suffix */
+        input[type="number"].no-spinner::-webkit-outer-spin-button,
+        input[type="number"].no-spinner::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+
+        input[type="number"].no-spinner {
+            -moz-appearance: textfield;
+            appearance: textfield;
+        }
+
+        /* Mute toggle button styling */
+        .mute-toggle-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 42px;
+        }
+
+        .mute-toggle-btn svg {
+            width: 18px;
+            height: 18px;
+            fill: currentColor;
+        }
     </style>
     <script>
         const currentPageId = 'settings';
@@ -424,28 +490,30 @@
                             <h5 class="mb-3"><span class="icon" data-icon="gear"></span><span
                                     data-i18n="runmode.settings.app.general.title">General</span></h5>
                             <div class="row g-3">
-                                <div class="col-md-6">
+                                <div class="col-md-6 col-lg-4">
                                     <label for="app-language" class="form-label"
                                         data-i18n="runmode.settings.app.general.language">Language</label>
-                                    <select id="app-language" class="form-select" data-config="app.language">
+                                    <select id="app-language" class="form-select text-center"
+                                        data-config="app.language">
                                         <option value="en">English</option>
                                         <option value="ja">日本語</option>
                                     </select>
                                 </div>
-                                <div class="col-md-6">
+                                <div class="col-md-6 col-lg-4">
                                     <label for="app-accent" class="form-label">
                                         <span data-i18n="runmode.settings.app.general.accent">Accent</span>
                                         <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
                                             role="button"
                                             data-i18n-tooltip="runmode.settings.app.general.accent.tooltip"></i>
                                     </label>
-                                    <input type="text" id="app-accent" class="form-control" data-config="app.accent"
-                                        placeholder="e.g., us, uk, au">
+                                    <input type="text" id="app-accent" class="form-control text-center"
+                                        data-config="app.accent" placeholder="e.g., us, uk, au">
                                 </div>
-                                <div class="col-md-6">
+                                <div class="col-md-6 col-lg-4">
                                     <label for="app-loglevel" class="form-label"
                                         data-i18n="runmode.settings.app.general.loglevel">Log Level</label>
-                                    <select id="app-loglevel" class="form-select" data-config="app.logLevel">
+                                    <select id="app-loglevel" class="form-select text-center"
+                                        data-config="app.logLevel">
                                         <option value="trace">Trace</option>
                                         <option value="debug">Debug</option>
                                         <option value="info">Info</option>
@@ -534,27 +602,30 @@
                         <div class="card-body">
                             <h5 class="mb-3"><span class="icon" data-icon="microchip"></span><span
                                     data-i18n="runmode.settings.system.hardware.title">Hardware</span></h5>
-                            <div class="mb-3">
-                                <label for="hardware-model" class="form-label"
-                                    data-i18n="runmode.settings.system.hardware.model">Hardware Model</label>
-                                <select id="hardware-model" class="form-select" data-config="hardware.model">
-                                    <option value="none">None</option>
-                                    <option value="pirateaudio">Pimoroni Pirate Audio</option>
-                                    <option value="waveshare">Waveshare 1.3inch LCD HAT</option>
-                                    <option value="spotpear">Spotpear RPi-1.3inch-MINI-LCD</option>
-                                </select>
-                            </div>
-                            <div class="mb-0">
-                                <label for="hardware-displayorientation" class="form-label"
-                                    data-i18n="runmode.settings.system.hardware.displayorientation">Display
-                                    Orientation</label>
-                                <select id="hardware-displayorientation" class="form-select"
-                                    data-config="hardware.displayOrientation" data-type="number">
-                                    <option value="0">0°</option>
-                                    <option value="90">90°</option>
-                                    <option value="180">180°</option>
-                                    <option value="270">270°</option>
-                                </select>
+                            <div class="row g-3 mb-4">
+                                <div class="col-md-8 col-lg-6">
+                                    <label for="hardware-model" class="form-label"
+                                        data-i18n="runmode.settings.system.hardware.model">Hardware Model</label>
+                                    <select id="hardware-model" class="form-select text-center"
+                                        data-config="hardware.model">
+                                        <option value="none">None</option>
+                                        <option value="pirateaudio">Pimoroni Pirate Audio</option>
+                                        <option value="waveshare">Waveshare 1.3inch LCD HAT</option>
+                                        <option value="spotpear">Spotpear RPi-1.3inch-MINI-LCD</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-4 col-lg-3">
+                                    <label for="hardware-displayorientation" class="form-label"
+                                        data-i18n="runmode.settings.system.hardware.displayorientation">Display
+                                        Orientation</label>
+                                    <select id="hardware-displayorientation" class="form-select text-center"
+                                        data-config="hardware.displayOrientation" data-type="number">
+                                        <option value="0">0°</option>
+                                        <option value="90">90°</option>
+                                        <option value="180">180°</option>
+                                        <option value="270">270°</option>
+                                    </select>
+                                </div>
                             </div>
 
 
@@ -613,17 +684,16 @@
                         <div class="card-body">
                             <h5 class="mb-3"><span class="icon" data-icon="caret-square-right"></span><span
                                     data-i18n="runmode.settings.synth.samplerates.title">Sample Rates</span></h5>
-                            <div class="row g-3 mb-4">
-                                <div class="col-md-6">
+                            <div class="row g-3 mb-3">
+                                <div class="col-md-6 col-lg-4">
                                     <label for="synth-internalsamplerate" class="form-label">
                                         <span data-i18n="runmode.settings.synth.samplerates.internal">Internal Sample
-                                            Rate
-                                            (Hz)</span>
+                                            Rate</span>
                                         <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
                                             role="button"
                                             data-i18n-tooltip="runmode.settings.synth.samplerates.internal.tooltip"></i>
                                     </label>
-                                    <select id="synth-internalsamplerate" class="form-select"
+                                    <select id="synth-internalsamplerate" class="form-select text-center"
                                         data-config="synthesizer.internalSampleRateHz" data-type="number">
                                         <option value="8000">8 kHz</option>
                                         <option value="16000">16 kHz</option>
@@ -633,15 +703,15 @@
                                         <option value="48000">48 kHz</option>
                                     </select>
                                 </div>
-                                <div class="col-md-6">
+                                <div class="col-md-6 col-lg-4">
                                     <label for="synth-outputsamplerate" class="form-label">
-                                        <span data-i18n="runmode.settings.synth.samplerates.output">Output Sample Rate
-                                            (Hz)</span>
+                                        <span data-i18n="runmode.settings.synth.samplerates.output">Output Sample
+                                            Rate</span>
                                         <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
                                             role="button"
                                             data-i18n-tooltip="runmode.settings.synth.samplerates.output.tooltip"></i>
                                     </label>
-                                    <select id="synth-outputsamplerate" class="form-select"
+                                    <select id="synth-outputsamplerate" class="form-select text-center"
                                         data-config="synthesizer.outputSampleRateHz" data-type="number">
                                         <option value="8000">8 kHz</option>
                                         <option value="16000">16 kHz</option>
@@ -658,110 +728,127 @@
                             <div class="row g-3">
                                 <div class="col-md-6 col-lg-4">
                                     <label for="synth-mastergain" class="form-label">
-                                        <span data-i18n="runmode.settings.synth.gaincontrols.master">Master (dB)</span>
+                                        <span data-i18n="runmode.settings.synth.gaincontrols.master">Master</span>
                                         <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
                                             role="button"
                                             data-i18n-tooltip="runmode.settings.synth.gaincontrols.master.tooltip"></i>
                                     </label>
-                                    <div style="position: relative;">
-                                        <input type="number" id="synth-mastergain" class="form-control gain-input"
-                                            data-config="synthesizer.masterGain" min="-60" max="0" step="0.25">
+                                    <div class="input-group">
+                                        <button type="button" class="btn btn-outline-primary mute-toggle-btn"
+                                            data-gain-input="synth-mastergain" data-mute-checkbox="synth-mastermute">
+                                        </button>
+                                        <div class="input-with-suffix" style="flex: 1;">
+                                            <input type="number" id="synth-mastergain"
+                                                class="form-control text-center gain-input"
+                                                data-config="synthesizer.masterGain" min="-60" max="0" step="0.25">
+                                            <span class="input-suffix">dB</span>
+                                        </div>
                                         <input type="checkbox" id="synth-mastermute"
                                             data-config="synthesizer.masterMute" style="display: none;">
-                                        <i class="fa-solid fa-volume-high mute-toggle-icon"
-                                            data-gain-input="synth-mastergain" data-mute-checkbox="synth-mastermute"
-                                            style="position: absolute; right: 35px; top: 50%; transform: translateY(-50%); font-size: 16px; cursor: pointer;"></i>
                                     </div>
                                 </div>
                                 <div class="col-md-6 col-lg-4">
                                     <label for="synth-chassisgain" class="form-label">
-                                        <span data-i18n="runmode.settings.synth.gaincontrols.chassis">Chassis
-                                            (dB)</span>
+                                        <span data-i18n="runmode.settings.synth.gaincontrols.chassis">Chassis</span>
                                         <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
                                             role="button"
                                             data-i18n-tooltip="runmode.settings.synth.gaincontrols.chassis.tooltip"></i>
                                     </label>
-                                    <div style="position: relative;">
-                                        <input type="number" id="synth-chassisgain" class="form-control gain-input"
-                                            data-config="synthesizer.chassisGain" min="-60" max="0" step="0.25">
+                                    <div class="input-group">
+                                        <button type="button" class="btn btn-outline-primary mute-toggle-btn"
+                                            data-gain-input="synth-chassisgain" data-mute-checkbox="synth-chassismute">
+                                        </button>
+                                        <div class="input-with-suffix" style="flex: 1;">
+                                            <input type="number" id="synth-chassisgain"
+                                                class="form-control text-center gain-input"
+                                                data-config="synthesizer.chassisGain" min="-60" max="0" step="0.25">
+                                            <span class="input-suffix">dB</span>
+                                        </div>
                                         <input type="checkbox" id="synth-chassismute"
                                             data-config="synthesizer.chassisMute" style="display: none;">
-                                        <i class="fa-solid fa-volume-high mute-toggle-icon"
-                                            data-gain-input="synth-chassisgain" data-mute-checkbox="synth-chassismute"
-                                            style="position: absolute; right: 35px; top: 50%; transform: translateY(-50%); font-size: 16px; cursor: pointer;"></i>
                                     </div>
                                 </div>
                                 <div class="col-md-6 col-lg-4">
                                     <label for="synth-enginegain" class="form-label">
-                                        <span data-i18n="runmode.settings.synth.gaincontrols.engine">Engine (dB)</span>
+                                        <span data-i18n="runmode.settings.synth.gaincontrols.engine">Engine</span>
                                         <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
                                             role="button"
                                             data-i18n-tooltip="runmode.settings.synth.gaincontrols.engine.tooltip"></i>
                                     </label>
-                                    <div style="position: relative;">
-                                        <input type="number" id="synth-enginegain" class="form-control gain-input"
-                                            data-config="synthesizer.engineGain" min="-60" max="0" step="0.25">
+                                    <div class="input-group">
+                                        <button type="button" class="btn btn-outline-primary mute-toggle-btn"
+                                            data-gain-input="synth-enginegain" data-mute-checkbox="synth-enginemute">
+                                        </button>
+                                        <div class="input-with-suffix" style="flex: 1;">
+                                            <input type="number" id="synth-enginegain"
+                                                class="form-control text-center gain-input"
+                                                data-config="synthesizer.engineGain" min="-60" max="0" step="0.25">
+                                            <span class="input-suffix">dB</span>
+                                        </div>
                                         <input type="checkbox" id="synth-enginemute"
                                             data-config="synthesizer.engineMute" style="display: none;">
-                                        <i class="fa-solid fa-volume-high mute-toggle-icon"
-                                            data-gain-input="synth-enginegain" data-mute-checkbox="synth-enginemute"
-                                            style="position: absolute; right: 35px; top: 50%; transform: translateY(-50%); font-size: 16px; cursor: pointer;"></i>
                                     </div>
                                 </div>
                                 <div class="col-md-6 col-lg-4">
                                     <label for="synth-transmissiongain" class="form-label">
-                                        <span data-i18n="runmode.settings.synth.gaincontrols.transmission">Transmission
-                                            (dB)</span>
+                                        <span
+                                            data-i18n="runmode.settings.synth.gaincontrols.transmission">Transmission</span>
                                         <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
                                             role="button"
                                             data-i18n-tooltip="runmode.settings.synth.gaincontrols.transmission.tooltip"></i>
                                     </label>
-                                    <div style="position: relative;">
-                                        <input type="number" id="synth-transmissiongain" class="form-control gain-input"
-                                            data-config="synthesizer.transmissionGain" min="-60" max="0" step="0.25">
+                                    <div class="input-group">
+                                        <button type="button" class="btn btn-outline-primary mute-toggle-btn"
+                                            data-gain-input="synth-transmissiongain"
+                                            data-mute-checkbox="synth-transmissionmute">
+                                        </button>
+                                        <div class="input-with-suffix" style="flex: 1;">
+                                            <input type="number" id="synth-transmissiongain"
+                                                class="form-control text-center gain-input"
+                                                data-config="synthesizer.transmissionGain" min="-60" max="0"
+                                                step="0.25">
+                                            <span class="input-suffix">dB</span>
+                                        </div>
                                         <input type="checkbox" id="synth-transmissionmute"
                                             data-config="synthesizer.transmissionMute" style="display: none;">
-                                        <i class="fa-solid fa-volume-high mute-toggle-icon"
-                                            data-gain-input="synth-transmissiongain"
-                                            data-mute-checkbox="synth-transmissionmute"
-                                            style="position: absolute; right: 35px; top: 50%; transform: translateY(-50%); font-size: 16px; cursor: pointer;"></i>
                                     </div>
                                 </div>
                                 <div class="col-md-6 col-lg-4">
                                     <label for="synth-transmissiongainminrace" class="form-label">
                                         <span
                                             data-i18n="runmode.settings.synth.gaincontrols.transmissionminrace">Transmission
-                                            Min
-                                            Race (dB)</span>
+                                            Min Race</span>
                                         <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
                                             role="button"
                                             data-i18n-tooltip="runmode.settings.synth.gaincontrols.transmissionminrace.tooltip"></i>
                                     </label>
-                                    <div style="position: relative;">
-                                        <input type="number" id="synth-transmissiongainminrace"
-                                            class="form-control gain-input"
+                                    <div class="input-with-suffix" style="flex: 1;">
+                                        <input type=" number" id="synth-transmissiongainminrace"
+                                            class="form-control text-center gain-input"
                                             data-config="synthesizer.transmissionGainMinRace" min="-60" max="0"
                                             step="0.25">
+                                        <span class="input-suffix">dB</span>
                                         <i class="fa-solid fa-volume-xmark mute-indicator"
-                                            style="position: absolute; right: 35px; top: 50%; transform: translateY(-50%); color: #dc3545; font-size: 16px; pointer-events: none; display: none;"></i>
+                                            style="position: absolute; right: 45px; top: 50%; transform: translateY(-50%); color: #dc3545; font-size: 16px; pointer-events: none; display: none;"></i>
                                     </div>
                                 </div>
                                 <div class="col-md-6 col-lg-4">
                                     <label for="synth-transmissiongainminstreet" class="form-label">
                                         <span
                                             data-i18n="runmode.settings.synth.gaincontrols.transmissionminstreet">Transmission
-                                            Min Street (dB)</span>
+                                            Min Street</span>
                                         <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
                                             role="button"
                                             data-i18n-tooltip="runmode.settings.synth.gaincontrols.transmissionminstreet.tooltip"></i>
                                     </label>
-                                    <div style="position: relative;">
+                                    <div class="input-with-suffix" style="flex: 1;">
                                         <input type="number" id="synth-transmissiongainminstreet"
-                                            class="form-control gain-input"
+                                            class="form-control text-center gain-input"
                                             data-config="synthesizer.transmissionGainMinStreet" min="-60" max="0"
                                             step="0.25">
+                                        <span class="input-suffix">dB</span>
                                         <i class="fa-solid fa-volume-xmark mute-indicator"
-                                            style="position: absolute; right: 35px; top: 50%; transform: translateY(-50%); color: #dc3545; font-size: 16px; pointer-events: none; display: none;"></i>
+                                            style="position: absolute; right: 45px; top: 50%; transform: translateY(-50%); color: #dc3545; font-size: 16px; pointer-events: none; display: none;"></i>
                                     </div>
                                 </div>
                                 <div class="col-md-6 col-lg-4">
@@ -772,8 +859,12 @@
                                             role="button"
                                             data-i18n-tooltip="runmode.settings.synth.gaincontrols.increment.tooltip"></i>
                                     </label>
-                                    <input type="number" id="synth-gainincrement" class="form-control gain-input"
-                                        data-config="synthesizer.gainIncrement" min="0.05" max="1.0" step="0.05">
+                                    <div class="input-with-suffix" style="flex: 1;">
+                                        <input type="number" id="synth-gainincrement"
+                                            class="form-control text-center gain-input"
+                                            data-config="synthesizer.gainIncrement" min="0.05" max="1.0" step="0.05">
+                                        <span class="input-suffix">dB</span>
+                                    </div>
                                 </div>
                             </div>
 
@@ -811,15 +902,19 @@
                                         <div class="row g-3 mb-3">
                                             <div class="col-md-6 col-lg-3">
                                                 <label for="calibration-volume" class="form-label">
-                                                    <span data-i18n="runmode.settings.synth.calibration.volume">Volume
-                                                        (dB)</span>
+                                                    <span
+                                                        data-i18n="runmode.settings.synth.calibration.gain">Gain</span>
                                                     <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
                                                         role="button"
-                                                        data-i18n-tooltip="runmode.settings.synth.calibration.volume.tooltip"></i>
+                                                        data-i18n-tooltip="runmode.settings.synth.calibration.gain.tooltip"></i>
                                                 </label>
-                                                <input type="number" id="calibration-volume"
-                                                    class="form-control text-center" data-config="calibration.volume"
-                                                    min="-60" max="0" step="0.25" value="-30">
+                                                <div class="input-with-suffix">
+                                                    <input type="number" id="calibration-volume"
+                                                        class="form-control text-center gain-input"
+                                                        data-config="calibration.volume" min="-60" max="0" step="0.25"
+                                                        value="-30">
+                                                    <span class="input-suffix">dB</span>
+                                                </div>
                                             </div>
                                             <div class="col-md-6 col-lg-6">
                                                 <label for="calibration-channel" class="form-label">
@@ -862,11 +957,10 @@
 
                                         <!-- Frequency and Sweep Range Row -->
                                         <div class="row g-3 mb-4">
-                                            <div class="col-md-6 col-lg-3">
+                                            <div class="col-md-2 col-lg-3">
                                                 <label for="calibration-frequency" class="form-label">
                                                     <span
-                                                        data-i18n="runmode.settings.synth.calibration.frequency">Frequency
-                                                        (Hz)</span>
+                                                        data-i18n="runmode.settings.synth.calibration.frequency">Frequency</span>
                                                     <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
                                                         role="button"
                                                         data-i18n-tooltip="runmode.settings.synth.calibration.frequency.tooltip"></i>
@@ -878,40 +972,54 @@
                                                         <span class="icon" data-icon="stairs"
                                                             style="margin-right: 0; font-size: 1rem;"></span>
                                                     </button>
-                                                    <input type="number" id="calibration-frequency"
-                                                        class="form-control text-center"
-                                                        data-config="calibration.frequency" min="5" max="160" step="1"
-                                                        value="5">
+                                                    <div class="input-with-suffix" style="flex: 1;">
+                                                        <input type="number" id="calibration-frequency"
+                                                            class="form-control text-center"
+                                                            data-config="calibration.frequency" min="5" max="160"
+                                                            step="1" value="5">
+                                                        <span class="input-suffix">Hz</span>
+                                                    </div>
                                                 </div>
                                             </div>
-                                            <div class="col-md-3 col-lg-2">
+                                            <div class="col-md-2 col-lg-2">
                                                 <label for="calibration-sweep-duration" class="form-label">
                                                     <span
-                                                        data-i18n="runmode.settings.synth.calibration.sweepDuration">Duration
-                                                        (s)</span>
+                                                        data-i18n="runmode.settings.synth.calibration.sweepDuration">Sweep
+                                                        Duration</span>
                                                 </label>
-                                                <input type="number" id="calibration-sweep-duration"
-                                                    class="form-control text-center"
-                                                    data-config="calibration.sweepDuration" min="1" max="60" step="1"
-                                                    value="10">
+                                                <div class="input-with-suffix">
+                                                    <input type="number" id="calibration-sweep-duration"
+                                                        class="form-control text-center"
+                                                        data-config="calibration.sweepDuration" min="1" max="60"
+                                                        step="1" value="10">
+                                                    <span class="input-suffix">s</span>
+                                                </div>
                                             </div>
-                                            <div class="col-md-3 col-lg-2">
+                                            <div class="col-md-2 col-lg-2">
                                                 <label for="calibration-sweep-min" class="form-label">
                                                     <span data-i18n="runmode.settings.synth.calibration.sweepMin">Sweep
-                                                        Min (Hz)</span>
+                                                        Min</span>
                                                 </label>
-                                                <input type="number" id="calibration-sweep-min"
-                                                    class="form-control text-center" data-config="calibration.sweepMin"
-                                                    min="5" max="159" step="1" value="5">
+                                                <div class="input-with-suffix">
+                                                    <input type="number" id="calibration-sweep-min"
+                                                        class="form-control text-center"
+                                                        data-config="calibration.sweepMin" min="5" max="159" step="1"
+                                                        value="5">
+                                                    <span class="input-suffix">Hz</span>
+                                                </div>
                                             </div>
-                                            <div class="col-md-3 col-lg-2">
+                                            <div class="col-md-2 col-lg-2">
                                                 <label for="calibration-sweep-max" class="form-label">
                                                     <span data-i18n="runmode.settings.synth.calibration.sweepMax">Sweep
-                                                        Max (Hz)</span>
+                                                        Max</span>
                                                 </label>
-                                                <input type="number" id="calibration-sweep-max"
-                                                    class="form-control text-center" data-config="calibration.sweepMax"
-                                                    min="6" max="160" step="1" value="160">
+                                                <div class="input-with-suffix">
+                                                    <input type="number" id="calibration-sweep-max"
+                                                        class="form-control text-center"
+                                                        data-config="calibration.sweepMax" min="6" max="160" step="1"
+                                                        value="160">
+                                                    <span class="input-suffix">Hz</span>
+                                                </div>
                                             </div>
                                             <div class="col-auto d-flex align-items-end">
                                                 <div class="btn-group" role="group" aria-label="Sweep range presets">
@@ -1056,8 +1164,9 @@
                                             role="button"
                                             data-i18n-tooltip="runmode.settings.haptics.chassis.jerkcurve.tooltip"></i>
                                     </label>
-                                    <input type="number" id="haptics-jerkcurve" class="form-control"
-                                        data-config="haptics.jerkCurve" min="5" max="955" step="1">
+                                    <input type="number" id="haptics-jerkcurve"
+                                        class="form-control text-center no-spinner" data-config="haptics.jerkCurve"
+                                        min="5" max="955" step="1">
                                 </div>
                                 <div class="col-md-6 col-lg-3">
                                     <label for="haptics-jerkmax" class="form-label">
@@ -1066,8 +1175,12 @@
                                             role="button"
                                             data-i18n-tooltip="runmode.settings.haptics.chassis.jerkmax.tooltip"></i>
                                     </label>
-                                    <input type="number" id="haptics-jerkmax" class="form-control"
-                                        data-config="haptics.jerkMax" min="5" max="955" step="1">
+                                    <div class="input-with-suffix">
+                                        <input type="number" id="haptics-jerkmax"
+                                            class="form-control text-center no-spinner" data-config="haptics.jerkMax"
+                                            min="5" max="955" step="1">
+                                        <span class="input-suffix">x100</span>
+                                    </div>
                                 </div>
                                 <div class="col-md-6 col-lg-3">
                                     <label for="haptics-snapcurve" class="form-label">
@@ -1077,8 +1190,9 @@
                                             role="button"
                                             data-i18n-tooltip="runmode.settings.haptics.chassis.snapcurve.tooltip"></i>
                                     </label>
-                                    <input type="number" id="haptics-snapcurve" class="form-control"
-                                        data-config="haptics.snapCurve" min="5" max="955" step="1">
+                                    <input type="number" id="haptics-snapcurve"
+                                        class="form-control text-center no-spinner" data-config="haptics.snapCurve"
+                                        min="5" max="955" step="1">
                                 </div>
                                 <div class="col-md-6 col-lg-3">
                                     <label for="haptics-snapmax" class="form-label">
@@ -1087,47 +1201,55 @@
                                             role="button"
                                             data-i18n-tooltip="runmode.settings.haptics.chassis.snapmax.tooltip"></i>
                                     </label>
-                                    <input type="number" id="haptics-snapmax" class="form-control"
-                                        data-config="haptics.snapMax" min="10" max="100" step="1">
+                                    <div class="input-with-suffix">
+                                        <input type="number" id="haptics-snapmax"
+                                            class="form-control text-center no-spinner" data-config="haptics.snapMax"
+                                            min="10" max="100" step="1">
+                                        <span class="input-suffix">x1000</span>
+                                    </div>
                                 </div>
                             </div>
 
                             <div class="row g-3">
-                                <div class="col-md-6 col-lg-4">
+                                <div class="col-md-6 col-lg-3">
                                     <label for="haptics-pulseamplitude" class="form-label">
                                         <span data-i18n="runmode.settings.haptics.chassis.pulsemaxamplitude">Pulse
-                                            Max
-                                            Amplitude</span>
+                                            Max Amplitude</span>
                                         <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
                                             role="button"
                                             data-i18n-tooltip="runmode.settings.haptics.chassis.pulsemaxamplitude.tooltip"></i>
                                     </label>
-                                    <input type="number" id="haptics-pulseamplitude" class="form-control"
+                                    <input type="number" id="haptics-pulseamplitude"
+                                        class="form-control text-center no-spinner decimal-input"
                                         data-config="haptics.pulseMaxAmplitude" min="0.05" max="1.0" step="0.05">
                                 </div>
-                                <div class="col-md-6 col-lg-4">
+                                <div class="col-md-6 col-lg-3">
                                     <label for="haptics-pulseminfreq" class="form-label">
                                         <span data-i18n="runmode.settings.haptics.chassis.pulseminfreq">Pulse Min
-                                            Frequency
-                                            (Hz)</span>
+                                            Frequency</span>
                                         <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
                                             role="button"
                                             data-i18n-tooltip="runmode.settings.haptics.chassis.pulseminfreq.tooltip"></i>
                                     </label>
-                                    <input type="number" id="haptics-pulseminfreq" class="form-control"
-                                        data-config="haptics.pulseMinFrequencyHz" min="5" max="150" step="1">
+                                    <div class="input-with-suffix">
+                                        <input type="number" id="haptics-pulseminfreq" class="form-control text-center"
+                                            data-config="haptics.pulseMinFrequencyHz" min="5" max="150" step="1">
+                                        <span class="input-suffix">Hz</span>
+                                    </div>
                                 </div>
-                                <div class="col-md-6 col-lg-4">
+                                <div class="col-md-6 col-lg-3">
                                     <label for="haptics-pulsemaxfreq" class="form-label">
                                         <span data-i18n="runmode.settings.haptics.chassis.pulsemaxfreq">Pulse Max
-                                            Frequency
-                                            (Hz)</span>
+                                            Frequency</span>
                                         <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
                                             role="button"
                                             data-i18n-tooltip="runmode.settings.haptics.chassis.pulsemaxfreq.tooltip"></i>
                                     </label>
-                                    <input type="number" id="haptics-pulsemaxfreq" class="form-control"
-                                        data-config="haptics.pulseMaxFrequencyHz" min="20" max="160" step="1">
+                                    <div class="input-with-suffix">
+                                        <input type="number" id="haptics-pulsemaxfreq" class="form-control text-center"
+                                            data-config="haptics.pulseMaxFrequencyHz" min="20" max="160" step="1">
+                                        <span class="input-suffix">Hz</span>
+                                    </div>
                                 </div>
                             </div>
 
@@ -1172,7 +1294,8 @@
                                             role="button"
                                             data-i18n-tooltip="runmode.settings.haptics.transmission.curve.tooltip"></i>
                                     </label>
-                                    <input type="number" id="haptics-transmissioncurve" class="form-control"
+                                    <input type="number" id="haptics-transmissioncurve"
+                                        class="form-control text-center no-spinner"
                                         data-config="haptics.dynamicTransmissionCurve" min="5" max="955" step="1">
                                 </div>
                                 <div class="col-md-6 col-lg-3">
@@ -1183,9 +1306,13 @@
                                             role="button"
                                             data-i18n-tooltip="runmode.settings.haptics.transmission.gforcemax.tooltip"></i>
                                     </label>
-                                    <input type="number" id="haptics-gforcemax" class="form-control"
-                                        data-config="haptics.dynamicTransmissionGforceMax" min="0.1" max="5.0"
-                                        step="0.1">
+                                    <div class="input-with-suffix">
+                                        <input type="number" id="haptics-gforcemax"
+                                            class="form-control text-center no-spinner"
+                                            data-config="haptics.dynamicTransmissionGforceMax" min="0.1" max="5.0"
+                                            step="0.1">
+                                        <span class="input-suffix">G</span>
+                                    </div>
                                 </div>
                             </div>
 
@@ -1214,15 +1341,15 @@
                                                     Profiles</span>
                                             </h5>
                                             <div class="row g-3 mb-3">
-                                                <div class="col-12">
-                                                    <select id="engine-profile-select" class="form-select">
+                                                <div class="col-md-6 col-lg-6">
+                                                    <select id="engine-profile-select" class="form-select text-center">
                                                         <option value="" disabled selected>Loading...</option>
                                                     </select>
                                                 </div>
                                             </div>
                                             <div id="engine-profile-settings" style="display:none;">
                                                 <div class="row g-3">
-                                                    <div class="col-md-6">
+                                                    <div class="col-md-6 col-lg-3">
                                                         <label for="engine-primarybalance" class="form-label">
                                                             <span
                                                                 data-i18n="runmode.settings.haptics.engineprofiles.primarybalance">Primary
@@ -1232,9 +1359,10 @@
                                                                 data-i18n-tooltip="runmode.settings.haptics.engineprofiles.primarybalance.tooltip"></i>
                                                         </label>
                                                         <input type="number" id="engine-primarybalance"
-                                                            class="form-control" min="0" max="1" step="0.01">
+                                                            class="form-control text-center no-spinner decimal-input"
+                                                            min="0" max="1" step="0.01">
                                                     </div>
-                                                    <div class="col-md-6">
+                                                    <div class="col-md-6 col-lg-3">
                                                         <label for="engine-secondarybalance" class="form-label">
                                                             <span
                                                                 data-i18n="runmode.settings.haptics.engineprofiles.secondarybalance">Secondary
@@ -1244,21 +1372,25 @@
                                                                 data-i18n-tooltip="runmode.settings.haptics.engineprofiles.secondarybalance.tooltip"></i>
                                                         </label>
                                                         <input type="number" id="engine-secondarybalance"
-                                                            class="form-control" min="0" max="1" step="0.01">
+                                                            class="form-control text-center no-spinner decimal-input"
+                                                            min="0" max="1" step="0.01">
                                                     </div>
-                                                    <div class="col-md-6">
+                                                    <div class="col-md-6 col-lg-3">
                                                         <label for="engine-gain" class="form-label">
                                                             <span
-                                                                data-i18n="runmode.settings.haptics.engineprofiles.gain">Gain
-                                                                (dB)</span>
+                                                                data-i18n="runmode.settings.haptics.engineprofiles.gain">Gain</span>
                                                             <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
                                                                 role="button"
                                                                 data-i18n-tooltip="runmode.settings.haptics.engineprofiles.gain.tooltip"></i>
                                                         </label>
-                                                        <input type="number" id="engine-gain" class="form-control"
-                                                            min="-20" max="20" step="0.25">
+                                                        <div class="input-with-suffix">
+                                                            <input type="number" id="engine-gain"
+                                                                class="form-control text-center gain-input" min="-12"
+                                                                max="0" step="0.25">
+                                                            <span class="input-suffix">dB</span>
+                                                        </div>
                                                     </div>
-                                                    <div class="col-md-6">
+                                                    <div class="col-md-6 col-lg-3">
                                                         <label for="engine-pulsescale" class="form-label">
                                                             <span
                                                                 data-i18n="runmode.settings.haptics.engineprofiles.pulsescale">Pulse
@@ -1267,7 +1399,8 @@
                                                                 role="button"
                                                                 data-i18n-tooltip="runmode.settings.haptics.engineprofiles.pulsescale.tooltip"></i>
                                                         </label>
-                                                        <input type="number" id="engine-pulsescale" class="form-control"
+                                                        <input type="number" id="engine-pulsescale"
+                                                            class="form-control text-center no-spinner decimal-input"
                                                             min="0.1" max="1.0" step="0.01">
                                                     </div>
                                                 </div>
@@ -1297,22 +1430,26 @@
                             </div>
 
                             <div class="row g-3 mb-3">
-                                <div class="col-md-6 col-lg-4">
+                                <div class="col-md-6 col-lg-3">
                                     <label for="pitradio-output" class="form-label">
                                         <span data-i18n="runmode.settings.pitradio.output">Output</span>
                                     </label>
-                                    <select id="pitradio-output" class="form-select"
+                                    <select id="pitradio-output" class="form-select text-center"
                                         data-config="haptics.pitRadioOutput">
                                         <option value="log">Log</option>
                                         <option value="discord">Discord</option>
                                     </select>
                                 </div>
-                                <div class="col-md-6 col-lg-4">
+                                <div class="col-md-6 col-lg-3">
                                     <label for="pitradio-interval" class="form-label"
-                                        data-i18n="runmode.settings.pitradio.messageinterval">Message Send Interval
-                                        (ms)</label>
-                                    <input type="number" id="pitradio-interval" class="form-control"
-                                        data-config="pitRadio.messageSendIntervalMs" min="500" max="10000" step="100">
+                                        data-i18n="runmode.settings.pitradio.messageinterval">Message Send
+                                        Interval</label>
+                                    <div class="input-with-suffix">
+                                        <input type="number" id="pitradio-interval" class="form-control text-center"
+                                            data-config="pitRadio.messageSendIntervalMs" min="500" max="10000"
+                                            step="100">
+                                        <span class="input-suffix">ms</span>
+                                    </div>
                                 </div>
                             </div>
 
@@ -1382,11 +1519,14 @@
                                     <div class="col-md-6 col-lg-3">
                                         <label for="notify-laptimes-maxdelta" class="form-label"
                                             data-i18n="runmode.settings.pitradio.notifications.laptimes.maxdelta">Max
-                                            Delta
-                                            (Seconds)</label>
-                                        <input type="number" id="notify-laptimes-maxdelta" class="form-control"
-                                            data-config="pitRadio.notifications.lapTimesMaxDeltaSeconds" min="0.1"
-                                            max="10.0" step="0.1">
+                                            Delta</label>
+                                        <div class="input-with-suffix">
+                                            <input type="number" id="notify-laptimes-maxdelta"
+                                                class="form-control text-center"
+                                                data-config="pitRadio.notifications.lapTimesMaxDeltaSeconds" min="0.1"
+                                                max="10.0" step="0.1">
+                                            <span class="input-suffix">s</span>
+                                        </div>
                                     </div>
                                     <div class="col-md-6 col-lg-3">
                                         <h6 class="mb-2"><span
@@ -1422,20 +1562,26 @@
                                         </div>
                                     </div>
                                     <div class="col-md-6 col-lg-3">
-                                        <label for="notify-racelaps-intervallaps" class="form-label"
-                                            data-i18n="runmode.settings.pitradio.notifications.racelaps.interval">Interval
-                                            (Laps)</label>
-                                        <input type="number" id="notify-racelaps-intervallaps" class="form-control"
-                                            data-config="pitRadio.notifications.raceLapsIntervalLaps" min="1" max="20"
-                                            step="1">
+                                        <label for="notify-racelaps-countdownlaps" class="form-label"
+                                            data-i18n="runmode.settings.pitradio.notifications.racelaps.countdown">Countdown</label>
+                                        <div class="input-with-suffix">
+                                            <input type="number" id="notify-racelaps-countdownlaps"
+                                                class="form-control text-center"
+                                                data-config="pitRadio.notifications.raceLapsCountdownLaps" min="1"
+                                                max="10" step="1">
+                                            <span class="input-suffix">laps</span>
+                                        </div>
                                     </div>
                                     <div class="col-md-6 col-lg-3">
-                                        <label for="notify-racelaps-countdownlaps" class="form-label"
-                                            data-i18n="runmode.settings.pitradio.notifications.racelaps.countdown">Countdown
-                                            (Laps)</label>
-                                        <input type="number" id="notify-racelaps-countdownlaps" class="form-control"
-                                            data-config="pitRadio.pitradio.notifications.raceLaps.countdown" min="1"
-                                            max="10" step="1">
+                                        <label for="notify-racelaps-intervallaps" class="form-label"
+                                            data-i18n="runmode.settings.pitradio.notifications.racelaps.interval">Interval</label>
+                                        <div class="input-with-suffix">
+                                            <input type="number" id="notify-racelaps-intervallaps"
+                                                class="form-control text-center"
+                                                data-config="pitRadio.notifications.raceLapsIntervalLaps" min="1"
+                                                max="20" step="1">
+                                            <span class="input-suffix">laps</span>
+                                        </div>
                                     </div>
                                     <div class="col-md-6 col-lg-3">
                                         <!-- Empty column -->
@@ -1460,19 +1606,26 @@
                                     </div>
                                     <div class="col-md-6 col-lg-3">
                                         <label for="notify-raceprogress-minlaps" class="form-label"
-                                            data-i18n="runmode.settings.pitradio.notifications.raceprogress.minlaps">Minimum
-                                            Laps</label>
-                                        <input type="number" id="notify-raceprogress-minlaps" class="form-control"
-                                            data-config="pitRadio.notifications.raceProgressMinLaps" min="1" max="50"
-                                            step="1">
+                                            data-i18n="runmode.settings.pitradio.notifications.raceprogress.minlaps">Min
+                                            Race Length</label>
+                                        <div class="input-with-suffix">
+                                            <input type="number" id="notify-raceprogress-minlaps"
+                                                class="form-control text-center"
+                                                data-config="pitRadio.notifications.raceProgressMinLaps" min="1"
+                                                max="50" step="1">
+                                            <span class="input-suffix">laps</span>
+                                        </div>
                                     </div>
                                     <div class="col-md-6 col-lg-3">
                                         <label for="notify-raceprogress-intervalpc" class="form-label"
-                                            data-i18n="runmode.settings.pitradio.notifications.raceprogress.interval">Interval
-                                            (%)</label>
-                                        <input type="number" id="notify-raceprogress-intervalpc" class="form-control"
-                                            data-config="pitRadio.notifications.raceProgressIntervalPc" min="5" max="50"
-                                            step="5">
+                                            data-i18n="runmode.settings.pitradio.notifications.raceprogress.interval">Interval</label>
+                                        <div class="input-with-suffix">
+                                            <input type="number" id="notify-raceprogress-intervalpc"
+                                                class="form-control text-center"
+                                                data-config="pitRadio.notifications.raceProgressIntervalPc" min="5"
+                                                max="50" step="5">
+                                            <span class="input-suffix">%</span>
+                                        </div>
                                     </div>
                                     <div class="col-md-6 col-lg-3">
                                         <!-- Empty column -->
@@ -1496,35 +1649,45 @@
                                 <div class="col-md-6 col-lg-3">
                                     <label for="fuel-prewarnlaps" class="form-label"
                                         data-i18n="runmode.settings.pitradio.notifications.fuel.prewarnlaps">Pre-warn
-                                        Notify Laps</label>
-                                    <input type="number" id="fuel-prewarnlaps" class="form-control"
-                                        data-config="pitRadio.fuelMonitoring.preWarnNotifyLaps" min="0" max="10"
-                                        step="0.1">
+                                        Notify</label>
+                                    <div class="input-with-suffix">
+                                        <input type="number" id="fuel-prewarnlaps" class="form-control text-center"
+                                            data-config="pitRadio.fuelMonitoring.preWarnNotifyLaps" min="0" max="10"
+                                            step="0.1">
+                                        <span class="input-suffix">laps</span>
+                                    </div>
                                 </div>
                                 <div class="col-md-6 col-lg-3">
                                     <label for="fuel-strategylaps" class="form-label"
                                         data-i18n="runmode.settings.pitradio.notifications.fuel.strategylaps">Strategy
-                                        Notify Laps</label>
-                                    <input type="number" id="fuel-strategylaps" class="form-control"
-                                        data-config="pitRadio.fuelMonitoring.strategyNotifyLaps" min="0" max="20"
-                                        step="0.1">
+                                        Notify</label>
+                                    <div class="input-with-suffix">
+                                        <input type="number" id="fuel-strategylaps" class="form-control text-center"
+                                            data-config="pitRadio.fuelMonitoring.strategyNotifyLaps" min="0" max="20"
+                                            step="0.1">
+                                        <span class="input-suffix">laps</span>
+                                    </div>
                                 </div>
-                                <div class="col-md-6 col-lg-3">
-                                    <label for="fuel-safetymarginlaps" class="form-label"
-                                        data-i18n="runmode.settings.pitradio.notifications.fuel.safetymarginlaps">Safety
-                                        Margin (Laps)</label>
-                                    <input type="number" id="fuel-safetymarginlaps" class="form-control"
-                                        data-config="pitRadio.fuelMonitoring.rangeSafetyMarginLaps" min="0" max="2"
-                                        step="0.05">
-                                </div>
-                                <div class="col-md-6 col-lg-3">
-                                    <label for="fuel-safetymarginmeters" class="form-label"
-                                        data-i18n="runmode.settings.pitradio.notifications.fuel.safetymarginmeters">Safety
-                                        Margin
-                                        (Meters)</label>
-                                    <input type="number" id="fuel-safetymarginmeters" class="form-control"
-                                        data-config="pitRadio.fuelMonitoring.rangeSafetyMarginMeters" min="0" max="2000"
-                                        step="50">
+                                <div class="col-md-6 col-lg-4">
+                                    <label class="form-label"
+                                        data-i18n="runmode.settings.pitradio.notifications.fuel.safetymargin">Range
+                                        Safety Margin</label>
+                                    <div class="d-flex gap-2">
+                                        <div class="input-with-suffix">
+                                            <input type="number" id="fuel-safetymarginlaps"
+                                                class="form-control text-center"
+                                                data-config="pitRadio.fuelMonitoring.rangeSafetyMarginLaps" min="0"
+                                                max="2" step="0.05">
+                                            <span class="input-suffix">laps</span>
+                                        </div>
+                                        <div class="input-with-suffix">
+                                            <input type="number" id="fuel-safetymarginmeters"
+                                                class="form-control text-center"
+                                                data-config="pitRadio.fuelMonitoring.rangeSafetyMarginMeters" min="0"
+                                                max="2000" step="50">
+                                            <span class="input-suffix">m</span>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
 
@@ -1541,32 +1704,38 @@
                                             data-i18n="runmode.settings.pitradio.notifications.tyres.enable">Enable</label>
                                     </div>
                                 </div>
-                                <div class="col-md-6 col-lg-4">
+                                <div class="col-md-6 col-lg-3">
                                     <label for="tyres-tempoptimal" class="form-label"
                                         data-i18n="runmode.settings.pitradio.notifications.tyres.tempoptimal">Temperature
-                                        Optimal
-                                        (°C)</label>
-                                    <input type="number" id="tyres-tempoptimal" class="form-control"
-                                        data-config="pitRadio.tyreMonitoring.temperatureOptimalCelsius" min="60"
-                                        max="120" step="1">
+                                        Optimal</label>
+                                    <div class="input-with-suffix">
+                                        <input type="number" id="tyres-tempoptimal" class="form-control text-center"
+                                            data-config="pitRadio.tyreMonitoring.temperatureOptimalCelsius" min="60"
+                                            max="120" step="1">
+                                        <span class="input-suffix">°C</span>
+                                    </div>
                                 </div>
-                                <div class="col-md-6 col-lg-4">
+                                <div class="col-md-6 col-lg-3">
                                     <label for="tyres-tempwindow" class="form-label"
-                                        data-i18n="runmode.settings.pitradio.notifications.tyres.tempwindow">Operating
-                                        Window
-                                        (°C)</label>
-                                    <input type="number" id="tyres-tempwindow" class="form-control"
-                                        data-config="pitRadio.tyreMonitoring.temperatureOperatingWindow" min="2"
-                                        max="20" step="0.5">
+                                        data-i18n="runmode.settings.pitradio.notifications.tyres.tempwindow">Temperature
+                                        Window</label>
+                                    <div class="input-with-suffix">
+                                        <input type="number" id="tyres-tempwindow" class="form-control text-center"
+                                            data-config="pitRadio.tyreMonitoring.temperatureOperatingWindow" min="2"
+                                            max="20" step="0.5">
+                                        <span class="input-suffix">°C</span>
+                                    </div>
                                 </div>
-                                <div class="col-md-6 col-lg-4">
+                                <div class="col-md-6 col-lg-3">
                                     <label for="tyres-tempmargin" class="form-label"
                                         data-i18n="runmode.settings.pitradio.notifications.tyres.tempmargin">Temperature
-                                        Margin
-                                        (°C)</label>
-                                    <input type="number" id="tyres-tempmargin" class="form-control"
-                                        data-config="pitRadio.tyreMonitoring.temperatureMarginCelsius" min="1" max="10"
-                                        step="0.5">
+                                        Margin</label>
+                                    <div class="input-with-suffix">
+                                        <input type="number" id="tyres-tempmargin" class="form-control text-center"
+                                            data-config="pitRadio.tyreMonitoring.temperatureMarginCelsius" min="1"
+                                            max="10" step="0.5">
+                                        <span class="input-suffix">°C</span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -1574,417 +1743,418 @@
                 </div>
             </div>
         </div>
+    </div>
 
-        <!-- Factory Reset Confirmation Modal -->
-        <div class="modal fade" id="factory-reset-modal" tabindex="-1" aria-labelledby="factoryResetModalLabel"
-            aria-hidden="true">
-            <div class="modal-dialog modal-dialog-centered">
-                <div class="modal-content">
-                    <div class="modal-header bg-danger text-white">
-                        <h5 class="modal-title" id="factoryResetModalLabel">Factory Reset Warning</h5>
-                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
-                            aria-label="Close"></button>
+    <!-- Factory Reset Confirmation Modal -->
+    <div class="modal fade" id="factory-reset-modal" tabindex="-1" aria-labelledby="factoryResetModalLabel"
+        aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title" id="factoryResetModalLabel">Factory Reset Warning</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
+                        aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-danger">
+                        <p class="mb-2" data-i18n="runmode.settings.modal.warning"><strong>This will permanently
+                                delete:</strong></p>
+                        <ul class="mb-0">
+                            <li data-i18n="runmode.settings.modal.allappsettings">All application settings</li>
+                            <li data-i18n="runmode.settings.modal.allnetworkconfigs">All network configurations</li>
+                            <li data-i18n="runmode.settings.modal.allsaveddata">All saved data</li>
+                        </ul>
                     </div>
-                    <div class="modal-body">
-                        <div class="alert alert-danger">
-                            <p class="mb-2" data-i18n="runmode.settings.modal.warning"><strong>This will permanently
-                                    delete:</strong></p>
-                            <ul class="mb-0">
-                                <li data-i18n="runmode.settings.modal.allappsettings">All application settings</li>
-                                <li data-i18n="runmode.settings.modal.allnetworkconfigs">All network configurations</li>
-                                <li data-i18n="runmode.settings.modal.allsaveddata">All saved data</li>
-                            </ul>
-                        </div>
-                        <p><strong data-i18n="runmode.settings.modal.cannotundo">The changes made by this action cannot
-                                be
-                                undone and all data will be lost.</strong></p>
-                        <p data-i18n-html="runmode.settings.modal.confirmtext">To confirm, type <strong>reset</strong>
-                            below
-                            and click Continue:</p>
-                        <input type="text" id="factory-reset-confirm-input" class="form-control"
-                            data-i18n-placeholder="runmode.settings.modal.placeholder"
-                            placeholder="Type 'reset' to confirm" autocomplete="off">
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"
-                            data-i18n="runmode.settings.modal.cancel">Cancel</button>
-                        <button type="button" id="factory-reset-confirm" class="btn btn-danger"
-                            data-i18n="runmode.settings.modal.reset" disabled>Reset</button>
-                    </div>
+                    <p><strong data-i18n="runmode.settings.modal.cannotundo">The changes made by this action cannot
+                            be
+                            undone and all data will be lost.</strong></p>
+                    <p data-i18n-html="runmode.settings.modal.confirmtext">To confirm, type <strong>reset</strong>
+                        below
+                        and click Continue:</p>
+                    <input type="text" id="factory-reset-confirm-input" class="form-control"
+                        data-i18n-placeholder="runmode.settings.modal.placeholder" placeholder="Type 'reset' to confirm"
+                        autocomplete="off">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"
+                        data-i18n="runmode.settings.modal.cancel">Cancel</button>
+                    <button type="button" id="factory-reset-confirm" class="btn btn-danger"
+                        data-i18n="runmode.settings.modal.reset" disabled>Reset</button>
                 </div>
             </div>
         </div>
+    </div>
 
-        <div id="custom-tooltip" class="custom-tooltip"></div>
+    <div id="custom-tooltip" class="custom-tooltip"></div>
 
-        <script>
-            document.addEventListener('DOMContentLoaded', function () {
-                // Tooltip handling
-                const tooltip = document.getElementById('custom-tooltip');
-                let currentTrigger = null;
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            // Tooltip handling
+            const tooltip = document.getElementById('custom-tooltip');
+            let currentTrigger = null;
 
-                // Use event delegation on document for tooltips
-                document.addEventListener('click', function (e) {
-                    const trigger = e.target.closest('.tooltip-trigger');
+            // Use event delegation on document for tooltips
+            document.addEventListener('click', function (e) {
+                const trigger = e.target.closest('.tooltip-trigger');
 
-                    if (trigger) {
-                        e.preventDefault();
-                        e.stopPropagation();
+                if (trigger) {
+                    e.preventDefault();
+                    e.stopPropagation();
 
-                        if (currentTrigger === trigger && tooltip.classList.contains('show')) {
-                            tooltip.classList.remove('show');
-                            currentTrigger = null;
-                        } else {
-                            const content = trigger.getAttribute('data-tooltip');
-                            tooltip.innerHTML = content;
-
-                            const rect = trigger.getBoundingClientRect();
-                            tooltip.style.left = (rect.left + window.scrollX) + 'px';
-                            tooltip.style.top = (rect.bottom + window.scrollY + 5) + 'px';
-
-                            tooltip.classList.add('show');
-                            currentTrigger = trigger;
-                        }
-                    } else if (!e.target.closest('#custom-tooltip')) {
-                        // Only hide if clicking outside both trigger and tooltip
+                    if (currentTrigger === trigger && tooltip.classList.contains('show')) {
                         tooltip.classList.remove('show');
                         currentTrigger = null;
-                    }
-                }, true); // Use capture phase to intercept before label click
-
-                // Sidebar navigation
-                const navLinks = document.querySelectorAll('.settings-nav-link');
-                const sectionCards = document.querySelectorAll('.settings-section-card');
-                const sectionSelect = document.getElementById('sectionSelect');
-
-                // Function to switch sections
-                function switchSection(sectionName) {
-                    // Remove active class from all links
-                    navLinks.forEach(l => l.classList.remove('active'));
-
-                    // Add active class to corresponding link
-                    const activeLink = document.querySelector(`.settings-nav-link[data-section="${sectionName}"]`);
-                    if (activeLink) {
-                        activeLink.classList.add('active');
-                    }
-
-                    // Update dropdown value
-                    if (sectionSelect) {
-                        sectionSelect.value = sectionName;
-                    }
-
-                    // Hide all section cards
-                    sectionCards.forEach(card => card.classList.remove('active'));
-
-                    // Show the selected section card
-                    const targetCard = document.querySelector(`[data-section-content="${sectionName}"]`);
-                    if (targetCard) {
-                        targetCard.classList.add('active');
-                        // Scroll to top of content area
-                        window.scrollTo({ top: 0, behavior: 'smooth' });
-                    }
-                }
-                // Function to update telemetry button styles based on input value
-                function updateTelemetryButtonStyles() {
-                    const input = document.getElementById('telemetry-source');
-                    const autoBtn = document.getElementById('telemetry-auto-btn');
-                    const demoBtn = document.getElementById('telemetry-demo-btn');
-
-                    if (!input || !autoBtn || !demoBtn) return;
-
-                    const baseDir = window.configManager?.config?.app?.baseDir || '';
-                    const autoValue = 'udp://255.255.255.255:33739';
-                    const demoValue = `file://${baseDir}/data/replays/demo.gtz`;
-                    const currentValue = input.value;
-
-                    // Update auto button
-                    if (currentValue === autoValue) {
-                        autoBtn.classList.remove('btn-secondary');
-                        autoBtn.classList.add('btn-primary');
                     } else {
-                        autoBtn.classList.remove('btn-primary');
-                        autoBtn.classList.add('btn-secondary');
-                    }
+                        const content = trigger.getAttribute('data-tooltip');
+                        tooltip.innerHTML = content;
 
-                    // Update demo button
-                    if (currentValue === demoValue) {
-                        demoBtn.classList.remove('btn-secondary');
-                        demoBtn.classList.add('btn-primary');
-                    } else {
-                        demoBtn.classList.remove('btn-primary');
-                        demoBtn.classList.add('btn-secondary');
+                        const rect = trigger.getBoundingClientRect();
+                        tooltip.style.left = (rect.left + window.scrollX) + 'px';
+                        tooltip.style.top = (rect.bottom + window.scrollY + 5) + 'px';
+
+                        tooltip.classList.add('show');
+                        currentTrigger = trigger;
                     }
+                } else if (!e.target.closest('#custom-tooltip')) {
+                    // Only hide if clicking outside both trigger and tooltip
+                    tooltip.classList.remove('show');
+                    currentTrigger = null;
+                }
+            }, true); // Use capture phase to intercept before label click
+
+            // Sidebar navigation
+            const navLinks = document.querySelectorAll('.settings-nav-link');
+            const sectionCards = document.querySelectorAll('.settings-section-card');
+            const sectionSelect = document.getElementById('sectionSelect');
+
+            // Function to switch sections
+            function switchSection(sectionName) {
+                // Remove active class from all links
+                navLinks.forEach(l => l.classList.remove('active'));
+
+                // Add active class to corresponding link
+                const activeLink = document.querySelector(`.settings-nav-link[data-section="${sectionName}"]`);
+                if (activeLink) {
+                    activeLink.classList.add('active');
                 }
 
-                // Telemetry auto-fill button
-                document.getElementById('telemetry-auto-btn')?.addEventListener('click', async function () {
-                    const input = document.getElementById('telemetry-source');
-                    input.value = 'udp://255.255.255.255:33739';
-                    input.dispatchEvent(new Event('change', { bubbles: true }));
-                    updateTelemetryButtonStyles();
-                    // Save immediately
-                    if (window.configManager) {
-                        await window.configManager.saveInputConfiguration(input);
-                    }
-                });
-
-                // Telemetry demo-fill button
-                document.getElementById('telemetry-demo-btn')?.addEventListener('click', async function () {
-                    const input = document.getElementById('telemetry-source');
-                    const baseDir = window.configManager?.config?.app?.baseDir || '';
-                    input.value = `file://${baseDir}/data/replays/demo.gtz`;
-                    input.dispatchEvent(new Event('change', { bubbles: true }));
-                    updateTelemetryButtonStyles();
-                    // Save immediately
-                    if (window.configManager) {
-                        await window.configManager.saveInputConfiguration(input);
-                    }
-                });
-
-                // Update button styles when input changes
-                document.getElementById('telemetry-source')?.addEventListener('input', updateTelemetryButtonStyles);
-                document.getElementById('telemetry-source')?.addEventListener('change', updateTelemetryButtonStyles);
-
-                // Initial button style update (call after config is loaded)
-                setTimeout(updateTelemetryButtonStyles, 500);
-
-                // Cache info and clear functionality
-                function fetchCacheSize() {
-                    fetch('/api/system/cache-size')
-                        .then(response => response.json())
-                        .then(data => {
-                            const sizeElement = document.getElementById('cache-size');
-                            if (data.success) {
-                                const itemKey = data.count === 1 ? 'runmode.settings.app.control.cacheitem' : 'runmode.settings.app.control.cacheitems';
-                                const itemText = t(itemKey) || (data.count === 1 ? 'item' : 'items');
-                                sizeElement.textContent = `${data.size} (${data.count} ${itemText})`;
-                            } else {
-                                sizeElement.textContent = t('runmode.settings.app.control.errorloading') || 'Error loading';
-                            }
-                        })
-                        .catch(error => {
-                            console.error('Error fetching cache size:', error);
-                            document.getElementById('cache-size').textContent = t('runmode.settings.app.control.error') || 'Error';
-                        });
-                }
-
-                // Load cache size on page load
-                fetchCacheSize();
-
-                // Clear cache button
-                document.getElementById('clear-cache')?.addEventListener('click', function () {
-                    const button = this;
-                    const buttonText = button.querySelector('span');
-                    button.disabled = true;
-                    if (buttonText) {
-                        buttonText.textContent = t('runmode.settings.app.control.clearing') || 'Clearing...';
-                    }
-
-                    fetch('/api/system/cache-clear', { method: 'POST' })
-                        .then(response => response.json())
-                        .then(data => {
-                            if (data.success) {
-                                fetchCacheSize();
-                            } else {
-                                alert('Error clearing cache: ' + (data.message || 'Unknown error'));
-                            }
-                        })
-                        .catch(error => {
-                            console.error('Error clearing cache:', error);
-                            alert('Error clearing cache');
-                        })
-                        .finally(() => {
-                            button.disabled = false;
-                            if (buttonText) {
-                                buttonText.textContent = t('runmode.settings.app.control.clearcache') || 'Clear Cache';
-                            }
-                        });
-                });
-                // Sidebar link click handler
-                navLinks.forEach(link => {
-                    link.addEventListener('click', function (e) {
-                        e.preventDefault();
-                        const sectionName = this.getAttribute('data-section');
-                        switchSection(sectionName);
-                    });
-                });
-
-                // Mobile dropdown change handler
+                // Update dropdown value
                 if (sectionSelect) {
-                    sectionSelect.addEventListener('change', function () {
-                        switchSection(this.value);
+                    sectionSelect.value = sectionName;
+                }
+
+                // Hide all section cards
+                sectionCards.forEach(card => card.classList.remove('active'));
+
+                // Show the selected section card
+                const targetCard = document.querySelector(`[data-section-content="${sectionName}"]`);
+                if (targetCard) {
+                    targetCard.classList.add('active');
+                    // Scroll to top of content area
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                }
+            }
+            // Function to update telemetry button styles based on input value
+            function updateTelemetryButtonStyles() {
+                const input = document.getElementById('telemetry-source');
+                const autoBtn = document.getElementById('telemetry-auto-btn');
+                const demoBtn = document.getElementById('telemetry-demo-btn');
+
+                if (!input || !autoBtn || !demoBtn) return;
+
+                const baseDir = window.configManager?.config?.app?.baseDir || '';
+                const autoValue = 'udp://255.255.255.255:33739';
+                const demoValue = `file://${baseDir}/data/replays/demo.gtz`;
+                const currentValue = input.value;
+
+                // Update auto button
+                if (currentValue === autoValue) {
+                    autoBtn.classList.remove('btn-secondary');
+                    autoBtn.classList.add('btn-primary');
+                } else {
+                    autoBtn.classList.remove('btn-primary');
+                    autoBtn.classList.add('btn-secondary');
+                }
+
+                // Update demo button
+                if (currentValue === demoValue) {
+                    demoBtn.classList.remove('btn-secondary');
+                    demoBtn.classList.add('btn-primary');
+                } else {
+                    demoBtn.classList.remove('btn-primary');
+                    demoBtn.classList.add('btn-secondary');
+                }
+            }
+
+            // Telemetry auto-fill button
+            document.getElementById('telemetry-auto-btn')?.addEventListener('click', async function () {
+                const input = document.getElementById('telemetry-source');
+                input.value = 'udp://255.255.255.255:33739';
+                input.dispatchEvent(new Event('change', { bubbles: true }));
+                updateTelemetryButtonStyles();
+                // Save immediately
+                if (window.configManager) {
+                    await window.configManager.saveInputConfiguration(input);
+                }
+            });
+
+            // Telemetry demo-fill button
+            document.getElementById('telemetry-demo-btn')?.addEventListener('click', async function () {
+                const input = document.getElementById('telemetry-source');
+                const baseDir = window.configManager?.config?.app?.baseDir || '';
+                input.value = `file://${baseDir}/data/replays/demo.gtz`;
+                input.dispatchEvent(new Event('change', { bubbles: true }));
+                updateTelemetryButtonStyles();
+                // Save immediately
+                if (window.configManager) {
+                    await window.configManager.saveInputConfiguration(input);
+                }
+            });
+
+            // Update button styles when input changes
+            document.getElementById('telemetry-source')?.addEventListener('input', updateTelemetryButtonStyles);
+            document.getElementById('telemetry-source')?.addEventListener('change', updateTelemetryButtonStyles);
+
+            // Initial button style update (call after config is loaded)
+            setTimeout(updateTelemetryButtonStyles, 500);
+
+            // Cache info and clear functionality
+            function fetchCacheSize() {
+                fetch('/api/system/cache-size')
+                    .then(response => response.json())
+                    .then(data => {
+                        const sizeElement = document.getElementById('cache-size');
+                        if (data.success) {
+                            const itemKey = data.count === 1 ? 'runmode.settings.app.control.cacheitem' : 'runmode.settings.app.control.cacheitems';
+                            const itemText = t(itemKey) || (data.count === 1 ? 'item' : 'items');
+                            sizeElement.textContent = `${data.size} (${data.count} ${itemText})`;
+                        } else {
+                            sizeElement.textContent = t('runmode.settings.app.control.errorloading') || 'Error loading';
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error fetching cache size:', error);
+                        document.getElementById('cache-size').textContent = t('runmode.settings.app.control.error') || 'Error';
                     });
+            }
+
+            // Load cache size on page load
+            fetchCacheSize();
+
+            // Clear cache button
+            document.getElementById('clear-cache')?.addEventListener('click', function () {
+                const button = this;
+                const buttonText = button.querySelector('span');
+                button.disabled = true;
+                if (buttonText) {
+                    buttonText.textContent = t('runmode.settings.app.control.clearing') || 'Clearing...';
                 }
 
-                // Transmission feedback button group with radio buttons
-                const transmissionCheckbox = document.getElementById('haptics-dynamictransmission');
-                const fixedRadio = document.getElementById('transmission-fixed-radio');
-                const dynamicRadio = document.getElementById('transmission-dynamic-radio');
-                const transmissionCurveInput = document.getElementById('haptics-transmissioncurve');
-                const gForceMaxInput = document.getElementById('haptics-gforcemax');
-
-                function updateTransmissionRadios(isDynamic) {
-                    if (isDynamic) {
-                        dynamicRadio.checked = true;
-                    } else {
-                        fixedRadio.checked = true;
-                    }
-
-                    // Disable/enable compression curve and g-force max based on mode
-                    if (transmissionCurveInput) {
-                        transmissionCurveInput.disabled = !isDynamic;
-                    }
-                    if (gForceMaxInput) {
-                        gForceMaxInput.disabled = !isDynamic;
-                    }
-                }
-
-                if (transmissionCheckbox && fixedRadio && dynamicRadio) {
-                    // Handle radio button changes
-                    fixedRadio.addEventListener('change', function () {
-                        if (this.checked) {
-                            transmissionCheckbox.checked = false;
-                            // Trigger change event for settings.js to save
-                            transmissionCheckbox.dispatchEvent(new Event('change', { bubbles: true }));
+                fetch('/api/system/cache-clear', { method: 'POST' })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            fetchCacheSize();
+                        } else {
+                            alert('Error clearing cache: ' + (data.message || 'Unknown error'));
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error clearing cache:', error);
+                        alert('Error clearing cache');
+                    })
+                    .finally(() => {
+                        button.disabled = false;
+                        if (buttonText) {
+                            buttonText.textContent = t('runmode.settings.app.control.clearcache') || 'Clear Cache';
                         }
                     });
+            });
+            // Sidebar link click handler
+            navLinks.forEach(link => {
+                link.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    const sectionName = this.getAttribute('data-section');
+                    switchSection(sectionName);
+                });
+            });
 
-                    dynamicRadio.addEventListener('change', function () {
-                        if (this.checked) {
-                            transmissionCheckbox.checked = true;
-                            // Trigger change event for settings.js to save
-                            transmissionCheckbox.dispatchEvent(new Event('change', { bubbles: true }));
-                        }
-                    });
+            // Mobile dropdown change handler
+            if (sectionSelect) {
+                sectionSelect.addEventListener('change', function () {
+                    switchSection(this.value);
+                });
+            }
 
-                    // Override the checkbox's checked property to update radio buttons
-                    const originalDescriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'checked');
-                    Object.defineProperty(transmissionCheckbox, 'checked', {
-                        get() {
-                            return originalDescriptor.get.call(this);
-                        },
-                        set(value) {
-                            originalDescriptor.set.call(this, value);
-                            updateTransmissionRadios(value);
-                        },
-                        configurable: true,
-                        enumerable: true
-                    });
+            // Transmission feedback button group with radio buttons
+            const transmissionCheckbox = document.getElementById('haptics-dynamictransmission');
+            const fixedRadio = document.getElementById('transmission-fixed-radio');
+            const dynamicRadio = document.getElementById('transmission-dynamic-radio');
+            const transmissionCurveInput = document.getElementById('haptics-transmissioncurve');
+            const gForceMaxInput = document.getElementById('haptics-gforcemax');
 
-                    // Initial update
-                    updateTransmissionRadios(transmissionCheckbox.checked);
+            function updateTransmissionRadios(isDynamic) {
+                if (isDynamic) {
+                    dynamicRadio.checked = true;
+                } else {
+                    fixedRadio.checked = true;
                 }
 
-                // Gain mute toggle handling
-                const muteToggleIcons = document.querySelectorAll('.mute-toggle-icon');
+                // Disable/enable compression curve and g-force max based on mode
+                if (transmissionCurveInput) {
+                    transmissionCurveInput.disabled = !isDynamic;
+                }
+                if (gForceMaxInput) {
+                    gForceMaxInput.disabled = !isDynamic;
+                }
+            }
 
-                function updateMuteIcon(icon, isMuted) {
-                    if (isMuted) {
-                        icon.classList.remove('fa-volume-high');
-                        icon.classList.add('fa-volume-xmark');
-                        icon.style.color = '#dc3545';
-                    } else {
-                        icon.classList.remove('fa-volume-xmark');
-                        icon.classList.add('fa-volume-high');
-                        icon.style.color = '';
+            if (transmissionCheckbox && fixedRadio && dynamicRadio) {
+                // Handle radio button changes
+                fixedRadio.addEventListener('change', function () {
+                    if (this.checked) {
+                        transmissionCheckbox.checked = false;
+                        // Trigger change event for settings.js to save
+                        transmissionCheckbox.dispatchEvent(new Event('change', { bubbles: true }));
                     }
+                });
+
+                dynamicRadio.addEventListener('change', function () {
+                    if (this.checked) {
+                        transmissionCheckbox.checked = true;
+                        // Trigger change event for settings.js to save
+                        transmissionCheckbox.dispatchEvent(new Event('change', { bubbles: true }));
+                    }
+                });
+
+                // Override the checkbox's checked property to update radio buttons
+                const originalDescriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'checked');
+                Object.defineProperty(transmissionCheckbox, 'checked', {
+                    get() {
+                        return originalDescriptor.get.call(this);
+                    },
+                    set(value) {
+                        originalDescriptor.set.call(this, value);
+                        updateTransmissionRadios(value);
+                    },
+                    configurable: true,
+                    enumerable: true
+                });
+
+                // Initial update
+                updateTransmissionRadios(transmissionCheckbox.checked);
+            }
+
+            // Gain mute toggle handling
+            const muteToggleIcons = document.querySelectorAll('.mute-toggle-icon');
+
+            function updateMuteIcon(icon, isMuted) {
+                if (isMuted) {
+                    icon.classList.remove('fa-volume-high');
+                    icon.classList.add('fa-volume-xmark');
+                    icon.style.color = '#dc3545';
+                } else {
+                    icon.classList.remove('fa-volume-xmark');
+                    icon.classList.add('fa-volume-high');
+                    icon.style.color = '';
                 }
+            }
 
-                muteToggleIcons.forEach(icon => {
-                    const gainInputId = icon.dataset.gainInput;
-                    const muteCheckboxId = icon.dataset.muteCheckbox;
-                    const gainInput = document.getElementById(gainInputId);
-                    const muteCheckbox = document.getElementById(muteCheckboxId);
+            muteToggleIcons.forEach(icon => {
+                const gainInputId = icon.dataset.gainInput;
+                const muteCheckboxId = icon.dataset.muteCheckbox;
+                const gainInput = document.getElementById(gainInputId);
+                const muteCheckbox = document.getElementById(muteCheckboxId);
 
-                    if (gainInput && muteCheckbox) {
-                        // Click handler to toggle mute
-                        icon.addEventListener('click', function () {
-                            muteCheckbox.checked = !muteCheckbox.checked;
-                            updateMuteIcon(icon, muteCheckbox.checked);
-
-                            // Trigger change event to save
-                            muteCheckbox.dispatchEvent(new Event('change', { bubbles: true }));
-                        });
-
-                        // Update icon when checkbox changes (from config load)
-                        muteCheckbox.addEventListener('change', function () {
-                            updateMuteIcon(icon, this.checked);
-                        });
-
-                        // Initial state
+                if (gainInput && muteCheckbox) {
+                    // Click handler to toggle mute
+                    icon.addEventListener('click', function () {
+                        muteCheckbox.checked = !muteCheckbox.checked;
                         updateMuteIcon(icon, muteCheckbox.checked);
-                    }
-                });
-            });
 
-            // Replace all Font Awesome icons with SVG icons
-            document.addEventListener('DOMContentLoaded', function () {
-                if (typeof IconHelper !== 'undefined') {
-                    // Map Font Awesome classes to SVG icon names
-                    const iconMap = {
-                        'fa-circle-question': 'fa-circle-question',
-                        'fa-volume-high': 'fa-volume-high',
-                        'fa-volume-xmark': 'fa-volume-xmark',
-                        'fa-chevron-right': 'fa-chevron-right',
-                        'fa-chevron-down': 'fa-chevron-down',
-                        'fa-rotate-left': 'fa-rotate-left',
-                        'fa-gas-pump': 'fa-gas-pump',
-                        'fa-message': 'fa-message',
-                        'fa-discord': 'fa-discord',
-                        'fa-circle-dot': 'fa-circle-dot'
-                    };
-
-                    // Find all Font Awesome icons
-                    document.querySelectorAll('[class*="fa-"]').forEach(element => {
-                        // Check which icon it has
-                        for (const [faClass, iconName] of Object.entries(iconMap)) {
-                            if (element.classList.contains(faClass)) {
-                                IconHelper.replaceIcon(element, iconName);
-                                break;
-                            }
-                        }
+                        // Trigger change event to save
+                        muteCheckbox.dispatchEvent(new Event('change', { bubbles: true }));
                     });
 
-                    // Load icons for navigation items
-                    document.querySelectorAll('[data-icon]').forEach(async (element) => {
-                        const iconName = element.getAttribute('data-icon');
-                        if (iconName) {
-                            const svgContent = await IconHelper.loadIcon(iconName);
-                            if (svgContent) {
-                                element.innerHTML = svgContent;
-                            }
-                        }
+                    // Update icon when checkbox changes (from config load)
+                    muteCheckbox.addEventListener('change', function () {
+                        updateMuteIcon(icon, this.checked);
                     });
+
+                    // Initial state
+                    updateMuteIcon(icon, muteCheckbox.checked);
                 }
             });
+        });
 
-            // Handle chevron rotation for Advanced Settings collapse
-            const advancedSettingsSynth = document.getElementById('advancedSettingsSynth');
-            const advancedSettingsHaptics = document.getElementById('advancedSettingsHaptics');
-            const chevronSynth = document.getElementById('advanced-settings-chevron-synth');
-            const chevronHaptics = document.getElementById('advanced-settings-chevron-haptics');
+        // Replace all Font Awesome icons with SVG icons
+        document.addEventListener('DOMContentLoaded', function () {
+            if (typeof IconHelper !== 'undefined') {
+                // Map Font Awesome classes to SVG icon names
+                const iconMap = {
+                    'fa-circle-question': 'fa-circle-question',
+                    'fa-volume-high': 'fa-volume-high',
+                    'fa-volume-xmark': 'fa-volume-xmark',
+                    'fa-chevron-right': 'fa-chevron-right',
+                    'fa-chevron-down': 'fa-chevron-down',
+                    'fa-rotate-left': 'fa-rotate-left',
+                    'fa-gas-pump': 'fa-gas-pump',
+                    'fa-message': 'fa-message',
+                    'fa-discord': 'fa-discord',
+                    'fa-circle-dot': 'fa-circle-dot'
+                };
 
-            if (advancedSettingsSynth && chevronSynth) {
-                advancedSettingsSynth.addEventListener('show.bs.collapse', function () {
-                    IconHelper.replaceIcon(chevronSynth, 'fa-chevron-down');
+                // Find all Font Awesome icons
+                document.querySelectorAll('[class*="fa-"]').forEach(element => {
+                    // Check which icon it has
+                    for (const [faClass, iconName] of Object.entries(iconMap)) {
+                        if (element.classList.contains(faClass)) {
+                            IconHelper.replaceIcon(element, iconName);
+                            break;
+                        }
+                    }
                 });
-                advancedSettingsSynth.addEventListener('hide.bs.collapse', function () {
-                    IconHelper.replaceIcon(chevronSynth, 'fa-chevron-right');
+
+                // Load icons for navigation items
+                document.querySelectorAll('[data-icon]').forEach(async (element) => {
+                    const iconName = element.getAttribute('data-icon');
+                    if (iconName) {
+                        const svgContent = await IconHelper.loadIcon(iconName);
+                        if (svgContent) {
+                            element.innerHTML = svgContent;
+                        }
+                    }
                 });
             }
+        });
 
-            if (advancedSettingsHaptics && chevronHaptics) {
-                advancedSettingsHaptics.addEventListener('show.bs.collapse', function () {
-                    IconHelper.replaceIcon(chevronHaptics, 'fa-chevron-down');
-                });
-                advancedSettingsHaptics.addEventListener('hide.bs.collapse', function () {
-                    IconHelper.replaceIcon(chevronHaptics, 'fa-chevron-right');
-                });
-            }
-        </script>
+        // Handle chevron rotation for Advanced Settings collapse
+        const advancedSettingsSynth = document.getElementById('advancedSettingsSynth');
+        const advancedSettingsHaptics = document.getElementById('advancedSettingsHaptics');
+        const chevronSynth = document.getElementById('advanced-settings-chevron-synth');
+        const chevronHaptics = document.getElementById('advanced-settings-chevron-haptics');
 
-        <!-- Bootstrap Bundle JS -->
-        <script src="/js/bootstrap.bundle.min.js"></script>
+        if (advancedSettingsSynth && chevronSynth) {
+            advancedSettingsSynth.addEventListener('show.bs.collapse', function () {
+                IconHelper.replaceIcon(chevronSynth, 'fa-chevron-down');
+            });
+            advancedSettingsSynth.addEventListener('hide.bs.collapse', function () {
+                IconHelper.replaceIcon(chevronSynth, 'fa-chevron-right');
+            });
+        }
+
+        if (advancedSettingsHaptics && chevronHaptics) {
+            advancedSettingsHaptics.addEventListener('show.bs.collapse', function () {
+                IconHelper.replaceIcon(chevronHaptics, 'fa-chevron-down');
+            });
+            advancedSettingsHaptics.addEventListener('hide.bs.collapse', function () {
+                IconHelper.replaceIcon(chevronHaptics, 'fa-chevron-right');
+            });
+        }
+    </script>
+
+    <!-- Bootstrap Bundle JS -->
+    <script src="/js/bootstrap.bundle.min.js"></script>
 </body>
 
 </html>
