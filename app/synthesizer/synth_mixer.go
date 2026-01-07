@@ -361,7 +361,7 @@ func (m *Mixer) MixToMaster(length int) {
 
 	// Check if calibration mode is enabled
 	if m.calibrator != nil && m.calibrator.IsEnabled() {
-		frequency := m.calibrator.GetFrequency()
+		frequency := m.calibrator.GetSweepFrequency() // Use sweep frequency if sweeping, otherwise static frequency
 		channel := m.calibrator.GetChannel()
 
 		// Generate sine wave samples

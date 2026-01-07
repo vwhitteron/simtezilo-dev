@@ -156,6 +156,7 @@ func (w *WebUI) GetHTTPHandler() http.Handler {
 	mux.HandleFunc("/images/", w.imagesHandlerFunc())
 	mux.HandleFunc("/js/", w.sciChartJSHandlerFunc())
 	mux.HandleFunc("/ws", w.handleWebSocketConnection)
+	mux.HandleFunc("/api/calibration/sweep", w.handleCalibrationSweep)
 	mux.HandleFunc("/api/config", w.handleConfigAPI)
 	mux.HandleFunc("/api/config/export", w.handleConfigExport)
 	mux.HandleFunc("/api/config/import", w.handleConfigImport)
@@ -922,10 +923,14 @@ func (w *WebUI) handleGetConfig(response http.ResponseWriter, _ *http.Request) {
 			"source": w.config.GetTelemetrySource(),
 		},
 		"calibration": map[string]any{
-			"enabled":   w.calibrator.IsEnabled(),
-			"frequency": w.calibrator.GetFrequency(),
-			"volume":    w.calibrator.GetVolume(),
-			"channel":   string(w.calibrator.GetChannel()),
+			"enabled":       w.calibrator.IsEnabled(),
+			"frequency":     w.calibrator.GetSweepFrequency(),
+			"volume":        w.calibrator.GetVolume(),
+			"channel":       string(w.calibrator.GetChannel()),
+			"sweeping":      w.calibrator.IsSweeping(),
+			"sweepMin":      w.calibrator.GetSweepMin(),
+			"sweepMax":      w.calibrator.GetSweepMax(),
+			"sweepDuration": w.calibrator.GetSweepDuration(),
 		},
 	}
 
@@ -1449,6 +1454,30 @@ func (w *WebUI) applyCalibrationConfig(config map[string]any) []string {
 			w.calibrator.SetChannel(calibrator.OutputChannel(channelStr))
 		} else {
 			errors = append(errors, "invalid calibration channel value")
+		}
+	}
+
+	if sweepMin, ok := config["sweepMin"]; ok {
+		if minFloat, ok := sweepMin.(float64); ok {
+			w.calibrator.SetSweepMin(minFloat)
+		} else {
+			errors = append(errors, "invalid calibration sweepMin value")
+		}
+	}
+
+	if sweepMax, ok := config["sweepMax"]; ok {
+		if maxFloat, ok := sweepMax.(float64); ok {
+			w.calibrator.SetSweepMax(maxFloat)
+		} else {
+			errors = append(errors, "invalid calibration sweepMax value")
+		}
+	}
+
+	if sweepDuration, ok := config["sweepDuration"]; ok {
+		if durationFloat, ok := sweepDuration.(float64); ok {
+			w.calibrator.SetSweepDuration(durationFloat)
+		} else {
+			errors = append(errors, "invalid calibration sweepDuration value")
 		}
 	}
 
@@ -2052,6 +2081,60 @@ func (w *WebUI) handleRestart(response http.ResponseWriter, request *http.Reques
 
 		w.shutdownChan <- exitcode.RestartApp
 	}()
+}
+
+// handleCalibrationSweep handles POST requests to start/stop a calibration frequency sweep.
+func (w *WebUI) handleCalibrationSweep(response http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodPost {
+		response.WriteHeader(http.StatusMethodNotAllowed)
+
+		return
+	}
+
+	response.Header().Set("Content-Type", "application/json")
+
+	// Parse request body to determine action
+	var reqData struct {
+		Action string `json:"action"` // "start" or "stop"
+	}
+
+	err := json.NewDecoder(request.Body).Decode(&reqData)
+	if err != nil {
+		response.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(response).Encode(map[string]string{ //nolint:errchkjson // simple encoding
+			"status":  "error",
+			"message": "Invalid request body",
+		})
+
+		return
+	}
+
+	switch reqData.Action {
+	case "start":
+		w.calibrator.StartSweep()
+		w.log.Info().Msg("calibration sweep started")
+		_ = json.NewEncoder(response).Encode(map[string]any{ //nolint:errchkjson // simple encoding
+			"status":    "success",
+			"message":   "Sweep started",
+			"sweeping":  true,
+			"frequency": w.calibrator.GetSweepFrequency(),
+		})
+	case "stop":
+		w.calibrator.StopSweep()
+		w.log.Info().Msg("calibration sweep stopped")
+		_ = json.NewEncoder(response).Encode(map[string]any{ //nolint:errchkjson // simple encoding
+			"status":    "success",
+			"message":   "Sweep stopped",
+			"sweeping":  false,
+			"frequency": w.calibrator.GetFrequency(),
+		})
+	default:
+		response.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(response).Encode(map[string]string{ //nolint:errchkjson // simple encoding
+			"status":  "error",
+			"message": "Invalid action (must be 'start' or 'stop')",
+		})
+	}
 }
 
 // handleSetupMode handles POST requests to activate setup mode.

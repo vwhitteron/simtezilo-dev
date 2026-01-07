@@ -807,20 +807,8 @@
                                     </div>
 
                                     <div id="calibration-controls">
-                                        <div class="row g-3 mb-4">
-                                            <div class="col-md-6 col-lg-3">
-                                                <label for="calibration-frequency" class="form-label">
-                                                    <span
-                                                        data-i18n="runmode.settings.synth.calibration.frequency">Frequency
-                                                        (Hz)</span>
-                                                    <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
-                                                        role="button"
-                                                        data-i18n-tooltip="runmode.settings.synth.calibration.frequency.tooltip"></i>
-                                                </label>
-                                                <input type="number" id="calibration-frequency"
-                                                    class="form-control text-center" data-config="calibration.frequency"
-                                                    min="5" max="160" step="1" value="5">
-                                            </div>
+                                        <!-- Volume and Output Channel Row -->
+                                        <div class="row g-3 mb-3">
                                             <div class="col-md-6 col-lg-3">
                                                 <label for="calibration-volume" class="form-label">
                                                     <span data-i18n="runmode.settings.synth.calibration.volume">Volume
@@ -833,7 +821,7 @@
                                                     class="form-control text-center" data-config="calibration.volume"
                                                     min="-60" max="0" step="0.25" value="-30">
                                             </div>
-                                            <div class="col-md-12 col-lg-6">
+                                            <div class="col-md-6 col-lg-6">
                                                 <label for="calibration-channel" class="form-label">
                                                     <span data-i18n="runmode.settings.synth.calibration.channel">Output
                                                         Channel</span>
@@ -868,6 +856,77 @@
                                                         <span
                                                             data-i18n="runmode.settings.synth.calibration.channel.right">Right</span>
                                                     </label>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Frequency and Sweep Range Row -->
+                                        <div class="row g-3 mb-4">
+                                            <div class="col-md-6 col-lg-3">
+                                                <label for="calibration-frequency" class="form-label">
+                                                    <span
+                                                        data-i18n="runmode.settings.synth.calibration.frequency">Frequency
+                                                        (Hz)</span>
+                                                    <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
+                                                        role="button"
+                                                        data-i18n-tooltip="runmode.settings.synth.calibration.frequency.tooltip"></i>
+                                                </label>
+                                                <div class="input-group">
+                                                    <button type="button" id="calibration-sweep-btn"
+                                                        class="btn btn-outline-primary d-flex align-items-center justify-content-center"
+                                                        title="Frequency Sweep">
+                                                        <span class="icon" data-icon="stairs"
+                                                            style="margin-right: 0; font-size: 1rem;"></span>
+                                                    </button>
+                                                    <input type="number" id="calibration-frequency"
+                                                        class="form-control text-center"
+                                                        data-config="calibration.frequency" min="5" max="160" step="1"
+                                                        value="5">
+                                                </div>
+                                            </div>
+                                            <div class="col-md-3 col-lg-2">
+                                                <label for="calibration-sweep-duration" class="form-label">
+                                                    <span
+                                                        data-i18n="runmode.settings.synth.calibration.sweepDuration">Duration
+                                                        (s)</span>
+                                                </label>
+                                                <input type="number" id="calibration-sweep-duration"
+                                                    class="form-control text-center"
+                                                    data-config="calibration.sweepDuration" min="1" max="60" step="1"
+                                                    value="10">
+                                            </div>
+                                            <div class="col-md-3 col-lg-2">
+                                                <label for="calibration-sweep-min" class="form-label">
+                                                    <span data-i18n="runmode.settings.synth.calibration.sweepMin">Sweep
+                                                        Min (Hz)</span>
+                                                </label>
+                                                <input type="number" id="calibration-sweep-min"
+                                                    class="form-control text-center" data-config="calibration.sweepMin"
+                                                    min="5" max="159" step="1" value="5">
+                                            </div>
+                                            <div class="col-md-3 col-lg-2">
+                                                <label for="calibration-sweep-max" class="form-label">
+                                                    <span data-i18n="runmode.settings.synth.calibration.sweepMax">Sweep
+                                                        Max (Hz)</span>
+                                                </label>
+                                                <input type="number" id="calibration-sweep-max"
+                                                    class="form-control text-center" data-config="calibration.sweepMax"
+                                                    min="6" max="160" step="1" value="160">
+                                            </div>
+                                            <div class="col-auto d-flex align-items-end">
+                                                <div class="btn-group" role="group" aria-label="Sweep range presets">
+                                                    <button type="button" id="sweep-preset-haptic"
+                                                        class="btn btn-sm btn-outline-secondary"
+                                                        title="Set to Haptic Pulse range">
+                                                        <i class="icon" data-icon="wave-square"
+                                                            style="margin-right: 0; font-size: 1rem;"></i>
+                                                    </button>
+                                                    <button type="button" id="sweep-preset-full"
+                                                        class="btn btn-sm btn-outline-secondary"
+                                                        title="Reset to full range (5-160 Hz)">
+                                                        <i class="fa-solid fa-rotate-left"
+                                                            style="margin-right: 0; font-size: 1rem;"></i>
+                                                    </button>
                                                 </div>
                                             </div>
                                         </div>

@@ -273,6 +273,160 @@ class ConfigManager {
             });
         }
 
+        // Calibration sweep button
+        const calibrationSweepBtn = document.getElementById('calibration-sweep-btn');
+
+        if (calibrationSweepBtn && calibrationFrequencyInput) {
+            let sweepInterval = null;
+            let isSweeping = false;
+
+            // Initialize sweep state from config
+            const initSweepState = () => {
+                if (this.config.calibration && this.config.calibration.sweeping) {
+                    isSweeping = true;
+                    calibrationSweepBtn.classList.remove('btn-outline-primary');
+                    calibrationSweepBtn.classList.add('btn-primary');
+                    calibrationSweepBtn.title = 'Stop Sweep';
+                    this.startSweepPolling();
+                }
+            };
+
+            // Start polling for sweep frequency updates
+            this.startSweepPolling = () => {
+                if (sweepInterval) return; // Already polling
+
+                sweepInterval = setInterval(async () => {
+                    try {
+                        const configResponse = await fetch('/api/config');
+                        if (configResponse.ok) {
+                            const configData = await configResponse.json();
+                            if (configData.calibration && configData.calibration.sweeping) {
+                                // Update frequency display without triggering save
+                                if (calibrationFrequencyInput) {
+                                    const currentFreq = Math.round(configData.calibration.frequency);
+                                    if (calibrationFrequencyInput.value != currentFreq) {
+                                        calibrationFrequencyInput.value = currentFreq;
+                                        this.previousValues.set('calibration.frequency', currentFreq);
+                                    }
+                                }
+                            }
+                        }
+                    } catch (error) {
+                        console.error('Failed to poll sweep status:', error);
+                    }
+                }, 200);
+            };
+
+            calibrationSweepBtn.addEventListener('click', async () => {
+                if (isSweeping) {
+                    // Stop sweep
+                    try {
+                        const response = await fetch('/api/calibration/sweep', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({ action: 'stop' })
+                        });
+
+                        if (response.ok) {
+                            isSweeping = false;
+                            calibrationSweepBtn.classList.remove('btn-primary');
+                            calibrationSweepBtn.classList.add('btn-outline-primary');
+                            calibrationSweepBtn.title = 'Frequency Sweep';
+
+                            // Stop polling frequency
+                            if (sweepInterval) {
+                                clearInterval(sweepInterval);
+                                sweepInterval = null;
+                            }
+                        }
+                    } catch (error) {
+                        console.error('Failed to stop sweep:', error);
+                    }
+                } else {
+                    // Check if calibration mode is enabled
+                    const calibrationEnabled = document.getElementById('calibration-enabled');
+                    if (!calibrationEnabled || !calibrationEnabled.checked) {
+                        console.log('Calibration mode must be enabled to start sweep');
+                        return;
+                    }
+
+                    // Start sweep
+                    try {
+                        const response = await fetch('/api/calibration/sweep', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({ action: 'start' })
+                        });
+
+                        if (response.ok) {
+                            isSweeping = true;
+                            calibrationSweepBtn.classList.remove('btn-outline-primary');
+                            calibrationSweepBtn.classList.add('btn-primary');
+                            calibrationSweepBtn.title = 'Stop Sweep';
+
+                            // Start polling for current frequency
+                            this.startSweepPolling();
+                        }
+                    } catch (error) {
+                        console.error('Failed to start sweep:', error);
+                    }
+                }
+            });
+
+            // Initialize on page load
+            setTimeout(initSweepState, 500);
+        }
+
+        // Sweep range preset buttons
+        const sweepPresetHaptic = document.getElementById('sweep-preset-haptic');
+        const sweepPresetFull = document.getElementById('sweep-preset-full');
+        const sweepMinInput = document.getElementById('calibration-sweep-min');
+        const sweepMaxInput = document.getElementById('calibration-sweep-max');
+
+        if (sweepPresetHaptic && sweepMinInput && sweepMaxInput) {
+            sweepPresetHaptic.addEventListener('click', () => {
+                // Get haptic pulse min/max frequency from config
+                const pulseMinFreq = this.config?.haptics?.pulseMinFrequencyHz || 20;
+                const pulseMaxFreq = this.config?.haptics?.pulseMaxFrequencyHz || 80;
+
+                sweepMinInput.value = pulseMinFreq;
+                sweepMaxInput.value = pulseMaxFreq;
+
+                // Trigger save for both inputs
+                sweepMinInput.dispatchEvent(new Event('change', { bubbles: true }));
+                sweepMaxInput.dispatchEvent(new Event('change', { bubbles: true }));
+
+                // Update highlighting
+                this.updateSweepPresetHighlights();
+            });
+        }
+
+        if (sweepPresetFull && sweepMinInput && sweepMaxInput) {
+            sweepPresetFull.addEventListener('click', () => {
+                sweepMinInput.value = 5;
+                sweepMaxInput.value = 160;
+
+                // Trigger save for both inputs
+                sweepMinInput.dispatchEvent(new Event('change', { bubbles: true }));
+                sweepMaxInput.dispatchEvent(new Event('change', { bubbles: true }));
+
+                // Update highlighting
+                this.updateSweepPresetHighlights();
+            });
+        }
+
+        // Update highlighting when min/max values change
+        if (sweepMinInput) {
+            sweepMinInput.addEventListener('input', () => this.updateSweepPresetHighlights());
+        }
+        if (sweepMaxInput) {
+            sweepMaxInput.addEventListener('input', () => this.updateSweepPresetHighlights());
+        }
+
         // Pit Radio output change handler to show/hide Discord settings
         const pitRadioOutput = document.getElementById('pitradio-output');
         if (pitRadioOutput) {
@@ -655,6 +809,9 @@ class ConfigManager {
         // Update transmission disabled state based on radio selection
         this.updateTransmissionDisabledState();
 
+        // Update sweep preset button highlighting based on current values
+        this.updateSweepPresetHighlights();
+
         this.isPopulating = false; // Clear flag after population complete
     }
 
@@ -676,6 +833,49 @@ class ConfigManager {
             const isDynamic = dynamicRadio.checked;
             transmissionCurveInput.disabled = !isDynamic;
             gForceMaxInput.disabled = !isDynamic;
+        }
+    }
+
+    // Update sweep preset button highlighting based on current min/max values
+    updateSweepPresetHighlights() {
+        const sweepMinInput = document.getElementById('calibration-sweep-min');
+        const sweepMaxInput = document.getElementById('calibration-sweep-max');
+        const sweepPresetHaptic = document.getElementById('sweep-preset-haptic');
+        const sweepPresetFull = document.getElementById('sweep-preset-full');
+
+        if (!sweepMinInput || !sweepMaxInput) return;
+
+        const currentMin = parseInt(sweepMinInput.value, 10);
+        const currentMax = parseInt(sweepMaxInput.value, 10);
+
+        // Haptic preset values
+        const hapticMin = this.config?.haptics?.pulseMinFrequencyHz || 20;
+        const hapticMax = this.config?.haptics?.pulseMaxFrequencyHz || 80;
+
+        // Full preset values
+        const fullMin = 5;
+        const fullMax = 160;
+
+        // Update haptic preset button
+        if (sweepPresetHaptic) {
+            if (currentMin === hapticMin && currentMax === hapticMax) {
+                sweepPresetHaptic.classList.remove('btn-outline-secondary');
+                sweepPresetHaptic.classList.add('btn-outline-primary');
+            } else {
+                sweepPresetHaptic.classList.remove('btn-outline-primary');
+                sweepPresetHaptic.classList.add('btn-outline-secondary');
+            }
+        }
+
+        // Update full preset button
+        if (sweepPresetFull) {
+            if (currentMin === fullMin && currentMax === fullMax) {
+                sweepPresetFull.classList.remove('btn-outline-secondary');
+                sweepPresetFull.classList.add('btn-outline-primary');
+            } else {
+                sweepPresetFull.classList.remove('btn-outline-primary');
+                sweepPresetFull.classList.add('btn-outline-secondary');
+            }
         }
     }
 

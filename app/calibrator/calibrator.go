@@ -1,7 +1,9 @@
 package calibrator
 
 import (
+	"context"
 	"sync"
+	"time"
 )
 
 // OutputChannel represents which audio channels should receive the calibration tone.
@@ -20,20 +22,29 @@ const (
 
 // Calibrator manages tone generation state for calibration mode.
 type Calibrator struct {
-	enabled   bool
-	frequency float64
-	volume    float64
-	channel   OutputChannel
-	mu        sync.RWMutex
+	enabled        bool
+	frequency      float64
+	volume         float64
+	channel        OutputChannel
+	mu             sync.RWMutex
+	sweeping       bool
+	sweepCancel    context.CancelFunc
+	sweepFrequency float64 // Current frequency during sweep
+	sweepMin       float64 // Minimum sweep frequency
+	sweepMax       float64 // Maximum sweep frequency
+	sweepDuration  float64 // Sweep duration in seconds
 }
 
 // New creates a new Calibrator instance with default values.
 func New() *Calibrator {
 	return &Calibrator{
-		enabled:   false,
-		frequency: 5,
-		volume:    -30,
-		channel:   OutputChannelBoth,
+		enabled:       false,
+		frequency:     5,
+		volume:        -30,
+		channel:       OutputChannelBoth,
+		sweepMin:      5,
+		sweepMax:      160,
+		sweepDuration: 10,
 	}
 }
 
@@ -62,6 +73,7 @@ func (c *Calibrator) GetFrequency() float64 {
 }
 
 // SetFrequency sets the calibrator frequency in Hz.
+// This also resets the sweep position to sweepMin.
 func (c *Calibrator) SetFrequency(frequency float64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -76,6 +88,8 @@ func (c *Calibrator) SetFrequency(frequency float64) {
 	}
 
 	c.frequency = frequency
+	// Reset sweep position when frequency is manually changed
+	c.sweepFrequency = c.sweepMin
 }
 
 // GetVolume returns the calibrator volume in dB.
@@ -122,5 +136,227 @@ func (c *Calibrator) SetChannel(channel OutputChannel) {
 		c.channel = channel
 	default:
 		c.channel = OutputChannelBoth
+	}
+}
+
+// GetSweepMin returns the minimum sweep frequency in Hz.
+func (c *Calibrator) GetSweepMin() float64 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.sweepMin
+}
+
+// SetSweepMin sets the minimum sweep frequency in Hz.
+func (c *Calibrator) SetSweepMin(freq float64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// Clamp between 5 and sweepMax-1
+	if freq < 5 {
+		freq = 5
+	}
+
+	if freq >= c.sweepMax {
+		freq = c.sweepMax - 1
+	}
+
+	c.sweepMin = freq
+}
+
+// GetSweepMax returns the maximum sweep frequency in Hz.
+func (c *Calibrator) GetSweepMax() float64 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.sweepMax
+}
+
+// SetSweepMax sets the maximum sweep frequency in Hz.
+func (c *Calibrator) SetSweepMax(freq float64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// Clamp between sweepMin+1 and 160
+	if freq > 160 {
+		freq = 160
+	}
+
+	if freq <= c.sweepMin {
+		freq = c.sweepMin + 1
+	}
+
+	c.sweepMax = freq
+}
+
+// GetSweepDuration returns the sweep duration in seconds.
+func (c *Calibrator) GetSweepDuration() float64 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.sweepDuration
+}
+
+// SetSweepDuration sets the sweep duration in seconds.
+func (c *Calibrator) SetSweepDuration(duration float64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// Clamp between 1 and 60 seconds
+	if duration < 1 {
+		duration = 1
+	}
+
+	if duration > 60 {
+		duration = 60
+	}
+
+	c.sweepDuration = duration
+}
+
+// IsSweeping returns whether a frequency sweep is currently active.
+func (c *Calibrator) IsSweeping() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.sweeping
+}
+
+// GetSweepFrequency returns the current frequency during a sweep.
+// Returns the static frequency if not sweeping.
+func (c *Calibrator) GetSweepFrequency() float64 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if c.sweeping {
+		return c.sweepFrequency
+	}
+
+	return c.frequency
+}
+
+// StartSweep starts a frequency sweep from sweepMin to sweepMax.
+// The sweep takes approximately the configured sweep duration to complete.
+// If calibration is not enabled, it will be enabled automatically.
+// If a previous sweep was stopped, it resumes from where it left off.
+func (c *Calibrator) StartSweep() {
+	c.mu.Lock()
+
+	// Stop any existing sweep
+	if c.sweepCancel != nil {
+		c.sweepCancel()
+		c.sweepCancel = nil
+	}
+
+	// Enable calibration mode if not already enabled
+	if !c.enabled {
+		c.enabled = true
+	}
+
+	// Create cancellation context
+	ctx, cancel := context.WithCancel(context.Background())
+	c.sweepCancel = cancel
+	c.sweeping = true
+
+	// Resume from last position if valid, otherwise start at minimum
+	if c.sweepFrequency < c.sweepMin || c.sweepFrequency > c.sweepMax {
+		c.sweepFrequency = c.sweepMin
+	}
+
+	c.mu.Unlock()
+
+	// Run sweep in goroutine
+	go c.runSweep(ctx)
+}
+
+// StopSweep stops an active frequency sweep.
+// The current sweep position is retained so the sweep can resume from where it left off.
+func (c *Calibrator) StopSweep() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.sweepCancel != nil {
+		c.sweepCancel()
+		c.sweepCancel = nil
+	}
+
+	c.sweeping = false
+	// Keep sweepFrequency at current value so sweep can resume
+}
+
+// runSweep executes the frequency sweep loop.
+func (c *Calibrator) runSweep(ctx context.Context) {
+	const stepSize = 1.0
+
+	// Helper function to calculate step duration based on current range and sweep duration
+	calcStepDuration := func(minFreq, maxFreq, sweepSecs float64) time.Duration {
+		stepCount := (maxFreq - minFreq) / stepSize
+		if stepCount <= 0 {
+			stepCount = 1
+		}
+
+		sweepDuration := time.Duration(sweepSecs * float64(time.Second))
+
+		return sweepDuration / time.Duration(stepCount)
+	}
+
+	// Get initial values
+	c.mu.RLock()
+	minFreq := c.sweepMin
+	maxFreq := c.sweepMax
+	sweepSecs := c.sweepDuration
+	currentFreq := c.sweepFrequency // Start from retained position
+	prevMin := minFreq
+	prevMax := maxFreq
+	prevSweepSecs := sweepSecs
+
+	c.mu.RUnlock()
+
+	stepDuration := calcStepDuration(minFreq, maxFreq, sweepSecs)
+
+	ticker := time.NewTicker(stepDuration)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			// Sweep cancelled
+			return
+		case <-ticker.C:
+			// Read current min/max/duration values (they may have changed)
+			c.mu.RLock()
+			minFreq = c.sweepMin
+			maxFreq = c.sweepMax
+			sweepSecs = c.sweepDuration
+			c.mu.RUnlock()
+
+			// If min/max/duration changed, recalculate step duration and reset ticker
+			if minFreq != prevMin || maxFreq != prevMax || sweepSecs != prevSweepSecs {
+				prevMin = minFreq
+				prevMax = maxFreq
+				prevSweepSecs = sweepSecs
+				stepDuration = calcStepDuration(minFreq, maxFreq, sweepSecs)
+				ticker.Reset(stepDuration)
+			}
+
+			// Clamp current frequency to new bounds if needed
+			if currentFreq < minFreq {
+				currentFreq = minFreq
+			}
+
+			if currentFreq > maxFreq {
+				currentFreq = minFreq
+			}
+
+			c.mu.Lock()
+			c.sweepFrequency = currentFreq
+			c.mu.Unlock()
+
+			currentFreq += stepSize
+			if currentFreq > maxFreq {
+				// Sweep complete - restart from minimum
+				currentFreq = minFreq
+			}
+		}
 	}
 }
