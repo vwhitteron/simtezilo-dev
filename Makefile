@@ -79,6 +79,12 @@ lint/fix:
 dist: build/rpi/v8/64 build/windows/64 build/darwin/silicon
 	@./build/scripts/gen_dist.sh
 
+## release/manifest: generate a release manifest JSON for the update system
+.PHONY: release/manifest
+release/manifest:
+	@chmod +x ./build/scripts/gen_release_manifest.sh
+	@./build/scripts/gen_release_manifest.sh "$(buildversion)" "stable" "out/releases/latest.json"
+
 ## build: build the application for the current platform
 .PHONY: build
 build:

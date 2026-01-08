@@ -1,0 +1,205 @@
+package updater
+
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"path/filepath"
+	"time"
+
+	"github.com/rs/zerolog"
+)
+
+// DownloadProgress represents the progress of a download operation.
+type DownloadProgress struct {
+	TotalBytes      int64
+	DownloadedBytes int64
+	Percent         float64
+}
+
+// ProgressCallback is called periodically during download with progress information.
+type ProgressCallback func(progress DownloadProgress)
+
+// Downloader handles downloading update binaries.
+type Downloader struct {
+	log         zerolog.Logger
+	httpTimeout time.Duration
+	downloadDir string
+}
+
+// NewDownloader creates a new Downloader instance.
+func NewDownloader(downloadDir string, httpTimeout time.Duration, log zerolog.Logger) *Downloader {
+	return &Downloader{
+		log:         log.With().Str("component", "downloader").Logger(),
+		httpTimeout: httpTimeout,
+		downloadDir: downloadDir,
+	}
+}
+
+// Download fetches the update binary and verifies its checksum.
+// Returns the path to the downloaded file.
+func (d *Downloader) Download(info *UpdateInfo, progressCb ProgressCallback) (string, error) {
+	if info == nil {
+		return "", errors.New("no update info provided")
+	}
+
+	// Ensure download directory exists
+	if err := os.MkdirAll(d.downloadDir, 0o755); err != nil {
+		return "", fmt.Errorf("failed to create download directory: %w", err)
+	}
+
+	// Create temporary file for download
+	destPath := filepath.Join(d.downloadDir, "simtezilo.new")
+	tmpPath := destPath + ".tmp"
+
+	d.log.Info().
+		Str("url", info.DownloadURL).
+		Str("dest", destPath).
+		Int64("size", info.DownloadSize).
+		Msg("Starting download")
+
+	// Create HTTP request
+	client := &http.Client{
+		Timeout: d.httpTimeout,
+	}
+
+	resp, err := client.Get(info.DownloadURL)
+	if err != nil {
+		return "", fmt.Errorf("failed to start download: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("download failed with status: %d", resp.StatusCode)
+	}
+
+	// Create temporary file
+	tmpFile, err := os.OpenFile(tmpPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
+	if err != nil {
+		return "", fmt.Errorf("failed to create temp file: %w", err)
+	}
+
+	defer func() {
+		tmpFile.Close()
+		// Clean up temp file on error
+		if err != nil {
+			os.Remove(tmpPath)
+		}
+	}()
+
+	// Download with progress tracking
+	totalSize := resp.ContentLength
+	if totalSize <= 0 && info.DownloadSize > 0 {
+		totalSize = info.DownloadSize
+	}
+
+	hasher := sha256.New()
+	writer := io.MultiWriter(tmpFile, hasher)
+
+	var downloaded int64
+
+	buf := make([]byte, 32*1024) // 32KB buffer
+
+	for {
+		n, readErr := resp.Body.Read(buf)
+		if n > 0 {
+			_, writeErr := writer.Write(buf[:n])
+			if writeErr != nil {
+				return "", fmt.Errorf("failed to write to file: %w", writeErr)
+			}
+
+			downloaded += int64(n)
+
+			// Report progress
+			if progressCb != nil && totalSize > 0 {
+				progressCb(DownloadProgress{
+					TotalBytes:      totalSize,
+					DownloadedBytes: downloaded,
+					Percent:         float64(downloaded) / float64(totalSize) * 100,
+				})
+			}
+		}
+
+		if readErr != nil {
+			if readErr == io.EOF {
+				break
+			}
+
+			return "", fmt.Errorf("failed to read response: %w", readErr)
+		}
+	}
+
+	// Close file before rename
+	if err := tmpFile.Close(); err != nil {
+		return "", fmt.Errorf("failed to close temp file: %w", err)
+	}
+
+	// Verify checksum
+	actualHash := hex.EncodeToString(hasher.Sum(nil))
+	if info.SHA256 != "" && actualHash != info.SHA256 {
+		os.Remove(tmpPath)
+
+		return "", fmt.Errorf("checksum mismatch: expected %s, got %s", info.SHA256, actualHash)
+	}
+
+	d.log.Debug().
+		Str("expected", info.SHA256).
+		Str("actual", actualHash).
+		Msg("Checksum verified")
+
+	// Rename temp file to final destination
+	if err := os.Rename(tmpPath, destPath); err != nil {
+		return "", fmt.Errorf("failed to rename temp file: %w", err)
+	}
+
+	// Ensure executable permissions
+	if err := os.Chmod(destPath, 0o755); err != nil {
+		return "", fmt.Errorf("failed to set executable permissions: %w", err)
+	}
+
+	d.log.Info().
+		Str("path", destPath).
+		Int64("bytes", downloaded).
+		Str("sha256", actualHash).
+		Msg("Download completed")
+
+	return destPath, nil
+}
+
+// VerifyFile checks if a file matches the expected SHA256 hash.
+func (d *Downloader) VerifyFile(path string, expectedSHA256 string) (bool, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return false, fmt.Errorf("failed to open file: %w", err)
+	}
+	defer file.Close()
+
+	hasher := sha256.New()
+	if _, err := io.Copy(hasher, file); err != nil {
+		return false, fmt.Errorf("failed to hash file: %w", err)
+	}
+
+	actualHash := hex.EncodeToString(hasher.Sum(nil))
+
+	return actualHash == expectedSHA256, nil
+}
+
+// CleanupDownloads removes old downloaded files from the download directory.
+func (d *Downloader) CleanupDownloads() error {
+	patterns := []string{"simtezilo.new", "simtezilo.new.tmp", "simtezilo.rollback"}
+	for _, pattern := range patterns {
+		path := filepath.Join(d.downloadDir, pattern)
+		if _, err := os.Stat(path); err == nil {
+			err := os.Remove(path)
+			if err != nil {
+				d.log.Warn().Err(err).Str("path", path).Msg("Failed to remove old download")
+			}
+		}
+	}
+
+	return nil
+}

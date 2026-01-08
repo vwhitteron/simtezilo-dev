@@ -1,16 +1,14 @@
 [Unit]
 Description=Sim racing telemetry signal processing client
-After=local-fs.target
-Wants=local-fs.target
+After=local-fs.target network-online.target
+Wants=local-fs.target network-online.target
 
 [Service]
+ExecStartPre=/opt/simtezilo/bin/apply-update.sh
 ExecStart=/opt/simtezilo/bin/simtezilo
 Type=simple
 Restart=always
+RestartSec=5
 
 [Install]
-WantedBy=local-fs.target
-
-[Socket]
-ListenDatagram=0.0.0.0:33740
-ListenStream=0.0.0.0:8080
+WantedBy=multi-user.target

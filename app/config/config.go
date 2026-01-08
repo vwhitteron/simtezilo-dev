@@ -143,6 +143,14 @@ type tyreMonitoring struct {
 	TemperatureMarginCelsius   float32 `toml:"temperatureMarginCelsius"`
 }
 
+type updates struct {
+	Enabled         bool   `toml:"enabled"`
+	ManifestURL     string `toml:"manifestURL"`
+	Channel         string `toml:"channel"`
+	CheckIntervalMs int    `toml:"checkIntervalMs"`
+	AutoInstall     bool   `toml:"autoInstall"`
+}
+
 type viperConfig struct {
 	App         *app         `toml:"app"`
 	Hardware    *hardware    `toml:"hardware"`
@@ -150,6 +158,7 @@ type viperConfig struct {
 	PitRadio    *pitRadio    `toml:"pitRadio"`
 	Synthesizer *Synthesizer `toml:"synthesizer"`
 	Telemetry   *Telemetry   `toml:"telemetry"`
+	Updates     *updates     `toml:"updates"`
 }
 
 // Snapshot holds frequently-accessed configuration values for lock-free reads.
@@ -2234,6 +2243,50 @@ func (c *Config) SetTelemetrySource(value string) {
 	c.viper.Telemetry.Source = value
 
 	c.registerUpdate(true)
+}
+
+// ****************************************************************************
+// Updates methods.
+// ****************************************************************************
+
+// GetUpdatesEnabled returns whether automatic update checking is enabled.
+func (c *Config) GetUpdatesEnabled() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.Updates.Enabled
+}
+
+// GetUpdatesManifestURL returns the URL of the update manifest.
+func (c *Config) GetUpdatesManifestURL() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.Updates.ManifestURL
+}
+
+// GetUpdatesChannel returns the update channel (e.g., "stable", "beta").
+func (c *Config) GetUpdatesChannel() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.Updates.Channel
+}
+
+// GetUpdatesCheckIntervalMs returns the update check interval in milliseconds.
+func (c *Config) GetUpdatesCheckIntervalMs() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.Updates.CheckIntervalMs
+}
+
+// GetUpdatesAutoInstall returns whether updates should be automatically installed.
+func (c *Config) GetUpdatesAutoInstall() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.Updates.AutoInstall
 }
 
 // ****************************************************************************
