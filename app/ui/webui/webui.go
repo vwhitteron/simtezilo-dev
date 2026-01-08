@@ -27,6 +27,7 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/logstore"
 	"github.com/vwhitteron/simtezilo-dev/app/setupmode"
 	"github.com/vwhitteron/simtezilo-dev/app/ui/webui/webcommon"
+	"github.com/vwhitteron/simtezilo-dev/app/updater"
 )
 
 // WSMessage represents a typed message envelope for the unified WebSocket.
@@ -82,6 +83,7 @@ type WebUI struct {
 	clientSubscriptions map[*websocket.Conn]map[string]bool // Track what data types each client wants
 	subscriptionsMutex  sync.RWMutex
 	subscriptionChan    chan subscriptionUpdate
+	updater             *updater.Updater // Self-update manager (may be nil)
 }
 
 type Config struct {
@@ -102,6 +104,7 @@ type Config struct {
 	BuildCommitHash    string
 	BuildTime          string
 	BuildPlatform      string
+	Updater            *updater.Updater // Self-update manager (may be nil)
 }
 
 // New creates a new instance of the WebUI.
@@ -139,6 +142,7 @@ func New(config Config) *WebUI {
 		unifiedSessions:     make(map[string]*websocket.Conn),
 		clientSubscriptions: make(map[*websocket.Conn]map[string]bool),
 		subscriptionChan:    make(chan subscriptionUpdate, 10),
+		updater:             config.Updater,
 	}
 
 	// Start unified websocket broadcaster
@@ -169,6 +173,14 @@ func (w *WebUI) GetHTTPHandler() http.Handler {
 	mux.HandleFunc("/api/system/cache-size", w.handleCacheSize)
 	mux.HandleFunc("/api/system/info", w.handleSystemInfo)
 	mux.HandleFunc("/api/system/restart", w.handleRestart)
+
+	// Update management endpoints (only register if updater is available)
+	if w.updater != nil {
+		mux.HandleFunc("/api/updates/status", w.handleUpdatesStatus)
+		mux.HandleFunc("/api/updates/check", w.handleUpdatesCheck)
+		mux.HandleFunc("/api/updates/download", w.handleUpdatesDownload)
+		mux.HandleFunc("/api/updates/install", w.handleUpdatesInstall)
+	}
 
 	if w.setupMode != nil && w.setupMode.IsAvailable() {
 		mux.HandleFunc("/api/system/factory-reset", w.handleFactoryReset)
@@ -2730,4 +2742,227 @@ func formatBytes(bytes int64) string {
 	}
 
 	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
+}
+
+// handleUpdatesStatus returns the current update status.
+func (w *WebUI) handleUpdatesStatus(response http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodGet {
+		response.WriteHeader(http.StatusMethodNotAllowed)
+		_ = json.NewEncoder(response).Encode(map[string]string{"error": "Method not allowed"}) //nolint:errchkjson // simple encoding
+
+		return
+	}
+
+	if w.updater == nil {
+		response.WriteHeader(http.StatusServiceUnavailable)
+		_ = json.NewEncoder(response).Encode(map[string]string{"error": "Updater not available"}) //nolint:errchkjson // simple encoding
+
+		return
+	}
+
+	status := w.updater.Status()
+	availableUpdate := w.updater.AvailableUpdate()
+
+	responseData := map[string]any{
+		"enabled":        w.config.GetUpdatesEnabled(),
+		"status":         status.String(),
+		"currentVersion": w.buildVersion,
+		"channel":        w.config.GetUpdatesChannel(),
+	}
+
+	if availableUpdate != nil {
+		responseData["availableUpdate"] = map[string]any{
+			"version":     availableUpdate.AvailableVersion,
+			"releaseDate": availableUpdate.ReleaseDate,
+			"changelog":   availableUpdate.Changelog,
+			"downloadURL": availableUpdate.DownloadURL,
+			"size":        availableUpdate.DownloadSize,
+		}
+	}
+
+	response.Header().Set("Content-Type", "application/json")
+	response.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+
+	err := json.NewEncoder(response).Encode(responseData)
+	if err != nil {
+		w.log.Error().Err(err).Msg("failed to encode updates status response")
+		http.Error(response, "error encoding updates status", http.StatusInternalServerError)
+
+		return
+	}
+
+	w.log.Debug().Str("status", status.String()).Msg("served updates status")
+}
+
+// handleUpdatesCheck triggers an immediate update check.
+func (w *WebUI) handleUpdatesCheck(response http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodPost {
+		response.WriteHeader(http.StatusMethodNotAllowed)
+		_ = json.NewEncoder(response).Encode(map[string]string{"error": "Method not allowed"}) //nolint:errchkjson // simple encoding
+
+		return
+	}
+
+	if w.updater == nil {
+		response.WriteHeader(http.StatusServiceUnavailable)
+		_ = json.NewEncoder(response).Encode(map[string]string{"error": "Updater not available"}) //nolint:errchkjson // simple encoding
+
+		return
+	}
+
+	updateInfo, err := w.updater.CheckNow() //nolint:contextcheck // CheckNow manages its own timeout context
+	if err != nil {
+		w.log.Error().Err(err).Msg("failed to check for updates")
+		response.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(response).Encode(map[string]string{"error": err.Error()}) //nolint:errchkjson // simple encoding
+
+		return
+	}
+
+	responseData := map[string]any{
+		"updateAvailable": updateInfo != nil,
+		"currentVersion":  w.buildVersion,
+	}
+
+	if updateInfo != nil {
+		responseData["availableUpdate"] = map[string]any{
+			"version":     updateInfo.AvailableVersion,
+			"releaseDate": updateInfo.ReleaseDate,
+			"changelog":   updateInfo.Changelog,
+			"downloadURL": updateInfo.DownloadURL,
+			"size":        updateInfo.DownloadSize,
+		}
+	}
+
+	response.Header().Set("Content-Type", "application/json")
+
+	err = json.NewEncoder(response).Encode(responseData)
+	if err != nil {
+		w.log.Error().Err(err).Msg("failed to encode update check response")
+		http.Error(response, "error encoding update check response", http.StatusInternalServerError)
+
+		return
+	}
+
+	w.log.Info().
+		Bool("updateAvailable", updateInfo != nil).
+		Msg("manual update check completed")
+}
+
+// handleUpdatesDownload downloads an available update.
+func (w *WebUI) handleUpdatesDownload(response http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodPost {
+		response.WriteHeader(http.StatusMethodNotAllowed)
+		_ = json.NewEncoder(response).Encode(map[string]string{"error": "Method not allowed"}) //nolint:errchkjson // simple encoding
+
+		return
+	}
+
+	if w.updater == nil {
+		response.WriteHeader(http.StatusServiceUnavailable)
+		_ = json.NewEncoder(response).Encode(map[string]string{"error": "Updater not available"}) //nolint:errchkjson // simple encoding
+
+		return
+	}
+
+	availableUpdate := w.updater.AvailableUpdate()
+	if availableUpdate == nil {
+		response.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(response).Encode(map[string]string{"error": "No update available"}) //nolint:errchkjson // simple encoding
+
+		return
+	}
+
+	w.log.Info().
+		Str("version", availableUpdate.AvailableVersion).
+		Msg("starting update download")
+
+	// Download and prepare the update
+	//nolint:contextcheck // download manages its own timeout context
+	err := w.updater.DownloadAndPrepare(func(progress updater.DownloadProgress) {
+		w.log.Debug().
+			Int64("downloaded", progress.DownloadedBytes).
+			Int64("total", progress.TotalBytes).
+			Float64("percent", progress.Percent).
+			Msg("download progress")
+	})
+	if err != nil {
+		w.log.Error().Err(err).Msg("failed to download update")
+		response.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(response).Encode(map[string]string{"error": err.Error()}) //nolint:errchkjson // simple encoding
+
+		return
+	}
+
+	response.Header().Set("Content-Type", "application/json")
+
+	err = json.NewEncoder(response).Encode(map[string]any{
+		"success": true,
+		"version": availableUpdate.AvailableVersion,
+		"message": "Update downloaded and prepared for installation",
+	})
+	if err != nil {
+		w.log.Error().Err(err).Msg("failed to encode download response")
+		http.Error(response, "error encoding download response", http.StatusInternalServerError)
+
+		return
+	}
+
+	w.log.Info().
+		Str("version", availableUpdate.AvailableVersion).
+		Msg("update downloaded and staged for installation")
+}
+
+// handleUpdatesInstall triggers installation of a downloaded update (restarts the service).
+func (w *WebUI) handleUpdatesInstall(response http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodPost {
+		response.WriteHeader(http.StatusMethodNotAllowed)
+		_ = json.NewEncoder(response).Encode(map[string]string{"error": "Method not allowed"}) //nolint:errchkjson // simple encoding
+
+		return
+	}
+
+	if w.updater == nil {
+		response.WriteHeader(http.StatusServiceUnavailable)
+		_ = json.NewEncoder(response).Encode(map[string]string{"error": "Updater not available"}) //nolint:errchkjson // simple encoding
+
+		return
+	}
+
+	status := w.updater.Status()
+	if status != updater.StatusReadyToInstall {
+		response.WriteHeader(http.StatusBadRequest)
+		//nolint:errchkjson // simple encoding
+		_ = json.NewEncoder(response).Encode(map[string]string{
+			"error":  "No update ready to install",
+			"status": status.String(),
+		})
+
+		return
+	}
+
+	w.log.Info().Msg("triggering service restart to apply update")
+
+	// Send success response before triggering restart
+	response.Header().Set("Content-Type", "application/json")
+
+	err := json.NewEncoder(response).Encode(map[string]any{
+		"success": true,
+		"message": "Service will restart to apply update",
+	})
+	if err != nil {
+		w.log.Error().Err(err).Msg("failed to encode install response")
+	}
+
+	// Trigger restart in a goroutine so response can be sent first
+	//nolint:contextcheck // restart is independent of request context
+	go func() {
+		// Small delay to ensure response is sent
+		time.Sleep(500 * time.Millisecond)
+
+		err := w.updater.RestartToApply()
+		if err != nil {
+			w.log.Error().Err(err).Msg("failed to restart service for update")
+		}
+	}()
 }

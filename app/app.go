@@ -39,6 +39,7 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/tyres"
 	"github.com/vwhitteron/simtezilo-dev/app/ui"
 	"github.com/vwhitteron/simtezilo-dev/app/ui/webui"
+	"github.com/vwhitteron/simtezilo-dev/app/updater"
 	"github.com/vwhitteron/simtezilo-dev/app/vehicle"
 	gttelemetry "github.com/zetetos/gt-telemetry"
 	gtmodels "github.com/zetetos/gt-telemetry/pkg/models"
@@ -104,6 +105,9 @@ type App struct {
 
 	httpServer        *http.Server // Shared HTTP server for both modes
 	activeHTTPHandler http.Handler // Current handler (setup mode or run mode)
+
+	updater       *updater.Updater   // Self-update manager
+	updaterCancel context.CancelFunc // Cancel function for updater context
 
 	// Chassis haptics state
 	jerkPeakHold         float64       // Peak hold value for jerk to prevent cancellation
@@ -222,6 +226,15 @@ func (a *App) Close() {
 	// Stop HTTP server first to prevent new requests
 	a.stopHTTPServer()
 
+	// Stop the updater if running
+	if a.updater != nil {
+		a.updater.Stop()
+
+		if a.updaterCancel != nil {
+			a.updaterCancel()
+		}
+	}
+
 	err := a.synth.Close()
 	if err != nil {
 		a.log.Error().
@@ -334,6 +347,7 @@ func (a *App) runAppMode() RunResult {
 			BuildCommitHash:    CommitHash,
 			BuildTime:          BuildTime,
 			BuildPlatform:      Platform,
+			Updater:            a.updater,
 		})
 	}
 
@@ -351,6 +365,13 @@ func (a *App) runAppMode() RunResult {
 		}
 
 		a.activeHTTPHandler = nil
+	}
+
+	// Start the updater if initialized
+	if a.updater != nil {
+		ctx, cancel := context.WithCancel(context.Background())
+		a.updaterCancel = cancel
+		a.updater.Start(ctx)
 	}
 
 	a.run()
@@ -739,6 +760,36 @@ func (a *App) initializeComponents(opts Options) error {
 			Str("package", "circuit").
 			Str("result", "failure").
 			Msg("init")
+	}
+
+	// Initialize updater if enabled
+	if a.config.GetUpdatesEnabled() {
+		baseDir := a.config.GetAppBaseDir()
+
+		a.updater, err = updater.New(&updater.Config{
+			Enabled:       a.config.GetUpdatesEnabled(),
+			ManifestURL:   a.config.GetUpdatesManifestURL(),
+			Channel:       a.config.GetUpdatesChannel(),
+			CheckInterval: time.Duration(a.config.GetUpdatesCheckIntervalMinutes()) * time.Minute,
+			AutoInstall:   a.config.GetUpdatesAutoInstall(),
+			InstallDir:    filepath.Join(baseDir, "bin"),
+			DataDir:       filepath.Join(baseDir, "data", "update"),
+			BinaryName:    "simtezilo",
+			ServiceName:   "simtezilo",
+			UseSystemd:    true,
+		}, Version, a.log)
+		if err != nil {
+			a.log.Warn().
+				Err(err).
+				Str("component", "updater").
+				Str("result", "failure").
+				Msg("init (continuing without auto-updates)")
+		} else {
+			a.log.Debug().
+				Str("component", "updater").
+				Str("result", "success").
+				Msg("init")
+		}
 	}
 
 	return nil

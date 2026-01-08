@@ -16,7 +16,7 @@ func defaultConfig() *viperConfig {
 			WebUIPort:     80,
 			Updates: &updates{
 				Enabled:              false,
-				ManifestURL:          "https://updates.simtezilo.com/releases/latest.json",
+				ManifestURL:          "https://simtezilo.com/releases/stable/latest.json",
 				Channel:              "stable",
 				CheckIntervalMinutes: 60,
 				AutoInstall:          false,
