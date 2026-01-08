@@ -1,6 +1,7 @@
 package updater
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,16 +14,19 @@ import (
 	"github.com/rs/zerolog"
 )
 
+// statusFailed is the status value for failed installations.
+const statusFailed = "failed"
+
 // InstallState tracks the state of a pending installation.
 type InstallState struct {
-	PendingVersion string    `json:"pendingVersion"`
-	CurrentVersion string    `json:"currentVersion"`
-	DownloadPath   string    `json:"downloadPath"`
-	SHA256         string    `json:"sha256"`
-	Timestamp      time.Time `json:"timestamp"`
-	Status         string    `json:"status"` // "pending", "installing", "failed", "complete"
-	FailCount      int       `json:"failCount"`
-	LastError      string    `json:"lastError,omitempty"`
+	PendingVersion string    `json:"pendingVersion"` //nolint:tagliatelle // external API format
+	CurrentVersion string    `json:"currentVersion"` //nolint:tagliatelle // external API format
+	DownloadPath   string    `json:"downloadPath"`   //nolint:tagliatelle // external API format
+	SHA256         string    `json:"sha256"`         //nolint:tagliatelle // external API format
+	Timestamp      time.Time `json:"timestamp"`      //nolint:tagliatelle // external API format
+	Status         string    `json:"status"`         //nolint:tagliatelle // external API format
+	FailCount      int       `json:"failCount"`      //nolint:tagliatelle // external API format
+	LastError      string    `json:"lastError"`      //nolint:tagliatelle // external API format
 }
 
 // Installer handles the installation of downloaded updates.
@@ -47,11 +51,6 @@ func NewInstaller(installDir, dataDir, binaryName string, useSystemd bool, log z
 	}
 }
 
-// stateFilePath returns the path to the install state file.
-func (i *Installer) stateFilePath() string {
-	return filepath.Join(i.dataDir, "update-state.json")
-}
-
 // LoadState loads the current installation state from disk.
 func (i *Installer) LoadState() (*InstallState, error) {
 	data, err := os.ReadFile(i.stateFilePath())
@@ -64,7 +63,9 @@ func (i *Installer) LoadState() (*InstallState, error) {
 	}
 
 	var state InstallState
-	if err := json.Unmarshal(data, &state); err != nil {
+
+	err = json.Unmarshal(data, &state)
+	if err != nil {
 		return nil, fmt.Errorf("failed to parse state file: %w", err)
 	}
 
@@ -73,7 +74,8 @@ func (i *Installer) LoadState() (*InstallState, error) {
 
 // SaveState persists the installation state to disk.
 func (i *Installer) SaveState(state *InstallState) error {
-	if err := os.MkdirAll(i.dataDir, 0o755); err != nil {
+	err := os.MkdirAll(i.dataDir, 0o755)
+	if err != nil {
 		return fmt.Errorf("failed to create data directory: %w", err)
 	}
 
@@ -82,7 +84,8 @@ func (i *Installer) SaveState(state *InstallState) error {
 		return fmt.Errorf("failed to marshal state: %w", err)
 	}
 
-	if err := os.WriteFile(i.stateFilePath(), data, 0o644); err != nil {
+	err = os.WriteFile(i.stateFilePath(), data, 0o600)
+	if err != nil {
 		return fmt.Errorf("failed to write state file: %w", err)
 	}
 
@@ -92,6 +95,7 @@ func (i *Installer) SaveState(state *InstallState) error {
 // ClearState removes the installation state file.
 func (i *Installer) ClearState() error {
 	path := i.stateFilePath()
+
 	err := os.Remove(path)
 	if err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("failed to remove state file: %w", err)
@@ -109,7 +113,8 @@ func (i *Installer) Prepare(downloadPath string, info *UpdateInfo, currentVersio
 		Msg("Preparing update for installation")
 
 	// Verify the downloaded file exists
-	if _, err := os.Stat(downloadPath); err != nil {
+	_, err := os.Stat(downloadPath)
+	if err != nil {
 		return fmt.Errorf("downloaded file not found: %w", err)
 	}
 
@@ -123,7 +128,7 @@ func (i *Installer) Prepare(downloadPath string, info *UpdateInfo, currentVersio
 		Status:         "pending",
 	}
 
-	err := i.SaveState(state)
+	err = i.SaveState(state)
 	if err != nil {
 		return fmt.Errorf("failed to save install state: %w", err)
 	}
@@ -153,7 +158,9 @@ func (i *Installer) ApplyPendingUpdate() error {
 		Msg("Applying pending update")
 
 	state.Status = "installing"
-	if err := i.SaveState(state); err != nil {
+
+	err = i.SaveState(state)
+	if err != nil {
 		return fmt.Errorf("failed to update state: %w", err)
 	}
 
@@ -161,16 +168,18 @@ func (i *Installer) ApplyPendingUpdate() error {
 	rollbackBinary := filepath.Join(i.installDir, i.binaryName+".rollback")
 
 	// Backup current binary
-	if _, err := os.Stat(currentBinary); err == nil {
+	_, statErr := os.Stat(currentBinary)
+	if statErr == nil {
 		i.log.Debug().Str("to", rollbackBinary).Msg("Backing up current binary")
-		err := os.Rename(currentBinary, rollbackBinary)
-		if err != nil {
-			state.Status = "failed"
-			state.LastError = fmt.Sprintf("failed to backup current binary: %v", err)
+
+		renameErr := os.Rename(currentBinary, rollbackBinary)
+		if renameErr != nil {
+			state.Status = statusFailed
+			state.LastError = fmt.Sprintf("failed to backup current binary: %v", renameErr)
 			state.FailCount++
 			_ = i.SaveState(state)
 
-			return fmt.Errorf("failed to backup current binary: %w", err)
+			return fmt.Errorf("failed to backup current binary: %w", renameErr)
 		}
 	}
 
@@ -180,10 +189,11 @@ func (i *Installer) ApplyPendingUpdate() error {
 		Str("to", currentBinary).
 		Msg("Installing new binary")
 
-	if err := os.Rename(state.DownloadPath, currentBinary); err != nil {
+	err = os.Rename(state.DownloadPath, currentBinary)
+	if err != nil {
 		// Try to restore from backup
 		_ = os.Rename(rollbackBinary, currentBinary)
-		state.Status = "failed"
+		state.Status = statusFailed
 		state.LastError = fmt.Sprintf("failed to install new binary: %v", err)
 		state.FailCount++
 		_ = i.SaveState(state)
@@ -192,12 +202,15 @@ func (i *Installer) ApplyPendingUpdate() error {
 	}
 
 	// Ensure executable permissions
-	if err := os.Chmod(currentBinary, 0o755); err != nil {
+	err = os.Chmod(currentBinary, 0o755)
+	if err != nil {
 		i.log.Warn().Err(err).Msg("Failed to set executable permissions")
 	}
 
 	state.Status = "complete"
-	if err := i.SaveState(state); err != nil {
+
+	err = i.SaveState(state)
+	if err != nil {
 		i.log.Warn().Err(err).Msg("Failed to save completion state")
 	}
 
@@ -213,7 +226,8 @@ func (i *Installer) Rollback() error {
 	currentBinary := filepath.Join(i.installDir, i.binaryName)
 	rollbackBinary := filepath.Join(i.installDir, i.binaryName+".rollback")
 
-	if _, err := os.Stat(rollbackBinary); err != nil {
+	_, err := os.Stat(rollbackBinary)
+	if err != nil {
 		return errors.New("no rollback binary available")
 	}
 
@@ -221,15 +235,17 @@ func (i *Installer) Rollback() error {
 
 	// Move current to .failed
 	failedBinary := filepath.Join(i.installDir, i.binaryName+".failed")
-	if _, err := os.Stat(currentBinary); err == nil {
-		err := os.Rename(currentBinary, failedBinary)
-		if err != nil {
-			return fmt.Errorf("failed to move current binary: %w", err)
+
+	_, statErr := os.Stat(currentBinary)
+	if statErr == nil {
+		renameErr := os.Rename(currentBinary, failedBinary)
+		if renameErr != nil {
+			return fmt.Errorf("failed to move current binary: %w", renameErr)
 		}
 	}
 
 	// Restore rollback
-	err := os.Rename(rollbackBinary, currentBinary)
+	err = os.Rename(rollbackBinary, currentBinary)
 	if err != nil {
 		return fmt.Errorf("failed to restore rollback binary: %w", err)
 	}
@@ -258,7 +274,12 @@ func (i *Installer) RestartService(serviceName string) error {
 
 	i.log.Info().Str("service", serviceName).Msg("Requesting service restart")
 
-	cmd := exec.Command("systemctl", "restart", serviceName)
+	// Use a short timeout context - we just need to start the command
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "systemctl", "restart", serviceName)
+
 	err := cmd.Start()
 	if err != nil {
 		return fmt.Errorf("failed to restart service: %w", err)
@@ -276,7 +297,7 @@ func (i *Installer) ShouldAutoRollback(maxFailures int) bool {
 		return false
 	}
 
-	return state.Status == "failed" && state.FailCount >= maxFailures
+	return state.Status == statusFailed && state.FailCount >= maxFailures
 }
 
 // ConfirmSuccess should be called after the application starts successfully
@@ -297,10 +318,17 @@ func (i *Installer) ConfirmSuccess() error {
 
 	// Remove rollback binary
 	rollbackBinary := filepath.Join(i.installDir, i.binaryName+".rollback")
-	if err := os.Remove(rollbackBinary); err != nil && !os.IsNotExist(err) {
-		i.log.Warn().Err(err).Msg("Failed to remove rollback binary")
+
+	removeErr := os.Remove(rollbackBinary)
+	if removeErr != nil && !os.IsNotExist(removeErr) {
+		i.log.Warn().Err(removeErr).Msg("Failed to remove rollback binary")
 	}
 
 	// Clear state
 	return i.ClearState()
+}
+
+// stateFilePath returns the path to the install state file.
+func (i *Installer) stateFilePath() string {
+	return filepath.Join(i.dataDir, "update-state.json")
 }

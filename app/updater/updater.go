@@ -121,6 +121,7 @@ func (u *Updater) Start(ctx context.Context) {
 	// Check if we should auto-rollback due to previous failures
 	if u.installer.ShouldAutoRollback(DefaultMaxFailures) {
 		u.log.Warn().Msg("Too many failed starts, initiating auto-rollback")
+
 		err := u.installer.Rollback()
 		if err != nil {
 			u.log.Error().Err(err).Msg("Auto-rollback failed")

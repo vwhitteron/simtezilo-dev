@@ -1,10 +1,12 @@
-package updater
+package updater //nolint:testpackage // testing internal functions
 
 import (
 	"testing"
 )
 
 func TestParseVersion(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name    string
 		input   string
@@ -48,31 +50,35 @@ func TestParseVersion(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := ParseVersion(tt.input)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("ParseVersion() error = %v, wantErr %v", err, tt.wantErr)
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := ParseVersion(testCase.input)
+			if (err != nil) != testCase.wantErr {
+				t.Errorf("ParseVersion() error = %v, wantErr %v", err, testCase.wantErr)
 
 				return
 			}
 
-			if tt.wantErr {
+			if testCase.wantErr {
 				return
 			}
 
-			if got.Major != tt.want.Major || got.Minor != tt.want.Minor || got.Patch != tt.want.Patch {
-				t.Errorf("ParseVersion() = %v, want %v", got, tt.want)
+			if got.Major != testCase.want.Major || got.Minor != testCase.want.Minor || got.Patch != testCase.want.Patch {
+				t.Errorf("ParseVersion() = %v, want %v", got, testCase.want)
 			}
 
-			if got.PreRelease != tt.want.PreRelease {
-				t.Errorf("ParseVersion() PreRelease = %v, want %v", got.PreRelease, tt.want.PreRelease)
+			if got.PreRelease != testCase.want.PreRelease {
+				t.Errorf("ParseVersion() PreRelease = %v, want %v", got.PreRelease, testCase.want.PreRelease)
 			}
 		})
 	}
 }
 
 func TestVersionCompare(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		v1   string
@@ -91,27 +97,31 @@ func TestVersionCompare(t *testing.T) {
 		{name: "v prefix handled", v1: "v1.0.0", v2: "1.0.0", want: 0},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			v1, err := ParseVersion(tt.v1)
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			version1, err := ParseVersion(testCase.v1)
 			if err != nil {
 				t.Fatalf("Failed to parse v1: %v", err)
 			}
 
-			v2, err := ParseVersion(tt.v2)
+			version2, err := ParseVersion(testCase.v2)
 			if err != nil {
 				t.Fatalf("Failed to parse v2: %v", err)
 			}
 
-			got := v1.Compare(v2)
-			if got != tt.want {
-				t.Errorf("Compare() = %v, want %v", got, tt.want)
+			got := version1.Compare(version2)
+			if got != testCase.want {
+				t.Errorf("Compare() = %v, want %v", got, testCase.want)
 			}
 		})
 	}
 }
 
 func TestVersionString(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name  string
 		input string
@@ -121,37 +131,43 @@ func TestVersionString(t *testing.T) {
 		{name: "with prerelease", input: "1.0.0-beta.1", want: "v1.0.0-beta.1"},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			v, _ := ParseVersion(tt.input)
-			if got := v.String(); got != tt.want {
-				t.Errorf("String() = %v, want %v", got, tt.want)
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			v, _ := ParseVersion(testCase.input)
+			if got := v.String(); got != testCase.want {
+				t.Errorf("String() = %v, want %v", got, testCase.want)
 			}
 		})
 	}
 }
 
 func TestVersionLessThanGreaterThan(t *testing.T) {
-	v1, _ := ParseVersion("1.0.0")
-	v2, _ := ParseVersion("2.0.0")
+	t.Parallel()
 
-	if !v1.LessThan(v2) {
+	version1, _ := ParseVersion("1.0.0")
+	version2, _ := ParseVersion("2.0.0")
+
+	if !version1.LessThan(version2) {
 		t.Error("Expected 1.0.0 < 2.0.0")
 	}
 
-	if v2.LessThan(v1) {
+	if version2.LessThan(version1) {
 		t.Error("Expected 2.0.0 not < 1.0.0")
 	}
 
-	if !v2.GreaterThan(v1) {
+	if !version2.GreaterThan(version1) {
 		t.Error("Expected 2.0.0 > 1.0.0")
 	}
 
-	if v1.GreaterThan(v2) {
+	if version1.GreaterThan(version2) {
 		t.Error("Expected 1.0.0 not > 2.0.0")
 	}
 
-	if !v1.Equal(v1) {
+	// Test equality with a copy of the same version
+	version1Copy, _ := ParseVersion("1.0.0")
+	if !version1.Equal(version1Copy) {
 		t.Error("Expected 1.0.0 == 1.0.0")
 	}
 }

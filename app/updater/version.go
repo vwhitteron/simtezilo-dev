@@ -20,10 +20,10 @@ var semverRegex = regexp.MustCompile(`^v?(\d+)\.(\d+)\.(\d+)(?:-([a-zA-Z0-9.-]+)
 
 // ParseVersion parses a semantic version string.
 // Accepts formats: "1.2.3", "v1.2.3", "1.2.3-beta.1".
-func ParseVersion(s string) (*Version, error) {
-	matches := semverRegex.FindStringSubmatch(s)
+func ParseVersion(versionStr string) (*Version, error) {
+	matches := semverRegex.FindStringSubmatch(versionStr)
 	if matches == nil {
-		return nil, fmt.Errorf("invalid version format: %s", s)
+		return nil, fmt.Errorf("invalid version format: %s", versionStr)
 	}
 
 	major, _ := strconv.Atoi(matches[1])
@@ -40,7 +40,7 @@ func ParseVersion(s string) (*Version, error) {
 		Minor:      minor,
 		Patch:      patch,
 		PreRelease: preRelease,
-		Raw:        s,
+		Raw:        versionStr,
 	}, nil
 }
 
@@ -61,45 +61,52 @@ func (v *Version) String() string {
 //	 0 if v == other
 //	 1 if v > other
 func (v *Version) Compare(other *Version) int {
-	if v.Major != other.Major {
-		if v.Major < other.Major {
-			return -1
-		}
-
-		return 1
+	// Compare major version
+	if cmp := compareInts(v.Major, other.Major); cmp != 0 {
+		return cmp
 	}
 
-	if v.Minor != other.Minor {
-		if v.Minor < other.Minor {
-			return -1
-		}
-
-		return 1
+	// Compare minor version
+	if cmp := compareInts(v.Minor, other.Minor); cmp != 0 {
+		return cmp
 	}
 
-	if v.Patch != other.Patch {
-		if v.Patch < other.Patch {
-			return -1
-		}
-
-		return 1
+	// Compare patch version
+	if cmp := compareInts(v.Patch, other.Patch); cmp != 0 {
+		return cmp
 	}
 
-	// Pre-release versions have lower precedence than release versions
-	// e.g., 1.0.0-alpha < 1.0.0
-	if v.PreRelease == "" && other.PreRelease != "" {
-		return 1
-	}
+	// Handle pre-release comparison
+	return comparePreReleaseStrings(v.PreRelease, other.PreRelease)
+}
 
-	if v.PreRelease != "" && other.PreRelease == "" {
+// compareInts returns -1 if a < b, 1 if a > b, 0 if equal.
+func compareInts(first, second int) int {
+	switch {
+	case first < second:
 		return -1
+	case first > second:
+		return 1
+	default:
+		return 0
 	}
+}
 
-	if v.PreRelease != "" && other.PreRelease != "" {
-		return comparePreRelease(v.PreRelease, other.PreRelease)
+// comparePreReleaseStrings handles pre-release comparison logic.
+// Pre-release versions have lower precedence than release versions.
+func comparePreReleaseStrings(first, second string) int {
+	switch {
+	case first == "" && second != "":
+		// Release > pre-release
+		return 1
+	case first != "" && second == "":
+		// Pre-release < release
+		return -1
+	case first != "" && second != "":
+		return comparePreRelease(first, second)
+	default:
+		return 0
 	}
-
-	return 0
 }
 
 // LessThan returns true if v < other.
@@ -119,46 +126,36 @@ func (v *Version) Equal(other *Version) bool {
 
 // comparePreRelease compares pre-release identifiers.
 // Follows semver spec: identifiers are compared left to right.
-func comparePreRelease(a, b string) int {
-	partsA := strings.Split(a, ".")
-	partsB := strings.Split(b, ".")
+func comparePreRelease(first, second string) int {
+	partsA := strings.Split(first, ".")
+	partsB := strings.Split(second, ".")
 
-	for i := 0; i < len(partsA) && i < len(partsB); i++ {
-		// Try numeric comparison first
-		numA, errA := strconv.Atoi(partsA[i])
-		numB, errB := strconv.Atoi(partsB[i])
-
-		if errA == nil && errB == nil {
-			// Both are numeric
-			if numA < numB {
-				return -1
-			}
-
-			if numA > numB {
-				return 1
-			}
-		} else if errA == nil {
-			// Numeric identifiers have lower precedence than alphanumeric
-			return -1
-		} else if errB == nil {
-			return 1
-		} else {
-			// Both are alphanumeric, compare as strings
-			cmp := strings.Compare(partsA[i], partsB[i])
-			if cmp != 0 {
-				return cmp
-			}
+	for idx := 0; idx < len(partsA) && idx < len(partsB); idx++ {
+		if cmp := comparePreReleasePart(partsA[idx], partsB[idx]); cmp != 0 {
+			return cmp
 		}
 	}
 
 	// Fewer identifiers = lower precedence
-	if len(partsA) < len(partsB) {
+	return compareInts(len(partsA), len(partsB))
+}
+
+// comparePreReleasePart compares a single pre-release identifier part.
+func comparePreReleasePart(partA, partB string) int {
+	numA, errA := strconv.Atoi(partA)
+	numB, errB := strconv.Atoi(partB)
+
+	switch {
+	case errA == nil && errB == nil:
+		// Both are numeric
+		return compareInts(numA, numB)
+	case errA == nil:
+		// Numeric identifiers have lower precedence than alphanumeric
 		return -1
-	}
-
-	if len(partsA) > len(partsB) {
+	case errB == nil:
 		return 1
+	default:
+		// Both are alphanumeric, compare as strings
+		return strings.Compare(partA, partB)
 	}
-
-	return 0
 }

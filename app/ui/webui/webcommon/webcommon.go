@@ -1,4 +1,4 @@
-// Package common contains web UI assets shared between run mode and setup mode
+// Package webcommon contains web UI assets shared between run mode and setup mode
 package webcommon
 
 import (

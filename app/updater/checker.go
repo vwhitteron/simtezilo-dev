@@ -99,7 +99,7 @@ func NewChecker(cfg CheckerConfig, log zerolog.Logger) (*Checker, error) {
 
 // Start begins periodic update checking.
 func (c *Checker) Start(ctx context.Context) {
-	go c.run(ctx)
+	go c.runPeriodicCheck(ctx)
 }
 
 // Stop gracefully stops the update checker.
@@ -108,46 +108,16 @@ func (c *Checker) Stop() {
 	<-c.doneChan
 }
 
-func (c *Checker) run(ctx context.Context) {
-	defer close(c.doneChan)
-
-	// Initial check after a short delay
-	initialDelay := time.NewTimer(10 * time.Second)
-	select {
-	case <-initialDelay.C:
-		c.CheckNow()
-	case <-c.stopChan:
-		initialDelay.Stop()
-
-		return
-	case <-ctx.Done():
-		initialDelay.Stop()
-
-		return
-	}
-
-	ticker := time.NewTicker(c.checkInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ticker.C:
-			c.CheckNow()
-		case <-c.stopChan:
-			return
-		case <-ctx.Done():
-			return
-		}
-	}
-}
-
 // CheckNow performs an immediate update check.
 func (c *Checker) CheckNow() (*UpdateInfo, error) {
 	c.mu.Lock()
 	c.status = StatusChecking
 	c.mu.Unlock()
 
-	manifest, err := FetchManifest(c.manifestURL, c.httpTimeout, c.log)
+	ctx, cancel := context.WithTimeout(context.Background(), c.httpTimeout)
+	defer cancel()
+
+	manifest, err := FetchManifest(ctx, c.manifestURL, c.httpTimeout, c.log)
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -286,4 +256,38 @@ func (c *Checker) AvailableUpdate() *UpdateInfo {
 // CurrentVersion returns the current version string.
 func (c *Checker) CurrentVersion() string {
 	return c.currentVersion.String()
+}
+
+// runPeriodicCheck runs the periodic update check loop.
+func (c *Checker) runPeriodicCheck(ctx context.Context) {
+	defer close(c.doneChan)
+
+	// Initial check after a short delay
+	initialDelay := time.NewTimer(10 * time.Second)
+	select {
+	case <-initialDelay.C:
+		_, _ = c.CheckNow() //nolint:contextcheck // CheckNow creates its own timeout context
+	case <-c.stopChan:
+		initialDelay.Stop()
+
+		return
+	case <-ctx.Done():
+		initialDelay.Stop()
+
+		return
+	}
+
+	ticker := time.NewTicker(c.checkInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			_, _ = c.CheckNow() //nolint:contextcheck // CheckNow creates its own timeout context
+		case <-c.stopChan:
+			return
+		case <-ctx.Done():
+			return
+		}
+	}
 }

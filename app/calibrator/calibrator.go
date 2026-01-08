@@ -73,7 +73,6 @@ func (c *Calibrator) GetFrequency() float64 {
 }
 
 // SetFrequency sets the calibrator frequency in Hz.
-// This also resets the sweep position to sweepMin.
 func (c *Calibrator) SetFrequency(frequency float64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -88,8 +87,6 @@ func (c *Calibrator) SetFrequency(frequency float64) {
 	}
 
 	c.frequency = frequency
-	// Reset sweep position when frequency is manually changed
-	c.sweepFrequency = c.sweepMin
 }
 
 // GetVolume returns the calibrator volume in dB.
@@ -236,9 +233,8 @@ func (c *Calibrator) GetSweepFrequency() float64 {
 }
 
 // StartSweep starts a frequency sweep from sweepMin to sweepMax.
-// The sweep takes approximately the configured sweep duration to complete.
+// The sweep takes approximately 10 seconds to complete.
 // If calibration is not enabled, it will be enabled automatically.
-// If a previous sweep was stopped, it resumes from where it left off.
 func (c *Calibrator) StartSweep() {
 	c.mu.Lock()
 
@@ -257,11 +253,7 @@ func (c *Calibrator) StartSweep() {
 	ctx, cancel := context.WithCancel(context.Background())
 	c.sweepCancel = cancel
 	c.sweeping = true
-
-	// Resume from last position if valid, otherwise start at minimum
-	if c.sweepFrequency < c.sweepMin || c.sweepFrequency > c.sweepMax {
-		c.sweepFrequency = c.sweepMin
-	}
+	c.sweepFrequency = c.sweepMin // Start at configured minimum frequency
 
 	c.mu.Unlock()
 
@@ -270,7 +262,6 @@ func (c *Calibrator) StartSweep() {
 }
 
 // StopSweep stops an active frequency sweep.
-// The current sweep position is retained so the sweep can resume from where it left off.
 func (c *Calibrator) StopSweep() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -281,7 +272,7 @@ func (c *Calibrator) StopSweep() {
 	}
 
 	c.sweeping = false
-	// Keep sweepFrequency at current value so sweep can resume
+	c.sweepFrequency = c.frequency
 }
 
 // runSweep executes the frequency sweep loop.
@@ -305,7 +296,6 @@ func (c *Calibrator) runSweep(ctx context.Context) {
 	minFreq := c.sweepMin
 	maxFreq := c.sweepMax
 	sweepSecs := c.sweepDuration
-	currentFreq := c.sweepFrequency // Start from retained position
 	prevMin := minFreq
 	prevMax := maxFreq
 	prevSweepSecs := sweepSecs
@@ -316,6 +306,8 @@ func (c *Calibrator) runSweep(ctx context.Context) {
 
 	ticker := time.NewTicker(stepDuration)
 	defer ticker.Stop()
+
+	currentFreq := minFreq
 
 	for {
 		select {

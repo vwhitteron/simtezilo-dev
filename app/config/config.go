@@ -23,13 +23,14 @@ import (
 )
 
 type app struct {
-	Language      string `toml:"language"`
-	Accent        string `toml:"accent"`
-	LogLevel      string `toml:"logLevel"`
-	BaseDir       string `toml:"baseDir"`
-	VehicleDBFile string `toml:"vehicleDBFile"`
-	WebUIEnabled  bool   `toml:"webUIEnabled"`
-	WebUIPort     int    `toml:"webUIPort"`
+	Language      string   `toml:"language"`
+	Accent        string   `toml:"accent"`
+	LogLevel      string   `toml:"logLevel"`
+	BaseDir       string   `toml:"baseDir"`
+	Updates       *updates `toml:"updates"`
+	VehicleDBFile string   `toml:"vehicleDBFile"`
+	WebUIEnabled  bool     `toml:"webUIEnabled"`
+	WebUIPort     int      `toml:"webUIPort"`
 }
 
 type discord struct {
@@ -144,11 +145,11 @@ type tyreMonitoring struct {
 }
 
 type updates struct {
-	Enabled         bool   `toml:"enabled"`
-	ManifestURL     string `toml:"manifestURL"`
-	Channel         string `toml:"channel"`
-	CheckIntervalMs int    `toml:"checkIntervalMs"`
-	AutoInstall     bool   `toml:"autoInstall"`
+	Enabled              bool   `toml:"enabled"`
+	ManifestURL          string `toml:"manifestURL"`
+	Channel              string `toml:"channel"`
+	CheckIntervalMinutes int    `toml:"checkIntervalMinutes"`
+	AutoInstall          bool   `toml:"autoInstall"`
 }
 
 type viperConfig struct {
@@ -158,7 +159,6 @@ type viperConfig struct {
 	PitRadio    *pitRadio    `toml:"pitRadio"`
 	Synthesizer *Synthesizer `toml:"synthesizer"`
 	Telemetry   *Telemetry   `toml:"telemetry"`
-	Updates     *updates     `toml:"updates"`
 }
 
 // Snapshot holds frequently-accessed configuration values for lock-free reads.
@@ -2254,7 +2254,7 @@ func (c *Config) GetUpdatesEnabled() bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	return c.viper.Updates.Enabled
+	return c.viper.App.Updates.Enabled
 }
 
 // GetUpdatesManifestURL returns the URL of the update manifest.
@@ -2262,7 +2262,7 @@ func (c *Config) GetUpdatesManifestURL() string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	return c.viper.Updates.ManifestURL
+	return c.viper.App.Updates.ManifestURL
 }
 
 // GetUpdatesChannel returns the update channel (e.g., "stable", "beta").
@@ -2270,15 +2270,15 @@ func (c *Config) GetUpdatesChannel() string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	return c.viper.Updates.Channel
+	return c.viper.App.Updates.Channel
 }
 
-// GetUpdatesCheckIntervalMs returns the update check interval in milliseconds.
-func (c *Config) GetUpdatesCheckIntervalMs() int {
+// GetUpdatesCheckIntervalMinutes returns the update check interval in minutes.
+func (c *Config) GetUpdatesCheckIntervalMinutes() int {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	return c.viper.Updates.CheckIntervalMs
+	return c.viper.App.Updates.CheckIntervalMinutes
 }
 
 // GetUpdatesAutoInstall returns whether updates should be automatically installed.
@@ -2286,7 +2286,7 @@ func (c *Config) GetUpdatesAutoInstall() bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	return c.viper.Updates.AutoInstall
+	return c.viper.App.Updates.AutoInstall
 }
 
 // ****************************************************************************

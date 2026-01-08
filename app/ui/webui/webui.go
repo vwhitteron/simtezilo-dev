@@ -2095,7 +2095,7 @@ func (w *WebUI) handleCalibrationSweep(response http.ResponseWriter, request *ht
 
 	// Parse request body to determine action
 	var reqData struct {
-		Action string `json:"action"` // "start" or "stop"
+		Action string `json:"action"`
 	}
 
 	err := json.NewDecoder(request.Body).Decode(&reqData)
@@ -2111,7 +2111,7 @@ func (w *WebUI) handleCalibrationSweep(response http.ResponseWriter, request *ht
 
 	switch reqData.Action {
 	case "start":
-		w.calibrator.StartSweep()
+		w.calibrator.StartSweep() //nolint:contextcheck // sweep context is unrelated to request context
 		w.log.Info().Msg("calibration sweep started")
 		_ = json.NewEncoder(response).Encode(map[string]any{ //nolint:errchkjson // simple encoding
 			"status":    "success",
@@ -2184,66 +2184,58 @@ func (w *WebUI) handleSetupMode(response http.ResponseWriter, request *http.Requ
 
 // handleSSHEnable handles POST requests to enable SSH.
 func (w *WebUI) handleSSHEnable(response http.ResponseWriter, request *http.Request) {
-	if request.Method != http.MethodPost {
-		response.WriteHeader(http.StatusMethodNotAllowed)
-
-		return
-	}
-
-	response.Header().Set("Content-Type", "application/json")
-
-	w.log.Info().Msg("SSH enable requested")
-
-	ctx, cancel := context.WithTimeout(request.Context(), 10*time.Second)
-	defer cancel()
-
-	_, err := w.setupMode.RunPlatformCommand(ctx, setupmode.CmdActionSSHEnable, nil)
-	if err != nil {
-		w.log.Error().Err(err).Msg("failed to enable SSH")
-		response.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(response).Encode(map[string]string{ //nolint:errchkjson // simple encoding
-			"status": "error",
-			"error":  "Failed to enable SSH: " + err.Error(),
-		})
-
-		return
-	}
-
-	w.log.Info().Msg("SSH enabled successfully")
-
-	_ = json.NewEncoder(response).Encode(map[string]string{ //nolint:errchkjson // simple encoding
-		"status": "success",
-	})
+	w.manageSSHEnablement(setupmode.CmdActionSSHEnable, response, request)
 }
 
 // handleSSHDisable handles POST requests to disable SSH.
 func (w *WebUI) handleSSHDisable(response http.ResponseWriter, request *http.Request) {
+	w.manageSSHEnablement(setupmode.CmdActionSSHDisable, response, request)
+}
+
+func (w *WebUI) manageSSHEnablement(action setupmode.CmdAction, response http.ResponseWriter, request *http.Request) {
 	if request.Method != http.MethodPost {
 		response.WriteHeader(http.StatusMethodNotAllowed)
 
 		return
 	}
 
-	response.Header().Set("Content-Type", "application/json")
+	var actionStr string
 
-	w.log.Info().Msg("SSH disable requested")
-
-	ctx, cancel := context.WithTimeout(request.Context(), 10*time.Second)
-	defer cancel()
-
-	_, err := w.setupMode.RunPlatformCommand(ctx, setupmode.CmdActionSSHDisable, nil)
-	if err != nil {
-		w.log.Error().Err(err).Msg("failed to disable SSH")
-		response.WriteHeader(http.StatusInternalServerError)
+	switch action { //nolint:exhaustive // only interested in two values
+	case setupmode.CmdActionSSHEnable:
+		actionStr = "enable"
+	case setupmode.CmdActionSSHDisable:
+		actionStr = "disable"
+	default:
+		response.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(response).Encode(map[string]string{ //nolint:errchkjson // simple encoding
 			"status": "error",
-			"error":  "Failed to disable SSH: " + err.Error(),
+			"error":  "Invalid SSH action",
 		})
 
 		return
 	}
 
-	w.log.Info().Msg("SSH disabled successfully")
+	response.Header().Set("Content-Type", "application/json")
+
+	w.log.Info().Msgf("SSH %s requested", actionStr)
+
+	ctx, cancel := context.WithTimeout(request.Context(), 10*time.Second)
+	defer cancel()
+
+	_, err := w.setupMode.RunPlatformCommand(ctx, action, nil)
+	if err != nil {
+		w.log.Error().Err(err).Msgf("failed to %s SSH", actionStr)
+		response.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(response).Encode(map[string]string{ //nolint:errchkjson // simple encoding
+			"status": "error",
+			"error":  "Failed to " + actionStr + " SSH: " + err.Error(),
+		})
+
+		return
+	}
+
+	w.log.Info().Msgf("SSH %sd successfully", actionStr)
 
 	_ = json.NewEncoder(response).Encode(map[string]string{ //nolint:errchkjson // simple encoding
 		"status": "success",

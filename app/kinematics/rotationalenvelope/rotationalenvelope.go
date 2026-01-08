@@ -1,4 +1,4 @@
-// Package rotataionalenvelope provides utilities for 6DOF rotational envelope operations.
+// Package rotationalenvelope provides utilities for 6DOF rotational envelope operations.
 package rotationalenvelope
 
 import (

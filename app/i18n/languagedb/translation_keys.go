@@ -69,7 +69,6 @@ const (
 	RadioRearLeft          Key = "radio.rearleft"
 	RadioRearRight         Key = "radio.rearright"
 
-	// Setup Mode - Network Configuration.
 	SetupmodeNetworkTitle                Key = "setupmode.network.title"
 	SetupmodeNetworkNetworkselection     Key = "setupmode.network.networkselection"
 	SetupmodeNetworkModeAutomatic        Key = "setupmode.network.mode.automatic"
@@ -83,10 +82,10 @@ const (
 	SetupmodeNetworkManualssid           Key = "setupmode.network.manualssid"
 	SetupmodeNetworkEnterssid            Key = "setupmode.network.enterssid"
 	SetupmodeNetworkSecuritytype         Key = "setupmode.network.securitytype"
-	SetupmodeNetworkPassword             Key = "setupmode.network.password"
-	SetupmodeNetworkEnterpassword        Key = "setupmode.network.enterpassword"
-	SetupmodeNetworkShowpassword         Key = "setupmode.network.showpassword"
-	SetupmodeNetworkHidepassword         Key = "setupmode.network.hidepassword"
+	SetupmodeNetworkPassword             Key = "setupmode.network.password"      //nolint:gosec // not credentials
+	SetupmodeNetworkEnterpassword        Key = "setupmode.network.enterpassword" //nolint:goses
+	SetupmodeNetworkShowpassword         Key = "setupmode.network.showpassword"  //nolint:gosec
+	SetupmodeNetworkHidepassword         Key = "setupmode.network.hidepassword"  //nolint:gosec
 	SetupmodeNetworkIpconfiguration      Key = "setupmode.network.ipconfiguration"
 	SetupmodeNetworkIpmodeDhcp           Key = "setupmode.network.ipmode.dhcp"
 	SetupmodeNetworkIpmodeStatic         Key = "setupmode.network.ipmode.static"
@@ -96,11 +95,10 @@ const (
 	SetupmodeNetworkPrefixexample        Key = "setupmode.network.prefixexample"
 	SetupmodeNetworkGateway              Key = "setupmode.network.gateway"
 	SetupmodeNetworkGatewayexample       Key = "setupmode.network.gatewayexample"
-	SetupmodeNetworkDns                  Key = "setupmode.network.dns"
-	SetupmodeNetworkDnsexample           Key = "setupmode.network.dnsexample"
+	SetupmodeNetworkDNS                  Key = "setupmode.network.dns"
+	SetupmodeNetworkDNSexample           Key = "setupmode.network.dnsexample"
 	SetupmodeNetworkReturntorunmode      Key = "setupmode.network.returntorunmode"
 
-	// Setup Mode - Validation.
 	SetupmodeValidationRequired          Key = "setupmode.validation.required"
 	SetupmodeValidationInvalidip         Key = "setupmode.validation.invalidip"
 	SetupmodeValidationInvaliddns        Key = "setupmode.validation.invaliddns"
@@ -109,7 +107,6 @@ const (
 	SetupmodeValidationPasswordmaxlength Key = "setupmode.validation.passwordmaxlength"
 	SetupmodeValidationSsidrequired      Key = "setupmode.validation.ssidrequired"
 
-	// Setup Mode - Confirmation.
 	SetupmodeConfirmationSavetitle          Key = "setupmode.confirmation.savetitle"
 	SetupmodeConfirmationSavemessage        Key = "setupmode.confirmation.savemessage"
 	SetupmodeConfirmationSaveinstructions   Key = "setupmode.confirmation.saveinstructions"
@@ -117,14 +114,12 @@ const (
 	SetupmodeConfirmationReturnmessage      Key = "setupmode.confirmation.returnmessage"
 	SetupmodeConfirmationReturninstructions Key = "setupmode.confirmation.returninstructions"
 
-	// Setup Mode - Result.
 	SetupmodeResultSuccess      Key = "setupmode.result.success"
 	SetupmodeResultError        Key = "setupmode.result.error"
 	SetupmodeResultMoreinfo     Key = "setupmode.result.moreinfo"
 	SetupmodeResultReturning    Key = "setupmode.result.returning"
 	SetupmodeResultNetworkerror Key = "setupmode.result.networkerror"
 
-	// Run Mode - Navigation.
 	RunmodeNavTelemetry Key = "runmode.nav.telemetry"
 	RunmodeNavRace      Key = "runmode.nav.race"
 	RunmodeNavDeveloper Key = "runmode.nav.developer"
@@ -132,21 +127,17 @@ const (
 	RunmodeNavLogs      Key = "runmode.nav.logs"
 	RunmodeNavInfo      Key = "runmode.nav.info"
 
-	// Run Mode - Info.
 	RunmodeInfoVersion        Key = "runmode.info.version"
 	RunmodeInfoBuilddate      Key = "runmode.info.buildDate"
 	RunmodeInfoTargetplatform Key = "runmode.info.targetPlatform"
 	RunmodeInfoHardware       Key = "runmode.info.hardware"
 
-	// Run Mode - Home Vehicle.
 	RunmodeHomeVehicleWaiting Key = "runmode.home.vehicle.waiting"
 	RunmodeHomeVehicleUnknown Key = "runmode.home.vehicle.unknown"
 
-	// Run Mode - Home Circuit.
 	RunmodeHomeCircuitWaiting Key = "runmode.home.circuit.waiting"
 	RunmodeHomeCircuitUnknown Key = "runmode.home.circuit.unknown"
 
-	// Run Mode - Home Race.
 	RunmodeHomeRaceTitle            Key = "runmode.home.race.title"
 	RunmodeHomeRaceTimeofday        Key = "runmode.home.race.timeofday"
 	RunmodeHomeRaceLap              Key = "runmode.home.race.lap"
@@ -157,7 +148,6 @@ const (
 	RunmodeHomeRaceLapeventDelta    Key = "runmode.home.race.lapevent.delta"
 	RunmodeHomeRaceLapeventPosition Key = "runmode.home.race.lapevent.position"
 
-	// Run Mode - Home Game State.
 	RunmodeHomeGamestateConnecting Key = "runmode.home.gamestate.connecting"
 	RunmodeHomeGamestateMainmenu   Key = "runmode.home.gamestate.mainmenu"
 	RunmodeHomeGamestateRacemenu   Key = "runmode.home.gamestate.racemenu"
@@ -166,7 +156,6 @@ const (
 	RunmodeHomeGamestatePaused     Key = "runmode.home.gamestate.paused"
 	RunmodeHomeGamestateUnknown    Key = "runmode.home.gamestate.unknown"
 
-	// Run Mode - Logs.
 	RunmodeLogsShowing       Key = "runmode.logs.showing"
 	RunmodeLogsPerpage       Key = "runmode.logs.perpage"
 	RunmodeLogsFilterlevels  Key = "runmode.logs.filterlevels"
@@ -182,7 +171,6 @@ const (
 	RunmodeLogsFilterDebug   Key = "runmode.logs.filter.debug"
 	RunmodeLogsClear         Key = "runmode.logs.clear"
 
-	// Run Mode - Settings App.
 	RunmodeSettingsAppTitle                         Key = "runmode.settings.app.title"
 	RunmodeSettingsAppGeneralTitle                  Key = "runmode.settings.app.general.title"
 	RunmodeSettingsAppGeneralLanguage               Key = "runmode.settings.app.general.language"
@@ -196,13 +184,11 @@ const (
 	RunmodeSettingsAppGeneralTelemetryAuto          Key = "runmode.settings.app.general.telemetry.auto"
 	RunmodeSettingsAppGeneralTelemetryDemo          Key = "runmode.settings.app.general.telemetry.demo"
 
-	// Run Mode - Settings App Config.
 	RunmodeSettingsAppConfigTitle  Key = "runmode.settings.app.config.title"
 	RunmodeSettingsAppConfigExport Key = "runmode.settings.app.config.export"
 	RunmodeSettingsAppConfigImport Key = "runmode.settings.app.config.import"
 	RunmodeSettingsAppConfigReset  Key = "runmode.settings.app.config.reset"
 
-	// Run Mode - Settings App Control.
 	RunmodeSettingsAppControlTitle        Key = "runmode.settings.app.control.title"
 	RunmodeSettingsAppControlCacheddata   Key = "runmode.settings.app.control.cacheddata"
 	RunmodeSettingsAppControlCacheItem    Key = "runmode.settings.app.control.cacheitem"
@@ -212,14 +198,12 @@ const (
 	RunmodeSettingsAppControlSetupmode    Key = "runmode.settings.app.control.setupmode"
 	RunmodeSettingsAppControlFactoryreset Key = "runmode.settings.app.control.factoryreset"
 
-	// Run Mode - Settings Haptics.
 	RunmodeSettingsHapticsTitle          Key = "runmode.settings.haptics.title"
 	RunmodeSettingsHapticsGeneralTitle   Key = "runmode.settings.haptics.general.title"
 	RunmodeSettingsHapticsOutputmode     Key = "runmode.settings.haptics.outputmode"
 	RunmodeSettingsHapticsModeLive       Key = "runmode.settings.haptics.mode.live"
 	RunmodeSettingsHapticsModeLivereplay Key = "runmode.settings.haptics.mode.livereplay"
 
-	// Run Mode - Settings Haptics Chassis.
 	RunmodeSettingsHapticsChassisTitle                    Key = "runmode.settings.haptics.chassis.title"
 	RunmodeSettingsHapticsChassisJerkcurve                Key = "runmode.settings.haptics.chassis.jerkcurve"
 	RunmodeSettingsHapticsChassisJerkcurveTooltip         Key = "runmode.settings.haptics.chassis.jerkcurve.tooltip"
@@ -236,7 +220,6 @@ const (
 	RunmodeSettingsHapticsChassisPulsemaxfreq             Key = "runmode.settings.haptics.chassis.pulsemaxfreq"
 	RunmodeSettingsHapticsChassisPulsemaxfreqTooltip      Key = "runmode.settings.haptics.chassis.pulsemaxfreq.tooltip"
 
-	// Run Mode - Settings Haptics Transmission.
 	RunmodeSettingsHapticsTransmissionTitle                   Key = "runmode.settings.haptics.transmission.title"
 	RunmodeSettingsHapticsTransmissionFeedbackstrength        Key = "runmode.settings.haptics.transmission.feedbackstrength"
 	RunmodeSettingsHapticsTransmissionFeedbackstrengthTooltip Key = "runmode.settings.haptics.transmission.feedbackstrength.tooltip"
@@ -247,10 +230,8 @@ const (
 	RunmodeSettingsHapticsTransmissionGforcemax               Key = "runmode.settings.haptics.transmission.gforcemax"
 	RunmodeSettingsHapticsTransmissionGforcemaxTooltip        Key = "runmode.settings.haptics.transmission.gforcemax.tooltip"
 
-	// Run Mode - Settings Haptics Advanced.
 	RunmodeSettingsHapticsAdvancedTitle Key = "runmode.settings.haptics.advanced.title"
 
-	// Run Mode - Settings Haptics Engine Profiles.
 	RunmodeSettingsHapticsEngineprofilesTitle                   Key = "runmode.settings.haptics.engineprofiles.title"
 	RunmodeSettingsHapticsEngineprofilesPrimarybalance          Key = "runmode.settings.haptics.engineprofiles.primarybalance"
 	RunmodeSettingsHapticsEngineprofilesPrimarybalanceTooltip   Key = "runmode.settings.haptics.engineprofiles.primarybalance.tooltip"
@@ -261,14 +242,12 @@ const (
 	RunmodeSettingsHapticsEngineprofilesPulsescale              Key = "runmode.settings.haptics.engineprofiles.pulsescale"
 	RunmodeSettingsHapticsEngineprofilesPulsescaleTooltip       Key = "runmode.settings.haptics.engineprofiles.pulsescale.tooltip"
 
-	// Run Mode - Settings Pit Radio.
 	RunmodeSettingsPitradioTitle           Key = "runmode.settings.pitradio.title"
 	RunmodeSettingsPitradioGeneralTitle    Key = "runmode.settings.pitradio.general.title"
 	RunmodeSettingsPitradioEnable          Key = "runmode.settings.pitradio.enable"
 	RunmodeSettingsPitradioOutput          Key = "runmode.settings.pitradio.output"
 	RunmodeSettingsPitradioMessageinterval Key = "runmode.settings.pitradio.messageinterval"
 
-	// Run Mode - Settings Pit Radio Discord.
 	RunmodeSettingsPitradioDiscordTitle                     Key = "runmode.settings.pitradio.discord.title"
 	RunmodeSettingsPitradioDiscordBottoken                  Key = "runmode.settings.pitradio.discord.bottoken"
 	RunmodeSettingsPitradioDiscordBottokenPlaceholder       Key = "runmode.settings.pitradio.discord.bottoken.placeholder"
@@ -279,29 +258,23 @@ const (
 	RunmodeSettingsPitradioDiscordVoicechannelid            Key = "runmode.settings.pitradio.discord.voicechannelid"
 	RunmodeSettingsPitradioDiscordVoicechannelidPlaceholder Key = "runmode.settings.pitradio.discord.voicechannelid.placeholder"
 
-	// Run Mode - Settings Pit Radio Notifications.
 	RunmodeSettingsPitradioNotificationsTitle Key = "runmode.settings.pitradio.notifications.title"
 
-	// Run Mode - Settings Pit Radio Notifications Lap Times.
 	RunmodeSettingsPitradioNotificationsLaptimesTitle    Key = "runmode.settings.pitradio.notifications.laptimes.title"
 	RunmodeSettingsPitradioNotificationsLaptimesEnable   Key = "runmode.settings.pitradio.notifications.laptimes.enable"
 	RunmodeSettingsPitradioNotificationsLaptimesMaxdelta Key = "runmode.settings.pitradio.notifications.laptimes.maxdelta"
 
-	// Run Mode - Settings Pit Radio Notifications Circuit Matching.
 	RunmodeSettingsPitradioNotificationsCircuitmatchingEnable Key = "runmode.settings.pitradio.notifications.circuitmatching.enable"
 
-	// Run Mode - Settings Pit Radio Notifications Race Laps.
 	RunmodeSettingsPitradioNotificationsRacelapsTitle     Key = "runmode.settings.pitradio.notifications.racelaps.title"
 	RunmodeSettingsPitradioNotificationsRacelapsEnable    Key = "runmode.settings.pitradio.notifications.racelaps.enable"
 	RunmodeSettingsPitradioNotificationsRacelapsInterval  Key = "runmode.settings.pitradio.notifications.racelaps.interval"
 	RunmodeSettingsPitradioNotificationsRacelapsCountdown Key = "runmode.settings.pitradio.notifications.racelaps.countdown"
 
-	// Run Mode - Settings Pit Radio Notifications Race Progress.
 	RunmodeSettingsPitradioNotificationsRaceprogressEnable   Key = "runmode.settings.pitradio.notifications.raceprogress.enable"
 	RunmodeSettingsPitradioNotificationsRaceprogressMinlaps  Key = "runmode.settings.pitradio.notifications.raceprogress.minlaps"
 	RunmodeSettingsPitradioNotificationsRaceprogressInterval Key = "runmode.settings.pitradio.notifications.raceprogress.interval"
 
-	// Run Mode - Settings Pit Radio Notifications Fuel.
 	RunmodeSettingsPitradioNotificationsFuelTitle              Key = "runmode.settings.pitradio.notifications.fuel.title"
 	RunmodeSettingsPitradioNotificationsFuelEnable             Key = "runmode.settings.pitradio.notifications.fuel.enable"
 	RunmodeSettingsPitradioNotificationsFuelPrewarnlaps        Key = "runmode.settings.pitradio.notifications.fuel.prewarnlaps"
@@ -309,24 +282,20 @@ const (
 	RunmodeSettingsPitradioNotificationsFuelSafetymarginlaps   Key = "runmode.settings.pitradio.notifications.fuel.safetymarginlaps"
 	RunmodeSettingsPitradioNotificationsFuelSafetymarginmeters Key = "runmode.settings.pitradio.notifications.fuel.safetymarginmeters"
 
-	// Run Mode - Settings Pit Radio Notifications Tyres.
 	RunmodeSettingsPitradioNotificationsTyresTitle       Key = "runmode.settings.pitradio.notifications.tyres.title"
 	RunmodeSettingsPitradioNotificationsTyresEnable      Key = "runmode.settings.pitradio.notifications.tyres.enable"
 	RunmodeSettingsPitradioNotificationsTyresTempoptimal Key = "runmode.settings.pitradio.notifications.tyres.tempoptimal"
 	RunmodeSettingsPitradioNotificationsTyresTempwindow  Key = "runmode.settings.pitradio.notifications.tyres.tempwindow"
 	RunmodeSettingsPitradioNotificationsTyresTempmargin  Key = "runmode.settings.pitradio.notifications.tyres.tempmargin"
 
-	// Run Mode - Settings Synth.
 	RunmodeSettingsSynthTitle Key = "runmode.settings.synth.title"
 
-	// Run Mode - Settings Synth Sample Rates.
 	RunmodeSettingsSynthSampleratesTitle           Key = "runmode.settings.synth.samplerates.title"
 	RunmodeSettingsSynthSampleratesInternal        Key = "runmode.settings.synth.samplerates.internal"
 	RunmodeSettingsSynthSampleratesInternalTooltip Key = "runmode.settings.synth.samplerates.internal.tooltip"
 	RunmodeSettingsSynthSampleratesOutput          Key = "runmode.settings.synth.samplerates.output"
 	RunmodeSettingsSynthSampleratesOutputTooltip   Key = "runmode.settings.synth.samplerates.output.tooltip"
 
-	// Run Mode - Settings Synth Gain Controls.
 	RunmodeSettingsSynthGaincontrolsTitle                        Key = "runmode.settings.synth.gaincontrols.title"
 	RunmodeSettingsSynthGaincontrolsMaster                       Key = "runmode.settings.synth.gaincontrols.master"
 	RunmodeSettingsSynthGaincontrolsMasterTooltip                Key = "runmode.settings.synth.gaincontrols.master.tooltip"
@@ -343,15 +312,12 @@ const (
 	RunmodeSettingsSynthGaincontrolsIncrement                    Key = "runmode.settings.synth.gaincontrols.increment"
 	RunmodeSettingsSynthGaincontrolsIncrementTooltip             Key = "runmode.settings.synth.gaincontrols.increment.tooltip"
 
-	// Run Mode - Settings System.
 	RunmodeSettingsSystemTitle Key = "runmode.settings.system.title"
 
-	// Run Mode - Settings System Hardware.
 	RunmodeSettingsSystemHardwareTitle              Key = "runmode.settings.system.hardware.title"
 	RunmodeSettingsSystemHardwareModel              Key = "runmode.settings.system.hardware.model"
 	RunmodeSettingsSystemHardwareDisplayorientation Key = "runmode.settings.system.hardware.displayorientation"
 
-	// Run Mode - Settings System Calibration.
 	RunmodeSettingsSystemCalibrationTitle            Key = "runmode.settings.system.calibration.title"
 	RunmodeSettingsSystemCalibrationEnabled          Key = "runmode.settings.system.calibration.enabled"
 	RunmodeSettingsSystemCalibrationEnabledTooltip   Key = "runmode.settings.system.calibration.enabled.tooltip"
@@ -366,7 +332,6 @@ const (
 	RunmodeSettingsSystemCalibrationChannelRight     Key = "runmode.settings.system.calibration.channel.right"
 	RunmodeSettingsSystemCalibrationHint             Key = "runmode.settings.system.calibration.hint"
 
-	// Run Mode - Settings System Access.
 	RunmodeSettingsSystemSSHAccessTitle            Key = "runmode.settings.system.sshaccess.title"
 	RunmodeSettingsSystemSSHAccessEnabled          Key = "runmode.settings.system.sshaccess.enabled"
 	RunmodeSettingsSystemSSHAccessEnabledTooltip   Key = "runmode.settings.system.sshaccess.enabled.tooltip"
@@ -375,10 +340,8 @@ const (
 	RunmodeSettingsSystemSSHAccessProvision        Key = "runmode.settings.system.sshaccess.provision"
 	RunmodeSettingsSystemSSHAccessHint             Key = "runmode.settings.system.sshaccess.hint"
 
-	// Run Mode - Settings System Advanced.
 	RunmodeSettingsSystemAdvancedTitle Key = "runmode.settings.system.advanced.title"
 
-	// Run Mode - Settings System Equalizer.
 	RunmodeSettingsSystemEqualizerTitle     Key = "runmode.settings.system.equalizer.title"
 	RunmodeSettingsSystemEqualizerTooltip   Key = "runmode.settings.system.equalizer.tooltip"
 	RunmodeSettingsSystemEqualizerEnabled   Key = "runmode.settings.system.equalizer.enabled"
@@ -388,7 +351,6 @@ const (
 	RunmodeSettingsSystemEqualizerQfactor   Key = "runmode.settings.system.equalizer.qfactor"
 	RunmodeSettingsSystemEqualizerReset     Key = "runmode.settings.system.equalizer.reset"
 
-	// Run Mode - Telemetry Charts.
 	RunmodeTelemetryChartRpmspeed           Key = "runmode.telemetry.chart.rpmspeed"
 	RunmodeTelemetryChartThrottlebrake      Key = "runmode.telemetry.chart.throttlebrake"
 	RunmodeTelemetryChartTyretemperature    Key = "runmode.telemetry.chart.tyretemperature"
@@ -403,18 +365,15 @@ const (
 	RunmodeTelemetryAdjusthint              Key = "runmode.telemetry.adjusthint"
 	RunmodeTelemetryReconnect               Key = "runmode.telemetry.reconnect"
 
-	// Run Mode - Settings Restart.
 	RunmodeSettingsRestartRequired          Key = "runmode.settings.restart.required"
 	RunmodeSettingsRestartOverlayRestarting Key = "runmode.settings.restart.overlay.restarting"
 	RunmodeSettingsRestartOverlayTitle      Key = "runmode.settings.restart.overlay.title"
 	RunmodeSettingsRestartOverlayPleasewait Key = "runmode.settings.restart.overlay.pleasewait"
 
-	// Run Mode - Settings Confirm.
 	RunmodeSettingsConfirmReset     Key = "runmode.settings.confirm.reset"
 	RunmodeSettingsConfirmRestart   Key = "runmode.settings.confirm.restart"
 	RunmodeSettingsConfirmSetupmode Key = "runmode.settings.confirm.setupmode"
 
-	// Run Mode - Settings Error.
 	RunmodeSettingsErrorExportfailed       Key = "runmode.settings.error.exportfailed"
 	RunmodeSettingsErrorImportfailed       Key = "runmode.settings.error.importfailed"
 	RunmodeSettingsErrorRestartfailed      Key = "runmode.settings.error.restartfailed"
@@ -425,14 +384,11 @@ const (
 	RunmodeSettingsErrorLoadconfigfailed   Key = "runmode.settings.error.loadconfigfailed"
 	RunmodeSettingsErrorSshkeyrequired     Key = "runmode.settings.error.sshkeyrequired"
 
-	// Run Mode - Settings Success.
 	RunmodeSettingsSuccessSshprovisioned Key = "runmode.settings.success.sshprovisioned"
 
-	// Run Mode - Settings Status.
 	RunmodeSettingsStatusLoading       Key = "runmode.settings.status.loading"
 	RunmodeSettingsStatusSelectprofile Key = "runmode.settings.status.selectprofile"
 
-	// Run Mode - Settings Modal.
 	RunmodeSettingsModalWarning           Key = "runmode.settings.modal.warning"
 	RunmodeSettingsModalAllappsettings    Key = "runmode.settings.modal.allappsettings"
 	RunmodeSettingsModalAllnetworkconfigs Key = "runmode.settings.modal.allnetworkconfigs"

@@ -126,7 +126,7 @@ func (r *Screen) RenderLiveScreen(value string) error {
 
 // RenderSettingScreen renders the setting screen with the provided header and value.
 func (r *Screen) RenderSettingScreen(layout Layout, title string, value string) error {
-	switch layout {
+	switch layout { //nolint:exhaustive // only interested in setting screen layouts
 	case LayoutSetting:
 		return r.renderLayoutSetting(title, value)
 	case LayoutInfo:

@@ -14,6 +14,13 @@ func defaultConfig() *viperConfig {
 			VehicleDBFile: "",
 			WebUIEnabled:  true,
 			WebUIPort:     80,
+			Updates: &updates{
+				Enabled:              false,
+				ManifestURL:          "https://updates.simtezilo.com/releases/latest.json",
+				Channel:              "stable",
+				CheckIntervalMinutes: 60,
+				AutoInstall:          false,
+			},
 		},
 		Hardware: &hardware{
 			Model:              "none",
@@ -137,13 +144,6 @@ func defaultConfig() *viperConfig {
 		},
 		Telemetry: &Telemetry{
 			Source: "udp://255.255.255.255:33739",
-		},
-		Updates: &updates{
-			Enabled:         false,
-			ManifestURL:     "https://updates.simtezilo.com/releases/latest.json",
-			Channel:         "stable",
-			CheckIntervalMs: 3600000, // 1 hour
-			AutoInstall:     false,
 		},
 	}
 }

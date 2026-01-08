@@ -62,20 +62,22 @@ func (s *Streamer) Stream(samples [][2]float64) (n int, ok bool) {
 	if s.synth.calibrator != nil && s.synth.calibrator.IsEnabled() {
 		channel := s.synth.GetCalibrationChannel()
 
-		for i := range samples {
-			sample := s.synth.ApplyMasterGain(buffer[i])
+		for index := range samples {
+			sample := s.synth.ApplyMasterGain(buffer[index])
 
 			// Apply channel selection
 			switch channel {
 			case calibrator.OutputChannelLeft:
-				samples[i][0] = sample
-				samples[i][1] = 0 // Mute right channel
+				samples[index][0] = sample
+				samples[index][1] = 0 // Mute right channel
 			case calibrator.OutputChannelRight:
-				samples[i][0] = 0 // Mute left channel
-				samples[i][1] = sample
+				samples[index][0] = 0 // Mute left channel
+				samples[index][1] = sample
+			case calibrator.OutputChannelBoth:
+				fallthrough
 			default: // OutputChannelBoth
-				samples[i][0] = sample
-				samples[i][1] = sample
+				samples[index][0] = sample
+				samples[index][1] = sample
 			}
 		}
 	} else {

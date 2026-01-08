@@ -1,6 +1,7 @@
-package updater
+package updater //nolint:testpackage // testing internal functions
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -11,6 +12,8 @@ import (
 )
 
 func TestParseManifest(t *testing.T) {
+	t.Parallel()
+
 	manifestJSON := `{
 		"version": "1.2.3",
 		"releaseDate": "2026-01-07T10:00:00Z",
@@ -63,6 +66,8 @@ func TestParseManifest(t *testing.T) {
 }
 
 func TestFetchManifest(t *testing.T) {
+	t.Parallel()
+
 	manifest := Manifest{
 		Version:     "2.0.0",
 		ReleaseDate: time.Now().UTC(),
@@ -76,15 +81,21 @@ func TestFetchManifest(t *testing.T) {
 		},
 	}
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(manifest)
+	server := httptest.NewServer(http.HandlerFunc(func(respWriter http.ResponseWriter, _ *http.Request) {
+		respWriter.Header().Set("Content-Type", "application/json")
+
+		err := json.NewEncoder(respWriter).Encode(manifest)
+		if err != nil {
+			t.Errorf("Failed to encode manifest: %v", err)
+		}
 	}))
 	defer server.Close()
 
 	log := zerolog.Nop()
 
-	fetched, err := FetchManifest(server.URL, 10*time.Second, log)
+	ctx := context.Background()
+
+	fetched, err := FetchManifest(ctx, server.URL, 10*time.Second, log)
 	if err != nil {
 		t.Fatalf("FetchManifest() error = %v", err)
 	}
@@ -99,34 +110,47 @@ func TestFetchManifest(t *testing.T) {
 }
 
 func TestFetchManifest_ServerError(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(respWriter http.ResponseWriter, _ *http.Request) {
+		respWriter.WriteHeader(http.StatusInternalServerError)
 	}))
 	defer server.Close()
 
 	log := zerolog.Nop()
 
-	_, err := FetchManifest(server.URL, 10*time.Second, log)
+	ctx := context.Background()
+
+	_, err := FetchManifest(ctx, server.URL, 10*time.Second, log)
 	if err == nil {
 		t.Error("Expected error for server error response")
 	}
 }
 
 func TestFetchManifest_InvalidJSON(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("not json"))
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(respWriter http.ResponseWriter, _ *http.Request) {
+		_, err := respWriter.Write([]byte("not json"))
+		if err != nil {
+			t.Errorf("Failed to write response: %v", err)
+		}
 	}))
 	defer server.Close()
 
 	log := zerolog.Nop()
 
-	_, err := FetchManifest(server.URL, 10*time.Second, log)
+	ctx := context.Background()
+
+	_, err := FetchManifest(ctx, server.URL, 10*time.Second, log)
 	if err == nil {
 		t.Error("Expected error for invalid JSON")
 	}
 }
 
 func TestGetPlatformKey(t *testing.T) {
+	t.Parallel()
+
 	key := GetPlatformKey()
 	if key == "" {
 		t.Error("GetPlatformKey() returned empty string")
