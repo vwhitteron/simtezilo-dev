@@ -1050,13 +1050,6 @@ func (a *App) mainLoop() {
 	a.log.Debug().Str("component", "app").Str("result", "success").Msg("main loop started")
 
 	for {
-		// wait for the GT telemetry client to start receiveing telemetry
-		if a.gtClient.Telemetry.SequenceID() == 0 {
-			time.Sleep(8 * time.Millisecond)
-
-			continue
-		}
-
 		select {
 		case <-a.done:
 			return
@@ -1080,10 +1073,12 @@ func (a *App) mainLoop() {
 
 // handleHapticsTick processes haptics-related updates.
 func (a *App) handleHapticsTick() {
-	_ = a.handleGameStateChange()
+	// Skip telemetry-dependent processing if no telemetry available
+	if a.gtClient.Telemetry.SequenceID() == 0 {
+		return
+	}
 
-	// Update calibrator state and generate sine wave if needed
-	a.synth.UpdateCalibrator()
+	_ = a.handleGameStateChange()
 
 	stateChanged := a.updateState()
 
@@ -1104,6 +1099,14 @@ func (a *App) handleHapticsTick() {
 
 // handleGeneralTick processes general telemetry updates.
 func (a *App) handleGeneralTick() {
+	// Update calibrator state - this works independently of telemetry
+	a.synth.UpdateCalibrator()
+
+	// Skip if no telemetry available
+	if a.gtClient.Telemetry.SequenceID() == 0 {
+		return
+	}
+
 	if a.gtClient.Telemetry.IsOnCircuit() {
 		a.updateFuelRange()
 		a.updateTyreTemperature()
@@ -1115,6 +1118,11 @@ func (a *App) handleGeneralTick() {
 
 // handleEngineHapticsTick processes engine haptics updates.
 func (a *App) handleEngineHapticsTick() {
+	// Skip if no telemetry available
+	if a.gtClient.Telemetry.SequenceID() == 0 {
+		return
+	}
+
 	if a.gtClient.Telemetry.IsOnCircuit() {
 		a.generateEngineHaptic()
 	}
@@ -1130,6 +1138,11 @@ func (a *App) handleDisplayTick() {
 
 // handlePitRadioTick processes pit radio updates.
 func (a *App) handlePitRadioTick() {
+	// Skip if no telemetry available
+	if a.gtClient.Telemetry.SequenceID() == 0 {
+		return
+	}
+
 	if !a.gtClient.Telemetry.IsOnCircuit() {
 		return
 	}
@@ -1140,6 +1153,11 @@ func (a *App) handlePitRadioTick() {
 // handleRaceDataTick periodically pushes current game state to ensure UI stays updated.
 func (a *App) handleRaceDataTick() {
 	if a.webUI == nil || !a.webUI.HasActiveClients() {
+		return
+	}
+
+	// Skip if no telemetry available
+	if a.gtClient.Telemetry.SequenceID() == 0 {
 		return
 	}
 
@@ -1162,6 +1180,11 @@ func (a *App) handleRaceDataTick() {
 // handleDebugTick processes debug logging.
 func (a *App) handleDebugTick() {
 	if a.log.GetLevel() > zerolog.DebugLevel {
+		return
+	}
+
+	// Skip if no telemetry available
+	if a.gtClient.Telemetry.SequenceID() == 0 {
 		return
 	}
 
