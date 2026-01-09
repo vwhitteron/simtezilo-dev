@@ -37,10 +37,10 @@ type SetupMode struct {
 }
 
 type Options struct {
-	Config  *config.Config
-	Done    chan<- exitcode.Code
-	Logger  *zerolog.Logger
-	Display *display.ST7789LCD
+	Config       *config.Config
+	ExitCodeChan chan<- exitcode.Code
+	Logger       *zerolog.Logger
+	Display      *display.ST7789LCD
 }
 
 func New(opts Options) *SetupMode {
@@ -52,7 +52,7 @@ func New(opts Options) *SetupMode {
 		config:    opts.Config,
 		command:   filepath.Join(opts.Config.GetAppBaseDir(), "bin", "platform"),
 		available: false,
-		done:      opts.Done,
+		done:      opts.ExitCodeChan,
 		shutdown:  shutdown,
 		lcd:       opts.Display,
 	}
@@ -420,7 +420,7 @@ func (s *SetupMode) handleAPIConfigSave(writer http.ResponseWriter, request *htt
 
 	s.log.Info().Int("exitCode", int(exitcode.Success)).Msg("Network configuration completed successfully, sending exit code")
 
-	// Do not send to done channel for normal config save; handled by return flow
+	// Do not send to exit code channel for normal config save; handled by return flow
 
 	close(s.shutdown)
 }
@@ -461,7 +461,7 @@ func (s *SetupMode) handleModeRun(writer http.ResponseWriter, request *http.Requ
 
 	s.log.Info().Int("exitCode", int(exitcode.Success)).Msg("Setup cancelled by user, sending success exit code")
 
-	// Do not send to done channel for normal return to run mode; handled by return flow
+	// Do not send to exit code channel for normal return to run mode; handled by return flow
 
 	close(s.shutdown)
 }

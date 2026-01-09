@@ -3,6 +3,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -56,10 +57,15 @@ type lapEvent struct {
 
 // App is the main application struct holding all components and state.
 type App struct {
-	log      zerolog.Logger     // Application logger
-	logStore *logstore.Store    // In-memory log storage
-	config   *config.Config     // Application configuration
-	done     chan exitcode.Code // Channel to signal application shutdown with exit code
+	log          zerolog.Logger     // Application logger
+	logStore     *logstore.Store    // In-memory log storage
+	config       *config.Config     // Application configuration
+	exitCodeChan chan exitcode.Code // Channel to signal application shutdown with exit code
+
+	// Lifecycle management for background goroutines
+	ctx    context.Context
+	cancel context.CancelFunc
+	wg     sync.WaitGroup
 
 	cache cache.Cache // Cache manager
 
@@ -119,18 +125,23 @@ type App struct {
 
 // Options holds configuration options for initializing the App.
 type Options struct {
-	ConfigFile string             // Path to configuration file
-	Done       chan exitcode.Code // Channel to signal application shutdown with exit code
-	Logger     *zerolog.Logger    // Logger instance for application logging
-	LogStore   *logstore.Store    // In-memory log storage
+	ConfigFile   string             // Path to configuration file
+	ExitCodeChan chan exitcode.Code // Channel to signal application shutdown with exit code
+	Logger       *zerolog.Logger    // Logger instance for application logging
+	LogStore     *logstore.Store    // In-memory log storage
 }
 
 // New creates a new App instance and sets up all components based on the provided options.
 func New(opts Options) (*App, error) {
+	// Create cancellable context for managing background goroutines
+	ctx, cancel := context.WithCancel(context.Background())
+
 	newApp := &App{
 		log:                opts.Logger.With().Str("package", "app").Logger(),
 		logStore:           opts.LogStore,
-		done:               opts.Done,
+		exitCodeChan:       opts.ExitCodeChan,
+		ctx:                ctx,
+		cancel:             cancel,
 		state:              NewGameState(opts.Logger),
 		kinematics:         kinematics.NewKinematicsState(),
 		calibrator:         calibrator.New(),
@@ -161,10 +172,10 @@ func New(opts Options) (*App, error) {
 
 	// Initialize setupMode after display is created
 	newApp.setupMode = setupmode.New(setupmode.Options{
-		Config:  newApp.config,
-		Done:    newApp.done,
-		Logger:  &newApp.log,
-		Display: newApp.getDisplayLCD(),
+		Config:       newApp.config,
+		ExitCodeChan: newApp.exitCodeChan,
+		Logger:       &newApp.log,
+		Display:      newApp.getDisplayLCD(),
 	})
 
 	err = newApp.initializeUI(opts, hidEvents)
@@ -222,8 +233,17 @@ func (a *App) Start() {
 func (a *App) Close() {
 	a.log.Info().Msg("Shutting down app")
 
+	// Cancel context to signal all background goroutines to stop
+	if a.cancel != nil {
+		a.log.Debug().Msg("Cancelling context")
+		a.cancel()
+		a.log.Debug().Msg("Context cancelled")
+	}
+
 	// Stop HTTP server first to prevent new requests
+	a.log.Debug().Msg("Stopping HTTP server")
 	a.stopHTTPServer()
+	a.log.Debug().Msg("HTTP server stopped")
 
 	// Stop the updater if running
 	if a.updater != nil {
@@ -266,6 +286,11 @@ func (a *App) Close() {
 			Msg("render splash screen")
 	}
 
+	// Wait for all background goroutines to finish
+	a.log.Debug().Msg("Waiting for goroutines")
+	a.wg.Wait()
+	a.log.Debug().Msg("All goroutines finished")
+
 	// Give time for cleanup to complete before closing display
 	time.Sleep(1 * time.Second)
 	a.display.Close()
@@ -289,8 +314,8 @@ func (a *App) runSetupMode() RunResult {
 
 	for {
 		select {
-		case code := <-a.done:
-			if code == exitcode.Success || code == exitcode.SetupMode {
+		case exitCode := <-a.exitCodeChan:
+			if exitCode == exitcode.Success || exitCode == exitcode.SetupMode {
 				a.log.Info().Msg("Setup mode signaled switch to run mode")
 
 				return RunResultSwitchMode
@@ -337,7 +362,7 @@ func (a *App) runAppMode() RunResult {
 			LogStatsFeed:       a.logStatsFeed,
 			Config:             a.config,
 			Calibrator:         a.calibrator,
-			ShutdownChan:       a.done,
+			ShutdownChan:       a.exitCodeChan,
 			SetupMode:          a.setupMode,
 			LogStore:           a.logStore,
 			BuildVersion:       Version,
@@ -371,9 +396,9 @@ func (a *App) runAppMode() RunResult {
 
 	a.run()
 
-	// run() returned because mainLoop exited due to done signal
+	// run() returned because mainLoop exited due to exit code signal
 	select {
-	case code := <-a.done:
+	case code := <-a.exitCodeChan:
 		// Check for special exit codes
 		if code == exitcode.SetupMode {
 			a.log.Info().Msg("Setup mode requested from run mode")
@@ -406,6 +431,8 @@ func (a *App) run() {
 	a.startAudioOutput()
 
 	a.mainLoop()
+
+	a.log.Debug().Msg("run() completed, mainLoop has exited")
 }
 
 // initializeConfig sets up configuration and logging.
@@ -608,7 +635,7 @@ func (a *App) initializeUI(opts Options, hidEvents chan ui.HIDInputEvent) error 
 		LiveData:         &ui.LiveData{Gear: kinematics.NullGear},
 		Log:              *opts.Logger,
 		SettingsCallback: a.settingAction,
-		Done:             a.done,
+		ExitCodeChan:     a.exitCodeChan,
 	})
 
 	err := a.ui.Screen.RenderSplashScreen("Starting...")
@@ -624,7 +651,16 @@ func (a *App) initializeUI(opts Options, hidEvents chan ui.HIDInputEvent) error 
 	}
 
 	// Watch for display orientation changes and update display hardware
-	go a.watchDisplayOrientation()
+	a.wg.Add(1)
+
+	go func() {
+		defer func() {
+			a.log.Debug().Msg("watchDisplayOrientation goroutine exiting")
+			a.wg.Done()
+		}()
+
+		a.watchDisplayOrientation()
+	}()
 
 	return nil
 }
@@ -656,13 +692,18 @@ func (a *App) updateIPAddress() {
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		newIP := getIPAddress()
-		if newIP != "" && newIP != a.ipAddress {
-			a.ipAddress = newIP
-			a.log.Info().
-				Str("ip", newIP).
-				Msg("IP address updated")
+	for {
+		select {
+		case <-a.ctx.Done():
+			return
+		case <-ticker.C:
+			newIP := getIPAddress()
+			if newIP != "" && newIP != a.ipAddress {
+				a.ipAddress = newIP
+				a.log.Info().
+					Str("ip", newIP).
+					Msg("IP address updated")
+			}
 		}
 	}
 }
@@ -675,13 +716,18 @@ func (a *App) watchDisplayOrientation() {
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		newOrientation := a.config.GetDisplayOrientation()
-		if newOrientation != currentOrientation {
-			currentOrientation = newOrientation
-			a.display.SetOrientation(currentOrientation)
-			a.ui.ForceRedraw()
-			a.log.Debug().Int("orientation", currentOrientation).Msg("display orientation changed")
+	for {
+		select {
+		case <-a.ctx.Done():
+			return
+		case <-ticker.C:
+			newOrientation := a.config.GetDisplayOrientation()
+			if newOrientation != currentOrientation {
+				currentOrientation = newOrientation
+				a.display.SetOrientation(currentOrientation)
+				a.ui.ForceRedraw()
+				a.log.Debug().Int("orientation", currentOrientation).Msg("display orientation changed")
+			}
 		}
 	}
 }
@@ -985,43 +1031,108 @@ func (a *App) getDisplayLCD() *display.ST7789LCD {
 
 // startBackgroundTasks launches all necessary background goroutines for the application.
 func (a *App) startBackgroundTasks() {
-	go a.ui.HIDEventHandler()
+	a.wg.Add(1)
 
-	go a.newLapHandler()
+	go func() {
+		defer func() {
+			a.log.Debug().Msg("HIDEventHandler goroutine exiting")
+			a.wg.Done()
+		}()
+
+		a.ui.HIDEventHandler(a.ctx)
+	}()
+
+	a.wg.Add(1)
+
+	go func() {
+		defer func() {
+			a.log.Debug().Msg("newLapHandler goroutine exiting")
+			a.wg.Done()
+		}()
+
+		a.newLapHandler()
+	}()
 
 	if a.pitRadio != nil {
-		go a.pitRadio.BackgroundTask()
+		a.wg.Add(1)
+
+		go func() {
+			defer func() {
+				a.log.Debug().Msg("pitRadio.BackgroundTask goroutine exiting")
+				a.wg.Done()
+			}()
+
+			a.pitRadio.BackgroundTask()
+		}()
 	}
 
 	// Start log stats broadcaster for WebUI
 	if a.config.GetAppWebUIEnabled() && a.logStore != nil {
-		go a.logStatsBroadcaster()
+		a.wg.Add(1)
+
+		go func() {
+			defer func() {
+				a.log.Debug().Msg("logStatsBroadcaster goroutine exiting")
+				a.wg.Done()
+			}()
+
+			a.logStatsBroadcaster()
+		}()
 	}
 
 	// Start IP address updater
-	go a.updateIPAddress()
+	a.wg.Add(1)
 
 	go func() {
-		for {
-			recoverable, err := a.gtClient.Run()
-			if err != nil {
-				_ = a.ui.Screen.RenderSplashScreen("GT client error")
+		defer func() {
+			a.log.Debug().Msg("updateIPAddress goroutine exiting")
+			a.wg.Done()
+		}()
 
-				if recoverable {
-					a.log.Error().
+		a.updateIPAddress()
+	}()
+
+	// Start GT client with context support
+	a.wg.Add(1)
+
+	go func() {
+		defer func() {
+			a.log.Debug().Msg("GT client goroutine exiting")
+			a.wg.Done()
+		}()
+
+		for {
+			select {
+			case <-a.ctx.Done():
+				return
+			default:
+				recoverable, err := a.gtClient.Run(a.ctx)
+				if err != nil {
+					// Check if error is due to context cancellation
+					if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+						a.log.Debug().Msg("GT client stopped due to context cancellation")
+
+						return
+					}
+
+					_ = a.ui.Screen.RenderSplashScreen("GT client error")
+
+					if recoverable {
+						a.log.Error().
+							Err(err).
+							Str("component", "gt client").
+							Str("result", "failure").
+							Msg("run")
+
+						continue
+					}
+
+					a.log.Fatal().
 						Err(err).
 						Str("component", "gt client").
 						Str("result", "failure").
 						Msg("run")
-
-					continue
 				}
-
-				a.log.Fatal().
-					Err(err).
-					Str("component", "gt client").
-					Str("result", "failure").
-					Msg("run")
 			}
 		}
 	}()
@@ -1077,7 +1188,7 @@ func (a *App) switchToSetupMode() {
 	time.Sleep(2 * time.Second)
 
 	// Signal exit with setup mode code
-	a.done <- exitcode.SetupMode
+	a.exitCodeChan <- exitcode.SetupMode
 }
 
 // mainLoop is the primary application loop handling telemetry updates, haptics, UI updates, and pit radio
@@ -1095,8 +1206,13 @@ func (a *App) mainLoop() {
 
 	for {
 		select {
-		case <-a.done:
-			// Channel closed or received value - exit main loop
+		case <-a.ctx.Done():
+			// Context cancelled - exit main loop
+			a.log.Debug().Msg("mainLoop exiting due to context cancellation")
+
+			return
+		case <-a.exitCodeChan:
+			// Exit code signal received - exit main loop
 			return
 		case <-tickerHaptics.C:
 			a.handleHapticsTick()
@@ -1268,6 +1384,8 @@ func (a *App) newLapHandler() bool {
 
 	for {
 		select {
+		case <-a.ctx.Done():
+			return false
 		case <-a.lapStartEvents:
 			lap := a.state.current.lapNumber
 			lapTime := a.state.current.lastLapTime
@@ -1973,34 +2091,39 @@ func (a *App) logStatsBroadcaster() {
 	ticker := time.NewTicker(2 * time.Second) // Update stats every 2 seconds
 	defer ticker.Stop()
 
-	for range ticker.C {
-		if a.webUI == nil || !a.webUI.HasActiveClients() || a.logStore == nil {
-			continue
-		}
-
-		stats := a.logStore.GetStats()
-		allLogs := a.logStore.GetAll()
-		totalCount := len(allLogs)
-
-		// Calculate total pages based on default page size of 100
-		pageSize := 100
-
-		totalPages := (totalCount + pageSize - 1) / pageSize
-		if totalPages < 1 {
-			totalPages = 1
-		}
-
-		logStats := map[string]any{
-			"stats":      stats,
-			"totalCount": totalCount,
-			"totalPages": totalPages,
-		}
-
+	for {
 		select {
-		case a.logStatsFeed <- logStats:
-			a.log.Debug().Int("totalCount", totalCount).Msg("broadcast log stats to web UI")
-		default:
-			a.log.Debug().Msg("log stats feed channel full; log stats not sent to web UI")
+		case <-a.ctx.Done():
+			return
+		case <-ticker.C:
+			if a.webUI == nil || !a.webUI.HasActiveClients() || a.logStore == nil {
+				continue
+			}
+
+			stats := a.logStore.GetStats()
+			allLogs := a.logStore.GetAll()
+			totalCount := len(allLogs)
+
+			// Calculate total pages based on default page size of 100
+			pageSize := 100
+
+			totalPages := (totalCount + pageSize - 1) / pageSize
+			if totalPages < 1 {
+				totalPages = 1
+			}
+
+			logStats := map[string]any{
+				"stats":      stats,
+				"totalCount": totalCount,
+				"totalPages": totalPages,
+			}
+
+			select {
+			case a.logStatsFeed <- logStats:
+				a.log.Debug().Int("totalCount", totalCount).Msg("broadcast log stats to web UI")
+			default:
+				a.log.Debug().Msg("log stats feed channel full; log stats not sent to web UI")
+			}
 		}
 	}
 }

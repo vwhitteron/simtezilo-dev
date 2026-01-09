@@ -20,7 +20,7 @@ type Config struct {
 	Display          hardware.Display
 	LiveData         *LiveData
 	SettingsCallback func(string, string) string
-	Done             chan exitcode.Code
+	ExitCodeChan     chan exitcode.Code
 	Log              zerolog.Logger
 }
 
@@ -63,7 +63,7 @@ func NewUserInterface(config *Config) *UserInterface {
 		startTime:        time.Now(),
 		lastActivity:     time.Now(),
 		settingsCallback: config.SettingsCallback,
-		done:             config.Done,
+		done:             config.ExitCodeChan,
 	}
 
 	var err error

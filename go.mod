@@ -17,7 +17,7 @@ require (
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.11.1
 	github.com/theojulienne/go-wireless v1.2.0
-	github.com/zetetos/gt-telemetry v1.11.1-0.20260103131630-319c90bd47f9
+	github.com/zetetos/gt-telemetry v1.11.1-0.20260109112559-9380d99ff817
 	golang.org/x/crypto v0.45.0
 	golang.org/x/image v0.34.0
 	layeh.com/gopus v0.0.0-20210501142526-1ee02d434e32
@@ -57,3 +57,5 @@ require (
 )
 
 replace github.com/bwmarrin/discordgo => github.com/ozraru/discordgo v0.0.0-20251101184423-6792228f3271
+
+// replace github.com/zetetos/gt-telemetry => /Users/vaughan/Code/github.com/zetetos/gt-telemetry

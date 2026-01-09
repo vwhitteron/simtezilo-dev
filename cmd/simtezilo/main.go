@@ -21,16 +21,16 @@ func main() {
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 
-	done := make(chan exitcode.Code, 1)
+	exitCodeChan := make(chan exitcode.Code, 1)
 
-	// Signal handler - forward signal to done channel as Success exit code
+	// Signal handler - forward signal to exit code channel as Success exit code
 	go func() {
 		sig := <-sigs
 		log.Printf("Received %v signal, shutting down\n", sig)
 
-		done <- exitcode.Success
+		exitCodeChan <- exitcode.Success
 
-		close(done) // Close so all readers can detect the shutdown
+		close(exitCodeChan) // Close so all readers can detect the shutdown
 	}()
 
 	var (
@@ -82,10 +82,10 @@ func main() {
 	var exitCode exitcode.Code
 
 	app, err := app.New(app.Options{
-		ConfigFile: configFile,
-		Done:       done,
-		Logger:     &logger,
-		LogStore:   loggerWithStore.Store,
+		ConfigFile:   configFile,
+		ExitCodeChan: exitCodeChan,
+		Logger:       &logger,
+		LogStore:     loggerWithStore.Store,
 	})
 	if err != nil {
 		logger.Fatal().Err(err).Msg("Error creating app")
@@ -93,7 +93,7 @@ func main() {
 
 	go app.Start()
 
-	exitCode = <-done
+	exitCode = <-exitCodeChan
 
 	app.Close()
 

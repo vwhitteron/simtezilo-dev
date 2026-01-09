@@ -46,10 +46,16 @@ type Discord struct {
 	voiceConn      *discordgo.VoiceConnection     // Voice connection for audio
 	queue          chan pitradio.Message          // Message queue for sending messages
 	log            zerolog.Logger                 // Logger instance for logging
+
+	// Lifecycle management
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
 // New creates a new Discord bot instance.
 func New(config Config) (*Discord, error) {
+	ctx, cancel := context.WithCancel(context.Background())
+
 	bot := Discord{
 		enabled:        config.Enabled,
 		channelID:      config.ChannelID,
@@ -60,6 +66,8 @@ func New(config Config) (*Discord, error) {
 		sampleBank:     config.SampleBank,
 		queue:          make(chan pitradio.Message, 100),
 		log:            config.Logger.With().Str("component", "discord").Logger(),
+		ctx:            ctx,
+		cancel:         cancel,
 	}
 
 	textEnabled := true
@@ -116,16 +124,25 @@ func New(config Config) (*Discord, error) {
 }
 
 func (d *Discord) BackgroundTask() {
-	for d.enabled {
-		if !d.isConnected() || d.isDead() {
-			d.handleReconnection()
+	for {
+		select {
+		case <-d.ctx.Done():
+			return
+		default:
+			if !d.enabled {
+				return
+			}
 
-			continue
+			if !d.isConnected() || d.isDead() {
+				d.handleReconnection()
+
+				continue
+			}
+
+			time.Sleep(d.messageGap)
+
+			d.dispatchMessages()
 		}
-
-		time.Sleep(d.messageGap)
-
-		d.dispatchMessages()
 	}
 }
 
@@ -137,6 +154,11 @@ func (d *Discord) Close() error {
 	}
 
 	d.enabled = false
+
+	// Cancel context to stop background task
+	if d.cancel != nil {
+		d.cancel()
+	}
 
 	// Leave voice channel if connected
 	if d.voiceConn != nil {

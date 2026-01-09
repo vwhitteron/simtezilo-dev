@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"strconv"
 	"time"
 
@@ -28,29 +29,35 @@ const (
 )
 
 // HIDEventHandler processes HID input events and updates the UI based on the event type.
-func (u *UserInterface) HIDEventHandler() {
+func (u *UserInterface) HIDEventHandler(ctx context.Context) {
 	u.log.Debug().
 		Str("component", "HID event handler").
 		Msg("Start")
 
 	ready := false
-	for key := range u.hidEvents {
-		if !u.shouldProcessHIDEvent(&ready) {
-			continue
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case key := <-u.hidEvents:
+			if !u.shouldProcessHIDEvent(&ready) {
+				continue
+			}
+
+			if u.handleSpecialKeys(key) {
+				continue
+			}
+
+			title, value := u.handleMenuNavigation(key)
+
+			layout := gui.LayoutSetting
+			if title == "info" {
+				layout = gui.LayoutInfo
+			}
+
+			u.renderSettingScreen(layout, title, value)
 		}
-
-		if u.handleSpecialKeys(key) {
-			continue
-		}
-
-		title, value := u.handleMenuNavigation(key)
-
-		layout := gui.LayoutSetting
-		if title == "info" {
-			layout = gui.LayoutInfo
-		}
-
-		u.renderSettingScreen(layout, title, value)
 	}
 }
 
