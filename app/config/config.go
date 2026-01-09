@@ -27,7 +27,7 @@ type app struct {
 	Accent        string   `toml:"accent"`
 	LogLevel      string   `toml:"logLevel"`
 	BaseDir       string   `toml:"baseDir"`
-	Updates       *updates `toml:"updates"`
+	Update        *updates `toml:"updates"`
 	VehicleDBFile string   `toml:"vehicleDBFile"`
 	WebUIEnabled  bool     `toml:"webUIEnabled"`
 	WebUIPort     int      `toml:"webUIPort"`
@@ -145,11 +145,11 @@ type tyreMonitoring struct {
 }
 
 type updates struct {
-	Enabled              bool   `toml:"enabled"`
 	ManifestURL          string `toml:"manifestURL"`
 	Channel              string `toml:"channel"`
-	CheckIntervalMinutes int    `toml:"checkIntervalMinutes"`
+	AutoCheck            bool   `toml:"autoCheck"`
 	AutoInstall          bool   `toml:"autoInstall"`
+	CheckIntervalMinutes int    `toml:"checkIntervalMinutes"`
 }
 
 type viperConfig struct {
@@ -625,6 +625,86 @@ func (c *Config) GetAppWebUIPort() int {
 	}
 
 	return c.viper.App.WebUIPort
+}
+
+// GetAppUpdateAutoCheck returns whether automatic update checking is enabled.
+func (c *Config) GetAppUpdateAutoCheck() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.App.Update.AutoCheck
+}
+
+// SetAppUpdateAutoCheck sets whether automatic update checking is enabled.
+func (c *Config) SetAppUpdateAutoCheck(enabled bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.App.Update.AutoCheck = enabled
+
+	c.registerUpdate(false)
+}
+
+// GetAppUpdateAutoInstall returns whether updates should be automatically installed.
+func (c *Config) GetAppUpdateAutoInstall() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.App.Update.AutoInstall
+}
+
+// SetAppUpdateAutoInstall sets whether updates should be automatically installed.
+func (c *Config) SetAppUpdateAutoInstall(autoInstall bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.App.Update.AutoInstall = autoInstall
+
+	c.registerUpdate(false)
+}
+
+// GetAppUpdateCheckIntervalMinutes returns the update check interval in minutes.
+func (c *Config) GetAppUpdateCheckIntervalMinutes() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.App.Update.CheckIntervalMinutes
+}
+
+// SetAppUpdateCheckIntervalMinutes sets the update check interval in minutes.
+func (c *Config) SetAppUpdateCheckIntervalMinutes(minutes int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.App.Update.CheckIntervalMinutes = minutes
+
+	c.registerUpdate(false)
+}
+
+// GetAppUpdateManifestURL returns the URL of the update manifest.
+func (c *Config) GetAppUpdateManifestURL() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.App.Update.ManifestURL
+}
+
+// GetAppUpdateChannel returns the update channel (e.g., "stable", "beta").
+func (c *Config) GetAppUpdateChannel() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.App.Update.Channel
+}
+
+// SetAppUpdateChannel sets the update channel (e.g., "stable", "beta", "dev").
+func (c *Config) SetAppUpdateChannel(channel string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.App.Update.Channel = channel
+
+	c.registerUpdate(false)
 }
 
 // ****************************************************************************
@@ -2243,50 +2323,6 @@ func (c *Config) SetTelemetrySource(value string) {
 	c.viper.Telemetry.Source = value
 
 	c.registerUpdate(true)
-}
-
-// ****************************************************************************
-// Updates methods.
-// ****************************************************************************
-
-// GetUpdatesEnabled returns whether automatic update checking is enabled.
-func (c *Config) GetUpdatesEnabled() bool {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.App.Updates.Enabled
-}
-
-// GetUpdatesManifestURL returns the URL of the update manifest.
-func (c *Config) GetUpdatesManifestURL() string {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.App.Updates.ManifestURL
-}
-
-// GetUpdatesChannel returns the update channel (e.g., "stable", "beta").
-func (c *Config) GetUpdatesChannel() string {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.App.Updates.Channel
-}
-
-// GetUpdatesCheckIntervalMinutes returns the update check interval in minutes.
-func (c *Config) GetUpdatesCheckIntervalMinutes() int {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.App.Updates.CheckIntervalMinutes
-}
-
-// GetUpdatesAutoInstall returns whether updates should be automatically installed.
-func (c *Config) GetUpdatesAutoInstall() bool {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.App.Updates.AutoInstall
 }
 
 // ****************************************************************************

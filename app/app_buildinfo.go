@@ -1,10 +1,10 @@
 package app
 
 var (
-	Version    = "dev"   //nolint:gochecknoglobals // special global for build version
-	CommitHash = ""      //nolint:gochecknoglobals // special global for build commit
-	BuildTime  string    //nolint:gochecknoglobals // special global for build time
-	Platform   = "local" //nolint:gochecknoglobals // special global for build platform
+	Version    = "v0.0.0-dev" //nolint:gochecknoglobals // special global for build version
+	CommitHash = ""           //nolint:gochecknoglobals // special global for build commit
+	BuildTime  string         //nolint:gochecknoglobals // special global for build time
+	Platform   = "local"      //nolint:gochecknoglobals // special global for build platform
 )
 
 type Info struct {

@@ -106,8 +106,7 @@ type App struct {
 	httpServer        *http.Server // Shared HTTP server for both modes
 	activeHTTPHandler http.Handler // Current handler (setup mode or run mode)
 
-	updater       *updater.Updater   // Self-update manager
-	updaterCancel context.CancelFunc // Cancel function for updater context
+	updater *updater.Updater // Self-update manager
 
 	// Chassis haptics state
 	jerkPeakHold         float64       // Peak hold value for jerk to prevent cancellation
@@ -229,10 +228,6 @@ func (a *App) Close() {
 	// Stop the updater if running
 	if a.updater != nil {
 		a.updater.Stop()
-
-		if a.updaterCancel != nil {
-			a.updaterCancel()
-		}
 	}
 
 	err := a.synth.Close()
@@ -288,28 +283,30 @@ func (a *App) runSetupMode() RunResult {
 
 	a.setupMode.Run()
 
-	select {
-	case code := <-a.done:
-		if code == exitcode.Success || code == exitcode.SetupMode {
-			a.log.Info().Msg("Setup mode signaled switch to run mode")
+	// Block waiting for either shutdown signal or setup completion
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
 
-			return RunResultSwitchMode
+	for {
+		select {
+		case code := <-a.done:
+			if code == exitcode.Success || code == exitcode.SetupMode {
+				a.log.Info().Msg("Setup mode signaled switch to run mode")
+
+				return RunResultSwitchMode
+			}
+
+			// Shutdown requested
+			return RunResultExit
+		case <-ticker.C:
+			// Check if setup has completed
+			status := a.setupMode.Status(context.Background())
+			if status.Available && !status.FlagEnabled {
+				a.log.Info().Msg("Setup mode completed, switching to run mode")
+
+				return RunResultSwitchMode
+			}
 		}
-
-		a.stopHTTPServer()
-
-		a.done <- code
-
-		return RunResultExit
-	default:
-		status := a.setupMode.Status(context.Background())
-		if status.Available && !status.FlagEnabled {
-			a.log.Info().Msg("Setup mode completed, switching to run mode")
-
-			return RunResultSwitchMode
-		}
-
-		return RunResultContinue
 	}
 }
 
@@ -367,17 +364,17 @@ func (a *App) runAppMode() RunResult {
 		a.activeHTTPHandler = nil
 	}
 
-	// Start the updater if initialized
+	// Start the updater if initialized (pass parent context for lifecycle management)
 	if a.updater != nil {
-		ctx, cancel := context.WithCancel(context.Background())
-		a.updaterCancel = cancel
-		a.updater.Start(ctx)
+		a.updater.Start(context.Background())
 	}
 
 	a.run()
 
+	// run() returned because mainLoop exited due to done signal
 	select {
 	case code := <-a.done:
+		// Check for special exit codes
 		if code == exitcode.SetupMode {
 			a.log.Info().Msg("Setup mode requested from run mode")
 
@@ -391,21 +388,14 @@ func (a *App) runAppMode() RunResult {
 			if err != nil {
 				a.log.Error().Err(err).Msg("Failed to reinitialize GT client")
 
-				a.done <- exitcode.InternalErr
-
 				return RunResultExit
 			}
 
 			return RunResultContinue
 		}
 
-		a.stopHTTPServer()
-
-		a.done <- code
-
+		// Normal shutdown
 		return RunResultExit
-	default:
-		return RunResultContinue
 	}
 }
 
@@ -762,16 +752,18 @@ func (a *App) initializeComponents(opts Options) error {
 			Msg("init")
 	}
 
-	// Initialize updater if enabled
-	if a.config.GetUpdatesEnabled() {
+	// Initialize updater (always available for manual checks)
+	// Auto-check setting controls whether periodic checks are scheduled
+	manifestURL := a.config.GetAppUpdateManifestURL()
+	if manifestURL != "" {
 		baseDir := a.config.GetAppBaseDir()
 
 		a.updater, err = updater.New(&updater.Config{
-			Enabled:       a.config.GetUpdatesEnabled(),
-			ManifestURL:   a.config.GetUpdatesManifestURL(),
-			Channel:       a.config.GetUpdatesChannel(),
-			CheckInterval: time.Duration(a.config.GetUpdatesCheckIntervalMinutes()) * time.Minute,
-			AutoInstall:   a.config.GetUpdatesAutoInstall(),
+			Enabled:       a.config.GetAppUpdateAutoCheck(),
+			ManifestURL:   manifestURL,
+			Channel:       a.config.GetAppUpdateChannel(),
+			CheckInterval: time.Duration(a.config.GetAppUpdateCheckIntervalMinutes()) * time.Minute,
+			AutoInstall:   a.config.GetAppUpdateAutoInstall(),
 			InstallDir:    filepath.Join(baseDir, "bin"),
 			DataDir:       filepath.Join(baseDir, "data", "update"),
 			BinaryName:    "simtezilo",
@@ -783,11 +775,12 @@ func (a *App) initializeComponents(opts Options) error {
 				Err(err).
 				Str("component", "updater").
 				Str("result", "failure").
-				Msg("init (continuing without auto-updates)")
+				Msg("init (continuing without updates)")
 		} else {
 			a.log.Debug().
 				Str("component", "updater").
 				Str("result", "success").
+				Bool("autoCheckEnabled", a.config.GetAppUpdateAutoCheck()).
 				Msg("init")
 		}
 	}
@@ -1103,6 +1096,7 @@ func (a *App) mainLoop() {
 	for {
 		select {
 		case <-a.done:
+			// Channel closed or received value - exit main loop
 			return
 		case <-tickerHaptics.C:
 			a.handleHapticsTick()

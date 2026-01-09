@@ -174,13 +174,12 @@ func (w *WebUI) GetHTTPHandler() http.Handler {
 	mux.HandleFunc("/api/system/info", w.handleSystemInfo)
 	mux.HandleFunc("/api/system/restart", w.handleRestart)
 
-	// Update management endpoints (only register if updater is available)
-	if w.updater != nil {
-		mux.HandleFunc("/api/updates/status", w.handleUpdatesStatus)
-		mux.HandleFunc("/api/updates/check", w.handleUpdatesCheck)
-		mux.HandleFunc("/api/updates/download", w.handleUpdatesDownload)
-		mux.HandleFunc("/api/updates/install", w.handleUpdatesInstall)
-	}
+	// Update management endpoints
+	mux.HandleFunc("/api/updates/status", w.handleUpdatesStatus)
+	mux.HandleFunc("/api/updates/check", w.handleUpdatesCheck)
+	mux.HandleFunc("/api/updates/download", w.handleUpdatesDownload)
+	mux.HandleFunc("/api/updates/install", w.handleUpdatesInstall)
+	mux.HandleFunc("/api/updates/rollback", w.handleUpdatesRollback)
 
 	if w.setupMode != nil && w.setupMode.IsAvailable() {
 		mux.HandleFunc("/api/system/factory-reset", w.handleFactoryReset)
@@ -207,6 +206,14 @@ var htmlFiles embed.FS
 func (w *WebUI) htmlRouterHandlerFunc() func(w http.ResponseWriter, r *http.Request) {
 	return func(response http.ResponseWriter, request *http.Request) {
 		path := request.URL.Path
+
+		// Don't serve API paths as HTML - they should be handled by specific handlers
+		if strings.HasPrefix(path, "/api/") {
+			response.WriteHeader(http.StatusNotFound)
+			w.log.Debug().Str("path", path).Msg("API endpoint not found")
+
+			return
+		}
 
 		var filename string
 		if path == "/" {
@@ -844,6 +851,9 @@ func (w *WebUI) handleGetConfig(response http.ResponseWriter, _ *http.Request) {
 			"vehicleDBFile": w.config.GetAppVehicleDBFile(),
 			"webUIEnabled":  w.config.GetAppWebUIEnabled(),
 			"webUIPort":     w.config.GetAppWebUIPort(),
+			"updates": map[string]any{
+				"channel": w.config.GetAppUpdateChannel(),
+			},
 		},
 		"discord": map[string]any{
 			"token":          w.config.GetDiscordToken(),
@@ -1096,6 +1106,49 @@ func (w *WebUI) applyAppConfig(config map[string]any) []string {
 			w.config.SetAppBaseDir(baseDirStr)
 		} else {
 			errors = append(errors, "invalid base directory value")
+		}
+	}
+
+	// Handle updates config
+	if updates, ok := config["updates"]; ok {
+		if updatesMap, ok := updates.(map[string]any); ok {
+			if autoCheck, ok := updatesMap["autoCheck"]; ok {
+				if autoCheckBool, ok := autoCheck.(bool); ok {
+					w.config.SetAppUpdateAutoCheck(autoCheckBool)
+				} else {
+					errors = append(errors, "invalid autoCheck value")
+				}
+			}
+
+			if autoInstall, ok := updatesMap["autoInstall"]; ok {
+				if autoInstallBool, ok := autoInstall.(bool); ok {
+					w.config.SetAppUpdateAutoInstall(autoInstallBool)
+				} else {
+					errors = append(errors, "invalid autoInstall value")
+				}
+			}
+
+			if checkIntervalMinutes, ok := updatesMap["checkIntervalMinutes"]; ok {
+				if intervalFloat, ok := checkIntervalMinutes.(float64); ok {
+					w.config.SetAppUpdateCheckIntervalMinutes(int(intervalFloat))
+				} else {
+					errors = append(errors, "invalid checkIntervalMinutes value")
+				}
+			}
+
+			if channel, ok := updatesMap["channel"]; ok {
+				if channelStr, ok := channel.(string); ok {
+					w.config.SetAppUpdateChannel(channelStr)
+					// Update the updater's channel immediately
+					if w.updater != nil {
+						w.updater.SetChannel(channelStr)
+					}
+				} else {
+					errors = append(errors, "invalid channel value")
+				}
+			}
+		} else {
+			errors = append(errors, "invalid updates configuration")
 		}
 	}
 
@@ -2753,30 +2806,38 @@ func (w *WebUI) handleUpdatesStatus(response http.ResponseWriter, request *http.
 		return
 	}
 
-	if w.updater == nil {
-		response.WriteHeader(http.StatusServiceUnavailable)
-		_ = json.NewEncoder(response).Encode(map[string]string{"error": "Updater not available"}) //nolint:errchkjson // simple encoding
-
-		return
-	}
-
-	status := w.updater.Status()
-	availableUpdate := w.updater.AvailableUpdate()
-
 	responseData := map[string]any{
-		"enabled":        w.config.GetUpdatesEnabled(),
-		"status":         status.String(),
-		"currentVersion": w.buildVersion,
-		"channel":        w.config.GetUpdatesChannel(),
+		"enabled":              w.config.GetAppUpdateAutoCheck(),
+		"autoInstall":          w.config.GetAppUpdateAutoInstall(),
+		"checkIntervalMinutes": w.config.GetAppUpdateCheckIntervalMinutes(),
+		"currentVersion":       w.buildVersion,
+		"channel":              w.config.GetAppUpdateChannel(),
+		"status":               "disabled",
+		"rollbackAvailable":    false,
+		"rollbackVersion":      "",
 	}
 
-	if availableUpdate != nil {
-		responseData["availableUpdate"] = map[string]any{
-			"version":     availableUpdate.AvailableVersion,
-			"releaseDate": availableUpdate.ReleaseDate,
-			"changelog":   availableUpdate.Changelog,
-			"downloadURL": availableUpdate.DownloadURL,
-			"size":        availableUpdate.DownloadSize,
+	if w.updater != nil {
+		status := w.updater.Status()
+		availableUpdate := w.updater.AvailableUpdate()
+		lastCheck := w.updater.Checker().LastCheck()
+
+		responseData["status"] = status.String()
+		responseData["rollbackAvailable"] = w.updater.RollbackAvailable()
+		responseData["rollbackVersion"] = w.updater.RollbackVersion()
+
+		if !lastCheck.IsZero() {
+			responseData["lastChecked"] = lastCheck.Format(time.RFC3339)
+		}
+
+		if availableUpdate != nil {
+			responseData["availableUpdate"] = map[string]any{
+				"version":     availableUpdate.AvailableVersion,
+				"releaseDate": availableUpdate.ReleaseDate,
+				"changelog":   availableUpdate.Changelog,
+				"downloadURL": availableUpdate.DownloadURL,
+				"size":        availableUpdate.DownloadSize,
+			}
 		}
 	}
 
@@ -2791,7 +2852,8 @@ func (w *WebUI) handleUpdatesStatus(response http.ResponseWriter, request *http.
 		return
 	}
 
-	w.log.Debug().Str("status", status.String()).Msg("served updates status")
+	statusStr := responseData["status"].(string)
+	w.log.Debug().Str("status", statusStr).Msg("served updates status")
 }
 
 // handleUpdatesCheck triggers an immediate update check.
@@ -2803,40 +2865,39 @@ func (w *WebUI) handleUpdatesCheck(response http.ResponseWriter, request *http.R
 		return
 	}
 
-	if w.updater == nil {
-		response.WriteHeader(http.StatusServiceUnavailable)
-		_ = json.NewEncoder(response).Encode(map[string]string{"error": "Updater not available"}) //nolint:errchkjson // simple encoding
-
-		return
-	}
-
-	updateInfo, err := w.updater.CheckNow() //nolint:contextcheck // CheckNow manages its own timeout context
-	if err != nil {
-		w.log.Error().Err(err).Msg("failed to check for updates")
-		response.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(response).Encode(map[string]string{"error": err.Error()}) //nolint:errchkjson // simple encoding
-
-		return
-	}
-
 	responseData := map[string]any{
-		"updateAvailable": updateInfo != nil,
+		"updateAvailable": false,
 		"currentVersion":  w.buildVersion,
 	}
 
-	if updateInfo != nil {
-		responseData["availableUpdate"] = map[string]any{
-			"version":     updateInfo.AvailableVersion,
-			"releaseDate": updateInfo.ReleaseDate,
-			"changelog":   updateInfo.Changelog,
-			"downloadURL": updateInfo.DownloadURL,
-			"size":        updateInfo.DownloadSize,
+	if w.updater == nil {
+		w.log.Debug().Msg("update check requested but updater not available")
+	} else {
+		updateInfo, err := w.updater.CheckNow() //nolint:contextcheck // CheckNow manages its own timeout context
+		if err != nil {
+			w.log.Error().Err(err).Msg("failed to check for updates")
+			response.WriteHeader(http.StatusInternalServerError)
+			_ = json.NewEncoder(response).Encode(map[string]string{"error": err.Error()}) //nolint:errchkjson // simple encoding
+
+			return
+		}
+
+		responseData["updateAvailable"] = updateInfo != nil
+
+		if updateInfo != nil {
+			responseData["availableUpdate"] = map[string]any{
+				"version":     updateInfo.AvailableVersion,
+				"releaseDate": updateInfo.ReleaseDate,
+				"changelog":   updateInfo.Changelog,
+				"downloadURL": updateInfo.DownloadURL,
+				"size":        updateInfo.DownloadSize,
+			}
 		}
 	}
 
 	response.Header().Set("Content-Type", "application/json")
 
-	err = json.NewEncoder(response).Encode(responseData)
+	err := json.NewEncoder(response).Encode(responseData)
 	if err != nil {
 		w.log.Error().Err(err).Msg("failed to encode update check response")
 		http.Error(response, "error encoding update check response", http.StatusInternalServerError)
@@ -2844,8 +2905,9 @@ func (w *WebUI) handleUpdatesCheck(response http.ResponseWriter, request *http.R
 		return
 	}
 
+	updateAvailable := responseData["updateAvailable"].(bool)
 	w.log.Info().
-		Bool("updateAvailable", updateInfo != nil).
+		Bool("updateAvailable", updateAvailable).
 		Msg("manual update check completed")
 }
 
@@ -2963,6 +3025,64 @@ func (w *WebUI) handleUpdatesInstall(response http.ResponseWriter, request *http
 		err := w.updater.RestartToApply()
 		if err != nil {
 			w.log.Error().Err(err).Msg("failed to restart service for update")
+		}
+	}()
+}
+
+// handleUpdatesRollback handles POST /api/updates/rollback.
+func (w *WebUI) handleUpdatesRollback(response http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodPost {
+		response.WriteHeader(http.StatusMethodNotAllowed)
+		_ = json.NewEncoder(response).Encode(map[string]string{"error": "Method not allowed"}) //nolint:errchkjson // simple encoding
+
+		return
+	}
+
+	if w.updater == nil {
+		response.WriteHeader(http.StatusServiceUnavailable)
+		_ = json.NewEncoder(response).Encode(map[string]string{"error": "Updater not available"}) //nolint:errchkjson // simple encoding
+
+		return
+	}
+
+	if !w.updater.RollbackAvailable() {
+		response.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(response).Encode(map[string]string{"error": "No rollback version available"}) //nolint:errchkjson // simple encoding
+
+		return
+	}
+
+	w.log.Info().Msg("triggering rollback to previous version")
+
+	// Perform the rollback
+	err := w.updater.Rollback()
+	if err != nil {
+		response.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(response).Encode(map[string]string{"error": err.Error()}) //nolint:errchkjson // simple encoding
+
+		return
+	}
+
+	// Send success response before triggering restart
+	response.Header().Set("Content-Type", "application/json")
+
+	encErr := json.NewEncoder(response).Encode(map[string]any{
+		"success": true,
+		"message": "Service will restart with previous version",
+	})
+	if encErr != nil {
+		w.log.Error().Err(encErr).Msg("failed to encode rollback response")
+	}
+
+	// Trigger restart in a goroutine so response can be sent first
+	//nolint:contextcheck // restart is independent of request context
+	go func() {
+		// Small delay to ensure response is sent
+		time.Sleep(500 * time.Millisecond)
+
+		restartErr := w.updater.Installer().RestartService("simtezilo")
+		if restartErr != nil {
+			w.log.Error().Err(restartErr).Msg("failed to restart service after rollback")
 		}
 	}()
 }

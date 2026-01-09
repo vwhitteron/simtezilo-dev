@@ -262,6 +262,26 @@ func (i *Installer) Rollback() error {
 	return nil
 }
 
+// RollbackAvailable checks if a rollback binary exists.
+func (i *Installer) RollbackAvailable() bool {
+	rollbackBinary := filepath.Join(i.installDir, i.binaryName+".rollback")
+	_, err := os.Stat(rollbackBinary)
+
+	return err == nil
+}
+
+// RollbackVersion returns the version that would be rolled back to.
+// This reads from the install state if available.
+func (i *Installer) RollbackVersion() string {
+	state, err := i.LoadState()
+	if err != nil || state == nil {
+		return ""
+	}
+
+	// The current version in state is the version we backed up
+	return state.CurrentVersion
+}
+
 // RestartService triggers a service restart via systemd.
 func (i *Installer) RestartService(serviceName string) error {
 	if runtime.GOOS != "linux" {

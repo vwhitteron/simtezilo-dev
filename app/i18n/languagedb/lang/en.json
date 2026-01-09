@@ -328,10 +328,30 @@
         "runmode.settings.synth.equalizer.reset": "Reset",
 
         "runmode.settings.system.title": "System",
+
         "runmode.settings.system.hardware.title": "Hardware",
         "runmode.settings.system.hardware.model": "Hardware Model",
         "runmode.settings.system.hardware.displayorientation": "Display Orientation",
-        "runmode.settings.system.access.title": "SSH Access",
+        "runmode.settings.system.update.title": "System Update",
+        "runmode.settings.system.updates.autocheckEnabled": "Automatically check for updates",
+        "runmode.settings.system.updates.checkinterval": "every",
+        "runmode.settings.system.updates.autoinstall": "Automatically install updates",
+        "runmode.settings.system.updates.autoinstall.tooltip": "When enabled any downloaded updates will be automatically installed during app startup.",
+        "runmode.settings.system.updates.currentversion": "Current Version",
+        "runmode.settings.system.updates.channel": "Channel",
+        "runmode.settings.system.updates.status.idle": "Ready to check",
+        "runmode.settings.system.updates.checkforupdates": "Check now",
+        "runmode.settings.system.updates.updateavailable": "Update available!",
+        "runmode.settings.system.updates.newversion": "New Version",
+        "runmode.settings.system.updates.releasedate": "Release Date",
+        "runmode.settings.system.updates.whatsnew": "What's New",
+        "runmode.settings.system.updates.downloadsize": "Download Size:",
+        "runmode.settings.system.updates.download": "Download",
+        "runmode.settings.system.updates.install": "Install",
+        "runmode.settings.system.updates.previousversion": "Previous Versions",
+        "runmode.settings.system.updates.rollback": "Rollback",
+        "runmode.settings.system.updates.restartwarning": "The application will restart to install the update.",
+        "runmode.settings.system.sshaccess.title": "SSH Access",
         "runmode.settings.system.sshaccess.enabled": "Enable",
         "runmode.settings.system.sshaccess.enabled.tooltip": "Enable or disable SSH access to the device. When enabled, you can connect to the device via SSH using the provisioned key.",
         "runmode.settings.system.sshaccess.publickey": "Public Key",
@@ -339,17 +359,6 @@
         "runmode.settings.system.sshaccess.provision": "Install SSH Key",
         "runmode.settings.system.sshaccess.hint": "Paste your SSH public key here and click the button below to enable SSH access to the device.",
         "runmode.settings.system.sshaccess.note": "SSH settings are not saved to the config file and are not included in config import or export.",
-
-        "runmode.telemetry.chart.rpmspeed": "RPM / Speed",
-        "runmode.telemetry.chart.throttlebrake": "Throttle / Brake",
-        "runmode.telemetry.chart.tyretemperature": "Tyre Temperature",
-        "runmode.telemetry.chart.fuelrange": "Fuel Range/Rate",
-        "runmode.telemetry.chart.jerk": "6DOF Jerk",
-        "runmode.telemetry.chart.snap": "6DOF Snap",
-        "runmode.telemetry.chart.translationalaccel": "6DOF Translational Acceleration",
-        "runmode.telemetry.chart.rotationalaccel": "6DOF Rotational Acceleration",
-        "runmode.telemetry.chart.synthoutput": "Synthesizer Outputs",
-        "runmode.telemetry.chart.computetime": "Compute Time",
 
 
 
@@ -401,6 +410,17 @@
 
         "runmode.telemetry.graphwindow": "Graph Window:",
         "runmode.telemetry.adjusthint": "(Use horizontal scroll to adjust)",
-        "runmode.telemetry.reconnect": "Reconnect"
+        "runmode.telemetry.reconnect": "Reconnect",
+
+        "runmode.telemetry.chart.rpmspeed": "RPM / Speed",
+        "runmode.telemetry.chart.throttlebrake": "Throttle / Brake",
+        "runmode.telemetry.chart.tyretemperature": "Tyre Temperature",
+        "runmode.telemetry.chart.fuelrange": "Fuel Range/Rate",
+        "runmode.telemetry.chart.jerk": "6DOF Jerk",
+        "runmode.telemetry.chart.snap": "6DOF Snap",
+        "runmode.telemetry.chart.translationalaccel": "6DOF Translational Acceleration",
+        "runmode.telemetry.chart.rotationalaccel": "6DOF Rotational Acceleration",
+        "runmode.telemetry.chart.synthoutput": "Synthesizer Outputs",
+        "runmode.telemetry.chart.computetime": "Compute Time"
     }
 }

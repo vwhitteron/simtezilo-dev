@@ -483,10 +483,13 @@
 
             <!-- Content Area -->
             <div class="col-lg-9 col-xl-8 col-xxl-7" style="max-width: 1000px;">
-                <!-- Application Settings -->
+
+                <!-- Application Section -->
                 <div class="settings-section-card active" data-section-content="application">
                     <div class="card">
                         <div class="card-body">
+
+                            <!-- General Settings -->
                             <h5 class="mb-3"><span class="icon" data-icon="gear"></span><span
                                     data-i18n="runmode.settings.app.general.title">General</span></h5>
                             <div class="row g-3">
@@ -555,6 +558,7 @@
                                 </div>
                             </div>
 
+                            <!-- Configuration Settings -->
                             <h5 class="mt-5 mb-3"><span class="icon" data-icon="file-code"></span><span
                                     data-i18n="runmode.settings.app.config.title">Configuration</span></h5>
                             <div class="d-flex gap-2 flex-wrap">
@@ -567,6 +571,7 @@
                                     data-i18n="runmode.settings.app.config.reset">Reset to Defaults</button>
                             </div>
 
+                            <!-- Control Settings -->
                             <h5 class="mt-5 mb-3"><span class="icon" data-icon="power-off"></span><span
                                     data-i18n="runmode.settings.app.control.title">Control</span></h5>
                             <div class="row mb-3">
@@ -596,83 +601,304 @@
                     </div>
                 </div>
 
-                <!-- Hardware Settings -->
+                <!-- System Section -->
                 <div class="settings-section-card" data-section-content="system">
                     <div class="card">
                         <div class="card-body">
-                            <h5 class="mb-3"><span class="icon" data-icon="microchip"></span><span
-                                    data-i18n="runmode.settings.system.hardware.title">Hardware</span></h5>
-                            <div class="row g-3 mb-4">
-                                <div class="col-md-8 col-lg-6">
-                                    <label for="hardware-model" class="form-label"
-                                        data-i18n="runmode.settings.system.hardware.model">Hardware Model</label>
-                                    <select id="hardware-model" class="form-select text-center"
-                                        data-config="hardware.model">
-                                        <option value="none">None</option>
-                                        <option value="pirateaudio">Pimoroni Pirate Audio</option>
-                                        <option value="waveshare">Waveshare 1.3inch LCD HAT</option>
-                                        <option value="spotpear">Spotpear RPi-1.3inch-MINI-LCD</option>
-                                    </select>
-                                </div>
-                                <div class="col-md-4 col-lg-3">
-                                    <label for="hardware-displayorientation" class="form-label"
-                                        data-i18n="runmode.settings.system.hardware.displayorientation">Display
-                                        Orientation</label>
-                                    <select id="hardware-displayorientation" class="form-select text-center"
-                                        data-config="hardware.displayOrientation" data-type="number">
-                                        <option value="0">0°</option>
-                                        <option value="90">90°</option>
-                                        <option value="180">180°</option>
-                                        <option value="270">270°</option>
-                                    </select>
+
+                            <!-- Hardware Settings -->
+                            <div id="hardware-settings">
+                                <h5 class="mb-3"><span class="icon" data-icon="microchip"></span><span
+                                        data-i18n="runmode.settings.system.hardware.title">Hardware</span></h5>
+                                <div class="row g-3 mb-4">
+                                    <div class="col-md-8 col-lg-6">
+                                        <label for="hardware-model" class="form-label"
+                                            data-i18n="runmode.settings.system.hardware.model">Hardware Model</label>
+                                        <select id="hardware-model" class="form-select text-center"
+                                            data-config="hardware.model">
+                                            <option value="none">None</option>
+                                            <option value="pirateaudio">Pimoroni Pirate Audio</option>
+                                            <option value="waveshare">Waveshare 1.3inch LCD HAT</option>
+                                            <option value="spotpear">Spotpear RPi-1.3inch-MINI-LCD</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-4 col-lg-3">
+                                        <label for="hardware-displayorientation" class="form-label"
+                                            data-i18n="runmode.settings.system.hardware.displayorientation">Display
+                                            Orientation</label>
+                                        <select id="hardware-displayorientation" class="form-select text-center"
+                                            data-config="hardware.displayOrientation" data-type="number">
+                                            <option value="0">0°</option>
+                                            <option value="90">90°</option>
+                                            <option value="180">180°</option>
+                                            <option value="270">270°</option>
+                                        </select>
+                                    </div>
                                 </div>
                             </div>
 
+                            <!-- Software Update -->
+                            <div id="software-update">
+                                <h5 class="mb-3 mt-5">
+                                    <span class="icon" data-icon="arrows-rotate"></span>
+                                    <span data-i18n="runmode.settings.system.update.title">Software Update</span>
+                                </h5>
 
-                            <!-- Access Settings -->
-                            <h5 class="mb-3 mt-5">
-                                <span class="icon" data-icon="terminal"></span><span
-                                    data-i18n="runmode.settings.system.access.title">SSH Access</span>
-                            </h5>
+                                <!-- Auto Update Settings -->
+                                <div class="row g-3 mb-3">
+                                    <div class="col-md-6 col-lg-4">
+                                        <div class="form-check form-switch">
+                                            <input type="checkbox" class="form-check-input" id="updates-enabled"
+                                                data-config="app.updates.autoCheck" role="switch">
+                                            <label class="form-check-label" for="updates-enabled">
+                                                <span
+                                                    data-i18n="runmode.settings.system.updates.autocheckEnabled">Automatically
+                                                    check for updates</span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 col-lg-3" id="updates-check-interval-container">
+                                        <div class="input-group input-group-sm">
+                                            <span class="input-group-text">
+                                                <span data-i18n="runmode.settings.system.updates.checkinterval">
+                                                    every</span>
+                                            </span>
+                                            <input type="number" id="updates-check-interval"
+                                                class="form-control text-center no-spinner"
+                                                data-config="app.updates.checkIntervalMinutes" data-type="number"
+                                                min="5" max="1440" step="5" value="60">
+                                            <span class="input-group-text">min</span>
+                                        </div>
+                                    </div>
+                                </div>
 
-                            <!-- SSH Enable Toggle -->
-                            <div class="form-check form-switch mb-4">
-                                <input type="checkbox" class="form-check-input" id="ssh-enabled" role="switch">
-                                <label class="form-check-label" for="ssh-enabled">
-                                    <span data-i18n="runmode.settings.system.sshaccess.enabled">Enable</span>
-                                    <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted" role="button"
-                                        data-i18n-tooltip="runmode.settings.system.sshaccess.enabled.tooltip"></i>
-                                </label>
+                                <div class="row g-3 mb-3">
+                                    <div class="col-md-6">
+                                        <div class="form-check form-switch">
+                                            <input type="checkbox" class="form-check-input" id="updates-autoinstall"
+                                                data-config="app.updates.autoInstall" role="switch">
+                                            <label class="form-check-label" for="updates-autoinstall">
+                                                <span
+                                                    data-i18n="runmode.settings.system.updates.autoinstall">Automatically
+                                                    install updates</span>
+                                                <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
+                                                    role="button"
+                                                    data-i18n-tooltip="runmode.settings.system.updates.autoinstall.tooltip">When
+                                                    enabled any downloaded updates will be automatically installed
+                                                    during app startup.</i>
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
 
-                            <!-- SSH Public Key -->
-                            <div id="ssh-controls">
-                                <div class="mb-3">
-                                    <label for="ssh-public-key" class="form-label">
-                                        <span data-i18n="runmode.settings.system.sshaccess.publickey">Public
-                                            Key</span>
-                                        <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
-                                            role="button"
-                                            data-i18n-tooltip="runmode.settings.system.sshaccess.publickey.tooltip"></i>
-                                    </label>
-                                    <textarea class="form-control font-monospace" id="ssh-public-key" rows="3"
-                                        data-i18n-placeholder="runmode.settings.system.sshaccess.hint"
-                                        style="font-size: 0.875rem;"></textarea>
+                            <!-- Current Version Info -->
+                            <div class="row g-3 mb-4" id="updates-version-info">
+                                <div class="col-md-6 col-lg-4">
+                                    <div class="card bg-secondary-subtle">
+                                        <div class="card-body py-2">
+                                            <div class="d-flex justify-content-between align-items-center">
+                                                <span class="text-muted"
+                                                    data-i18n="runmode.settings.system.updates.currentversion">Current
+                                                    Version</span>
+                                                <span class="fw-bold" id="update-current-version">-</span>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
-                                <div class="d-flex justify-content-center">
-                                    <button type="button" class="btn btn-sm btn-primary" id="provision-ssh-btn">
-                                        <span data-i18n="runmode.settings.system.sshaccess.provision">Install
-                                            SSH Key</span>
+                                <div class="col-md-6 col-lg-4">
+                                    <div class="card bg-secondary-subtle">
+                                        <div class="card-body py-2">
+                                            <div class="d-flex justify-content-between align-items-center gap-3">
+                                                <span class="text-muted"
+                                                    data-i18n="runmode.settings.system.updates.channel">Channel</span>
+                                                <select id="update-channel"
+                                                    class="form-select form-select-sm text-center"
+                                                    style="width: auto; min-width: 120px;"
+                                                    data-config="app.updates.channel">
+                                                    <option value="stable">Stable</option>
+                                                    <option value="beta">Beta</option>
+                                                    <option value="dev">Dev</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-12 col-lg-2 d-flex align-items-center">
+                                    <button type="button" class="btn btn-outline-primary btn-sm w-100"
+                                        id="check-updates-btn">
+                                        <i class="fa-solid fa-rotate me-1"></i>
+                                        <span data-i18n="runmode.settings.system.updates.checkforupdates">Check
+                                            now</span>
                                     </button>
                                 </div>
                             </div>
 
-                            <!-- SSH Note -->
-                            <div class="alert alert-info mt-3 mb-0 text-center" role="alert">
-                                <i class="fa-solid fa-circle-info me-2"></i>
-                                <span data-i18n="runmode.settings.system.sshaccess.note">SSH settings are not
-                                    saved to the config file and are not included in config import or
-                                    export.</span>
+                            <!-- Up to Date Card (shown when no update available) -->
+                            <div class="card border-secondary mb-4 d-none" id="update-uptodate-card">
+                                <div class="card-header bg-secondary0-subtle">
+                                    <div class="d-flex align-items-cente">
+                                        <i class="fa-solid fa-circle-check me-2"></i>
+                                        <span data-i18n="runmode.settings.system.updates.status.uptodate">Up to
+                                            date</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Available Update Card (hidden when no update) -->
+                            <div class="card border-primary mb-4 d-none" id="update-available-card">
+                                <div class="card-header bg-primary">
+                                    <div class="d-flex align-items-center">
+                                        <i class="fa-solid fa-arrow-up-from-bracket me-2"></i>
+                                        <span data-i18n="runmode.settings.system.updates.updateavailable">Update
+                                            Available</span>
+                                    </div>
+                                </div>
+                                <div class="card-body bg-primary-subtle">
+                                    <div class="row mb-3">
+                                        <div class="col-6">
+                                            <small class="text-muted"
+                                                data-i18n="runmode.settings.system.updates.newversion">New
+                                                Version</small>
+                                            <div class="fw-bold" id="update-new-version">-</div>
+                                        </div>
+                                        <div class="col-6">
+                                            <small class="text-muted"
+                                                data-i18n="runmode.settings.system.updates.releasedate">Release
+                                                Date</small>
+                                            <div id="update-release-date">-</div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Changelog -->
+                                    <div class="mb-3">
+                                        <small class="text-muted"
+                                            data-i18n="runmode.settings.system.updates.whatsnew">What's
+                                            New</small>
+                                        <div class="card bg-dark mt-1">
+                                            <div class="card-body py-2" style="max-height: 200px; overflow-y: auto;">
+                                                <div id="update-changelog" class="small" style="white-space: pre-wrap;">
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Download Size -->
+                                    <div class="mb-3">
+                                        <small class="text-muted"
+                                            data-i18n="runmode.settings.system.updates.downloadsize">Download
+                                            Size</small>
+                                        <span id="update-download-size">-</span>
+                                    </div>
+
+                                    <!-- Progress Bar (hidden initially) -->
+                                    <div class="progress mb-3 d-none" id="update-progress-container"
+                                        style="height: 20px;">
+                                        <div class="progress-bar progress-bar-striped progress-bar-animated"
+                                            id="update-progress-bar" role="progressbar" style="width: 0%">
+                                            <span id="update-progress-text">0%</span>
+                                        </div>
+                                    </div>
+
+                                    <!-- Action Buttons -->
+                                    <div class="d-flex gap-2 justify-content-center">
+                                        <button type="button" class="btn btn-primary" id="download-update-btn">
+                                            <i class="fa-solid fa-download me-1"></i>
+                                            <span data-i18n="runmode.settings.system.updates.download">Download
+                                                Update</span>
+                                        </button>
+                                        <button type="button" class="btn btn-success d-none" id="install-update-btn">
+                                            <i class="fa-solid fa-rotate me-1"></i>
+                                            <span data-i18n="runmode.settings.system.updates.install">Install</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Rollback Card (shown when previous version available) -->
+                            <div class="card border-secondary mb-4 d-none" id="update-rollback-card">
+                                <div class="card-body">
+                                    <div class="d-flex align-items-center justify-content-between">
+                                        <div>
+                                            <div class="d-flex align-items-center">
+                                                <i class="fa-solid fa-clock-rotate-left me-2 text-muted"></i>
+                                                <span
+                                                    data-i18n="runmode.settings.system.updates.previousversion">Previous
+                                                    Version</span>
+                                            </div>
+                                            <small class="text-muted" id="rollback-version">-</small>
+                                        </div>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm"
+                                            id="rollback-btn">
+                                            <i class="fa-solid fa-rotate-left me-1"></i>
+                                            <span data-i18n="runmode.settings.system.updates.rollback">Rollback</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Warning for restart -->
+                            <div class="alert alert-warning mt-3 mb-0 d-none" id="update-restart-warning">
+                                <i class="fa-solid fa-triangle-exclamation me-2"></i>
+                                <span data-i18n="runmode.settings.system.updates.restartwarning">
+                                    The application will restart to install the update.
+                                </span>
+                            </div>
+                        </div>
+
+                        <!-- Advanced Settings Section -->
+                        <div class="d-flex align-items-center mb-3 mt-5" data-bs-toggle="collapse"
+                            data-bs-target="#advancedSettingsSystem" aria-expanded="false"
+                            aria-controls="advancedSettingsSystem" style="cursor: pointer;">
+                            <h5 class="mb-0 me-3">
+                                <span class="icon" data-icon="tools"></span><span
+                                    data-i18n="runmode.settings.system.advanced.title">Advanced
+                                    Settings</span>
+                            </h5>
+                            <i class="fa-solid fa-chevron-right" id="advanced-settings-chevron-system"
+                                style="transition: transform 0.3s ease;"></i>
+                        </div>
+
+                        <div id="advancedSettingsSystem" class="collapse">
+                            <!-- SSH Access Settings -->
+                            <div id="ssh-access-settings">
+                                <h5 class="mb-3 mt-4">
+                                    <span class="icon" data-icon="terminal"></span><span
+                                        data-i18n="runmode.settings.system.sshaccess.title">SSH Access</span>
+                                </h5>
+
+                                <!-- SSH Enable Toggle -->
+                                <div class="form-check form-switch mb-4">
+                                    <input type="checkbox" class="form-check-input" id="ssh-enabled" role="switch">
+                                    <label class="form-check-label" for="ssh-enabled">
+                                        <span data-i18n="runmode.settings.system.sshaccess.enabled">Enable</span>
+                                        <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
+                                            role="button"
+                                            data-i18n-tooltip="runmode.settings.system.sshaccess.enabled.tooltip"></i>
+                                    </label>
+                                </div>
+
+                                <!-- SSH Public Key -->
+                                <div id="ssh-controls">
+                                    <div class="mb-3">
+                                        <label for="ssh-public-key" class="form-label">
+                                            <span data-i18n="runmode.settings.system.sshaccess.publickey">Public
+                                                Key</span>
+                                            <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
+                                                role="button"
+                                                data-i18n-tooltip="runmode.settings.system.sshaccess.publickey.tooltip"></i>
+                                        </label>
+                                        <textarea class="form-control font-monospace" id="ssh-public-key" rows="3"
+                                            data-i18n-placeholder="runmode.settings.system.sshaccess.hint"
+                                            style="font-size: 0.875rem;"></textarea>
+                                    </div>
+                                    <div class="d-flex justify-content-center">
+                                        <button type="button" class="btn btn-sm btn-primary" id="provision-ssh-btn">
+                                            <span data-i18n="runmode.settings.system.sshaccess.provision">Install
+                                                SSH Key</span>
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -687,7 +913,8 @@
                             <div class="row g-3 mb-3">
                                 <div class="col-md-6 col-lg-4">
                                     <label for="synth-internalsamplerate" class="form-label">
-                                        <span data-i18n="runmode.settings.synth.samplerates.internal">Internal Sample
+                                        <span data-i18n="runmode.settings.synth.samplerates.internal">Internal
+                                            Sample
                                             Rate</span>
                                         <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
                                             role="button"
@@ -875,7 +1102,8 @@
                                     aria-controls="advancedSettingsSynth" style="cursor: pointer;">
                                     <h5 class="mb-0 me-3">
                                         <span class="icon" data-icon="tools"></span><span
-                                            data-i18n="runmode.settings.synth.advanced.title">Advanced Settings</span>
+                                            data-i18n="runmode.settings.synth.advanced.title">Advanced
+                                            Settings</span>
                                     </h5>
                                     <i class="fa-solid fa-chevron-right" id="advanced-settings-chevron-synth"
                                         style="transition: transform 0.3s ease;"></i>
@@ -1128,7 +1356,7 @@
                     </div>
                 </div>
 
-                <!-- Haptics Settings -->
+                <!-- Haptics Section -->
                 <div class="settings-section-card" data-section-content="haptics">
                     <div class="card">
                         <div class="card-body">
@@ -1414,7 +1642,7 @@
                     </div>
                 </div>
 
-                <!-- Pit Radio Settings -->
+                <!-- Pit Radio Section -->
                 <div class="settings-section-card" data-section-content="pitradio">
                     <div class="card">
                         <div class="card-body">
@@ -1741,7 +1969,8 @@
                         </div>
                     </div>
                 </div>
-            </div>
+
+            </div> <!-- End Content Area -->
         </div>
     </div>
 
@@ -1917,6 +2146,25 @@
 
             // Initial button style update (call after config is loaded)
             setTimeout(updateTelemetryButtonStyles, 500);
+
+            // Updates check interval visibility (hide only the interval input when auto-update is off)
+            const updatesEnabledCheckbox = document.getElementById('updates-enabled');
+            const updatesCheckIntervalContainer = document.getElementById('updates-check-interval-container');
+
+            if (updatesEnabledCheckbox) {
+                function updateCheckIntervalVisibility() {
+                    const isEnabled = updatesEnabledCheckbox.checked;
+                    const displayValue = isEnabled ? '' : 'none';
+
+                    // Only hide the check interval input when auto-update is disabled
+                    // Version info and Check now button remain visible for manual updates
+                    if (updatesCheckIntervalContainer) updatesCheckIntervalContainer.style.display = displayValue;
+                }
+
+                updatesEnabledCheckbox.addEventListener('change', updateCheckIntervalVisibility);
+                // Set initial visibility after config loads
+                setTimeout(updateCheckIntervalVisibility, 500);
+            }
 
             // Cache info and clear functionality
             function fetchCacheSize() {
@@ -2131,8 +2379,10 @@
         // Handle chevron rotation for Advanced Settings collapse
         const advancedSettingsSynth = document.getElementById('advancedSettingsSynth');
         const advancedSettingsHaptics = document.getElementById('advancedSettingsHaptics');
+        const advancedSettingsSystem = document.getElementById('advancedSettingsSystem');
         const chevronSynth = document.getElementById('advanced-settings-chevron-synth');
         const chevronHaptics = document.getElementById('advanced-settings-chevron-haptics');
+        const chevronSystem = document.getElementById('advanced-settings-chevron-system');
 
         if (advancedSettingsSynth && chevronSynth) {
             advancedSettingsSynth.addEventListener('show.bs.collapse', function () {
@@ -2150,6 +2400,350 @@
             advancedSettingsHaptics.addEventListener('hide.bs.collapse', function () {
                 IconHelper.replaceIcon(chevronHaptics, 'fa-chevron-right');
             });
+        }
+
+        if (advancedSettingsSystem && chevronSystem) {
+            advancedSettingsSystem.addEventListener('show.bs.collapse', function () {
+                IconHelper.replaceIcon(chevronSystem, 'fa-chevron-down');
+            });
+            advancedSettingsSystem.addEventListener('hide.bs.collapse', function () {
+                IconHelper.replaceIcon(chevronSystem, 'fa-chevron-right');
+            });
+        }
+
+        // ============================
+        // Software Updates Management
+        // ============================
+        const UpdateManager = {
+            state: {
+                currentVersion: '',
+                channel: '',
+                latestVersion: null,
+                updateAvailable: false,
+                downloadProgress: 0,
+                downloadReady: false,
+                rollbackAvailable: false,
+                rollbackVersion: '',
+                lastChecked: null,
+                error: null
+            },
+
+            elements: {
+                currentVersion: document.getElementById('update-current-version'),
+                channel: document.getElementById('update-channel'),
+                uptodateCard: document.getElementById('update-uptodate-card'),
+                availableCard: document.getElementById('update-available-card'),
+                newVersion: document.getElementById('update-new-version'),
+                releaseDate: document.getElementById('update-release-date'),
+                changelog: document.getElementById('update-changelog'),
+                downloadSize: document.getElementById('update-download-size'),
+                progressContainer: document.getElementById('update-progress-container'),
+                progressBar: document.getElementById('update-progress-bar'),
+                progressText: document.getElementById('update-progress-text'),
+                checkBtn: document.getElementById('check-updates-btn'),
+                downloadBtn: document.getElementById('download-update-btn'),
+                installBtn: document.getElementById('install-update-btn'),
+                rollbackCard: document.getElementById('update-rollback-card'),
+                rollbackVersion: document.getElementById('rollback-version'),
+                rollbackBtn: document.getElementById('rollback-btn'),
+                restartWarning: document.getElementById('update-restart-warning')
+            },
+
+            init() {
+                // Initialize state with current channel value from dropdown
+                if (this.elements.channel) {
+                    this.state.channel = this.elements.channel.value;
+
+                    // Listen for changes from config system (e.g., WebSocket updates)
+                    this.elements.channel.addEventListener('change', () => {
+                        // Update our internal state when config system changes dropdown
+                        this.state.channel = this.elements.channel.value;
+                    });
+                }
+                this.bindEvents();
+                this.fetchStatus();
+            },
+
+            bindEvents() {
+                if (this.elements.checkBtn) {
+                    this.elements.checkBtn.addEventListener('click', () => this.checkForUpdates());
+                }
+                if (this.elements.downloadBtn) {
+                    this.elements.downloadBtn.addEventListener('click', () => this.downloadUpdate());
+                }
+                if (this.elements.installBtn) {
+                    this.elements.installBtn.addEventListener('click', () => this.installUpdate());
+                }
+                if (this.elements.rollbackBtn) {
+                    this.elements.rollbackBtn.addEventListener('click', () => this.rollback());
+                }
+            },
+
+            async fetchStatus() {
+                try {
+                    const response = await fetch('/api/updates/status');
+                    if (response.status === 404) {
+                        // Updates API not available - hide all update cards
+                        this.hideElement(this.elements.uptodateCard);
+                        this.hideElement(this.elements.availableCard);
+                        return;
+                    }
+                    if (!response.ok) throw new Error('Failed to fetch status');
+                    const data = await response.json();
+                    this.updateState(data);
+                    this.render();
+                } catch (error) {
+                    console.error('Error fetching update status:', error);
+                    this.state.error = error.message;
+                    this.render();
+                }
+            },
+
+            updateState(data) {
+                this.state.currentVersion = data.currentVersion || '';
+                // Only update channel if provided in response (status endpoint provides it, check endpoint doesn't)
+                if (data.channel !== undefined) {
+                    this.state.channel = data.channel;
+                }
+                this.state.updateAvailable = !!data.availableUpdate;
+                this.state.downloadReady = data.downloadReady || false;
+                this.state.rollbackAvailable = data.rollbackAvailable || false;
+                this.state.rollbackVersion = data.rollbackVersion || '';
+                this.state.lastChecked = data.lastChecked ? new Date(data.lastChecked) : null;
+
+                if (data.availableUpdate) {
+                    this.state.latestVersion = {
+                        version: data.availableUpdate.version,
+                        release_date: data.availableUpdate.releaseDate,
+                        changelog: data.availableUpdate.changelog,
+                        size: data.availableUpdate.size
+                    };
+                }
+
+                this.state.error = null;
+            },
+
+            render() {
+                // Current version
+                if (this.elements.currentVersion) {
+                    this.elements.currentVersion.textContent = this.state.currentVersion || '-';
+                }
+
+                // Channel select is managed by config system, don't update it here
+
+                // Show either up-to-date card or available update card
+                if (this.state.error) {
+                    // Hide both cards on error
+                    this.hideElement(this.elements.uptodateCard);
+                    this.hideElement(this.elements.availableCard);
+                } else if (this.state.updateAvailable && this.state.latestVersion) {
+                    // Hide up-to-date, show available update card
+                    this.hideElement(this.elements.uptodateCard);
+                    this.showElement(this.elements.availableCard);
+                    this.elements.newVersion.textContent = this.state.latestVersion.version || '-';
+                    this.elements.releaseDate.textContent = this.formatDate(this.state.latestVersion.release_date);
+                    this.elements.changelog.textContent = this.state.latestVersion.changelog || 'No changelog available';
+                    this.elements.downloadSize.textContent = this.formatBytes(this.state.latestVersion.size || 0);
+
+                    // Show download or install button based on state
+                    if (this.state.downloadReady) {
+                        this.hideElement(this.elements.downloadBtn);
+                        this.showElement(this.elements.installBtn);
+                        this.showElement(this.elements.restartWarning);
+                    } else {
+                        this.showElement(this.elements.downloadBtn);
+                        this.hideElement(this.elements.installBtn);
+                        this.hideElement(this.elements.restartWarning);
+                    }
+                } else if (this.state.currentVersion) {
+                    // Show up-to-date card, hide available update card
+                    this.showElement(this.elements.uptodateCard);
+                    this.hideElement(this.elements.availableCard);
+                } else {
+                    // Hide both cards if no version info
+                    this.hideElement(this.elements.uptodateCard);
+                    this.hideElement(this.elements.availableCard);
+                }
+
+                // Rollback card
+                if (this.state.rollbackAvailable && this.state.rollbackVersion) {
+                    this.showElement(this.elements.rollbackCard);
+                    this.elements.rollbackVersion.textContent = 'v' + this.state.rollbackVersion;
+                } else {
+                    this.hideElement(this.elements.rollbackCard);
+                }
+            },
+
+            showElement(el) {
+                if (el) el.classList.remove('d-none');
+            },
+
+            hideElement(el) {
+                if (el) el.classList.add('d-none');
+            },
+
+            formatBytes(bytes) {
+                if (bytes === 0) return '0 Bytes';
+                const k = 1024;
+                const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+                const i = Math.floor(Math.log(bytes) / Math.log(k));
+                return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+            },
+
+            formatDate(dateString) {
+                if (!dateString) return '-';
+                const date = new Date(dateString);
+                if (isNaN(date.getTime())) return '-';
+
+                // Format as "Jan 15, 2026 at 3:45 PM"
+                const dateOptions = { year: 'numeric', month: 'short', day: 'numeric' };
+                const timeOptions = { hour: 'numeric', minute: '2-digit', hour12: true };
+                return date.toLocaleDateString('en-US', dateOptions) + ' at ' +
+                    date.toLocaleTimeString('en-US', timeOptions);
+            },
+
+            async checkForUpdates() {
+                this.elements.checkBtn.disabled = true;
+                const originalText = this.elements.checkBtn.innerHTML;
+                this.elements.checkBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Checking...';
+
+                try {
+                    const response = await fetch('/api/updates/check', { method: 'POST' });
+                    if (response.status === 404) {
+                        // Updates API not available
+                        return;
+                    }
+                    if (!response.ok) throw new Error('Failed to check for updates');
+                    const data = await response.json();
+                    this.updateState(data);
+                    this.state.lastChecked = new Date();
+                } catch (error) {
+                    console.error('Error checking for updates:', error);
+                    this.state.error = error.message;
+                } finally {
+                    this.elements.checkBtn.disabled = false;
+                    this.elements.checkBtn.innerHTML = originalText;
+                    this.render();
+                }
+            },
+
+            async downloadUpdate() {
+                this.elements.downloadBtn.disabled = true;
+                this.showElement(this.elements.progressContainer);
+                this.updateProgress(0);
+
+                try {
+                    const response = await fetch('/api/updates/download', { method: 'POST' });
+                    if (!response.ok) throw new Error('Failed to download update');
+
+                    // Poll for progress
+                    const pollProgress = async () => {
+                        const statusResponse = await fetch('/api/updates/status');
+                        if (statusResponse.ok) {
+                            const data = await statusResponse.json();
+                            if (data.download_progress !== undefined) {
+                                this.updateProgress(data.download_progress);
+                            }
+                            if (data.download_ready) {
+                                this.state.downloadReady = true;
+                                this.updateProgress(100);
+                                this.hideElement(this.elements.progressContainer);
+                                this.render();
+                                return;
+                            }
+                            if (!data.error) {
+                                setTimeout(pollProgress, 500);
+                            }
+                        }
+                    };
+
+                    pollProgress();
+                } catch (error) {
+                    console.error('Error downloading update:', error);
+                    this.state.error = error.message;
+                    this.hideElement(this.elements.progressContainer);
+                    this.render();
+                }
+            },
+
+            updateProgress(percent) {
+                if (this.elements.progressBar) {
+                    this.elements.progressBar.style.width = percent + '%';
+                }
+                if (this.elements.progressText) {
+                    this.elements.progressText.textContent = Math.round(percent) + '%';
+                }
+            },
+
+            async installUpdate() {
+                if (!confirm('Installing the update will restart the service. Continue?')) {
+                    return;
+                }
+
+                this.elements.installBtn.disabled = true;
+                this.elements.installBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Installing...';
+
+                try {
+                    const response = await fetch('/api/updates/install', { method: 'POST' });
+                    if (!response.ok) throw new Error('Failed to install update');
+
+                    // Service will restart, show message
+                    this.elements.statusText.textContent = 'Installing update, service will restart...';
+
+                    // Poll for service to come back up
+                    setTimeout(() => this.pollServiceRestart(), 5000);
+                } catch (error) {
+                    console.error('Error installing update:', error);
+                    this.state.error = error.message;
+                    this.elements.installBtn.disabled = false;
+                    this.elements.installBtn.innerHTML = '<i class="fa-solid fa-rotate me-1"></i> Install & Restart';
+                    this.render();
+                }
+            },
+
+            pollServiceRestart() {
+                const checkService = async () => {
+                    try {
+                        const response = await fetch('/api/updates/status');
+                        if (response.ok) {
+                            window.location.reload();
+                        } else {
+                            setTimeout(checkService, 2000);
+                        }
+                    } catch {
+                        setTimeout(checkService, 2000);
+                    }
+                };
+                checkService();
+            },
+
+            async rollback() {
+                if (!confirm('Rolling back will restart the service with the previous version. Continue?')) {
+                    return;
+                }
+
+                this.elements.rollbackBtn.disabled = true;
+                this.elements.rollbackBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Rolling back...';
+
+                try {
+                    const response = await fetch('/api/updates/rollback', { method: 'POST' });
+                    if (!response.ok) throw new Error('Failed to rollback');
+
+                    this.elements.statusText.textContent = 'Rolling back, service will restart...';
+                    setTimeout(() => this.pollServiceRestart(), 5000);
+                } catch (error) {
+                    console.error('Error rolling back:', error);
+                    this.state.error = error.message;
+                    this.elements.rollbackBtn.disabled = false;
+                    this.elements.rollbackBtn.innerHTML = '<i class="fa-solid fa-rotate-left me-1"></i> Rollback';
+                    this.render();
+                }
+            }
+        };
+
+        // Initialize UpdateManager when the page loads
+        if (document.getElementById('update-uptodate-card')) {
+            UpdateManager.init();
         }
     </script>
 

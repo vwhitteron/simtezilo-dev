@@ -213,6 +213,21 @@ func (u *Updater) DownloadAndPrepare(progressCb ProgressCallback) error {
 	return u.PrepareInstall(path)
 }
 
+// Rollback reverts to the previous version.
+func (u *Updater) Rollback() error {
+	return u.installer.Rollback()
+}
+
+// RollbackAvailable returns true if a previous version is available for rollback.
+func (u *Updater) RollbackAvailable() bool {
+	return u.installer.RollbackAvailable()
+}
+
+// RollbackVersion returns the version that would be rolled back to.
+func (u *Updater) RollbackVersion() string {
+	return u.installer.RollbackVersion()
+}
+
 // Installer returns the installer for use by external scripts.
 func (u *Updater) Installer() *Installer {
 	return u.installer
@@ -221,4 +236,11 @@ func (u *Updater) Installer() *Installer {
 // Checker returns the update checker.
 func (u *Updater) Checker() *Checker {
 	return u.checker
+}
+
+// SetChannel updates the channel for update checking.
+func (u *Updater) SetChannel(channel string) {
+	if u.checker != nil {
+		u.checker.SetChannel(channel)
+	}
 }

@@ -23,11 +23,14 @@ func main() {
 
 	done := make(chan exitcode.Code, 1)
 
+	// Signal handler - forward signal to done channel as Success exit code
 	go func() {
 		sig := <-sigs
 		log.Printf("Received %v signal, shutting down\n", sig)
 
 		done <- exitcode.Success
+
+		close(done) // Close so all readers can detect the shutdown
 	}()
 
 	var (

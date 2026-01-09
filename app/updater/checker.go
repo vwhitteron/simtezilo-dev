@@ -2,10 +2,13 @@ package updater
 
 import (
 	"context"
+	"fmt"
+	"regexp"
 	"sync"
 	"time"
 
 	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 )
 
 // UpdateStatus represents the current state of the updater.
@@ -49,10 +52,10 @@ type UpdateInfo struct {
 type Checker struct {
 	log zerolog.Logger
 
-	manifestURL   string
-	checkInterval time.Duration
-	httpTimeout   time.Duration
-	channel       string
+	manifestBaseURL string // Base URL without channel-specific path
+	checkInterval   time.Duration
+	httpTimeout     time.Duration
+	channel         string
 
 	currentVersion *Version
 
@@ -63,8 +66,11 @@ type Checker struct {
 	availableInfo  *UpdateInfo
 	cachedManifest *Manifest
 
-	stopChan chan struct{}
-	doneChan chan struct{}
+	// Lifecycle management using context and WaitGroup pattern
+	// - cancel is called to signal shutdown to the background goroutine
+	// - wg tracks when the goroutine has finished cleanup
+	cancel context.CancelFunc
+	wg     sync.WaitGroup
 }
 
 // CheckerConfig holds configuration for the update checker.
@@ -84,40 +90,73 @@ func NewChecker(cfg CheckerConfig, log zerolog.Logger) (*Checker, error) {
 		currentVer = &Version{Major: 0, Minor: 0, Patch: 0, Raw: cfg.CurrentVersion}
 	}
 
+	// Extract base URL (remove channel-specific path if present)
+	baseURL := cfg.ManifestURL
+	// Remove trailing /stable/latest.json, /beta/latest.json, etc. to get base
+	// Also handle generic /manifest.json or /latest.json patterns
+	channelPattern := regexp.MustCompile(`/(stable|beta|dev)/latest\.json$`)
+	genericPattern := regexp.MustCompile(`/(manifest|latest)\.json$`)
+
+	if idx := channelPattern.FindStringIndex(baseURL); idx != nil {
+		baseURL = baseURL[:idx[0]]
+	} else if idx := genericPattern.FindStringIndex(baseURL); idx != nil {
+		baseURL = baseURL[:idx[0]]
+	}
+	// If baseURL is empty or invalid, keep the original
+	if baseURL == "" {
+		baseURL = cfg.ManifestURL
+	}
+
 	return &Checker{
-		log:            log.With().Str("component", "updater").Logger(),
-		manifestURL:    cfg.ManifestURL,
-		checkInterval:  cfg.CheckInterval,
-		httpTimeout:    cfg.HTTPTimeout,
-		channel:        cfg.Channel,
-		currentVersion: currentVer,
-		status:         StatusIdle,
-		stopChan:       make(chan struct{}),
-		doneChan:       make(chan struct{}),
+		log:             log.With().Str("component", "updater").Logger(),
+		manifestBaseURL: baseURL,
+		checkInterval:   cfg.CheckInterval,
+		httpTimeout:     cfg.HTTPTimeout,
+		channel:         cfg.Channel,
+		currentVersion:  currentVer,
+		status:          StatusIdle,
 	}, nil
 }
 
 // Start begins periodic update checking.
 func (c *Checker) Start(ctx context.Context) {
-	go c.runPeriodicCheck(ctx)
+	// Create a cancellable context for this checker
+	childCtx, cancel := context.WithCancel(ctx)
+	c.cancel = cancel
+
+	c.wg.Add(1)
+
+	go c.runPeriodicCheck(childCtx)
 }
 
 // Stop gracefully stops the update checker.
 func (c *Checker) Stop() {
-	close(c.stopChan)
-	<-c.doneChan
+	if c.cancel != nil {
+		c.cancel()
+	}
+
+	c.wg.Wait()
 }
 
 // CheckNow performs an immediate update check.
 func (c *Checker) CheckNow() (*UpdateInfo, error) {
 	c.mu.Lock()
 	c.status = StatusChecking
+	channel := c.channel
 	c.mu.Unlock()
+
+	// Build manifest URL based on current channel
+	manifestURL := fmt.Sprintf("%s/%s/latest.json", c.manifestBaseURL, channel)
 
 	ctx, cancel := context.WithTimeout(context.Background(), c.httpTimeout)
 	defer cancel()
 
-	manifest, err := FetchManifest(ctx, c.manifestURL, c.httpTimeout, c.log)
+	log.Debug().
+		Str("url", manifestURL).
+		Dur("timeout", c.httpTimeout).
+		Msg("Fetching update manifest")
+
+	manifest, err := FetchManifest(ctx, manifestURL, c.httpTimeout, c.log)
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -144,6 +183,13 @@ func (c *Checker) CheckNow() (*UpdateInfo, error) {
 
 		return nil, nil
 	}
+
+	c.log.Debug().
+		Str("version", manifest.Version).
+		Str("channel", manifest.Channel).
+		Time("releaseDate", manifest.ReleaseDate).
+		Int("platforms", len(manifest.Platforms)).
+		Msg("Manifest fetched successfully")
 
 	// Parse available version
 	availableVer, err := ParseVersion(manifest.Version)
@@ -258,19 +304,24 @@ func (c *Checker) CurrentVersion() string {
 	return c.currentVersion.String()
 }
 
+// SetChannel updates the channel for update checking.
+func (c *Checker) SetChannel(channel string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.channel = channel
+	c.log.Info().Str("channel", channel).Msg("Update channel changed")
+}
+
 // runPeriodicCheck runs the periodic update check loop.
 func (c *Checker) runPeriodicCheck(ctx context.Context) {
-	defer close(c.doneChan)
+	defer c.wg.Done()
 
 	// Initial check after a short delay
 	initialDelay := time.NewTimer(10 * time.Second)
 	select {
 	case <-initialDelay.C:
 		_, _ = c.CheckNow() //nolint:contextcheck // CheckNow creates its own timeout context
-	case <-c.stopChan:
-		initialDelay.Stop()
-
-		return
 	case <-ctx.Done():
 		initialDelay.Stop()
 
@@ -284,8 +335,6 @@ func (c *Checker) runPeriodicCheck(ctx context.Context) {
 		select {
 		case <-ticker.C:
 			_, _ = c.CheckNow() //nolint:contextcheck // CheckNow creates its own timeout context
-		case <-c.stopChan:
-			return
 		case <-ctx.Done():
 			return
 		}
