@@ -4,14 +4,14 @@ SETUPMODEFLAG="/opt/simtezilo/etc/setupmode"
 
 # Status results
 RESULT='success'
-ACTIVECONN='SetupMode'
+ACTIVECONN='RunMode'
 AVAILABLE='true'
-FLAGENABLED='true'
+FLAGENABLED='false'
 READY='true'
 RUNMODEPRESENT='true'
 SETUPMODEPRESENT='true'
 SETUPREQUIRED='false'
-LCDPRESENT='true'
+LCDPRESENT='false'
 SSHENABLED='true'
 
 
@@ -96,7 +96,7 @@ function handle_wifi_scan() {
 }
 
 function handle_status() {
-    echo '{"result":"'${RESULT}'",status":{activeConn":"'${ACTIVECONN}'","available":"'${AVAILABLE}'","flagEnabled":"'${FLAGENABLED}'","ready":"'${READY}'","runModePresent":"'${RUNMODEPRESENT}'","setupModePresent":"'${SETUPMODEPRESENT}'","setupRequired":"'${SETUPREQUIRED}'","lcdPresent":"'${LCDPRESENT}'","sshEnabled":"'${SSHENABLED}'"}}'
+    echo '{"result":"'${RESULT}'","status":{"activeConn":"'${ACTIVECONN}'","available":'${AVAILABLE}',"flagEnabled":'${FLAGENABLED}',"ready":'${READY}',"runModePresent":'${RUNMODEPRESENT}',"setupModePresent":'${SETUPMODEPRESENT}',"setupRequired":'${SETUPREQUIRED}',"lcdPresent":'${LCDPRESENT}',"sshEnabled":'${SSHENABLED}'}}'
 }
 
 while getopts "hl:v" Option

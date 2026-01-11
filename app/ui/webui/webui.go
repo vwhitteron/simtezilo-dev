@@ -2,10 +2,14 @@
 package webui
 
 import (
+	"archive/tar"
+	"archive/zip"
 	"bytes"
+	"compress/gzip"
 	"context"
 	"embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime"
@@ -178,6 +182,7 @@ func (w *WebUI) GetHTTPHandler() http.Handler {
 	mux.HandleFunc("/api/updates/status", w.handleUpdatesStatus)
 	mux.HandleFunc("/api/updates/check", w.handleUpdatesCheck)
 	mux.HandleFunc("/api/updates/download", w.handleUpdatesDownload)
+	mux.HandleFunc("/api/updates/upload", w.handleUpdatesUpload)
 	mux.HandleFunc("/api/updates/install", w.handleUpdatesInstall)
 	mux.HandleFunc("/api/updates/rollback", w.handleUpdatesRollback)
 
@@ -191,7 +196,29 @@ func (w *WebUI) GetHTTPHandler() http.Handler {
 
 	w.log.Debug().Msg("Web UI handler configured")
 
-	return mux
+	// Wrap with CORS middleware
+	return w.corsMiddleware(mux)
+}
+
+// corsMiddleware adds CORS headers to all responses.
+// TODO: figure out if this is needed, and if so perhaps make it more restrictive via config.
+func (w *WebUI) corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		// Set CORS headers
+		response.Header().Set("Access-Control-Allow-Origin", "*")
+		response.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		response.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+		// Handle preflight requests
+		if request.Method == http.MethodOptions {
+			response.WriteHeader(http.StatusOK)
+
+			return
+		}
+
+		// Call the next handler
+		next.ServeHTTP(response, request)
+	})
 }
 
 // HasActiveClients returns true if there are active WebSocket clients connected.
@@ -1142,6 +1169,8 @@ func (w *WebUI) applyAppConfig(config map[string]any) []string {
 					// Update the updater's channel immediately
 					if w.updater != nil {
 						w.updater.SetChannel(channelStr)
+						// Check for existing downloads in the new channel
+						w.updater.CheckExistingDownloads()
 					}
 				} else {
 					errors = append(errors, "invalid channel value")
@@ -2821,13 +2850,19 @@ func (w *WebUI) handleUpdatesStatus(response http.ResponseWriter, request *http.
 		status := w.updater.Status()
 		availableUpdate := w.updater.AvailableUpdate()
 		lastCheck := w.updater.Checker().LastCheck()
+		lastError := w.updater.Checker().LastError()
 
 		responseData["status"] = status.String()
+		responseData["downloadReady"] = status == updater.StatusReadyToInstall
 		responseData["rollbackAvailable"] = w.updater.RollbackAvailable()
 		responseData["rollbackVersion"] = w.updater.RollbackVersion()
 
 		if !lastCheck.IsZero() {
 			responseData["lastChecked"] = lastCheck.Format(time.RFC3339)
+		}
+
+		if lastError != nil {
+			responseData["error"] = lastError.Error()
 		}
 
 		if availableUpdate != nil {
@@ -2868,6 +2903,7 @@ func (w *WebUI) handleUpdatesCheck(response http.ResponseWriter, request *http.R
 	responseData := map[string]any{
 		"updateAvailable": false,
 		"currentVersion":  w.buildVersion,
+		"downloadReady":   false,
 	}
 
 	if w.updater == nil {
@@ -2882,7 +2918,9 @@ func (w *WebUI) handleUpdatesCheck(response http.ResponseWriter, request *http.R
 			return
 		}
 
+		status := w.updater.Status()
 		responseData["updateAvailable"] = updateInfo != nil
+		responseData["downloadReady"] = status == updater.StatusReadyToInstall
 
 		if updateInfo != nil {
 			responseData["availableUpdate"] = map[string]any{
@@ -2940,7 +2978,7 @@ func (w *WebUI) handleUpdatesDownload(response http.ResponseWriter, request *htt
 		Msg("starting update download")
 
 	// Download and prepare the update
-	//nolint:contextcheck // download manages its own timeout context
+
 	err := w.updater.DownloadAndPrepare(func(progress updater.DownloadProgress) {
 		w.log.Debug().
 			Int64("downloaded", progress.DownloadedBytes).
@@ -2973,6 +3011,268 @@ func (w *WebUI) handleUpdatesDownload(response http.ResponseWriter, request *htt
 	w.log.Info().
 		Str("version", availableUpdate.AvailableVersion).
 		Msg("update downloaded and staged for installation")
+}
+
+// UploadMetadata represents metadata embedded in a custom update archive.
+type UploadMetadata struct {
+	Version     string    `json:"version"`
+	ReleaseDate time.Time `json:"releaseDate"`
+	Changelog   string    `json:"changelog"`
+	Platform    string    `json:"platform"`
+}
+
+// extractMetadataFromArchive attempts to extract manifest.json from an uploaded archive.
+func (w *WebUI) extractMetadataFromArchive(file io.ReadSeeker, filename string) (*UploadMetadata, error) {
+	// Reset file pointer to beginning
+	_, err := file.Seek(0, io.SeekStart)
+	if err != nil {
+		return nil, fmt.Errorf("failed to seek file: %w", err)
+	}
+
+	// Determine archive type from extension
+	if strings.HasSuffix(filename, ".zip") {
+		return w.extractMetadataFromZip(file)
+	} else if strings.HasSuffix(filename, ".tar.gz") || strings.HasSuffix(filename, ".tgz") {
+		return w.extractMetadataFromTarGz(file)
+	}
+
+	return nil, fmt.Errorf("unsupported archive format: %s", filename)
+}
+
+// extractMetadataFromZip extracts metadata from a ZIP archive.
+func (w *WebUI) extractMetadataFromZip(file io.ReadSeeker) (*UploadMetadata, error) {
+	// Get file size for zip.NewReader
+	size, err := file.Seek(0, io.SeekEnd)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get file size: %w", err)
+	}
+
+	_, err = file.Seek(0, io.SeekStart)
+	if err != nil {
+		return nil, fmt.Errorf("failed to seek file: %w", err)
+	}
+
+	zipReader, err := zip.NewReader(file.(io.ReaderAt), size)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open zip: %w", err)
+	}
+
+	// Look for manifest.json
+	for _, f := range zipReader.File {
+		if f.Name == "manifest.json" || strings.HasSuffix(f.Name, "/manifest.json") {
+			rc, openErr := f.Open()
+			if openErr != nil {
+				return nil, fmt.Errorf("failed to open metadata file: %w", openErr)
+			}
+			defer rc.Close()
+
+			var metadata UploadMetadata
+
+			decodeErr := json.NewDecoder(rc).Decode(&metadata)
+			if decodeErr != nil {
+				return nil, fmt.Errorf("failed to decode metadata: %w", decodeErr)
+			}
+
+			return &metadata, nil
+		}
+	}
+
+	return nil, errors.New("metadata file not found in archive")
+}
+
+// extractMetadataFromTarGz extracts metadata from a tar.gz archive.
+func (w *WebUI) extractMetadataFromTarGz(file io.ReadSeeker) (*UploadMetadata, error) {
+	gzipReader, err := gzip.NewReader(file)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open gzip: %w", err)
+	}
+	defer gzipReader.Close()
+
+	tarReader := tar.NewReader(gzipReader)
+
+	// Iterate through tar entries
+	for {
+		header, tarErr := tarReader.Next()
+		if tarErr == io.EOF {
+			break
+		}
+
+		if tarErr != nil {
+			return nil, fmt.Errorf("failed to read tar: %w", tarErr)
+		}
+
+		if header.Name == "manifest.json" || strings.HasSuffix(header.Name, "/manifest.json") {
+			var metadata UploadMetadata
+
+			decodeErr := json.NewDecoder(tarReader).Decode(&metadata)
+			if decodeErr != nil {
+				return nil, fmt.Errorf("failed to decode metadata: %w", decodeErr)
+			}
+
+			return &metadata, nil
+		}
+	}
+
+	return nil, errors.New("metadata file not found in archive")
+}
+
+// handleUpdatesUpload handles custom update file uploads.
+func (w *WebUI) handleUpdatesUpload(response http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodPost {
+		response.WriteHeader(http.StatusMethodNotAllowed)
+		_ = json.NewEncoder(response).Encode(map[string]string{"error": "Method not allowed"}) //nolint:errchkjson // simple encoding
+
+		return
+	}
+
+	if w.updater == nil {
+		response.WriteHeader(http.StatusServiceUnavailable)
+		_ = json.NewEncoder(response).Encode(map[string]string{"error": "Updater not available"}) //nolint:errchkjson // simple encoding
+
+		return
+	}
+
+	// Parse multipart form with max 500MB upload size
+	err := request.ParseMultipartForm(500 << 20)
+	if err != nil {
+		w.log.Error().Err(err).Msg("failed to parse multipart form")
+		response.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(response).Encode(map[string]string{"error": "Failed to parse upload"}) //nolint:errchkjson // simple encoding
+
+		return
+	}
+
+	file, header, err := request.FormFile("file")
+	if err != nil {
+		w.log.Error().Err(err).Msg("failed to get uploaded file")
+		response.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(response).Encode(map[string]string{"error": "No file uploaded"}) //nolint:errchkjson // simple encoding
+
+		return
+	}
+	defer file.Close()
+
+	w.log.Info().
+		Str("filename", header.Filename).
+		Int64("size", header.Size).
+		Msg("Receiving custom update upload")
+
+	// Try to extract metadata from the archive
+	var metadata *UploadMetadata
+
+	if seeker, ok := file.(io.ReadSeeker); ok {
+		var metaErr error
+
+		metadata, metaErr = w.extractMetadataFromArchive(seeker, header.Filename)
+		if metaErr != nil {
+			w.log.Warn().Err(metaErr).Msg("failed to extract metadata from archive, using defaults")
+		} else {
+			w.log.Info().
+				Str("version", metadata.Version).
+				Str("platform", metadata.Platform).
+				Msg("Extracted metadata from archive")
+		}
+		// Reset file pointer after reading metadata
+		_, _ = seeker.Seek(0, io.SeekStart)
+	}
+
+	// Get download directory from updater
+	downloadDir := filepath.Join(w.config.GetAppBaseDir(), "data", "update", "downloads")
+
+	err = os.MkdirAll(downloadDir, 0o755)
+	if err != nil {
+		w.log.Error().Err(err).Msg("failed to create download directory")
+		response.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(response).Encode(map[string]string{"error": "Failed to create download directory"}) //nolint:errchkjson // simple encoding
+
+		return
+	}
+
+	// Clean up old custom uploads before saving the new one
+	w.log.Debug().Msg("Cleaning up old uploads before saving new custom upload")
+	_ = w.updater.Downloader().CleanupDownloads()
+
+	// Prefix filename with "custom-" to identify custom uploads
+	prefixedFilename := "custom-" + header.Filename
+	destPath := filepath.Join(downloadDir, prefixedFilename)
+
+	destFile, err := os.Create(destPath)
+	if err != nil {
+		w.log.Error().Err(err).Msg("failed to create destination file")
+		response.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(response).Encode(map[string]string{"error": "Failed to save upload"}) //nolint:errchkjson // simple encoding
+
+		return
+	}
+	defer destFile.Close()
+
+	_, err = io.Copy(destFile, file)
+	if err != nil {
+		w.log.Error().Err(err).Msg("failed to write uploaded file")
+		response.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(response).Encode(map[string]string{"error": "Failed to write file"}) //nolint:errchkjson // simple encoding
+
+		return
+	}
+
+	// Set executable permissions
+	err = os.Chmod(destPath, 0o755)
+	if err != nil {
+		w.log.Warn().Err(err).Msg("failed to set executable permissions")
+	}
+
+	// Set updater status to ready to install
+	w.updater.Checker().SetStatus(updater.StatusReadyToInstall)
+
+	// Create UpdateInfo using metadata if available, otherwise use defaults
+	var (
+		version, changelog string
+		releaseDate        time.Time
+	)
+
+	if metadata != nil {
+		version = metadata.Version
+		changelog = metadata.Changelog
+		releaseDate = metadata.ReleaseDate
+	} else {
+		// Fallback to synthetic info if no metadata
+		version = "custom-" + filepath.Base(header.Filename)
+		changelog = "Custom uploaded file: " + header.Filename
+		releaseDate = time.Now()
+	}
+
+	w.updater.Checker().SetAvailableUpdate(&updater.UpdateInfo{
+		CurrentVersion:   w.buildVersion,
+		AvailableVersion: version,
+		Channel:          "custom",
+		Changelog:        changelog,
+		DownloadURL:      "",
+		DownloadSize:     header.Size,
+		SHA256:           "",
+		ReleaseDate:      releaseDate,
+	})
+
+	w.log.Info().
+		Str("filename", prefixedFilename).
+		Str("version", version).
+		Str("path", destPath).
+		Msg("Custom update uploaded and ready to install")
+
+	response.Header().Set("Content-Type", "application/json")
+
+	err = json.NewEncoder(response).Encode(map[string]any{
+		"success":  true,
+		"filename": prefixedFilename,
+		"size":     header.Size,
+		"version":  version,
+		"message":  "Update uploaded and ready to install",
+	})
+	if err != nil {
+		w.log.Error().Err(err).Msg("failed to encode upload response")
+		http.Error(response, "error encoding upload response", http.StatusInternalServerError)
+
+		return
+	}
 }
 
 // handleUpdatesInstall triggers installation of a downloaded update (restarts the service).

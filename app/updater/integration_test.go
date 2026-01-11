@@ -73,7 +73,7 @@ func TestFullUpdateFlowFromCheckToInstall(t *testing.T) {
 	// Create updater config
 	cfg := &Config{
 		Enabled:         true,
-		ManifestURL:     server.URL + "/releases/stable/latest.json",
+		BaseURL:         server.URL + "/releases",
 		Channel:         "stable",
 		CheckInterval:   1 * time.Hour,
 		HTTPTimeout:     30 * time.Second,
@@ -233,7 +233,7 @@ func TestDownloadAndPrepareStagesUpdate(t *testing.T) {
 
 	cfg := &Config{
 		Enabled:         true,
-		ManifestURL:     server.URL + "/manifest.json",
+		BaseURL:         server.URL,
 		Channel:         "stable",
 		CheckInterval:   1 * time.Hour,
 		HTTPTimeout:     30 * time.Second,
@@ -311,7 +311,7 @@ func TestRollbackRestoresWorkingVersionAfterFailure(t *testing.T) {
 
 	cfg := &Config{
 		Enabled:         true,
-		ManifestURL:     "https://example.com/manifest.json",
+		BaseURL:         "https://example.com/manifest.json",
 		Channel:         "stable",
 		CheckInterval:   1 * time.Hour,
 		HTTPTimeout:     30 * time.Second,
@@ -533,7 +533,7 @@ func TestCheckNowReturnsNilWhenNoUpdateAvailable(t *testing.T) {
 
 	cfg := &Config{
 		Enabled:         true,
-		ManifestURL:     server.URL + "/manifest.json",
+		BaseURL:         server.URL,
 		Channel:         "stable",
 		CheckInterval:   1 * time.Hour,
 		HTTPTimeout:     30 * time.Second,

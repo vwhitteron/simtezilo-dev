@@ -14,8 +14,8 @@ func defaultConfig() *viperConfig {
 			VehicleDBFile: "",
 			WebUIEnabled:  true,
 			WebUIPort:     80,
-			Update: &updates{
-				ManifestURL:          "https://simtezilo.com/releases/stable/latest.json",
+			Update: &update{
+				BaseURL:              "https://simtezilo.com/releases",
 				Channel:              "stable",
 				AutoCheck:            false,
 				AutoInstall:          false,

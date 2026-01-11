@@ -7,8 +7,6 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
-
-	"github.com/rs/zerolog"
 )
 
 func TestParseManifest(t *testing.T) {
@@ -91,11 +89,10 @@ func TestFetchManifest(t *testing.T) {
 	}))
 	defer server.Close()
 
-	log := zerolog.Nop()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
-	ctx := context.Background()
-
-	fetched, err := FetchManifest(ctx, server.URL, 10*time.Second, log)
+	fetched, err := FetchManifest(ctx, server.URL)
 	if err != nil {
 		t.Fatalf("FetchManifest() error = %v", err)
 	}
@@ -117,11 +114,10 @@ func TestFetchManifest_ServerError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	log := zerolog.Nop()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
-	ctx := context.Background()
-
-	_, err := FetchManifest(ctx, server.URL, 10*time.Second, log)
+	_, err := FetchManifest(ctx, server.URL)
 	if err == nil {
 		t.Error("Expected error for server error response")
 	}
@@ -138,11 +134,10 @@ func TestFetchManifest_InvalidJSON(t *testing.T) {
 	}))
 	defer server.Close()
 
-	log := zerolog.Nop()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
-	ctx := context.Background()
-
-	_, err := FetchManifest(ctx, server.URL, 10*time.Second, log)
+	_, err := FetchManifest(ctx, server.URL)
 	if err == nil {
 		t.Error("Expected error for invalid JSON")
 	}

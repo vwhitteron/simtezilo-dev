@@ -1,9 +1,17 @@
 package updater
 
 import (
+	"archive/tar"
+	"archive/zip"
+	"compress/gzip"
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
-	"regexp"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -52,10 +60,11 @@ type UpdateInfo struct {
 type Checker struct {
 	log zerolog.Logger
 
-	manifestBaseURL string // Base URL without channel-specific path
-	checkInterval   time.Duration
-	httpTimeout     time.Duration
-	channel         string
+	baseURL       string // Base URL without channel-specific path
+	checkInterval time.Duration
+	httpTimeout   time.Duration
+	channel       string
+	dataDir       string
 
 	currentVersion *Version
 
@@ -75,11 +84,12 @@ type Checker struct {
 
 // CheckerConfig holds configuration for the update checker.
 type CheckerConfig struct {
-	ManifestURL    string
+	BaseURL        string
 	CheckInterval  time.Duration
 	HTTPTimeout    time.Duration
 	Channel        string
 	CurrentVersion string
+	DataDir        string
 }
 
 // NewChecker creates a new update checker.
@@ -90,31 +100,15 @@ func NewChecker(cfg CheckerConfig, log zerolog.Logger) (*Checker, error) {
 		currentVer = &Version{Major: 0, Minor: 0, Patch: 0, Raw: cfg.CurrentVersion}
 	}
 
-	// Extract base URL (remove channel-specific path if present)
-	baseURL := cfg.ManifestURL
-	// Remove trailing /stable/latest.json, /beta/latest.json, etc. to get base
-	// Also handle generic /manifest.json or /latest.json patterns
-	channelPattern := regexp.MustCompile(`/(stable|beta|dev)/latest\.json$`)
-	genericPattern := regexp.MustCompile(`/(manifest|latest)\.json$`)
-
-	if idx := channelPattern.FindStringIndex(baseURL); idx != nil {
-		baseURL = baseURL[:idx[0]]
-	} else if idx := genericPattern.FindStringIndex(baseURL); idx != nil {
-		baseURL = baseURL[:idx[0]]
-	}
-	// If baseURL is empty or invalid, keep the original
-	if baseURL == "" {
-		baseURL = cfg.ManifestURL
-	}
-
 	return &Checker{
-		log:             log.With().Str("component", "updater").Logger(),
-		manifestBaseURL: baseURL,
-		checkInterval:   cfg.CheckInterval,
-		httpTimeout:     cfg.HTTPTimeout,
-		channel:         cfg.Channel,
-		currentVersion:  currentVer,
-		status:          StatusIdle,
+		log:            log.With().Str("component", "updater").Logger(),
+		baseURL:        cfg.BaseURL,
+		checkInterval:  cfg.CheckInterval,
+		httpTimeout:    cfg.HTTPTimeout,
+		channel:        cfg.Channel,
+		dataDir:        cfg.DataDir,
+		currentVersion: currentVer,
+		status:         StatusIdle,
 	}, nil
 }
 
@@ -142,11 +136,18 @@ func (c *Checker) Stop() {
 func (c *Checker) CheckNow() (*UpdateInfo, error) {
 	c.mu.Lock()
 	c.status = StatusChecking
+	baseURL := c.baseURL
 	channel := c.channel
+	dataDir := c.dataDir
 	c.mu.Unlock()
 
+	// For custom channel, check for local files instead of fetching from URL
+	if channel == "custom" {
+		return c.checkCustomUpdate(dataDir)
+	}
+
 	// Build manifest URL based on current channel
-	manifestURL := fmt.Sprintf("%s/%s/latest.json", c.manifestBaseURL, channel)
+	manifestURL := fmt.Sprintf("%s/%s/latest.json", baseURL, channel)
 
 	ctx, cancel := context.WithTimeout(context.Background(), c.httpTimeout)
 	defer cancel()
@@ -156,7 +157,7 @@ func (c *Checker) CheckNow() (*UpdateInfo, error) {
 		Dur("timeout", c.httpTimeout).
 		Msg("Fetching update manifest")
 
-	manifest, err := FetchManifest(ctx, manifestURL, c.httpTimeout, c.log)
+	manifest, err := FetchManifest(ctx, manifestURL)
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -166,6 +167,7 @@ func (c *Checker) CheckNow() (*UpdateInfo, error) {
 	if err != nil {
 		c.status = StatusError
 		c.lastError = err
+		c.availableInfo = nil // Clear any previous update info on error
 		c.log.Warn().Err(err).Msg("Failed to check for updates")
 
 		return nil, err
@@ -220,7 +222,10 @@ func (c *Checker) CheckNow() (*UpdateInfo, error) {
 			Str("available", availableVer.String()).
 			Msg("Already running latest version")
 		c.status = StatusIdle
-		c.availableInfo = nil
+		// Only clear availableInfo if it's not a custom update
+		if c.availableInfo == nil || c.availableInfo.Channel != "custom" {
+			c.availableInfo = nil
+		}
 
 		return nil, nil
 	}
@@ -247,7 +252,11 @@ func (c *Checker) CheckNow() (*UpdateInfo, error) {
 		SHA256:           platform.SHA256,
 		ReleaseDate:      manifest.ReleaseDate,
 	}
-	c.status = StatusUpdateAvailable
+	// Only change status to UpdateAvailable if not already in a more advanced state
+	if c.status != StatusReadyToInstall && c.status != StatusDownloading && c.status != StatusInstalling {
+		c.status = StatusUpdateAvailable
+	}
+
 	c.lastError = nil
 
 	c.log.Info().
@@ -273,6 +282,14 @@ func (c *Checker) SetStatus(status UpdateStatus) {
 	defer c.mu.Unlock()
 
 	c.status = status
+}
+
+// SetAvailableUpdate sets the available update information (for custom uploads).
+func (c *Checker) SetAvailableUpdate(info *UpdateInfo) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.availableInfo = info
 }
 
 // LastCheck returns the time of the last update check.
@@ -339,4 +356,190 @@ func (c *Checker) runPeriodicCheck(ctx context.Context) {
 			return
 		}
 	}
+}
+
+// checkCustomUpdate checks for custom update files in the data directory.
+func (c *Checker) checkCustomUpdate(dataDir string) (*UpdateInfo, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.lastCheck = time.Now()
+
+	if dataDir == "" {
+		c.status = StatusIdle
+		c.lastError = errors.New("data directory not configured")
+
+		return nil, c.lastError
+	}
+
+	downloadsDir := filepath.Join(dataDir, "downloads")
+
+	// Look for files starting with "custom-"
+	files, err := os.ReadDir(downloadsDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			c.log.Debug().Msg("Downloads directory does not exist, no custom update found")
+			c.status = StatusIdle
+			// Don't clear availableInfo for custom channel - it may have been set via upload
+			return nil, nil
+		}
+
+		c.status = StatusError
+		c.lastError = err
+
+		return nil, err
+	}
+
+	var customFile string
+
+	for _, file := range files {
+		if file.IsDir() {
+			continue
+		}
+
+		if strings.HasPrefix(file.Name(), "custom-") {
+			customFile = filepath.Join(downloadsDir, file.Name())
+
+			break
+		}
+	}
+
+	if customFile == "" {
+		c.log.Debug().Msg("No custom update file found")
+		c.status = StatusIdle
+		// Don't clear availableInfo for custom channel - it may have been set via upload
+		return nil, nil
+	}
+
+	c.log.Debug().Str("file", customFile).Msg("Found custom update file")
+
+	// Extract and parse manifest.json
+	manifest, err := c.extractManifest(customFile)
+	if err != nil {
+		c.status = StatusError
+		c.lastError = fmt.Errorf("failed to extract manifest: %w", err)
+		c.log.Warn().Err(err).Str("file", customFile).Msg("Failed to extract manifest from custom update")
+
+		return nil, c.lastError
+	}
+
+	// Get file size
+	fileInfo, err := os.Stat(customFile)
+	if err != nil {
+		c.log.Warn().Err(err).Msg("Failed to get custom file size")
+	}
+
+	// Create UpdateInfo from manifest
+	c.availableInfo = &UpdateInfo{
+		CurrentVersion:   c.currentVersion.String(),
+		AvailableVersion: manifest.Version,
+		Channel:          "custom",
+		Changelog:        manifest.Changelog,
+		DownloadURL:      "",
+		DownloadSize:     fileInfo.Size(),
+		SHA256:           "",
+		ReleaseDate:      manifest.ReleaseDate,
+	}
+
+	c.status = StatusReadyToInstall
+	c.lastError = nil
+
+	c.log.Info().
+		Str("version", manifest.Version).
+		Str("file", customFile).
+		Msg("Custom update detected")
+
+	return c.availableInfo, nil
+}
+
+// extractManifest extracts manifest.json from a zip or tar.gz archive.
+func (c *Checker) extractManifest(archivePath string) (*Manifest, error) {
+	ext := filepath.Ext(archivePath)
+
+	if ext == ".zip" {
+		return c.extractManifestFromZip(archivePath)
+	}
+
+	if ext == ".gz" || strings.HasSuffix(archivePath, ".tar.gz") {
+		return c.extractManifestFromTarGz(archivePath)
+	}
+
+	return nil, fmt.Errorf("unsupported archive format: %s", ext)
+}
+
+// extractManifestFromZip extracts manifest.json from a zip archive.
+func (c *Checker) extractManifestFromZip(zipPath string) (*Manifest, error) {
+	r, err := zip.OpenReader(zipPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open zip: %w", err)
+	}
+	defer r.Close()
+
+	for _, f := range r.File {
+		if filepath.Base(f.Name) == "manifest.json" {
+			rc, err := f.Open()
+			if err != nil {
+				return nil, fmt.Errorf("failed to open manifest.json: %w", err)
+			}
+			defer rc.Close()
+
+			data, err := io.ReadAll(rc)
+			if err != nil {
+				return nil, fmt.Errorf("failed to read manifest.json: %w", err)
+			}
+
+			var manifest Manifest
+			if err := json.Unmarshal(data, &manifest); err != nil {
+				return nil, fmt.Errorf("failed to parse manifest.json: %w", err)
+			}
+
+			return &manifest, nil
+		}
+	}
+
+	return nil, errors.New("manifest.json not found in archive")
+}
+
+// extractManifestFromTarGz extracts manifest.json from a tar.gz archive.
+func (c *Checker) extractManifestFromTarGz(tarGzPath string) (*Manifest, error) {
+	f, err := os.Open(tarGzPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open tar.gz: %w", err)
+	}
+	defer f.Close()
+
+	gzr, err := gzip.NewReader(f)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create gzip reader: %w", err)
+	}
+	defer gzr.Close()
+
+	tr := tar.NewReader(gzr)
+
+	for {
+		header, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+
+		if err != nil {
+			return nil, fmt.Errorf("failed to read tar header: %w", err)
+		}
+
+		if filepath.Base(header.Name) == "manifest.json" {
+			data, err := io.ReadAll(tr)
+			if err != nil {
+				return nil, fmt.Errorf("failed to read manifest.json: %w", err)
+			}
+
+			var manifest Manifest
+			if err := json.Unmarshal(data, &manifest); err != nil {
+				return nil, fmt.Errorf("failed to parse manifest.json: %w", err)
+			}
+
+			return &manifest, nil
+		}
+	}
+
+	return nil, errors.New("manifest.json not found in archive")
 }

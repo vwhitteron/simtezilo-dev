@@ -4,14 +4,11 @@ package updater
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"runtime"
 	"time"
-
-	"github.com/rs/zerolog"
 )
 
 // Manifest represents the release manifest JSON structure hosted on the update server.
@@ -47,90 +44,8 @@ func (m *Manifest) GetPlatform() *Platform {
 	return nil
 }
 
-func FetchManifest(_ context.Context, manifestURL string, _ time.Duration, _ zerolog.Logger) (*Manifest, error) {
-	switch manifestURL {
-	case "https://simtezilo.com/releases/stable/latest.json":
-		return &Manifest{
-			Version:     "1.2.3",
-			ReleaseDate: time.Now().Add(-time.Duration(time.Now().UnixNano()%86400) * time.Second),
-			Changelog:   "Bug fixes and improvements",
-			Channel:     "stable",
-			Platforms: map[string]Platform{
-				"darwin-arm64": {
-					URL:    "https://example.com/simtezilo-1.2.3-darwin-arm64.tar.gz",
-					SHA256: "fake_sha256_hash_for_darwin_arm64",
-					Size:   12345677,
-				},
-				"linux-arm64": {
-					URL:    "https://example.com/simtezilo-1.2.3-linux-arm64.tar.gz",
-					SHA256: "fake_sha256_hash_for_linux_arm64",
-					Size:   12345678,
-				},
-				"windows-amd64": {
-					URL:    "https://example.com/simtezilo-1.2.3-windows-amd64.zip",
-					SHA256: "fake_sha256_hash_for_windows_amd64",
-					Size:   12345679,
-				},
-			},
-		}, nil
-	case "https://simtezilo.com/releases/beta/latest.json":
-		return &Manifest{
-			Version:     "1.3.0-beta1",
-			ReleaseDate: time.Now().Add(-time.Duration(time.Now().UnixNano()%86400) * time.Second),
-			Changelog:   "Beta features and improvements",
-			Channel:     "beta",
-			Platforms: map[string]Platform{
-				"darwin-arm64": {
-					URL:    "https://example.com/simtezilo-1.3.0-beta1-darwin-arm64.tar.gz",
-					SHA256: "fake_sha256_hash_for_darwin_arm64_beta",
-					Size:   22345677,
-				},
-				"linux-arm64": {
-					URL:    "https://example.com/simtezilo-1.3.0-beta1-linux-arm64.tar.gz",
-					SHA256: "fake_sha256_hash_for_linux_arm64_beta",
-					Size:   22345678,
-				},
-				"windows-amd64": {
-					URL:    "https://example.com/simtezilo-1.3.0-beta1-windows-amd64.zip",
-					SHA256: "fake_sha256_hash_for_windows_amd64_beta",
-					Size:   22345679,
-				},
-			},
-		}, nil
-	case "https://simtezilo.com/releases/dev/latest.json":
-		return &Manifest{
-			Version:     "1.4.0-dev1",
-			ReleaseDate: time.Now().Add(-time.Duration(time.Now().UnixNano()%86400) * time.Second),
-			Changelog:   "Development features and improvements",
-			Channel:     "dev",
-			Platforms: map[string]Platform{
-				"darwin-arm64": {
-					URL:    "https://example.com/simtezilo-1.4.0-dev1-darwin-arm64.tar.gz",
-					SHA256: "fake_sha256_hash_for_darwin_arm64_dev",
-					Size:   32345677,
-				},
-				"linux-arm64": {
-					URL:    "https://example.com/simtezilo-1.4.0-dev1-linux-arm64.tar.gz",
-					SHA256: "fake_sha256_hash_for_linux_arm64_dev",
-					Size:   32345678,
-				},
-				"windows-amd64": {
-					URL:    "https://example.com/simtezilo-1.4.0-dev1-windows-amd64.zip",
-					SHA256: "fake_sha256_hash_for_windows_amd64_dev",
-					Size:   32345679,
-				},
-			},
-		}, nil
-	default:
-		return nil, errors.New("invalid manifest URL")
-	}
-}
-
 // FetchManifest retrieves and parses the release manifest from the given URL.
-func FetchManifestx(ctx context.Context, manifestURL string, timeout time.Duration) (*Manifest, error) {
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
+func FetchManifest(ctx context.Context, manifestURL string) (*Manifest, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, manifestURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)

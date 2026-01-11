@@ -800,21 +800,23 @@ func (a *App) initializeComponents(opts Options) error {
 
 	// Initialize updater (always available for manual checks)
 	// Auto-check setting controls whether periodic checks are scheduled
-	manifestURL := a.config.GetAppUpdateManifestURL()
-	if manifestURL != "" {
+	updateBaseURL := a.config.GetAppUpdateBaseURL()
+	if updateBaseURL != "" {
 		baseDir := a.config.GetAppBaseDir()
 
 		a.updater, err = updater.New(&updater.Config{
-			Enabled:       a.config.GetAppUpdateAutoCheck(),
-			ManifestURL:   manifestURL,
-			Channel:       a.config.GetAppUpdateChannel(),
-			CheckInterval: time.Duration(a.config.GetAppUpdateCheckIntervalMinutes()) * time.Minute,
-			AutoInstall:   a.config.GetAppUpdateAutoInstall(),
-			InstallDir:    filepath.Join(baseDir, "bin"),
-			DataDir:       filepath.Join(baseDir, "data", "update"),
-			BinaryName:    "simtezilo",
-			ServiceName:   "simtezilo",
-			UseSystemd:    true,
+			Enabled:         a.config.GetAppUpdateAutoCheck(),
+			BaseURL:         updateBaseURL,
+			Channel:         a.config.GetAppUpdateChannel(),
+			CheckInterval:   time.Duration(a.config.GetAppUpdateCheckIntervalMinutes()) * time.Minute,
+			HTTPTimeout:     updater.DefaultHTTPTimeout,
+			DownloadTimeout: updater.DefaultDownloadTimeout,
+			AutoInstall:     a.config.GetAppUpdateAutoInstall(),
+			InstallDir:      filepath.Join(baseDir, "bin"),
+			DataDir:         filepath.Join(baseDir, "data", "update"),
+			BinaryName:      "simtezilo",
+			ServiceName:     "simtezilo",
+			UseSystemd:      true,
 		}, Version, a.log)
 		if err != nil {
 			a.log.Warn().
@@ -823,6 +825,9 @@ func (a *App) initializeComponents(opts Options) error {
 				Str("result", "failure").
 				Msg("init (continuing without updates)")
 		} else {
+			// Check for existing downloads immediately (works even if auto-check is disabled)
+			a.updater.CheckExistingDownloads()
+
 			a.log.Debug().
 				Str("component", "updater").
 				Str("result", "success").

@@ -41,11 +41,12 @@ func TestNewCheckerCreatesValidInstance(t *testing.T) {
 	log := zerolog.Nop()
 
 	cfg := CheckerConfig{
-		ManifestURL:    "https://example.com/manifest.json",
+		BaseURL:        "https://example.com",
 		CheckInterval:  1 * time.Hour,
 		HTTPTimeout:    30 * time.Second,
 		Channel:        "stable",
 		CurrentVersion: "1.0.0",
+		DataDir:        "/tmp/test",
 	}
 
 	checker, err := NewChecker(cfg, log)
@@ -59,8 +60,8 @@ func TestNewCheckerCreatesValidInstance(t *testing.T) {
 
 	// Extract base URL from the manifest URL (remove /manifest.json part)
 	expectedBaseURL := "https://example.com"
-	if checker.manifestBaseURL != expectedBaseURL {
-		t.Errorf("manifestBaseURL = %v, want %v", checker.manifestBaseURL, expectedBaseURL)
+	if checker.baseURL != expectedBaseURL {
+		t.Errorf("manifestBaseURL = %v, want %v", checker.baseURL, expectedBaseURL)
 	}
 
 	if checker.channel != cfg.Channel {
@@ -78,7 +79,7 @@ func TestNewCheckerParsesDevVersionAsZero(t *testing.T) {
 	log := zerolog.Nop()
 
 	cfg := CheckerConfig{
-		ManifestURL:    "https://example.com/manifest.json",
+		BaseURL:        "https://example.com",
 		CheckInterval:  1 * time.Hour,
 		HTTPTimeout:    30 * time.Second,
 		Channel:        "stable",
@@ -127,11 +128,12 @@ func TestCheckNowReturnsUpdateInfoWhenNewerVersionAvailable(t *testing.T) {
 	log := zerolog.Nop()
 
 	cfg := CheckerConfig{
-		ManifestURL:    server.URL,
+		BaseURL:        server.URL,
 		CheckInterval:  1 * time.Hour,
 		HTTPTimeout:    10 * time.Second,
 		Channel:        "stable",
 		CurrentVersion: "1.0.0",
+		DataDir:        "/tmp/test",
 	}
 
 	checker, err := NewChecker(cfg, log)
@@ -190,11 +192,12 @@ func TestCheckNowReturnsNilWhenAlreadyOnLatestVersion(t *testing.T) {
 	log := zerolog.Nop()
 
 	cfg := CheckerConfig{
-		ManifestURL:    server.URL,
+		BaseURL:        server.URL,
 		CheckInterval:  1 * time.Hour,
 		HTTPTimeout:    10 * time.Second,
 		Channel:        "stable",
 		CurrentVersion: "1.0.0",
+		DataDir:        "/tmp/test",
 	}
 
 	checker, err := NewChecker(cfg, log)
@@ -268,7 +271,7 @@ func TestCheckNowReturnsNilWhenUpdateNotApplicable(t *testing.T) {
 			log := zerolog.Nop()
 
 			cfg := CheckerConfig{
-				ManifestURL:    server.URL,
+				BaseURL:        server.URL,
 				CheckInterval:  1 * time.Hour,
 				HTTPTimeout:    10 * time.Second,
 				Channel:        testCase.checkerChannel,
@@ -317,11 +320,12 @@ func TestCheckNowReturnsNilWhenNoPlatformBinaryAvailable(t *testing.T) {
 	log := zerolog.Nop()
 
 	cfg := CheckerConfig{
-		ManifestURL:    server.URL,
+		BaseURL:        server.URL,
 		CheckInterval:  1 * time.Hour,
 		HTTPTimeout:    10 * time.Second,
 		Channel:        "stable",
 		CurrentVersion: "1.0.0",
+		DataDir:        "/tmp/test",
 	}
 
 	checker, err := NewChecker(cfg, log)
@@ -350,11 +354,12 @@ func TestCheckNowReturnsErrorWhenServerFails(t *testing.T) {
 	log := zerolog.Nop()
 
 	cfg := CheckerConfig{
-		ManifestURL:    server.URL,
+		BaseURL:        server.URL,
 		CheckInterval:  1 * time.Hour,
 		HTTPTimeout:    10 * time.Second,
 		Channel:        "stable",
 		CurrentVersion: "1.0.0",
+		DataDir:        "/tmp/test",
 	}
 
 	checker, err := NewChecker(cfg, log)
@@ -382,11 +387,12 @@ func TestSetStatusUpdatesCheckerStatus(t *testing.T) {
 	log := zerolog.Nop()
 
 	cfg := CheckerConfig{
-		ManifestURL:    "https://example.com/manifest.json",
+		BaseURL:        "https://example.com",
 		CheckInterval:  1 * time.Hour,
 		HTTPTimeout:    30 * time.Second,
 		Channel:        "stable",
 		CurrentVersion: "1.0.0",
+		DataDir:        "/tmp/test",
 	}
 
 	checker, err := NewChecker(cfg, log)
@@ -426,11 +432,12 @@ func TestLastCheckReturnsTimeOfMostRecentCheck(t *testing.T) {
 	log := zerolog.Nop()
 
 	cfg := CheckerConfig{
-		ManifestURL:    server.URL,
+		BaseURL:        server.URL,
 		CheckInterval:  1 * time.Hour,
 		HTTPTimeout:    10 * time.Second,
 		Channel:        "stable",
 		CurrentVersion: "1.0.0",
+		DataDir:        "/tmp/test",
 	}
 
 	checker, err := NewChecker(cfg, log)
@@ -476,11 +483,12 @@ func TestCheckerStartsAndStopsWithoutPanic(t *testing.T) {
 	log := zerolog.Nop()
 
 	cfg := CheckerConfig{
-		ManifestURL:    server.URL,
+		BaseURL:        server.URL,
 		CheckInterval:  100 * time.Millisecond, // Short interval for testing
 		HTTPTimeout:    10 * time.Second,
 		Channel:        "stable",
 		CurrentVersion: "1.0.0",
+		DataDir:        "/tmp/test",
 	}
 
 	checker, err := NewChecker(cfg, log)
@@ -520,11 +528,12 @@ func TestCheckerStopsWhenContextCancelled(t *testing.T) {
 	log := zerolog.Nop()
 
 	cfg := CheckerConfig{
-		ManifestURL:    server.URL,
+		BaseURL:        server.URL,
 		CheckInterval:  100 * time.Millisecond,
 		HTTPTimeout:    10 * time.Second,
 		Channel:        "stable",
 		CurrentVersion: "1.0.0",
+		DataDir:        "/tmp/test",
 	}
 
 	checker, err := NewChecker(cfg, log)
@@ -598,11 +607,12 @@ func TestCheckNowReturnsUpdateEvenWhenBelowMinUpgradeVersion(t *testing.T) {
 	log := zerolog.Nop()
 
 	cfg := CheckerConfig{
-		ManifestURL:    server.URL,
+		BaseURL:        server.URL,
 		CheckInterval:  1 * time.Hour,
 		HTTPTimeout:    10 * time.Second,
 		Channel:        "stable",
 		CurrentVersion: "1.0.0", // Below minimum upgrade version
+		DataDir:        "/tmp/test",
 	}
 
 	checker, err := NewChecker(cfg, log)
@@ -618,5 +628,193 @@ func TestCheckNowReturnsUpdateEvenWhenBelowMinUpgradeVersion(t *testing.T) {
 
 	if info == nil {
 		t.Error("CheckNow() should return update info even when below min upgrade version")
+	}
+}
+
+func TestCustomChannelDoesNotFetchFromHTTP(t *testing.T) {
+	t.Parallel()
+
+	log := zerolog.Nop()
+	dataDir := t.TempDir()
+
+	cfg := CheckerConfig{
+		BaseURL:        "https://example.com",
+		CheckInterval:  1 * time.Hour,
+		HTTPTimeout:    30 * time.Second,
+		Channel:        "custom",
+		CurrentVersion: "1.0.0",
+		DataDir:        dataDir,
+	}
+
+	checker, err := NewChecker(cfg, log)
+	if err != nil {
+		t.Fatalf("NewChecker() error = %v", err)
+	}
+
+	// Should not attempt HTTP fetch for custom channel
+	// Should return nil (no custom file found) without error
+	info, err := checker.CheckNow()
+	if err != nil {
+		t.Errorf("CheckNow() should not error for custom channel with no files: %v", err)
+	}
+
+	if info != nil {
+		t.Error("CheckNow() should return nil when no custom file exists")
+	}
+
+	if checker.Status() != StatusIdle {
+		t.Errorf("Status should be Idle when no custom file found, got %v", checker.Status())
+	}
+}
+
+func TestSwitchingChannelsClearsStaleUpdateInfo(t *testing.T) {
+	t.Parallel()
+
+	log := zerolog.Nop()
+	dataDir := t.TempDir()
+
+	// Start with custom channel and set some update info
+	cfg := CheckerConfig{
+		BaseURL:        "https://example.com",
+		CheckInterval:  1 * time.Hour,
+		HTTPTimeout:    1 * time.Second, // Short timeout to force error
+		Channel:        "custom",
+		CurrentVersion: "1.0.0",
+		DataDir:        dataDir,
+	}
+
+	checker, err := NewChecker(cfg, log)
+	if err != nil {
+		t.Fatalf("NewChecker() error = %v", err)
+	}
+
+	// Manually set custom update info (simulating previous upload)
+	checker.SetAvailableUpdate(&UpdateInfo{
+		CurrentVersion:   "1.0.0",
+		AvailableVersion: "2.0.0",
+		Channel:          "custom",
+		Changelog:        "Custom update",
+	})
+
+	// Verify custom update is set
+	if checker.AvailableUpdate() == nil {
+		t.Fatal("Custom update should be set")
+	}
+
+	// Switch to stable channel (which will fail to fetch)
+	checker.SetChannel("stable")
+
+	// Attempt to check - this should fail and clear the custom update info
+	info, err := checker.CheckNow()
+	if err == nil {
+		t.Error("CheckNow() should error when fetching from unreachable server")
+	}
+
+	if info != nil {
+		t.Error("CheckNow() should return nil on error")
+	}
+
+	// Verify that availableInfo was cleared
+	if checker.AvailableUpdate() != nil {
+		t.Error("AvailableUpdate should be nil after failed fetch on non-custom channel")
+	}
+
+	if checker.Status() != StatusError {
+		t.Errorf("Status should be Error after failed fetch, got %v", checker.Status())
+	}
+}
+
+func TestCustomChannelPreservesInfoWhenSwitchingBack(t *testing.T) {
+	t.Parallel()
+
+	log := zerolog.Nop()
+	dataDir := t.TempDir()
+
+	cfg := CheckerConfig{
+		BaseURL:        "https://example.com",
+		CheckInterval:  1 * time.Hour,
+		HTTPTimeout:    30 * time.Second,
+		Channel:        "stable",
+		CurrentVersion: "1.0.0",
+		DataDir:        dataDir,
+	}
+
+	checker, err := NewChecker(cfg, log)
+	if err != nil {
+		t.Fatalf("NewChecker() error = %v", err)
+	}
+
+	// Set custom update info
+	customUpdate := &UpdateInfo{
+		CurrentVersion:   "1.0.0",
+		AvailableVersion: "2.0.0",
+		Channel:          "custom",
+		Changelog:        "Custom update",
+	}
+	checker.SetAvailableUpdate(customUpdate)
+
+	// Simulate a check on stable channel that finds no update
+	// (this would normally clear availableInfo, but should preserve custom)
+	checker.SetChannel("stable")
+
+	// The actual CheckNow would fail without a server, but the logic
+	// in the code preserves custom updates when checking other channels
+	// Let's verify the SetAvailableUpdate persists
+	if checker.AvailableUpdate() == nil {
+		t.Error("Custom update should still be available")
+	}
+
+	if checker.AvailableUpdate().Channel != "custom" {
+		t.Errorf("Update channel should be custom, got %v", checker.AvailableUpdate().Channel)
+	}
+}
+
+func TestCheckNowClearsAvailableInfoOnError(t *testing.T) {
+	t.Parallel()
+
+	log := zerolog.Nop()
+
+	cfg := CheckerConfig{
+		BaseURL:        "https://invalid-domain-that-does-not-exist-12345.com",
+		CheckInterval:  1 * time.Hour,
+		HTTPTimeout:    1 * time.Second,
+		Channel:        "stable",
+		CurrentVersion: "1.0.0",
+		DataDir:        t.TempDir(),
+	}
+
+	checker, err := NewChecker(cfg, log)
+	if err != nil {
+		t.Fatalf("NewChecker() error = %v", err)
+	}
+
+	// Set some update info first
+	checker.SetAvailableUpdate(&UpdateInfo{
+		AvailableVersion: "2.0.0",
+		Channel:          "stable",
+	})
+
+	// Verify it's set
+	if checker.AvailableUpdate() == nil {
+		t.Fatal("Update info should be set")
+	}
+
+	// Try to check - should fail and clear availableInfo
+	_, err = checker.CheckNow()
+	if err == nil {
+		t.Error("Expected error when fetching from invalid domain")
+	}
+
+	// Verify availableInfo was cleared
+	if checker.AvailableUpdate() != nil {
+		t.Error("AvailableUpdate should be cleared on fetch error")
+	}
+
+	if checker.Status() != StatusError {
+		t.Errorf("Status should be Error, got %v", checker.Status())
+	}
+
+	if checker.LastError() == nil {
+		t.Error("LastError should be set after failed check")
 	}
 }

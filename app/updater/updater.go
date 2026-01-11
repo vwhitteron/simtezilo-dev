@@ -29,7 +29,7 @@ const (
 // Config holds the updater configuration.
 type Config struct {
 	Enabled         bool
-	ManifestURL     string
+	BaseURL         string
 	Channel         string
 	CheckInterval   time.Duration
 	HTTPTimeout     time.Duration
@@ -40,24 +40,6 @@ type Config struct {
 	BinaryName      string
 	ServiceName     string
 	UseSystemd      bool
-}
-
-// DefaultConfig returns a Config with sensible defaults.
-func DefaultConfig() *Config {
-	return &Config{
-		Enabled:         false,
-		ManifestURL:     "",
-		Channel:         DefaultChannel,
-		CheckInterval:   DefaultCheckInterval,
-		HTTPTimeout:     DefaultHTTPTimeout,
-		DownloadTimeout: DefaultDownloadTimeout,
-		AutoInstall:     false,
-		InstallDir:      "/opt/simtezilo/bin",
-		DataDir:         "/opt/simtezilo/data/update",
-		BinaryName:      "simtezilo",
-		ServiceName:     "simtezilo",
-		UseSystemd:      true,
-	}
 }
 
 // Updater is the main entry point for the update system.
@@ -75,21 +57,22 @@ type Updater struct {
 // New creates a new Updater instance.
 func New(cfg *Config, currentVersion string, log zerolog.Logger) (*Updater, error) {
 	if cfg == nil {
-		cfg = DefaultConfig()
+		return nil, errors.New("config is required")
 	}
 
-	if cfg.ManifestURL == "" {
+	if cfg.BaseURL == "" {
 		return nil, errors.New("manifest URL is required")
 	}
 
 	logger := log.With().Str("component", "updater").Logger()
 
 	checker, err := NewChecker(CheckerConfig{
-		ManifestURL:    cfg.ManifestURL,
+		BaseURL:        cfg.BaseURL,
 		CheckInterval:  cfg.CheckInterval,
 		HTTPTimeout:    cfg.HTTPTimeout,
 		Channel:        cfg.Channel,
 		CurrentVersion: currentVersion,
+		DataDir:        cfg.DataDir,
 	}, logger)
 	if err != nil {
 		return nil, err
@@ -134,8 +117,11 @@ func (u *Updater) Start(ctx context.Context) {
 		u.log.Warn().Err(err).Msg("Failed to confirm successful update")
 	}
 
+	// Check for existing downloads that might be ready to install
+	u.CheckExistingDownloads()
+
 	u.log.Info().
-		Str("manifestURL", u.cfg.ManifestURL).
+		Str("manifestURL", u.cfg.BaseURL).
 		Str("channel", u.cfg.Channel).
 		Dur("checkInterval", u.cfg.CheckInterval).
 		Msg("Starting update checker")
@@ -238,9 +224,68 @@ func (u *Updater) Checker() *Checker {
 	return u.checker
 }
 
+// Downloader returns the downloader for checking download status.
+func (u *Updater) Downloader() *Downloader {
+	return u.downloader
+}
+
 // SetChannel updates the channel for update checking.
 func (u *Updater) SetChannel(channel string) {
 	if u.checker != nil {
 		u.checker.SetChannel(channel)
 	}
+}
+
+// CheckExistingDownloads checks if there are any valid downloaded updates in the download directory.
+// If a valid newer version is found, it sets the status to ReadyToInstall.
+func (u *Updater) CheckExistingDownloads() {
+	// First, check for updates to get the latest version info
+	updateInfo, err := u.checker.CheckNow()
+	if err != nil {
+		u.log.Debug().Err(err).Msg("Could not check for updates during startup")
+
+		return
+	}
+
+	// If no update is available (already on latest or newer), nothing to check
+	if updateInfo == nil {
+		u.log.Debug().Msg("No updates available, skipping download check")
+
+		return
+	}
+
+	// Check if the download already exists
+	exists, downloadPath := u.downloader.DownloadExists(updateInfo)
+	if !exists {
+		u.log.Debug().Msg("No existing download found")
+
+		return
+	}
+
+	u.log.Info().
+		Str("path", downloadPath).
+		Str("version", updateInfo.AvailableVersion).
+		Msg("Found existing download")
+
+	// Verify the downloaded file matches the expected checksum
+	if updateInfo.SHA256 != "" {
+		valid, err := u.downloader.VerifyFile(downloadPath, updateInfo.SHA256)
+		if err != nil {
+			u.log.Warn().Err(err).Str("path", downloadPath).Msg("Could not verify existing download")
+
+			return
+		}
+
+		if !valid {
+			u.log.Warn().Str("path", downloadPath).Msg("Existing download checksum mismatch, ignoring")
+
+			return
+		}
+	}
+
+	// Set status to ready to install (this preserves the availableInfo from CheckNow)
+	u.checker.SetStatus(StatusReadyToInstall)
+	u.log.Info().
+		Str("version", updateInfo.AvailableVersion).
+		Msg("Existing download is valid and ready to install")
 }

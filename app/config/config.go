@@ -23,14 +23,14 @@ import (
 )
 
 type app struct {
-	Language      string   `toml:"language"`
-	Accent        string   `toml:"accent"`
-	LogLevel      string   `toml:"logLevel"`
-	BaseDir       string   `toml:"baseDir"`
-	Update        *updates `toml:"updates"`
-	VehicleDBFile string   `toml:"vehicleDBFile"`
-	WebUIEnabled  bool     `toml:"webUIEnabled"`
-	WebUIPort     int      `toml:"webUIPort"`
+	Language      string  `toml:"language"`
+	Accent        string  `toml:"accent"`
+	LogLevel      string  `toml:"logLevel"`
+	BaseDir       string  `toml:"baseDir"`
+	Update        *update `toml:"update"`
+	VehicleDBFile string  `toml:"vehicleDBFile"`
+	WebUIEnabled  bool    `toml:"webUIEnabled"`
+	WebUIPort     int     `toml:"webUIPort"`
 }
 
 type discord struct {
@@ -144,8 +144,8 @@ type tyreMonitoring struct {
 	TemperatureMarginCelsius   float32 `toml:"temperatureMarginCelsius"`
 }
 
-type updates struct {
-	ManifestURL          string `toml:"manifestURL"`
+type update struct {
+	BaseURL              string `toml:"baseURL"`
 	Channel              string `toml:"channel"`
 	AutoCheck            bool   `toml:"autoCheck"`
 	AutoInstall          bool   `toml:"autoInstall"`
@@ -681,12 +681,12 @@ func (c *Config) SetAppUpdateCheckIntervalMinutes(minutes int) {
 	c.registerUpdate(false)
 }
 
-// GetAppUpdateManifestURL returns the URL of the update manifest.
-func (c *Config) GetAppUpdateManifestURL() string {
+// GetAppUpdateBaseURL returns the URL of the update manifest.
+func (c *Config) GetAppUpdateBaseURL() string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	return c.viper.App.Update.ManifestURL
+	return c.viper.App.Update.BaseURL
 }
 
 // GetAppUpdateChannel returns the update channel (e.g., "stable", "beta").

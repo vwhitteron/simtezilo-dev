@@ -719,6 +719,7 @@
                                                     <option value="stable">Stable</option>
                                                     <option value="beta">Beta</option>
                                                     <option value="dev">Dev</option>
+                                                    <option value="custom">Custom</option>
                                                 </select>
                                             </div>
                                         </div>
@@ -731,16 +732,36 @@
                                         <span data-i18n="runmode.settings.system.updates.checkforupdates">Check
                                             now</span>
                                     </button>
+                                    <div class="w-100 d-none" id="upload-update-container">
+                                        <input type="file" id="upload-update-input" class="d-none"
+                                            accept=".zip,.tar.gz,.tgz,application/gzip,application/x-gzip,application/x-tar,application/zip">
+                                        <button type="button" class="btn btn-outline-primary btn-sm w-100"
+                                            id="upload-update-btn">
+                                            <i class="fa-solid fa-upload me-1"></i>
+                                            <span data-i18n="runmode.settings.system.updates.upload">Upload</span>
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
 
                             <!-- Up to Date Card (shown when no update available) -->
-                            <div class="card border-secondary mb-4 d-none" id="update-uptodate-card">
-                                <div class="card-header bg-secondary0-subtle">
-                                    <div class="d-flex align-items-cente">
+                            <div class="card border-success mb-4 d-none" id="update-uptodate-card">
+                                <div class="card-header bg-success-subtle">
+                                    <div class="d-flex align-items-center justify-content-center">
                                         <i class="fa-solid fa-circle-check me-2"></i>
                                         <span data-i18n="runmode.settings.system.updates.status.uptodate">Up to
                                             date</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Connection Error Card (shown when unable to reach update server) -->
+                            <div class="card border-warning mb-4 d-none" id="update-connection-error-card">
+                                <div class="card-header bg-warning-subtle">
+                                    <div class="d-flex align-items-center justify-content-center">
+                                        <i class="fa-solid fa-triangle-exclamation me-2"></i>
+                                        <span data-i18n="runmode.settings.system.updates.status.connectionerror">Unable
+                                            to connect to update server</span>
                                     </div>
                                 </div>
                             </div>
@@ -756,17 +777,23 @@
                                 </div>
                                 <div class="card-body bg-primary-subtle">
                                     <div class="row mb-3">
-                                        <div class="col-6">
+                                        <div class="col-4">
                                             <small class="text-muted"
                                                 data-i18n="runmode.settings.system.updates.newversion">New
                                                 Version</small>
                                             <div class="fw-bold" id="update-new-version">-</div>
                                         </div>
-                                        <div class="col-6">
+                                        <div class="col-4">
                                             <small class="text-muted"
                                                 data-i18n="runmode.settings.system.updates.releasedate">Release
                                                 Date</small>
                                             <div id="update-release-date">-</div>
+                                        </div>
+                                        <div class="col-4">
+                                            <small class="text-muted"
+                                                data-i18n="runmode.settings.system.updates.downloadsize">Download
+                                                Size</small>
+                                            <div id="update-download-size">-</div>
                                         </div>
                                     </div>
 
@@ -776,19 +803,12 @@
                                             data-i18n="runmode.settings.system.updates.whatsnew">What's
                                             New</small>
                                         <div class="card bg-dark mt-1">
-                                            <div class="card-body py-2" style="max-height: 200px; overflow-y: auto;">
+                                            <div class="card-body py-2"
+                                                style="max-height: 200px; overflow-y: auto; overscroll-behavior: contain;">
                                                 <div id="update-changelog" class="small" style="white-space: pre-wrap;">
                                                 </div>
                                             </div>
                                         </div>
-                                    </div>
-
-                                    <!-- Download Size -->
-                                    <div class="mb-3">
-                                        <small class="text-muted"
-                                            data-i18n="runmode.settings.system.updates.downloadsize">Download
-                                            Size</small>
-                                        <span id="update-download-size">-</span>
                                     </div>
 
                                     <!-- Progress Bar (hidden initially) -->
@@ -798,6 +818,12 @@
                                             id="update-progress-bar" role="progressbar" style="width: 0%">
                                             <span id="update-progress-text">0%</span>
                                         </div>
+                                    </div>
+
+                                    <!-- Error Message (hidden initially) -->
+                                    <div class="alert alert-danger mb-3 d-none" id="update-error-message" role="alert">
+                                        <i class="fa-solid fa-triangle-exclamation me-2"></i>
+                                        <span id="update-error-text"></span>
                                     </div>
 
                                     <!-- Action Buttons -->
@@ -836,13 +862,38 @@
                                     </div>
                                 </div>
                             </div>
+                        </div>
 
-                            <!-- Warning for restart -->
-                            <div class="alert alert-warning mt-3 mb-0 d-none" id="update-restart-warning">
-                                <i class="fa-solid fa-triangle-exclamation me-2"></i>
-                                <span data-i18n="runmode.settings.system.updates.restartwarning">
-                                    The application will restart to install the update.
-                                </span>
+                        <!-- Restart Confirmation Modal -->
+                        <div class="modal fade" id="update-restart-modal" tabindex="-1"
+                            aria-labelledby="updateRestartModalLabel" aria-hidden="true">
+                            <div class="modal-dialog modal-dialog-centered">
+                                <div class="modal-content">
+                                    <div class="modal-header bg-warning text-dark justify-content-center">
+                                        <h5 class="modal-title" id="updateRestartModalLabel">
+                                            <i class="fa-solid fa-triangle-exclamation me-2"></i>
+                                            <span data-i18n="runmode.settings.system.updates.restart.title">Restart
+                                                Required</span>
+                                        </h5>
+                                        <button type="button" class="btn-close position-absolute end-0 me-3"
+                                            data-bs-dismiss="modal" aria-label="Close"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        <p data-i18n="runmode.settings.system.updates.restart.message">
+                                            The application will restart to install the update. Do you want to continue?
+                                        </p>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                                            <span
+                                                data-i18n="runmode.settings.system.updates.restart.cancel">Cancel</span>
+                                        </button>
+                                        <button type="button" class="btn btn-warning" id="update-restart-confirm">
+                                            <i class="fa-solid fa-rotate me-1"></i>
+                                            <span data-i18n="runmode.settings.system.updates.restart.ok">Restart</span>
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
@@ -2422,6 +2473,9 @@
                 updateAvailable: false,
                 downloadProgress: 0,
                 downloadReady: false,
+                downloadInProgress: false,
+                checking: false,
+                connectionError: false,
                 rollbackAvailable: false,
                 rollbackVersion: '',
                 lastChecked: null,
@@ -2432,6 +2486,7 @@
                 currentVersion: document.getElementById('update-current-version'),
                 channel: document.getElementById('update-channel'),
                 uptodateCard: document.getElementById('update-uptodate-card'),
+                connectionErrorCard: document.getElementById('update-connection-error-card'),
                 availableCard: document.getElementById('update-available-card'),
                 newVersion: document.getElementById('update-new-version'),
                 releaseDate: document.getElementById('update-release-date'),
@@ -2440,13 +2495,17 @@
                 progressContainer: document.getElementById('update-progress-container'),
                 progressBar: document.getElementById('update-progress-bar'),
                 progressText: document.getElementById('update-progress-text'),
+                errorMessage: document.getElementById('update-error-message'),
+                errorText: document.getElementById('update-error-text'),
                 checkBtn: document.getElementById('check-updates-btn'),
+                uploadContainer: document.getElementById('upload-update-container'),
+                uploadBtn: document.getElementById('upload-update-btn'),
+                uploadInput: document.getElementById('upload-update-input'),
                 downloadBtn: document.getElementById('download-update-btn'),
                 installBtn: document.getElementById('install-update-btn'),
                 rollbackCard: document.getElementById('update-rollback-card'),
                 rollbackVersion: document.getElementById('rollback-version'),
-                rollbackBtn: document.getElementById('rollback-btn'),
-                restartWarning: document.getElementById('update-restart-warning')
+                rollbackBtn: document.getElementById('rollback-btn')
             },
 
             init() {
@@ -2454,10 +2513,31 @@
                 if (this.elements.channel) {
                     this.state.channel = this.elements.channel.value;
 
+                    // Set initial button visibility based on channel
+                    this.toggleUploadButton();
+
                     // Listen for changes from config system (e.g., WebSocket updates)
                     this.elements.channel.addEventListener('change', () => {
                         // Update our internal state when config system changes dropdown
+                        const previousChannel = this.state.channel;
                         this.state.channel = this.elements.channel.value;
+
+                        // Toggle button visibility based on channel
+                        this.toggleUploadButton();
+
+                        // Reset download state when channel changes
+                        if (previousChannel !== this.state.channel) {
+                            this.state.downloadReady = false;
+                            this.state.downloadInProgress = false;
+                            this.state.updateAvailable = false;
+                            this.state.latestVersion = null;
+                            this.state.checking = true; // Set checking for all channels
+                            this.render();
+
+                            // Fetch new status after a short delay to allow backend to process the channel change
+                            // For custom channel, this will trigger checkCustomUpdate() to scan for local files
+                            setTimeout(() => this.fetchStatus(), 500);
+                        }
                     });
                 }
                 this.bindEvents();
@@ -2467,6 +2547,12 @@
             bindEvents() {
                 if (this.elements.checkBtn) {
                     this.elements.checkBtn.addEventListener('click', () => this.checkForUpdates());
+                }
+                if (this.elements.uploadBtn) {
+                    this.elements.uploadBtn.addEventListener('click', () => this.elements.uploadInput.click());
+                }
+                if (this.elements.uploadInput) {
+                    this.elements.uploadInput.addEventListener('change', (e) => this.handleUpload(e));
                 }
                 if (this.elements.downloadBtn) {
                     this.elements.downloadBtn.addEventListener('click', () => this.downloadUpdate());
@@ -2486,14 +2572,22 @@
                         // Updates API not available - hide all update cards
                         this.hideElement(this.elements.uptodateCard);
                         this.hideElement(this.elements.availableCard);
+                        this.hideElement(this.elements.connectionErrorCard);
+                        this.state.checking = false;
                         return;
                     }
                     if (!response.ok) throw new Error('Failed to fetch status');
                     const data = await response.json();
                     this.updateState(data);
+                    // Check if backend reported an error status or error field
+                    this.state.connectionError = (data.status === 'error' || !!data.error) && this.state.channel !== 'custom';
+                    this.state.error = data.error || null;
+                    this.state.checking = false;
                     this.render();
                 } catch (error) {
                     console.error('Error fetching update status:', error);
+                    this.state.connectionError = true;
+                    this.state.checking = false;
                     this.state.error = error.message;
                     this.render();
                 }
@@ -2531,37 +2625,50 @@
 
                 // Channel select is managed by config system, don't update it here
 
-                // Show either up-to-date card or available update card
-                if (this.state.error) {
-                    // Hide both cards on error
+                // Show either up-to-date card, connection error card, or available update card
+                if (this.state.connectionError && !this.state.checking) {
+                    // Show connection error card (already filtered for custom channel in fetchStatus)
                     this.hideElement(this.elements.uptodateCard);
                     this.hideElement(this.elements.availableCard);
+                    this.showElement(this.elements.connectionErrorCard);
                 } else if (this.state.updateAvailable && this.state.latestVersion) {
                     // Hide up-to-date, show available update card
                     this.hideElement(this.elements.uptodateCard);
+                    this.hideElement(this.elements.connectionErrorCard);
                     this.showElement(this.elements.availableCard);
                     this.elements.newVersion.textContent = this.state.latestVersion.version || '-';
                     this.elements.releaseDate.textContent = this.formatDate(this.state.latestVersion.release_date);
                     this.elements.changelog.textContent = this.state.latestVersion.changelog || 'No changelog available';
                     this.elements.downloadSize.textContent = this.formatBytes(this.state.latestVersion.size || 0);
 
+                    // Show or hide error message
+                    if (this.state.error) {
+                        this.showElement(this.elements.errorMessage);
+                        this.elements.errorText.textContent = this.state.error;
+                    } else {
+                        this.hideElement(this.elements.errorMessage);
+                    }
+
                     // Show download or install button based on state
                     if (this.state.downloadReady) {
                         this.hideElement(this.elements.downloadBtn);
                         this.showElement(this.elements.installBtn);
-                        this.showElement(this.elements.restartWarning);
+                        this.elements.installBtn.disabled = false;
                     } else {
                         this.showElement(this.elements.downloadBtn);
                         this.hideElement(this.elements.installBtn);
-                        this.hideElement(this.elements.restartWarning);
+                        // Only disable if download is in progress
+                        this.elements.downloadBtn.disabled = this.state.downloadInProgress;
                     }
-                } else if (this.state.currentVersion) {
-                    // Show up-to-date card, hide available update card
+                } else if (this.state.currentVersion && this.state.channel !== 'custom' && !this.state.checking) {
+                    // Show up-to-date card, hide available update card (but not for custom channel or while checking)
                     this.showElement(this.elements.uptodateCard);
+                    this.hideElement(this.elements.connectionErrorCard);
                     this.hideElement(this.elements.availableCard);
                 } else {
-                    // Hide both cards if no version info
+                    // Hide all cards if no version info
                     this.hideElement(this.elements.uptodateCard);
+                    this.hideElement(this.elements.connectionErrorCard);
                     this.hideElement(this.elements.availableCard);
                 }
 
@@ -2603,6 +2710,9 @@
             },
 
             async checkForUpdates() {
+                this.state.error = null;
+                this.state.checking = true;
+                this.render();
                 this.elements.checkBtn.disabled = true;
                 const originalText = this.elements.checkBtn.innerHTML;
                 this.elements.checkBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Checking...';
@@ -2616,11 +2726,14 @@
                     if (!response.ok) throw new Error('Failed to check for updates');
                     const data = await response.json();
                     this.updateState(data);
+                    this.state.connectionError = false;
                     this.state.lastChecked = new Date();
                 } catch (error) {
                     console.error('Error checking for updates:', error);
+                    this.state.connectionError = true;
                     this.state.error = error.message;
                 } finally {
+                    this.state.checking = false;
                     this.elements.checkBtn.disabled = false;
                     this.elements.checkBtn.innerHTML = originalText;
                     this.render();
@@ -2628,31 +2741,75 @@
             },
 
             async downloadUpdate() {
+                // Check if file already exists
+                try {
+                    const checkResponse = await fetch('/api/updates/status');
+                    if (checkResponse.ok) {
+                        const checkData = await checkResponse.json();
+                        if (checkData.downloadReady) {
+                            const confirmOverwrite = confirm(
+                                'Update file has already been downloaded. Do you want to download it again? This will overwrite the existing file.'
+                            );
+                            if (!confirmOverwrite) {
+                                return;
+                            }
+                        }
+                    }
+                } catch (error) {
+                    console.warn('Could not check download status:', error);
+                }
+
+                this.state.error = null;
+                this.state.downloadInProgress = true;
+                this.render();
                 this.elements.downloadBtn.disabled = true;
                 this.showElement(this.elements.progressContainer);
                 this.updateProgress(0);
 
                 try {
                     const response = await fetch('/api/updates/download', { method: 'POST' });
-                    if (!response.ok) throw new Error('Failed to download update');
+                    if (!response.ok) {
+                        // Try to get error details from response
+                        let errorMessage = 'Failed to download update';
+                        try {
+                            const errorData = await response.json();
+                            if (errorData.error) {
+                                errorMessage = this.formatDownloadError(errorData.error);
+                            }
+                        } catch (e) {
+                            // If JSON parsing fails, use status text
+                            errorMessage = `Failed to download update: ${response.status} ${response.statusText}`;
+                        }
+                        throw new Error(errorMessage);
+                    }
 
                     // Poll for progress
                     const pollProgress = async () => {
                         const statusResponse = await fetch('/api/updates/status');
                         if (statusResponse.ok) {
                             const data = await statusResponse.json();
+
+                            // Update progress if available
                             if (data.download_progress !== undefined) {
                                 this.updateProgress(data.download_progress);
                             }
-                            if (data.download_ready) {
+
+                            // Check if download is complete
+                            if (data.downloadReady) {
                                 this.state.downloadReady = true;
+                                this.state.downloadInProgress = false;
                                 this.updateProgress(100);
                                 this.hideElement(this.elements.progressContainer);
                                 this.render();
                                 return;
                             }
+
+                            // Continue polling if no error
                             if (!data.error) {
                                 setTimeout(pollProgress, 500);
+                            } else {
+                                // Error detected during download
+                                throw new Error(this.formatDownloadError(data.error));
                             }
                         }
                     };
@@ -2661,9 +2818,60 @@
                 } catch (error) {
                     console.error('Error downloading update:', error);
                     this.state.error = error.message;
+                    this.state.downloadInProgress = false;
                     this.hideElement(this.elements.progressContainer);
+                    this.elements.downloadBtn.disabled = false;
                     this.render();
                 }
+            },
+
+            formatDownloadError(errorMsg) {
+                // Parse common error patterns and provide helpful messages
+                if (!errorMsg) return 'Unknown error occurred';
+
+                // HTTP status errors
+                if (errorMsg.includes('HTTP status 404') || errorMsg.includes('404 (Not Found)')) {
+                    return 'Download file not found on server. The update may not be available for your platform yet.';
+                }
+                if (errorMsg.includes('HTTP status 403') || errorMsg.includes('403 (Forbidden)')) {
+                    return 'Access denied to download file. Please check your network connection.';
+                }
+                if (errorMsg.includes('HTTP status 500') || errorMsg.includes('500 (Internal Server Error)')) {
+                    return 'Server error while downloading. Please try again later.';
+                }
+                if (errorMsg.includes('HTTP status')) {
+                    const match = errorMsg.match(/HTTP status (\d+)/);
+                    if (match) {
+                        return `Download failed with server error: ${match[1]}. Please try again later.`;
+                    }
+                }
+
+                // Network errors
+                if (errorMsg.includes('network') || errorMsg.includes('connection refused') || errorMsg.includes('ECONNREFUSED')) {
+                    return 'Network connection error. Please check your internet connection and try again.';
+                }
+                if (errorMsg.includes('timeout') || errorMsg.includes('deadline exceeded')) {
+                    return 'Download timed out. Please check your internet connection and try again.';
+                }
+                if (errorMsg.includes('DNS') || errorMsg.includes('no such host')) {
+                    return 'Cannot reach update server. Please check your internet connection.';
+                }
+
+                // Checksum errors
+                if (errorMsg.includes('checksum mismatch')) {
+                    return 'Downloaded file is corrupted. Please try downloading again.';
+                }
+
+                // Disk errors
+                if (errorMsg.includes('no space') || errorMsg.includes('disk full')) {
+                    return 'Not enough disk space to download update. Please free up space and try again.';
+                }
+                if (errorMsg.includes('permission denied')) {
+                    return 'Permission denied to save update file. Please check file permissions.';
+                }
+
+                // Return original error if no pattern matches, but clean it up
+                return errorMsg.replace(/^(failed to start download: |failed to download update: )/i, '');
             },
 
             updateProgress(percent) {
@@ -2676,7 +2884,9 @@
             },
 
             async installUpdate() {
-                if (!confirm('Installing the update will restart the service. Continue?')) {
+                // Show custom confirmation modal
+                const confirmed = await this.showRestartConfirmation();
+                if (!confirmed) {
                     return;
                 }
 
@@ -2715,6 +2925,105 @@
                     }
                 };
                 checkService();
+            },
+
+            toggleUploadButton() {
+                const isCustomChannel = this.state.channel === 'custom';
+                if (isCustomChannel) {
+                    this.hideElement(this.elements.checkBtn);
+                    this.showElement(this.elements.uploadContainer);
+                } else {
+                    this.showElement(this.elements.checkBtn);
+                    this.hideElement(this.elements.uploadContainer);
+                }
+            },
+
+            async handleUpload(event) {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                // Validate file type
+                const validExtensions = ['.zip', '.tar.gz'];
+                const fileName = file.name.toLowerCase();
+                const isValid = validExtensions.some(ext => fileName.endsWith(ext));
+
+                if (!isValid) {
+                    this.state.error = 'Invalid file type. Please upload a .zip or .tar.gz file.';
+                    this.render();
+                    return;
+                }
+
+                this.state.error = null;
+                this.elements.uploadBtn.disabled = true;
+                const originalText = this.elements.uploadBtn.innerHTML;
+                this.elements.uploadBtn.innerHTML = '<span class=\"spinner-border spinner-border-sm me-1\"></span> Uploading...';
+
+                try {
+                    const formData = new FormData();
+                    formData.append('file', file);
+
+                    const response = await fetch('/api/updates/upload', {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.error || 'Upload failed');
+                    }
+
+                    const data = await response.json();
+
+                    // Set state to show install button
+                    this.state.downloadReady = true;
+                    this.state.updateAvailable = true;
+                    this.state.latestVersion = {
+                        version: data.version || 'Custom Upload',
+                        release_date: new Date().toISOString(),
+                        changelog: 'Custom uploaded file: ' + file.name,
+                        size: file.size
+                    };
+
+                    // Reset file input
+                    this.elements.uploadInput.value = '';
+
+                } catch (error) {
+                    console.error('Error uploading file:', error);
+                    this.state.error = error.message;
+                    this.elements.uploadInput.value = '';
+                } finally {
+                    this.elements.uploadBtn.disabled = false;
+                    this.elements.uploadBtn.innerHTML = originalText;
+                    this.render();
+                }
+            },
+
+            showRestartConfirmation() {
+                return new Promise((resolve) => {
+                    const modal = document.getElementById('update-restart-modal');
+                    const confirmBtn = document.getElementById('update-restart-confirm');
+                    const bsModal = new bootstrap.Modal(modal);
+
+                    // Remove any existing event listeners
+                    const newConfirmBtn = confirmBtn.cloneNode(true);
+                    confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+
+                    // Add confirm handler
+                    newConfirmBtn.addEventListener('click', () => {
+                        bsModal.hide();
+                        resolve(true);
+                    });
+
+                    // Add cancel/close handler
+                    const handleCancel = () => {
+                        resolve(false);
+                    };
+
+                    modal.addEventListener('hidden.bs.modal', handleCancel, { once: true });
+
+                    // Show modal
+                    bsModal.show();
+                });
             },
 
             async rollback() {

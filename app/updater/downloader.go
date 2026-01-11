@@ -1,15 +1,17 @@
 package updater
 
 import (
-	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -54,8 +56,18 @@ func (d *Downloader) Download(info *UpdateInfo, progressCb ProgressCallback) (st
 		return "", fmt.Errorf("failed to create download directory: %w", err)
 	}
 
+	// Clean up any old downloads before starting new one
+	d.log.Debug().Msg("Cleaning up old downloads before starting new download")
+	_ = d.CleanupDownloads()
+
+	// Extract filename from URL
+	filename := d.extractFilenameFromURL(info.DownloadURL)
+	if filename == "" {
+		filename = "simtezilo.new"
+	}
+
 	// Create temporary file for download
-	destPath := filepath.Join(d.downloadDir, "simtezilo.new")
+	destPath := filepath.Join(d.downloadDir, filename)
 	tmpPath := destPath + ".tmp"
 
 	d.log.Info().
@@ -64,25 +76,48 @@ func (d *Downloader) Download(info *UpdateInfo, progressCb ProgressCallback) (st
 		Int64("size", info.DownloadSize).
 		Msg("Starting download")
 
-	// Create HTTP request with context
-	ctx, cancel := context.WithTimeout(context.Background(), d.httpTimeout)
-	defer cancel()
+	// Create HTTP client with proper timeouts
+	// Use shorter timeout for connection, but allow the download itself to take longer
+	client := &http.Client{
+		Timeout: d.httpTimeout, // Overall timeout for the entire request
+		Transport: &http.Transport{
+			DialContext: (&net.Dialer{
+				Timeout:   30 * time.Second, // Connection timeout
+				KeepAlive: 30 * time.Second,
+			}).DialContext,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ResponseHeaderTimeout: 30 * time.Second, // Time to receive response headers
+			ExpectContinueTimeout: 1 * time.Second,
+		},
+	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, info.DownloadURL, nil)
+	d.log.Debug().Msg("Creating HTTP request")
+
+	req, err := http.NewRequest(http.MethodGet, info.DownloadURL, nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to create download request: %w", err)
 	}
 
-	client := &http.Client{}
+	d.log.Debug().Msg("Sending HTTP request")
 
 	resp, err := client.Do(req)
 	if err != nil {
+		d.log.Error().Err(err).Str("url", info.DownloadURL).Msg("HTTP request failed")
+
 		return "", fmt.Errorf("failed to start download: %w", err)
 	}
 	defer resp.Body.Close()
 
+	d.log.Debug().Int("status", resp.StatusCode).Msg("Received HTTP response")
+
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("download failed with status: %d", resp.StatusCode)
+		d.log.Error().
+			Int("status", resp.StatusCode).
+			Str("status_text", resp.Status).
+			Str("url", info.DownloadURL).
+			Msg("Download failed with non-OK HTTP status")
+
+		return "", fmt.Errorf("download failed with HTTP status %d (%s)", resp.StatusCode, http.StatusText(resp.StatusCode))
 	}
 
 	return d.downloadToFile(resp, tmpPath, destPath, info, progressCb)
@@ -110,15 +145,22 @@ func (d *Downloader) VerifyFile(path string, expectedSHA256 string) (bool, error
 
 // CleanupDownloads removes old downloaded files from the download directory.
 func (d *Downloader) CleanupDownloads() error {
-	patterns := []string{"simtezilo.new", "simtezilo.new.tmp", "simtezilo.rollback"}
+	patterns := []string{"*.zip", "*.tar.gz", "*.tmp", "simtezilo.new", "simtezilo.rollback"}
 	for _, pattern := range patterns {
-		path := filepath.Join(d.downloadDir, pattern)
+		matches, err := filepath.Glob(filepath.Join(d.downloadDir, pattern))
+		if err != nil {
+			d.log.Warn().Err(err).Str("pattern", pattern).Msg("Failed to glob pattern")
 
-		_, statErr := os.Stat(path)
-		if statErr == nil {
-			removeErr := os.Remove(path)
-			if removeErr != nil {
-				d.log.Warn().Err(removeErr).Str("path", path).Msg("Failed to remove old download")
+			continue
+		}
+
+		for _, path := range matches {
+			_, statErr := os.Stat(path)
+			if statErr == nil {
+				removeErr := os.Remove(path)
+				if removeErr != nil {
+					d.log.Warn().Err(removeErr).Str("path", path).Msg("Failed to remove old download")
+				}
 			}
 		}
 	}
@@ -240,4 +282,44 @@ func (d *Downloader) writeAndHash(
 	}
 
 	return downloaded, hex.EncodeToString(hasher.Sum(nil)), nil
+}
+
+// extractFilenameFromURL extracts the filename from a download URL.
+func (d *Downloader) extractFilenameFromURL(downloadURL string) string {
+	parsedURL, err := url.Parse(downloadURL)
+	if err != nil {
+		d.log.Warn().Err(err).Str("url", downloadURL).Msg("Failed to parse URL")
+
+		return ""
+	}
+
+	// Get the last segment of the path
+	filename := filepath.Base(parsedURL.Path)
+
+	// Clean up the filename
+	filename = strings.TrimSpace(filename)
+
+	// Validate filename
+	if filename == "" || filename == "." || filename == "/" {
+		return ""
+	}
+
+	return filename
+}
+
+// DownloadExists checks if a file has already been downloaded.
+func (d *Downloader) DownloadExists(info *UpdateInfo) (bool, string) {
+	if info == nil {
+		return false, ""
+	}
+
+	filename := d.extractFilenameFromURL(info.DownloadURL)
+	if filename == "" {
+		return false, ""
+	}
+
+	destPath := filepath.Join(d.downloadDir, filename)
+	_, err := os.Stat(destPath)
+
+	return err == nil, destPath
 }
