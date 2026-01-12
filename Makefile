@@ -15,7 +15,7 @@ help:
 
 ## audit: run quality control checks
 .PHONY: audit
-audit: test
+audit: version/validate test
 	go mod tidy -diff
 	go mod verify
 	test -z "$(shell gofmt -l .)" 
@@ -59,7 +59,7 @@ upgradeable:
 # ==================================================================================== #
 
 buildmodule := $(shell awk '/module/ {print $$NF}' go.mod)
-buildversion := ${BUILDVERSION}
+buildversion := $(shell cat VERSION 2>/dev/null || echo "v0.0.1-dev.1")
 buildcommit := $(shell git describe --tags --always --dirty)
 buildtime := $(shell date -u '+%Y-%m-%d_%H:%M:%S')
 platform := $(shell uname -s | tr '[:upper:]' '[:lower:]')
@@ -84,6 +84,56 @@ dist: build/rpi/v8/64 build/windows/64 build/darwin/silicon
 release/manifest:
 	@chmod +x ./build/scripts/gen_release_manifest.sh
 	@./build/scripts/gen_release_manifest.sh "$(buildversion)" "stable" "out/releases/latest.json"
+
+## version/validate: validate VERSION file format
+.PHONY: version/validate
+version/validate:
+	@./build/scripts/update_version.sh validate
+
+## version/show: display current version
+.PHONY: version/show
+version/show:
+	@./build/scripts/update_version.sh show
+
+## version/patch: increment patch version (0.8.0 -> 0.8.1)
+.PHONY: version/patch
+version/patch:
+	@./build/scripts/update_version.sh patch
+
+## version/minor: increment minor version (0.8.0 -> 0.9.0)
+.PHONY: version/minor
+version/minor:
+	@./build/scripts/update_version.sh minor
+
+## version/major: increment major version (0.8.0 -> 1.0.0)
+.PHONY: version/major
+version/bump-major:
+	@./build/scripts/update_version.sh major
+
+## version/prerelease: add or bump pre-release version (0.8.0 -> 0.8.0-beta.1)
+.PHONY: version/prerelease
+version/prerelease:
+	@./build/scripts/update_version.sh prerelease beta
+
+## version/release: remove pre-release suffix for stable release
+.PHONY: version/release
+version/release:
+	@./build/scripts/update_version.sh release
+
+## version/auto: automatically determine and apply version bump from conventional commits
+.PHONY: version/auto
+version/auto:
+	@./build/scripts/update_version.sh auto
+
+## version/check: analyze commits and show recommended version bump (dry-run)
+.PHONY: version/check
+version/check:
+	@./build/scripts/update_version.sh check
+
+## version/tag: create a git tag matching the VERSION file
+.PHONY: version/tag
+version/tag:
+	@./build/scripts/update_version.sh tag
 
 ## build: build the application for the current platform
 .PHONY: build
