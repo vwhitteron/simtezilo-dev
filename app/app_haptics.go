@@ -27,6 +27,11 @@ func (a *App) disableHaptics(reason string) {
 
 // generateForceHaptics generates haptic feedback based on the vehicle telemetry data.
 func (a *App) generateForceHaptics() {
+	// Skip haptics generation if in calibration mode
+	if a.calibrator.IsEnabled() {
+		return
+	}
+
 	startTime := time.Now()
 
 	if !a.sequenceHasAdvanced() {

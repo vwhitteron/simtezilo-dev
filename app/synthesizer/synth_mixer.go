@@ -359,15 +359,20 @@ func (m *Mixer) MixToMaster(length int) {
 
 	m.mu.RLock()
 
-	// Check if calibration mode is enabled
-	if m.calibrator != nil && m.calibrator.IsEnabled() {
+	// Check if calibration mode is enabled or stopping (waiting for zero crossing)
+	if m.calibrator != nil && (m.calibrator.IsEnabled() || m.calibrator.IsStopping()) {
 		frequency := m.calibrator.GetSweepFrequency() // Use sweep frequency if sweeping, otherwise static frequency
 		channel := m.calibrator.GetChannel()
+		isStopping := m.calibrator.IsStopping()
+
+		var prevPhase float64
 
 		// Generate sine wave samples
-		for i := range outSamples {
+		for offset := range outSamples {
+			prevPhase = m.sineWavePhaseL
+
 			// For mono (both channels), use phase L only
-			outSamples[i] = math.Sin(m.sineWavePhaseL)
+			outSamples[offset] = math.Sin(m.sineWavePhaseL)
 
 			// Increment phase
 			m.sineWavePhaseL += 2 * math.Pi * frequency / float64(m.sampleRateHz)
@@ -375,6 +380,31 @@ func (m *Mixer) MixToMaster(length int) {
 			// Keep phase in reasonable range
 			if m.sineWavePhaseL > 2*math.Pi {
 				m.sineWavePhaseL -= 2 * math.Pi
+			}
+
+			// If stopping, check for zero crossing
+			if isStopping {
+				// Detect zero crossing: previous phase was negative, current is positive
+				// or we wrapped around through zero
+				prevSin := math.Sin(prevPhase)
+				currSin := math.Sin(m.sineWavePhaseL)
+
+				if prevSin <= 0 && currSin >= 0 {
+					// Zero crossing detected - stop here
+					outSamples[offset] = 0 // End on zero to ensure clean stop
+
+					m.mu.RUnlock()
+					m.calibrator.ConfirmStopped()
+					// Pad remaining samples with zeros
+					for j := offset + 1; j < len(outSamples); j++ {
+						outSamples[j] = 0
+					}
+
+					masterChannel := m.channels[ChannelMaster]
+					masterChannel.Write(outSamples, 1.0, 0, true)
+
+					return
+				}
 			}
 		}
 

@@ -33,6 +33,7 @@ type Calibrator struct {
 	sweepMin       float64 // Minimum sweep frequency
 	sweepMax       float64 // Maximum sweep frequency
 	sweepDuration  float64 // Sweep duration in seconds
+	stopping       bool    // Signal to continue generating until zero crossing
 }
 
 // New creates a new Calibrator instance with default values.
@@ -56,12 +57,47 @@ func (c *Calibrator) IsEnabled() bool {
 	return c.enabled
 }
 
+// IsStopping returns whether calibration is waiting to stop at zero crossing.
+func (c *Calibrator) IsStopping() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.stopping
+}
+
+// ConfirmStopped marks calibration as fully stopped (called after zero crossing).
+func (c *Calibrator) ConfirmStopped() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.enabled = false
+	c.stopping = false
+}
+
 // SetEnabled sets whether calibration mode is enabled.
 func (c *Calibrator) SetEnabled(enabled bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.enabled = enabled
+	if enabled {
+		// Enabling calibration
+		c.enabled = true
+		c.stopping = false
+	}
+
+	// Disabling calibration - set stopping flag but keep enabled until the mixer
+	// detects zero crossing
+	if c.enabled {
+		c.stopping = true
+		// Stop any sweep immediately
+		if c.sweepCancel != nil {
+			c.sweepCancel()
+			c.sweepCancel = nil
+		}
+
+		c.sweeping = false
+		c.sweepFrequency = c.sweepMin
+	}
 }
 
 // GetFrequency returns the calibrator frequency in Hz.

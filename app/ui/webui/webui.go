@@ -98,12 +98,12 @@ type Config struct {
 	CircuitInfoFeed    chan map[string]string
 	RaceInfoFeed       chan map[string]any
 	GameStateFeed      chan string
+	LogStatsFeed       chan map[string]any
 	Config             *appconfig.Config
 	Calibrator         *calibrator.Calibrator
 	ShutdownChan       chan exitcode.Code
 	SetupMode          *setupmode.SetupMode
 	LogStore           *logstore.Store
-	LogStatsFeed       chan map[string]any
 	BuildVersion       string
 	BuildCommitHash    string
 	BuildTime          string
@@ -200,27 +200,6 @@ func (w *WebUI) GetHTTPHandler() http.Handler {
 	return w.corsMiddleware(mux)
 }
 
-// corsMiddleware adds CORS headers to all responses.
-// TODO: figure out if this is needed, and if so perhaps make it more restrictive via config.
-func (w *WebUI) corsMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
-		// Set CORS headers
-		response.Header().Set("Access-Control-Allow-Origin", "*")
-		response.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		response.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-
-		// Handle preflight requests
-		if request.Method == http.MethodOptions {
-			response.WriteHeader(http.StatusOK)
-
-			return
-		}
-
-		// Call the next handler
-		next.ServeHTTP(response, request)
-	})
-}
-
 // HasActiveClients returns true if there are active WebSocket clients connected.
 func (w *WebUI) HasActiveClients() bool {
 	return len(w.unifiedClients) > 0 || w.webSocketClients > 0
@@ -268,6 +247,27 @@ func (w *WebUI) htmlRouterHandlerFunc() func(w http.ResponseWriter, r *http.Requ
 
 		w.log.Debug().Str("file", filename).Str("path", path).Int("bytes_written", length).Msg("served HTML page")
 	}
+}
+
+// corsMiddleware adds CORS headers to all responses.
+// TODO: figure out if this is needed, and if so perhaps make it more restrictive via config.
+func (w *WebUI) corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		// Set CORS headers
+		response.Header().Set("Access-Control-Allow-Origin", "*")
+		response.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		response.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+		// Handle preflight requests
+		if request.Method == http.MethodOptions {
+			response.WriteHeader(http.StatusOK)
+
+			return
+		}
+
+		// Call the next handler
+		next.ServeHTTP(response, request)
+	})
 }
 
 //go:embed static/*
@@ -569,19 +569,16 @@ func (w *WebUI) unifiedWebSocketBroadcaster() {
 
 			w.subscriptionsMutex.Lock()
 			w.clientSubscriptions[client] = map[string]bool{
-				"vehicle":   true,
-				"gameState": true,
-				"circuit":   true,
-				"race":      true,
-				"logStats":  true,
-				"telemetry": false, // Telemetry off by default
+				"vehicle":     true,
+				"gameState":   true,
+				"circuit":     true,
+				"race":        true,
+				"logStats":    true,
+				"calibration": true,
+				"telemetry":   false, // Telemetry off by default
 			}
 			w.subscriptionsMutex.Unlock()
 
-			w.log.Debug().Int("unified_clients", len(w.unifiedClients)).Msg("unified client subscribed")
-
-		case client := <-w.unifiedUnsubChan:
-			// Remove client
 			for i, c := range w.unifiedClients {
 				if c == client {
 					w.unifiedClients = append(w.unifiedClients[:i], w.unifiedClients[i+1:]...)
@@ -1042,7 +1039,7 @@ func (w *WebUI) handleSetConfig(response http.ResponseWriter, request *http.Requ
 
 	w.log.Debug().Msg("configuration saved to file")
 
-	// Return success response with updated config including EQ curve
+	// Return success response with updated config including EQ curve and calibration state
 	_ = json.NewEncoder(response).Encode(map[string]any{ //nolint:errchkjson // simple encoding
 		"status":          "success",
 		"message":         "Configuration updated and saved successfully",
@@ -1057,6 +1054,16 @@ func (w *WebUI) handleSetConfig(response http.ResponseWriter, request *http.Requ
 					"resolution": resolution,
 				}
 			}(),
+			"calibration": map[string]any{
+				"enabled":       w.calibrator.IsEnabled(),
+				"frequency":     w.calibrator.GetSweepFrequency(),
+				"volume":        w.calibrator.GetVolume(),
+				"channel":       string(w.calibrator.GetChannel()),
+				"sweeping":      w.calibrator.IsSweeping(),
+				"sweepMin":      w.calibrator.GetSweepMin(),
+				"sweepMax":      w.calibrator.GetSweepMax(),
+				"sweepDuration": w.calibrator.GetSweepDuration(),
+			},
 		},
 	})
 }
@@ -1522,6 +1529,29 @@ func (w *WebUI) applyCalibrationConfig(config map[string]any) []string {
 	if enabled, ok := config["enabled"]; ok {
 		if enabledBool, ok := enabled.(bool); ok {
 			w.calibrator.SetEnabled(enabledBool)
+
+			// Broadcast calibration state change to all WebSocket clients
+			calibrationState := map[string]any{
+				"enabled":       w.calibrator.IsEnabled(),
+				"frequency":     w.calibrator.GetSweepFrequency(),
+				"volume":        w.calibrator.GetVolume(),
+				"channel":       string(w.calibrator.GetChannel()),
+				"sweeping":      w.calibrator.IsSweeping(),
+				"sweepMin":      w.calibrator.GetSweepMin(),
+				"sweepMax":      w.calibrator.GetSweepMax(),
+				"sweepDuration": w.calibrator.GetSweepDuration(),
+			}
+
+			msg := WSMessage{
+				Type:      "calibration",
+				Timestamp: time.Now().UnixMilli(),
+				Data:      calibrationState,
+			}
+
+			encodedData, err := json.Marshal(msg)
+			if err == nil {
+				w.broadcastToUnifiedClients(encodedData, "calibration")
+			}
 		} else {
 			errors = append(errors, "invalid calibration enabled value")
 		}
@@ -2189,7 +2219,7 @@ func (w *WebUI) handleCalibrationSweep(response http.ResponseWriter, request *ht
 
 	// Parse request body to determine action
 	var reqData struct {
-		Action string `json:"action"`
+		Action string `json:"action"` //nolint:tagliatelle // lowercase for easy compatibility
 	}
 
 	err := json.NewDecoder(request.Body).Decode(&reqData)
@@ -2295,7 +2325,7 @@ func (w *WebUI) manageSSHEnablement(action setupmode.CmdAction, response http.Re
 
 	var actionStr string
 
-	switch action { //nolint:exhaustive // only interested in two values
+	switch action { //nolint:exhaustive // only interested in enable/disable cases
 	case setupmode.CmdActionSSHEnable:
 		actionStr = "enable"
 	case setupmode.CmdActionSSHDisable:
@@ -3015,10 +3045,10 @@ func (w *WebUI) handleUpdatesDownload(response http.ResponseWriter, request *htt
 
 // UploadMetadata represents metadata embedded in a custom update archive.
 type UploadMetadata struct {
-	Version     string    `json:"version"`
-	ReleaseDate time.Time `json:"releaseDate"`
-	Changelog   string    `json:"changelog"`
-	Platform    string    `json:"platform"`
+	Version     string    `json:"version"`     //nolint:tagliatelle // lowercase for compatibility
+	ReleaseDate time.Time `json:"releaseDate"` //nolint:tagliatelle
+	Changelog   string    `json:"changelog"`   //nolint:tagliatelle
+	Platform    string    `json:"platform"`    //nolint:tagliatelle
 }
 
 // extractMetadataFromArchive attempts to extract manifest.json from an uploaded archive.
@@ -3060,15 +3090,15 @@ func (w *WebUI) extractMetadataFromZip(file io.ReadSeeker) (*UploadMetadata, err
 	// Look for manifest.json
 	for _, f := range zipReader.File {
 		if f.Name == "manifest.json" || strings.HasSuffix(f.Name, "/manifest.json") {
-			rc, openErr := f.Open()
+			manifest, openErr := f.Open()
 			if openErr != nil {
 				return nil, fmt.Errorf("failed to open metadata file: %w", openErr)
 			}
-			defer rc.Close()
+			defer manifest.Close()
 
 			var metadata UploadMetadata
 
-			decodeErr := json.NewDecoder(rc).Decode(&metadata)
+			decodeErr := json.NewDecoder(manifest).Decode(&metadata)
 			if decodeErr != nil {
 				return nil, fmt.Errorf("failed to decode metadata: %w", decodeErr)
 			}

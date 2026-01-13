@@ -390,6 +390,25 @@ class ConfigManager {
                 }
             });
 
+            // When calibration mode is disabled, ensure sweep UI and polling stop
+            const calibrationEnabled = document.getElementById('calibration-enabled');
+            if (calibrationEnabled) {
+                calibrationEnabled.addEventListener('change', () => {
+                    if (!calibrationEnabled.checked && isSweeping) {
+                        isSweeping = false;
+                        calibrationSweepBtn.classList.remove('btn-primary');
+                        calibrationSweepBtn.classList.add('btn-outline-primary');
+                        calibrationSweepBtn.title = 'Frequency Sweep';
+
+                        // Stop polling frequency
+                        if (sweepInterval) {
+                            clearInterval(sweepInterval);
+                            sweepInterval = null;
+                        }
+                    }
+                });
+            }
+
             // Initialize on page load
             setTimeout(initSweepState, 500);
         }

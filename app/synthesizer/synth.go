@@ -220,61 +220,90 @@ func (s *Synthesizer) PlayEffect(name string, magnitude float64, channel string)
 	_ = s.mixer.WriteChannel(channel, effectSample.Samples(), magnitude, 0, false)
 }
 
+// StartFadeIn initiates a fade-in of the master gain over the specified duration.
+func (s *Synthesizer) StartFadeIn(duration time.Duration) {
+	s.mixer.FadeIn(duration)
+}
+
 // UpdateCalibrator checks calibration state and manages channel switching.
 func (s *Synthesizer) UpdateCalibrator() {
-	isCalibrating := s.calibrator.IsEnabled()
+	calibratorEnabled := s.calibrator.IsEnabled()
+	calibratorStopping := s.calibrator.IsStopping()
 
 	// Handle calibrator state transitions
-	if isCalibrating && !s.wasCalibrating {
+	if calibratorEnabled && !s.wasCalibrating {
 		// Entering calibration mode - flush all haptic buffers first, then change master gain
-		s.log.Info().Msg("Entering calibration mode")
-		s.wasCalibrating = true
-
-		// Clear all haptic channel buffers first to prevent volume spike
-		s.mixer.ClearChannelBuffer(ChannelChassis)
-		s.mixer.ClearChannelBuffer(ChannelEngine)
-		s.mixer.ClearChannelBuffer(ChannelTransmission)
-		s.log.Debug().Msg("Flushed haptic channel buffers")
-
-		// Clear calibrator buffer to start fresh
-		s.mixer.ClearChannelBuffer(ChannelCalibrator)
-		s.log.Debug().Msg("Cleared calibrator buffer")
-
-		// Reset sine wave phase to start from zero
-		s.mixer.ResetSineWavePhase()
-
-		// Store original master gain
-		currentGain, err := s.mixer.GetChannelGain(ChannelMaster)
-		if err == nil {
-			s.originalMasterGain = currentGain
-
-			// Clear master buffer to remove any previously mixed audio before gain change
-			s.mixer.ClearChannelBuffer(ChannelMaster)
-			s.log.Debug().Msg("Flushed master channel buffer")
-
-			// Set master gain to calibration volume (in dB, not converted)
-			calibrationVolume := s.calibrator.GetVolume()
-			_ = s.mixer.SetChannelGain(ChannelMaster, calibrationVolume)
-			s.log.Debug().Float64("original_gain", currentGain).Float64("calibration_volume_db", calibrationVolume).Msg("Set master gain to calibration volume")
-		}
-	} else if !isCalibrating && s.wasCalibrating {
-		// Exiting calibration mode - clear calibrator buffer and restore master gain
-		s.log.Info().Msg("Exiting calibration mode")
-		s.wasCalibrating = false
-
-		// Clear the calibrator channel buffer
-		s.mixer.ClearChannelBuffer(ChannelCalibrator)
-
-		// Restore original master gain
-		if s.originalMasterGain > 0 {
-			_ = s.mixer.SetChannelGain(ChannelMaster, s.originalMasterGain)
-			s.log.Debug().Float64("restored_gain", s.originalMasterGain).Msg("Restored original master gain")
-		}
+		s.startCalibrator()
+	} else if !calibratorEnabled && !calibratorStopping && s.wasCalibrating {
+		// Exiting calibration mode - zero crossing has been reached
+		s.stopCalibrator()
 	}
 
-	if isCalibrating {
+	if calibratorEnabled {
 		// Update master gain to match calibration volume in real-time (in dB)
 		calibrationVolume := s.calibrator.GetVolume()
 		_ = s.mixer.SetChannelGain(ChannelMaster, calibrationVolume)
 	}
+}
+
+func (s *Synthesizer) startCalibrator() {
+	s.log.Info().Msg("Entering calibration mode")
+	s.wasCalibrating = true
+
+	// Clear all haptic channel buffers first to prevent volume spike
+	s.mixer.ClearChannelBuffer(ChannelChassis)
+	s.mixer.ClearChannelBuffer(ChannelEngine)
+	s.mixer.ClearChannelBuffer(ChannelTransmission)
+	s.log.Debug().Msg("Flushed haptic channel buffers")
+
+	// Clear calibrator buffer to start fresh
+	s.mixer.ClearChannelBuffer(ChannelCalibrator)
+	s.log.Debug().Msg("Cleared calibrator buffer")
+
+	// Reset sine wave phase to start from zero
+	s.mixer.ResetSineWavePhase()
+
+	// Store original master gain
+	currentGain, err := s.mixer.GetChannelGain(ChannelMaster)
+	if err == nil {
+		s.originalMasterGain = currentGain
+
+		// Clear master buffer to remove any previously mixed audio before gain change
+		s.mixer.ClearChannelBuffer(ChannelMaster)
+		s.log.Debug().Msg("Flushed master channel buffer")
+
+		// Set master gain to calibration volume (in dB, not converted)
+		calibrationVolume := s.calibrator.GetVolume()
+		_ = s.mixer.SetChannelGain(ChannelMaster, calibrationVolume)
+		s.log.Debug().Float64("original_gain", currentGain).Float64("calibration_volume_db", calibrationVolume).Msg("Set master gain to calibration volume")
+	}
+}
+
+func (s *Synthesizer) stopCalibrator() {
+	s.log.Info().Msg("Exiting calibration mode after zero crossing")
+	s.wasCalibrating = false
+
+	// Add a small delay to allow the sine wave to complete naturally without cutting
+	// off the tail end of the waveform
+	time.Sleep(50 * time.Millisecond)
+
+	// Clear the calibrator channel buffer
+	s.mixer.ClearChannelBuffer(ChannelCalibrator)
+
+	// Clear master buffer to remove any calibration audio mixed at calibration volume
+	s.mixer.ClearChannelBuffer(ChannelMaster)
+	s.log.Debug().Msg("Cleared master buffer")
+
+	// Clear all haptic channel buffers to ensure clean start
+	s.mixer.ClearChannelBuffer(ChannelChassis)
+	s.mixer.ClearChannelBuffer(ChannelEngine)
+	s.mixer.ClearChannelBuffer(ChannelTransmission)
+	s.log.Debug().Msg("Cleared haptic channel buffers")
+
+	// Start fade-in from minimum to original gain over 100ms to prevent blip
+	// Set master to minimum first
+	_ = s.mixer.SetChannelGain(ChannelMaster, config.MinimumGain)
+	// Fade to original gain
+	s.mixer.FadeIn(100 * time.Millisecond)
+	s.log.Debug().Float64("target_gain", s.originalMasterGain).Msg("Started fade-in after calibration")
 }

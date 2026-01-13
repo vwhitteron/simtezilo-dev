@@ -59,6 +59,11 @@ func (a *App) generateEngineHaptic() {
 
 // shouldGenerateEngineHaptic checks if engine haptic generation should proceed.
 func (a *App) shouldGenerateEngineHaptic() bool {
+	// Skip if in calibration mode
+	if a.calibrator.IsEnabled() {
+		return false
+	}
+
 	// Engine haptics are silenced
 	if a.config.GetSynthEngineMute() {
 		return false
