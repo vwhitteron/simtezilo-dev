@@ -365,14 +365,29 @@ func (m *Mixer) MixToMaster(length int) {
 		channel := m.calibrator.GetChannel()
 		isStopping := m.calibrator.IsStopping()
 
+		// Get EQ amplitude multiplier for this frequency
+		eqAmplitude := 1.0
+
+		if m.config.GetSynthEqEnabled() {
+			curve, minFreq, resolution := m.config.GetSynthEqCurve()
+			if len(curve) > 0 {
+				// Calculate bucket index for this frequency
+				index := int((frequency - minFreq) / resolution)
+				// Apply EQ if frequency is within range
+				if index >= 0 && index < len(curve) {
+					eqAmplitude = curve[index]
+				}
+			}
+		}
+
 		var prevPhase float64
 
 		// Generate sine wave samples
 		for offset := range outSamples {
 			prevPhase = m.sineWavePhaseL
 
-			// For mono (both channels), use phase L only
-			outSamples[offset] = math.Sin(m.sineWavePhaseL)
+			// For mono (both channels), use phase L only and apply EQ
+			outSamples[offset] = math.Sin(m.sineWavePhaseL) * eqAmplitude
 
 			// Increment phase
 			m.sineWavePhaseL += 2 * math.Pi * frequency / float64(m.sampleRateHz)

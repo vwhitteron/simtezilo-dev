@@ -22,24 +22,24 @@ const (
 
 // Calibrator manages tone generation state for calibration mode.
 type Calibrator struct {
-	enabled        bool
+	isEnabled      bool
+	isStopping     bool // Signal to continue generating until zero crossing
 	frequency      float64
 	volume         float64
 	channel        OutputChannel
 	mu             sync.RWMutex
-	sweeping       bool
+	isSweeping     bool
 	sweepCancel    context.CancelFunc
 	sweepFrequency float64 // Current frequency during sweep
 	sweepMin       float64 // Minimum sweep frequency
 	sweepMax       float64 // Maximum sweep frequency
 	sweepDuration  float64 // Sweep duration in seconds
-	stopping       bool    // Signal to continue generating until zero crossing
 }
 
 // New creates a new Calibrator instance with default values.
 func New() *Calibrator {
 	return &Calibrator{
-		enabled:       false,
+		isEnabled:     false,
 		frequency:     5,
 		volume:        -30,
 		channel:       OutputChannelBoth,
@@ -54,7 +54,7 @@ func (c *Calibrator) IsEnabled() bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	return c.enabled
+	return c.isEnabled
 }
 
 // IsStopping returns whether calibration is waiting to stop at zero crossing.
@@ -62,7 +62,7 @@ func (c *Calibrator) IsStopping() bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	return c.stopping
+	return c.isStopping
 }
 
 // ConfirmStopped marks calibration as fully stopped (called after zero crossing).
@@ -70,32 +70,30 @@ func (c *Calibrator) ConfirmStopped() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.enabled = false
-	c.stopping = false
+	c.isEnabled = false
+	c.isStopping = false
 }
 
 // SetEnabled sets whether calibration mode is enabled.
-func (c *Calibrator) SetEnabled(enabled bool) {
+func (c *Calibrator) SetEnabled(requestEnable bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if enabled {
+	if requestEnable {
 		// Enabling calibration
-		c.enabled = true
-		c.stopping = false
-	}
-
-	// Disabling calibration - set stopping flag but keep enabled until the mixer
-	// detects zero crossing
-	if c.enabled {
-		c.stopping = true
+		c.isEnabled = true
+		c.isStopping = false
+	} else if c.isEnabled {
+		// Disabling calibration - set stopping flag but keep enabled until the mixer
+		// detects zero crossing
+		c.isStopping = true
 		// Stop any sweep immediately
 		if c.sweepCancel != nil {
 			c.sweepCancel()
 			c.sweepCancel = nil
 		}
 
-		c.sweeping = false
+		c.isSweeping = false
 		c.sweepFrequency = c.sweepMin
 	}
 }
@@ -252,7 +250,7 @@ func (c *Calibrator) IsSweeping() bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	return c.sweeping
+	return c.isSweeping
 }
 
 // GetSweepFrequency returns the current frequency during a sweep.
@@ -261,7 +259,7 @@ func (c *Calibrator) GetSweepFrequency() float64 {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	if c.sweeping {
+	if c.isSweeping {
 		return c.sweepFrequency
 	}
 
@@ -281,14 +279,14 @@ func (c *Calibrator) StartSweep() {
 	}
 
 	// Enable calibration mode if not already enabled
-	if !c.enabled {
-		c.enabled = true
+	if !c.isEnabled {
+		c.isEnabled = true
 	}
 
 	// Create cancellation context
 	ctx, cancel := context.WithCancel(context.Background())
 	c.sweepCancel = cancel
-	c.sweeping = true
+	c.isSweeping = true
 	c.sweepFrequency = c.sweepMin // Start at configured minimum frequency
 
 	c.mu.Unlock()
@@ -307,7 +305,7 @@ func (c *Calibrator) StopSweep() {
 		c.sweepCancel = nil
 	}
 
-	c.sweeping = false
+	c.isSweeping = false
 	c.sweepFrequency = c.frequency
 }
 
