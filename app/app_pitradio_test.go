@@ -407,7 +407,7 @@ func (suite *PitRadioTestSuite) TestNotifyCircuitChange() {
 		"app": {"language": "en", "accent": "us"},
 		"pitRadio": {
 			"notifications": {
-				"circuitMatchingEnabled": true
+				"enableCircuitMatching": true
 			}
 		}
 	}`)
@@ -433,7 +433,7 @@ func (suite *PitRadioTestSuite) TestNotifyCircuitChangeNotSentForSameCircuit() {
 		"app": {"language": "en", "accent": "us"},
 		"pitRadio": {
 			"notifications": {
-				"circuitMatchingEnabled": true
+				"enableCircuitMatching": true
 			}
 		}
 	}`)

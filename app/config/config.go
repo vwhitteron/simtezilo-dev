@@ -23,14 +23,15 @@ import (
 )
 
 type app struct {
-	Language      string  `toml:"language"`
-	Accent        string  `toml:"accent"`
-	LogLevel      string  `toml:"logLevel"`
-	BaseDir       string  `toml:"baseDir"`
-	Update        *update `toml:"update"`
-	VehicleDBFile string  `toml:"vehicleDBFile"`
-	WebUIEnabled  bool    `toml:"webUIEnabled"`
-	WebUIPort     int     `toml:"webUIPort"`
+	Language       string  `toml:"language"`
+	Accent         string  `toml:"accent"`
+	LogLevel       string  `toml:"logLevel"`
+	BaseDir        string  `toml:"baseDir"`
+	Update         *update `toml:"update"`
+	VehicleDBFile  string  `toml:"vehicleDBFile"`
+	EnabledWebUI   bool    `toml:"enabledWebUI"`
+	WebUIPort      int     `toml:"webUIPort"`
+	EnableDevTools bool    `toml:"enableDevTools"`
 }
 
 type discord struct {
@@ -74,15 +75,15 @@ type hardware struct {
 }
 
 type notifications struct {
-	RaceProgressEnabled     bool    `toml:"raceProgressEnabled"`
+	EnableRaceProgress      bool    `toml:"enableRaceProgress"`
 	RaceProgressMinLaps     int     `toml:"raceProgressMinLaps"`
 	RaceProgressIntervalPc  int     `toml:"raceProgressIntervalPc"`
-	RaceLapsEnabled         bool    `toml:"raceLapsEnabled"`
+	EnableRaceLaps          bool    `toml:"enableRaceLaps"`
 	RaceLapsIntervalLaps    int     `toml:"raceLapsIntervalLaps"`
 	RaceLapsCountdownLaps   int     `toml:"raceLapsCountdownLaps"`
-	LapTimesEnabled         bool    `toml:"lapTimesEnabled"`
+	EnableLapTimes          bool    `toml:"enableLapTimes"`
 	LapTimesMaxDeltaSeconds float64 `toml:"lapTimesMaxDeltaSeconds"`
-	CircuitMatchingEnabled  bool    `toml:"circuitMatchingEnabled"`
+	EnableCircuitMatching   bool    `toml:"enableCircuitMatching"`
 }
 
 type pitRadio struct {
@@ -118,7 +119,7 @@ type Synthesizer struct {
 	EngineMute                bool      `toml:"engineMute"`
 	EngineGain                float64   `toml:"engineGain"`
 	GainIncrement             float64   `toml:"gainIncrement"`
-	EqEnabled                 bool      `toml:"eqEnabled"`
+	EnableEq                  bool      `toml:"enableEq"`
 	EqBands                   []EQBand  `toml:"eqBands"`
 	_eqCurve                  []float64 `toml:"-"` // Computed curve for fast lookup
 	_eqMinFreq                float64   `toml:"-"` // Minimum frequency for curve
@@ -611,7 +612,7 @@ func (c *Config) GetAppWebUIEnabled() bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	return c.viper.App.WebUIEnabled
+	return c.viper.App.EnabledWebUI
 }
 
 // GetAppWebUIPort returns the configured web UI port.
@@ -703,6 +704,24 @@ func (c *Config) SetAppUpdateChannel(channel string) {
 	defer c.mu.Unlock()
 
 	c.viper.App.Update.Channel = channel
+
+	c.registerUpdate(false)
+}
+
+// GetDevToolsEnabled returns true if developer tools are enabled.
+func (c *Config) GetDevToolsEnabled() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.App.EnableDevTools
+}
+
+// SetDevToolsEnabled sets whether developer tools are enabled.
+func (c *Config) SetDevToolsEnabled(enabled bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.App.EnableDevTools = enabled
 
 	c.registerUpdate(false)
 }
@@ -870,8 +889,8 @@ func (c *Config) DecreaseHapticsJerkMax() int {
 	return result
 }
 
-// GetHapticsEnableReplay returns true if replay mode is enabled.
-func (c *Config) GetHapticsEnableReplay() bool {
+// GetHapticsReplayEnabled returns true if replay mode is enabled.
+func (c *Config) GetHapticsReplayEnabled() bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
@@ -1506,7 +1525,7 @@ func (c *Config) GetPitRadioNotifyRaceProgressEnabled() bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	return c.viper.PitRadio.Notifications.RaceProgressEnabled
+	return c.viper.PitRadio.Notifications.EnableRaceProgress
 }
 
 // SetPitRadioNotifyRaceProgressEnabled sets whether race progress notifications are enabled.
@@ -1514,7 +1533,7 @@ func (c *Config) SetPitRadioNotifyRaceProgressEnabled(value bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.viper.PitRadio.Notifications.RaceProgressEnabled = value
+	c.viper.PitRadio.Notifications.EnableRaceProgress = value
 
 	c.registerUpdate(false)
 }
@@ -1560,7 +1579,7 @@ func (c *Config) GetPitRadioNotifyRaceLapsEnabled() bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	return c.viper.PitRadio.Notifications.RaceLapsEnabled
+	return c.viper.PitRadio.Notifications.EnableRaceLaps
 }
 
 // SetPitRadioNotifyRaceLapsEnabled sets whether race lap notifications are enabled.
@@ -1568,7 +1587,7 @@ func (c *Config) SetPitRadioNotifyRaceLapsEnabled(value bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.viper.PitRadio.Notifications.RaceLapsEnabled = value
+	c.viper.PitRadio.Notifications.EnableRaceLaps = value
 
 	c.registerUpdate(false)
 }
@@ -1614,7 +1633,7 @@ func (c *Config) GetPitRadioNotifyLapTimesEnabled() bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	return c.viper.PitRadio.Notifications.LapTimesEnabled
+	return c.viper.PitRadio.Notifications.EnableLapTimes
 }
 
 // SetPitRadioNotifyLapTimesEnabled sets whether lap time notifications are enabled.
@@ -1622,7 +1641,7 @@ func (c *Config) SetPitRadioNotifyLapTimesEnabled(value bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.viper.PitRadio.Notifications.LapTimesEnabled = value
+	c.viper.PitRadio.Notifications.EnableLapTimes = value
 
 	c.registerUpdate(false)
 }
@@ -1650,7 +1669,7 @@ func (c *Config) GetPitRadioNotifyCircuitMatchingEnabled() bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	return c.viper.PitRadio.Notifications.CircuitMatchingEnabled
+	return c.viper.PitRadio.Notifications.EnableCircuitMatching
 }
 
 // SetPitRadioNotifyCircuitMatchingEnabled sets whether circuit change notifications are enabled.
@@ -1658,7 +1677,7 @@ func (c *Config) SetPitRadioNotifyCircuitMatchingEnabled(value bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.viper.PitRadio.Notifications.CircuitMatchingEnabled = value
+	c.viper.PitRadio.Notifications.EnableCircuitMatching = value
 
 	c.registerUpdate(false)
 }
@@ -2264,7 +2283,7 @@ func (c *Config) GetSynthEqEnabled() bool {
 // SetSynthEqEnabled sets whether the equalizer is enabled.
 func (c *Config) SetSynthEqEnabled(enabled bool) {
 	c.mu.Lock()
-	c.viper.Synthesizer.EqEnabled = enabled
+	c.viper.Synthesizer.EnableEq = enabled
 	c.rebuildSnapshot()
 	c.registerUpdate(false)
 	c.mu.Unlock()
@@ -2598,7 +2617,7 @@ func (c *Config) rebuildSnapshot() {
 		DynamicTransmissionCurve:     c.viper.Haptics.DynamicTransmissionCurve,
 		DynamicTransmissionGforceMax: c.viper.Haptics.DynamicTransmissionGforceMax,
 
-		EqEnabled: c.viper.Synthesizer.EqEnabled,
+		EqEnabled: c.viper.Synthesizer.EnableEq,
 
 		FuelMonitoringEnabled: c.viper.PitRadio.FuelMonitoring.Enabled,
 		TyreMonitoringEnabled: c.viper.PitRadio.TyreMonitoring.Enabled,

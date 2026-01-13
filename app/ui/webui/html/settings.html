@@ -597,6 +597,34 @@
                                         data-i18n="runmode.settings.app.control.factoryreset">Factory
                                         Reset</span></button>
                             </div>
+
+                            <!-- Advanced Settings Section -->
+                            <div class="d-flex align-items-center mb-3 mt-5" data-bs-toggle="collapse"
+                                data-bs-target="#advancedSettingsApp" aria-expanded="false"
+                                aria-controls="advancedSettingsApp" style="cursor: pointer;">
+                                <h5 class="mb-0 me-3">
+                                    <span class="icon" data-icon="tools"></span><span
+                                        data-i18n="runmode.settings.app.advanced.title">Advanced
+                                        Settings</span>
+                                </h5>
+                                <i class="fa-solid fa-chevron-right" id="advanced-settings-chevron-app"
+                                    style="transition: transform 0.3s ease;"></i>
+                            </div>
+
+                            <div id="advancedSettingsApp" class="collapse">
+                                <!-- Developer Tools -->
+                                <div class="form-check form-switch mb-4">
+                                    <input type="checkbox" class="form-check-input" id="app-enabledevtools"
+                                        data-config="app.enableDevTools" role="switch">
+                                    <label class="form-check-label" for="app-enabledevtools">
+                                        <span data-i18n="runmode.settings.app.advanced.enabledevtools">Enable Developer
+                                            Tools</span>
+                                        <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
+                                            role="button"
+                                            data-i18n-tooltip="runmode.settings.app.advanced.enabledevtools.tooltip"></i>
+                                    </label>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -718,7 +746,6 @@
                                                     data-config="app.updates.channel">
                                                     <option value="stable">Stable</option>
                                                     <option value="beta">Beta</option>
-                                                    <option value="dev">Dev</option>
                                                     <option value="custom">Custom</option>
                                                 </select>
                                             </div>
@@ -900,7 +927,7 @@
                         <!-- Advanced Settings Section -->
                         <div class="d-flex align-items-center mb-3 mt-5" data-bs-toggle="collapse"
                             data-bs-target="#advancedSettingsSystem" aria-expanded="false"
-                            aria-controls="advancedSettingsSystem" style="cursor: pointer;">
+                            aria-controls="advancedSettingsSystem" style="cursor: pointer; display: none;">
                             <h5 class="mb-0 me-3">
                                 <span class="icon" data-icon="tools"></span><span
                                     data-i18n="runmode.settings.system.advanced.title">Advanced
@@ -912,7 +939,7 @@
 
                         <div id="advancedSettingsSystem" class="collapse">
                             <!-- SSH Access Settings -->
-                            <div id="ssh-access-settings">
+                            <div id="ssh-access-settings" style="display: none;">
                                 <h5 class="mb-3 mt-4">
                                     <span class="icon" data-icon="terminal"></span><span
                                         data-i18n="runmode.settings.system.sshaccess.title">SSH Access</span>
@@ -1338,7 +1365,7 @@
                                     <div class="mb-3">
                                         <div class="form-check form-switch">
                                             <input type="checkbox" class="form-check-input" id="synth-eqenabled"
-                                                role="switch">
+                                                data-config="synthesizer.enableEQ" role="switch">
                                             <label class="form-check-label" for="synth-eqenabled">
                                                 <span data-i18n="runmode.settings.synth.equalizer.enabled">Enable</span>
                                             </label>
@@ -1792,7 +1819,7 @@
                                             data-i18n="runmode.settings.pitradio.notifications.laptimes.enable">Enable</label>
                                         <div class="form-check form-switch">
                                             <input type="checkbox" class="form-check-input" id="notify-laptimes-enabled"
-                                                data-config="pitRadio.notifications.lapTimesEnabled" role="switch">
+                                                data-config="pitRadio.notifications.enableLapTimes" role="switch">
                                         </div>
                                     </div>
                                     <div class="col-md-6 col-lg-3">
@@ -1816,7 +1843,7 @@
                                         <div class="form-check form-switch">
                                             <input type="checkbox" class="form-check-input"
                                                 id="notify-circuitmatching-enabled"
-                                                data-config="pitRadio.notifications.circuitMatchingEnabled"
+                                                data-config="pitRadio.notifications.enabledCircuitMatching"
                                                 role="switch">
                                         </div>
                                     </div>
@@ -1837,7 +1864,7 @@
                                             data-i18n="runmode.settings.pitradio.notifications.racelaps.enable">Enable</label>
                                         <div class="form-check form-switch">
                                             <input type="checkbox" class="form-check-input" id="notify-racelaps-enabled"
-                                                data-config="pitRadio.notifications.raceLapsEnabled" role="switch">
+                                                data-config="pitRadio.notifications.enabledRaceLaps" role="switch">
                                         </div>
                                     </div>
                                     <div class="col-md-6 col-lg-3">
@@ -1876,11 +1903,11 @@
                                 <div class="row g-3 align-items-end">
                                     <div class="col-md-6 col-lg-3">
                                         <label class="form-label"
-                                            data-i18n="runmode.settings.pitradio.notifications.enable">Enable</label>
+                                            data-i18n="runmode.settings.pitradio.notifications.raceprogress.enable">Enable</label>
                                         <div class="form-check form-switch">
                                             <input type="checkbox" class="form-check-input"
                                                 id="notify-raceprogress-enabled"
-                                                data-config="pitRadio.notifications.raceProgressEnabled" role="switch">
+                                                data-config="pitRadio.notifications.enableRaceProgress" role="switch">
                                         </div>
                                     </div>
                                     <div class="col-md-6 col-lg-3">
@@ -2938,6 +2965,14 @@
                 }
             },
 
+            // Sync channel state from dropdown after config is loaded
+            syncChannelState() {
+                if (this.elements.channel) {
+                    this.state.channel = this.elements.channel.value;
+                    this.toggleUploadButton();
+                }
+            },
+
             async handleUpload(event) {
                 const file = event.target.files[0];
                 if (!file) return;
@@ -2978,9 +3013,9 @@
                     this.state.downloadReady = true;
                     this.state.updateAvailable = true;
                     this.state.latestVersion = {
-                        version: data.version || 'Custom Upload',
+                        version: data.version || t('runmode.settings.system.updates.customupload'),
                         release_date: new Date().toISOString(),
-                        changelog: 'Custom uploaded file: ' + file.name,
+                        changelog: t('runmode.settings.system.updates.customuploadedfile') + ' ' + file.name,
                         size: file.size
                     };
 

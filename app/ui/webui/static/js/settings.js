@@ -224,6 +224,21 @@ class ConfigManager {
             this.factoryReset();
         });
 
+        // Developer Tools toggle - update visibility when changed
+        const enableDevToolsToggle = document.getElementById('app-enabledevtools');
+        if (enableDevToolsToggle) {
+            enableDevToolsToggle.addEventListener('change', () => {
+                // Update the visibility after the value changes
+                setTimeout(() => {
+                    this.updateDevToolsVisibility();
+                    // Also update navigation to show/hide Developer menu
+                    if (typeof initializeNavigation === 'function') {
+                        initializeNavigation();
+                    }
+                }, 100);
+            });
+        }
+
         // SSH enable/disable toggle
         const sshEnabledToggle = document.getElementById('ssh-enabled');
         if (sshEnabledToggle) {
@@ -505,11 +520,8 @@ class ConfigManager {
             // Checkboxes and selects should save immediately on change
             if (input.type === 'checkbox' || input.tagName === 'SELECT' || input.type === 'radio') {
                 input.addEventListener('change', () => {
-                    console.log('[DEBUG] Change event fired for:', input.id, input.dataset.config, 'value:', input.value);
-
                     // Don't process changes during form population
                     if (this.isPopulating) {
-                        console.log('[DEBUG] Skipping - form is populating');
                         return;
                     }
 
@@ -588,11 +600,8 @@ class ConfigManager {
 
     // Save configuration for a specific input
     async saveInputConfiguration(input) {
-        console.log('[DEBUG] saveInputConfiguration called for:', input.id, input.dataset.config);
-
         // Skip saves during initial load or form population
         if (this.isInitializing || this.isPopulating) {
-            console.log('[DEBUG] Skipping save - initializing:', this.isInitializing, 'populating:', this.isPopulating);
             return;
         }
 
@@ -638,22 +647,7 @@ class ConfigManager {
             const formData = {};
             this.setNestedValue(formData, configPath, newValue);
 
-            // Debug logging
-            console.log(`[DEBUG] Saving ${configPath}:`, {
-                configPath,
-                newValue,
-                attemptedValue,
-                inputType: input.type,
-                inputTagName: input.tagName,
-                hasDataType: !!input.dataset.type,
-                dataType: input.dataset.type,
-                formData
-            });
-
             // Send to server
-            console.log('[DEBUG] About to send fetch request to /api/config');
-            console.log('[DEBUG] Request body:', JSON.stringify(formData));
-
             try {
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
@@ -668,13 +662,11 @@ class ConfigManager {
                 });
 
                 clearTimeout(timeoutId);
-                console.log(`[DEBUG] Save response status: ${updateResponse.status}`);
 
                 if (!updateResponse.ok) {
                     // Try to parse error details
                     try {
                         const errorData = await updateResponse.json();
-                        console.error(`[DEBUG] Save failed with errors:`, errorData);
                         throw new Error(`HTTP error! status: ${updateResponse.status}, details: ${JSON.stringify(errorData)}`);
                     } catch (parseError) {
                         throw new Error(`HTTP error! status: ${updateResponse.status}`);
@@ -685,10 +677,8 @@ class ConfigManager {
                 this.showInputStatus(input, 'success');
             } catch (fetchError) {
                 if (fetchError.name === 'AbortError') {
-                    console.error('[DEBUG] Fetch request timed out after 5 seconds');
                     throw new Error('Request timed out');
                 } else {
-                    console.error('[DEBUG] Fetch error:', fetchError);
                     throw fetchError;
                 }
             }
@@ -698,8 +688,7 @@ class ConfigManager {
             this.setNestedValue(this.config, configPath, newValue);
 
         } catch (error) {
-            console.error(`[DEBUG] Failed to save ${configPath}:`, error);
-            console.error('[DEBUG] Error stack:', error.stack);
+            console.error(`Failed to save ${configPath}:`, error);
             this.showInputStatus(input, 'error');
 
             // Keep the attempted value visible while error icon is showing
@@ -887,6 +876,14 @@ class ConfigManager {
         // Update sweep preset button highlighting based on current values
         this.updateSweepPresetHighlights();
 
+        // Update visibility of dev-only elements
+        this.updateDevToolsVisibility();
+
+        // Notify UpdateManager to sync its state with the channel dropdown
+        if (typeof UpdateManager !== 'undefined' && typeof UpdateManager.syncChannelState === 'function') {
+            UpdateManager.syncChannelState();
+        }
+
         this.isPopulating = false; // Clear flag after population complete
     }
 
@@ -896,6 +893,70 @@ class ConfigManager {
         muteCheckboxes.forEach(checkbox => {
             this.updateMuteIconForCheckbox(checkbox);
         });
+    }
+
+    // Update visibility of developer-only UI elements based on enableDevTools setting
+    updateDevToolsVisibility() {
+        const devToolsEnabled = this.getNestedValue(this.config, 'app.enableDevTools') === true;
+
+        // Hide/show the dev channel option in update channel select
+        const updateChannelSelect = document.getElementById('update-channel');
+        if (updateChannelSelect) {
+            let devChannelOption = updateChannelSelect.querySelector('option[value="dev"]');
+
+            if (devToolsEnabled) {
+                // Add the dev option if it doesn't exist
+                if (!devChannelOption) {
+                    devChannelOption = document.createElement('option');
+                    devChannelOption.value = 'dev';
+                    devChannelOption.textContent = 'Dev';
+                    // Insert before "custom" option
+                    const customOption = updateChannelSelect.querySelector('option[value="custom"]');
+                    if (customOption) {
+                        updateChannelSelect.insertBefore(devChannelOption, customOption);
+                    } else {
+                        updateChannelSelect.appendChild(devChannelOption);
+                    }
+                }
+            } else {
+                // Remove the dev option completely
+                if (devChannelOption) {
+                    // If dev channel is currently selected, switch to stable first
+                    if (updateChannelSelect.value === 'dev') {
+                        updateChannelSelect.value = 'stable';
+                        // Save the new value
+                        this.saveInputConfiguration(updateChannelSelect);
+                    }
+                    devChannelOption.remove();
+                }
+            }
+        }
+
+        // Hide/show the SSH Access section in System Advanced settings
+        const sshAccessSection = document.getElementById('ssh-access-settings');
+        if (sshAccessSection) {
+            sshAccessSection.style.display = devToolsEnabled ? 'block' : 'none';
+        }
+
+        // Hide the entire advanced settings expander for System when dev tools is disabled
+        // (since SSH is currently the only content in System advanced settings)
+        const advancedToggle = document.querySelector('[data-bs-target="#advancedSettingsSystem"]');
+        if (advancedToggle) {
+            if (devToolsEnabled) {
+                // Show the toggle - restore d-flex class and clear display
+                if (!advancedToggle.classList.contains('d-flex')) {
+                    advancedToggle.classList.add('d-flex');
+                }
+                advancedToggle.style.display = '';
+            } else {
+                // Hide the toggle - remove d-flex and set display none with !important
+                advancedToggle.classList.remove('d-flex');
+                advancedToggle.style.setProperty('display', 'none', 'important');
+            }
+        }
+
+        // Store the dev tools state globally so navigation can access it
+        window.devToolsEnabled = devToolsEnabled;
     }
 
     // Update transmission curve and g-force inputs disabled state based on mode
@@ -1000,8 +1061,6 @@ class ConfigManager {
         const inputs = document.querySelectorAll('[data-config]');
         const formData = {};
 
-        console.log('[DEBUG] Collecting form data from', inputs.length, 'inputs');
-
         inputs.forEach(input => {
             const configPath = input.dataset.config;
             let value;
@@ -1016,7 +1075,6 @@ class ConfigManager {
                     value = input.dataset.radioValue === 'true' ? true :
                         input.dataset.radioValue === 'false' ? false :
                             input.dataset.radioValue;
-                    console.log(`[DEBUG] Collected radio field ${configPath}:`, value);
                 } else {
                     value = input.value;
                 }
@@ -1027,15 +1085,12 @@ class ConfigManager {
                 if (isNaN(value)) {
                     value = 0;
                 }
-                console.log(`[DEBUG] Collected number field ${configPath}:`, value, 'from', input.value);
             } else {
                 value = input.value;
             }
 
             this.setNestedValue(formData, configPath, value);
         });
-
-        console.log('[DEBUG] Collected form data:', formData);
 
         return formData;
     }
@@ -1906,7 +1961,7 @@ class ConfigManager {
 
         // Set EQ enabled checkbox
         if (eqEnabledCheckbox) {
-            eqEnabledCheckbox.checked = this.config.synthesizer.eqEnabled || false;
+            eqEnabledCheckbox.checked = this.config.synthesizer.enableEQ || false;
             // Listen for checkbox changes and trigger EQ save
             eqEnabledCheckbox.addEventListener('change', () => {
                 this.debounceEqSave();
@@ -2384,13 +2439,13 @@ class ConfigManager {
             // Update local config
             this.config.synthesizer.eq = normalizedBands;
             if (eqEnabledCheckbox) {
-                this.config.synthesizer.eqEnabled = eqEnabledCheckbox.checked;
+                this.config.synthesizer.enableEQ = eqEnabledCheckbox.checked;
             }
 
             // Save to server
             const formData = {
                 synthesizer: {
-                    eqEnabled: eqEnabledCheckbox ? eqEnabledCheckbox.checked : false,
+                    enableEQ: eqEnabledCheckbox ? eqEnabledCheckbox.checked : false,
                     eq: normalizedBands
                 }
             };

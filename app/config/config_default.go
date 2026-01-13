@@ -12,7 +12,7 @@ func defaultConfig() *viperConfig {
 			LogLevel:      "info",
 			BaseDir:       ".",
 			VehicleDBFile: "",
-			WebUIEnabled:  true,
+			EnabledWebUI:  true,
 			WebUIPort:     80,
 			Update: &update{
 				BaseURL:              "https://simtezilo.com/releases",
@@ -21,6 +21,7 @@ func defaultConfig() *viperConfig {
 				AutoInstall:          false,
 				CheckIntervalMinutes: 60,
 			},
+			EnableDevTools: false,
 		},
 		Hardware: &hardware{
 			Model:              "none",
@@ -85,15 +86,15 @@ func defaultConfig() *viperConfig {
 			Output:                "log",
 			MessageSendIntervalMs: 2000,
 			Notifications: &notifications{
-				RaceProgressEnabled:     true,
+				EnableRaceProgress:      true,
 				RaceProgressMinLaps:     10,
 				RaceProgressIntervalPc:  25,
-				RaceLapsEnabled:         true,
+				EnableRaceLaps:          true,
 				RaceLapsIntervalLaps:    1,
 				RaceLapsCountdownLaps:   3,
-				LapTimesEnabled:         true,
+				EnableLapTimes:          true,
 				LapTimesMaxDeltaSeconds: 2.0,
-				CircuitMatchingEnabled:  false,
+				EnableCircuitMatching:   false,
 			},
 			Discord: &discord{
 				Token:          "",
@@ -130,7 +131,7 @@ func defaultConfig() *viperConfig {
 			TransmissionGainMinStreet: -6.00,
 			EngineMute:                false,
 			EngineGain:                -4.25,
-			EqEnabled:                 false,
+			EnableEq:                  false,
 			EqBands: []EQBand{
 				{Frequency: 12, Gain: 0.0, Q: 2.0},
 				{Frequency: 16, Gain: 0.0, Q: 2.0},

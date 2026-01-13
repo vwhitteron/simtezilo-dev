@@ -1,9 +1,14 @@
 // Navigation component for Simtezilo Web UI
 function createNavigation(currentPage) {
+    // Build telemetry dropdown - conditionally include Developer page based on devToolsEnabled
     const telemetryDropdown = [
-        { path: '/telemetry', nameKey: 'runmode.nav.race', fallback: 'Race', id: 'telemetry' },
-        { path: '/dev', nameKey: 'runmode.nav.developer', fallback: 'Developer', id: 'dev' }
+        { path: '/telemetry', nameKey: 'runmode.nav.race', fallback: 'Race', id: 'telemetry' }
     ];
+
+    // Only add Developer page if dev tools is enabled
+    if (window.devToolsEnabled) {
+        telemetryDropdown.push({ path: '/dev', nameKey: 'runmode.nav.developer', fallback: 'Developer', id: 'dev' });
+    }
 
     const pages = [
         { path: '/settings', nameKey: 'runmode.nav.settings', fallback: 'Settings', id: 'settings' },
@@ -138,6 +143,11 @@ window.hideNavbarStatus = function () {
 
 // Initialize navigation when DOM is loaded
 document.addEventListener('DOMContentLoaded', function () {
+    initializeNavigation();
+});
+
+// Function to initialize or reinitialize navigation
+function initializeNavigation() {
     const navContainer = document.getElementById('navigation');
     if (navContainer && typeof currentPageId !== 'undefined') {
         // Create navigation immediately with fallback text
@@ -181,48 +191,8 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         }
 
-        // Handle Info nav link click
-        const infoLink = document.getElementById('info-nav-link');
-        const popover = document.getElementById('info-popover');
-        let popoverVisible = false;
-
-        if (infoLink && popover) {
-            infoLink.addEventListener('click', function (e) {
-                e.preventDefault();
-
-                if (popoverVisible) {
-                    popover.style.display = 'none';
-                    popoverVisible = false;
-                } else {
-                    // Position popover below the nav link
-                    const rect = infoLink.getBoundingClientRect();
-                    popover.style.left = rect.left + 'px';
-                    popover.style.top = (rect.bottom + 5) + 'px';
-                    popover.style.display = 'block';
-                    popoverVisible = true;
-
-                    // Fetch and populate system info
-                    fetch('/api/system/info')
-                        .then(response => response.json())
-                        .then(data => {
-                            document.getElementById('info-version').textContent = data.version || '-';
-                            document.getElementById('info-commit-hash').textContent = data.commitHash || '-';
-                            document.getElementById('info-build-date').textContent = data.buildTime || '-';
-                            document.getElementById('info-build-platform').textContent = data.buildPlatform || '-';
-                            document.getElementById('info-hardware').textContent = data.hardware || '-';
-                        })
-                        .catch(error => console.error('Failed to fetch system info:', error));
-                }
-            });
-
-            // Close popover when clicking outside
-            document.addEventListener('click', function (e) {
-                if (popoverVisible && !popover.contains(e.target) && e.target !== infoLink) {
-                    popover.style.display = 'none';
-                    popoverVisible = false;
-                }
-            });
-        }
+        // Setup info nav link popover (need to do this every time navigation is recreated)
+        setupInfoPopover();
 
         // Check config status from backend if on settings page
         if (currentPageId === 'settings' && typeof window.configManager !== 'undefined') {
@@ -275,5 +245,59 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
             });
         }
+    }
+}
+
+// Track popover visibility state
+let popoverVisible = false;
+
+// Function to set up info popover event handlers
+function setupInfoPopover() {
+    const infoLink = document.getElementById('info-nav-link');
+    const popover = document.getElementById('info-popover');
+
+    if (infoLink && popover) {
+        // Remove any existing click listeners by cloning the element
+        const newInfoLink = infoLink.cloneNode(true);
+        infoLink.parentNode.replaceChild(newInfoLink, infoLink);
+
+        newInfoLink.addEventListener('click', function (e) {
+            e.preventDefault();
+
+            if (popoverVisible) {
+                popover.style.display = 'none';
+                popoverVisible = false;
+            } else {
+                // Position popover below the nav link
+                const rect = newInfoLink.getBoundingClientRect();
+                popover.style.left = rect.left + 'px';
+                popover.style.top = (rect.bottom + 5) + 'px';
+                popover.style.display = 'block';
+                popoverVisible = true;
+
+                // Fetch and populate system info
+                fetch('/api/system/info')
+                    .then(response => response.json())
+                    .then(data => {
+                        document.getElementById('info-version').textContent = data.version || '-';
+                        document.getElementById('info-commit-hash').textContent = data.commitHash || '-';
+                        document.getElementById('info-build-date').textContent = data.buildTime || '-';
+                        document.getElementById('info-build-platform').textContent = data.buildPlatform || '-';
+                        document.getElementById('info-hardware').textContent = data.hardware || '-';
+                    })
+                    .catch(error => console.error('Failed to fetch system info:', error));
+            }
+        });
+    }
+}
+
+// Close popover when clicking outside (only set up once)
+document.addEventListener('click', function (e) {
+    const popover = document.getElementById('info-popover');
+    const infoLink = document.getElementById('info-nav-link');
+
+    if (popoverVisible && popover && infoLink && !popover.contains(e.target) && e.target !== infoLink) {
+        popover.style.display = 'none';
+        popoverVisible = false;
     }
 });

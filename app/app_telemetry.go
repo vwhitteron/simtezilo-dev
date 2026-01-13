@@ -130,7 +130,7 @@ func (a *App) telemetryIsActive() bool {
 	}
 
 	// If in replay mode, telmetry is considered active if the time of day has advanced.
-	if a.config.GetHapticsEnableReplay() {
+	if a.config.GetHapticsReplayEnabled() {
 		return true
 	}
 

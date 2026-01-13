@@ -228,6 +228,14 @@ func (w *WebUI) htmlRouterHandlerFunc() func(w http.ResponseWriter, r *http.Requ
 			filename = path[1:] + ".html"
 		}
 
+		// Restrict access to dev.html if developer tools are not enabled
+		if filename == "dev.html" && !w.config.GetDevToolsEnabled() {
+			response.WriteHeader(http.StatusForbidden)
+			w.log.Debug().Str("path", path).Msg("access to developer page denied - dev tools not enabled")
+
+			return
+		}
+
 		content, err := htmlFiles.ReadFile("html/" + filename)
 		if err != nil {
 			response.WriteHeader(http.StatusNotFound)
@@ -868,13 +876,14 @@ func (w *WebUI) handleConfigAPI(response http.ResponseWriter, request *http.Requ
 func (w *WebUI) handleGetConfig(response http.ResponseWriter, _ *http.Request) {
 	configData := map[string]any{
 		"app": map[string]any{
-			"language":      *w.config.GetAppLanguage(),
-			"accent":        w.config.GetAppAccent(),
-			"logLevel":      w.config.GetAppLogLevel(),
-			"baseDir":       w.config.GetAppBaseDir(),
-			"vehicleDBFile": w.config.GetAppVehicleDBFile(),
-			"webUIEnabled":  w.config.GetAppWebUIEnabled(),
-			"webUIPort":     w.config.GetAppWebUIPort(),
+			"language":       *w.config.GetAppLanguage(),
+			"accent":         w.config.GetAppAccent(),
+			"logLevel":       w.config.GetAppLogLevel(),
+			"baseDir":        w.config.GetAppBaseDir(),
+			"vehicleDBFile":  w.config.GetAppVehicleDBFile(),
+			"enabledWebUI":   w.config.GetAppWebUIEnabled(),
+			"webUIPort":      w.config.GetAppWebUIPort(),
+			"enableDevTools": w.config.GetDevToolsEnabled(),
 			"updates": map[string]any{
 				"channel": w.config.GetAppUpdateChannel(),
 			},
@@ -890,7 +899,7 @@ func (w *WebUI) handleGetConfig(response http.ResponseWriter, _ *http.Request) {
 			"displayOrientation": w.config.GetDisplayOrientation(),
 		},
 		"haptics": map[string]any{
-			"enableReplay":                 w.config.GetHapticsEnableReplay(),
+			"enableReplay":                 w.config.GetHapticsReplayEnabled(),
 			"pitRadioOutput":               w.config.GetPitRadioOutput(),
 			"dynamicTransmissionFeedback":  w.config.GethapticsDynamicTransFeedbackEnabled(),
 			"dynamicTransmissionCurve":     w.config.GetHapticsTransmissionCurve(),
@@ -907,15 +916,15 @@ func (w *WebUI) handleGetConfig(response http.ResponseWriter, _ *http.Request) {
 			"enabled":               w.config.PitRadioEnabled(),
 			"messageSendIntervalMs": w.config.GetPitRadioMessageSendIntervalMs(),
 			"notifications": map[string]any{
-				"raceProgressEnabled":     w.config.GetPitRadioNotifyRaceProgressEnabled(),
+				"enableRaceProgress":      w.config.GetPitRadioNotifyRaceProgressEnabled(),
 				"raceProgressMinLaps":     w.config.GetPitRadioNotifyRaceProgressMinLaps(),
 				"raceProgressIntervalPc":  w.config.GetPitRadioNotifyRaceProgressIntervalPc(),
-				"raceLapsEnabled":         w.config.GetPitRadioNotifyRaceLapsEnabled(),
+				"enableRaceLaps":          w.config.GetPitRadioNotifyRaceLapsEnabled(),
 				"raceLapsIntervalLaps":    w.config.GetPitRadioNotifyRaceLapsIntervalLaps(),
 				"raceLapsCountdownLaps":   w.config.GetPitRadioNotifyRaceLapsCountdownLaps(),
-				"lapTimesEnabled":         w.config.GetPitRadioNotifyLapTimesEnabled(),
+				"enableLapTimes":          w.config.GetPitRadioNotifyLapTimesEnabled(),
 				"lapTimesMaxDeltaSeconds": w.config.GetPitRadioNotifyLapTimesMaxDeltaSeconds(),
-				"circuitMatchingEnabled":  w.config.GetPitRadioNotifyCircuitMatchingEnabled(),
+				"enableCircuitMatching":   w.config.GetPitRadioNotifyCircuitMatchingEnabled(),
 			},
 			"fuelMonitoring": map[string]any{
 				"enabled":                 w.config.GetPitRadioFuelMonitoringEnabled(),
@@ -953,7 +962,7 @@ func (w *WebUI) handleGetConfig(response http.ResponseWriter, _ *http.Request) {
 			"engineGain":                w.config.GetSynthEngineGain(),
 			"gainIncrement":             w.config.GetSynthGainIncrement(),
 			"engineProfiles":            w.config.GetSynthEngineProfiles(),
-			"eqEnabled":                 w.config.GetSynthEqEnabled(),
+			"enableEQ":                  w.config.GetSynthEqEnabled(),
 			"eq":                        w.config.GetSynthEq(),
 		},
 		"eqCurve": func() map[string]any {
@@ -1140,6 +1149,14 @@ func (w *WebUI) applyAppConfig(config map[string]any) []string {
 			w.config.SetAppBaseDir(baseDirStr)
 		} else {
 			errors = append(errors, "invalid base directory value")
+		}
+	}
+
+	if enableDevTools, ok := config["enableDevTools"]; ok {
+		if enableDevToolsBool, ok := enableDevTools.(bool); ok {
+			w.config.SetDevToolsEnabled(enableDevToolsBool)
+		} else {
+			errors = append(errors, "invalid enableDevTools value")
 		}
 	}
 
@@ -1370,7 +1387,7 @@ func (w *WebUI) applySynthesizerConfig(config map[string]any) []string {
 		}
 	}
 
-	if eqEnabled, ok := config["eqEnabled"]; ok {
+	if eqEnabled, ok := config["enableEQ"]; ok {
 		if enabled, ok := eqEnabled.(bool); ok {
 			w.config.SetSynthEqEnabled(enabled)
 		} else {
