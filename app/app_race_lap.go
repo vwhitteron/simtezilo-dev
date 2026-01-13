@@ -451,3 +451,19 @@ func pronounceTime(minutes string, seconds string, milliseconds string, includeU
 
 	return strings.Join(announce, " ")
 }
+
+func (a *App) getPreviousLapTime(lap int16) (lapTime time.Duration) {
+	if len(a.lapEvents) == 0 || lap < int16(len(a.lapEvents)) { //nolint:gosec // lap count will not overflow int16
+		return 0
+	}
+
+	for i := len(a.lapEvents) - 1; i >= 0; i-- {
+		if a.lapEvents[i].Lap == lap-1 {
+			lapTime = a.lapEvents[i].LapTime
+
+			break
+		}
+	}
+
+	return lapTime
+}

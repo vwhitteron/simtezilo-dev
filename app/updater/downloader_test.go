@@ -1,6 +1,7 @@
 package updater //nolint:testpackage // testing internal functions
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"net/http"
@@ -20,18 +21,18 @@ func TestNewDownloaderCreatesValidInstance(t *testing.T) {
 	downloadDir := "/tmp/test-downloads"
 	timeout := 30 * time.Second
 
-	d := NewDownloader(downloadDir, timeout, log)
+	downloader := NewDownloader(downloadDir, timeout, log)
 
-	if d == nil {
+	if downloader == nil {
 		t.Fatal("NewDownloader() returned nil")
 	}
 
-	if d.downloadDir != downloadDir {
-		t.Errorf("downloadDir = %v, want %v", d.downloadDir, downloadDir)
+	if downloader.directory != downloadDir {
+		t.Errorf("downloadDir = %v, want %v", downloader.directory, downloadDir)
 	}
 
-	if d.httpTimeout != timeout {
-		t.Errorf("httpTimeout = %v, want %v", d.httpTimeout, timeout)
+	if downloader.httpTimeout != timeout {
+		t.Errorf("httpTimeout = %v, want %v", downloader.httpTimeout, timeout)
 	}
 }
 
@@ -56,7 +57,7 @@ func TestDownloadSucceedsWithValidChecksumAndReportsProgress(t *testing.T) {
 	downloadDir := t.TempDir()
 	log := zerolog.Nop()
 
-	d := NewDownloader(downloadDir, 30*time.Second, log)
+	downloader := NewDownloader(downloadDir, 30*time.Second, log)
 
 	info := &UpdateInfo{
 		DownloadURL:      server.URL,
@@ -71,7 +72,7 @@ func TestDownloadSucceedsWithValidChecksumAndReportsProgress(t *testing.T) {
 		progressUpdates = append(progressUpdates, p)
 	}
 
-	path, err := d.Download(info, progressCb)
+	path, err := downloader.Download(context.Background(), info, progressCb)
 	if err != nil {
 		t.Fatalf("Download() error = %v", err)
 	}
@@ -104,7 +105,7 @@ func TestDownloadFailsWhenUpdateInfoIsNil(t *testing.T) {
 
 	d := NewDownloader(downloadDir, 30*time.Second, log)
 
-	_, err := d.Download(nil, nil)
+	_, err := d.Download(context.Background(), nil, nil)
 	if err == nil {
 		t.Error("Download() with nil info should return error")
 	}
@@ -122,14 +123,14 @@ func TestDownloadFailsWhenServerReturnsError(t *testing.T) {
 	downloadDir := t.TempDir()
 	log := zerolog.Nop()
 
-	d := NewDownloader(downloadDir, 30*time.Second, log)
+	downloader := NewDownloader(downloadDir, 30*time.Second, log)
 
 	info := &UpdateInfo{
 		DownloadURL: server.URL,
 		SHA256:      "somehash",
 	}
 
-	_, err := d.Download(info, nil)
+	_, err := downloader.Download(context.Background(), info, nil)
 	if err == nil {
 		t.Error("Download() should return error on HTTP error")
 	}
@@ -149,7 +150,7 @@ func TestDownloadFailsWhenChecksumDoesNotMatch(t *testing.T) {
 	downloadDir := t.TempDir()
 	log := zerolog.Nop()
 
-	d := NewDownloader(downloadDir, 30*time.Second, log)
+	downloader := NewDownloader(downloadDir, 30*time.Second, log)
 
 	info := &UpdateInfo{
 		DownloadURL:  server.URL,
@@ -157,7 +158,7 @@ func TestDownloadFailsWhenChecksumDoesNotMatch(t *testing.T) {
 		DownloadSize: int64(len(testContent)),
 	}
 
-	_, err := d.Download(info, nil)
+	_, err := downloader.Download(context.Background(), info, nil)
 	if err == nil {
 		t.Error("Download() should return error on checksum mismatch")
 	}
@@ -171,7 +172,7 @@ func TestVerifyFileReturnsTrueForMatchingHash(t *testing.T) {
 	testFile := filepath.Join(testDir, "test-file")
 	testContent := []byte("test content for verification")
 
-	err := os.WriteFile(testFile, testContent, 0o644)
+	err := os.WriteFile(testFile, testContent, 0o600)
 	if err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
@@ -182,10 +183,10 @@ func TestVerifyFileReturnsTrueForMatchingHash(t *testing.T) {
 	expectedHash := hex.EncodeToString(hasher.Sum(nil))
 
 	log := zerolog.Nop()
-	d := NewDownloader(testDir, 30*time.Second, log)
+	downloader := NewDownloader(testDir, 30*time.Second, log)
 
 	// Test with correct hash
-	valid, err := d.VerifyFile(testFile, expectedHash)
+	valid, err := downloader.VerifyFile(testFile, expectedHash)
 	if err != nil {
 		t.Fatalf("VerifyFile() error = %v", err)
 	}
@@ -195,7 +196,7 @@ func TestVerifyFileReturnsTrueForMatchingHash(t *testing.T) {
 	}
 
 	// Test with wrong hash
-	valid, err = d.VerifyFile(testFile, "wrong-hash")
+	valid, err = downloader.VerifyFile(testFile, "wrong-hash")
 	if err != nil {
 		t.Fatalf("VerifyFile() error = %v", err)
 	}
@@ -230,15 +231,15 @@ func TestCleanupDownloadsRemovesOldFiles(t *testing.T) {
 	}
 
 	for _, f := range files {
-		err := os.WriteFile(f, []byte("test"), 0o644)
+		err := os.WriteFile(f, []byte("test"), 0o600)
 		if err != nil {
 			t.Fatalf("Failed to create test file: %v", err)
 		}
 	}
 
-	d := NewDownloader(downloadDir, 30*time.Second, log)
+	downloader := NewDownloader(downloadDir, 30*time.Second, log)
 
-	err := d.CleanupDownloads()
+	err := downloader.CleanupDownloads()
 	if err != nil {
 		t.Fatalf("CleanupDownloads() error = %v", err)
 	}
@@ -269,7 +270,7 @@ func TestDownloadSucceedsWithoutProgressCallback(t *testing.T) {
 	downloadDir := t.TempDir()
 	log := zerolog.Nop()
 
-	d := NewDownloader(downloadDir, 30*time.Second, log)
+	downloader := NewDownloader(downloadDir, 30*time.Second, log)
 
 	info := &UpdateInfo{
 		DownloadURL:  server.URL,
@@ -278,7 +279,7 @@ func TestDownloadSucceedsWithoutProgressCallback(t *testing.T) {
 	}
 
 	// Test with nil progress callback
-	path, err := d.Download(info, nil)
+	path, err := downloader.Download(context.Background(), info, nil)
 	if err != nil {
 		t.Fatalf("Download() error = %v", err)
 	}

@@ -94,7 +94,7 @@ func New(cfg *Config, currentVersion string, log zerolog.Logger) (*Updater, erro
 }
 
 // Start begins the update checker if updates are enabled.
-func (u *Updater) Start(ctx context.Context) {
+func (u *Updater) Start(lifecycleCTX context.Context) {
 	if !u.cfg.Enabled {
 		u.log.Debug().Msg("Updates disabled")
 
@@ -118,7 +118,7 @@ func (u *Updater) Start(ctx context.Context) {
 	}
 
 	// Check for existing downloads that might be ready to install
-	u.CheckExistingDownloads()
+	u.CheckExistingDownloads() //nolint:contextcheck // context is for managing lifecycle only
 
 	u.log.Info().
 		Str("manifestURL", u.cfg.BaseURL).
@@ -126,7 +126,7 @@ func (u *Updater) Start(ctx context.Context) {
 		Dur("checkInterval", u.cfg.CheckInterval).
 		Msg("Starting update checker")
 
-	u.checker.Start(ctx)
+	u.checker.Start(lifecycleCTX)
 }
 
 // Stop gracefully stops the updater.
@@ -152,7 +152,7 @@ func (u *Updater) AvailableUpdate() *UpdateInfo {
 }
 
 // DownloadUpdate downloads the available update.
-func (u *Updater) DownloadUpdate(progressCb ProgressCallback) (string, error) {
+func (u *Updater) DownloadUpdate(ctx context.Context, progressCb ProgressCallback) (string, error) {
 	info := u.checker.AvailableUpdate()
 	if info == nil {
 		return "", errors.New("no update available")
@@ -160,7 +160,7 @@ func (u *Updater) DownloadUpdate(progressCb ProgressCallback) (string, error) {
 
 	u.checker.SetStatus(StatusDownloading)
 
-	path, err := u.downloader.Download(info, progressCb)
+	path, err := u.downloader.Download(ctx, info, progressCb)
 	if err != nil {
 		u.checker.SetStatus(StatusError)
 
@@ -190,8 +190,8 @@ func (u *Updater) RestartToApply() error {
 }
 
 // DownloadAndPrepare is a convenience method that downloads and prepares an update.
-func (u *Updater) DownloadAndPrepare(progressCb ProgressCallback) error {
-	path, err := u.DownloadUpdate(progressCb)
+func (u *Updater) DownloadAndPrepare(ctx context.Context, progressCb ProgressCallback) error {
+	path, err := u.DownloadUpdate(ctx, progressCb)
 	if err != nil {
 		return err
 	}

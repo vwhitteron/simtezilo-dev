@@ -3,26 +3,38 @@ package updater //nolint:testpackage // testing internal functions
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestParseManifest(t *testing.T) {
 	t.Parallel()
 
-	manifestJSON := `{
-		"version": "1.2.3",
-		"releaseDate": "2026-01-07T10:00:00Z",
-		"channel": "stable",
+	want := map[string]string{
+		"version":           "1.2.3",
+		"channel":           "stable",
 		"minUpgradeVersion": "1.0.0",
+		"sha256":            "abc123",
+		"size":              "15728640",
+	}
+
+	manifestJSON := fmt.Sprintf(`{
+		"version": "%s",
+		"releaseDate": "2026-01-07T10:00:00Z",
+		"channel": "%s",
+		"minUpgradeVersion": "%s",
 		"changelog": "- Bug fixes\n- New features",
 		"platforms": {
 			"linux-arm64": {
 				"url": "https://example.com/releases/v1.2.3/simtezilo-linux-arm64",
-				"sha256": "abc123",
-				"size": 15728640
+				"sha256": "%s",
+				"size": %s
 			},
 			"linux-amd64": {
 				"url": "https://example.com/releases/v1.2.3/simtezilo-linux-amd64",
@@ -30,23 +42,23 @@ func TestParseManifest(t *testing.T) {
 				"size": 16252928
 			}
 		}
-	}`
+	}`, want["version"], want["channel"], want["minUpgradeVersion"], want["sha256"], want["size"])
 
 	manifest, err := ParseManifest([]byte(manifestJSON))
 	if err != nil {
 		t.Fatalf("ParseManifest() error = %v", err)
 	}
 
-	if manifest.Version != "1.2.3" {
-		t.Errorf("Version = %v, want 1.2.3", manifest.Version)
+	if manifest.Version != want["version"] {
+		t.Errorf("Version = %v, want %v", manifest.Version, want["version"])
 	}
 
-	if manifest.Channel != "stable" {
-		t.Errorf("Channel = %v, want stable", manifest.Channel)
+	if manifest.Channel != want["channel"] {
+		t.Errorf("Channel = %v, want %v", manifest.Channel, want["channel"])
 	}
 
-	if manifest.MinUpgradeVersion != "1.0.0" {
-		t.Errorf("MinUpgradeVersion = %v, want 1.0.0", manifest.MinUpgradeVersion)
+	if manifest.MinUpgradeVersion != want["minUpgradeVersion"] {
+		t.Errorf("MinUpgradeVersion = %v, want %v", manifest.MinUpgradeVersion, want["minUpgradeVersion"])
 	}
 
 	if len(manifest.Platforms) != 2 {
@@ -54,12 +66,15 @@ func TestParseManifest(t *testing.T) {
 	}
 
 	linuxArm64 := manifest.Platforms["linux-arm64"]
-	if linuxArm64.SHA256 != "abc123" {
-		t.Errorf("linux-arm64 SHA256 = %v, want abc123", linuxArm64.SHA256)
+	if linuxArm64.SHA256 != want["sha256"] {
+		t.Errorf("linux-arm64 SHA256 = %v, want %v", linuxArm64.SHA256, want["sha256"])
 	}
 
-	if linuxArm64.Size != 15728640 {
-		t.Errorf("linux-arm64 Size = %v, want 15728640", linuxArm64.Size)
+	wantSize, err := strconv.ParseInt(want["size"], 10, 64)
+	require.NoError(t, err)
+
+	if linuxArm64.Size != wantSize {
+		t.Errorf("linux-arm64 Size = %v, want %v", linuxArm64.Size, wantSize)
 	}
 }
 

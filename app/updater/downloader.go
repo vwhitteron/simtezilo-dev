@@ -1,6 +1,7 @@
 package updater
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -31,7 +32,7 @@ type ProgressCallback func(progress DownloadProgress)
 type Downloader struct {
 	log         zerolog.Logger
 	httpTimeout time.Duration
-	downloadDir string
+	directory   string
 }
 
 // NewDownloader creates a new Downloader instance.
@@ -39,19 +40,36 @@ func NewDownloader(downloadDir string, httpTimeout time.Duration, log zerolog.Lo
 	return &Downloader{
 		log:         log.With().Str("component", "downloader").Logger(),
 		httpTimeout: httpTimeout,
-		downloadDir: downloadDir,
+		directory:   downloadDir,
 	}
+}
+
+// DownloadExists checks if a file has already been downloaded.
+func (d *Downloader) DownloadExists(info *UpdateInfo) (bool, string) {
+	if info == nil {
+		return false, ""
+	}
+
+	filename := d.extractFilenameFromURL(info.DownloadURL)
+	if filename == "" {
+		return false, ""
+	}
+
+	destPath := filepath.Join(d.directory, filename)
+	_, err := os.Stat(destPath)
+
+	return err == nil, destPath
 }
 
 // Download fetches the update binary and verifies its checksum.
 // Returns the path to the downloaded file.
-func (d *Downloader) Download(info *UpdateInfo, progressCb ProgressCallback) (string, error) {
+func (d *Downloader) Download(ctx context.Context, info *UpdateInfo, progressCb ProgressCallback) (string, error) {
 	if info == nil {
 		return "", errors.New("no update info provided")
 	}
 
 	// Ensure download directory exists
-	err := os.MkdirAll(d.downloadDir, 0o755)
+	err := os.MkdirAll(d.directory, 0o755)
 	if err != nil {
 		return "", fmt.Errorf("failed to create download directory: %w", err)
 	}
@@ -67,7 +85,7 @@ func (d *Downloader) Download(info *UpdateInfo, progressCb ProgressCallback) (st
 	}
 
 	// Create temporary file for download
-	destPath := filepath.Join(d.downloadDir, filename)
+	destPath := filepath.Join(d.directory, filename)
 	tmpPath := destPath + ".tmp"
 
 	d.log.Info().
@@ -93,7 +111,7 @@ func (d *Downloader) Download(info *UpdateInfo, progressCb ProgressCallback) (st
 
 	d.log.Debug().Msg("Creating HTTP request")
 
-	req, err := http.NewRequest(http.MethodGet, info.DownloadURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, info.DownloadURL, nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to create download request: %w", err)
 	}
@@ -147,7 +165,7 @@ func (d *Downloader) VerifyFile(path string, expectedSHA256 string) (bool, error
 func (d *Downloader) CleanupDownloads() error {
 	patterns := []string{"*.zip", "*.tar.gz", "*.tmp", "simtezilo.new", "simtezilo.rollback"}
 	for _, pattern := range patterns {
-		matches, err := filepath.Glob(filepath.Join(d.downloadDir, pattern))
+		matches, err := filepath.Glob(filepath.Join(d.directory, pattern))
 		if err != nil {
 			d.log.Warn().Err(err).Str("pattern", pattern).Msg("Failed to glob pattern")
 
@@ -305,21 +323,4 @@ func (d *Downloader) extractFilenameFromURL(downloadURL string) string {
 	}
 
 	return filename
-}
-
-// DownloadExists checks if a file has already been downloaded.
-func (d *Downloader) DownloadExists(info *UpdateInfo) (bool, string) {
-	if info == nil {
-		return false, ""
-	}
-
-	filename := d.extractFilenameFromURL(info.DownloadURL)
-	if filename == "" {
-		return false, ""
-	}
-
-	destPath := filepath.Join(d.downloadDir, filename)
-	_, err := os.Stat(destPath)
-
-	return err == nil, destPath
 }

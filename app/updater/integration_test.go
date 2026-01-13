@@ -1,9 +1,11 @@
 package updater //nolint:testpackage // testing internal integration
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -27,28 +29,31 @@ func TestFullUpdateFlowFromCheckToInstall(t *testing.T) {
 	// Create test server
 	mux := http.NewServeMux()
 
+	wantVersion := "2.0.0" //nolint:goconst // test constant
+	releaseURL := fmt.Sprintf("/releases/%s/simtezilo", wantVersion)
+
 	// Manifest endpoint
-	mux.HandleFunc("/releases/stable/latest.json", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("/releases/stable/latest.json", func(resp http.ResponseWriter, _ *http.Request) {
 		manifest := Manifest{
-			Version:     "2.0.0",
+			Version:     wantVersion,
 			ReleaseDate: time.Now().UTC(),
 			Channel:     "stable",
 			Changelog:   "- Feature 1\n- Feature 2",
 			Platforms: map[string]Platform{
 				GetPlatformKey(): {
-					URL:    "/releases/v2.0.0/simtezilo",
+					URL:    releaseURL,
 					SHA256: binaryHash,
 					Size:   int64(len(testBinary)),
 				},
 			},
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(manifest)
+		resp.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(resp).Encode(manifest)
 	})
 
 	// Binary download endpoint
-	mux.HandleFunc("/releases/v2.0.0/simtezilo", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc(releaseURL, func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/octet-stream")
 		_, _ = w.Write(testBinary)
 	})
@@ -63,7 +68,7 @@ func TestFullUpdateFlowFromCheckToInstall(t *testing.T) {
 	// Create current binary
 	currentBinaryPath := filepath.Join(installDir, "simtezilo")
 
-	err := os.WriteFile(currentBinaryPath, []byte("old version"), 0o755)
+	err := os.WriteFile(currentBinaryPath, []byte("old version"), 0o755) //nolint:gosec // binary executable file
 	if err != nil {
 		t.Fatalf("Failed to create current binary: %v", err)
 	}
@@ -102,8 +107,8 @@ func TestFullUpdateFlowFromCheckToInstall(t *testing.T) {
 		t.Fatal("CheckNow() returned nil, expected update info")
 	}
 
-	if info.AvailableVersion != "v2.0.0" {
-		t.Errorf("AvailableVersion = %v, want v2.0.0", info.AvailableVersion)
+	if info.AvailableVersion != "v"+wantVersion {
+		t.Errorf("AvailableVersion = %v, want v%s", info.AvailableVersion, wantVersion)
 	}
 
 	if updater.Status() != StatusUpdateAvailable {
@@ -120,7 +125,7 @@ func TestFullUpdateFlowFromCheckToInstall(t *testing.T) {
 		progressUpdates = append(progressUpdates, p)
 	}
 
-	downloadPath, err := updater.DownloadUpdate(progressCb)
+	downloadPath, err := updater.DownloadUpdate(context.Background(), progressCb)
 	if err != nil {
 		t.Fatalf("DownloadUpdate() error = %v", err)
 	}
@@ -130,7 +135,8 @@ func TestFullUpdateFlowFromCheckToInstall(t *testing.T) {
 	}
 
 	// Verify downloaded file exists
-	if _, statErr := os.Stat(downloadPath); statErr != nil {
+	_, statErr := os.Stat(downloadPath)
+	if statErr != nil {
 		t.Errorf("Downloaded file does not exist: %v", statErr)
 	}
 
@@ -198,7 +204,7 @@ func TestDownloadAndPrepareStagesUpdate(t *testing.T) {
 
 	mux := http.NewServeMux()
 
-	manifestHandler := func(w http.ResponseWriter, _ *http.Request) {
+	manifestHandler := func(resp http.ResponseWriter, _ *http.Request) {
 		manifest := Manifest{
 			Version:     "2.0.0",
 			ReleaseDate: time.Now().UTC(),
@@ -212,8 +218,8 @@ func TestDownloadAndPrepareStagesUpdate(t *testing.T) {
 			},
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(manifest)
+		resp.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(resp).Encode(manifest) //nolint:errchkjson // ignore error in test
 	}
 
 	mux.HandleFunc("/manifest.json", manifestHandler)
@@ -268,7 +274,7 @@ func TestDownloadAndPrepareStagesUpdate(t *testing.T) {
 	updater.Checker().mu.Unlock()
 
 	// Use DownloadAndPrepare convenience method
-	err = updater.DownloadAndPrepare(nil)
+	err = updater.DownloadAndPrepare(context.Background(), nil)
 	if err != nil {
 		t.Fatalf("DownloadAndPrepare() error = %v", err)
 	}
@@ -294,7 +300,7 @@ func TestRollbackRestoresWorkingVersionAfterFailure(t *testing.T) {
 	// Create current binary (the failed new version)
 	currentBinaryPath := filepath.Join(installDir, "simtezilo")
 
-	err := os.WriteFile(currentBinaryPath, []byte("failed new version"), 0o755)
+	err := os.WriteFile(currentBinaryPath, []byte("failed new version"), 0o755) //nolint:gosec // binary executable file
 	if err != nil {
 		t.Fatalf("Failed to create current binary: %v", err)
 	}
@@ -302,7 +308,7 @@ func TestRollbackRestoresWorkingVersionAfterFailure(t *testing.T) {
 	// Create rollback binary (the old working version)
 	rollbackPath := filepath.Join(installDir, "simtezilo.rollback")
 
-	err = os.WriteFile(rollbackPath, []byte("old working version"), 0o755)
+	err = os.WriteFile(rollbackPath, []byte("old working version"), 0o755) //nolint:gosec // binary executable file
 	if err != nil {
 		t.Fatalf("Failed to create rollback binary: %v", err)
 	}
@@ -344,8 +350,8 @@ func TestRollbackRestoresWorkingVersionAfterFailure(t *testing.T) {
 		t.Error("RollbackAvailable() should be true")
 	}
 
-	if updater.RollbackVersion() != "1.0.0" {
-		t.Errorf("RollbackVersion() = %v, want 1.0.0", updater.RollbackVersion())
+	if updater.RollbackVersion() != state.CurrentVersion {
+		t.Errorf("RollbackVersion() = %v, want %v", updater.RollbackVersion(), state.CurrentVersion)
 	}
 
 	// Perform rollback
@@ -385,7 +391,7 @@ func TestAutoRollbackTriggersAfterMultipleFailures(t *testing.T) {
 	// Create current binary
 	currentBinaryPath := filepath.Join(installDir, "simtezilo")
 
-	err := os.WriteFile(currentBinaryPath, []byte("failed version"), 0o755)
+	err := os.WriteFile(currentBinaryPath, []byte("failed version"), 0o755) //nolint:gosec // binary executable file
 	if err != nil {
 		t.Fatalf("Failed to create current binary: %v", err)
 	}
@@ -393,7 +399,7 @@ func TestAutoRollbackTriggersAfterMultipleFailures(t *testing.T) {
 	// Create rollback binary
 	rollbackPath := filepath.Join(installDir, "simtezilo.rollback")
 
-	err = os.WriteFile(rollbackPath, []byte("stable version"), 0o755)
+	err = os.WriteFile(rollbackPath, []byte("stable version"), 0o755) //nolint:gosec // binary executable file
 	if err != nil {
 		t.Fatalf("Failed to create rollback binary: %v", err)
 	}
@@ -448,7 +454,7 @@ func TestSuccessConfirmationCleansUpAfterUpdate(t *testing.T) {
 	// Create current binary (successfully updated)
 	currentBinaryPath := filepath.Join(installDir, "simtezilo")
 
-	err := os.WriteFile(currentBinaryPath, []byte("new version"), 0o755)
+	err := os.WriteFile(currentBinaryPath, []byte("new version"), 0o755) //nolint:gosec // binary executable file
 	if err != nil {
 		t.Fatalf("Failed to create current binary: %v", err)
 	}
@@ -456,7 +462,7 @@ func TestSuccessConfirmationCleansUpAfterUpdate(t *testing.T) {
 	// Create rollback binary (from before update)
 	rollbackPath := filepath.Join(installDir, "simtezilo.rollback")
 
-	err = os.WriteFile(rollbackPath, []byte("old version"), 0o755)
+	err = os.WriteFile(rollbackPath, []byte("old version"), 0o755) //nolint:gosec // binary executable file
 	if err != nil {
 		t.Fatalf("Failed to create rollback binary: %v", err)
 	}
@@ -484,7 +490,8 @@ func TestSuccessConfirmationCleansUpAfterUpdate(t *testing.T) {
 	}
 
 	// Verify rollback was cleaned up
-	if _, statErr := os.Stat(rollbackPath); statErr == nil {
+	_, statErr := os.Stat(rollbackPath)
+	if statErr == nil {
 		t.Error("Rollback binary should be removed after ConfirmSuccess()")
 	}
 
@@ -505,7 +512,7 @@ func TestCheckNowReturnsNilWhenNoUpdateAvailable(t *testing.T) {
 
 	mux := http.NewServeMux()
 
-	manifestHandler := func(w http.ResponseWriter, _ *http.Request) {
+	manifestHandler := func(resp http.ResponseWriter, _ *http.Request) {
 		manifest := Manifest{
 			Version:     "1.0.0",
 			ReleaseDate: time.Now().UTC(),
@@ -519,8 +526,8 @@ func TestCheckNowReturnsNilWhenNoUpdateAvailable(t *testing.T) {
 			},
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(manifest)
+		resp.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(resp).Encode(manifest) //nolint:errchkjson // ignore error in test
 	}
 
 	mux.HandleFunc("/manifest.json", manifestHandler)

@@ -63,7 +63,7 @@ type App struct {
 	exitCodeChan chan exitcode.Code // Channel to signal application shutdown with exit code
 
 	// Lifecycle management for background goroutines
-	ctx    context.Context
+	ctx    context.Context //nolint:containedctx // Context for managing lifecycle
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
 
@@ -397,28 +397,26 @@ func (a *App) runAppMode() RunResult {
 	a.run()
 
 	// run() returned because mainLoop exited due to exit code signal
-	select {
-	case code := <-a.exitCodeChan:
-		// Check for special exit codes
-		if code == exitcode.SetupMode {
-			a.log.Info().Msg("Setup mode requested from run mode")
+	code := <-a.exitCodeChan
 
-			return RunResultSwitchMode
+	// Check for special exit codes
+	switch code { //nolint:exhaustive // other codes mean normal exit
+	case exitcode.SetupMode:
+		a.log.Info().Msg("Setup mode requested from run mode")
+
+		return RunResultSwitchMode
+	case exitcode.RestartGTClient:
+		a.log.Info().Msg("GT client restart requested, reinitializing")
+
+		err := a.reinitializeGTClient()
+		if err != nil {
+			a.log.Error().Err(err).Msg("Failed to reinitialize GT client")
+
+			return RunResultExit
 		}
 
-		if code == exitcode.RestartGTClient {
-			a.log.Info().Msg("GT client restart requested, reinitializing")
-
-			err := a.reinitializeGTClient()
-			if err != nil {
-				a.log.Error().Err(err).Msg("Failed to reinitialize GT client")
-
-				return RunResultExit
-			}
-
-			return RunResultContinue
-		}
-
+		return RunResultContinue
+	default:
 		// Normal shutdown
 		return RunResultExit
 	}
@@ -1918,41 +1916,23 @@ func (a *App) addLapEvent(lap int16, lapTime time.Duration, position int16) {
 	}
 
 	// Calculate delta from previous lap
-	var (
-		delta    time.Duration
-		hasDelta bool
-	)
+	var delta time.Duration
 
-	// Lap 1 has no delta (no previous lap to compare to)
-	if lap == 1 {
-		hasDelta = false
-
-		if a.bestLapTime == 0 || lapTime < a.bestLapTime {
-			a.bestLapTime = lapTime
-		}
-	} else {
+	hasDelta := false
+	// Lap 1 has no delta
+	if lap > 1 {
 		// Find the previous lap to calculate delta
-		var previousLapTime time.Duration
-
-		for i := len(a.lapEvents) - 1; i >= 0; i-- {
-			if a.lapEvents[i].Lap == lap-1 {
-				previousLapTime = a.lapEvents[i].LapTime
-
-				break
-			}
-		}
+		previousLapTime := a.getPreviousLapTime(lap)
 
 		if previousLapTime > 0 {
 			hasDelta = true
 			delta = lapTime - previousLapTime
-		} else {
-			hasDelta = false
 		}
+	}
 
-		// Update best lap time
-		if a.bestLapTime == 0 || lapTime < a.bestLapTime {
-			a.bestLapTime = lapTime
-		}
+	// Update best lap time
+	if a.bestLapTime == 0 || lapTime < a.bestLapTime {
+		a.bestLapTime = lapTime
 	}
 
 	// Add new event

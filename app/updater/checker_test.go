@@ -576,8 +576,29 @@ func TestUpdateInfoStoresAllFields(t *testing.T) {
 		t.Errorf("AvailableVersion = %v, want 2.0.0", info.AvailableVersion)
 	}
 
+	if info.Channel != "stable" {
+		t.Errorf("Channel = %v, want stable", info.Channel)
+	}
+
+	if info.Changelog != "- New feature" {
+		t.Errorf("Changelog = %v, want - New feature", info.Changelog)
+	}
+
+	if info.DownloadURL != "https://example.com/binary" {
+		t.Errorf("DownloadURL = %v, want https://example.com/binary", info.DownloadURL)
+	}
+
 	if info.DownloadSize != 1024 {
 		t.Errorf("DownloadSize = %v, want 1024", info.DownloadSize)
+	}
+
+	if info.SHA256 != "abc123" {
+		t.Errorf("SHA256 = %v, want abc123", info.SHA256)
+	}
+
+	expectedDate := time.Date(2025, 1, 15, 10, 0, 0, 0, time.UTC)
+	if !info.ReleaseDate.Equal(expectedDate) {
+		t.Errorf("ReleaseDate = %v, want %v", info.ReleaseDate, expectedDate)
 	}
 }
 

@@ -32,6 +32,10 @@ const (
 	StatusError
 )
 
+const (
+	channelCustom = "custom"
+)
+
 func (s UpdateStatus) String() string {
 	return [...]string{
 		"idle",
@@ -142,7 +146,7 @@ func (c *Checker) CheckNow() (*UpdateInfo, error) {
 	c.mu.Unlock()
 
 	// For custom channel, check for local files instead of fetching from URL
-	if channel == "custom" {
+	if channel == channelCustom {
 		return c.checkCustomUpdate(dataDir)
 	}
 
@@ -223,7 +227,7 @@ func (c *Checker) CheckNow() (*UpdateInfo, error) {
 			Msg("Already running latest version")
 		c.status = StatusIdle
 		// Only clear availableInfo if it's not a custom update
-		if c.availableInfo == nil || c.availableInfo.Channel != "custom" {
+		if c.availableInfo == nil || c.availableInfo.Channel != channelCustom {
 			c.availableInfo = nil
 		}
 
@@ -433,7 +437,7 @@ func (c *Checker) checkCustomUpdate(dataDir string) (*UpdateInfo, error) {
 	c.availableInfo = &UpdateInfo{
 		CurrentVersion:   c.currentVersion.String(),
 		AvailableVersion: manifest.Version,
-		Channel:          "custom",
+		Channel:          channelCustom,
 		Changelog:        manifest.Changelog,
 		DownloadURL:      "",
 		DownloadSize:     fileInfo.Size(),
@@ -469,27 +473,29 @@ func (c *Checker) extractManifest(archivePath string) (*Manifest, error) {
 
 // extractManifestFromZip extracts manifest.json from a zip archive.
 func (c *Checker) extractManifestFromZip(zipPath string) (*Manifest, error) {
-	r, err := zip.OpenReader(zipPath)
+	zipReader, err := zip.OpenReader(zipPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open zip: %w", err)
 	}
-	defer r.Close()
+	defer zipReader.Close()
 
-	for _, f := range r.File {
-		if filepath.Base(f.Name) == "manifest.json" {
-			rc, err := f.Open()
+	for _, innerFile := range zipReader.File {
+		if filepath.Base(innerFile.Name) == "manifest.json" {
+			fileHandle, err := innerFile.Open()
 			if err != nil {
 				return nil, fmt.Errorf("failed to open manifest.json: %w", err)
 			}
-			defer rc.Close()
+			defer fileHandle.Close()
 
-			data, err := io.ReadAll(rc)
+			data, err := io.ReadAll(fileHandle)
 			if err != nil {
 				return nil, fmt.Errorf("failed to read manifest.json: %w", err)
 			}
 
 			var manifest Manifest
-			if err := json.Unmarshal(data, &manifest); err != nil {
+
+			err = json.Unmarshal(data, &manifest)
+			if err != nil {
 				return nil, fmt.Errorf("failed to parse manifest.json: %w", err)
 			}
 
@@ -502,22 +508,22 @@ func (c *Checker) extractManifestFromZip(zipPath string) (*Manifest, error) {
 
 // extractManifestFromTarGz extracts manifest.json from a tar.gz archive.
 func (c *Checker) extractManifestFromTarGz(tarGzPath string) (*Manifest, error) {
-	f, err := os.Open(tarGzPath)
+	tgzFile, err := os.Open(tarGzPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open tar.gz: %w", err)
 	}
-	defer f.Close()
+	defer tgzFile.Close()
 
-	gzr, err := gzip.NewReader(f)
+	gzReader, err := gzip.NewReader(tgzFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create gzip reader: %w", err)
 	}
-	defer gzr.Close()
+	defer gzReader.Close()
 
-	tr := tar.NewReader(gzr)
+	tarReader := tar.NewReader(gzReader)
 
 	for {
-		header, err := tr.Next()
+		header, err := tarReader.Next()
 		if err == io.EOF {
 			break
 		}
@@ -527,13 +533,15 @@ func (c *Checker) extractManifestFromTarGz(tarGzPath string) (*Manifest, error) 
 		}
 
 		if filepath.Base(header.Name) == "manifest.json" {
-			data, err := io.ReadAll(tr)
+			data, err := io.ReadAll(tarReader)
 			if err != nil {
 				return nil, fmt.Errorf("failed to read manifest.json: %w", err)
 			}
 
 			var manifest Manifest
-			if err := json.Unmarshal(data, &manifest); err != nil {
+
+			err = json.Unmarshal(data, &manifest)
+			if err != nil {
 				return nil, fmt.Errorf("failed to parse manifest.json: %w", err)
 			}
 

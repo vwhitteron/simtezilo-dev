@@ -50,7 +50,7 @@ type Discord struct {
 	log            zerolog.Logger                 // Logger instance for logging
 
 	// Lifecycle management
-	ctx    context.Context
+	ctx    context.Context //nolint:containedctx // Context for managing lifecycle
 	cancel context.CancelFunc
 }
 

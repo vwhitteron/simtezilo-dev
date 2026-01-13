@@ -190,7 +190,7 @@ func TestPrepareStagesUpdateForInstallation(t *testing.T) {
 	// Create a fake download file
 	downloadPath := filepath.Join(dataDir, "simtezilo.new")
 
-	err := os.WriteFile(downloadPath, []byte("binary content"), 0o755)
+	err := os.WriteFile(downloadPath, []byte("binary content"), 0o755) //nolint:gosec // binary executable file
 	if err != nil {
 		t.Fatalf("Failed to create download file: %v", err)
 	}
@@ -258,7 +258,7 @@ func TestApplyPendingUpdateInstallsNewBinaryAndCreatesRollback(t *testing.T) {
 	// Create current binary
 	currentBinaryPath := filepath.Join(installDir, "simtezilo")
 
-	err := os.WriteFile(currentBinaryPath, []byte("old binary"), 0o755)
+	err := os.WriteFile(currentBinaryPath, []byte("old binary"), 0o755) //nolint:gosec // binary executable file
 	if err != nil {
 		t.Fatalf("Failed to create current binary: %v", err)
 	}
@@ -266,7 +266,7 @@ func TestApplyPendingUpdateInstallsNewBinaryAndCreatesRollback(t *testing.T) {
 	// Create new binary in download location
 	downloadPath := filepath.Join(dataDir, "simtezilo.new")
 
-	err = os.WriteFile(downloadPath, []byte("new binary"), 0o755)
+	err = os.WriteFile(downloadPath, []byte("new binary"), 0o755) //nolint:gosec // binary executable file
 	if err != nil {
 		t.Fatalf("Failed to create new binary: %v", err)
 	}
@@ -351,7 +351,7 @@ func TestRollbackRestoresPreviousVersion(t *testing.T) {
 	// Create current binary
 	currentBinaryPath := filepath.Join(installDir, "simtezilo")
 
-	err := os.WriteFile(currentBinaryPath, []byte("new binary"), 0o755)
+	err := os.WriteFile(currentBinaryPath, []byte("new binary"), 0o755) //nolint:gosec // binary executable file
 	if err != nil {
 		t.Fatalf("Failed to create current binary: %v", err)
 	}
@@ -359,7 +359,7 @@ func TestRollbackRestoresPreviousVersion(t *testing.T) {
 	// Create rollback binary
 	rollbackPath := filepath.Join(installDir, "simtezilo.rollback")
 
-	err = os.WriteFile(rollbackPath, []byte("old binary"), 0o755)
+	err = os.WriteFile(rollbackPath, []byte("old binary"), 0o755) //nolint:gosec // binary executable file
 	if err != nil {
 		t.Fatalf("Failed to create rollback binary: %v", err)
 	}
@@ -413,7 +413,7 @@ func TestRollbackAvailableReturnsTrueWhenRollbackExists(t *testing.T) {
 	// Create rollback binary
 	rollbackPath := filepath.Join(installDir, "simtezilo.rollback")
 
-	err := os.WriteFile(rollbackPath, []byte("old binary"), 0o755)
+	err := os.WriteFile(rollbackPath, []byte("old binary"), 0o755) //nolint:gosec // binary executable file
 	if err != nil {
 		t.Fatalf("Failed to create rollback binary: %v", err)
 	}
@@ -512,7 +512,7 @@ func TestConfirmSuccessRemovesRollbackAndClearsState(t *testing.T) {
 	// Create rollback binary
 	rollbackPath := filepath.Join(installDir, "simtezilo.rollback")
 
-	err := os.WriteFile(rollbackPath, []byte("old binary"), 0o755)
+	err := os.WriteFile(rollbackPath, []byte("old binary"), 0o755) //nolint:gosec // binary executable file
 	if err != nil {
 		t.Fatalf("Failed to create rollback binary: %v", err)
 	}

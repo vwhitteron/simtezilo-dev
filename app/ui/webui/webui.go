@@ -2917,7 +2917,11 @@ func (w *WebUI) handleUpdatesStatus(response http.ResponseWriter, request *http.
 		return
 	}
 
-	statusStr := responseData["status"].(string)
+	statusStr, ok := responseData["status"].(string)
+	if !ok {
+		statusStr = "unknown"
+	}
+
 	w.log.Debug().Str("status", statusStr).Msg("served updates status")
 }
 
@@ -2973,7 +2977,11 @@ func (w *WebUI) handleUpdatesCheck(response http.ResponseWriter, request *http.R
 		return
 	}
 
-	updateAvailable := responseData["updateAvailable"].(bool)
+	updateAvailable, ok := responseData["updateAvailable"].(bool)
+	if !ok {
+		updateAvailable = false
+	}
+
 	w.log.Info().
 		Bool("updateAvailable", updateAvailable).
 		Msg("manual update check completed")
@@ -3009,7 +3017,7 @@ func (w *WebUI) handleUpdatesDownload(response http.ResponseWriter, request *htt
 
 	// Download and prepare the update
 
-	err := w.updater.DownloadAndPrepare(func(progress updater.DownloadProgress) {
+	err := w.updater.DownloadAndPrepare(request.Context(), func(progress updater.DownloadProgress) {
 		w.log.Debug().
 			Int64("downloaded", progress.DownloadedBytes).
 			Int64("total", progress.TotalBytes).
@@ -3082,7 +3090,7 @@ func (w *WebUI) extractMetadataFromZip(file io.ReadSeeker) (*UploadMetadata, err
 		return nil, fmt.Errorf("failed to seek file: %w", err)
 	}
 
-	zipReader, err := zip.NewReader(file.(io.ReaderAt), size)
+	zipReader, err := zip.NewReader(file.(io.ReaderAt), size) //nolint:forcetypeassert // unnecessary
 	if err != nil {
 		return nil, fmt.Errorf("failed to open zip: %w", err)
 	}
