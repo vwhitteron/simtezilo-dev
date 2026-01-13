@@ -341,7 +341,8 @@ func formatDeltaTime(delta time.Duration) string {
 	)
 
 	switch {
-	case absSeconds >= 1.0:
+	case absSeconds > 0.90:
+		// Values > 0.90s might ceil to 10 tenths, so treat as seconds
 		rounded := math.Round(absSeconds*10) / 10
 
 		unit := "seconds"
@@ -354,10 +355,12 @@ func formatDeltaTime(delta time.Duration) string {
 		}
 
 		return fmt.Sprintf("%.1f %s", rounded, unit)
-	case absSeconds >= 0.1:
+	case absSeconds > 0.090:
+		// Values > 0.090s might ceil to 10 hundredths, so treat as tenths
 		value = delta.Seconds() * 10
 		units = "tenth"
-	case absSeconds >= 0.01:
+	case absSeconds > 0.0090:
+		// Values > 0.0090s might ceil to 10 thou, so treat as hundredths
 		value = delta.Seconds() * 100
 		units = "hundredth"
 	default:
