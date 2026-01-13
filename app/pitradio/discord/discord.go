@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sync"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
@@ -44,6 +45,7 @@ type Discord struct {
 	sampleBank     *synthesizer.EffectsSampleBank // Pre-generated audio samples // TODO: is there a better way to do this?
 	session        *discordgo.Session             // Currently connected Discord session
 	voiceConn      *discordgo.VoiceConnection     // Voice connection for audio
+	voiceMu        sync.Mutex                     // Mutex to protect websocket writes to voice connection
 	queue          chan pitradio.Message          // Message queue for sending messages
 	log            zerolog.Logger                 // Logger instance for logging
 
@@ -463,6 +465,10 @@ func (d *Discord) voiceMessageSend(dcaData []byte) error {
 
 // sendVoiceAudio plays a DCA audio buffer to the voice channel.
 func (d *Discord) sendVoiceAudio(dca []byte) error {
+	// Lock to prevent concurrent websocket writes
+	d.voiceMu.Lock()
+	defer d.voiceMu.Unlock()
+
 	if d.voiceConn == nil {
 		return errors.New("not connected to voice channel")
 	}
