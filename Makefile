@@ -150,7 +150,7 @@ build/darwin/silicon:
 	go build -ldflags "-X '$(buildmodule)/app.Version=$(buildversion)' -X '$(buildmodule)/app.CommitHash=$(buildcommit)' -X '$(buildmodule)/app.BuildTime=$(buildtime)' -X '$(buildmodule)/app.Platform=darwin'" \
 	-o ./out/simtezilo-macos ./cmd/simtezilo/main.go
 
-## build/darwin/silicon: build the application for Apple Silicon
+## build/windows/64: build the application for Windows 64-bit
 .PHONY: build/windows/64
 build/windows/64:
 	GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc \
