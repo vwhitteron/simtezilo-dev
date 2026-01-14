@@ -51,8 +51,9 @@
         "ui.menu.tsat": "Trans Saturation",
         "ui.menu.mix": "Mix Algo",
         "ui.menu.lang": "Language",
-        "ui.menu.info": "Info",
+        "ui.menu.record": "Recording",
         "ui.menu.setupmode": "Setup Mode",
+        "ui.menu.info": "Info",
 
         "radio.online": "Radio check",
         "radio.laprecordfmt": "Up %s. %s",

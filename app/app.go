@@ -633,6 +633,7 @@ func (a *App) initializeUI(opts Options, hidEvents chan ui.HIDInputEvent) error 
 		LiveData:         &ui.LiveData{Gear: kinematics.NullGear},
 		Log:              *opts.Logger,
 		SettingsCallback: a.settingAction,
+		DevToolsEnabled:  a.config.GetDevToolsEnabled,
 		ExitCodeChan:     a.exitCodeChan,
 	})
 

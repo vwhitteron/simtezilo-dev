@@ -20,6 +20,7 @@ type Config struct {
 	Display          hardware.Display
 	LiveData         *LiveData
 	SettingsCallback func(string, string) string
+	DevToolsEnabled  func() bool
 	ExitCodeChan     chan exitcode.Code
 	Log              zerolog.Logger
 }
@@ -64,6 +65,11 @@ func NewUserInterface(config *Config) *UserInterface {
 		lastActivity:     time.Now(),
 		settingsCallback: config.SettingsCallback,
 		done:             config.ExitCodeChan,
+	}
+
+	// Set devToolsEnabled callback if provided
+	if config.DevToolsEnabled != nil {
+		userInterface.menuSystem.SetDevToolsEnabledCallback(config.DevToolsEnabled)
 	}
 
 	var err error

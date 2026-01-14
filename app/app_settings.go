@@ -23,6 +23,7 @@ func (a *App) settingAction(setting string, action string) string {
 		"vCurve":     a.handleVibrationCurveSetting,
 		"vol":        a.handleMasterVolSetting,
 		"vSat":       a.handleVibrationSatSetting,
+		"record":     a.handleRecordToggle,
 		"setupMode":  a.handleSetupModeCountdown,
 		"info":       a.handleInfoScreen,
 	}
@@ -318,4 +319,19 @@ func (a *App) handleSetupModeCountdown(action string) string {
 
 		return strconv.Itoa(countdown)
 	}
+}
+
+func (a *App) handleRecordToggle(action string) string {
+	// Both increase and decrease actions toggle recording
+	switch action {
+	case "increase", "decrease":
+		a.toggleRecording()
+	}
+
+	// Return current recording state
+	if a.gtClient.IsRecording() {
+		return "ON"
+	}
+
+	return "OFF"
 }
