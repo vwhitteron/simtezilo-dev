@@ -37,6 +37,7 @@
         "ui.menu.cvol": "シャーシ音量",
         "ui.menu.tvol": "ギア音量",
         "ui.menu.evol": "エンジン音量",
+        "ui.menu.eq": "イコライザー",
         "ui.menu.eprimary": "エンジンバランス1",
         "ui.menu.esecondary": "エンジンバランス2",
         "ui.menu.epvol": "エンジン音量",

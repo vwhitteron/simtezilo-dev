@@ -37,6 +37,7 @@
         "ui.menu.cvol": "Chassis Gain",
         "ui.menu.tvol": "Trans Gain",
         "ui.menu.evol": "Engine Gain",
+        "ui.menu.eq": "Equalizer",
         "ui.menu.eprimary": "Engine Bal 1",
         "ui.menu.esecondary": "Engine Bal 2",
         "ui.menu.epvol": "Engine Pul Gain",

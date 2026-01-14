@@ -12,6 +12,7 @@ func (a *App) settingAction(setting string, action string) string {
 		"ePScale":    a.handleEnginePulseScaleSetting,
 		"eSecondary": a.handleEngineSecondarySetting,
 		"eVol":       a.handleEngineVolSetting,
+		"eq":         a.handleEqEnableSetting,
 		"fCurve":     a.handleForceCurveSetting,
 		"fMax":       a.handleForceMaxSetting,
 		"fMin":       a.handleForceMinSetting,
@@ -123,6 +124,26 @@ func (a *App) handleEngineVolSetting(action string) string {
 	}
 
 	return strconv.FormatFloat(value, 'f', 2, 64)
+}
+
+func (a *App) handleEqEnableSetting(action string) string {
+	value := "OFF"
+
+	switch action {
+	case "increase":
+		a.config.SetSynthEqEnabled(true)
+
+		value = "ON"
+	case "decrease":
+		a.config.SetSynthEqEnabled(false)
+	default:
+		enabled := a.config.GetSynthEqEnabled()
+		if enabled {
+			value = "ON"
+		}
+	}
+
+	return value
 }
 
 func (a *App) handleForceCurveSetting(action string) string {

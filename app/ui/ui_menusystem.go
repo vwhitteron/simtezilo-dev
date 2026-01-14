@@ -32,6 +32,7 @@ func NewMenuSystem() *MenuSystem {
 			{name: "cVol", context: PageContextAlways},
 			{name: "tVol", context: PageContextAlways},
 			{name: "eVol", context: PageContextAlways},
+			{name: "eq", context: PageContextAlways},
 			{name: "vCurve", context: PageContextAlways},
 			{name: "vSat", context: PageContextAlways},
 			{name: "fCurve", context: PageContextAlways},
