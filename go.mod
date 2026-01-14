@@ -17,7 +17,7 @@ require (
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.11.1
 	github.com/theojulienne/go-wireless v1.2.0
-	github.com/zetetos/gt-telemetry v1.11.1-0.20260109112559-9380d99ff817
+	github.com/zetetos/gt-telemetry v1.11.1-0.20260114003618-48c48e8341e1
 	golang.org/x/crypto v0.45.0
 	golang.org/x/image v0.34.0
 	layeh.com/gopus v0.0.0-20210501142526-1ee02d434e32

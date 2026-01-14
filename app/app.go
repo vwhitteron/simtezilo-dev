@@ -1238,7 +1238,7 @@ func (a *App) mainLoop() {
 // handleHapticsTick processes haptics-related updates.
 func (a *App) handleHapticsTick() {
 	// Skip telemetry-dependent processing if no telemetry available
-	if a.gtClient.Telemetry.SequenceID() == 0 {
+	if !a.gtClient.Telemetry.TelemetryStarted() {
 		return
 	}
 
@@ -1267,7 +1267,7 @@ func (a *App) handleGeneralTick() {
 	a.synth.UpdateCalibrator()
 
 	// Skip if no telemetry available
-	if a.gtClient.Telemetry.SequenceID() == 0 {
+	if !a.gtClient.Telemetry.TelemetryStarted() {
 		return
 	}
 
@@ -1283,7 +1283,7 @@ func (a *App) handleGeneralTick() {
 // handleEngineHapticsTick processes engine haptics updates.
 func (a *App) handleEngineHapticsTick() {
 	// Skip if no telemetry available
-	if a.gtClient.Telemetry.SequenceID() == 0 {
+	if !a.gtClient.Telemetry.TelemetryStarted() {
 		return
 	}
 
@@ -1303,7 +1303,7 @@ func (a *App) handleDisplayTick() {
 // handlePitRadioTick processes pit radio updates.
 func (a *App) handlePitRadioTick() {
 	// Skip if no telemetry available
-	if a.gtClient.Telemetry.SequenceID() == 0 {
+	if !a.gtClient.Telemetry.TelemetryStarted() {
 		return
 	}
 
@@ -1321,7 +1321,7 @@ func (a *App) handleRaceDataTick() {
 	}
 
 	// Skip if no telemetry available
-	if a.gtClient.Telemetry.SequenceID() == 0 {
+	if !a.gtClient.Telemetry.TelemetryStarted() {
 		return
 	}
 
@@ -1348,7 +1348,7 @@ func (a *App) handleDebugTick() {
 	}
 
 	// Skip if no telemetry available
-	if a.gtClient.Telemetry.SequenceID() == 0 {
+	if !a.gtClient.Telemetry.TelemetryStarted() {
 		return
 	}
 
