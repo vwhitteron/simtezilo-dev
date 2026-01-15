@@ -41,10 +41,157 @@ type WSMessage struct {
 	Data      any    `json:"data"`      //nolint:tagliatelle // Message data
 }
 
-// subscriptionUpdate represents a client's subscription preferences.
-type subscriptionUpdate struct {
-	client        *websocket.Conn
-	subscriptions map[string]bool // map of data type to subscribed status
+// wsMessage is an internal message sent to a client's write goroutine.
+type wsMessage struct {
+	msgType     string // Message type for subscription filtering (e.g., "telemetry", "vehicle")
+	data        []byte // Pre-encoded message data
+	isPing      bool   // True if this is a ping control message
+	isInitState bool   // True if this is initial state (bypasses subscription check)
+}
+
+// wsClient represents a connected websocket client with its own write channel.
+// Each client has a dedicated goroutine that handles all writes, eliminating
+// the need for mutexes and following Go's "share memory by communicating" idiom.
+type wsClient struct {
+	conn          *websocket.Conn
+	send          chan wsMessage  // Channel for outgoing messages
+	subscriptions map[string]bool // What data types this client wants
+	subMu         sync.RWMutex    // Protects subscriptions map
+	done          chan struct{}   // Signals client shutdown
+	closeOnce     sync.Once       // Ensures cleanup happens once
+	log           zerolog.Logger  // Logger for this client
+}
+
+// newWSClient creates a new websocket client with default subscriptions.
+func newWSClient(conn *websocket.Conn, log zerolog.Logger) *wsClient {
+	return &wsClient{
+		conn: conn,
+		send: make(chan wsMessage, 64), // Buffered to handle bursts
+		subscriptions: map[string]bool{
+			"vehicle":     true,
+			"gameState":   true,
+			"circuit":     true,
+			"race":        true,
+			"logStats":    true,
+			"calibration": true,
+			"telemetry":   false, // Telemetry off by default
+		},
+		done: make(chan struct{}),
+		log:  log,
+	}
+}
+
+// writePump handles all writes to the websocket connection.
+// It runs in its own goroutine and is the only code that writes to the connection.
+func (c *wsClient) writePump() {
+	pingTicker := time.NewTicker(5 * time.Second)
+
+	defer func() {
+		pingTicker.Stop()
+		c.conn.Close()
+	}()
+
+	for {
+		select {
+		case <-c.done:
+			return
+
+		case msg, ok := <-c.send:
+			if !ok {
+				// Channel closed, send close message and exit
+				_ = c.conn.SetWriteDeadline(time.Now().Add(3 * time.Second))
+				_ = c.conn.WriteMessage(websocket.CloseMessage, []byte{})
+
+				return
+			}
+
+			if msg.isPing {
+				_ = c.conn.SetWriteDeadline(time.Now().Add(3 * time.Second))
+
+				err := c.conn.WriteMessage(websocket.PingMessage, nil)
+				if err != nil {
+					c.log.Debug().Err(err).Msg("failed to send ping")
+
+					return
+				}
+
+				continue
+			}
+
+			// Check subscription (unless it's initial state)
+			if !msg.isInitState {
+				c.subMu.RLock()
+				subscribed := c.subscriptions[msg.msgType]
+				c.subMu.RUnlock()
+
+				if !subscribed {
+					continue
+				}
+			}
+
+			_ = c.conn.SetWriteDeadline(time.Now().Add(3 * time.Second))
+
+			err := c.conn.WriteMessage(websocket.TextMessage, msg.data)
+			if err != nil {
+				c.log.Debug().Err(err).Msg("failed to send message")
+
+				return
+			}
+
+		case <-pingTicker.C:
+			_ = c.conn.SetWriteDeadline(time.Now().Add(3 * time.Second))
+
+			err := c.conn.WriteMessage(websocket.PingMessage, nil)
+			if err != nil {
+				c.log.Debug().Err(err).Msg("failed to send ping")
+
+				return
+			}
+		}
+	}
+}
+
+// Send queues a message to be sent to the client.
+// Returns false if the client is closed or the send buffer is full.
+func (c *wsClient) Send(msgType string, data []byte, isInitState bool) bool {
+	select {
+	case <-c.done:
+		return false
+	case c.send <- wsMessage{msgType: msgType, data: data, isInitState: isInitState}:
+		return true
+	default:
+		// Buffer full, client is slow - drop message
+		c.log.Debug().Str("msgType", msgType).Msg("dropping message, client buffer full")
+
+		return false
+	}
+}
+
+// UpdateSubscriptions updates what message types this client receives.
+func (c *wsClient) UpdateSubscriptions(subs map[string]bool) {
+	c.subMu.Lock()
+	defer c.subMu.Unlock()
+
+	for dataType, subscribed := range subs {
+		c.subscriptions[dataType] = subscribed
+	}
+}
+
+// Close gracefully shuts down the client.
+func (c *wsClient) Close() {
+	c.closeOnce.Do(func() {
+		close(c.done)
+	})
+}
+
+// IsClosed returns true if the client has been closed.
+func (c *wsClient) IsClosed() bool {
+	select {
+	case <-c.done:
+		return true
+	default:
+		return false
+	}
 }
 
 // WebUI defines the web user interface.
@@ -79,15 +226,12 @@ type WebUI struct {
 	buildTime          string
 	buildPlatform      string
 	// Unified WebSocket support
-	unifiedClients      []*websocket.Conn
-	unifiedClientsChan  chan *websocket.Conn
-	unifiedUnsubChan    chan *websocket.Conn
-	unifiedSessions     map[string]*websocket.Conn // Track sessions to prevent duplicates
-	unifiedSessionsMux  sync.Mutex
-	clientSubscriptions map[*websocket.Conn]map[string]bool // Track what data types each client wants
-	subscriptionsMutex  sync.RWMutex
-	subscriptionChan    chan subscriptionUpdate
-	updater             *updater.Updater // Self-update manager (may be nil)
+	unifiedClients     []*wsClient
+	unifiedClientsChan chan *wsClient
+	unifiedUnsubChan   chan *wsClient
+	unifiedSessions    map[string]*wsClient // Track sessions to prevent duplicates
+	unifiedSessionsMux sync.Mutex
+	updater            *updater.Updater // Self-update manager (may be nil)
 }
 
 type Config struct {
@@ -131,22 +275,20 @@ func New(config Config) *WebUI {
 		upgrader: websocket.Upgrader{
 			CheckOrigin: func(_ *http.Request) bool { return true },
 		},
-		shutdownChan:        config.ShutdownChan,
-		setupMode:           config.SetupMode,
-		logStore:            config.LogStore,
-		logStatsFeed:        config.LogStatsFeed,
-		currentLogStats:     make(map[string]any),
-		buildVersion:        config.BuildVersion,
-		buildCommitHash:     config.BuildCommitHash,
-		buildTime:           config.BuildTime,
-		buildPlatform:       config.BuildPlatform,
-		unifiedClients:      make([]*websocket.Conn, 0),
-		unifiedClientsChan:  make(chan *websocket.Conn, 10),
-		unifiedUnsubChan:    make(chan *websocket.Conn, 10),
-		unifiedSessions:     make(map[string]*websocket.Conn),
-		clientSubscriptions: make(map[*websocket.Conn]map[string]bool),
-		subscriptionChan:    make(chan subscriptionUpdate, 10),
-		updater:             config.Updater,
+		shutdownChan:       config.ShutdownChan,
+		setupMode:          config.SetupMode,
+		logStore:           config.LogStore,
+		logStatsFeed:       config.LogStatsFeed,
+		currentLogStats:    make(map[string]any),
+		buildVersion:       config.BuildVersion,
+		buildCommitHash:    config.BuildCommitHash,
+		buildTime:          config.BuildTime,
+		buildPlatform:      config.BuildPlatform,
+		unifiedClients:     make([]*wsClient, 0),
+		unifiedClientsChan: make(chan *wsClient, 10),
+		unifiedUnsubChan:   make(chan *wsClient, 10),
+		unifiedSessions:    make(map[string]*wsClient),
+		updater:            config.Updater,
 	}
 
 	// Start unified websocket broadcaster
@@ -339,35 +481,44 @@ func (w *WebUI) handleWebSocketConnection(response http.ResponseWriter, request 
 	if sessionID != "" {
 		w.unifiedSessionsMux.Lock()
 
-		if oldConn, exists := w.unifiedSessions[sessionID]; exists {
+		if oldClient, exists := w.unifiedSessions[sessionID]; exists {
 			w.log.Debug().Str("session", sessionID).Msg("closing old unified connection for session")
 
-			_ = oldConn.Close()
+			oldClient.Close()
 			// Remove from clients list immediately
-			w.unifiedUnsubChan <- oldConn
+			w.unifiedUnsubChan <- oldClient
 		}
 
 		w.unifiedSessionsMux.Unlock()
 	}
 
-	webSocket, err := w.upgrader.Upgrade(response, request, nil)
+	conn, err := w.upgrader.Upgrade(response, request, nil)
 	if err != nil {
 		w.log.Error().Err(err).Msg("error upgrading unified websocket connection")
 
 		return
 	}
 
+	// Create client with its own write pump
+	client := newWSClient(conn, w.log)
+
 	w.log.Debug().Str("session", sessionID).Msg("unified websocket connection established")
 
 	// Track this session
 	if sessionID != "" {
 		w.unifiedSessionsMux.Lock()
-		w.unifiedSessions[sessionID] = webSocket
+		w.unifiedSessions[sessionID] = client
 		w.unifiedSessionsMux.Unlock()
 	}
 
+	// Start the write pump goroutine
+	go client.writePump()
+
 	// Subscribe this client
-	w.unifiedClientsChan <- webSocket
+	w.unifiedClientsChan <- client
+
+	// Send current state immediately via the client's channel
+	w.sendInitialState(client)
 
 	defer func() {
 		// Remove from session map
@@ -378,160 +529,37 @@ func (w *WebUI) handleWebSocketConnection(response http.ResponseWriter, request 
 		}
 
 		// Unsubscribe on disconnect
-		w.unifiedUnsubChan <- webSocket
+		w.unifiedUnsubChan <- client
 
-		err := webSocket.Close()
-		if err != nil {
-			w.log.Debug().Err(err).Msg("closing unified websocket connection")
-		}
+		// Close the client (stops write pump)
+		client.Close()
 	}()
 
-	// Send current vehicle info immediately (with mutex protection)
-	w.vehicleInfoMutex.RLock()
+	// Set up read handling
+	_ = conn.SetReadDeadline(time.Now().Add(10 * time.Second))
 
-	if len(w.currentVehicleInfo) > 0 {
-		msg := WSMessage{
-			Type:      "vehicle",
-			Timestamp: time.Now().UnixMilli(),
-			Data:      w.currentVehicleInfo,
-		}
-
-		encodedData, err := json.Marshal(msg)
-		if err == nil {
-			_ = webSocket.SetWriteDeadline(time.Now().Add(3 * time.Second))
-			_ = webSocket.WriteMessage(websocket.TextMessage, encodedData)
-		}
-	}
-
-	w.vehicleInfoMutex.RUnlock()
-
-	// Send current game state immediately
-	w.gameStateMutex.RLock()
-	gameState := w.currentGameState
-	w.gameStateMutex.RUnlock()
-
-	if gameState != "" {
-		msg := WSMessage{
-			Type:      "gameState",
-			Timestamp: time.Now().UnixMilli(),
-			Data:      map[string]any{"gamestate": gameState},
-		}
-
-		encodedData, err := json.Marshal(msg)
-		if err == nil {
-			_ = webSocket.SetWriteDeadline(time.Now().Add(3 * time.Second))
-			_ = webSocket.WriteMessage(websocket.TextMessage, encodedData)
-		}
-	}
-
-	// Send current circuit info immediately
-	w.circuitInfoMutex.RLock()
-
-	if len(w.currentCircuitInfo) > 0 {
-		msg := WSMessage{
-			Type:      "circuit",
-			Timestamp: time.Now().UnixMilli(),
-			Data:      w.currentCircuitInfo,
-		}
-
-		encodedData, err := json.Marshal(msg)
-		if err == nil {
-			_ = webSocket.SetWriteDeadline(time.Now().Add(3 * time.Second))
-			_ = webSocket.WriteMessage(websocket.TextMessage, encodedData)
-		}
-	}
-
-	w.circuitInfoMutex.RUnlock()
-
-	// Send current race info immediately
-	w.raceInfoMutex.RLock()
-
-	if len(w.currentRaceInfo) > 0 {
-		msg := WSMessage{
-			Type:      "race",
-			Timestamp: time.Now().UnixMilli(),
-			Data:      w.currentRaceInfo,
-		}
-
-		encodedData, err := json.Marshal(msg)
-		if err == nil {
-			_ = webSocket.SetWriteDeadline(time.Now().Add(3 * time.Second))
-			_ = webSocket.WriteMessage(websocket.TextMessage, encodedData)
-		}
-	}
-
-	w.raceInfoMutex.RUnlock()
-
-	// Send current log stats immediately
-	w.logStatsMutex.RLock()
-
-	if len(w.currentLogStats) > 0 {
-		msg := WSMessage{
-			Type:      "logStats",
-			Timestamp: time.Now().UnixMilli(),
-			Data:      w.currentLogStats,
-		}
-
-		encodedData, err := json.Marshal(msg)
-		if err == nil {
-			_ = webSocket.SetWriteDeadline(time.Now().Add(3 * time.Second))
-			_ = webSocket.WriteMessage(websocket.TextMessage, encodedData)
-		}
-	}
-
-	w.logStatsMutex.RUnlock()
-
-	// Keep connection alive - read messages (if any) to detect disconnects
-	// Set read deadline - if no pong received in 10 seconds, connection is dead
-	_ = webSocket.SetReadDeadline(time.Now().Add(10 * time.Second))
-
-	// Handle pong messages
-	webSocket.SetPongHandler(func(string) error {
-		_ = webSocket.SetReadDeadline(time.Now().Add(10 * time.Second))
+	conn.SetPongHandler(func(string) error {
+		_ = conn.SetReadDeadline(time.Now().Add(10 * time.Second))
 
 		return nil
 	})
 
-	// Handle close messages from client
-	webSocket.SetCloseHandler(func(code int, text string) error {
+	conn.SetCloseHandler(func(code int, text string) error {
 		w.log.Debug().Int("code", code).Str("text", text).Msg("unified websocket close message received")
 
 		return nil
 	})
 
-	// Send pings every 5 seconds to detect dead connections
-	pingTicker := time.NewTicker(5 * time.Second)
-	defer pingTicker.Stop()
-
-	done := make(chan struct{})
-
-	// Goroutine to handle pings
-	go func() {
-		defer close(done)
-
-		for range pingTicker.C {
-			_ = webSocket.SetWriteDeadline(time.Now().Add(3 * time.Second))
-
-			err := webSocket.WriteMessage(websocket.PingMessage, nil)
-			if err != nil {
-				w.log.Debug().Err(err).Msg("failed to send ping on unified websocket")
-
-				return
-			}
-		}
-	}()
-
-	// Handle incoming messages (subscription updates)
+	// Read loop - handles incoming messages and detects disconnects
 	for {
-		_, message, err := webSocket.ReadMessage()
+		_, message, err := conn.ReadMessage()
 		if err != nil {
 			w.log.Debug().Err(err).Msg("unified websocket read error, closing connection")
 
 			break
 		}
 
-		// Reset read deadline on any message
-		_ = webSocket.SetReadDeadline(time.Now().Add(10 * time.Second))
+		_ = conn.SetReadDeadline(time.Now().Add(10 * time.Second))
 
 		// Try to parse as subscription message
 		var subMsg struct {
@@ -539,19 +567,92 @@ func (w *WebUI) handleWebSocketConnection(response http.ResponseWriter, request 
 			Subscriptions map[string]bool `json:"subscriptions"` //nolint:tagliatelle
 		}
 
-		err = json.Unmarshal(message, &subMsg)
-		if err == nil && subMsg.Type == "subscribe" {
-			// Send subscription update to broadcaster
-			w.subscriptionChan <- subscriptionUpdate{
-				client:        webSocket,
-				subscriptions: subMsg.Subscriptions,
-			}
+		if err := json.Unmarshal(message, &subMsg); err == nil && subMsg.Type == "subscribe" {
+			client.UpdateSubscriptions(subMsg.Subscriptions)
 
 			w.log.Debug().
 				Interface("subscriptions", subMsg.Subscriptions).
 				Msg("client updated subscriptions")
 		}
 	}
+}
+
+// sendInitialState sends current cached state to a newly connected client.
+func (w *WebUI) sendInitialState(client *wsClient) {
+	// Send current vehicle info
+	w.vehicleInfoMutex.RLock()
+
+	if len(w.currentVehicleInfo) > 0 {
+		if data, err := json.Marshal(WSMessage{
+			Type:      "vehicle",
+			Timestamp: time.Now().UnixMilli(),
+			Data:      w.currentVehicleInfo,
+		}); err == nil {
+			client.Send("vehicle", data, true)
+		}
+	}
+
+	w.vehicleInfoMutex.RUnlock()
+
+	// Send current game state
+	w.gameStateMutex.RLock()
+	gameState := w.currentGameState
+	w.gameStateMutex.RUnlock()
+
+	if gameState != "" {
+		if data, err := json.Marshal(WSMessage{
+			Type:      "gameState",
+			Timestamp: time.Now().UnixMilli(),
+			Data:      map[string]any{"gamestate": gameState},
+		}); err == nil {
+			client.Send("gameState", data, true)
+		}
+	}
+
+	// Send current circuit info
+	w.circuitInfoMutex.RLock()
+
+	if len(w.currentCircuitInfo) > 0 {
+		if data, err := json.Marshal(WSMessage{
+			Type:      "circuit",
+			Timestamp: time.Now().UnixMilli(),
+			Data:      w.currentCircuitInfo,
+		}); err == nil {
+			client.Send("circuit", data, true)
+		}
+	}
+
+	w.circuitInfoMutex.RUnlock()
+
+	// Send current race info
+	w.raceInfoMutex.RLock()
+
+	if len(w.currentRaceInfo) > 0 {
+		if data, err := json.Marshal(WSMessage{
+			Type:      "race",
+			Timestamp: time.Now().UnixMilli(),
+			Data:      w.currentRaceInfo,
+		}); err == nil {
+			client.Send("race", data, true)
+		}
+	}
+
+	w.raceInfoMutex.RUnlock()
+
+	// Send current log stats
+	w.logStatsMutex.RLock()
+
+	if len(w.currentLogStats) > 0 {
+		if data, err := json.Marshal(WSMessage{
+			Type:      "logStats",
+			Timestamp: time.Now().UnixMilli(),
+			Data:      w.currentLogStats,
+		}); err == nil {
+			client.Send("logStats", data, true)
+		}
+	}
+
+	w.logStatsMutex.RUnlock()
 }
 
 // unifiedWebSocketBroadcaster manages the unified websocket, handling all message types.
@@ -572,20 +673,8 @@ func (w *WebUI) unifiedWebSocketBroadcaster() {
 	for {
 		select {
 		case client := <-w.unifiedClientsChan:
-			// Add new client with default subscriptions (all enabled except telemetry)
+			// Add new client (subscriptions are managed by the client itself)
 			w.unifiedClients = append(w.unifiedClients, client)
-
-			w.subscriptionsMutex.Lock()
-			w.clientSubscriptions[client] = map[string]bool{
-				"vehicle":     true,
-				"gameState":   true,
-				"circuit":     true,
-				"race":        true,
-				"logStats":    true,
-				"calibration": true,
-				"telemetry":   false, // Telemetry off by default
-			}
-			w.subscriptionsMutex.Unlock()
 
 			w.log.Debug().Int("unified_clients", len(w.unifiedClients)).Msg("unified client subscribed")
 
@@ -599,24 +688,7 @@ func (w *WebUI) unifiedWebSocketBroadcaster() {
 				}
 			}
 
-			// Remove subscriptions
-			w.subscriptionsMutex.Lock()
-			delete(w.clientSubscriptions, client)
-			w.subscriptionsMutex.Unlock()
-
 			w.log.Debug().Int("unified_clients", len(w.unifiedClients)).Msg("unified client unsubscribed")
-
-		case subUpdate := <-w.subscriptionChan:
-			// Update client subscriptions
-			w.subscriptionsMutex.Lock()
-
-			if _, exists := w.clientSubscriptions[subUpdate.client]; exists {
-				for dataType, subscribed := range subUpdate.subscriptions {
-					w.clientSubscriptions[subUpdate.client][dataType] = subscribed
-				}
-			}
-
-			w.subscriptionsMutex.Unlock()
 
 		case data := <-w.telemetryChartFeed:
 			// Handle telemetry data - add to batch buffer
@@ -818,33 +890,24 @@ func (w *WebUI) unifiedWebSocketBroadcaster() {
 	}
 }
 
-// broadcastToUnifiedClients sends a message to subscribed unified websocket clients.
+// broadcastToUnifiedClients sends a message to all connected unified websocket clients.
+// Each client's writePump handles subscription filtering and the actual write.
 // messageType specifies what type of data is being sent (e.g., "telemetry", "vehicle", etc.)
 func (w *WebUI) broadcastToUnifiedClients(encodedData []byte, messageType string) {
-	activeClients := make([]*websocket.Conn, 0, len(w.unifiedClients))
-
-	w.subscriptionsMutex.RLock()
-	defer w.subscriptionsMutex.RUnlock()
+	activeClients := make([]*wsClient, 0, len(w.unifiedClients))
 
 	for _, client := range w.unifiedClients {
-		// Check if client is subscribed to this message type
-		if subs, exists := w.clientSubscriptions[client]; exists && !subs[messageType] {
-			// Client not subscribed to this type, skip
-			activeClients = append(activeClients, client)
-
+		if client.IsClosed() {
 			continue
 		}
 
-		// Set reasonable write deadline for high-latency connections (3 seconds)
-		_ = client.SetWriteDeadline(time.Now().Add(3 * time.Second))
-
-		err := client.WriteMessage(websocket.TextMessage, encodedData)
-		if err != nil {
-			w.log.Debug().Err(err).Msg("failed to send message to unified client, removing")
-
-			_ = client.Close()
-		} else {
+		// Queue message to client's write channel (non-blocking)
+		// The client's writePump handles subscription filtering
+		if client.Send(messageType, encodedData, false) {
 			activeClients = append(activeClients, client)
+		} else {
+			// Client is closed or buffer full, remove it
+			w.log.Debug().Str("msgType", messageType).Msg("client unavailable, removing")
 		}
 	}
 
