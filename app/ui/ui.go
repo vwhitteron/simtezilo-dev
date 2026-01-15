@@ -19,7 +19,7 @@ type Config struct {
 	HIDEvents        chan HIDInputEvent
 	Display          hardware.Display
 	LiveData         *LiveData
-	SettingsCallback func(string, string) string
+	SettingsCallback func(languagedb.Key, string) string
 	DevToolsEnabled  func() bool
 	ExitCodeChan     chan exitcode.Code
 	Log              zerolog.Logger
@@ -42,13 +42,14 @@ type UserInterface struct {
 
 	log zerolog.Logger
 
-	settingsCallback func(menuPage string, action string) string
+	settingsCallback func(setting languagedb.Key, action string) string
 	done             chan exitcode.Code
 
-	displayData  LiveData
-	mode         ScreenMode
-	startTime    time.Time
-	lastActivity time.Time
+	displayData      LiveData
+	mode             ScreenMode
+	startTime        time.Time
+	lastMenuActivity time.Time
+	lastActivity     time.Time
 }
 
 // NewUserInterface initializes and returns a new UserInterface instance.
@@ -141,6 +142,11 @@ func (u *UserInterface) DisplayToggleOff() bool {
 // DrawReadyDisplay renders the ready screen on the display.
 // TODO: move it elsewhere or get rid of it entirely.
 func (u *UserInterface) DrawReadyDisplay() {
+	// Don't override settings mode
+	if int(u.mode) == int(ScreenModeSettings) {
+		return
+	}
+
 	if int(u.mode) == int(ScreenModeWait) && !u.displayData.forceRefresh {
 		return
 	}
@@ -176,7 +182,7 @@ func (u *UserInterface) ForceRedraw() {
 }
 
 // SettingAction performs a settings action and returns the resulting setting value.
-func (u *UserInterface) SettingAction(setting string, action string) string {
+func (u *UserInterface) SettingAction(setting languagedb.Key, action string) string {
 	u.RegisterActivity()
 	u.mode = ScreenModeSettings
 
@@ -227,6 +233,15 @@ func (u *UserInterface) IsSetupModeCountdownZero() bool {
 
 // handleSettingsMode handles display updates in settings mode.
 func (u *UserInterface) handleSettingsMode(data LiveData) {
+	// Check for 10-second inactivity timeout in menu - turn display off
+	if !u.lastMenuActivity.IsZero() && time.Since(u.lastMenuActivity) > 10*time.Second {
+		u.log.Debug().Msg("Menu inactivity timeout - turning display off")
+		u.lastMenuActivity = time.Time{} // Reset timer
+		u.DisplaySleep()
+
+		return
+	}
+
 	if u.displayInactiveTimeoutReached() {
 		u.showActiveOrReadyDisplay(data)
 	}

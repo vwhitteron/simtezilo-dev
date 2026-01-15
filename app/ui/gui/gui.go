@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"image"
 	"image/draw"
+	"strings"
 
 	"github.com/golang/freetype/truetype"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware"
@@ -38,6 +39,7 @@ const (
 	LayoutLive
 	LayoutSetting
 	LayoutInfo
+	LayoutMenuSub
 )
 
 // NewScreen creates a new Screen instance.
@@ -128,27 +130,44 @@ func (r *Screen) RenderLiveScreen(value string) error {
 func (r *Screen) RenderSettingScreen(layout Layout, title string, value string) error {
 	switch layout { //nolint:exhaustive // only interested in setting screen layouts
 	case LayoutSetting:
-		return r.renderLayoutSetting(title, value)
+		return r.renderLeafNode(title, value)
 	case LayoutInfo:
 		return r.renderLayoutInfo(title, value)
+	case LayoutMenuSub:
+		return r.renderLayoutMenuSub(title, value)
 	default:
 		return fmt.Errorf("unknown layout type: %d", layout)
 	}
 }
 
-// RenderSettingScreen renders the setting screen with the provided header and value.
-func (r *Screen) renderLayoutSetting(header string, value string) error {
-	// Title
+// renderLeafNode renders a leaf node: parent menu at top, value in center (larger font), setting name at bottom.
+// header = parent menu name, value = "settingName|settingValue" (split on |).
+func (r *Screen) renderLeafNode(header string, value string) error {
+	// Parse value to extract setting name and setting value
+	settingName := ""
+	settingValue := value
+	// Check if value contains a pipe separator
+	for i, char := range value {
+		if char == '|' {
+			settingName = value[:i]
+			settingValue = value[i+1:]
+
+			break
+		}
+	}
+
+	canvas := r.newBlankCanvas()
+
+	// Parent menu at top
 	fontFace := truetype.NewFace(r.i18n.RegularFont().Font, &truetype.Options{
-		Size:    r.i18n.RegularFont().Scale * headerSize,
+		Size:    r.i18n.RegularFont().Scale * fontSmall,
 		DPI:     r.dpi,
 		Hinting: font.HintingFull,
 	})
 
-	canvas := r.newBlankCanvas()
 	fontDrawer := &font.Drawer{
 		Dst:  canvas,
-		Src:  image.NewUniform(headerColor()),
+		Src:  image.NewUniform(mediumGrayColor()),
 		Face: fontFace,
 	}
 
@@ -162,37 +181,134 @@ func (r *Screen) renderLayoutSetting(header string, value string) error {
 	}
 	fontDrawer.DrawString(header)
 
-	// Value
+	// Setting value in center (larger font)
+	fontScale := fontLarge
+	if strings.ToLower(header) == "info" {
+		fontScale = fontSmall
+	}
+
 	fontFace = truetype.NewFace(r.i18n.ValueFont().Font, &truetype.Options{
-		Size:    r.i18n.ValueFont().Scale * valueSmallSize,
+		Size:    r.i18n.ValueFont().Scale * fontScale,
 		DPI:     r.dpi,
 		Hinting: font.HintingFull,
 	})
 
 	fontDrawer = &font.Drawer{
 		Dst:  canvas,
-		Src:  image.NewUniform(valueColor()),
+		Src:  image.NewUniform(offWhiteColor()),
 		Face: fontFace,
 	}
 
-	valueBounds, _ := fontDrawer.BoundString(value)
-	xPosition = (fixed.I(canvas.Rect.Max.X) - fontDrawer.MeasureString(value)) / 2
+	valueBounds, _ := fontDrawer.BoundString(settingValue)
+	xPosition = (fixed.I(canvas.Rect.Max.X) - fontDrawer.MeasureString(settingValue)) / 2
 	textHeight = valueBounds.Max.Y - valueBounds.Min.Y
 	yPosition = fixed.I((canvas.Rect.Max.Y)-textHeight.Ceil())/2 + fixed.I(textHeight.Ceil())
 	fontDrawer.Dot = fixed.Point26_6{
 		X: xPosition,
 		Y: yPosition,
 	}
-	fontDrawer.DrawString(value)
+	fontDrawer.DrawString(settingValue)
+
+	// Setting name at bottom (if provided)
+	if settingName != "" {
+		fontFace = truetype.NewFace(r.i18n.RegularFont().Font, &truetype.Options{
+			Size:    r.i18n.RegularFont().Scale * fontMedium,
+			DPI:     r.dpi,
+			Hinting: font.HintingFull,
+		})
+
+		fontDrawer = &font.Drawer{
+			Dst:  canvas,
+			Src:  image.NewUniform(lightGrayColor()),
+			Face: fontFace,
+		}
+
+		xPosition = (fixed.I(canvas.Rect.Max.X) - fontDrawer.MeasureString(settingName)) / 2
+		nameBounds, _ := fontDrawer.BoundString(settingName)
+		textHeight = nameBounds.Max.Y - nameBounds.Min.Y
+		yPosition = fixed.I((canvas.Rect.Max.Y) - (textHeight.Ceil() / 2))
+		fontDrawer.Dot = fixed.Point26_6{
+			X: xPosition,
+			Y: yPosition,
+		}
+		fontDrawer.DrawString(settingName)
+	}
 
 	content := &display.Content{
-		Text:   "Setting " + header + ": " + value,
+		Text:   "Setting " + header + ": " + settingName + "=" + settingValue,
 		Canvas: canvas,
 	}
 
 	err := r.displayDevice.Write(content)
 	if err != nil {
 		return fmt.Errorf("write settings canvas to display: %w", err)
+	}
+
+	r.displayDevice.Wakeup()
+
+	return nil
+}
+
+// renderLayoutMenuSub renders a branch menu with optional parent name at top and current item in center.
+func (r *Screen) renderLayoutMenuSub(parentName string, currentItem string) error {
+	canvas := r.newBlankCanvas()
+
+	// Parent name at top (if provided)
+	if parentName != "" {
+		fontFace := truetype.NewFace(r.i18n.RegularFont().Font, &truetype.Options{
+			Size:    r.i18n.RegularFont().Scale * headerSize,
+			DPI:     r.dpi,
+			Hinting: font.HintingFull,
+		})
+
+		fontDrawer := &font.Drawer{
+			Dst:  canvas,
+			Src:  image.NewUniform(headerColor()),
+			Face: fontFace,
+		}
+
+		xPosition := (fixed.I(canvas.Rect.Max.X) - fontDrawer.MeasureString(parentName)) / 2
+		titleBounds, _ := fontDrawer.BoundString(parentName)
+		textHeight := titleBounds.Max.Y - titleBounds.Min.Y
+		yPosition := fixed.I((canvas.Rect.Min.Y) + textHeight.Ceil())
+		fontDrawer.Dot = fixed.Point26_6{
+			X: xPosition,
+			Y: yPosition,
+		}
+		fontDrawer.DrawString(parentName)
+	}
+
+	// Current item in center
+	fontFace := truetype.NewFace(r.i18n.RegularFont().Font, &truetype.Options{
+		Size:    r.i18n.RegularFont().Scale * valueMediumSize,
+		DPI:     r.dpi,
+		Hinting: font.HintingFull,
+	})
+
+	fontDrawer := &font.Drawer{
+		Dst:  canvas,
+		Src:  image.NewUniform(valueColor()),
+		Face: fontFace,
+	}
+
+	itemBounds, _ := fontDrawer.BoundString(currentItem)
+	xPosition := (fixed.I(canvas.Rect.Max.X) - fontDrawer.MeasureString(currentItem)) / 2
+	textHeight := itemBounds.Max.Y - itemBounds.Min.Y
+	yPosition := fixed.I((canvas.Rect.Max.Y)-textHeight.Ceil())/2 + fixed.I(textHeight.Ceil())
+	fontDrawer.Dot = fixed.Point26_6{
+		X: xPosition,
+		Y: yPosition,
+	}
+	fontDrawer.DrawString(currentItem)
+
+	content := &display.Content{
+		Text:   "Menu " + parentName + ": " + currentItem,
+		Canvas: canvas,
+	}
+
+	err := r.displayDevice.Write(content)
+	if err != nil {
+		return fmt.Errorf("write submenu canvas to display: %w", err)
 	}
 
 	r.displayDevice.Wakeup()

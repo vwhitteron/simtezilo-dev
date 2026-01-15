@@ -10,9 +10,9 @@ func SetupHID(orientation int, hidEvent chan ui.HIDInputEvent) {
 	rotationOffset := (orientation / 90) % 4
 
 	baseMapping := []ui.HIDInputEvent{
-		ui.HIDInputUp,    // Button A
+		ui.HIDInputLeft,  // Button A
 		ui.HIDInputRight, // Button X
-		ui.HIDInputLeft,  // Button Y
+		ui.HIDInputUp,    // Button Y
 		ui.HIDInputDown,  // Button B
 	}
 

@@ -7,8 +7,11 @@ import (
 
 	"github.com/vwhitteron/simtezilo-dev/app/exitcode"
 	"github.com/vwhitteron/simtezilo-dev/app/i18n/languagedb"
+	"github.com/vwhitteron/simtezilo-dev/app/kinematics"
 	"github.com/vwhitteron/simtezilo-dev/app/ui/gui"
 )
+
+const unknownMenuTitle = "???"
 
 type HIDInputEvent int
 
@@ -51,10 +54,16 @@ func (u *UserInterface) HIDEventHandler(ctx context.Context) {
 
 			title, value := u.handleMenuNavigation(key)
 
-			layout := gui.LayoutSetting
-			if title == "info" {
-				layout = gui.LayoutInfo
+			// Special case: entering live view should render the live screen
+			if title == string(languagedb.UIMenuLiveView) {
+				u.mode = ScreenModeLive
+				u.lastMenuActivity = time.Now()
+				_ = u.Screen.RenderLiveScreen(kinematics.GearName(u.displayData.Gear))
+
+				continue
 			}
+
+			layout := u.determineLayout(title)
 
 			u.renderSettingScreen(layout, title, value)
 		}
@@ -129,13 +138,13 @@ func (u *UserInterface) handlePowerKey() {
 
 // handleMenuNavigation handles menu navigation keys and returns the menu page and value.
 func (u *UserInterface) handleMenuNavigation(key HIDInputEvent) (title string, value string) {
-	title = u.menuSystem.GetCurrentMenuPage()
+	title = string(u.menuSystem.GetCurrentMenuPage())
 
 	switch key { //nolint:exhaustive // no need to handle all keys
 	case HIDInputUp:
-		return u.handleUpKey(title)
+		return u.handleUpKey()
 	case HIDInputDown:
-		return u.handleDownKey(title)
+		return u.handleDownKey()
 	case HIDInputLeft:
 		return u.handleLeftKey()
 	case HIDInputRight:
@@ -147,81 +156,338 @@ func (u *UserInterface) handleMenuNavigation(key HIDInputEvent) (title string, v
 	}
 }
 
-// handleUpKey handles the up key for increasing values.
-func (u *UserInterface) handleUpKey(menuPage string) (title string, value string) {
-	value = u.SettingAction(menuPage, "increase")
-	u.log.Debug().
-		Str("key", "up").
-		Str("action", "increase").
-		Str("type", menuPage).
-		Str("value", value).
-		Msg("HID event")
+// handleUpKey handles the up key for navigating to parent node.
+func (u *UserInterface) handleUpKey() (title string, value string) {
+	// Reset inactivity timer on any menu interaction
+	u.lastMenuActivity = time.Now()
 
-	return menuPage, value
+	node, action := u.menuSystem.NavigateUp()
+	menuPage := node.name
+
+	switch action {
+	case "exit":
+		u.log.Debug().
+			Str("key", "up").
+			Str("action", "exit to parent").
+			Str("type", "navigate").
+			Str("value", string(menuPage)).
+			Msg("HID event")
+
+		value = ""
+		// If exited to a branch, don't get value
+		if u.menuSystem.IsCurrentNodeBranch() {
+			return string(menuPage), value
+		}
+	case "increase":
+		// On a leaf node - increase value
+		value = u.SettingAction(menuPage, "increase")
+		u.log.Debug().
+			Str("key", "up").
+			Str("action", "increase").
+			Str("type", string(menuPage)).
+			Str("value", value).
+			Msg("HID event")
+
+		return string(menuPage), value
+	}
+
+	// Get current value if we're on a leaf
+	if u.menuSystem.IsCurrentNodeLeaf() {
+		value = u.SettingAction(menuPage, "get")
+	}
+
+	return string(menuPage), value
 }
 
-// handleDownKey handles the down key for decreasing values.
-func (u *UserInterface) handleDownKey(menuPage string) (title string, value string) {
-	value = u.SettingAction(menuPage, "decrease")
-	u.log.Debug().
-		Str("key", "down").
-		Str("action", "decrease").
-		Str("type", menuPage).
-		Str("value", value).
-		Msg("HID event")
+// handleDownKey handles the down key for entering branches or navigating.
+func (u *UserInterface) handleDownKey() (title string, value string) {
+	// Reset inactivity timer on any menu interaction
+	u.lastMenuActivity = time.Now()
 
-	return menuPage, value
+	node, action := u.menuSystem.NavigateDown()
+	menuPage := node.name
+
+	switch action {
+	case "enter":
+		u.log.Debug().
+			Str("key", "down").
+			Str("action", "enter branch").
+			Str("type", "navigate").
+			Str("value", string(menuPage)).
+			Msg("HID event")
+	case "exit":
+		u.log.Debug().
+			Str("key", "down").
+			Str("action", "exit to parent").
+			Str("type", "navigate").
+			Str("value", string(menuPage)).
+			Msg("HID event")
+
+		value = ""
+		// If exited to a branch, don't get value
+		if u.menuSystem.IsCurrentNodeBranch() {
+			return string(menuPage), value
+		}
+	case "decrease":
+		// On a leaf node - decrease value
+		value = u.SettingAction(menuPage, "decrease")
+		u.log.Debug().
+			Str("key", "down").
+			Str("action", "decrease").
+			Str("type", string(menuPage)).
+			Str("value", value).
+			Msg("HID event")
+
+		return string(menuPage), value
+	}
+
+	// Reset setupMode countdown if we navigated to setupMode
+	if string(menuPage) == "setupMode" {
+		_ = u.menuSystem.ResetSetupModeCountdown()
+	}
+
+	// Get current value if we're on a leaf
+	if u.menuSystem.IsCurrentNodeLeaf() {
+		value = u.SettingAction(menuPage, "get")
+	} else {
+		value = ""
+	}
+
+	return string(menuPage), value
 }
 
-// handleLeftKey handles the left key for previous menu page.
+// handleLeftKey handles the left key for previous sibling or decreasing values.
 func (u *UserInterface) handleLeftKey() (title string, value string) {
-	menuPage := u.menuSystem.GetCurrentMenuPage()
-	if u.display.IsAwake() {
-		menuPage = u.menuSystem.PreviousMenuPage()
+	// Reset inactivity timer on any menu interaction
+	u.lastMenuActivity = time.Now()
+
+	node, action := u.menuSystem.NavigateLeft()
+	menuPage := node.name
+
+	if action == "decrease" {
+		// On a leaf node - decrease value
+		value = u.SettingAction(menuPage, "decrease")
+		u.log.Debug().
+			Str("key", "left").
+			Str("action", "decrease").
+			Str("type", string(menuPage)).
+			Str("value", value).
+			Msg("HID event")
+	} else {
+		// Navigation to previous sibling
+		u.log.Debug().
+			Str("key", "left").
+			Str("action", "previous").
+			Str("type", "navigate").
+			Str("value", string(menuPage)).
+			Msg("HID event")
+
+		// Reset setupMode countdown if we navigated to setupMode
+		if string(menuPage) == "setupMode" {
+			_ = u.menuSystem.ResetSetupModeCountdown()
+		}
+
+		if u.display.IsAwake() && u.menuSystem.IsCurrentNodeLeaf() {
+			value = u.SettingAction(menuPage, "get")
+		} else {
+			value = ""
+		}
 	}
 
-	value = u.SettingAction(menuPage, "get")
-	u.log.Debug().
-		Str("key", "left").
-		Str("action", "previous").
-		Str("type", "menuPage").
-		Str("value", menuPage).
-		Msg("HID event")
-
-	return menuPage, value
+	return string(menuPage), value
 }
 
-// handleRightKey handles the right key for next menu page.
+// handleRightKey handles the right key for next sibling or increasing values.
 func (u *UserInterface) handleRightKey() (title string, value string) {
-	menuPage := u.menuSystem.GetCurrentMenuPage()
-	if u.display.IsAwake() {
-		menuPage = u.menuSystem.NextMenuPage()
+	// Reset inactivity timer on any menu interaction
+	u.lastMenuActivity = time.Now()
+
+	node, action := u.menuSystem.NavigateRight()
+	menuPage := node.name
+
+	if action == "increase" {
+		// On a leaf node - increase value
+		value = u.SettingAction(menuPage, "increase")
+		u.log.Debug().
+			Str("key", "right").
+			Str("action", "increase").
+			Str("type", string(menuPage)).
+			Str("value", value).
+			Msg("HID event")
+	} else {
+		// Navigation to next sibling
+		u.log.Debug().
+			Str("key", "right").
+			Str("action", "next").
+			Str("type", "navigate").
+			Str("value", string(menuPage)).
+			Msg("HID event")
+
+		// Reset setupMode countdown if we navigated to setupMode
+		if string(menuPage) == "setupMode" {
+			_ = u.menuSystem.ResetSetupModeCountdown()
+		}
+
+		if u.display.IsAwake() && u.menuSystem.IsCurrentNodeLeaf() {
+			value = u.SettingAction(menuPage, "get")
+		} else {
+			value = ""
+		}
 	}
 
-	value = u.SettingAction(menuPage, "get")
-	u.log.Debug().
-		Str("key", "right").
-		Str("action", "next").
-		Str("type", "menuPage").
-		Str("value", menuPage).
-		Msg("HID event")
+	return string(menuPage), value
+}
 
-	return menuPage, value
+// determineLayout determines the appropriate layout based on the current node type.
+func (u *UserInterface) determineLayout(menuPage string) gui.Layout {
+	// Special info pages
+	if menuPage == "version" || menuPage == "commitHash" || menuPage == "buildTime" || menuPage == "platform" || menuPage == "ipAddress" {
+		return gui.LayoutInfo
+	}
+
+	// Branch nodes (including return nodes)
+	if u.menuSystem.IsCurrentNodeBranch() {
+		return gui.LayoutMenuSub
+	}
+
+	// Leaf nodes (settings)
+	return gui.LayoutSetting
 }
 
 // renderSettingScreen renders the setting screen with the given title and value.
 func (u *UserInterface) renderSettingScreen(layout gui.Layout, menuPage string, value string) {
-	title := "???"
+	// Switch to settings mode to display the menu
+	u.mode = ScreenModeSettings
 
-	key, err := languagedb.StringToKey("ui.menu." + menuPage)
+	// Reset inactivity timer on any menu display
+	u.lastMenuActivity = time.Now()
+
+	var (
+		title        string
+		displayValue string
+	)
+
+	switch layout {
+	case gui.LayoutMenuSub:
+		// Branch nodes: show parent at top (empty for top-level), current item in center
+		parent := u.menuSystem.GetCurrentNode().parent
+		if parent != nil && parent.name != "root" {
+			title = u.getBranchTitle(string(parent.name))
+		} else {
+			title = "" // Empty for top-level branches
+		}
+
+		displayValue = u.getBranchTitle(menuPage)
+		_ = u.Screen.RenderSettingScreen(layout, title, displayValue)
+
+		return
+
+	case gui.LayoutInfo:
+		// Info pages: title at top, multi-line value in center
+		title = u.getLeafTitle(menuPage)
+		_ = u.Screen.RenderSettingScreen(layout, title, value)
+
+		return
+
+	case gui.LayoutSetting:
+		// Leaf nodes: parent at top, value in center, setting name at bottom
+		parent := u.menuSystem.GetCurrentNode().parent
+		if parent != nil && parent.name != "root" {
+			title = u.getBranchTitle(string(parent.name))
+		} else {
+			title = u.i18n.GetString(languagedb.UIMenuSettings)
+		}
+
+		// For "return" leaf, show parent name as title and "return" as value
+		if menuPage == "return" {
+			displayValue = u.i18n.GetString(languagedb.UIMenuReturn)
+		} else {
+			// Format as "settingName|settingValue"
+			settingName := u.getSettingName(menuPage)
+			displayValue = settingName + "|" + value
+		}
+
+		_ = u.Screen.RenderSettingScreen(layout, title, displayValue)
+
+		return
+	}
+}
+
+// getSettingName returns the translated name of the setting (leaf node).
+func (u *UserInterface) getSettingName(menuPage string) string {
+	key, err := languagedb.StringToKey(menuPage)
+	if err != nil {
+		return menuPage
+	}
+
+	return u.i18n.GetString(key)
+}
+
+// getMenuTitle returns the appropriate title for the menu page.
+func (u *UserInterface) getMenuTitle(menuPage string) string {
+	// For branch nodes, show the branch name as title
+	if u.menuSystem.IsCurrentNodeBranch() {
+		return u.getBranchTitle(menuPage)
+	}
+
+	// For leaf nodes, show full breadcrumb if multiple levels
+	return u.getLeafTitle(menuPage)
+}
+
+// getBranchTitle returns the title for a branch node.
+func (u *UserInterface) getBranchTitle(menuPage string) string {
+	key, err := languagedb.StringToKey(menuPage)
 	if err != nil {
 		u.log.Error().
 			Err(err).
 			Str("menuPage", menuPage).
 			Msg("Failed to convert menu page to translation key")
-	} else {
-		title = u.i18n.GetString(key)
+
+		return "???"
 	}
 
-	_ = u.Screen.RenderSettingScreen(layout, title, value)
+	return u.i18n.GetString(key)
+}
+
+// getLeafTitle returns the title for a leaf node.
+func (u *UserInterface) getLeafTitle(menuPage string) string {
+	// Just translate the leaf name directly
+	key, err := languagedb.StringToKey(menuPage)
+	if err != nil {
+		u.log.Error().
+			Err(err).
+			Str("menuPage", menuPage).
+			Msg("Failed to convert menu page to translation key")
+
+		return unknownMenuTitle
+	}
+
+	return u.i18n.GetString(key)
+}
+
+// buildHierarchicalTitle builds a hierarchical title from breadcrumb parts.
+func (u *UserInterface) buildHierarchicalTitle(breadcrumb []string) string {
+	titleParts := make([]string, 0)
+
+	for index, part := range breadcrumb {
+		// Show parent and current item for context
+		if index == len(breadcrumb)-1 || index == len(breadcrumb)-2 {
+			key, err := languagedb.StringToKey(part)
+			if err != nil {
+				titleParts = append(titleParts, part)
+			} else {
+				titleParts = append(titleParts, u.i18n.GetString(key))
+			}
+		}
+	}
+
+	if len(titleParts) == 0 {
+		return unknownMenuTitle
+	}
+
+	if len(titleParts) == 1 {
+		return titleParts[0]
+	}
+
+	return titleParts[0] + " › " + titleParts[1]
 }

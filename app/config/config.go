@@ -67,6 +67,7 @@ type haptics struct {
 	_pulseWidthMin               float64                             `toml:"-"`
 	EngineProfiles               map[string]appHaptics.EngineProfile `toml:"engineProfiles"`
 	_engineProfile               *appHaptics.EngineProfile           `toml:"-"`
+	_engineProfileName           string                              `toml:"-"`
 }
 
 type hardware struct {
@@ -1119,6 +1120,15 @@ func (c *Config) GetHapticsPulseMinHz() float64 {
 	return c.snapshot.Load().PulseMinFrequencyHz
 }
 
+// syncEngineProfileToMap copies the current engine profile pointer back to the map.
+// This must be called after modifying _engineProfile to ensure changes are persisted.
+// Caller must hold the mutex.
+func (c *Config) syncEngineProfileToMap() {
+	if c.viper.Haptics._engineProfile != nil && c.viper.Haptics._engineProfileName != "" {
+		c.viper.Haptics.EngineProfiles[c.viper.Haptics._engineProfileName] = *c.viper.Haptics._engineProfile
+	}
+}
+
 // GetHapticsEngineProfile returns the currently selected engine profile.
 // If no profile is selected, it returns nil.
 func (c *Config) GetHapticsEngineProfile(name string) *appHaptics.EngineProfile {
@@ -1128,8 +1138,10 @@ func (c *Config) GetHapticsEngineProfile(name string) *appHaptics.EngineProfile 
 	name = strings.ToLower(name)
 	if profile, ok := c.viper.Haptics.EngineProfiles[name]; ok {
 		c.viper.Haptics._engineProfile = &profile
+		c.viper.Haptics._engineProfileName = name
 	} else {
 		c.viper.Haptics._engineProfile = nil
+		c.viper.Haptics._engineProfileName = ""
 	}
 
 	return c.viper.Haptics._engineProfile
@@ -1163,6 +1175,7 @@ func (c *Config) IncreaseHapticsEnginePrimaryBalance() float64 {
 		c.viper.Haptics._engineProfile.PrimaryBalance+0.01,
 	)
 
+	c.syncEngineProfileToMap()
 	c.registerUpdate(false)
 
 	return c.viper.Haptics._engineProfile.PrimaryBalance
@@ -1183,6 +1196,7 @@ func (c *Config) DecreaseHapticsEnginePrimaryBalance() float64 {
 		c.viper.Haptics._engineProfile.PrimaryBalance-0.01,
 	)
 
+	c.syncEngineProfileToMap()
 	c.registerUpdate(false)
 
 	return c.viper.Haptics._engineProfile.PrimaryBalance
@@ -1216,6 +1230,7 @@ func (c *Config) IncreaseHapticsEngineSecondaryBalance() float64 {
 		c.viper.Haptics._engineProfile.SecondaryBalance+0.01,
 	)
 
+	c.syncEngineProfileToMap()
 	c.registerUpdate(false)
 
 	return c.viper.Haptics._engineProfile.SecondaryBalance
@@ -1236,6 +1251,7 @@ func (c *Config) DecreaseHapticsEngineSecondaryBalance() float64 {
 		c.viper.Haptics._engineProfile.SecondaryBalance-0.01,
 	)
 
+	c.syncEngineProfileToMap()
 	c.registerUpdate(false)
 
 	return c.viper.Haptics._engineProfile.SecondaryBalance
@@ -1269,6 +1285,7 @@ func (c *Config) IncreaseHapticsEnginePulseGain() float64 {
 		c.viper.Haptics._engineProfile.Gain+c.viper.Synthesizer.GainIncrement,
 	)
 
+	c.syncEngineProfileToMap()
 	c.registerUpdate(false)
 
 	return c.viper.Haptics._engineProfile.Gain
@@ -1289,6 +1306,7 @@ func (c *Config) DecreaseHapticsEnginePulseGain() float64 {
 		c.viper.Haptics._engineProfile.Gain-c.viper.Synthesizer.GainIncrement,
 	)
 
+	c.syncEngineProfileToMap()
 	c.registerUpdate(false)
 
 	return c.viper.Haptics._engineProfile.Gain
@@ -1322,6 +1340,7 @@ func (c *Config) IncreaseHapticsEnginePulseScale() float64 {
 		c.viper.Haptics._engineProfile.PulseScale+0.01,
 	)
 
+	c.syncEngineProfileToMap()
 	c.registerUpdate(false)
 
 	return c.viper.Haptics._engineProfile.PulseScale
@@ -1342,6 +1361,7 @@ func (c *Config) DecreasehapticsEnginePulseScale() float64 {
 		c.viper.Haptics._engineProfile.PulseScale-0.01,
 	)
 
+	c.syncEngineProfileToMap()
 	c.registerUpdate(false)
 
 	return c.viper.Haptics._engineProfile.PulseScale
@@ -1389,9 +1409,9 @@ func (c *Config) IncreaseHapticsPulseMaxHz() int {
 	return result
 }
 
-// DecreasehapticsPulseMaxHz decreases the maximum pulse frequency in 1 Hz increments.
+// DecreaseHapticsPulseMaxHz decreases the maximum pulse frequency in 1 Hz increments.
 // This is the maximum frequency output for chassis bump haptics and is clamped to a minimum of 26Hz.
-func (c *Config) DecreasehapticsPulseMaxHz() int {
+func (c *Config) DecreaseHapticsPulseMaxHz() int {
 	c.mu.Lock()
 	c.viper.Haptics.PulseMaxFrequencyHz = max(26, c.viper.Haptics.PulseMaxFrequencyHz-1)
 	result := int(c.viper.Haptics.PulseMaxFrequencyHz)
@@ -1431,6 +1451,30 @@ func (c *Config) SetHapticsPulseMaxAmplitude(value float64) {
 	c.rebuildSnapshot()
 	c.registerUpdate(false)
 	c.mu.Unlock()
+}
+
+// IncreaseHapticsPulseMaxAmplitude increases the maximum pulse amplitude for chassis bump haptics in increments of 0.01.
+func (c *Config) IncreaseHapticsPulseMaxAmplitude() float64 {
+	c.mu.Lock()
+	c.viper.Haptics.PulseMaxAmplitude = min(1.0, c.viper.Haptics.PulseMaxAmplitude+0.01)
+	result := c.viper.Haptics.PulseMaxAmplitude
+	c.rebuildSnapshot()
+	c.registerUpdate(false)
+	c.mu.Unlock()
+
+	return result
+}
+
+// DecreaseHapticsPulseMaxAmplitude decreases the maximum pulse amplitude for chassis bump haptics in increments of 0.01.
+func (c *Config) DecreaseHapticsPulseMaxAmplitude() float64 {
+	c.mu.Lock()
+	c.viper.Haptics.PulseMaxAmplitude = max(0.0, c.viper.Haptics.PulseMaxAmplitude-0.01)
+	result := c.viper.Haptics.PulseMaxAmplitude
+	c.rebuildSnapshot()
+	c.registerUpdate(false)
+	c.mu.Unlock()
+
+	return result
 }
 
 // GetHapticsPulseMaxFrequencyHz returns the maximum pulse frequency in Hz for chassis bump haptics.
@@ -1556,6 +1600,28 @@ func (c *Config) SetPitRadioNotifyRaceProgressMinLaps(value int) {
 	c.registerUpdate(false)
 }
 
+// IncreasePitRadioNotifyRaceProgressMinLaps increases the minimum laps by 1 (max 50).
+func (c *Config) IncreasePitRadioNotifyRaceProgressMinLaps() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.PitRadio.Notifications.RaceProgressMinLaps = min(50, c.viper.PitRadio.Notifications.RaceProgressMinLaps+1)
+	c.registerUpdate(false)
+
+	return c.viper.PitRadio.Notifications.RaceProgressMinLaps
+}
+
+// DecreasePitRadioNotifyRaceProgressMinLaps decreases the minimum laps by 1 (min 1).
+func (c *Config) DecreasePitRadioNotifyRaceProgressMinLaps() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.PitRadio.Notifications.RaceProgressMinLaps = max(1, c.viper.PitRadio.Notifications.RaceProgressMinLaps-1)
+	c.registerUpdate(false)
+
+	return c.viper.PitRadio.Notifications.RaceProgressMinLaps
+}
+
 // GetPitRadioNotifyRaceProgressIntervalPc returns the race progress notification interval percentage.
 func (c *Config) GetPitRadioNotifyRaceProgressIntervalPc() int {
 	c.mu.RLock()
@@ -1569,9 +1635,31 @@ func (c *Config) SetPitRadioNotifyRaceProgressIntervalPc(value int) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.viper.PitRadio.Notifications.RaceProgressIntervalPc = value
+	c.viper.PitRadio.Notifications.RaceProgressIntervalPc = min(50, max(5, value))
 
 	c.registerUpdate(false)
+}
+
+// IncreasePitRadioNotifyRaceProgressIntervalPc increases the interval by 5% (max 50).
+func (c *Config) IncreasePitRadioNotifyRaceProgressIntervalPc() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.PitRadio.Notifications.RaceProgressIntervalPc = min(50, c.viper.PitRadio.Notifications.RaceProgressIntervalPc+5)
+	c.registerUpdate(false)
+
+	return c.viper.PitRadio.Notifications.RaceProgressIntervalPc
+}
+
+// DecreasePitRadioNotifyRaceProgressIntervalPc decreases the interval by 5% (min 5).
+func (c *Config) DecreasePitRadioNotifyRaceProgressIntervalPc() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.PitRadio.Notifications.RaceProgressIntervalPc = max(5, c.viper.PitRadio.Notifications.RaceProgressIntervalPc-5)
+	c.registerUpdate(false)
+
+	return c.viper.PitRadio.Notifications.RaceProgressIntervalPc
 }
 
 // GetPitRadioNotifyRaceLapsEnabled returns whether race lap notifications are enabled.
@@ -1605,9 +1693,31 @@ func (c *Config) SetPitRadioNotifyRaceLapsIntervalLaps(value int) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.viper.PitRadio.Notifications.RaceLapsIntervalLaps = value
+	c.viper.PitRadio.Notifications.RaceLapsIntervalLaps = min(50, max(1, value))
 
 	c.registerUpdate(false)
+}
+
+// IncreasePitRadioNotifyRaceLapsIntervalLaps increases the interval by 1 lap (max 50).
+func (c *Config) IncreasePitRadioNotifyRaceLapsIntervalLaps() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.PitRadio.Notifications.RaceLapsIntervalLaps = min(50, c.viper.PitRadio.Notifications.RaceLapsIntervalLaps+1)
+	c.registerUpdate(false)
+
+	return c.viper.PitRadio.Notifications.RaceLapsIntervalLaps
+}
+
+// DecreasePitRadioNotifyRaceLapsIntervalLaps decreases the interval by 1 lap (min 1).
+func (c *Config) DecreasePitRadioNotifyRaceLapsIntervalLaps() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.PitRadio.Notifications.RaceLapsIntervalLaps = max(1, c.viper.PitRadio.Notifications.RaceLapsIntervalLaps-1)
+	c.registerUpdate(false)
+
+	return c.viper.PitRadio.Notifications.RaceLapsIntervalLaps
 }
 
 // GetPitRadioNotifyRaceLapsCountdownLaps returns the number of laps for countdown notifications.
@@ -1623,9 +1733,31 @@ func (c *Config) SetPitRadioNotifyRaceLapsCountdownLaps(value int) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.viper.PitRadio.Notifications.RaceLapsCountdownLaps = value
+	c.viper.PitRadio.Notifications.RaceLapsCountdownLaps = min(25, max(1, value))
 
 	c.registerUpdate(false)
+}
+
+// IncreasePitRadioNotifyRaceLapsCountdownLaps increases the countdown laps by 1 (max 25).
+func (c *Config) IncreasePitRadioNotifyRaceLapsCountdownLaps() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.PitRadio.Notifications.RaceLapsCountdownLaps = min(25, c.viper.PitRadio.Notifications.RaceLapsCountdownLaps+1)
+	c.registerUpdate(false)
+
+	return c.viper.PitRadio.Notifications.RaceLapsCountdownLaps
+}
+
+// DecreasePitRadioNotifyRaceLapsCountdownLaps decreases the countdown laps by 1 (min 1).
+func (c *Config) DecreasePitRadioNotifyRaceLapsCountdownLaps() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.PitRadio.Notifications.RaceLapsCountdownLaps = max(1, c.viper.PitRadio.Notifications.RaceLapsCountdownLaps-1)
+	c.registerUpdate(false)
+
+	return c.viper.PitRadio.Notifications.RaceLapsCountdownLaps
 }
 
 // GetPitRadioNotifyLapTimesEnabled returns whether lap time notifications are enabled.
@@ -1659,9 +1791,31 @@ func (c *Config) SetPitRadioNotifyLapTimesMaxDeltaSeconds(value float64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.viper.PitRadio.Notifications.LapTimesMaxDeltaSeconds = value
+	c.viper.PitRadio.Notifications.LapTimesMaxDeltaSeconds = min(30.0, max(0.1, value))
 
 	c.registerUpdate(false)
+}
+
+// IncreasePitRadioNotifyLapTimesMaxDeltaSeconds increases the maximum delta by 0.1 seconds (max 30.0).
+func (c *Config) IncreasePitRadioNotifyLapTimesMaxDeltaSeconds() float64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.PitRadio.Notifications.LapTimesMaxDeltaSeconds = min(30.0, c.viper.PitRadio.Notifications.LapTimesMaxDeltaSeconds+0.1)
+	c.registerUpdate(false)
+
+	return c.viper.PitRadio.Notifications.LapTimesMaxDeltaSeconds
+}
+
+// DecreasePitRadioNotifyLapTimesMaxDeltaSeconds decreases the maximum delta by 0.1 seconds (min 0.1).
+func (c *Config) DecreasePitRadioNotifyLapTimesMaxDeltaSeconds() float64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.PitRadio.Notifications.LapTimesMaxDeltaSeconds = max(0.1, c.viper.PitRadio.Notifications.LapTimesMaxDeltaSeconds-0.1)
+	c.registerUpdate(false)
+
+	return c.viper.PitRadio.Notifications.LapTimesMaxDeltaSeconds
 }
 
 // GetPitRadioNotifyCircuitMatchingEnabled returns whether circuit change notifications are enabled.
@@ -1709,9 +1863,31 @@ func (c *Config) SetPitRadioFuelPreWarnNotifyLaps(value float64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.viper.PitRadio.FuelMonitoring.PreWarnNotifyLaps = value
+	c.viper.PitRadio.FuelMonitoring.PreWarnNotifyLaps = min(10.0, max(0.0, value))
 
 	c.registerUpdate(false)
+}
+
+// IncreasePitRadioFuelPreWarnNotifyLaps increases the pre-warn laps by 0.1 (max 10.0).
+func (c *Config) IncreasePitRadioFuelPreWarnNotifyLaps() float64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.PitRadio.FuelMonitoring.PreWarnNotifyLaps = min(10.0, c.viper.PitRadio.FuelMonitoring.PreWarnNotifyLaps+0.1)
+	c.registerUpdate(false)
+
+	return c.viper.PitRadio.FuelMonitoring.PreWarnNotifyLaps
+}
+
+// DecreasePitRadioFuelPreWarnNotifyLaps decreases the pre-warn laps by 0.1 (min 0.0).
+func (c *Config) DecreasePitRadioFuelPreWarnNotifyLaps() float64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.PitRadio.FuelMonitoring.PreWarnNotifyLaps = max(0.0, c.viper.PitRadio.FuelMonitoring.PreWarnNotifyLaps-0.1)
+	c.registerUpdate(false)
+
+	return c.viper.PitRadio.FuelMonitoring.PreWarnNotifyLaps
 }
 
 // GetPitRadioFuelStrategyNotifyLaps returns the number of laps remaining before a fuel strategy notification is triggered.
@@ -1727,9 +1903,31 @@ func (c *Config) SetPitRadioFuelStrategyNotifyLaps(value float64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.viper.PitRadio.FuelMonitoring.StrategyNotifyLaps = value
+	c.viper.PitRadio.FuelMonitoring.StrategyNotifyLaps = min(20.0, max(0.0, value))
 
 	c.registerUpdate(false)
+}
+
+// IncreasePitRadioFuelStrategyNotifyLaps increases the strategy notify laps by 0.1 (max 20.0).
+func (c *Config) IncreasePitRadioFuelStrategyNotifyLaps() float64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.PitRadio.FuelMonitoring.StrategyNotifyLaps = min(20.0, c.viper.PitRadio.FuelMonitoring.StrategyNotifyLaps+0.1)
+	c.registerUpdate(false)
+
+	return c.viper.PitRadio.FuelMonitoring.StrategyNotifyLaps
+}
+
+// DecreasePitRadioFuelStrategyNotifyLaps decreases the strategy notify laps by 0.1 (min 0.0).
+func (c *Config) DecreasePitRadioFuelStrategyNotifyLaps() float64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.PitRadio.FuelMonitoring.StrategyNotifyLaps = max(0.0, c.viper.PitRadio.FuelMonitoring.StrategyNotifyLaps-0.1)
+	c.registerUpdate(false)
+
+	return c.viper.PitRadio.FuelMonitoring.StrategyNotifyLaps
 }
 
 // GetPitRadioFuelRangeSafetyMarginLaps returns the safety margin in laps to apply when calculating fuel range.
@@ -1745,9 +1943,31 @@ func (c *Config) SetPitRadioFuelRangeSafetyMarginLaps(value float64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.viper.PitRadio.FuelMonitoring.RangeSafetyMarginLaps = value
+	c.viper.PitRadio.FuelMonitoring.RangeSafetyMarginLaps = min(2.0, max(0.0, value))
 
 	c.registerUpdate(false)
+}
+
+// IncreasePitRadioFuelRangeSafetyMarginLaps increases the safety margin by 0.05 laps (max 2.0).
+func (c *Config) IncreasePitRadioFuelRangeSafetyMarginLaps() float64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.PitRadio.FuelMonitoring.RangeSafetyMarginLaps = min(2.0, c.viper.PitRadio.FuelMonitoring.RangeSafetyMarginLaps+0.05)
+	c.registerUpdate(false)
+
+	return c.viper.PitRadio.FuelMonitoring.RangeSafetyMarginLaps
+}
+
+// DecreasePitRadioFuelRangeSafetyMarginLaps decreases the safety margin by 0.05 laps (min 0.0).
+func (c *Config) DecreasePitRadioFuelRangeSafetyMarginLaps() float64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.PitRadio.FuelMonitoring.RangeSafetyMarginLaps = max(0.0, c.viper.PitRadio.FuelMonitoring.RangeSafetyMarginLaps-0.05)
+	c.registerUpdate(false)
+
+	return c.viper.PitRadio.FuelMonitoring.RangeSafetyMarginLaps
 }
 
 // GetPitRadioFuelRangeSafetyMarginMeters returns the safety margin in meters to apply when calculating fuel range.
@@ -1763,9 +1983,31 @@ func (c *Config) SetPitRadioFuelRangeSafetyMarginMeters(value float64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.viper.PitRadio.FuelMonitoring.RangeSafetyMarginMeters = value
+	c.viper.PitRadio.FuelMonitoring.RangeSafetyMarginMeters = min(2000.0, max(0.0, value))
 
 	c.registerUpdate(false)
+}
+
+// IncreasePitRadioFuelRangeSafetyMarginMeters increases the safety margin by 50 meters (max 2000).
+func (c *Config) IncreasePitRadioFuelRangeSafetyMarginMeters() float64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.PitRadio.FuelMonitoring.RangeSafetyMarginMeters = min(2000.0, c.viper.PitRadio.FuelMonitoring.RangeSafetyMarginMeters+50)
+	c.registerUpdate(false)
+
+	return c.viper.PitRadio.FuelMonitoring.RangeSafetyMarginMeters
+}
+
+// DecreasePitRadioFuelRangeSafetyMarginMeters decreases the safety margin by 50 meters (min 0).
+func (c *Config) DecreasePitRadioFuelRangeSafetyMarginMeters() float64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.PitRadio.FuelMonitoring.RangeSafetyMarginMeters = max(0.0, c.viper.PitRadio.FuelMonitoring.RangeSafetyMarginMeters-50)
+	c.registerUpdate(false)
+
+	return c.viper.PitRadio.FuelMonitoring.RangeSafetyMarginMeters
 }
 
 // GetPitRadioTyreMonitoringEnabled returns whether tyre monitoring is enabled.
@@ -1795,9 +2037,31 @@ func (c *Config) SetPitRadioTyreTemperatureOptimalCelsius(value float32) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.viper.PitRadio.TyreMonitoring.TemperatureOptimalCelsius = value
+	c.viper.PitRadio.TyreMonitoring.TemperatureOptimalCelsius = min(120.0, max(60.0, value))
 
 	c.registerUpdate(false)
+}
+
+// IncreasePitRadioTyreTemperatureOptimalCelsius increases the optimal temperature by 1°C (max 120).
+func (c *Config) IncreasePitRadioTyreTemperatureOptimalCelsius() float32 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.PitRadio.TyreMonitoring.TemperatureOptimalCelsius = min(120.0, c.viper.PitRadio.TyreMonitoring.TemperatureOptimalCelsius+1)
+	c.registerUpdate(false)
+
+	return c.viper.PitRadio.TyreMonitoring.TemperatureOptimalCelsius
+}
+
+// DecreasePitRadioTyreTemperatureOptimalCelsius decreases the optimal temperature by 1°C (min 60).
+func (c *Config) DecreasePitRadioTyreTemperatureOptimalCelsius() float32 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.PitRadio.TyreMonitoring.TemperatureOptimalCelsius = max(60.0, c.viper.PitRadio.TyreMonitoring.TemperatureOptimalCelsius-1)
+	c.registerUpdate(false)
+
+	return c.viper.PitRadio.TyreMonitoring.TemperatureOptimalCelsius
 }
 
 // GetPitRadioTyreTemperatureOperatingWindow returns the total operating window width around optimal temperature in Celsius.
@@ -1814,9 +2078,31 @@ func (c *Config) SetPitRadioTyreTemperatureOperatingWindow(value float32) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.viper.PitRadio.TyreMonitoring.TemperatureOperatingWindow = value
+	c.viper.PitRadio.TyreMonitoring.TemperatureOperatingWindow = min(20.0, max(0.5, value))
 
 	c.registerUpdate(false)
+}
+
+// IncreasePitRadioTyreTemperatureOperatingWindow increases the operating window by 0.5°C (max 20.0).
+func (c *Config) IncreasePitRadioTyreTemperatureOperatingWindow() float32 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.PitRadio.TyreMonitoring.TemperatureOperatingWindow = min(20.0, c.viper.PitRadio.TyreMonitoring.TemperatureOperatingWindow+0.5)
+	c.registerUpdate(false)
+
+	return c.viper.PitRadio.TyreMonitoring.TemperatureOperatingWindow
+}
+
+// DecreasePitRadioTyreTemperatureOperatingWindow decreases the operating window by 0.5°C (min 0.5).
+func (c *Config) DecreasePitRadioTyreTemperatureOperatingWindow() float32 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.PitRadio.TyreMonitoring.TemperatureOperatingWindow = max(0.5, c.viper.PitRadio.TyreMonitoring.TemperatureOperatingWindow-0.5)
+	c.registerUpdate(false)
+
+	return c.viper.PitRadio.TyreMonitoring.TemperatureOperatingWindow
 }
 
 // GetPitRadioTyreTemperatureMarginCelsius returns the margin beyond operating window for hot/cold thresholds in Celsius.
@@ -1832,9 +2118,31 @@ func (c *Config) SetPitRadioTyreTemperatureMarginCelsius(value float32) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.viper.PitRadio.TyreMonitoring.TemperatureMarginCelsius = value
+	c.viper.PitRadio.TyreMonitoring.TemperatureMarginCelsius = min(10.0, max(0.5, value))
 
 	c.registerUpdate(false)
+}
+
+// IncreasePitRadioTyreTemperatureMarginCelsius increases the temperature margin by 0.5°C (max 10.0).
+func (c *Config) IncreasePitRadioTyreTemperatureMarginCelsius() float32 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.PitRadio.TyreMonitoring.TemperatureMarginCelsius = min(10.0, c.viper.PitRadio.TyreMonitoring.TemperatureMarginCelsius+0.5)
+	c.registerUpdate(false)
+
+	return c.viper.PitRadio.TyreMonitoring.TemperatureMarginCelsius
+}
+
+// DecreasePitRadioTyreTemperatureMarginCelsius decreases the temperature margin by 0.5°C (min 0.5).
+func (c *Config) DecreasePitRadioTyreTemperatureMarginCelsius() float32 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.PitRadio.TyreMonitoring.TemperatureMarginCelsius = max(0.5, c.viper.PitRadio.TyreMonitoring.TemperatureMarginCelsius-0.5)
+	c.registerUpdate(false)
+
+	return c.viper.PitRadio.TyreMonitoring.TemperatureMarginCelsius
 }
 
 // ****************************************************************************
@@ -2106,6 +2414,30 @@ func (c *Config) SetSynthTransmissionGainMinRace(value float64) {
 	c.mu.Unlock()
 }
 
+// IncreaseSynthTransmissionGainMinRace increases the minimum race transmission gain by 0.25 (max 0).
+func (c *Config) IncreaseSynthTransmissionGainMinRace() float64 {
+	c.mu.Lock()
+	c.viper.Synthesizer.TransmissionGainMinRace = min(MaximumGain, c.viper.Synthesizer.TransmissionGainMinRace+0.25)
+	c.rebuildSnapshot()
+	c.registerUpdate(false)
+	result := c.viper.Synthesizer.TransmissionGainMinRace
+	c.mu.Unlock()
+
+	return result
+}
+
+// DecreaseSynthTransmissionGainMinRace decreases the minimum race transmission gain by 0.25 (min -60).
+func (c *Config) DecreaseSynthTransmissionGainMinRace() float64 {
+	c.mu.Lock()
+	c.viper.Synthesizer.TransmissionGainMinRace = max(MinimumGain, c.viper.Synthesizer.TransmissionGainMinRace-0.25)
+	c.rebuildSnapshot()
+	c.registerUpdate(false)
+	result := c.viper.Synthesizer.TransmissionGainMinRace
+	c.mu.Unlock()
+
+	return result
+}
+
 // SetSynthTransmissionGainMinStreet sets the minimum transmission gain for street transmissions.
 func (c *Config) SetSynthTransmissionGainMinStreet(value float64) {
 	c.mu.Lock()
@@ -2113,6 +2445,30 @@ func (c *Config) SetSynthTransmissionGainMinStreet(value float64) {
 	c.rebuildSnapshot()
 	c.registerUpdate(false)
 	c.mu.Unlock()
+}
+
+// IncreaseSynthTransmissionGainMinStreet increases the minimum street transmission gain by 0.25 (max 0).
+func (c *Config) IncreaseSynthTransmissionGainMinStreet() float64 {
+	c.mu.Lock()
+	c.viper.Synthesizer.TransmissionGainMinStreet = min(MaximumGain, c.viper.Synthesizer.TransmissionGainMinStreet+0.25)
+	c.rebuildSnapshot()
+	c.registerUpdate(false)
+	result := c.viper.Synthesizer.TransmissionGainMinStreet
+	c.mu.Unlock()
+
+	return result
+}
+
+// DecreaseSynthTransmissionGainMinStreet decreases the minimum street transmission gain by 0.25 (min -60).
+func (c *Config) DecreaseSynthTransmissionGainMinStreet() float64 {
+	c.mu.Lock()
+	c.viper.Synthesizer.TransmissionGainMinStreet = max(MinimumGain, c.viper.Synthesizer.TransmissionGainMinStreet-0.25)
+	c.rebuildSnapshot()
+	c.registerUpdate(false)
+	result := c.viper.Synthesizer.TransmissionGainMinStreet
+	c.mu.Unlock()
+
+	return result
 }
 
 // GetSynthTransmissionGain returns the transmission gain of the synthesizer (i.e. the volume level for transmission

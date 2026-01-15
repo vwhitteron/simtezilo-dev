@@ -2,41 +2,99 @@ package app
 
 import (
 	"strconv"
+
+	"github.com/vwhitteron/simtezilo-dev/app/i18n/languagedb"
 )
 
-func (a *App) settingAction(setting string, action string) string {
-	handlers := map[string]func(string) string{
-		"cVol":       a.handleChassisVolSetting,
-		"ePVol":      a.handleEnginePulseVolSetting,
-		"ePrimary":   a.handleEnginePrimarySetting,
-		"ePScale":    a.handleEnginePulseScaleSetting,
-		"eSecondary": a.handleEngineSecondarySetting,
-		"eVol":       a.handleEngineVolSetting,
-		"eq":         a.handleEqEnableSetting,
-		"fCurve":     a.handleForceCurveSetting,
-		"fMax":       a.handleForceMaxSetting,
-		"fMin":       a.handleForceMinSetting,
-		"fSat":       a.handleForceSatSetting,
-		"lang":       a.handleLanguageSetting,
-		"tCurve":     a.handleTransmissionCurveSetting,
-		"tSat":       a.handleTransmissionSatSetting,
-		"tVol":       a.handleTransmissionVolSetting,
-		"vCurve":     a.handleVibrationCurveSetting,
-		"vol":        a.handleMasterVolSetting,
-		"vSat":       a.handleVibrationSatSetting,
-		"record":     a.handleRecordToggle,
-		"setupMode":  a.handleSetupModeCountdown,
-		"info":       a.handleInfoScreen,
+func (a *App) settingAction(setting languagedb.Key, action string) string {
+	handlers := map[languagedb.Key]func(string) string{
+		// App handlers
+		languagedb.UIMenuAppLanguage:        a.handleLanguageSetting,
+		languagedb.UIMenuAppLoglevel:        a.handleLogLevelSetting,
+		languagedb.UIMenuAppDevtools:        a.handleDevToolsSetting,
+		languagedb.UIMenuAppTelemetrySource: a.handleTelemetrySourceSetting,
+
+		// System handlers
+		languagedb.UIMenuSystemSetupmode: a.handleSetupModeCountdown,
+
+		// Synthesizer handlers
+		languagedb.UIMenuSynthInternalSampleRate:        a.handleInternalSampleRateSetting,
+		languagedb.UIMenuSynthOutputSampleRate:          a.handleOutputSampleRateSetting,
+		languagedb.UIMenuSynthMasterGain:                a.handleMasterGainSetting,
+		languagedb.UIMenuSynthChassisGain:               a.handleChassisGainSetting,
+		languagedb.UIMenuSynthEngineGain:                a.handleEngineGainSetting,
+		languagedb.UIMenuSynthTransmissionGain:          a.handleTransmissionGainSetting,
+		languagedb.UIMenuSynthTransmissionGainMinRace:   a.handleTransmissionGainMinRaceSetting,
+		languagedb.UIMenuSynthTransmissionGainMinStreet: a.handleTransmissionGainMinStreetSetting,
+		languagedb.UIMenuSynthEqEnabled:                 a.handleEqEnableSetting,
+
+		// Haptics handlers
+		languagedb.UIMenuHapticsOutputMode:              a.handleOutputModeSetting,
+		languagedb.UIMenuHapticsJerkCurve:               a.handleJerkCurveSetting,
+		languagedb.UIMenuHapticsJerkMax:                 a.handleJerkMaxSetting,
+		languagedb.UIMenuHapticsSnapCurve:               a.handleSnapCurveSetting,
+		languagedb.UIMenuHapticsSnapMax:                 a.handleSnapMaxSetting,
+		languagedb.UIMenuHapticsPulseMaxAmplitude:       a.handlePulseMaxAmplitudeSetting,
+		languagedb.UIMenuHapticsPulseMinFreq:            a.handlePulseMinFreqSetting,
+		languagedb.UIMenuHapticsPulseMaxFreq:            a.handlePulseMaxFreqSetting,
+		languagedb.UIMenuHapticsTransmissionFFBStrength: a.handletransmissionFFBStrengthSetting,
+		languagedb.UIMenuHapticsTransmissionCurve:       a.handleTransmissionCurveSetting,
+		languagedb.UIMenuHapticsTransmissionGforceMax:   a.handleTransmissionGforceMaxSetting,
+		languagedb.UIMenuHapticsEnginePrimaryBalance:    a.handlePrimaryBalanceSetting,
+		languagedb.UIMenuHapticsEngineSecondaryBalance:  a.handleSecondaryBalanceSetting,
+		languagedb.UIMenuHapticsEnginePulseGain:         a.handleEnginePulseGainSetting,
+		languagedb.UIMenuHapticsEnginePulseScale:        a.handlePulseScaleSetting,
+
+		// Pit Radio handlers
+		languagedb.UIMenuPitRadioEnable:               a.handlePitRadioEnableSetting,
+		languagedb.UIMenuPitRadioLapTimesEnable:       a.handlePitradioLapTimesEnableSetting,
+		languagedb.UIMenuPitRadioLapTimesMaxDelta:     a.handlePitradioLapTimesMaxDeltaSetting,
+		languagedb.UIMenuPitRadioRaceLapsEnable:       a.handlePitradioRaceLapsEnableSetting,
+		languagedb.UIMenuPitRadioRaceLapsCountdown:    a.handlePitradioRaceLapsCountdownSetting,
+		languagedb.UIMenuPitRadioRaceLapsInterval:     a.handlePitradioRaceLapsIntervalSetting,
+		languagedb.UIMenuPitRadioRaceProgressEnable:   a.handlePitradioRaceProgressEnableSetting,
+		languagedb.UIMenuPitRadioRaceProgressMinLaps:  a.handlePitradioRaceProgressMinLapsSetting,
+		languagedb.UIMenuPitRadioRaceProgressInterval: a.handlePitradioRaceProgressIntervalSetting,
+		languagedb.UIMenuPitRadioFuelEnable:           a.handlePitradioFuelEnableSetting,
+		languagedb.UIMenuPitRadioFuelPreWarn:          a.handlePitradioFuelPreWarnSetting,
+		languagedb.UIMenuPitRadioFuelStrategy:         a.handlePitradioFuelStrategySetting,
+		languagedb.UIMenuPitRadioFuelSafetyLaps:       a.handlePitradioFuelSafetyLapsSetting,
+		languagedb.UIMenuPitRadioFuelSafetyMeters:     a.handlePitradioFuelSafetyMetersSetting,
+		languagedb.UIMenuPitRadioTyreEnable:           a.handlePitRadioTyreEnableSetting,
+		languagedb.UIMenuPitRadioTyreTempOptimal:      a.handlePitradioTyreTempOptimalSetting,
+		languagedb.UIMenuPitRadioTyreTempWindow:       a.handlePitradioTyreTempWindowSetting,
+		languagedb.UIMenuPitRadioTyreTempMargin:       a.handlePitradioTyreTempMarginSetting,
+
+		// Dev tool handlers
+		languagedb.UIMenuDevtoolsRecord: a.handleRecordToggle,
+
+		// Info handlers
+		languagedb.UIMenuInfo:           a.handleInfoScreen,
+		languagedb.UIMenuInfoVersion:    a.handleVersionInfo,
+		languagedb.UIMenuInfoCommitHash: a.handleCommitHashInfo,
+		languagedb.UIMenuInfoBuildTime:  a.handleBuildTimeInfo,
+		languagedb.UIMenuInfoPlatform:   a.handlePlatformInfo,
+		languagedb.UIMenuInfoIPAddress:  a.handleIPAddressInfo,
 	}
 
 	if handler, exists := handlers[setting]; exists {
-		return handler(action)
+		result := handler(action)
+
+		// Save config to file after any setting change (except "get" actions)
+		if action != "get" && action != "" {
+			err := a.config.SaveConfigToFile()
+			if err != nil {
+				a.log.Error().Err(err).Msg("failed to save configuration to file")
+			}
+		}
+
+		return result
 	}
 
 	return "error"
 }
 
-func (a *App) handleChassisVolSetting(action string) string {
+func (a *App) handleChassisGainSetting(action string) string {
 	var value float64
 
 	switch action {
@@ -111,7 +169,7 @@ func (a *App) handleEngineSecondarySetting(action string) string {
 	return strconv.FormatFloat(value, 'f', 2, 64)
 }
 
-func (a *App) handleEngineVolSetting(action string) string {
+func (a *App) handleEngineGainSetting(action string) string {
 	var value float64
 
 	switch action {
@@ -168,7 +226,7 @@ func (a *App) handleForceMaxSetting(action string) string {
 	case "increase":
 		value = a.config.IncreaseHapticsPulseMaxHz()
 	case "decrease":
-		value = a.config.DecreasehapticsPulseMaxHz()
+		value = a.config.DecreaseHapticsPulseMaxHz()
 	default:
 		value = int(a.config.GetHapticsPulseMaxHz())
 	}
@@ -247,7 +305,7 @@ func (a *App) handleTransmissionSatSetting(action string) string {
 	return strconv.FormatFloat(value, 'f', 1, 64)
 }
 
-func (a *App) handleTransmissionVolSetting(action string) string {
+func (a *App) handleTransmissionGainSetting(action string) string {
 	var value float64
 
 	switch action {
@@ -277,7 +335,7 @@ func (a *App) handleVibrationCurveSetting(action string) string {
 	return strconv.Itoa(value)
 }
 
-func (a *App) handleMasterVolSetting(action string) string {
+func (a *App) handleMasterGainSetting(action string) string {
 	var value float64
 
 	switch action {
@@ -355,4 +413,723 @@ func (a *App) handleRecordToggle(action string) string {
 	}
 
 	return "OFF"
+}
+
+func (a *App) handleVersionInfo(_ string) string {
+	return Version
+}
+
+func (a *App) handleCommitHashInfo(_ string) string {
+	return CommitHash
+}
+
+func (a *App) handleBuildTimeInfo(_ string) string {
+	return BuildTime
+}
+
+func (a *App) handlePlatformInfo(_ string) string {
+	return Platform
+}
+
+func (a *App) handleIPAddressInfo(_ string) string {
+	return a.ipAddress
+}
+
+func (a *App) handleLogLevelSetting(action string) string {
+	levels := []string{"trace", "debug", "info", "warn", "error", "fatal"}
+	currentLevel := a.config.GetAppLogLevel()
+
+	// Find current index
+	currentIndex := 0
+
+	for i, level := range levels {
+		if level == currentLevel {
+			currentIndex = i
+
+			break
+		}
+	}
+
+	switch action {
+	case "increase":
+		// Move to previous level (less verbose)
+		if currentIndex > 0 {
+			currentIndex--
+		}
+
+		a.config.SetAppLogLevel(levels[currentIndex])
+	case "decrease":
+		// Move to next level (more verbose)
+		if currentIndex < len(levels)-1 {
+			currentIndex++
+		}
+
+		a.config.SetAppLogLevel(levels[currentIndex])
+	}
+
+	return a.config.GetAppLogLevel()
+}
+
+func (a *App) handleDevToolsSetting(action string) string {
+	switch action {
+	case "increase", "decrease":
+		// Toggle dev tools
+		current := a.config.GetDevToolsEnabled()
+		a.config.SetDevToolsEnabled(!current)
+	}
+
+	if a.config.GetDevToolsEnabled() {
+		return "ON"
+	}
+
+	return "OFF"
+}
+
+const (
+	telemetrySourceAuto       = "udp://255.255.255.255:33739"
+	telemetrySourceDemo       = "file:///opt/simtezilo/data/replays/demo.gtz"
+	telemetrySourceModeAuto   = "auto"
+	telemetrySourceModeDemo   = "demo"
+	telemetrySourceModeCustom = "custom"
+)
+
+// getTelemetrySourceMode returns the current telemetry source mode.
+func (a *App) getTelemetrySourceMode() string {
+	switch a.config.GetTelemetrySource() {
+	case telemetrySourceAuto:
+		return telemetrySourceModeAuto
+	case telemetrySourceDemo:
+		return telemetrySourceModeDemo
+	default:
+		return telemetrySourceModeCustom
+	}
+}
+
+// hasCustomTelemetrySource returns true if a custom telemetry source is stored.
+func (a *App) hasCustomTelemetrySource() bool {
+	return a.customTelemetrySource != "" &&
+		a.customTelemetrySource != telemetrySourceAuto &&
+		a.customTelemetrySource != telemetrySourceDemo
+}
+
+// setTelemetrySourceWithMode sets the telemetry source and returns the new mode.
+func (a *App) setTelemetrySourceWithMode(source, mode string) string {
+	a.config.SetTelemetrySource(source)
+
+	return mode
+}
+
+func (a *App) handleTelemetrySourceSetting(action string) string {
+	current := a.config.GetTelemetrySource()
+	currentMode := a.getTelemetrySourceMode()
+
+	// Define mode transitions: [currentMode] -> [nextMode on increase, nextMode on decrease]
+	switch action {
+	case "increase":
+		return a.cycleTelemetrySourceForward(current, currentMode)
+	case "decrease":
+		return a.cycleTelemetrySourceBackward(current, currentMode)
+	}
+
+	return currentMode
+}
+
+func (a *App) cycleTelemetrySourceForward(current, currentMode string) string {
+	// Cycle: AUTO -> DEMO -> CUSTOM -> AUTO
+	switch currentMode {
+	case telemetrySourceModeAuto:
+		return a.setTelemetrySourceWithMode(telemetrySourceDemo, telemetrySourceModeDemo)
+	case telemetrySourceModeDemo:
+		if a.hasCustomTelemetrySource() {
+			return a.setTelemetrySourceWithMode(a.customTelemetrySource, telemetrySourceModeCustom)
+		}
+
+		return a.setTelemetrySourceWithMode(telemetrySourceAuto, telemetrySourceModeAuto)
+	case telemetrySourceModeCustom:
+		a.customTelemetrySource = current
+
+		return a.setTelemetrySourceWithMode(telemetrySourceAuto, telemetrySourceModeAuto)
+	}
+
+	return currentMode
+}
+
+func (a *App) cycleTelemetrySourceBackward(current, currentMode string) string {
+	// Cycle: AUTO -> CUSTOM -> DEMO -> AUTO
+	switch currentMode {
+	case telemetrySourceModeAuto:
+		if a.hasCustomTelemetrySource() {
+			return a.setTelemetrySourceWithMode(a.customTelemetrySource, telemetrySourceModeCustom)
+		}
+
+		return a.setTelemetrySourceWithMode(telemetrySourceDemo, telemetrySourceModeDemo)
+	case telemetrySourceModeDemo:
+		return a.setTelemetrySourceWithMode(telemetrySourceAuto, telemetrySourceModeAuto)
+	case telemetrySourceModeCustom:
+		a.customTelemetrySource = current
+
+		return a.setTelemetrySourceWithMode(telemetrySourceDemo, telemetrySourceModeDemo)
+	}
+
+	return currentMode
+}
+
+func (a *App) handlePitRadioEnableSetting(action string) string {
+	switch action {
+	case "increase", "decrease":
+		// Toggle pit radio
+		current := a.config.PitRadioEnabled()
+		a.config.SetPitRadioEnabled(!current)
+	}
+
+	if a.config.PitRadioEnabled() {
+		return "ON"
+	}
+
+	return "OFF"
+}
+
+// Pit Radio - Lap Times notification handlers.
+func (a *App) handlePitradioLapTimesEnableSetting(action string) string {
+	switch action {
+	case "increase", "decrease":
+		current := a.config.GetPitRadioNotifyLapTimesEnabled()
+		a.config.SetPitRadioNotifyLapTimesEnabled(!current)
+	}
+
+	if a.config.GetPitRadioNotifyLapTimesEnabled() {
+		return "ON"
+	}
+
+	return "OFF"
+}
+
+func (a *App) handlePitradioLapTimesMaxDeltaSetting(action string) string {
+	var value float64
+
+	switch action {
+	case "increase":
+		value = a.config.IncreasePitRadioNotifyLapTimesMaxDeltaSeconds()
+	case "decrease":
+		value = a.config.DecreasePitRadioNotifyLapTimesMaxDeltaSeconds()
+	default:
+		value = a.config.GetPitRadioNotifyLapTimesMaxDeltaSeconds()
+	}
+
+	return strconv.FormatFloat(value, 'f', 1, 64) + "s"
+}
+
+// Pit Radio - Race Laps notification handlers.
+func (a *App) handlePitradioRaceLapsEnableSetting(action string) string {
+	switch action {
+	case "increase", "decrease":
+		current := a.config.GetPitRadioNotifyRaceLapsEnabled()
+		a.config.SetPitRadioNotifyRaceLapsEnabled(!current)
+	}
+
+	if a.config.GetPitRadioNotifyRaceLapsEnabled() {
+		return "ON"
+	}
+
+	return "OFF"
+}
+
+func (a *App) handlePitradioRaceLapsCountdownSetting(action string) string {
+	var value int
+
+	switch action {
+	case "increase":
+		value = a.config.IncreasePitRadioNotifyRaceLapsCountdownLaps()
+	case "decrease":
+		value = a.config.DecreasePitRadioNotifyRaceLapsCountdownLaps()
+	default:
+		value = a.config.GetPitRadioNotifyRaceLapsCountdownLaps()
+	}
+
+	return strconv.Itoa(value)
+}
+
+func (a *App) handlePitradioRaceLapsIntervalSetting(action string) string {
+	var value int
+
+	switch action {
+	case "increase":
+		value = a.config.IncreasePitRadioNotifyRaceLapsIntervalLaps()
+	case "decrease":
+		value = a.config.DecreasePitRadioNotifyRaceLapsIntervalLaps()
+	default:
+		value = a.config.GetPitRadioNotifyRaceLapsIntervalLaps()
+	}
+
+	return strconv.Itoa(value)
+}
+
+// Pit Radio - Race Progress notification handlers.
+func (a *App) handlePitradioRaceProgressEnableSetting(action string) string {
+	switch action {
+	case "increase", "decrease":
+		current := a.config.GetPitRadioNotifyRaceProgressEnabled()
+		a.config.SetPitRadioNotifyRaceProgressEnabled(!current)
+	}
+
+	if a.config.GetPitRadioNotifyRaceProgressEnabled() {
+		return "ON"
+	}
+
+	return "OFF"
+}
+
+func (a *App) handlePitradioRaceProgressMinLapsSetting(action string) string {
+	var value int
+
+	switch action {
+	case "increase":
+		value = a.config.IncreasePitRadioNotifyRaceProgressMinLaps()
+	case "decrease":
+		value = a.config.DecreasePitRadioNotifyRaceProgressMinLaps()
+	default:
+		value = a.config.GetPitRadioNotifyRaceProgressMinLaps()
+	}
+
+	return strconv.Itoa(value)
+}
+
+func (a *App) handlePitradioRaceProgressIntervalSetting(action string) string {
+	var value int
+
+	switch action {
+	case "increase":
+		value = a.config.IncreasePitRadioNotifyRaceProgressIntervalPc()
+	case "decrease":
+		value = a.config.DecreasePitRadioNotifyRaceProgressIntervalPc()
+	default:
+		value = a.config.GetPitRadioNotifyRaceProgressIntervalPc()
+	}
+
+	return strconv.Itoa(value) + "%"
+}
+
+// Pit Radio - Fuel Management handlers.
+func (a *App) handlePitradioFuelEnableSetting(action string) string {
+	switch action {
+	case "increase", "decrease":
+		current := a.config.GetPitRadioFuelMonitoringEnabled()
+		a.config.SetPitRadioFuelMonitoringEnabled(!current)
+	}
+
+	if a.config.GetPitRadioFuelMonitoringEnabled() {
+		return "ON"
+	}
+
+	return "OFF"
+}
+
+func (a *App) handlePitradioFuelPreWarnSetting(action string) string {
+	var value float64
+
+	switch action {
+	case "increase":
+		value = a.config.IncreasePitRadioFuelPreWarnNotifyLaps()
+	case "decrease":
+		value = a.config.DecreasePitRadioFuelPreWarnNotifyLaps()
+	default:
+		value = a.config.GetPitRadioFuelPreWarnNotifyLaps()
+	}
+
+	return strconv.FormatFloat(value, 'f', 1, 64)
+}
+
+func (a *App) handlePitradioFuelStrategySetting(action string) string {
+	var value float64
+
+	switch action {
+	case "increase":
+		value = a.config.IncreasePitRadioFuelStrategyNotifyLaps()
+	case "decrease":
+		value = a.config.DecreasePitRadioFuelStrategyNotifyLaps()
+	default:
+		value = a.config.GetPitRadioFuelStrategyNotifyLaps()
+	}
+
+	return strconv.FormatFloat(value, 'f', 1, 64)
+}
+
+func (a *App) handlePitradioFuelSafetyLapsSetting(action string) string {
+	var value float64
+
+	switch action {
+	case "increase":
+		value = a.config.IncreasePitRadioFuelRangeSafetyMarginLaps()
+	case "decrease":
+		value = a.config.DecreasePitRadioFuelRangeSafetyMarginLaps()
+	default:
+		value = a.config.GetPitRadioFuelRangeSafetyMarginLaps()
+	}
+
+	return strconv.FormatFloat(value, 'f', 2, 64)
+}
+
+func (a *App) handlePitradioFuelSafetyMetersSetting(action string) string {
+	var value float64
+
+	switch action {
+	case "increase":
+		value = a.config.IncreasePitRadioFuelRangeSafetyMarginMeters()
+	case "decrease":
+		value = a.config.DecreasePitRadioFuelRangeSafetyMarginMeters()
+	default:
+		value = a.config.GetPitRadioFuelRangeSafetyMarginMeters()
+	}
+
+	return strconv.FormatFloat(value, 'f', 0, 64) + "m"
+}
+
+// Pit Radio - Tyre Management handlers.
+func (a *App) handlePitRadioTyreEnableSetting(action string) string {
+	switch action {
+	case "increase", "decrease":
+		current := a.config.GetPitRadioTyreMonitoringEnabled()
+		a.config.SetPitRadioTyreMonitoringEnabled(!current)
+	}
+
+	if a.config.GetPitRadioTyreMonitoringEnabled() {
+		return "ON"
+	}
+
+	return "OFF"
+}
+
+func (a *App) handlePitradioTyreTempOptimalSetting(action string) string {
+	var value float32
+
+	switch action {
+	case "increase":
+		value = a.config.IncreasePitRadioTyreTemperatureOptimalCelsius()
+	case "decrease":
+		value = a.config.DecreasePitRadioTyreTemperatureOptimalCelsius()
+	default:
+		value = a.config.GetPitRadioTyreTemperatureOptimalCelsius()
+	}
+
+	return strconv.FormatFloat(float64(value), 'f', 0, 64) + "°C"
+}
+
+func (a *App) handlePitradioTyreTempWindowSetting(action string) string {
+	var value float32
+
+	switch action {
+	case "increase":
+		value = a.config.IncreasePitRadioTyreTemperatureOperatingWindow()
+	case "decrease":
+		value = a.config.DecreasePitRadioTyreTemperatureOperatingWindow()
+	default:
+		value = a.config.GetPitRadioTyreTemperatureOperatingWindow()
+	}
+
+	return strconv.FormatFloat(float64(value), 'f', 1, 64) + "°C"
+}
+
+func (a *App) handlePitradioTyreTempMarginSetting(action string) string {
+	var value float32
+
+	switch action {
+	case "increase":
+		value = a.config.IncreasePitRadioTyreTemperatureMarginCelsius()
+	case "decrease":
+		value = a.config.DecreasePitRadioTyreTemperatureMarginCelsius()
+	default:
+		value = a.config.GetPitRadioTyreTemperatureMarginCelsius()
+	}
+
+	return strconv.FormatFloat(float64(value), 'f', 1, 64) + "°C"
+}
+
+// Synthesizer - Sample Rate handlers.
+func (a *App) handleInternalSampleRateSetting(action string) string {
+	rates := []int{8000, 16000, 22050, 32000, 44100, 48000}
+	current := a.config.GetSynthInternalSampleRateHz()
+
+	var newRate int
+
+	switch action {
+	case "increase":
+		for _, rate := range rates {
+			if rate > current {
+				newRate = rate
+
+				break
+			}
+		}
+
+		if newRate == 0 {
+			newRate = rates[len(rates)-1]
+		}
+
+		a.config.SetSynthInternalSampleRateHz(newRate)
+	case "decrease":
+		for i := len(rates) - 1; i >= 0; i-- {
+			if rates[i] < current {
+				newRate = rates[i]
+
+				break
+			}
+		}
+
+		if newRate == 0 {
+			newRate = rates[0]
+		}
+
+		a.config.SetSynthInternalSampleRateHz(newRate)
+	}
+
+	hz := a.config.GetSynthInternalSampleRateHz()
+	if hz >= 1000 {
+		return strconv.Itoa(hz/1000) + "kHz"
+	}
+
+	return strconv.Itoa(hz) + "Hz"
+}
+
+func (a *App) handleOutputSampleRateSetting(action string) string {
+	rates := []int{8000, 16000, 22050, 32000, 44100, 48000}
+	current := a.config.GetSynthOutputSampleRateHz()
+
+	var newRate int
+
+	switch action {
+	case "increase":
+		for _, rate := range rates {
+			if rate > current {
+				newRate = rate
+
+				break
+			}
+		}
+
+		if newRate == 0 {
+			newRate = rates[len(rates)-1]
+		}
+
+		a.config.SetSynthOutputSampleRateHz(newRate)
+	case "decrease":
+		for i := len(rates) - 1; i >= 0; i-- {
+			if rates[i] < current {
+				newRate = rates[i]
+
+				break
+			}
+		}
+
+		if newRate == 0 {
+			newRate = rates[0]
+		}
+
+		a.config.SetSynthOutputSampleRateHz(newRate)
+	}
+
+	hz := a.config.GetSynthOutputSampleRateHz()
+	if hz >= 1000 {
+		return strconv.Itoa(hz/1000) + "kHz"
+	}
+
+	return strconv.Itoa(hz) + "Hz"
+}
+
+// Synthesizer - Transmission Min Gain handlers.
+func (a *App) handleTransmissionGainMinRaceSetting(action string) string {
+	var value float64
+
+	switch action {
+	case "increase":
+		value = a.config.IncreaseSynthTransmissionGainMinRace()
+	case "decrease":
+		value = a.config.DecreaseSynthTransmissionGainMinRace()
+	default:
+		value = a.config.GetSynthTransmissionGainMinRace()
+	}
+
+	return strconv.FormatFloat(value, 'f', 2, 64)
+}
+
+func (a *App) handleTransmissionGainMinStreetSetting(action string) string {
+	var value float64
+
+	switch action {
+	case "increase":
+		value = a.config.IncreaseSynthTransmissionGainMinStreet()
+	case "decrease":
+		value = a.config.DecreaseSynthTransmissionGainMinStreet()
+	default:
+		value = a.config.GetSynthTransmissionGainMinStreet()
+	}
+
+	return strconv.FormatFloat(value, 'f', 2, 64)
+}
+
+// Haptics - Output Mode handler.
+func (a *App) handleOutputModeSetting(action string) string {
+	switch action {
+	case "increase", "decrease":
+		current := a.config.GetHapticsReplayEnabled()
+		a.config.SetHapticsEnableReplay(!current)
+	}
+
+	if a.config.GetHapticsReplayEnabled() {
+		return "Live+Replay"
+	}
+
+	return "Live"
+}
+
+// Haptics - Chassis Feedback handlers.
+func (a *App) handleJerkCurveSetting(action string) string {
+	var value int
+
+	switch action {
+	case "increase":
+		value = a.config.IncreaseHapticsJerkCurve()
+	case "decrease":
+		value = a.config.DecreaseHapticsJerkCurve()
+	default:
+		value = int(a.config.GethapticsJerkCurve())
+	}
+
+	return strconv.Itoa(value)
+}
+
+func (a *App) handleJerkMaxSetting(action string) string {
+	var value int
+
+	switch action {
+	case "increase":
+		value = a.config.IncreaseHapticsJerkMax()
+	case "decrease":
+		value = a.config.DecreaseHapticsJerkMax()
+	default:
+		value = a.config.GetHapticsJerkMax()
+	}
+
+	return strconv.Itoa(value)
+}
+
+func (a *App) handleSnapCurveSetting(action string) string {
+	var value int
+
+	switch action {
+	case "increase":
+		value = a.config.IncreaseHapticsSnapCurve()
+	case "decrease":
+		value = a.config.DecreaseHapticsSnapCurve()
+	default:
+		value = int(a.config.GetHapticsSnapCurve())
+	}
+
+	return strconv.Itoa(value)
+}
+
+func (a *App) handleSnapMaxSetting(action string) string {
+	var value int
+
+	switch action {
+	case "increase":
+		value = a.config.IncreaseHapticsSnapMax()
+	case "decrease":
+		value = a.config.DecreaseHapticsSnapMax()
+	default:
+		value = a.config.GetHapticsSnapMax()
+	}
+
+	return strconv.Itoa(value)
+}
+
+func (a *App) handlePulseMaxAmplitudeSetting(action string) string {
+	var value float64
+
+	switch action {
+	case "increase":
+		value = a.config.IncreaseHapticsPulseMaxAmplitude()
+	case "decrease":
+		value = a.config.DecreaseHapticsPulseMaxAmplitude()
+	default:
+		value = a.config.GetHapticsPulseMaxAmplitude()
+	}
+
+	return strconv.FormatFloat(value, 'f', 2, 64)
+}
+
+func (a *App) handlePulseMinFreqSetting(action string) string {
+	var value int
+
+	switch action {
+	case "increase":
+		value = a.config.IncreaseHapticsPulseMinHz()
+	case "decrease":
+		value = a.config.DecreaseHapticsPulseMinHz()
+	default:
+		value = int(a.config.GetHapticsPulseMinHz())
+	}
+
+	return strconv.Itoa(value) + "Hz"
+}
+
+func (a *App) handlePulseMaxFreqSetting(action string) string {
+	var value int
+
+	switch action {
+	case "increase":
+		value = a.config.IncreaseHapticsPulseMaxHz()
+	case "decrease":
+		value = a.config.DecreaseHapticsPulseMaxHz()
+	default:
+		value = int(a.config.GetHapticsPulseMaxHz())
+	}
+
+	return strconv.Itoa(value) + "Hz"
+}
+
+// Haptics - Transmission Feedback handlers.
+func (a *App) handletransmissionFFBStrengthSetting(action string) string {
+	switch action {
+	case "increase", "decrease":
+		current := a.config.GethapticsDynamicTransFeedbackEnabled()
+		a.config.SetHapticsDynamicTransFeedbackEnabled(!current)
+	}
+
+	if a.config.GethapticsDynamicTransFeedbackEnabled() {
+		return "Dynamic"
+	}
+
+	return "Fixed"
+}
+
+func (a *App) handleTransmissionGforceMaxSetting(action string) string {
+	var value float64
+
+	switch action {
+	case "increase":
+		value = a.config.IncreaseHapticsTransmissionGforceMax()
+	case "decrease":
+		value = a.config.DecreasehapticsTransmissionGforceMax()
+	default:
+		value = a.config.GetHapticsTransmissionGforceMax()
+	}
+
+	return strconv.FormatFloat(value, 'f', 1, 64) + "G"
+}
+
+// Haptics - Engine Profile handlers (these are aliases to existing handlers).
+func (a *App) handlePrimaryBalanceSetting(action string) string {
+	return a.handleEnginePrimarySetting(action)
+}
+
+func (a *App) handleSecondaryBalanceSetting(action string) string {
+	return a.handleEngineSecondarySetting(action)
+}
+
+func (a *App) handleEnginePulseGainSetting(action string) string {
+	return a.handleEnginePulseVolSetting(action)
+}
+
+func (a *App) handlePulseScaleSetting(action string) string {
+	return a.handleEnginePulseScaleSetting(action)
 }

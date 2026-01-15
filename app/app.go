@@ -119,6 +119,9 @@ type App struct {
 	jerkPeakHoldTime     time.Time     // Time when peak hold was last updated
 	jerkPeakHoldDuration time.Duration // Duration to hold peak based on pulse length
 
+	// Telemetry source management
+	customTelemetrySource string // Stores custom telemetry source when user switches to auto/demo
+
 	// TODO: fix menu nav and remove this
 	activeBuildInfoItem int // Active build info item index
 }
@@ -339,7 +342,9 @@ func (a *App) runSetupMode() RunResult {
 func (a *App) runAppMode() RunResult {
 	a.log.Info().Msg("Launching run mode")
 
-	err := a.ui.Screen.RenderSplashScreen("Ready")
+	readyMessage := a.i18n.GetString(languagedb.UIReady)
+
+	err := a.ui.Screen.RenderSplashScreen(readyMessage)
 	if err != nil {
 		a.log.Error().
 			Err(err).
@@ -637,7 +642,9 @@ func (a *App) initializeUI(opts Options, hidEvents chan ui.HIDInputEvent) error 
 		ExitCodeChan:     a.exitCodeChan,
 	})
 
-	err := a.ui.Screen.RenderSplashScreen("Starting...")
+	startingMessage := a.i18n.GetString(languagedb.UIStarting)
+
+	err := a.ui.Screen.RenderSplashScreen(startingMessage)
 	if err != nil {
 		a.log.Error().
 			Err(err).
