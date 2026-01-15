@@ -49,10 +49,6 @@
             }
         }
 
-        if (data.manufacturer || data.model) {
-            console.log('Vehicle updated:', currentManufacturer || '(cleared)', currentModel || '(cleared)');
-        }
-
         // Dispatch event for overlay manager
         window.dispatchEvent(new CustomEvent('vehicleDataUpdate', {
             detail: {

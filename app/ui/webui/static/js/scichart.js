@@ -717,14 +717,14 @@ async function initSciChart() {
                         dataSeriesName: "Fuel Usage (%/km)",
                         yAxisId: "ID_Y_AXIS_RATE",
                         strokeThickness: 3,
-                        stroke: "#50C7E0"
+                        stroke: "#f9b73dff"
                     }),
                     new SciChart.FastLineRenderableSeries(wasmContext, {
                         dataSeries: fuelRangeSeries,
                         dataSeriesName: "Range (km)",
                         yAxisId: "ID_Y_AXIS_RANGE",
                         strokeThickness: 3,
-                        stroke: "#C750E0"
+                        stroke: "#5072e0ff"
                     })
                 );
 

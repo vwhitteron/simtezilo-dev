@@ -1317,7 +1317,7 @@ func (a *App) handlePitRadioTick() {
 
 // handleRaceDataTick periodically pushes current game state to ensure UI stays updated.
 func (a *App) handleRaceDataTick() {
-	if a.webUI == nil || !a.webUI.HasActiveClients() {
+	if a.webUI == nil {
 		return
 	}
 
@@ -1766,7 +1766,7 @@ func (a *App) raceHasFinished() bool {
 
 // pushVehicleInfo sends the current vehicle manufacturer and model to the web UI.
 func (a *App) pushVehicleInfo() {
-	if a.webUI == nil || !a.webUI.HasActiveClients() {
+	if a.webUI == nil {
 		return
 	}
 
@@ -1798,7 +1798,7 @@ func (a *App) pushVehicleInfo() {
 
 // pushGameState sends the current game state to the web UI.
 func (a *App) pushGameState() {
-	if a.webUI == nil || !a.webUI.HasActiveClients() {
+	if a.webUI == nil {
 		return
 	}
 
@@ -1816,7 +1816,7 @@ func (a *App) pushGameState() {
 
 // clearVehicleInfo sends empty vehicle info to the web UI to clear the display.
 func (a *App) clearVehicleInfo() {
-	if a.webUI == nil || !a.webUI.HasActiveClients() {
+	if a.webUI == nil {
 		return
 	}
 
@@ -1842,12 +1842,6 @@ func (a *App) pushCircuitInfo() {
 		return
 	}
 
-	if !a.webUI.HasActiveClients() {
-		a.log.Debug().Msg("pushCircuitInfo: no active clients")
-
-		return
-	}
-
 	circuitName := a.circuit.Name()
 	circuitVariation := a.circuit.Variation()
 	circuitCountry := a.circuit.Country()
@@ -1860,7 +1854,7 @@ func (a *App) pushCircuitInfo() {
 		Str("country", circuitCountry).
 		Float64("length", circuitLength).
 		Int("candidates", candidateCount).
-		Msg("pushCircuitInfo: circuit data retrieved")
+		Msg("push circuit data to web UI")
 
 	// Send circuit info even if empty to indicate we're analyzing
 	circuitInfo := map[string]string{
@@ -1873,7 +1867,7 @@ func (a *App) pushCircuitInfo() {
 
 	select {
 	case a.circuitInfoFeed <- circuitInfo:
-		a.log.Debug().Str("circuit", circuitName).Str("variation", circuitVariation).Msg("pushed circuit info to web UI")
+		a.log.Debug().Str("circuit", circuitName).Str("variation", circuitVariation).Msg("pushed circuit info to channel")
 	default:
 		a.log.Debug().Msg("circuit info feed channel full, skipping push")
 	}
@@ -1881,7 +1875,7 @@ func (a *App) pushCircuitInfo() {
 
 // clearCircuitInfo sends empty circuit info to the web UI to clear the display.
 func (a *App) clearCircuitInfo() {
-	if a.webUI == nil || !a.webUI.HasActiveClients() {
+	if a.webUI == nil {
 		return
 	}
 
@@ -1962,7 +1956,7 @@ func (a *App) addLapEvent(lap int16, lapTime time.Duration, position int16) {
 
 // pushRaceInfo sends the current race details to the web UI.
 func (a *App) pushRaceInfo() {
-	if a.webUI == nil || !a.webUI.HasActiveClients() {
+	if a.webUI == nil {
 		return
 	}
 
@@ -2045,7 +2039,7 @@ func formatLapTime(d time.Duration) string {
 
 // clearRaceInfo sends empty race info to the web UI to clear the display.
 func (a *App) clearRaceInfo() {
-	if a.webUI == nil || !a.webUI.HasActiveClients() {
+	if a.webUI == nil {
 		return
 	}
 

@@ -587,6 +587,10 @@ func (w *WebUI) unifiedWebSocketBroadcaster() {
 			}
 			w.subscriptionsMutex.Unlock()
 
+			w.log.Debug().Int("unified_clients", len(w.unifiedClients)).Msg("unified client subscribed")
+
+		case client := <-w.unifiedUnsubChan:
+			// Remove client from unified clients list
 			for i, c := range w.unifiedClients {
 				if c == client {
 					w.unifiedClients = append(w.unifiedClients[:i], w.unifiedClients[i+1:]...)
@@ -716,6 +720,8 @@ func (w *WebUI) unifiedWebSocketBroadcaster() {
 				Msg("broadcast game state to unified clients")
 
 		case circuitInfo := <-w.circuitInfoFeed:
+			w.log.Debug().Interface("circuitInfo", circuitInfo).Msg("received circuit info from channel")
+
 			// Store current state with mutex protection
 			w.circuitInfoMutex.Lock()
 			w.currentCircuitInfo = circuitInfo
