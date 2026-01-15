@@ -1,4 +1,4 @@
-package updater //nolint:testpackage // testing internal functions
+package updater_test
 
 import (
 	"context"
@@ -10,22 +10,23 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
+	"github.com/vwhitteron/simtezilo-dev/app/updater"
 )
 
 func TestUpdateStatusReturnsCorrectStringRepresentation(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		status   UpdateStatus
+		status   updater.UpdateStatus
 		expected string
 	}{
-		{StatusIdle, "idle"},
-		{StatusChecking, "checking"},
-		{StatusUpdateAvailable, "update_available"},
-		{StatusDownloading, "downloading"},
-		{StatusReadyToInstall, "ready_to_install"},
-		{StatusInstalling, "installing"},
-		{StatusError, "error"},
+		{updater.UpdateStatusIdle, "idle"},
+		{updater.UpdateStatusChecking, "checking"},
+		{updater.UpdateStatusUpdateAvailable, "update_available"},
+		{updater.UpdateStatusDownloading, "downloading"},
+		{updater.UpdateStatusReadyToInstall, "ready_to_install"},
+		{updater.UpdateStatusInstalling, "installing"},
+		{updater.UpdateStatusError, "error"},
 	}
 
 	for _, tt := range tests {
@@ -40,7 +41,7 @@ func TestNewCheckerCreatesValidInstance(t *testing.T) {
 
 	log := zerolog.Nop()
 
-	cfg := CheckerConfig{
+	cfg := updater.CheckerConfig{
 		BaseURL:        "https://example.com",
 		CheckInterval:  1 * time.Hour,
 		HTTPTimeout:    30 * time.Second,
@@ -49,7 +50,7 @@ func TestNewCheckerCreatesValidInstance(t *testing.T) {
 		DataDir:        "/tmp/test",
 	}
 
-	checker, err := NewChecker(cfg, log)
+	checker, err := updater.NewChecker(cfg, log)
 	if err != nil {
 		t.Fatalf("NewChecker() error = %v", err)
 	}
@@ -60,15 +61,15 @@ func TestNewCheckerCreatesValidInstance(t *testing.T) {
 
 	// Extract base URL from the manifest URL (remove /manifest.json part)
 	expectedBaseURL := "https://example.com"
-	if checker.baseURL != expectedBaseURL {
-		t.Errorf("manifestBaseURL = %v, want %v", checker.baseURL, expectedBaseURL)
+	if checker.BaseURL() != expectedBaseURL {
+		t.Errorf("manifestBaseURL = %v, want %v", checker.BaseURL(), expectedBaseURL)
 	}
 
-	if checker.channel != cfg.Channel {
-		t.Errorf("channel = %v, want %v", checker.channel, cfg.Channel)
+	if checker.Channel() != cfg.Channel {
+		t.Errorf("channel = %v, want %v", checker.Channel(), cfg.Channel)
 	}
 
-	if checker.Status() != StatusIdle {
+	if checker.Status() != updater.UpdateStatusIdle {
 		t.Errorf("initial status = %v, want StatusIdle", checker.Status())
 	}
 }
@@ -78,7 +79,7 @@ func TestNewCheckerParsesDevVersionAsZero(t *testing.T) {
 
 	log := zerolog.Nop()
 
-	cfg := CheckerConfig{
+	cfg := updater.CheckerConfig{
 		BaseURL:        "https://example.com",
 		CheckInterval:  1 * time.Hour,
 		HTTPTimeout:    30 * time.Second,
@@ -87,7 +88,7 @@ func TestNewCheckerParsesDevVersionAsZero(t *testing.T) {
 	}
 
 	// Should not error for dev version
-	checker, err := NewChecker(cfg, log)
+	checker, err := updater.NewChecker(cfg, log)
 	if err != nil {
 		t.Fatalf("NewChecker() error = %v", err)
 	}
@@ -105,13 +106,13 @@ func TestNewCheckerParsesDevVersionAsZero(t *testing.T) {
 func TestCheckNowReturnsUpdateInfoWhenNewerVersionAvailable(t *testing.T) {
 	t.Parallel()
 
-	manifest := Manifest{
+	manifest := updater.Manifest{
 		Version:     "2.0.0",
 		ReleaseDate: time.Now().UTC(),
 		Channel:     "stable",
 		Changelog:   "- New features",
-		Platforms: map[string]Platform{
-			GetPlatformKey(): {
+		Platforms: map[string]updater.Platform{
+			updater.GetPlatformKey(): {
 				URL:    "https://example.com/binary",
 				SHA256: "abc123",
 				Size:   1024,
@@ -127,7 +128,7 @@ func TestCheckNowReturnsUpdateInfoWhenNewerVersionAvailable(t *testing.T) {
 
 	log := zerolog.Nop()
 
-	cfg := CheckerConfig{
+	cfg := updater.CheckerConfig{
 		BaseURL:        server.URL,
 		CheckInterval:  1 * time.Hour,
 		HTTPTimeout:    10 * time.Second,
@@ -136,7 +137,7 @@ func TestCheckNowReturnsUpdateInfoWhenNewerVersionAvailable(t *testing.T) {
 		DataDir:        "/tmp/test",
 	}
 
-	checker, err := NewChecker(cfg, log)
+	checker, err := updater.NewChecker(cfg, log)
 	if err != nil {
 		t.Fatalf("NewChecker() error = %v", err)
 	}
@@ -158,7 +159,7 @@ func TestCheckNowReturnsUpdateInfoWhenNewerVersionAvailable(t *testing.T) {
 		t.Errorf("CurrentVersion = %v, want v1.0.0", info.CurrentVersion)
 	}
 
-	if checker.Status() != StatusUpdateAvailable {
+	if checker.Status() != updater.UpdateStatusUpdateAvailable {
 		t.Errorf("Status() = %v, want StatusUpdateAvailable", checker.Status())
 	}
 
@@ -170,12 +171,12 @@ func TestCheckNowReturnsUpdateInfoWhenNewerVersionAvailable(t *testing.T) {
 func TestCheckNowReturnsNilWhenAlreadyOnLatestVersion(t *testing.T) {
 	t.Parallel()
 
-	manifest := Manifest{
+	manifest := updater.Manifest{
 		Version:     "1.0.0",
 		ReleaseDate: time.Now().UTC(),
 		Channel:     "stable",
-		Platforms: map[string]Platform{
-			GetPlatformKey(): {
+		Platforms: map[string]updater.Platform{
+			updater.GetPlatformKey(): {
 				URL:    "https://example.com/binary",
 				SHA256: "abc123",
 				Size:   1024,
@@ -191,7 +192,7 @@ func TestCheckNowReturnsNilWhenAlreadyOnLatestVersion(t *testing.T) {
 
 	log := zerolog.Nop()
 
-	cfg := CheckerConfig{
+	cfg := updater.CheckerConfig{
 		BaseURL:        server.URL,
 		CheckInterval:  1 * time.Hour,
 		HTTPTimeout:    10 * time.Second,
@@ -200,7 +201,7 @@ func TestCheckNowReturnsNilWhenAlreadyOnLatestVersion(t *testing.T) {
 		DataDir:        "/tmp/test",
 	}
 
-	checker, err := NewChecker(cfg, log)
+	checker, err := updater.NewChecker(cfg, log)
 	if err != nil {
 		t.Fatalf("NewChecker() error = %v", err)
 	}
@@ -214,7 +215,7 @@ func TestCheckNowReturnsNilWhenAlreadyOnLatestVersion(t *testing.T) {
 		t.Error("CheckNow() should return nil when already on latest")
 	}
 
-	if checker.Status() != StatusIdle {
+	if checker.Status() != updater.UpdateStatusIdle {
 		t.Errorf("Status() = %v, want StatusIdle", checker.Status())
 	}
 }
@@ -249,12 +250,12 @@ func TestCheckNowReturnsNilWhenUpdateNotApplicable(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			manifest := Manifest{
+			manifest := updater.Manifest{
 				Version:     testCase.manifestVersion,
 				ReleaseDate: time.Now().UTC(),
 				Channel:     testCase.manifestChannel,
-				Platforms: map[string]Platform{
-					GetPlatformKey(): {
+				Platforms: map[string]updater.Platform{
+					updater.GetPlatformKey(): {
 						URL:    "https://example.com/binary",
 						SHA256: "abc123",
 						Size:   1024,
@@ -270,7 +271,7 @@ func TestCheckNowReturnsNilWhenUpdateNotApplicable(t *testing.T) {
 
 			log := zerolog.Nop()
 
-			cfg := CheckerConfig{
+			cfg := updater.CheckerConfig{
 				BaseURL:        server.URL,
 				CheckInterval:  1 * time.Hour,
 				HTTPTimeout:    10 * time.Second,
@@ -278,7 +279,7 @@ func TestCheckNowReturnsNilWhenUpdateNotApplicable(t *testing.T) {
 				CurrentVersion: testCase.currentVersion,
 			}
 
-			checker, err := NewChecker(cfg, log)
+			checker, err := updater.NewChecker(cfg, log)
 			if err != nil {
 				t.Fatalf("NewChecker() error = %v", err)
 			}
@@ -298,11 +299,11 @@ func TestCheckNowReturnsNilWhenUpdateNotApplicable(t *testing.T) {
 func TestCheckNowReturnsNilWhenNoPlatformBinaryAvailable(t *testing.T) {
 	t.Parallel()
 
-	manifest := Manifest{
+	manifest := updater.Manifest{
 		Version:     "2.0.0",
 		ReleaseDate: time.Now().UTC(),
 		Channel:     "stable",
-		Platforms: map[string]Platform{
+		Platforms: map[string]updater.Platform{
 			"unsupported-platform": {
 				URL:    "https://example.com/binary",
 				SHA256: "abc123",
@@ -319,7 +320,7 @@ func TestCheckNowReturnsNilWhenNoPlatformBinaryAvailable(t *testing.T) {
 
 	log := zerolog.Nop()
 
-	cfg := CheckerConfig{
+	cfg := updater.CheckerConfig{
 		BaseURL:        server.URL,
 		CheckInterval:  1 * time.Hour,
 		HTTPTimeout:    10 * time.Second,
@@ -328,7 +329,7 @@ func TestCheckNowReturnsNilWhenNoPlatformBinaryAvailable(t *testing.T) {
 		DataDir:        "/tmp/test",
 	}
 
-	checker, err := NewChecker(cfg, log)
+	checker, err := updater.NewChecker(cfg, log)
 	if err != nil {
 		t.Fatalf("NewChecker() error = %v", err)
 	}
@@ -353,7 +354,7 @@ func TestCheckNowReturnsErrorWhenServerFails(t *testing.T) {
 
 	log := zerolog.Nop()
 
-	cfg := CheckerConfig{
+	cfg := updater.CheckerConfig{
 		BaseURL:        server.URL,
 		CheckInterval:  1 * time.Hour,
 		HTTPTimeout:    10 * time.Second,
@@ -362,7 +363,7 @@ func TestCheckNowReturnsErrorWhenServerFails(t *testing.T) {
 		DataDir:        "/tmp/test",
 	}
 
-	checker, err := NewChecker(cfg, log)
+	checker, err := updater.NewChecker(cfg, log)
 	if err != nil {
 		t.Fatalf("NewChecker() error = %v", err)
 	}
@@ -372,7 +373,7 @@ func TestCheckNowReturnsErrorWhenServerFails(t *testing.T) {
 		t.Error("CheckNow() should return error on server error")
 	}
 
-	if checker.Status() != StatusError {
+	if checker.Status() != updater.UpdateStatusError {
 		t.Errorf("Status() = %v, want StatusError", checker.Status())
 	}
 
@@ -386,7 +387,7 @@ func TestSetStatusUpdatesCheckerStatus(t *testing.T) {
 
 	log := zerolog.Nop()
 
-	cfg := CheckerConfig{
+	cfg := updater.CheckerConfig{
 		BaseURL:        "https://example.com",
 		CheckInterval:  1 * time.Hour,
 		HTTPTimeout:    30 * time.Second,
@@ -395,20 +396,20 @@ func TestSetStatusUpdatesCheckerStatus(t *testing.T) {
 		DataDir:        "/tmp/test",
 	}
 
-	checker, err := NewChecker(cfg, log)
+	checker, err := updater.NewChecker(cfg, log)
 	if err != nil {
 		t.Fatalf("NewChecker() error = %v", err)
 	}
 
-	checker.SetStatus(StatusDownloading)
+	checker.SetStatus(updater.UpdateStatusDownloading)
 
-	if checker.Status() != StatusDownloading {
+	if checker.Status() != updater.UpdateStatusDownloading {
 		t.Errorf("Status() = %v, want StatusDownloading", checker.Status())
 	}
 
-	checker.SetStatus(StatusReadyToInstall)
+	checker.SetStatus(updater.UpdateStatusReadyToInstall)
 
-	if checker.Status() != StatusReadyToInstall {
+	if checker.Status() != updater.UpdateStatusReadyToInstall {
 		t.Errorf("Status() = %v, want StatusReadyToInstall", checker.Status())
 	}
 }
@@ -416,11 +417,11 @@ func TestSetStatusUpdatesCheckerStatus(t *testing.T) {
 func TestLastCheckReturnsTimeOfMostRecentCheck(t *testing.T) {
 	t.Parallel()
 
-	manifest := Manifest{
+	manifest := updater.Manifest{
 		Version:     "1.0.0",
 		ReleaseDate: time.Now().UTC(),
 		Channel:     "stable",
-		Platforms:   map[string]Platform{},
+		Platforms:   map[string]updater.Platform{},
 	}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -431,7 +432,7 @@ func TestLastCheckReturnsTimeOfMostRecentCheck(t *testing.T) {
 
 	log := zerolog.Nop()
 
-	cfg := CheckerConfig{
+	cfg := updater.CheckerConfig{
 		BaseURL:        server.URL,
 		CheckInterval:  1 * time.Hour,
 		HTTPTimeout:    10 * time.Second,
@@ -440,7 +441,7 @@ func TestLastCheckReturnsTimeOfMostRecentCheck(t *testing.T) {
 		DataDir:        "/tmp/test",
 	}
 
-	checker, err := NewChecker(cfg, log)
+	checker, err := updater.NewChecker(cfg, log)
 	if err != nil {
 		t.Fatalf("NewChecker() error = %v", err)
 	}
@@ -468,11 +469,11 @@ func TestCheckerStartsAndStopsWithoutPanic(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(resp http.ResponseWriter, _ *http.Request) {
 		atomic.AddInt32(&checkCount, 1)
 
-		manifest := Manifest{
+		manifest := updater.Manifest{
 			Version:     "1.0.0",
 			ReleaseDate: time.Now().UTC(),
 			Channel:     "stable",
-			Platforms:   map[string]Platform{},
+			Platforms:   map[string]updater.Platform{},
 		}
 
 		resp.Header().Set("Content-Type", "application/json")
@@ -482,7 +483,7 @@ func TestCheckerStartsAndStopsWithoutPanic(t *testing.T) {
 
 	log := zerolog.Nop()
 
-	cfg := CheckerConfig{
+	cfg := updater.CheckerConfig{
 		BaseURL:        server.URL,
 		CheckInterval:  100 * time.Millisecond, // Short interval for testing
 		HTTPTimeout:    10 * time.Second,
@@ -491,7 +492,7 @@ func TestCheckerStartsAndStopsWithoutPanic(t *testing.T) {
 		DataDir:        "/tmp/test",
 	}
 
-	checker, err := NewChecker(cfg, log)
+	checker, err := updater.NewChecker(cfg, log)
 	if err != nil {
 		t.Fatalf("NewChecker() error = %v", err)
 	}
@@ -513,11 +514,11 @@ func TestCheckerStopsWhenContextCancelled(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(resp http.ResponseWriter, _ *http.Request) {
-		manifest := Manifest{
+		manifest := updater.Manifest{
 			Version:     "1.0.0",
 			ReleaseDate: time.Now().UTC(),
 			Channel:     "stable",
-			Platforms:   map[string]Platform{},
+			Platforms:   map[string]updater.Platform{},
 		}
 
 		resp.Header().Set("Content-Type", "application/json")
@@ -527,7 +528,7 @@ func TestCheckerStopsWhenContextCancelled(t *testing.T) {
 
 	log := zerolog.Nop()
 
-	cfg := CheckerConfig{
+	cfg := updater.CheckerConfig{
 		BaseURL:        server.URL,
 		CheckInterval:  100 * time.Millisecond,
 		HTTPTimeout:    10 * time.Second,
@@ -536,7 +537,7 @@ func TestCheckerStopsWhenContextCancelled(t *testing.T) {
 		DataDir:        "/tmp/test",
 	}
 
-	checker, err := NewChecker(cfg, log)
+	checker, err := updater.NewChecker(cfg, log)
 	if err != nil {
 		t.Fatalf("NewChecker() error = %v", err)
 	}
@@ -557,7 +558,7 @@ func TestCheckerStopsWhenContextCancelled(t *testing.T) {
 func TestUpdateInfoStoresAllFields(t *testing.T) {
 	t.Parallel()
 
-	info := UpdateInfo{
+	info := updater.UpdateInfo{
 		CurrentVersion:   "1.0.0",
 		AvailableVersion: "2.0.0",
 		Channel:          "stable",
@@ -605,13 +606,13 @@ func TestUpdateInfoStoresAllFields(t *testing.T) {
 func TestCheckNowReturnsUpdateEvenWhenBelowMinUpgradeVersion(t *testing.T) {
 	t.Parallel()
 
-	manifest := Manifest{
+	manifest := updater.Manifest{
 		Version:           "2.0.0",
 		ReleaseDate:       time.Now().UTC(),
 		Channel:           "stable",
 		MinUpgradeVersion: "1.5.0",
-		Platforms: map[string]Platform{
-			GetPlatformKey(): {
+		Platforms: map[string]updater.Platform{
+			updater.GetPlatformKey(): {
 				URL:    "https://example.com/binary",
 				SHA256: "abc123",
 				Size:   1024,
@@ -627,7 +628,7 @@ func TestCheckNowReturnsUpdateEvenWhenBelowMinUpgradeVersion(t *testing.T) {
 
 	log := zerolog.Nop()
 
-	cfg := CheckerConfig{
+	cfg := updater.CheckerConfig{
 		BaseURL:        server.URL,
 		CheckInterval:  1 * time.Hour,
 		HTTPTimeout:    10 * time.Second,
@@ -636,7 +637,7 @@ func TestCheckNowReturnsUpdateEvenWhenBelowMinUpgradeVersion(t *testing.T) {
 		DataDir:        "/tmp/test",
 	}
 
-	checker, err := NewChecker(cfg, log)
+	checker, err := updater.NewChecker(cfg, log)
 	if err != nil {
 		t.Fatalf("NewChecker() error = %v", err)
 	}
@@ -658,7 +659,7 @@ func TestCustomChannelDoesNotFetchFromHTTP(t *testing.T) {
 	log := zerolog.Nop()
 	dataDir := t.TempDir()
 
-	cfg := CheckerConfig{
+	cfg := updater.CheckerConfig{
 		BaseURL:        "https://example.com",
 		CheckInterval:  1 * time.Hour,
 		HTTPTimeout:    30 * time.Second,
@@ -667,7 +668,7 @@ func TestCustomChannelDoesNotFetchFromHTTP(t *testing.T) {
 		DataDir:        dataDir,
 	}
 
-	checker, err := NewChecker(cfg, log)
+	checker, err := updater.NewChecker(cfg, log)
 	if err != nil {
 		t.Fatalf("NewChecker() error = %v", err)
 	}
@@ -683,7 +684,7 @@ func TestCustomChannelDoesNotFetchFromHTTP(t *testing.T) {
 		t.Error("CheckNow() should return nil when no custom file exists")
 	}
 
-	if checker.Status() != StatusIdle {
+	if checker.Status() != updater.UpdateStatusIdle {
 		t.Errorf("Status should be Idle when no custom file found, got %v", checker.Status())
 	}
 }
@@ -695,7 +696,7 @@ func TestSwitchingChannelsClearsStaleUpdateInfo(t *testing.T) {
 	dataDir := t.TempDir()
 
 	// Start with custom channel and set some update info
-	cfg := CheckerConfig{
+	cfg := updater.CheckerConfig{
 		BaseURL:        "https://example.com",
 		CheckInterval:  1 * time.Hour,
 		HTTPTimeout:    1 * time.Second, // Short timeout to force error
@@ -704,13 +705,13 @@ func TestSwitchingChannelsClearsStaleUpdateInfo(t *testing.T) {
 		DataDir:        dataDir,
 	}
 
-	checker, err := NewChecker(cfg, log)
+	checker, err := updater.NewChecker(cfg, log)
 	if err != nil {
 		t.Fatalf("NewChecker() error = %v", err)
 	}
 
 	// Manually set custom update info (simulating previous upload)
-	checker.SetAvailableUpdate(&UpdateInfo{
+	checker.SetAvailableUpdate(&updater.UpdateInfo{
 		CurrentVersion:   "1.0.0",
 		AvailableVersion: "2.0.0",
 		Channel:          "custom",
@@ -740,7 +741,7 @@ func TestSwitchingChannelsClearsStaleUpdateInfo(t *testing.T) {
 		t.Error("AvailableUpdate should be nil after failed fetch on non-custom channel")
 	}
 
-	if checker.Status() != StatusError {
+	if checker.Status() != updater.UpdateStatusError {
 		t.Errorf("Status should be Error after failed fetch, got %v", checker.Status())
 	}
 }
@@ -751,7 +752,7 @@ func TestCustomChannelPreservesInfoWhenSwitchingBack(t *testing.T) {
 	log := zerolog.Nop()
 	dataDir := t.TempDir()
 
-	cfg := CheckerConfig{
+	cfg := updater.CheckerConfig{
 		BaseURL:        "https://example.com",
 		CheckInterval:  1 * time.Hour,
 		HTTPTimeout:    30 * time.Second,
@@ -760,13 +761,13 @@ func TestCustomChannelPreservesInfoWhenSwitchingBack(t *testing.T) {
 		DataDir:        dataDir,
 	}
 
-	checker, err := NewChecker(cfg, log)
+	checker, err := updater.NewChecker(cfg, log)
 	if err != nil {
 		t.Fatalf("NewChecker() error = %v", err)
 	}
 
 	// Set custom update info
-	customUpdate := &UpdateInfo{
+	customUpdate := &updater.UpdateInfo{
 		CurrentVersion:   "1.0.0",
 		AvailableVersion: "2.0.0",
 		Channel:          "custom",
@@ -795,7 +796,7 @@ func TestCheckNowClearsAvailableInfoOnError(t *testing.T) {
 
 	log := zerolog.Nop()
 
-	cfg := CheckerConfig{
+	cfg := updater.CheckerConfig{
 		BaseURL:        "https://invalid-domain-that-does-not-exist-12345.com",
 		CheckInterval:  1 * time.Hour,
 		HTTPTimeout:    1 * time.Second,
@@ -804,13 +805,13 @@ func TestCheckNowClearsAvailableInfoOnError(t *testing.T) {
 		DataDir:        t.TempDir(),
 	}
 
-	checker, err := NewChecker(cfg, log)
+	checker, err := updater.NewChecker(cfg, log)
 	if err != nil {
 		t.Fatalf("NewChecker() error = %v", err)
 	}
 
 	// Set some update info first
-	checker.SetAvailableUpdate(&UpdateInfo{
+	checker.SetAvailableUpdate(&updater.UpdateInfo{
 		AvailableVersion: "2.0.0",
 		Channel:          "stable",
 	})
@@ -831,7 +832,7 @@ func TestCheckNowClearsAvailableInfoOnError(t *testing.T) {
 		t.Error("AvailableUpdate should be cleared on fetch error")
 	}
 
-	if checker.Status() != StatusError {
+	if checker.Status() != updater.UpdateStatusError {
 		t.Errorf("Status should be Error, got %v", checker.Status())
 	}
 

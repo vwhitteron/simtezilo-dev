@@ -1,4 +1,4 @@
-package updater //nolint:testpackage // testing internal functions
+package updater_test
 
 import (
 	"encoding/json"
@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
+	"github.com/vwhitteron/simtezilo-dev/app/updater"
 )
 
 func TestNewInstallerCreatesValidInstance(t *testing.T) {
@@ -18,25 +19,25 @@ func TestNewInstallerCreatesValidInstance(t *testing.T) {
 	dataDir := "/opt/simtezilo/data"
 	binaryName := "simtezilo"
 
-	installer := NewInstaller(installDir, dataDir, binaryName, true, log)
+	installer := updater.NewInstaller(installDir, dataDir, binaryName, true, log)
 
 	if installer == nil {
 		t.Fatal("NewInstaller() returned nil")
 	}
 
-	if installer.installDir != installDir {
-		t.Errorf("installDir = %v, want %v", installer.installDir, installDir)
+	if installer.InstallDir() != installDir {
+		t.Errorf("installDir = %v, want %v", installer.InstallDir(), installDir)
 	}
 
-	if installer.dataDir != dataDir {
-		t.Errorf("dataDir = %v, want %v", installer.dataDir, dataDir)
+	if installer.DataDir() != dataDir {
+		t.Errorf("dataDir = %v, want %v", installer.DataDir(), dataDir)
 	}
 
-	if installer.binaryName != binaryName {
-		t.Errorf("binaryName = %v, want %v", installer.binaryName, binaryName)
+	if installer.BinaryName() != binaryName {
+		t.Errorf("binaryName = %v, want %v", installer.BinaryName(), binaryName)
 	}
 
-	if !installer.useSystemd {
+	if !installer.UseSystemd() {
 		t.Error("useSystemd should be true")
 	}
 }
@@ -47,15 +48,15 @@ func TestSaveAndLoadStatePreservesAllFields(t *testing.T) {
 	dataDir := t.TempDir()
 	log := zerolog.Nop()
 
-	installer := NewInstaller(dataDir, dataDir, "simtezilo", false, log)
+	installer := updater.NewInstaller(dataDir, dataDir, "simtezilo", false, log)
 
-	state := &InstallState{
+	state := &updater.InstallState{
 		PendingVersion: "2.0.0",
 		CurrentVersion: "1.0.0",
 		DownloadPath:   "/tmp/simtezilo.new",
 		SHA256:         "abc123",
 		Timestamp:      time.Now(),
-		Status:         "pending",
+		Status:         updater.InstallStatusPending,
 		FailCount:      0,
 	}
 
@@ -94,7 +95,7 @@ func TestLoadStateReturnsNilForMissingFile(t *testing.T) {
 	dataDir := t.TempDir()
 	log := zerolog.Nop()
 
-	installer := NewInstaller(dataDir, dataDir, "simtezilo", false, log)
+	installer := updater.NewInstaller(dataDir, dataDir, "simtezilo", false, log)
 
 	state, err := installer.LoadState()
 	if err != nil {
@@ -112,7 +113,7 @@ func TestLoadStateFailsForInvalidJSON(t *testing.T) {
 	dataDir := t.TempDir()
 	log := zerolog.Nop()
 
-	installer := NewInstaller(dataDir, dataDir, "simtezilo", false, log)
+	installer := updater.NewInstaller(dataDir, dataDir, "simtezilo", false, log)
 
 	// Write invalid JSON to state file
 	statePath := filepath.Join(dataDir, "update-state.json")
@@ -134,12 +135,12 @@ func TestClearStateRemovesStateFile(t *testing.T) {
 	dataDir := t.TempDir()
 	log := zerolog.Nop()
 
-	installer := NewInstaller(dataDir, dataDir, "simtezilo", false, log)
+	installer := updater.NewInstaller(dataDir, dataDir, "simtezilo", false, log)
 
 	// First save a state
-	state := &InstallState{
+	state := &updater.InstallState{
 		PendingVersion: "2.0.0",
-		Status:         "pending",
+		Status:         updater.InstallStatusPending,
 	}
 
 	err := installer.SaveState(state)
@@ -170,7 +171,7 @@ func TestClearStateSucceedsWhenNoStateExists(t *testing.T) {
 	dataDir := t.TempDir()
 	log := zerolog.Nop()
 
-	installer := NewInstaller(dataDir, dataDir, "simtezilo", false, log)
+	installer := updater.NewInstaller(dataDir, dataDir, "simtezilo", false, log)
 
 	// Should not error when state doesn't exist
 	err := installer.ClearState()
@@ -185,7 +186,7 @@ func TestPrepareStagesUpdateForInstallation(t *testing.T) {
 	dataDir := t.TempDir()
 	log := zerolog.Nop()
 
-	installer := NewInstaller(dataDir, dataDir, "simtezilo", false, log)
+	installer := updater.NewInstaller(dataDir, dataDir, "simtezilo", false, log)
 
 	// Create a fake download file
 	downloadPath := filepath.Join(dataDir, "simtezilo.new")
@@ -195,7 +196,7 @@ func TestPrepareStagesUpdateForInstallation(t *testing.T) {
 		t.Fatalf("Failed to create download file: %v", err)
 	}
 
-	info := &UpdateInfo{
+	info := &updater.UpdateInfo{
 		AvailableVersion: "2.0.0",
 		SHA256:           "abc123",
 	}
@@ -223,7 +224,7 @@ func TestPrepareStagesUpdateForInstallation(t *testing.T) {
 		t.Errorf("CurrentVersion = %v, want 1.0.0", state.CurrentVersion)
 	}
 
-	if state.Status != "pending" {
+	if state.Status != updater.InstallStatusPending {
 		t.Errorf("Status = %v, want pending", state.Status)
 	}
 }
@@ -234,9 +235,9 @@ func TestPrepareFailsWhenDownloadFileMissing(t *testing.T) {
 	dataDir := t.TempDir()
 	log := zerolog.Nop()
 
-	installer := NewInstaller(dataDir, dataDir, "simtezilo", false, log)
+	installer := updater.NewInstaller(dataDir, dataDir, "simtezilo", false, log)
 
-	info := &UpdateInfo{
+	info := &updater.UpdateInfo{
 		AvailableVersion: "2.0.0",
 	}
 
@@ -253,7 +254,7 @@ func TestApplyPendingUpdateInstallsNewBinaryAndCreatesRollback(t *testing.T) {
 	dataDir := t.TempDir()
 	log := zerolog.Nop()
 
-	installer := NewInstaller(installDir, dataDir, "simtezilo", false, log)
+	installer := updater.NewInstaller(installDir, dataDir, "simtezilo", false, log)
 
 	// Create current binary
 	currentBinaryPath := filepath.Join(installDir, "simtezilo")
@@ -272,12 +273,12 @@ func TestApplyPendingUpdateInstallsNewBinaryAndCreatesRollback(t *testing.T) {
 	}
 
 	// Save pending state
-	state := &InstallState{
+	state := &updater.InstallState{
 		PendingVersion: "2.0.0",
 		CurrentVersion: "1.0.0",
 		DownloadPath:   downloadPath,
 		SHA256:         "abc123",
-		Status:         "pending",
+		Status:         updater.InstallStatusPending,
 	}
 
 	err = installer.SaveState(state)
@@ -319,7 +320,7 @@ func TestApplyPendingUpdateInstallsNewBinaryAndCreatesRollback(t *testing.T) {
 		t.Fatalf("LoadState() error = %v", err)
 	}
 
-	if state.Status != "complete" {
+	if state.Status != updater.InstallStatusComplete {
 		t.Errorf("Status = %v, want complete", state.Status)
 	}
 }
@@ -330,7 +331,7 @@ func TestApplyPendingUpdateSucceedsWhenNoPendingUpdate(t *testing.T) {
 	dataDir := t.TempDir()
 	log := zerolog.Nop()
 
-	installer := NewInstaller(dataDir, dataDir, "simtezilo", false, log)
+	installer := updater.NewInstaller(dataDir, dataDir, "simtezilo", false, log)
 
 	// Should not error when no pending update
 	err := installer.ApplyPendingUpdate()
@@ -346,7 +347,7 @@ func TestRollbackRestoresPreviousVersion(t *testing.T) {
 	dataDir := t.TempDir()
 	log := zerolog.Nop()
 
-	installer := NewInstaller(installDir, dataDir, "simtezilo", false, log)
+	installer := updater.NewInstaller(installDir, dataDir, "simtezilo", false, log)
 
 	// Create current binary
 	currentBinaryPath := filepath.Join(installDir, "simtezilo")
@@ -388,7 +389,7 @@ func TestRollbackFailsWhenNoRollbackBinaryExists(t *testing.T) {
 	dataDir := t.TempDir()
 	log := zerolog.Nop()
 
-	installer := NewInstaller(installDir, dataDir, "simtezilo", false, log)
+	installer := updater.NewInstaller(installDir, dataDir, "simtezilo", false, log)
 
 	err := installer.Rollback()
 	if err == nil {
@@ -403,7 +404,7 @@ func TestRollbackAvailableReturnsTrueWhenRollbackExists(t *testing.T) {
 	dataDir := t.TempDir()
 	log := zerolog.Nop()
 
-	installer := NewInstaller(installDir, dataDir, "simtezilo", false, log)
+	installer := updater.NewInstaller(installDir, dataDir, "simtezilo", false, log)
 
 	// Should be false when no rollback binary
 	if installer.RollbackAvailable() {
@@ -431,7 +432,7 @@ func TestRollbackVersionReturnsVersionFromState(t *testing.T) {
 	dataDir := t.TempDir()
 	log := zerolog.Nop()
 
-	installer := NewInstaller(installDir, dataDir, "simtezilo", false, log)
+	installer := updater.NewInstaller(installDir, dataDir, "simtezilo", false, log)
 
 	// Should return empty when no state
 	version := installer.RollbackVersion()
@@ -440,10 +441,10 @@ func TestRollbackVersionReturnsVersionFromState(t *testing.T) {
 	}
 
 	// Save state with current version
-	state := &InstallState{
+	state := &updater.InstallState{
 		PendingVersion: "2.0.0",
 		CurrentVersion: "1.5.0",
-		Status:         "complete",
+		Status:         updater.InstallStatusComplete,
 	}
 
 	err := installer.SaveState(state)
@@ -465,7 +466,7 @@ func TestShouldAutoRollbackReturnsTrueWhenFailCountExceedsMax(t *testing.T) {
 	dataDir := t.TempDir()
 	log := zerolog.Nop()
 
-	installer := NewInstaller(installDir, dataDir, "simtezilo", false, log)
+	installer := updater.NewInstaller(installDir, dataDir, "simtezilo", false, log)
 
 	// Should be false when no state
 	if installer.ShouldAutoRollback(3) {
@@ -473,7 +474,7 @@ func TestShouldAutoRollbackReturnsTrueWhenFailCountExceedsMax(t *testing.T) {
 	}
 
 	// Save state with fail count below threshold
-	state := &InstallState{
+	state := &updater.InstallState{
 		Status:    "failed",
 		FailCount: 2,
 	}
@@ -507,7 +508,7 @@ func TestConfirmSuccessRemovesRollbackAndClearsState(t *testing.T) {
 	dataDir := t.TempDir()
 	log := zerolog.Nop()
 
-	installer := NewInstaller(installDir, dataDir, "simtezilo", false, log)
+	installer := updater.NewInstaller(installDir, dataDir, "simtezilo", false, log)
 
 	// Create rollback binary
 	rollbackPath := filepath.Join(installDir, "simtezilo.rollback")
@@ -518,9 +519,9 @@ func TestConfirmSuccessRemovesRollbackAndClearsState(t *testing.T) {
 	}
 
 	// Save complete state
-	state := &InstallState{
+	state := &updater.InstallState{
 		PendingVersion: "2.0.0",
-		Status:         "complete",
+		Status:         updater.InstallStatusComplete,
 	}
 
 	err = installer.SaveState(state)
@@ -558,12 +559,12 @@ func TestConfirmSuccessDoesNothingWhenStatusNotComplete(t *testing.T) {
 	dataDir := t.TempDir()
 	log := zerolog.Nop()
 
-	installer := NewInstaller(installDir, dataDir, "simtezilo", false, log)
+	installer := updater.NewInstaller(installDir, dataDir, "simtezilo", false, log)
 
 	// Save pending state (not complete)
-	state := &InstallState{
+	state := &updater.InstallState{
 		PendingVersion: "2.0.0",
-		Status:         "pending",
+		Status:         updater.InstallStatusPending,
 	}
 
 	err := installer.SaveState(state)
@@ -591,13 +592,13 @@ func TestConfirmSuccessDoesNothingWhenStatusNotComplete(t *testing.T) {
 func TestInstallStateSerializesToAndFromJSON(t *testing.T) {
 	t.Parallel()
 
-	state := &InstallState{
+	state := &updater.InstallState{
 		PendingVersion: "2.0.0",
 		CurrentVersion: "1.0.0",
 		DownloadPath:   "/path/to/binary",
 		SHA256:         "abc123",
 		Timestamp:      time.Date(2025, 1, 15, 10, 0, 0, 0, time.UTC),
-		Status:         "pending",
+		Status:         updater.InstallStatusPending,
 		FailCount:      1,
 		LastError:      "some error",
 	}
@@ -609,7 +610,7 @@ func TestInstallStateSerializesToAndFromJSON(t *testing.T) {
 	}
 
 	// Unmarshal back
-	var loaded InstallState
+	var loaded updater.InstallState
 
 	err = json.Unmarshal(data, &loaded)
 	if err != nil {

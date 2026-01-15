@@ -567,7 +567,8 @@ func (w *WebUI) handleWebSocketConnection(response http.ResponseWriter, request 
 			Subscriptions map[string]bool `json:"subscriptions"` //nolint:tagliatelle
 		}
 
-		if err := json.Unmarshal(message, &subMsg); err == nil && subMsg.Type == "subscribe" {
+		err = json.Unmarshal(message, &subMsg)
+		if err == nil && subMsg.Type == "subscribe" {
 			client.UpdateSubscriptions(subMsg.Subscriptions)
 
 			w.log.Debug().
@@ -583,11 +584,12 @@ func (w *WebUI) sendInitialState(client *wsClient) {
 	w.vehicleInfoMutex.RLock()
 
 	if len(w.currentVehicleInfo) > 0 {
-		if data, err := json.Marshal(WSMessage{
+		data, err := json.Marshal(WSMessage{
 			Type:      "vehicle",
 			Timestamp: time.Now().UnixMilli(),
 			Data:      w.currentVehicleInfo,
-		}); err == nil {
+		})
+		if err == nil {
 			client.Send("vehicle", data, true)
 		}
 	}
@@ -600,11 +602,12 @@ func (w *WebUI) sendInitialState(client *wsClient) {
 	w.gameStateMutex.RUnlock()
 
 	if gameState != "" {
-		if data, err := json.Marshal(WSMessage{
+		data, err := json.Marshal(WSMessage{
 			Type:      "gameState",
 			Timestamp: time.Now().UnixMilli(),
 			Data:      map[string]any{"gamestate": gameState},
-		}); err == nil {
+		})
+		if err == nil {
 			client.Send("gameState", data, true)
 		}
 	}
@@ -613,11 +616,12 @@ func (w *WebUI) sendInitialState(client *wsClient) {
 	w.circuitInfoMutex.RLock()
 
 	if len(w.currentCircuitInfo) > 0 {
-		if data, err := json.Marshal(WSMessage{
+		data, err := json.Marshal(WSMessage{
 			Type:      "circuit",
 			Timestamp: time.Now().UnixMilli(),
 			Data:      w.currentCircuitInfo,
-		}); err == nil {
+		})
+		if err == nil {
 			client.Send("circuit", data, true)
 		}
 	}
@@ -628,11 +632,12 @@ func (w *WebUI) sendInitialState(client *wsClient) {
 	w.raceInfoMutex.RLock()
 
 	if len(w.currentRaceInfo) > 0 {
-		if data, err := json.Marshal(WSMessage{
+		data, err := json.Marshal(WSMessage{
 			Type:      "race",
 			Timestamp: time.Now().UnixMilli(),
 			Data:      w.currentRaceInfo,
-		}); err == nil {
+		})
+		if err == nil {
 			client.Send("race", data, true)
 		}
 	}
@@ -643,11 +648,12 @@ func (w *WebUI) sendInitialState(client *wsClient) {
 	w.logStatsMutex.RLock()
 
 	if len(w.currentLogStats) > 0 {
-		if data, err := json.Marshal(WSMessage{
+		data, err := json.Marshal(WSMessage{
 			Type:      "logStats",
 			Timestamp: time.Now().UnixMilli(),
 			Data:      w.currentLogStats,
-		}); err == nil {
+		})
+		if err == nil {
 			client.Send("logStats", data, true)
 		}
 	}
@@ -2969,7 +2975,7 @@ func (w *WebUI) handleUpdatesStatus(response http.ResponseWriter, request *http.
 		lastError := w.updater.Checker().LastError()
 
 		responseData["status"] = status.String()
-		responseData["downloadReady"] = status == updater.StatusReadyToInstall
+		responseData["downloadReady"] = status == updater.UpdateStatusReadyToInstall
 		responseData["rollbackAvailable"] = w.updater.RollbackAvailable()
 		responseData["rollbackVersion"] = w.updater.RollbackVersion()
 
@@ -3040,7 +3046,7 @@ func (w *WebUI) handleUpdatesCheck(response http.ResponseWriter, request *http.R
 
 		status := w.updater.Status()
 		responseData["updateAvailable"] = updateInfo != nil
-		responseData["downloadReady"] = status == updater.StatusReadyToInstall
+		responseData["downloadReady"] = status == updater.UpdateStatusReadyToInstall
 
 		if updateInfo != nil {
 			responseData["availableUpdate"] = map[string]any{
@@ -3346,7 +3352,7 @@ func (w *WebUI) handleUpdatesUpload(response http.ResponseWriter, request *http.
 	}
 
 	// Set updater status to ready to install
-	w.updater.Checker().SetStatus(updater.StatusReadyToInstall)
+	w.updater.Checker().SetStatus(updater.UpdateStatusReadyToInstall)
 
 	// Create UpdateInfo using metadata if available, otherwise use defaults
 	var (
@@ -3416,7 +3422,7 @@ func (w *WebUI) handleUpdatesInstall(response http.ResponseWriter, request *http
 	}
 
 	status := w.updater.Status()
-	if status != updater.StatusReadyToInstall {
+	if status != updater.UpdateStatusReadyToInstall {
 		response.WriteHeader(http.StatusBadRequest)
 		//nolint:errchkjson // simple encoding
 		_ = json.NewEncoder(response).Encode(map[string]string{

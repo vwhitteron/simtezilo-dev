@@ -398,7 +398,7 @@ func (m *MenuSystem) NavigateDown() (*MenuNode, string) {
 		if m.currentNode.parent != nil && m.currentNode.parent.name != menuNodeRoot {
 			m.currentNode = m.currentNode.parent
 
-			return m.currentNode, "exit"
+			return m.currentNode, actionExit
 		}
 	}
 
@@ -409,7 +409,7 @@ func (m *MenuSystem) NavigateDown() (*MenuNode, string) {
 			if firstVisible != nil {
 				m.currentNode = firstVisible
 
-				return m.currentNode, "enter"
+				return m.currentNode, actionEnter
 			}
 		}
 	}
@@ -419,19 +419,19 @@ func (m *MenuSystem) NavigateDown() (*MenuNode, string) {
 		if m.currentNode.parent != nil && m.currentNode.parent.name == languagedb.UIMenuInfo {
 			m.currentNode = m.currentNode.parent
 
-			return m.currentNode, "exit"
+			return m.currentNode, actionExit
 		}
 
 		if m.currentNode.parent != nil && m.currentNode.parent.name == languagedb.UIMenuLive {
 			m.currentNode = m.currentNode.parent
 
-			return m.currentNode, "exit"
+			return m.currentNode, actionExit
 		}
 
-		return m.currentNode, "decrease"
+		return m.currentNode, actionDecrease
 	}
 
-	return m.currentNode, "none"
+	return m.currentNode, actionNone
 }
 
 // NavigateUp exits to parent on return node or increases value on regular leaves.
@@ -441,7 +441,7 @@ func (m *MenuSystem) NavigateUp() (*MenuNode, string) {
 		if m.currentNode.parent != nil && m.currentNode.parent.name != menuNodeRoot {
 			m.currentNode = m.currentNode.parent
 
-			return m.currentNode, "exit"
+			return m.currentNode, actionExit
 		}
 	}
 
@@ -452,7 +452,7 @@ func (m *MenuSystem) NavigateUp() (*MenuNode, string) {
 			if firstVisible != nil {
 				m.currentNode = firstVisible
 
-				return m.currentNode, "enter"
+				return m.currentNode, actionEnter
 			}
 		}
 	}
@@ -462,20 +462,20 @@ func (m *MenuSystem) NavigateUp() (*MenuNode, string) {
 		if m.currentNode.parent != nil && m.currentNode.parent.name == languagedb.UIMenuInfo {
 			m.currentNode = m.currentNode.parent
 
-			return m.currentNode, "exit"
+			return m.currentNode, actionExit
 		}
 
 		if m.currentNode.parent != nil && m.currentNode.parent.name == languagedb.UIMenuLive {
 			m.currentNode = m.currentNode.parent
 
-			return m.currentNode, "exit"
+			return m.currentNode, actionExit
 		}
 
-		return m.currentNode, "increase"
+		return m.currentNode, actionIncrease
 	}
 
 	// For branches, do nothing
-	return m.currentNode, "none"
+	return m.currentNode, actionNone
 }
 
 // GetCurrentNode returns the current menu node.

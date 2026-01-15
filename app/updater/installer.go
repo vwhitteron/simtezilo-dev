@@ -14,9 +14,6 @@ import (
 	"github.com/rs/zerolog"
 )
 
-// statusFailed is the status value for failed installations.
-const statusFailed = "failed"
-
 // InstallState tracks the state of a pending installation.
 type InstallState struct {
 	PendingVersion string    `json:"pendingVersion"` //nolint:tagliatelle // external API format
@@ -49,6 +46,26 @@ func NewInstaller(installDir, dataDir, binaryName string, useSystemd bool, log z
 		binaryName: binaryName,
 		useSystemd: useSystemd,
 	}
+}
+
+// InstallDir returns the installation directory.
+func (i *Installer) InstallDir() string {
+	return i.installDir
+}
+
+// DataDir returns the data directory.
+func (i *Installer) DataDir() string {
+	return i.dataDir
+}
+
+// BinaryName returns the binary name.
+func (i *Installer) BinaryName() string {
+	return i.binaryName
+}
+
+// UseSystemd returns whether systemd is used for restarts.
+func (i *Installer) UseSystemd() bool {
+	return i.useSystemd
 }
 
 // LoadState loads the current installation state from disk.
@@ -125,7 +142,7 @@ func (i *Installer) Prepare(downloadPath string, info *UpdateInfo, currentVersio
 		DownloadPath:   downloadPath,
 		SHA256:         info.SHA256,
 		Timestamp:      time.Now(),
-		Status:         "pending",
+		Status:         InstallStatusPending,
 	}
 
 	err = i.SaveState(state)
@@ -146,7 +163,7 @@ func (i *Installer) ApplyPendingUpdate() error {
 		return fmt.Errorf("failed to load state: %w", err)
 	}
 
-	if state == nil || state.Status != "pending" {
+	if state == nil || state.Status != InstallStatusPending {
 		i.log.Debug().Msg("No pending update to apply")
 
 		return nil
@@ -174,7 +191,7 @@ func (i *Installer) ApplyPendingUpdate() error {
 
 		renameErr := os.Rename(currentBinary, rollbackBinary)
 		if renameErr != nil {
-			state.Status = statusFailed
+			state.Status = InstallStatusFailed
 			state.LastError = fmt.Sprintf("failed to backup current binary: %v", renameErr)
 			state.FailCount++
 			_ = i.SaveState(state)
@@ -193,7 +210,7 @@ func (i *Installer) ApplyPendingUpdate() error {
 	if err != nil {
 		// Try to restore from backup
 		_ = os.Rename(rollbackBinary, currentBinary)
-		state.Status = statusFailed
+		state.Status = InstallStatusFailed
 		state.LastError = fmt.Sprintf("failed to install new binary: %v", err)
 		state.FailCount++
 		_ = i.SaveState(state)
@@ -207,7 +224,7 @@ func (i *Installer) ApplyPendingUpdate() error {
 		i.log.Warn().Err(err).Msg("Failed to set executable permissions")
 	}
 
-	state.Status = "complete"
+	state.Status = InstallStatusComplete
 
 	err = i.SaveState(state)
 	if err != nil {
@@ -317,7 +334,7 @@ func (i *Installer) ShouldAutoRollback(maxFailures int) bool {
 		return false
 	}
 
-	return state.Status == statusFailed && state.FailCount >= maxFailures
+	return state.Status == InstallStatusFailed && state.FailCount >= maxFailures
 }
 
 // ConfirmSuccess should be called after the application starts successfully
@@ -328,7 +345,7 @@ func (i *Installer) ConfirmSuccess() error {
 		return err
 	}
 
-	if state == nil || state.Status != "complete" {
+	if state == nil || state.Status != InstallStatusComplete {
 		return nil
 	}
 

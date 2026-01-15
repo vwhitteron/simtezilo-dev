@@ -88,7 +88,7 @@ func (r *Screen) RenderBlankScreen() error {
 func (r *Screen) RenderLiveScreen(value string) error {
 	// value
 	fontFace := truetype.NewFace(r.i18n.RegularFont().Font, &truetype.Options{
-		Size:    r.i18n.RegularFont().Scale * valueLargeSize,
+		Size:    r.i18n.RegularFont().Scale * fontXLarge,
 		DPI:     r.dpi,
 		Hinting: font.HintingFull,
 	})
@@ -195,7 +195,7 @@ func (r *Screen) renderLeafNode(header string, value string) error {
 
 	fontDrawer = &font.Drawer{
 		Dst:  canvas,
-		Src:  image.NewUniform(offWhiteColor()),
+		Src:  image.NewUniform(whiteColor()),
 		Face: fontFace,
 	}
 
@@ -256,14 +256,14 @@ func (r *Screen) renderLayoutMenuSub(parentName string, currentItem string) erro
 	// Parent name at top (if provided)
 	if parentName != "" {
 		fontFace := truetype.NewFace(r.i18n.RegularFont().Font, &truetype.Options{
-			Size:    r.i18n.RegularFont().Scale * headerSize,
+			Size:    r.i18n.RegularFont().Scale * fontMedium,
 			DPI:     r.dpi,
 			Hinting: font.HintingFull,
 		})
 
 		fontDrawer := &font.Drawer{
 			Dst:  canvas,
-			Src:  image.NewUniform(headerColor()),
+			Src:  image.NewUniform(whiteColor()),
 			Face: fontFace,
 		}
 
@@ -280,7 +280,7 @@ func (r *Screen) renderLayoutMenuSub(parentName string, currentItem string) erro
 
 	// Current item in center
 	fontFace := truetype.NewFace(r.i18n.RegularFont().Font, &truetype.Options{
-		Size:    r.i18n.RegularFont().Scale * valueMediumSize,
+		Size:    r.i18n.RegularFont().Scale * fontLarge,
 		DPI:     r.dpi,
 		Hinting: font.HintingFull,
 	})
@@ -320,7 +320,7 @@ func (r *Screen) renderLayoutMenuSub(parentName string, currentItem string) erro
 func (r *Screen) renderLayoutInfo(header string, value string) error {
 	// Title
 	fontFace := truetype.NewFace(r.i18n.RegularFont().Font, &truetype.Options{
-		Size:    r.i18n.RegularFont().Scale * headerSize,
+		Size:    r.i18n.RegularFont().Scale * fontMedium,
 		DPI:     r.dpi,
 		Hinting: font.HintingFull,
 	})
@@ -328,7 +328,7 @@ func (r *Screen) renderLayoutInfo(header string, value string) error {
 	canvas := r.newBlankCanvas()
 	fontDrawer := &font.Drawer{
 		Dst:  canvas,
-		Src:  image.NewUniform(headerColor()),
+		Src:  image.NewUniform(whiteColor()),
 		Face: fontFace,
 	}
 
@@ -344,7 +344,7 @@ func (r *Screen) renderLayoutInfo(header string, value string) error {
 
 	// Value - split into multiple lines
 	fontFace = truetype.NewFace(r.i18n.ValueFont().Font, &truetype.Options{
-		Size:    r.i18n.RegularFont().Scale * footerSize,
+		Size:    r.i18n.RegularFont().Scale * fontSmall,
 		DPI:     r.dpi,
 		Hinting: font.HintingFull,
 	})
@@ -380,9 +380,9 @@ func (r *Screen) renderLayoutInfo(header string, value string) error {
 		lineHeight = sampleBounds.Max.Y - sampleBounds.Min.Y
 	}
 
-	totalHeight := lineHeight * fixed.Int26_6(len(lines))
-	lineSpacing := (lineHeight * 3) / 4 // 75% of line height as spacing
-	totalHeightWithSpacing := totalHeight + lineSpacing*fixed.Int26_6(len(lines)-1)
+	totalHeight := lineHeight * fixed.Int26_6(len(lines))                           //nolint:gosec // pixel res too small for overflow
+	lineSpacing := (lineHeight * 3) / 4                                             // 75% of line height as spacing
+	totalHeightWithSpacing := totalHeight + lineSpacing*fixed.Int26_6(len(lines)-1) //nolint:gosec // pixel res too small for overflow
 
 	// Start Y position to center all lines as a group
 	startY := (fixed.I(canvas.Rect.Max.Y) - totalHeightWithSpacing) / 2
@@ -390,7 +390,7 @@ func (r *Screen) renderLayoutInfo(header string, value string) error {
 	// Draw each line
 	for i, line := range lines {
 		xPosition = (fixed.I(canvas.Rect.Max.X) - fontDrawer.MeasureString(line)) / 2
-		yPosition = startY + lineHeight*fixed.Int26_6(i+1) + lineSpacing*fixed.Int26_6(i)
+		yPosition = startY + lineHeight*fixed.Int26_6(i+1) + lineSpacing*fixed.Int26_6(i) //nolint:gosec // pixel res too small for overflow
 		fontDrawer.Dot = fixed.Point26_6{
 			X: xPosition,
 			Y: yPosition,
@@ -422,7 +422,7 @@ func (r *Screen) newBlankCanvas() *image.RGBA {
 func (r *Screen) renderBackgroundScreen(sprite sprites.SpriteName, value string) error {
 	// footer
 	fontFace := truetype.NewFace(r.i18n.RegularFont().Font, &truetype.Options{
-		Size:    r.i18n.RegularFont().Scale * footerSize,
+		Size:    r.i18n.RegularFont().Scale * fontSmall,
 		DPI:     r.dpi,
 		Hinting: font.HintingFull,
 	})
@@ -433,7 +433,7 @@ func (r *Screen) renderBackgroundScreen(sprite sprites.SpriteName, value string)
 
 	fontDrawer := &font.Drawer{
 		Dst:  canvas,
-		Src:  image.NewUniform(footerColor()),
+		Src:  image.NewUniform(mediumGrayColor()),
 		Face: fontFace,
 	}
 

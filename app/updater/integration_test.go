@@ -1,4 +1,4 @@
-package updater //nolint:testpackage // testing internal integration
+package updater_test
 
 import (
 	"context"
@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
+	"github.com/vwhitteron/simtezilo-dev/app/updater"
 )
 
 // TestFullUpdateFlowFromCheckToInstall tests the complete update flow from check to install.
@@ -34,13 +35,13 @@ func TestFullUpdateFlowFromCheckToInstall(t *testing.T) {
 
 	// Manifest endpoint
 	mux.HandleFunc("/releases/stable/latest.json", func(resp http.ResponseWriter, _ *http.Request) {
-		manifest := Manifest{
+		manifest := updater.Manifest{
 			Version:     wantVersion,
 			ReleaseDate: time.Now().UTC(),
 			Channel:     "stable",
 			Changelog:   "- Feature 1\n- Feature 2",
-			Platforms: map[string]Platform{
-				GetPlatformKey(): {
+			Platforms: map[string]updater.Platform{
+				updater.GetPlatformKey(): {
 					URL:    releaseURL,
 					SHA256: binaryHash,
 					Size:   int64(len(testBinary)),
@@ -76,7 +77,7 @@ func TestFullUpdateFlowFromCheckToInstall(t *testing.T) {
 	log := zerolog.Nop()
 
 	// Create updater config
-	cfg := &Config{
+	cfg := &updater.Config{
 		Enabled:         true,
 		BaseURL:         server.URL + "/releases",
 		Channel:         "stable",
@@ -92,13 +93,13 @@ func TestFullUpdateFlowFromCheckToInstall(t *testing.T) {
 	}
 
 	// Create updater
-	updater, err := New(cfg, "1.0.0", log)
+	updateManager, err := updater.New(cfg, "1.0.0", log)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
 
 	// Step 1: Check for updates
-	info, err := updater.CheckNow()
+	info, err := updateManager.CheckNow()
 	if err != nil {
 		t.Fatalf("CheckNow() error = %v", err)
 	}
@@ -111,21 +112,21 @@ func TestFullUpdateFlowFromCheckToInstall(t *testing.T) {
 		t.Errorf("AvailableVersion = %v, want v%s", info.AvailableVersion, wantVersion)
 	}
 
-	if updater.Status() != StatusUpdateAvailable {
-		t.Errorf("Status() = %v, want StatusUpdateAvailable", updater.Status())
+	if updateManager.Status() != updater.UpdateStatusUpdateAvailable {
+		t.Errorf("Status() = %v, want StatusUpdateAvailable", updateManager.Status())
 	}
 
 	// Step 2: Download update
 	// Update the download URL to use full server URL
 	info.DownloadURL = server.URL + info.DownloadURL
 
-	var progressUpdates []DownloadProgress
+	var progressUpdates []updater.DownloadProgress
 
-	progressCb := func(p DownloadProgress) {
+	progressCb := func(p updater.DownloadProgress) {
 		progressUpdates = append(progressUpdates, p)
 	}
 
-	downloadPath, err := updater.DownloadUpdate(context.Background(), progressCb)
+	downloadPath, err := updateManager.DownloadUpdate(context.Background(), progressCb)
 	if err != nil {
 		t.Fatalf("DownloadUpdate() error = %v", err)
 	}
@@ -140,18 +141,18 @@ func TestFullUpdateFlowFromCheckToInstall(t *testing.T) {
 		t.Errorf("Downloaded file does not exist: %v", statErr)
 	}
 
-	if updater.Status() != StatusReadyToInstall {
-		t.Errorf("Status() = %v, want StatusReadyToInstall", updater.Status())
+	if updateManager.Status() != updater.UpdateStatusReadyToInstall {
+		t.Errorf("Status() = %v, want StatusReadyToInstall", updateManager.Status())
 	}
 
 	// Step 3: Prepare installation
-	err = updater.PrepareInstall(downloadPath)
+	err = updateManager.PrepareInstall(downloadPath)
 	if err != nil {
 		t.Fatalf("PrepareInstall() error = %v", err)
 	}
 
 	// Verify state was saved
-	state, err := updater.Installer().LoadState()
+	state, err := updateManager.Installer().LoadState()
 	if err != nil {
 		t.Fatalf("LoadState() error = %v", err)
 	}
@@ -165,7 +166,7 @@ func TestFullUpdateFlowFromCheckToInstall(t *testing.T) {
 	}
 
 	// Step 4: Apply update (simulating what the startup script would do)
-	err = updater.Installer().ApplyPendingUpdate()
+	err = updateManager.Installer().ApplyPendingUpdate()
 	if err != nil {
 		t.Fatalf("ApplyPendingUpdate() error = %v", err)
 	}
@@ -205,12 +206,12 @@ func TestDownloadAndPrepareStagesUpdate(t *testing.T) {
 	mux := http.NewServeMux()
 
 	manifestHandler := func(resp http.ResponseWriter, _ *http.Request) {
-		manifest := Manifest{
+		manifest := updater.Manifest{
 			Version:     "2.0.0",
 			ReleaseDate: time.Now().UTC(),
 			Channel:     "stable",
-			Platforms: map[string]Platform{
-				GetPlatformKey(): {
+			Platforms: map[string]updater.Platform{
+				updater.GetPlatformKey(): {
 					URL:    "/binary",
 					SHA256: binaryHash,
 					Size:   int64(len(testBinary)),
@@ -237,7 +238,7 @@ func TestDownloadAndPrepareStagesUpdate(t *testing.T) {
 
 	log := zerolog.Nop()
 
-	cfg := &Config{
+	cfg := &updater.Config{
 		Enabled:         true,
 		BaseURL:         server.URL,
 		Channel:         "stable",
@@ -251,13 +252,13 @@ func TestDownloadAndPrepareStagesUpdate(t *testing.T) {
 		UseSystemd:      false,
 	}
 
-	updater, err := New(cfg, "1.0.0", log)
+	updaterManager, err := updater.New(cfg, "1.0.0", log)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
 
 	// Check for update first
-	info, err := updater.CheckNow()
+	info, err := updaterManager.CheckNow()
 	if err != nil {
 		t.Fatalf("CheckNow() error = %v", err)
 	}
@@ -269,23 +270,21 @@ func TestDownloadAndPrepareStagesUpdate(t *testing.T) {
 	// Update URL to use server
 	info.DownloadURL = server.URL + info.DownloadURL
 
-	updater.Checker().mu.Lock()
-	updater.Checker().availableInfo.DownloadURL = info.DownloadURL
-	updater.Checker().mu.Unlock()
+	updaterManager.Checker().SetAvailableDownloadURL(info.DownloadURL)
 
 	// Use DownloadAndPrepare convenience method
-	err = updater.DownloadAndPrepare(context.Background(), nil)
+	err = updaterManager.DownloadAndPrepare(context.Background(), nil)
 	if err != nil {
 		t.Fatalf("DownloadAndPrepare() error = %v", err)
 	}
 
 	// Verify state
-	state, err := updater.Installer().LoadState()
+	state, err := updaterManager.Installer().LoadState()
 	if err != nil {
 		t.Fatalf("LoadState() error = %v", err)
 	}
 
-	if state == nil || state.Status != "pending" {
+	if state == nil || state.Status != updater.InstallStatusPending {
 		t.Error("State should be pending after DownloadAndPrepare()")
 	}
 }
@@ -315,7 +314,7 @@ func TestRollbackRestoresWorkingVersionAfterFailure(t *testing.T) {
 
 	log := zerolog.Nop()
 
-	cfg := &Config{
+	cfg := &updater.Config{
 		Enabled:         true,
 		BaseURL:         "https://example.com/manifest.json",
 		Channel:         "stable",
@@ -328,34 +327,34 @@ func TestRollbackRestoresWorkingVersionAfterFailure(t *testing.T) {
 		UseSystemd:      false,
 	}
 
-	updater, err := New(cfg, "2.0.0", log)
+	updateManager, err := updater.New(cfg, "2.0.0", log)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
 
 	// Save state indicating an update was applied
-	state := &InstallState{
+	state := &updater.InstallState{
 		PendingVersion: "2.0.0",
 		CurrentVersion: "1.0.0",
-		Status:         "complete",
+		Status:         updater.InstallStatusComplete,
 	}
 
-	err = updater.Installer().SaveState(state)
+	err = updateManager.Installer().SaveState(state)
 	if err != nil {
 		t.Fatalf("SaveState() error = %v", err)
 	}
 
 	// Verify rollback is available
-	if !updater.RollbackAvailable() {
+	if !updateManager.RollbackAvailable() {
 		t.Error("RollbackAvailable() should be true")
 	}
 
-	if updater.RollbackVersion() != state.CurrentVersion {
-		t.Errorf("RollbackVersion() = %v, want %v", updater.RollbackVersion(), state.CurrentVersion)
+	if updateManager.RollbackVersion() != state.CurrentVersion {
+		t.Errorf("RollbackVersion() = %v, want %v", updateManager.RollbackVersion(), state.CurrentVersion)
 	}
 
 	// Perform rollback
-	err = updater.Rollback()
+	err = updateManager.Rollback()
 	if err != nil {
 		t.Fatalf("Rollback() error = %v", err)
 	}
@@ -371,12 +370,12 @@ func TestRollbackRestoresWorkingVersionAfterFailure(t *testing.T) {
 	}
 
 	// Verify state was updated
-	state, err = updater.Installer().LoadState()
+	state, err = updateManager.Installer().LoadState()
 	if err != nil {
 		t.Fatalf("LoadState() error = %v", err)
 	}
 
-	if state == nil || state.Status != "rolled_back" {
+	if state == nil || state.Status != updater.InstallStatusRolledBack {
 		t.Error("State should be rolled_back after Rollback()")
 	}
 }
@@ -406,10 +405,10 @@ func TestAutoRollbackTriggersAfterMultipleFailures(t *testing.T) {
 
 	log := zerolog.Nop()
 
-	installer := NewInstaller(installDir, dataDir, "simtezilo", false, log)
+	installer := updater.NewInstaller(installDir, dataDir, "simtezilo", false, log)
 
 	// Save state with enough failures to trigger auto-rollback
-	state := &InstallState{
+	state := &updater.InstallState{
 		PendingVersion: "2.0.0",
 		CurrentVersion: "1.0.0",
 		Status:         "failed",
@@ -469,13 +468,13 @@ func TestSuccessConfirmationCleansUpAfterUpdate(t *testing.T) {
 
 	log := zerolog.Nop()
 
-	installer := NewInstaller(installDir, dataDir, "simtezilo", false, log)
+	installer := updater.NewInstaller(installDir, dataDir, "simtezilo", false, log)
 
 	// Save state indicating complete update
-	state := &InstallState{
+	state := &updater.InstallState{
 		PendingVersion: "2.0.0",
 		CurrentVersion: "1.0.0",
-		Status:         "complete",
+		Status:         updater.InstallStatusComplete,
 	}
 
 	err = installer.SaveState(state)
@@ -513,12 +512,12 @@ func TestCheckNowReturnsNilWhenNoUpdateAvailable(t *testing.T) {
 	mux := http.NewServeMux()
 
 	manifestHandler := func(resp http.ResponseWriter, _ *http.Request) {
-		manifest := Manifest{
+		manifest := updater.Manifest{
 			Version:     "1.0.0",
 			ReleaseDate: time.Now().UTC(),
 			Channel:     "stable",
-			Platforms: map[string]Platform{
-				GetPlatformKey(): {
+			Platforms: map[string]updater.Platform{
+				updater.GetPlatformKey(): {
 					URL:    "/binary",
 					SHA256: "abc123",
 					Size:   1024,
@@ -538,7 +537,7 @@ func TestCheckNowReturnsNilWhenNoUpdateAvailable(t *testing.T) {
 
 	log := zerolog.Nop()
 
-	cfg := &Config{
+	cfg := &updater.Config{
 		Enabled:         true,
 		BaseURL:         server.URL,
 		Channel:         "stable",
@@ -551,12 +550,12 @@ func TestCheckNowReturnsNilWhenNoUpdateAvailable(t *testing.T) {
 		UseSystemd:      false,
 	}
 
-	updater, err := New(cfg, "1.0.0", log)
+	updateManager, err := updater.New(cfg, "1.0.0", log)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
 
-	info, err := updater.CheckNow()
+	info, err := updateManager.CheckNow()
 	if err != nil {
 		t.Fatalf("CheckNow() error = %v", err)
 	}
@@ -565,11 +564,11 @@ func TestCheckNowReturnsNilWhenNoUpdateAvailable(t *testing.T) {
 		t.Error("CheckNow() should return nil when already on latest")
 	}
 
-	if updater.Status() != StatusIdle {
-		t.Errorf("Status() = %v, want StatusIdle", updater.Status())
+	if updateManager.Status() != updater.UpdateStatusIdle {
+		t.Errorf("Status() = %v, want StatusIdle", updateManager.Status())
 	}
 
-	if updater.AvailableUpdate() != nil {
+	if updateManager.AvailableUpdate() != nil {
 		t.Error("AvailableUpdate() should be nil when no update available")
 	}
 }

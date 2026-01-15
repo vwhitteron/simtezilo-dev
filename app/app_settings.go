@@ -6,6 +6,16 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/i18n/languagedb"
 )
 
+const (
+	settingStateOn            = "on"
+	settingStateOff           = "off"
+	telemetrySourceModeAuto   = "auto"
+	telemetrySourceModeDemo   = "demo"
+	telemetrySourceModeCustom = "custom"
+	telemetrySourceAuto       = "udp://255.255.255.255:33739"
+	telemetrySourceDemo       = "file:///opt/simtezilo/data/replays/demo.gtz"
+)
+
 func (a *App) settingAction(setting languagedb.Key, action string) string {
 	handlers := map[languagedb.Key]func(string) string{
 		// App handlers
@@ -185,83 +195,23 @@ func (a *App) handleEngineGainSetting(action string) string {
 }
 
 func (a *App) handleEqEnableSetting(action string) string {
-	value := "OFF"
+	value := settingStateOff
 
 	switch action {
 	case "increase":
 		a.config.SetSynthEqEnabled(true)
 
-		value = "ON"
+		value = settingStateOn
 	case "decrease":
 		a.config.SetSynthEqEnabled(false)
 	default:
 		enabled := a.config.GetSynthEqEnabled()
 		if enabled {
-			value = "ON"
+			value = settingStateOn
 		}
 	}
 
 	return value
-}
-
-func (a *App) handleForceCurveSetting(action string) string {
-	var value int
-
-	switch action {
-	case "increase":
-		value = a.config.IncreaseHapticsSnapCurve()
-	case "decrease":
-		value = a.config.DecreaseHapticsSnapCurve()
-	default:
-		value = int(a.config.GetHapticsSnapCurve())
-	}
-
-	return strconv.Itoa(value)
-}
-
-func (a *App) handleForceMaxSetting(action string) string {
-	var value int
-
-	switch action {
-	case "increase":
-		value = a.config.IncreaseHapticsPulseMaxHz()
-	case "decrease":
-		value = a.config.DecreaseHapticsPulseMaxHz()
-	default:
-		value = int(a.config.GetHapticsPulseMaxHz())
-	}
-
-	return strconv.Itoa(value)
-}
-
-func (a *App) handleForceMinSetting(action string) string {
-	var value int
-
-	switch action {
-	case "increase":
-		value = a.config.IncreaseHapticsPulseMinHz()
-	case "decrease":
-		value = a.config.DecreaseHapticsPulseMinHz()
-	default:
-		value = int(a.config.GetHapticsPulseMinHz())
-	}
-
-	return strconv.Itoa(value)
-}
-
-func (a *App) handleForceSatSetting(action string) string {
-	var value int
-
-	switch action {
-	case "increase":
-		value = a.config.IncreaseHapticsSnapMax()
-	case "decrease":
-		value = a.config.DecreaseHapticsSnapMax()
-	default:
-		value = a.config.GetHapticsSnapMax()
-	}
-
-	return strconv.Itoa(value)
 }
 
 func (a *App) handleLanguageSetting(action string) string {
@@ -290,21 +240,6 @@ func (a *App) handleTransmissionCurveSetting(action string) string {
 	return strconv.Itoa(value)
 }
 
-func (a *App) handleTransmissionSatSetting(action string) string {
-	var value float64
-
-	switch action {
-	case "increase":
-		value = a.config.IncreaseHapticsTransmissionGforceMax()
-	case "decrease":
-		value = a.config.DecreasehapticsTransmissionGforceMax()
-	default:
-		value = a.config.GetHapticsTransmissionGforceMax()
-	}
-
-	return strconv.FormatFloat(value, 'f', 1, 64)
-}
-
 func (a *App) handleTransmissionGainSetting(action string) string {
 	var value float64
 
@@ -320,21 +255,6 @@ func (a *App) handleTransmissionGainSetting(action string) string {
 	return strconv.FormatFloat(value, 'f', 2, 64)
 }
 
-func (a *App) handleVibrationCurveSetting(action string) string {
-	var value int
-
-	switch action {
-	case "increase":
-		value = a.config.IncreaseHapticsJerkCurve()
-	case "decrease":
-		value = a.config.DecreaseHapticsJerkCurve()
-	default:
-		value = int(a.config.GethapticsJerkCurve())
-	}
-
-	return strconv.Itoa(value)
-}
-
 func (a *App) handleMasterGainSetting(action string) string {
 	var value float64
 
@@ -348,21 +268,6 @@ func (a *App) handleMasterGainSetting(action string) string {
 	}
 
 	return strconv.FormatFloat(value, 'f', 2, 64) + " dB"
-}
-
-func (a *App) handleVibrationSatSetting(action string) string {
-	var value int
-
-	switch action {
-	case "increase":
-		value = a.config.IncreaseHapticsJerkMax()
-	case "decrease":
-		value = a.config.DecreaseHapticsJerkMax()
-	default:
-		value = a.config.GetHapticsJerkMax()
-	}
-
-	return strconv.Itoa(value)
 }
 
 func (a *App) handleInfoScreen(action string) (value string) {
@@ -409,10 +314,10 @@ func (a *App) handleRecordToggle(action string) string {
 
 	// Return current recording state
 	if a.gtClient.IsRecording() {
-		return "ON"
+		return settingStateOn
 	}
 
-	return "OFF"
+	return settingStateOff
 }
 
 func (a *App) handleVersionInfo(_ string) string {
@@ -479,19 +384,11 @@ func (a *App) handleDevToolsSetting(action string) string {
 	}
 
 	if a.config.GetDevToolsEnabled() {
-		return "ON"
+		return settingStateOn
 	}
 
-	return "OFF"
+	return settingStateOff
 }
-
-const (
-	telemetrySourceAuto       = "udp://255.255.255.255:33739"
-	telemetrySourceDemo       = "file:///opt/simtezilo/data/replays/demo.gtz"
-	telemetrySourceModeAuto   = "auto"
-	telemetrySourceModeDemo   = "demo"
-	telemetrySourceModeCustom = "custom"
-)
 
 // getTelemetrySourceMode returns the current telemetry source mode.
 func (a *App) getTelemetrySourceMode() string {
@@ -583,10 +480,10 @@ func (a *App) handlePitRadioEnableSetting(action string) string {
 	}
 
 	if a.config.PitRadioEnabled() {
-		return "ON"
+		return settingStateOn
 	}
 
-	return "OFF"
+	return settingStateOff
 }
 
 // Pit Radio - Lap Times notification handlers.
@@ -598,10 +495,10 @@ func (a *App) handlePitradioLapTimesEnableSetting(action string) string {
 	}
 
 	if a.config.GetPitRadioNotifyLapTimesEnabled() {
-		return "ON"
+		return settingStateOn
 	}
 
-	return "OFF"
+	return settingStateOff
 }
 
 func (a *App) handlePitradioLapTimesMaxDeltaSetting(action string) string {
@@ -628,10 +525,10 @@ func (a *App) handlePitradioRaceLapsEnableSetting(action string) string {
 	}
 
 	if a.config.GetPitRadioNotifyRaceLapsEnabled() {
-		return "ON"
+		return settingStateOn
 	}
 
-	return "OFF"
+	return settingStateOff
 }
 
 func (a *App) handlePitradioRaceLapsCountdownSetting(action string) string {
@@ -673,10 +570,10 @@ func (a *App) handlePitradioRaceProgressEnableSetting(action string) string {
 	}
 
 	if a.config.GetPitRadioNotifyRaceProgressEnabled() {
-		return "ON"
+		return settingStateOn
 	}
 
-	return "OFF"
+	return settingStateOff
 }
 
 func (a *App) handlePitradioRaceProgressMinLapsSetting(action string) string {
@@ -718,10 +615,10 @@ func (a *App) handlePitradioFuelEnableSetting(action string) string {
 	}
 
 	if a.config.GetPitRadioFuelMonitoringEnabled() {
-		return "ON"
+		return settingStateOn
 	}
 
-	return "OFF"
+	return settingStateOff
 }
 
 func (a *App) handlePitradioFuelPreWarnSetting(action string) string {
@@ -793,10 +690,10 @@ func (a *App) handlePitRadioTyreEnableSetting(action string) string {
 	}
 
 	if a.config.GetPitRadioTyreMonitoringEnabled() {
-		return "ON"
+		return settingStateOn
 	}
 
-	return "OFF"
+	return settingStateOff
 }
 
 func (a *App) handlePitradioTyreTempOptimalSetting(action string) string {
@@ -849,90 +746,24 @@ func (a *App) handleInternalSampleRateSetting(action string) string {
 	rates := []int{8000, 16000, 22050, 32000, 44100, 48000}
 	current := a.config.GetSynthInternalSampleRateHz()
 
-	var newRate int
-
-	switch action {
-	case "increase":
-		for _, rate := range rates {
-			if rate > current {
-				newRate = rate
-
-				break
-			}
-		}
-
-		if newRate == 0 {
-			newRate = rates[len(rates)-1]
-		}
-
-		a.config.SetSynthInternalSampleRateHz(newRate)
-	case "decrease":
-		for i := len(rates) - 1; i >= 0; i-- {
-			if rates[i] < current {
-				newRate = rates[i]
-
-				break
-			}
-		}
-
-		if newRate == 0 {
-			newRate = rates[0]
-		}
-
+	if action == "increase" || action == "decrease" {
+		newRate := cycleSampleRate(action, current, rates)
 		a.config.SetSynthInternalSampleRateHz(newRate)
 	}
 
-	hz := a.config.GetSynthInternalSampleRateHz()
-	if hz >= 1000 {
-		return strconv.Itoa(hz/1000) + "kHz"
-	}
-
-	return strconv.Itoa(hz) + "Hz"
+	return formatSampleRate(a.config.GetSynthInternalSampleRateHz())
 }
 
 func (a *App) handleOutputSampleRateSetting(action string) string {
 	rates := []int{8000, 16000, 22050, 32000, 44100, 48000}
 	current := a.config.GetSynthOutputSampleRateHz()
 
-	var newRate int
-
-	switch action {
-	case "increase":
-		for _, rate := range rates {
-			if rate > current {
-				newRate = rate
-
-				break
-			}
-		}
-
-		if newRate == 0 {
-			newRate = rates[len(rates)-1]
-		}
-
-		a.config.SetSynthOutputSampleRateHz(newRate)
-	case "decrease":
-		for i := len(rates) - 1; i >= 0; i-- {
-			if rates[i] < current {
-				newRate = rates[i]
-
-				break
-			}
-		}
-
-		if newRate == 0 {
-			newRate = rates[0]
-		}
-
+	if action == "increase" || action == "decrease" {
+		newRate := cycleSampleRate(action, current, rates)
 		a.config.SetSynthOutputSampleRateHz(newRate)
 	}
 
-	hz := a.config.GetSynthOutputSampleRateHz()
-	if hz >= 1000 {
-		return strconv.Itoa(hz/1000) + "kHz"
-	}
-
-	return strconv.Itoa(hz) + "Hz"
+	return formatSampleRate(a.config.GetSynthOutputSampleRateHz())
 }
 
 // Synthesizer - Transmission Min Gain handlers.
@@ -1132,4 +963,50 @@ func (a *App) handleEnginePulseGainSetting(action string) string {
 
 func (a *App) handlePulseScaleSetting(action string) string {
 	return a.handleEnginePulseScaleSetting(action)
+}
+
+// cycleSampleRate handles cycling through sample rates based on the action.
+// Returns the new rate after the action is applied.
+func cycleSampleRate(action string, current int, rates []int) int {
+	var newRate int
+
+	switch action {
+	case "increase":
+		for _, rate := range rates {
+			if rate > current {
+				newRate = rate
+
+				break
+			}
+		}
+
+		if newRate == 0 {
+			newRate = rates[len(rates)-1]
+		}
+	case "decrease":
+		for i := len(rates) - 1; i >= 0; i-- {
+			if rates[i] < current {
+				newRate = rates[i]
+
+				break
+			}
+		}
+
+		if newRate == 0 {
+			newRate = rates[0]
+		}
+	default:
+		newRate = current
+	}
+
+	return newRate
+}
+
+// formatSampleRate formats a sample rate in Hz to a human-readable string.
+func formatSampleRate(hz int) string {
+	if hz >= 1000 {
+		return strconv.Itoa(hz/1000) + "kHz"
+	}
+
+	return strconv.Itoa(hz) + "Hz"
 }

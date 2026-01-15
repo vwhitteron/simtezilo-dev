@@ -23,17 +23,13 @@ import (
 type UpdateStatus int
 
 const (
-	StatusIdle UpdateStatus = iota
-	StatusChecking
-	StatusUpdateAvailable
-	StatusDownloading
-	StatusReadyToInstall
-	StatusInstalling
-	StatusError
-)
-
-const (
-	channelCustom = "custom"
+	UpdateStatusIdle UpdateStatus = iota
+	UpdateStatusChecking
+	UpdateStatusUpdateAvailable
+	UpdateStatusDownloading
+	UpdateStatusReadyToInstall
+	UpdateStatusInstalling
+	UpdateStatusError
 )
 
 func (s UpdateStatus) String() string {
@@ -112,7 +108,7 @@ func NewChecker(cfg CheckerConfig, log zerolog.Logger) (*Checker, error) {
 		channel:        cfg.Channel,
 		dataDir:        cfg.DataDir,
 		currentVersion: currentVer,
-		status:         StatusIdle,
+		status:         UpdateStatusIdle,
 	}, nil
 }
 
@@ -139,7 +135,7 @@ func (c *Checker) Stop() {
 // CheckNow performs an immediate update check.
 func (c *Checker) CheckNow() (*UpdateInfo, error) {
 	c.mu.Lock()
-	c.status = StatusChecking
+	c.status = UpdateStatusChecking
 	baseURL := c.baseURL
 	channel := c.channel
 	dataDir := c.dataDir
@@ -169,7 +165,7 @@ func (c *Checker) CheckNow() (*UpdateInfo, error) {
 	c.lastCheck = time.Now()
 
 	if err != nil {
-		c.status = StatusError
+		c.status = UpdateStatusError
 		c.lastError = err
 		c.availableInfo = nil // Clear any previous update info on error
 		c.log.Warn().Err(err).Msg("Failed to check for updates")
@@ -185,7 +181,7 @@ func (c *Checker) CheckNow() (*UpdateInfo, error) {
 			Str("expected", c.channel).
 			Str("got", manifest.Channel).
 			Msg("Manifest channel mismatch, skipping")
-		c.status = StatusIdle
+		c.status = UpdateStatusIdle
 
 		return nil, nil
 	}
@@ -200,7 +196,7 @@ func (c *Checker) CheckNow() (*UpdateInfo, error) {
 	// Parse available version
 	availableVer, err := ParseVersion(manifest.Version)
 	if err != nil {
-		c.status = StatusError
+		c.status = UpdateStatusError
 		c.lastError = err
 		c.log.Warn().Err(err).Str("version", manifest.Version).Msg("Failed to parse manifest version")
 
@@ -225,7 +221,7 @@ func (c *Checker) CheckNow() (*UpdateInfo, error) {
 			Str("current", c.currentVersion.String()).
 			Str("available", availableVer.String()).
 			Msg("Already running latest version")
-		c.status = StatusIdle
+		c.status = UpdateStatusIdle
 		// Only clear availableInfo if it's not a custom update
 		if c.availableInfo == nil || c.availableInfo.Channel != channelCustom {
 			c.availableInfo = nil
@@ -240,7 +236,7 @@ func (c *Checker) CheckNow() (*UpdateInfo, error) {
 		c.log.Warn().
 			Str("platform", GetPlatformKey()).
 			Msg("No binary available for current platform")
-		c.status = StatusIdle
+		c.status = UpdateStatusIdle
 
 		return nil, nil
 	}
@@ -257,8 +253,8 @@ func (c *Checker) CheckNow() (*UpdateInfo, error) {
 		ReleaseDate:      manifest.ReleaseDate,
 	}
 	// Only change status to UpdateAvailable if not already in a more advanced state
-	if c.status != StatusReadyToInstall && c.status != StatusDownloading && c.status != StatusInstalling {
-		c.status = StatusUpdateAvailable
+	if c.status != UpdateStatusReadyToInstall && c.status != UpdateStatusDownloading && c.status != UpdateStatusInstalling {
+		c.status = UpdateStatusUpdateAvailable
 	}
 
 	c.lastError = nil
@@ -320,9 +316,32 @@ func (c *Checker) AvailableUpdate() *UpdateInfo {
 	return c.availableInfo
 }
 
+// SetAvailableDownloadURL updates the download URL for the available update.
+func (c *Checker) SetAvailableDownloadURL(url string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.availableInfo != nil {
+		c.availableInfo.DownloadURL = url
+	}
+}
+
 // CurrentVersion returns the current version string.
 func (c *Checker) CurrentVersion() string {
 	return c.currentVersion.String()
+}
+
+// BaseURL returns the base URL for update checking.
+func (c *Checker) BaseURL() string {
+	return c.baseURL
+}
+
+// Channel returns the current update channel.
+func (c *Checker) Channel() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.channel
 }
 
 // SetChannel updates the channel for update checking.
@@ -370,7 +389,7 @@ func (c *Checker) checkCustomUpdate(dataDir string) (*UpdateInfo, error) {
 	c.lastCheck = time.Now()
 
 	if dataDir == "" {
-		c.status = StatusIdle
+		c.status = UpdateStatusIdle
 		c.lastError = errors.New("data directory not configured")
 
 		return nil, c.lastError
@@ -383,12 +402,12 @@ func (c *Checker) checkCustomUpdate(dataDir string) (*UpdateInfo, error) {
 	if err != nil {
 		if os.IsNotExist(err) {
 			c.log.Debug().Msg("Downloads directory does not exist, no custom update found")
-			c.status = StatusIdle
+			c.status = UpdateStatusIdle
 			// Don't clear availableInfo for custom channel - it may have been set via upload
 			return nil, nil
 		}
 
-		c.status = StatusError
+		c.status = UpdateStatusError
 		c.lastError = err
 
 		return nil, err
@@ -410,7 +429,7 @@ func (c *Checker) checkCustomUpdate(dataDir string) (*UpdateInfo, error) {
 
 	if customFile == "" {
 		c.log.Debug().Msg("No custom update file found")
-		c.status = StatusIdle
+		c.status = UpdateStatusIdle
 		// Don't clear availableInfo for custom channel - it may have been set via upload
 		return nil, nil
 	}
@@ -420,7 +439,7 @@ func (c *Checker) checkCustomUpdate(dataDir string) (*UpdateInfo, error) {
 	// Extract and parse manifest.json
 	manifest, err := c.extractManifest(customFile)
 	if err != nil {
-		c.status = StatusError
+		c.status = UpdateStatusError
 		c.lastError = fmt.Errorf("failed to extract manifest: %w", err)
 		c.log.Warn().Err(err).Str("file", customFile).Msg("Failed to extract manifest from custom update")
 
@@ -445,7 +464,7 @@ func (c *Checker) checkCustomUpdate(dataDir string) (*UpdateInfo, error) {
 		ReleaseDate:      manifest.ReleaseDate,
 	}
 
-	c.status = StatusReadyToInstall
+	c.status = UpdateStatusReadyToInstall
 	c.lastError = nil
 
 	c.log.Info().

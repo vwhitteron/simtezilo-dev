@@ -9,23 +9,6 @@ import (
 	"github.com/rs/zerolog"
 )
 
-const (
-	// DefaultCheckInterval is the default time between update checks.
-	DefaultCheckInterval = 1 * time.Hour
-
-	// DefaultHTTPTimeout is the default timeout for HTTP operations.
-	DefaultHTTPTimeout = 30 * time.Second
-
-	// DefaultDownloadTimeout is the timeout for downloading binaries.
-	DefaultDownloadTimeout = 10 * time.Minute
-
-	// DefaultChannel is the default update channel.
-	DefaultChannel = "stable"
-
-	// DefaultMaxFailures is the maximum number of consecutive failures before auto-rollback.
-	DefaultMaxFailures = 3
-)
-
 // Config holds the updater configuration.
 type Config struct {
 	Enabled         bool
@@ -158,16 +141,16 @@ func (u *Updater) DownloadUpdate(ctx context.Context, progressCb ProgressCallbac
 		return "", errors.New("no update available")
 	}
 
-	u.checker.SetStatus(StatusDownloading)
+	u.checker.SetStatus(UpdateStatusDownloading)
 
 	path, err := u.downloader.Download(ctx, info, progressCb)
 	if err != nil {
-		u.checker.SetStatus(StatusError)
+		u.checker.SetStatus(UpdateStatusError)
 
 		return "", err
 	}
 
-	u.checker.SetStatus(StatusReadyToInstall)
+	u.checker.SetStatus(UpdateStatusReadyToInstall)
 
 	return path, nil
 }
@@ -184,7 +167,7 @@ func (u *Updater) PrepareInstall(downloadPath string) error {
 
 // RestartToApply requests a service restart to apply the update.
 func (u *Updater) RestartToApply() error {
-	u.checker.SetStatus(StatusInstalling)
+	u.checker.SetStatus(UpdateStatusInstalling)
 
 	return u.installer.RestartService(u.cfg.ServiceName)
 }
@@ -284,7 +267,7 @@ func (u *Updater) CheckExistingDownloads() {
 	}
 
 	// Set status to ready to install (this preserves the availableInfo from CheckNow)
-	u.checker.SetStatus(StatusReadyToInstall)
+	u.checker.SetStatus(UpdateStatusReadyToInstall)
 	u.log.Info().
 		Str("version", updateInfo.AvailableVersion).
 		Msg("Existing download is valid and ready to install")

@@ -1,8 +1,10 @@
-package app
+package app_test
 
 import (
 	"testing"
 	"time"
+
+	"github.com/vwhitteron/simtezilo-dev/app"
 )
 
 func TestFormatDeltaTimeFormatsLapTimeDeltasCorrectly(t *testing.T) {
@@ -143,7 +145,7 @@ func TestFormatDeltaTimeFormatsLapTimeDeltasCorrectly(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := formatDeltaTime(testCase.delta)
+			result := app.FormatDeltaTime(testCase.delta)
 			if result != testCase.expected {
 				t.Errorf("formatDeltaTime(%v) = %q, want %q", testCase.delta, result, testCase.expected)
 			}
@@ -195,7 +197,7 @@ func TestRoundDeltaRoundsValuesBasedOnSign(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := roundDelta(testCase.value)
+			result := app.RoundDelta(testCase.value)
 			if result != testCase.expected {
 				t.Errorf("roundDelta(%v) = %v, want %v", testCase.value, result, testCase.expected)
 			}
@@ -266,7 +268,7 @@ func TestPluraliseDeltaHandlesSingularAndPluralForms(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := pluraliseDelta(testCase.value, testCase.scale)
+			result := app.PluraliseDelta(testCase.value, testCase.scale)
 			if result != testCase.expected {
 				t.Errorf("pluraliseDelta(%v, %q) = %q, want %q", testCase.value, testCase.scale, result, testCase.expected)
 			}
@@ -323,7 +325,7 @@ func TestFormatDurationConvertsLapTimesToSpeechFormat(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := formatDuration(testCase.duration)
+			result := app.FormatDuration(testCase.duration)
 			if result != testCase.expected {
 				t.Errorf("formatDuration(%v) = %q, want %q", testCase.duration, result, testCase.expected)
 			}
@@ -396,7 +398,7 @@ func TestPronounceTimeFormatsTimeComponentsForSpeech(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := pronounceTime(testCase.minutes, testCase.seconds, testCase.milliseconds, testCase.includeUnits)
+			result := app.PronounceTime(testCase.minutes, testCase.seconds, testCase.milliseconds, testCase.includeUnits)
 			if result != testCase.expected {
 				t.Errorf("pronounceTime(%q, %q, %q, %v) = %q, want %q",
 					testCase.minutes, testCase.seconds, testCase.milliseconds, testCase.includeUnits, result, testCase.expected)

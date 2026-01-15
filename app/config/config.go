@@ -1120,15 +1120,6 @@ func (c *Config) GetHapticsPulseMinHz() float64 {
 	return c.snapshot.Load().PulseMinFrequencyHz
 }
 
-// syncEngineProfileToMap copies the current engine profile pointer back to the map.
-// This must be called after modifying _engineProfile to ensure changes are persisted.
-// Caller must hold the mutex.
-func (c *Config) syncEngineProfileToMap() {
-	if c.viper.Haptics._engineProfile != nil && c.viper.Haptics._engineProfileName != "" {
-		c.viper.Haptics.EngineProfiles[c.viper.Haptics._engineProfileName] = *c.viper.Haptics._engineProfile
-	}
-}
-
 // GetHapticsEngineProfile returns the currently selected engine profile.
 // If no profile is selected, it returns nil.
 func (c *Config) GetHapticsEngineProfile(name string) *appHaptics.EngineProfile {
@@ -2981,6 +2972,15 @@ func (c *Config) rebuildSnapshot() {
 		DisplayOrientation: c.viper.Hardware.DisplayOrientation,
 	}
 	c.snapshot.Store(newSnap)
+}
+
+// syncEngineProfileToMap copies the current engine profile pointer back to the map.
+// This must be called after modifying _engineProfile to ensure changes are persisted.
+// Caller must hold the mutex.
+func (c *Config) syncEngineProfileToMap() {
+	if c.viper.Haptics._engineProfile != nil && c.viper.Haptics._engineProfileName != "" {
+		c.viper.Haptics.EngineProfiles[c.viper.Haptics._engineProfileName] = *c.viper.Haptics._engineProfile
+	}
 }
 
 // updatePulseWidthExtents recalculates the minimum and maximum pulse widths in samples.
