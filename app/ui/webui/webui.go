@@ -227,6 +227,7 @@ type WebUI struct {
 	buildPlatform      string
 	// Unified WebSocket support
 	unifiedClients     []*wsClient
+	unifiedClientsMux  sync.RWMutex
 	unifiedClientsChan chan *wsClient
 	unifiedUnsubChan   chan *wsClient
 	unifiedSessions    map[string]*wsClient // Track sessions to prevent duplicates
@@ -344,7 +345,11 @@ func (w *WebUI) GetHTTPHandler() http.Handler {
 
 // HasActiveClients returns true if there are active WebSocket clients connected.
 func (w *WebUI) HasActiveClients() bool {
-	return len(w.unifiedClients) > 0 || w.webSocketClients > 0
+	w.unifiedClientsMux.RLock()
+	hasUnified := len(w.unifiedClients) > 0
+	w.unifiedClientsMux.RUnlock()
+
+	return hasUnified || w.webSocketClients > 0
 }
 
 //go:embed html/*
@@ -680,12 +685,16 @@ func (w *WebUI) unifiedWebSocketBroadcaster() {
 		select {
 		case client := <-w.unifiedClientsChan:
 			// Add new client (subscriptions are managed by the client itself)
+			w.unifiedClientsMux.Lock()
 			w.unifiedClients = append(w.unifiedClients, client)
+			w.unifiedClientsMux.Unlock()
 
 			w.log.Debug().Int("unified_clients", len(w.unifiedClients)).Msg("unified client subscribed")
 
 		case client := <-w.unifiedUnsubChan:
 			// Remove client from unified clients list
+			w.unifiedClientsMux.Lock()
+
 			for i, c := range w.unifiedClients {
 				if c == client {
 					w.unifiedClients = append(w.unifiedClients[:i], w.unifiedClients[i+1:]...)
@@ -693,6 +702,8 @@ func (w *WebUI) unifiedWebSocketBroadcaster() {
 					break
 				}
 			}
+
+			w.unifiedClientsMux.Unlock()
 
 			w.log.Debug().Int("unified_clients", len(w.unifiedClients)).Msg("unified client unsubscribed")
 
@@ -900,6 +911,9 @@ func (w *WebUI) unifiedWebSocketBroadcaster() {
 // Each client's writePump handles subscription filtering and the actual write.
 // messageType specifies what type of data is being sent (e.g., "telemetry", "vehicle", etc.)
 func (w *WebUI) broadcastToUnifiedClients(encodedData []byte, messageType string) {
+	w.unifiedClientsMux.Lock()
+	defer w.unifiedClientsMux.Unlock()
+
 	activeClients := make([]*wsClient, 0, len(w.unifiedClients))
 
 	for _, client := range w.unifiedClients {
