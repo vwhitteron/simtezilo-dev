@@ -48,7 +48,7 @@ func main() {
 	flag.Parse()
 
 	if version {
-		fmt.Printf("Version: %s  Build Time: %s  Platform: %s\n", app.Version, app.BuildTime, app.Platform) //nolint:forbidigo // Allow for version output
+		fmt.Fprintf(os.Stdout, "Version: %s  Commit Hash: %s  Build Time: %s  Platform: %s\n", app.Version, app.CommitHash, app.BuildTime, app.Platform)
 
 		os.Exit(0)
 	}
