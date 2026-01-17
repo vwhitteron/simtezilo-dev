@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"runtime"
+	"strings"
 	"time"
 )
 
@@ -17,7 +18,7 @@ type Manifest struct {
 	ReleaseDate       time.Time           `json:"releaseDate"`       //nolint:tagliatelle // external API format
 	Channel           string              `json:"channel"`           //nolint:tagliatelle // external API format
 	MinUpgradeVersion string              `json:"minUpgradeVersion"` //nolint:tagliatelle // external API format
-	Changelog         string              `json:"changelog"`         //nolint:tagliatelle // external API format
+	Changelog         []string            `json:"changelog"`         //nolint:tagliatelle // external API format
 	Platforms         map[string]Platform `json:"platforms"`         //nolint:tagliatelle // external API format
 }
 
@@ -26,6 +27,67 @@ type Platform struct {
 	URL    string `json:"url"`    //nolint:tagliatelle // external API format
 	SHA256 string `json:"sha256"` //nolint:tagliatelle // external API format
 	Size   int64  `json:"size"`   //nolint:tagliatelle // external API format
+}
+
+// UnmarshalJSON implements custom JSON unmarshaling for Manifest to handle
+// both string and array formats for the changelog field (backward compatibility).
+func (m *Manifest) UnmarshalJSON(data []byte) error {
+	// Use an alias to avoid infinite recursion
+	type ManifestAlias Manifest
+
+	// First try unmarshaling with []string changelog (new format)
+	var aux struct {
+		ManifestAlias
+
+		Changelog json.RawMessage `json:"changelog"`
+	}
+
+	err := json.Unmarshal(data, &aux)
+	if err != nil {
+		return err
+	}
+
+	*m = Manifest(aux.ManifestAlias)
+
+	// Handle null or missing changelog
+	if len(aux.Changelog) == 0 || string(aux.Changelog) == "null" {
+		m.Changelog = []string{}
+
+		return nil
+	}
+
+	// Try to unmarshal changelog as []string first
+	var changelogArray []string
+
+	err = json.Unmarshal(aux.Changelog, &changelogArray)
+	if err == nil {
+		if changelogArray == nil {
+			changelogArray = []string{}
+		}
+
+		m.Changelog = changelogArray
+
+		return nil
+	}
+
+	// Fall back to string format (old format)
+	var changelogString string
+
+	err = json.Unmarshal(aux.Changelog, &changelogString)
+	if err == nil {
+		if changelogString != "" {
+			m.Changelog = strings.Split(changelogString, "\n")
+		} else {
+			m.Changelog = []string{}
+		}
+
+		return nil
+	}
+
+	// If changelog is null or missing, use empty slice
+	m.Changelog = []string{}
+
+	return nil
 }
 
 // GetPlatformKey returns the platform key for the current OS/architecture.

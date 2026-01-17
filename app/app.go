@@ -819,6 +819,7 @@ func (a *App) initializeComponents(opts Options) error {
 			DownloadTimeout: updater.DefaultDownloadTimeout,
 			AutoInstall:     a.config.GetAppUpdateAutoInstall(),
 			InstallDir:      filepath.Join(baseDir, "bin"),
+			InitDir:         filepath.Join(baseDir, "init"),
 			DataDir:         filepath.Join(baseDir, "data", "update"),
 			BinaryName:      "simtezilo",
 			ServiceName:     "simtezilo",

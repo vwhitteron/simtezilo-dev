@@ -49,7 +49,7 @@ type UpdateInfo struct {
 	CurrentVersion   string
 	AvailableVersion string
 	Channel          string
-	Changelog        string
+	Changelog        []string
 	DownloadURL      string
 	DownloadSize     int64
 	SHA256           string

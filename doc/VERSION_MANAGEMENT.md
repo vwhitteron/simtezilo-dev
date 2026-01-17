@@ -50,12 +50,12 @@ The automatic version detection follows the [Conventional Commits](https://www.c
 
 ### Version Bump Rules
 
-| Commit Pattern | Version Bump | Example |
-|---------------|--------------|---------|
-| `fix:` | **Patch** | `fix: resolve memory leak` |
-| `feat:` | **Minor** | `feat: add user authentication` |
-| `perf:` | **Patch** | `perf: optimize database queries` |
-| `feat!:` or `BREAKING CHANGE:` | **Major** | `feat!: redesign API` |
+|          Commit Pattern        | Version Bump |              Example              |
+|--------------------------------|--------------|-----------------------------------|
+| `fix:`                         |  **Patch**   | `fix: resolve memory leak`        |
+| `feat:`                        |  **Minor**   | `feat: add user authentication`   |
+| `perf:`                        |  **Patch**   | `perf: optimize database queries` |
+| `feat!:` or `BREAKING CHANGE:` |  **Major**   | `feat!: redesign API`             |
 
 ### Examples
 
@@ -90,12 +90,12 @@ git commit -m "test: add unit tests"
 
 ## How It Works
 
-- **VERSION file**: Single source of truth at project root
+- **VERSION file**:      Single source of truth at project root
 - **update_version.sh**: Shell script containing all version management logic
-- **Makefile**: Thin wrappers around `update_version.sh` for convenience
-- **Build injection**: Version injected into binary via `-ldflags -X app.Version=$(buildversion)`
-- **Fallback**: If VERSION file missing, falls back to "dev"
-- **Validation**: `make audit` now includes VERSION validation
+- **Makefile**:          Thin wrappers around `update_version.sh` for convenience
+- **Build injection**:   Version injected into binary via `-ldflags -X app.Version=$(buildversion)`
+- **Fallback**:          If VERSION file missing, falls back to "dev"
+- **Validation**:        `make audit` now includes VERSION validation
 
 ## Direct Script Usage
 
@@ -219,9 +219,9 @@ git push --tags
 
 ## Benefits
 
-- **Automated**: Analyzes git history to determine appropriate version
-- **Consistent**: Follows semantic versioning automatically
-- **Safe**: Validates format and prevents errors
-- **Flexible**: Works in CI/CD and local development
-- **Transparent**: Shows reasoning for version decisions
+- **Automated**:         Analyzes git history to determine appropriate version
+- **Consistent**:        Follows semantic versioning automatically
+- **Safe**:              Validates format and prevents errors
+- **Flexible**:          Works in CI/CD and local development
+- **Transparent**:       Shows reasoning for version decisions
 - **No external tools**: Pure shell script, no dependencies

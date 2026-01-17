@@ -110,7 +110,7 @@ func TestCheckNowReturnsUpdateInfoWhenNewerVersionAvailable(t *testing.T) {
 		Version:     "2.0.0",
 		ReleaseDate: time.Now().UTC(),
 		Channel:     "stable",
-		Changelog:   "- New features",
+		Changelog:   []string{"- New features"},
 		Platforms: map[string]updater.Platform{
 			updater.GetPlatformKey(): {
 				URL:    "https://example.com/binary",
@@ -562,7 +562,7 @@ func TestUpdateInfoStoresAllFields(t *testing.T) {
 		CurrentVersion:   "1.0.0",
 		AvailableVersion: "2.0.0",
 		Channel:          "stable",
-		Changelog:        "- New feature",
+		Changelog:        []string{"- New feature"},
 		DownloadURL:      "https://example.com/binary",
 		DownloadSize:     1024,
 		SHA256:           "abc123",
@@ -581,8 +581,8 @@ func TestUpdateInfoStoresAllFields(t *testing.T) {
 		t.Errorf("Channel = %v, want stable", info.Channel)
 	}
 
-	if info.Changelog != "- New feature" {
-		t.Errorf("Changelog = %v, want - New feature", info.Changelog)
+	if len(info.Changelog) != 1 || info.Changelog[0] != "- New feature" {
+		t.Errorf("Changelog = %v, want [- New feature]", info.Changelog)
 	}
 
 	if info.DownloadURL != "https://example.com/binary" {
@@ -715,7 +715,7 @@ func TestSwitchingChannelsClearsStaleUpdateInfo(t *testing.T) {
 		CurrentVersion:   "1.0.0",
 		AvailableVersion: "2.0.0",
 		Channel:          "custom",
-		Changelog:        "Custom update",
+		Changelog:        []string{"Custom update"},
 	})
 
 	// Verify custom update is set
@@ -771,7 +771,7 @@ func TestCustomChannelPreservesInfoWhenSwitchingBack(t *testing.T) {
 		CurrentVersion:   "1.0.0",
 		AvailableVersion: "2.0.0",
 		Channel:          "custom",
-		Changelog:        "Custom update",
+		Changelog:        []string{"Custom update"},
 	}
 	checker.SetAvailableUpdate(customUpdate)
 

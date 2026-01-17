@@ -3161,7 +3161,7 @@ func (w *WebUI) handleUpdatesDownload(response http.ResponseWriter, request *htt
 type UploadMetadata struct {
 	Version     string    `json:"version"`     //nolint:tagliatelle // lowercase for compatibility
 	ReleaseDate time.Time `json:"releaseDate"` //nolint:tagliatelle
-	Changelog   string    `json:"changelog"`   //nolint:tagliatelle
+	Changelog   []string  `json:"changelog"`   //nolint:tagliatelle
 	Platform    string    `json:"platform"`    //nolint:tagliatelle
 }
 
@@ -3370,8 +3370,9 @@ func (w *WebUI) handleUpdatesUpload(response http.ResponseWriter, request *http.
 
 	// Create UpdateInfo using metadata if available, otherwise use defaults
 	var (
-		version, changelog string
-		releaseDate        time.Time
+		version     string
+		changelog   []string
+		releaseDate time.Time
 	)
 
 	if metadata != nil {
@@ -3381,7 +3382,7 @@ func (w *WebUI) handleUpdatesUpload(response http.ResponseWriter, request *http.
 	} else {
 		// Fallback to synthetic info if no metadata
 		version = "custom-" + filepath.Base(header.Filename)
-		changelog = "Custom uploaded file: " + header.Filename
+		changelog = []string{"Custom uploaded file: " + header.Filename}
 		releaseDate = time.Now()
 	}
 

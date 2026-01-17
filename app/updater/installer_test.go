@@ -16,10 +16,11 @@ func TestNewInstallerCreatesValidInstance(t *testing.T) {
 
 	log := zerolog.Nop()
 	installDir := "/opt/simtezilo/bin"
+	initDir := "/opt/simtezilo/init"
 	dataDir := "/opt/simtezilo/data"
 	binaryName := "simtezilo"
 
-	installer := updater.NewInstaller(installDir, dataDir, binaryName, true, log)
+	installer := updater.NewInstaller(installDir, initDir, dataDir, binaryName, true, log)
 
 	if installer == nil {
 		t.Fatal("NewInstaller() returned nil")
@@ -27,6 +28,10 @@ func TestNewInstallerCreatesValidInstance(t *testing.T) {
 
 	if installer.InstallDir() != installDir {
 		t.Errorf("installDir = %v, want %v", installer.InstallDir(), installDir)
+	}
+
+	if installer.InitDir() != initDir {
+		t.Errorf("initDir = %v, want %v", installer.InitDir(), initDir)
 	}
 
 	if installer.DataDir() != dataDir {
@@ -48,7 +53,7 @@ func TestSaveAndLoadStatePreservesAllFields(t *testing.T) {
 	dataDir := t.TempDir()
 	log := zerolog.Nop()
 
-	installer := updater.NewInstaller(dataDir, dataDir, "simtezilo", false, log)
+	installer := updater.NewInstaller(dataDir, dataDir, dataDir, "simtezilo", false, log)
 
 	state := &updater.InstallState{
 		PendingVersion: "2.0.0",
@@ -95,7 +100,7 @@ func TestLoadStateReturnsNilForMissingFile(t *testing.T) {
 	dataDir := t.TempDir()
 	log := zerolog.Nop()
 
-	installer := updater.NewInstaller(dataDir, dataDir, "simtezilo", false, log)
+	installer := updater.NewInstaller(dataDir, dataDir, dataDir, "simtezilo", false, log)
 
 	state, err := installer.LoadState()
 	if err != nil {
@@ -113,7 +118,7 @@ func TestLoadStateFailsForInvalidJSON(t *testing.T) {
 	dataDir := t.TempDir()
 	log := zerolog.Nop()
 
-	installer := updater.NewInstaller(dataDir, dataDir, "simtezilo", false, log)
+	installer := updater.NewInstaller(dataDir, dataDir, dataDir, "simtezilo", false, log)
 
 	// Write invalid JSON to state file
 	statePath := filepath.Join(dataDir, "update-state.json")
@@ -135,7 +140,7 @@ func TestClearStateRemovesStateFile(t *testing.T) {
 	dataDir := t.TempDir()
 	log := zerolog.Nop()
 
-	installer := updater.NewInstaller(dataDir, dataDir, "simtezilo", false, log)
+	installer := updater.NewInstaller(dataDir, dataDir, dataDir, "simtezilo", false, log)
 
 	// First save a state
 	state := &updater.InstallState{
@@ -171,7 +176,7 @@ func TestClearStateSucceedsWhenNoStateExists(t *testing.T) {
 	dataDir := t.TempDir()
 	log := zerolog.Nop()
 
-	installer := updater.NewInstaller(dataDir, dataDir, "simtezilo", false, log)
+	installer := updater.NewInstaller(dataDir, dataDir, dataDir, "simtezilo", false, log)
 
 	// Should not error when state doesn't exist
 	err := installer.ClearState()
@@ -186,7 +191,7 @@ func TestPrepareStagesUpdateForInstallation(t *testing.T) {
 	dataDir := t.TempDir()
 	log := zerolog.Nop()
 
-	installer := updater.NewInstaller(dataDir, dataDir, "simtezilo", false, log)
+	installer := updater.NewInstaller(dataDir, dataDir, dataDir, "simtezilo", false, log)
 
 	// Create a fake download file
 	downloadPath := filepath.Join(dataDir, "simtezilo.new")
@@ -235,7 +240,7 @@ func TestPrepareFailsWhenDownloadFileMissing(t *testing.T) {
 	dataDir := t.TempDir()
 	log := zerolog.Nop()
 
-	installer := updater.NewInstaller(dataDir, dataDir, "simtezilo", false, log)
+	installer := updater.NewInstaller(dataDir, dataDir, dataDir, "simtezilo", false, log)
 
 	info := &updater.UpdateInfo{
 		AvailableVersion: "2.0.0",
@@ -254,7 +259,7 @@ func TestApplyPendingUpdateInstallsNewBinaryAndCreatesRollback(t *testing.T) {
 	dataDir := t.TempDir()
 	log := zerolog.Nop()
 
-	installer := updater.NewInstaller(installDir, dataDir, "simtezilo", false, log)
+	installer := updater.NewInstaller(installDir, installDir, dataDir, "simtezilo", false, log)
 
 	// Create current binary
 	currentBinaryPath := filepath.Join(installDir, "simtezilo")
@@ -331,7 +336,7 @@ func TestApplyPendingUpdateSucceedsWhenNoPendingUpdate(t *testing.T) {
 	dataDir := t.TempDir()
 	log := zerolog.Nop()
 
-	installer := updater.NewInstaller(dataDir, dataDir, "simtezilo", false, log)
+	installer := updater.NewInstaller(dataDir, dataDir, dataDir, "simtezilo", false, log)
 
 	// Should not error when no pending update
 	err := installer.ApplyPendingUpdate()
@@ -347,7 +352,7 @@ func TestRollbackRestoresPreviousVersion(t *testing.T) {
 	dataDir := t.TempDir()
 	log := zerolog.Nop()
 
-	installer := updater.NewInstaller(installDir, dataDir, "simtezilo", false, log)
+	installer := updater.NewInstaller(installDir, installDir, dataDir, "simtezilo", false, log)
 
 	// Create current binary
 	currentBinaryPath := filepath.Join(installDir, "simtezilo")
@@ -389,7 +394,7 @@ func TestRollbackFailsWhenNoRollbackBinaryExists(t *testing.T) {
 	dataDir := t.TempDir()
 	log := zerolog.Nop()
 
-	installer := updater.NewInstaller(installDir, dataDir, "simtezilo", false, log)
+	installer := updater.NewInstaller(installDir, installDir, dataDir, "simtezilo", false, log)
 
 	err := installer.Rollback()
 	if err == nil {
@@ -404,7 +409,7 @@ func TestRollbackAvailableReturnsTrueWhenRollbackExists(t *testing.T) {
 	dataDir := t.TempDir()
 	log := zerolog.Nop()
 
-	installer := updater.NewInstaller(installDir, dataDir, "simtezilo", false, log)
+	installer := updater.NewInstaller(installDir, installDir, dataDir, "simtezilo", false, log)
 
 	// Should be false when no rollback binary
 	if installer.RollbackAvailable() {
@@ -432,7 +437,7 @@ func TestRollbackVersionReturnsVersionFromState(t *testing.T) {
 	dataDir := t.TempDir()
 	log := zerolog.Nop()
 
-	installer := updater.NewInstaller(installDir, dataDir, "simtezilo", false, log)
+	installer := updater.NewInstaller(installDir, installDir, dataDir, "simtezilo", false, log)
 
 	// Should return empty when no state
 	version := installer.RollbackVersion()
@@ -466,7 +471,7 @@ func TestShouldAutoRollbackReturnsTrueWhenFailCountExceedsMax(t *testing.T) {
 	dataDir := t.TempDir()
 	log := zerolog.Nop()
 
-	installer := updater.NewInstaller(installDir, dataDir, "simtezilo", false, log)
+	installer := updater.NewInstaller(installDir, installDir, dataDir, "simtezilo", false, log)
 
 	// Should be false when no state
 	if installer.ShouldAutoRollback(3) {
@@ -508,7 +513,7 @@ func TestConfirmSuccessRemovesRollbackAndClearsState(t *testing.T) {
 	dataDir := t.TempDir()
 	log := zerolog.Nop()
 
-	installer := updater.NewInstaller(installDir, dataDir, "simtezilo", false, log)
+	installer := updater.NewInstaller(installDir, installDir, dataDir, "simtezilo", false, log)
 
 	// Create rollback binary
 	rollbackPath := filepath.Join(installDir, "simtezilo.rollback")
@@ -559,7 +564,7 @@ func TestConfirmSuccessDoesNothingWhenStatusNotComplete(t *testing.T) {
 	dataDir := t.TempDir()
 	log := zerolog.Nop()
 
-	installer := updater.NewInstaller(installDir, dataDir, "simtezilo", false, log)
+	installer := updater.NewInstaller(installDir, installDir, dataDir, "simtezilo", false, log)
 
 	// Save pending state (not complete)
 	state := &updater.InstallState{

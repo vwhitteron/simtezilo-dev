@@ -17,13 +17,14 @@ import (
 // InstallState tracks the state of a pending installation.
 type InstallState struct {
 	PendingVersion string    `json:"pendingVersion"` //nolint:tagliatelle // external API format
-	CurrentVersion string    `json:"currentVersion"` //nolint:tagliatelle // external API format
-	DownloadPath   string    `json:"downloadPath"`   //nolint:tagliatelle // external API format
-	SHA256         string    `json:"sha256"`         //nolint:tagliatelle // external API format
-	Timestamp      time.Time `json:"timestamp"`      //nolint:tagliatelle // external API format
-	Status         string    `json:"status"`         //nolint:tagliatelle // external API format
-	FailCount      int       `json:"failCount"`      //nolint:tagliatelle // external API format
-	LastError      string    `json:"lastError"`      //nolint:tagliatelle // external API format
+	CurrentVersion string    `json:"currentVersion"` //nolint:tagliatelle
+	DownloadPath   string    `json:"downloadPath"`   //nolint:tagliatelle
+	ExtractDir     string    `json:"extractDir"`     //nolint:tagliatelle
+	SHA256         string    `json:"sha256"`         //nolint:tagliatelle
+	Timestamp      time.Time `json:"timestamp"`      //nolint:tagliatelle
+	Status         string    `json:"status"`         //nolint:tagliatelle
+	FailCount      int       `json:"failCount"`      //nolint:tagliatelle
+	LastError      string    `json:"lastError"`      //nolint:tagliatelle
 }
 
 // Installer handles the installation of downloaded updates.
@@ -31,6 +32,7 @@ type Installer struct {
 	log zerolog.Logger
 
 	installDir string // Directory containing the running binary
+	initDir    string // Directory containing init scripts
 	dataDir    string // Directory for state files
 	binaryName string // Name of the binary (e.g., "simtezilo")
 
@@ -38,10 +40,11 @@ type Installer struct {
 }
 
 // NewInstaller creates a new Installer instance.
-func NewInstaller(installDir, dataDir, binaryName string, useSystemd bool, log zerolog.Logger) *Installer {
+func NewInstaller(installDir, initDir, dataDir, binaryName string, useSystemd bool, log zerolog.Logger) *Installer {
 	return &Installer{
 		log:        log.With().Str("component", "installer").Logger(),
 		installDir: installDir,
+		initDir:    initDir,
 		dataDir:    dataDir,
 		binaryName: binaryName,
 		useSystemd: useSystemd,
@@ -61,6 +64,11 @@ func (i *Installer) DataDir() string {
 // BinaryName returns the binary name.
 func (i *Installer) BinaryName() string {
 	return i.binaryName
+}
+
+// InitDir returns the init scripts directory.
+func (i *Installer) InitDir() string {
+	return i.initDir
 }
 
 // UseSystemd returns whether systemd is used for restarts.

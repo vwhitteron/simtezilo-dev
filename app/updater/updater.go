@@ -19,6 +19,7 @@ type Config struct {
 	DownloadTimeout time.Duration
 	AutoInstall     bool
 	InstallDir      string
+	InitDir         string
 	DataDir         string
 	BinaryName      string
 	ServiceName     string
@@ -64,7 +65,7 @@ func New(cfg *Config, currentVersion string, log zerolog.Logger) (*Updater, erro
 	downloadDir := filepath.Join(cfg.DataDir, "downloads")
 	downloader := NewDownloader(downloadDir, cfg.DownloadTimeout, logger)
 
-	installer := NewInstaller(cfg.InstallDir, cfg.DataDir, cfg.BinaryName, cfg.UseSystemd, logger)
+	installer := NewInstaller(cfg.InstallDir, cfg.InitDir, cfg.DataDir, cfg.BinaryName, cfg.UseSystemd, logger)
 
 	return &Updater{
 		log:            logger,

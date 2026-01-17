@@ -4,7 +4,7 @@ After=local-fs.target network-online.target
 Wants=local-fs.target network-online.target
 
 [Service]
-ExecStartPre=/opt/simtezilo/bin/apply-update.sh
+ExecStartPre=/opt/simtezilo/init/recover.sh
 ExecStart=/opt/simtezilo/bin/simtezilo
 Type=simple
 Restart=always

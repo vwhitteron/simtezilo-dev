@@ -39,7 +39,7 @@ func TestFullUpdateFlowFromCheckToInstall(t *testing.T) {
 			Version:     wantVersion,
 			ReleaseDate: time.Now().UTC(),
 			Channel:     "stable",
-			Changelog:   "- Feature 1\n- Feature 2",
+			Changelog:   []string{"- Feature 1", "- Feature 2"},
 			Platforms: map[string]updater.Platform{
 				updater.GetPlatformKey(): {
 					URL:    releaseURL,
@@ -86,6 +86,7 @@ func TestFullUpdateFlowFromCheckToInstall(t *testing.T) {
 		DownloadTimeout: 5 * time.Minute,
 		AutoInstall:     false,
 		InstallDir:      installDir,
+		InitDir:         installDir,
 		DataDir:         dataDir,
 		BinaryName:      "simtezilo",
 		ServiceName:     "simtezilo",
@@ -247,6 +248,7 @@ func TestDownloadAndPrepareStagesUpdate(t *testing.T) {
 		DownloadTimeout: 5 * time.Minute,
 		AutoInstall:     false,
 		InstallDir:      installDir,
+		InitDir:         installDir,
 		DataDir:         dataDir,
 		BinaryName:      "simtezilo",
 		UseSystemd:      false,
@@ -322,6 +324,7 @@ func TestRollbackRestoresWorkingVersionAfterFailure(t *testing.T) {
 		HTTPTimeout:     30 * time.Second,
 		DownloadTimeout: 5 * time.Minute,
 		InstallDir:      installDir,
+		InitDir:         installDir,
 		DataDir:         dataDir,
 		BinaryName:      "simtezilo",
 		UseSystemd:      false,
@@ -405,7 +408,7 @@ func TestAutoRollbackTriggersAfterMultipleFailures(t *testing.T) {
 
 	log := zerolog.Nop()
 
-	installer := updater.NewInstaller(installDir, dataDir, "simtezilo", false, log)
+	installer := updater.NewInstaller(installDir, installDir, dataDir, "simtezilo", false, log)
 
 	// Save state with enough failures to trigger auto-rollback
 	state := &updater.InstallState{
@@ -468,7 +471,7 @@ func TestSuccessConfirmationCleansUpAfterUpdate(t *testing.T) {
 
 	log := zerolog.Nop()
 
-	installer := updater.NewInstaller(installDir, dataDir, "simtezilo", false, log)
+	installer := updater.NewInstaller(installDir, installDir, dataDir, "simtezilo", false, log)
 
 	// Save state indicating complete update
 	state := &updater.InstallState{
@@ -545,6 +548,7 @@ func TestCheckNowReturnsNilWhenNoUpdateAvailable(t *testing.T) {
 		HTTPTimeout:     30 * time.Second,
 		DownloadTimeout: 5 * time.Minute,
 		InstallDir:      t.TempDir(),
+		InitDir:         t.TempDir(),
 		DataDir:         t.TempDir(),
 		BinaryName:      "simtezilo",
 		UseSystemd:      false,
