@@ -407,6 +407,7 @@
             align-items: center;
             justify-content: center;
             min-width: 42px;
+            box-sizing: border-box;
         }
 
         .mute-toggle-btn svg {
@@ -414,9 +415,327 @@
             height: 18px;
             fill: currentColor;
         }
+
+        /* Style mute button with filled style (both touch and non-touch) */
+        .input-group .mute-toggle-btn {
+            background-color: var(--bs-secondary);
+            border-color: var(--bs-secondary);
+            color: white;
+            padding-top: 0;
+            padding-bottom: 0;
+            margin-top: 1px;
+            margin-bottom: 1px;
+        }
+
+        .input-group .mute-toggle-btn:hover {
+            background-color: #5c636a;
+            border-color: #565e64;
+        }
+
+        .input-group .mute-toggle-btn.btn-outline-danger {
+            background-color: var(--bs-danger);
+            border-color: var(--bs-danger);
+            color: white;
+        }
+
+        .input-group .mute-toggle-btn.btn-outline-danger:hover {
+            background-color: #bb2d3b;
+            border-color: #b02a37;
+        }
+
+        /* Style sweep button with filled style (both touch and non-touch) */
+        .input-group #calibration-sweep-btn {
+            background-color: var(--bs-secondary);
+            border-color: var(--bs-secondary);
+            color: white;
+            padding-top: 0;
+            padding-bottom: 0;
+            margin-top: 1px;
+            margin-bottom: 1px;
+        }
+
+        .input-group #calibration-sweep-btn:hover {
+            background-color: #5c636a;
+            border-color: #565e64;
+        }
+
+        .input-group #calibration-sweep-btn.btn-primary {
+            background-color: var(--bs-primary);
+            border-color: var(--bs-primary);
+            color: white;
+        }
+
+        /* Touch-friendly spinner controls */
+        .touch-spinner-btn {
+            display: none;
+            align-items: center;
+            justify-content: center;
+            min-width: 42px;
+            padding: 0 0.5rem;
+            font-size: 1.1rem;
+            font-weight: bold;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+        }
+
+        .touch-spinner-btn:active {
+            transform: scale(0.95);
+        }
+
+        /* Show touch spinners on touch devices */
+        .touch-device .touch-spinner-btn {
+            display: flex;
+        }
+
+        /* Fix border-radius for elements in input-group with spinner buttons */
+        .touch-device .input-group .input-with-suffix,
+        .touch-device .input-group .input-with-suffix .form-control {
+            border-radius: 0;
+        }
+
+        /* Fix border-radius for mute button on touch devices with spinners */
+        .touch-device .input-group .mute-toggle-btn {
+            border-top-right-radius: 0;
+            border-bottom-right-radius: 0;
+        }
+
+        /* Fix border-radius for sweep button on touch devices with spinners */
+        .touch-device .input-group #calibration-sweep-btn {
+            border-top-right-radius: 0;
+            border-bottom-right-radius: 0;
+        }
+
+        /* Hide touch spinners for standalone inputs that get wrapped */
+        .touch-spinner-wrapper {
+            display: none;
+        }
+
+        .touch-device .touch-spinner-wrapper {
+            display: flex;
+        }
+
+        .touch-device .touch-spinner-original {
+            display: none;
+        }
+
+        .touch-spinner-wrapper .form-control {
+            text-align: center;
+        }
     </style>
     <script>
         const currentPageId = 'settings';
+
+        // Detect touch device and add touch-friendly spinner controls
+        (function () {
+            const isTouchDevice = ('ontouchstart' in window) ||
+                (navigator.maxTouchPoints > 0) ||
+                (navigator.msMaxTouchPoints > 0) ||
+                (window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+
+            if (isTouchDevice) {
+                document.documentElement.classList.add('touch-device');
+            }
+
+            // Initialize touch spinners after DOM is ready
+            document.addEventListener('DOMContentLoaded', function () {
+                if (!isTouchDevice) return;
+
+                initTouchSpinners();
+            });
+
+            // Expose function globally so it can be called when engine profiles load
+            window.initTouchSpinners = initTouchSpinners;
+
+            function initTouchSpinners() {
+                // Find all number inputs that should have touch spinners
+                // Include inputs with data-config AND engine profile inputs
+                const numberInputs = document.querySelectorAll('input[type="number"][data-config], #engine-profile-settings input[type="number"]');
+
+                numberInputs.forEach(function (input) {
+                    // Skip equalizer inputs
+                    if (input.closest('.eq-band-control')) {
+                        return;
+                    }
+
+                    // Skip if already has touch spinner buttons
+                    if (input.dataset.touchSpinnerAdded) {
+                        return;
+                    }
+
+                    // Check if input is in an existing input-group
+                    const parentGroup = input.closest('.input-group');
+
+                    if (parentGroup) {
+                        // Skip if group already has touch spinner buttons
+                        if (parentGroup.querySelector('.touch-spinner-btn')) {
+                            return;
+                        }
+                        // Add spinner buttons to existing input-group
+                        addSpinnerButtonsToGroup(input, parentGroup);
+                    } else {
+                        // Create new input-group wrapper for standalone inputs
+                        createTouchSpinnerWrapper(input);
+                    }
+
+                    // Mark as processed
+                    input.dataset.touchSpinnerAdded = 'true';
+                });
+            }
+
+            function addSpinnerButtonsToGroup(input, group) {
+                const step = parseFloat(input.step) || 1;
+                const min = input.min !== '' ? parseFloat(input.min) : -Infinity;
+                const max = input.max !== '' ? parseFloat(input.max) : Infinity;
+
+                // Create decrease button
+                const decreaseBtn = document.createElement('button');
+                decreaseBtn.type = 'button';
+                decreaseBtn.className = 'btn btn-secondary touch-spinner-btn';
+                decreaseBtn.innerHTML = '−';
+                decreaseBtn.setAttribute('aria-label', 'Decrease');
+
+                // Create increase button
+                const increaseBtn = document.createElement('button');
+                increaseBtn.type = 'button';
+                increaseBtn.className = 'btn btn-secondary touch-spinner-btn';
+                increaseBtn.innerHTML = '+';
+                increaseBtn.setAttribute('aria-label', 'Increase');
+
+                // Find the input-with-suffix wrapper or the input itself
+                const suffixWrapper = input.closest('.input-with-suffix');
+                const targetElement = suffixWrapper || input;
+
+                // Insert decrease button before the input/wrapper
+                targetElement.parentNode.insertBefore(decreaseBtn, targetElement);
+
+                // Insert increase button after the input/wrapper
+                if (targetElement.nextSibling) {
+                    targetElement.parentNode.insertBefore(increaseBtn, targetElement.nextSibling);
+                } else {
+                    targetElement.parentNode.appendChild(increaseBtn);
+                }
+
+                // Handle decrease
+                decreaseBtn.addEventListener('click', function () {
+                    const currentValue = parseFloat(input.value) || 0;
+                    const newValue = Math.max(currentValue - step, min);
+                    input.value = roundToStep(newValue, step);
+                    input.dispatchEvent(new Event('change', { bubbles: true }));
+                });
+
+                // Handle increase
+                increaseBtn.addEventListener('click', function () {
+                    const currentValue = parseFloat(input.value) || 0;
+                    const newValue = Math.min(currentValue + step, max);
+                    input.value = roundToStep(newValue, step);
+                    input.dispatchEvent(new Event('change', { bubbles: true }));
+                });
+            }
+
+            function createTouchSpinnerWrapper(input) {
+                const step = parseFloat(input.step) || 1;
+                const min = input.min !== '' ? parseFloat(input.min) : -Infinity;
+                const max = input.max !== '' ? parseFloat(input.max) : Infinity;
+
+                // Check if input is inside input-with-suffix wrapper
+                const suffixWrapper = input.closest('.input-with-suffix');
+                const suffix = suffixWrapper ? suffixWrapper.querySelector('.input-suffix') : null;
+
+                // Create wrapper
+                const wrapper = document.createElement('div');
+                wrapper.className = 'input-group touch-spinner-wrapper';
+
+                // Create decrease button
+                const decreaseBtn = document.createElement('button');
+                decreaseBtn.type = 'button';
+                decreaseBtn.className = 'btn btn-secondary touch-spinner-btn';
+                decreaseBtn.innerHTML = '−';
+                decreaseBtn.setAttribute('aria-label', 'Decrease');
+
+                // Create increase button
+                const increaseBtn = document.createElement('button');
+                increaseBtn.type = 'button';
+                increaseBtn.className = 'btn btn-secondary touch-spinner-btn';
+                increaseBtn.innerHTML = '+';
+                increaseBtn.setAttribute('aria-label', 'Increase');
+
+                // Clone input for touch spinner
+                const touchInput = input.cloneNode(true);
+                touchInput.classList.add('text-center');
+                touchInput.removeAttribute('id');
+                touchInput.dataset.touchFor = input.id;
+
+                // Build the wrapper
+                wrapper.appendChild(decreaseBtn);
+
+                if (suffix) {
+                    const innerWrapper = document.createElement('div');
+                    innerWrapper.className = 'input-with-suffix';
+                    innerWrapper.style.flex = '1';
+                    innerWrapper.appendChild(touchInput);
+                    const suffixClone = suffix.cloneNode(true);
+                    innerWrapper.appendChild(suffixClone);
+                    wrapper.appendChild(innerWrapper);
+                } else {
+                    wrapper.appendChild(touchInput);
+                }
+
+                wrapper.appendChild(increaseBtn);
+
+                // Insert wrapper and hide original
+                if (suffixWrapper) {
+                    suffixWrapper.classList.add('touch-spinner-original');
+                    suffixWrapper.parentNode.insertBefore(wrapper, suffixWrapper.nextSibling);
+                } else {
+                    input.classList.add('touch-spinner-original');
+                    input.parentNode.insertBefore(wrapper, input.nextSibling);
+                }
+
+                // Sync values
+                function syncToOriginal() {
+                    input.value = touchInput.value;
+                    input.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+
+                function syncFromOriginal() {
+                    touchInput.value = input.value;
+                }
+
+                decreaseBtn.addEventListener('click', function () {
+                    const currentValue = parseFloat(touchInput.value) || 0;
+                    const newValue = Math.max(currentValue - step, min);
+                    touchInput.value = roundToStep(newValue, step);
+                    syncToOriginal();
+                });
+
+                increaseBtn.addEventListener('click', function () {
+                    const currentValue = parseFloat(touchInput.value) || 0;
+                    const newValue = Math.min(currentValue + step, max);
+                    touchInput.value = roundToStep(newValue, step);
+                    syncToOriginal();
+                });
+
+                touchInput.addEventListener('change', syncToOriginal);
+                touchInput.addEventListener('blur', syncToOriginal);
+
+                const observer = new MutationObserver(function (mutations) {
+                    mutations.forEach(function (mutation) {
+                        if (mutation.attributeName === 'value') {
+                            syncFromOriginal();
+                        }
+                    });
+                });
+                observer.observe(input, { attributes: true });
+                input.addEventListener('change', syncFromOriginal);
+                syncFromOriginal();
+            }
+
+            function roundToStep(value, step) {
+                const decimals = (step.toString().split('.')[1] || '').length;
+                return parseFloat(value.toFixed(decimals));
+            }
+        })();
     </script>
     <script src="/js/icons.js"></script>
     <script src="/js/i18n.js"></script>
@@ -1128,7 +1447,7 @@
                                             data-i18n-tooltip="runmode.settings.synth.gaincontrols.transmissionminrace.tooltip"></i>
                                     </label>
                                     <div class="input-with-suffix" style="flex: 1;">
-                                        <input type=" number" id="synth-transmissiongainminrace"
+                                        <input type="number" id="synth-transmissiongainminrace"
                                             class="form-control text-center gain-input"
                                             data-config="synthesizer.transmissionGainMinRace" min="-60" max="0"
                                             step="0.25">
@@ -1330,13 +1649,13 @@
                                             <div class="col-auto d-flex align-items-end">
                                                 <div class="btn-group" role="group" aria-label="Sweep range presets">
                                                     <button type="button" id="sweep-preset-haptic"
-                                                        class="btn btn-sm btn-outline-secondary"
+                                                        class="btn btn-outline-secondary"
                                                         title="Set to Haptic Pulse range">
                                                         <i class="icon" data-icon="wave-square"
                                                             style="margin-right: 0; font-size: 1rem;"></i>
                                                     </button>
                                                     <button type="button" id="sweep-preset-full"
-                                                        class="btn btn-sm btn-outline-secondary"
+                                                        class="btn btn-outline-secondary"
                                                         title="Reset to full range (5-160 Hz)">
                                                         <i class="fa-solid fa-rotate-left"
                                                             style="margin-right: 0; font-size: 1rem;"></i>

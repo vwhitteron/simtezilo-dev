@@ -1845,6 +1845,10 @@ class ConfigManager {
             profileSelect.value = firstProfile;
             this.loadEngineProfile(firstProfile, profiles[firstProfile]);
             profileSettings.style.display = 'block';
+            // Initialize touch spinners for engine profile fields
+            if (typeof window.initTouchSpinners === 'function') {
+                window.initTouchSpinners();
+            }
         }
 
         // Handle profile selection
