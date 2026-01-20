@@ -61,10 +61,6 @@ type Kinematics struct {
 	ComputeTime time.Duration
 	Format      string
 
-	AngularVelocity     models.Vector
-	AngularAcceleration models.Vector
-	AngularAccelMag     float64
-
 	SixDOFTranslation     TranslationalDerivatives
 	SixDOFTranslationCalc CalculatedTranslationalDerivatives
 	SixDOFRotation        RotationalDerivatives
@@ -137,13 +133,13 @@ func (k *State) Update(windowSeconds float64, vehicleDimensions vehicle.Dimensio
 
 	// 6DOF rotational envelope - provided by telemetry
 	k.Current.SixDOFRotation.Velocity = gtclient.Telemetry.AngularVelocityVector()
-	k.Current.SixDOFRotation.Acceleration = vector.Delta(k.Current.AngularVelocity, k.Last.AngularVelocity)
-	k.Current.SixDOFRotation.AccelMag = vector.Magnitude(k.Current.AngularAcceleration)
+	k.Current.SixDOFRotation.Acceleration = vector.Delta(k.Current.SixDOFRotation.Velocity, k.Last.SixDOFRotation.Velocity)
+	k.Current.SixDOFRotation.AccelMag = vector.Magnitude(k.Current.SixDOFRotation.Acceleration)
 
 	// 6DOF rotational envelope - calculated angular velocity vector
 	// Convert from radians to meters at the wheels using vehicle dimensions
 	k.Current.SixDOFRotationCalc.Velocity = vector.Scale(
-		k.Current.AngularVelocity,
+		k.Current.SixDOFRotation.Velocity,
 		vehicleDimensions.LongitudinalRadius,
 		vehicleDimensions.LongitudinalRadius,
 		vehicleDimensions.TransverseRadius,
