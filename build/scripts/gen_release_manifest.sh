@@ -50,13 +50,39 @@ VERSION_TAG="v${VERSION_CLEAN}"
 
 RELEASE_DATE=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
 
-# Platform binary mappings
-declare -A PLATFORMS=(
-    ["linux-arm64"]="simtezilo-linux-arm64"
-    ["linux-amd64"]="simtezilo-linux-amd64"
-    ["darwin-arm64"]="simtezilo-macos"
-    ["windows-amd64"]="simtezilo.exe"
-)
+# Platform binary mappings (using parallel arrays for bash 3.x compatibility on macOS)
+PLATFORM_KEYS="linux-arm64-6 linux-arm64-8 linux-arm64 linux-amd64 darwin-arm64 windows-amd64"
+get_binary_name() {
+    case "$1" in
+        "linux-arm64")   echo "simtezilo-linux-arm64" ;;
+        "linux-amd64")   echo "simtezilo-linux-amd64" ;;
+        "darwin-arm64")  echo "simtezilo-macos" ;;
+        "windows-amd64") echo "simtezilo.exe" ;;
+    esac
+}
+
+# Function to compute SHA256 hash of a file
+get_sha256() {
+    local file="$1"
+    if command -v sha256sum &> /dev/null; then
+        sha256sum "$file" | cut -d' ' -f1
+    elif command -v shasum &> /dev/null; then
+        shasum -a 256 "$file" | cut -d' ' -f1
+    else
+        echo "Error: No sha256 command found" >&2
+        exit 1
+    fi
+}
+
+get_file_size() {
+    local file="$1"
+
+    if [[ "$(uname)" == "Darwin" ]]; then
+        stat -f%z "$file"
+    else
+        stat -c%s "$file"
+    fi
+}
 
 # Function to get file info
 get_file_info() {
@@ -68,29 +94,11 @@ get_file_info() {
         echo "null"
         return
     fi
-    
-    local sha256
-    local size
-    
-    # macOS and Linux have different sha256 commands
-    if command -v sha256sum &> /dev/null; then
-        sha256=$(sha256sum "$file" | cut -d' ' -f1)
-    elif command -v shasum &> /dev/null; then
-        sha256=$(shasum -a 256 "$file" | cut -d' ' -f1)
-    else
-        echo "Error: No sha256 command found" >&2
-        exit 1
-    fi
-    
-    # Get file size
-    if [[ "$(uname)" == "Darwin" ]]; then
-        size=$(stat -f%z "$file")
-    else
-        size=$(stat -c%s "$file")
-    fi
-    
+
     local url="${BASE_URL}/releases/${VERSION_TAG}/${binary_name}"
-    
+    local sha256=$(get_sha256 "$file")
+    local size=$(get_file_size "$file")
+
     cat <<EOF
 {
       "url": "${url}",
@@ -104,8 +112,8 @@ EOF
 PLATFORMS_JSON=""
 FIRST=true
 
-for platform in "${!PLATFORMS[@]}"; do
-    binary_name="${PLATFORMS[$platform]}"
+for platform in $PLATFORM_KEYS; do
+    binary_name=$(get_binary_name "$platform")
     file="${OUT_DIR}/${binary_name}"
     
     info=$(get_file_info "$file" "$platform" "$binary_name")
@@ -161,17 +169,13 @@ echo "Release Date: ${RELEASE_DATE}"
 # Also generate individual checksum files
 echo ""
 echo "Generating checksum files..."
-for platform in "${!PLATFORMS[@]}"; do
-    binary_name="${PLATFORMS[$platform]}"
+for platform in $PLATFORM_KEYS; do
+    binary_name=$(get_binary_name "$platform")
     file="${OUT_DIR}/${binary_name}"
     
     if [[ -f "$file" ]]; then
         checksum_file="${file}.sha256"
-        if command -v sha256sum &> /dev/null; then
-            sha256sum "$file" | cut -d' ' -f1 > "$checksum_file"
-        elif command -v shasum &> /dev/null; then
-            shasum -a 256 "$file" | cut -d' ' -f1 > "$checksum_file"
-        fi
+        get_sha256 "$file" > "$checksum_file"
         echo "✓ ${checksum_file}"
     fi
 done
