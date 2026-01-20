@@ -143,7 +143,19 @@ window.hideNavbarStatus = function () {
 
 // Initialize navigation when DOM is loaded
 document.addEventListener('DOMContentLoaded', function () {
-    initializeNavigation();
+    // Fetch devToolsEnabled setting before initializing navigation
+    fetch('/api/config')
+        .then(response => response.ok ? response.json() : null)
+        .then(config => {
+            if (config && config.app) {
+                window.devToolsEnabled = config.app.enableDevTools === true;
+            }
+            initializeNavigation();
+        })
+        .catch(error => {
+            console.error('Failed to fetch config for navigation:', error);
+            initializeNavigation();
+        });
 });
 
 // Function to initialize or reinitialize navigation
