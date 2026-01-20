@@ -17,6 +17,9 @@ const (
 
 	// DefaultMaxFailures is the maximum number of consecutive failures before auto-rollback.
 	DefaultMaxFailures = 3
+
+	// initialCheckDelay is the delay before the first update check after startup.
+	initialCheckDelay = 10 * time.Second
 )
 
 const (

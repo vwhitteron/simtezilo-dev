@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
 )
 
 // UpdateStatus represents the current state of the updater.
@@ -92,8 +91,30 @@ type CheckerConfig struct {
 	DataDir        string
 }
 
+// Validate checks the configuration for required fields and sensible defaults.
+func (cfg CheckerConfig) Validate() error {
+	if cfg.BaseURL == "" {
+		return errors.New("BaseURL is required")
+	}
+
+	if cfg.CheckInterval <= 0 {
+		return errors.New("CheckInterval must be positive")
+	}
+
+	if cfg.HTTPTimeout <= 0 {
+		return errors.New("HTTPTimeout must be positive")
+	}
+
+	return nil
+}
+
 // NewChecker creates a new update checker.
 func NewChecker(cfg CheckerConfig, log zerolog.Logger) (*Checker, error) {
+	err := cfg.Validate()
+	if err != nil {
+		return nil, fmt.Errorf("invalid checker config: %w", err)
+	}
+
 	currentVer, err := ParseVersion(cfg.CurrentVersion)
 	if err != nil {
 		// If version is "dev" or unparseable, create a zero version
@@ -141,46 +162,24 @@ func (c *Checker) CheckNow() (*UpdateInfo, error) {
 	dataDir := c.dataDir
 	c.mu.Unlock()
 
-	// For custom channel, check for local files instead of fetching from URL
 	if channel == channelCustom {
 		return c.checkCustomUpdate(dataDir)
 	}
 
-	// Build manifest URL based on current channel
-	manifestURL := fmt.Sprintf("%s/%s/latest.json", baseURL, channel)
-
-	ctx, cancel := context.WithTimeout(context.Background(), c.httpTimeout)
-	defer cancel()
-
-	log.Debug().
-		Str("url", manifestURL).
-		Dur("timeout", c.httpTimeout).
-		Msg("Fetching update manifest")
-
-	manifest, err := FetchManifest(ctx, manifestURL)
+	manifest, err := c.fetchUpdateManifest(baseURL, channel)
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.lastCheck = time.Now()
-
 	if err != nil {
-		c.status = UpdateStatusError
-		c.lastError = err
-		c.availableInfo = nil // Clear any previous update info on error
+		c.setError(err)
+		c.availableInfo = nil
 		c.log.Warn().Err(err).Msg("Failed to check for updates")
 
 		return nil, err
 	}
 
-	c.cachedManifest = manifest
-
-	// Check if manifest is for the correct channel
-	if manifest.Channel != c.channel && c.channel != "" {
-		c.log.Debug().
-			Str("expected", c.channel).
-			Str("got", manifest.Channel).
-			Msg("Manifest channel mismatch, skipping")
+	if !c.manifestChannelIsValid(manifest) {
 		c.status = UpdateStatusIdle
 
 		return nil, nil
@@ -193,79 +192,7 @@ func (c *Checker) CheckNow() (*UpdateInfo, error) {
 		Int("platforms", len(manifest.Platforms)).
 		Msg("Manifest fetched successfully")
 
-	// Parse available version
-	availableVer, err := ParseVersion(manifest.Version)
-	if err != nil {
-		c.status = UpdateStatusError
-		c.lastError = err
-		c.log.Warn().Err(err).Str("version", manifest.Version).Msg("Failed to parse manifest version")
-
-		return nil, err
-	}
-
-	// Check minimum upgrade version if specified
-	if manifest.MinUpgradeVersion != "" {
-		minVer, err := ParseVersion(manifest.MinUpgradeVersion)
-		if err == nil && c.currentVersion.LessThan(minVer) {
-			c.log.Warn().
-				Str("current", c.currentVersion.String()).
-				Str("minimum", minVer.String()).
-				Msg("Current version is below minimum upgrade version")
-			// Still allow the update, but log a warning
-		}
-	}
-
-	// Compare versions
-	if !availableVer.GreaterThan(c.currentVersion) {
-		c.log.Debug().
-			Str("current", c.currentVersion.String()).
-			Str("available", availableVer.String()).
-			Msg("Already running latest version")
-		c.status = UpdateStatusIdle
-		// Only clear availableInfo if it's not a custom update
-		if c.availableInfo == nil || c.availableInfo.Channel != channelCustom {
-			c.availableInfo = nil
-		}
-
-		return nil, nil
-	}
-
-	// Get platform-specific information
-	platform := manifest.GetPlatform()
-	if platform == nil {
-		c.log.Warn().
-			Str("platform", GetPlatformKey()).
-			Msg("No binary available for current platform")
-		c.status = UpdateStatusIdle
-
-		return nil, nil
-	}
-
-	// Update available
-	c.availableInfo = &UpdateInfo{
-		CurrentVersion:   c.currentVersion.String(),
-		AvailableVersion: availableVer.String(),
-		Channel:          manifest.Channel,
-		Changelog:        manifest.Changelog,
-		DownloadURL:      platform.URL,
-		DownloadSize:     platform.Size,
-		SHA256:           platform.SHA256,
-		ReleaseDate:      manifest.ReleaseDate,
-	}
-	// Only change status to UpdateAvailable if not already in a more advanced state
-	if c.status != UpdateStatusReadyToInstall && c.status != UpdateStatusDownloading && c.status != UpdateStatusInstalling {
-		c.status = UpdateStatusUpdateAvailable
-	}
-
-	c.lastError = nil
-
-	c.log.Info().
-		Str("current", c.currentVersion.String()).
-		Str("available", availableVer.String()).
-		Str("channel", manifest.Channel).
-		Msg("Update available")
-
-	return c.availableInfo, nil
+	return c.processManifestUpdate(manifest), nil
 }
 
 // Status returns the current update status.
@@ -353,12 +280,151 @@ func (c *Checker) SetChannel(channel string) {
 	c.log.Info().Str("channel", channel).Msg("Update channel changed")
 }
 
+// setError sets the checker to error state with the given error.
+// Caller must hold the mutex.
+func (c *Checker) setError(err error) {
+	c.status = UpdateStatusError
+	c.lastError = err
+}
+
+func (c *Checker) fetchUpdateManifest(baseURL, channel string) (*Manifest, error) {
+	manifestURL := fmt.Sprintf("%s/%s/latest.json", baseURL, channel)
+
+	c.log.Debug().
+		Str("url", manifestURL).
+		Dur("timeout", c.httpTimeout).
+		Msg("Fetching update manifest")
+
+	ctx, cancel := context.WithTimeout(context.Background(), c.httpTimeout)
+	defer cancel()
+
+	manifest, err := FetchManifest(ctx, manifestURL)
+	if err != nil {
+		return nil, fmt.Errorf("fetch update manifest: %w", err)
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.lastCheck = time.Now()
+	c.cachedManifest = manifest
+
+	return manifest, nil
+}
+
+func (c *Checker) manifestChannelIsValid(manifest *Manifest) bool {
+	if manifest.Channel != c.channel && c.channel != "" {
+		c.log.Debug().
+			Str("expected", c.channel).
+			Str("got", manifest.Channel).
+			Msg("Manifest channel mismatch, skipping")
+
+		return false
+	}
+
+	return true
+}
+
+// parseAndValidateVersion parses the manifest version and checks if it's newer than current.
+// Returns the parsed version, or nil if not applicable (with reason logged).
+// This is a pure function that does not modify checker state.
+func (c *Checker) parseAndValidateVersion(manifest *Manifest) (*Version, error) {
+	availableVer, err := ParseVersion(manifest.Version)
+	if err != nil {
+		return nil, fmt.Errorf("parse manifest version %q: %w", manifest.Version, err)
+	}
+
+	if manifest.MinUpgradeVersion != "" {
+		minVer, err := ParseVersion(manifest.MinUpgradeVersion)
+		if err == nil && c.currentVersion.LessThan(minVer) {
+			c.log.Warn().
+				Str("current", c.currentVersion.String()).
+				Str("minimum", minVer.String()).
+				Msg("Current version is below minimum upgrade version")
+		}
+	}
+
+	if !availableVer.GreaterThan(c.currentVersion) {
+		c.log.Debug().
+			Str("current", c.currentVersion.String()).
+			Str("available", availableVer.String()).
+			Msg("Already running latest version")
+
+		return nil, nil
+	}
+
+	return availableVer, nil
+}
+
+// processManifestUpdate processes a manifest and updates checker state accordingly.
+// Caller must hold the mutex.
+func (c *Checker) processManifestUpdate(manifest *Manifest) *UpdateInfo {
+	availableVer, err := c.parseAndValidateVersion(manifest)
+	if err != nil {
+		c.setError(err)
+		c.log.Warn().Err(err).Str("version", manifest.Version).Msg("Failed to parse manifest version")
+
+		return nil
+	}
+
+	if availableVer == nil {
+		// Already on latest version
+		c.status = UpdateStatusIdle
+
+		if c.availableInfo == nil || c.availableInfo.Channel != channelCustom {
+			c.availableInfo = nil
+		}
+
+		return nil
+	}
+
+	platform := manifest.GetPlatform()
+	if platform == nil {
+		c.log.Warn().
+			Str("platform", GetPlatformKey()).
+			Msg("No binary available for current platform")
+
+		c.status = UpdateStatusIdle
+
+		return nil
+	}
+
+	return c.setUpdateAvailable(manifest, availableVer, platform)
+}
+
+func (c *Checker) setUpdateAvailable(manifest *Manifest, availableVer *Version, platform *Platform) *UpdateInfo {
+	c.availableInfo = &UpdateInfo{
+		CurrentVersion:   c.currentVersion.String(),
+		AvailableVersion: availableVer.String(),
+		Channel:          manifest.Channel,
+		Changelog:        manifest.Changelog,
+		DownloadURL:      platform.URL,
+		DownloadSize:     platform.Size,
+		SHA256:           platform.SHA256,
+		ReleaseDate:      manifest.ReleaseDate,
+	}
+
+	if c.status != UpdateStatusReadyToInstall && c.status != UpdateStatusDownloading && c.status != UpdateStatusInstalling {
+		c.status = UpdateStatusUpdateAvailable
+	}
+
+	c.lastError = nil
+
+	c.log.Info().
+		Str("current", c.currentVersion.String()).
+		Str("available", availableVer.String()).
+		Str("channel", manifest.Channel).
+		Msg("Update available")
+
+	return c.availableInfo
+}
+
 // runPeriodicCheck runs the periodic update check loop.
 func (c *Checker) runPeriodicCheck(ctx context.Context) {
 	defer c.wg.Done()
 
 	// Initial check after a short delay
-	initialDelay := time.NewTimer(10 * time.Second)
+	initialDelay := time.NewTimer(initialCheckDelay)
 	select {
 	case <-initialDelay.C:
 		_, _ = c.CheckNow() //nolint:contextcheck // CheckNow creates its own timeout context
@@ -397,50 +463,33 @@ func (c *Checker) checkCustomUpdate(dataDir string) (*UpdateInfo, error) {
 
 	downloadsDir := filepath.Join(dataDir, "downloads")
 
-	// Look for files starting with "custom-"
-	files, err := os.ReadDir(downloadsDir)
+	customFile, err := findCustomUpdateFile(downloadsDir)
 	if err != nil {
 		if os.IsNotExist(err) {
 			c.log.Debug().Msg("Downloads directory does not exist, no custom update found")
 			c.status = UpdateStatusIdle
-			// Don't clear availableInfo for custom channel - it may have been set via upload
+
 			return nil, nil
 		}
 
-		c.status = UpdateStatusError
-		c.lastError = err
+		c.setError(err)
 
 		return nil, err
-	}
-
-	var customFile string
-
-	for _, file := range files {
-		if file.IsDir() {
-			continue
-		}
-
-		if strings.HasPrefix(file.Name(), "custom-") {
-			customFile = filepath.Join(downloadsDir, file.Name())
-
-			break
-		}
 	}
 
 	if customFile == "" {
 		c.log.Debug().Msg("No custom update file found")
 		c.status = UpdateStatusIdle
-		// Don't clear availableInfo for custom channel - it may have been set via upload
+
 		return nil, nil
 	}
 
 	c.log.Debug().Str("file", customFile).Msg("Found custom update file")
 
 	// Extract and parse manifest.json
-	manifest, err := c.extractManifest(customFile)
+	manifest, err := extractManifest(customFile)
 	if err != nil {
-		c.status = UpdateStatusError
-		c.lastError = fmt.Errorf("failed to extract manifest: %w", err)
+		c.setError(fmt.Errorf("failed to extract manifest: %w", err))
 		c.log.Warn().Err(err).Str("file", customFile).Msg("Failed to extract manifest from custom update")
 
 		return nil, c.lastError
@@ -452,18 +501,7 @@ func (c *Checker) checkCustomUpdate(dataDir string) (*UpdateInfo, error) {
 		c.log.Warn().Err(err).Msg("Failed to get custom file size")
 	}
 
-	// Create UpdateInfo from manifest
-	c.availableInfo = &UpdateInfo{
-		CurrentVersion:   c.currentVersion.String(),
-		AvailableVersion: manifest.Version,
-		Channel:          channelCustom,
-		Changelog:        manifest.Changelog,
-		DownloadURL:      "",
-		DownloadSize:     fileInfo.Size(),
-		SHA256:           "",
-		ReleaseDate:      manifest.ReleaseDate,
-	}
-
+	c.availableInfo = buildCustomUpdateInfo(c.currentVersion.String(), manifest, fileInfo.Size())
 	c.status = UpdateStatusReadyToInstall
 	c.lastError = nil
 
@@ -475,23 +513,59 @@ func (c *Checker) checkCustomUpdate(dataDir string) (*UpdateInfo, error) {
 	return c.availableInfo, nil
 }
 
+// findCustomUpdateFile searches the downloads directory for a custom update file.
+// Returns the full path to the custom file, or empty string if not found.
+// Returns an error if the directory cannot be read.
+func findCustomUpdateFile(downloadsDir string) (string, error) {
+	files, err := os.ReadDir(downloadsDir)
+	if err != nil {
+		return "", err
+	}
+
+	for _, file := range files {
+		if file.IsDir() {
+			continue
+		}
+
+		if strings.HasPrefix(file.Name(), "custom-") {
+			return filepath.Join(downloadsDir, file.Name()), nil
+		}
+	}
+
+	return "", nil
+}
+
+// buildCustomUpdateInfo creates an UpdateInfo struct for a custom update.
+func buildCustomUpdateInfo(currentVersion string, manifest *Manifest, fileSize int64) *UpdateInfo {
+	return &UpdateInfo{
+		CurrentVersion:   currentVersion,
+		AvailableVersion: manifest.Version,
+		Channel:          channelCustom,
+		Changelog:        manifest.Changelog,
+		DownloadURL:      "",
+		DownloadSize:     fileSize,
+		SHA256:           "",
+		ReleaseDate:      manifest.ReleaseDate,
+	}
+}
+
 // extractManifest extracts manifest.json from a zip or tar.gz archive.
-func (c *Checker) extractManifest(archivePath string) (*Manifest, error) {
+func extractManifest(archivePath string) (*Manifest, error) {
 	ext := filepath.Ext(archivePath)
 
 	if ext == ".zip" {
-		return c.extractManifestFromZip(archivePath)
+		return extractManifestFromZip(archivePath)
 	}
 
 	if ext == ".gz" || strings.HasSuffix(archivePath, ".tar.gz") {
-		return c.extractManifestFromTarGz(archivePath)
+		return extractManifestFromTarGz(archivePath)
 	}
 
 	return nil, fmt.Errorf("unsupported archive format: %s", ext)
 }
 
 // extractManifestFromZip extracts manifest.json from a zip archive.
-func (c *Checker) extractManifestFromZip(zipPath string) (*Manifest, error) {
+func extractManifestFromZip(zipPath string) (*Manifest, error) {
 	zipReader, err := zip.OpenReader(zipPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open zip: %w", err)
@@ -500,33 +574,43 @@ func (c *Checker) extractManifestFromZip(zipPath string) (*Manifest, error) {
 
 	for _, innerFile := range zipReader.File {
 		if filepath.Base(innerFile.Name) == "manifest.json" {
-			fileHandle, err := innerFile.Open()
+			manifest, err := readManifestFromZipFile(innerFile)
 			if err != nil {
-				return nil, fmt.Errorf("failed to open manifest.json: %w", err)
-			}
-			defer fileHandle.Close()
-
-			data, err := io.ReadAll(fileHandle)
-			if err != nil {
-				return nil, fmt.Errorf("failed to read manifest.json: %w", err)
+				return nil, err
 			}
 
-			var manifest Manifest
-
-			err = json.Unmarshal(data, &manifest)
-			if err != nil {
-				return nil, fmt.Errorf("failed to parse manifest.json: %w", err)
-			}
-
-			return &manifest, nil
+			return manifest, nil
 		}
 	}
 
 	return nil, errors.New("manifest.json not found in archive")
 }
 
+// readManifestFromZipFile reads and parses a manifest from a zip file entry.
+func readManifestFromZipFile(file *zip.File) (*Manifest, error) {
+	fileHandle, err := file.Open()
+	if err != nil {
+		return nil, fmt.Errorf("failed to open manifest.json: %w", err)
+	}
+	defer fileHandle.Close()
+
+	data, err := io.ReadAll(fileHandle)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read manifest.json: %w", err)
+	}
+
+	var manifest Manifest
+
+	err = json.Unmarshal(data, &manifest)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse manifest.json: %w", err)
+	}
+
+	return &manifest, nil
+}
+
 // extractManifestFromTarGz extracts manifest.json from a tar.gz archive.
-func (c *Checker) extractManifestFromTarGz(tarGzPath string) (*Manifest, error) {
+func extractManifestFromTarGz(tarGzPath string) (*Manifest, error) {
 	tgzFile, err := os.Open(tarGzPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open tar.gz: %w", err)
