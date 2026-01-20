@@ -141,7 +141,7 @@ build:
 	go build -ldflags "X '$(buildmodule)/app.Version=$(buildversion)' -X '$(buildmodule)/app.CommitHash=$(buildcommit)' -X '$(buildmodule)/app.BuildTime=$(buildtime)' -X '$(buildmodule)/app.Platform=local'" \
 	-o ./out/simtezilo-local ./cmd/simtezilo/main.go
 	go build -ldflags "-X '$(buildmodule)/app.Version=$(buildversion)' -X '$(buildmodule)/app.CommitHash=$(buildcommit)' -X '$(buildmodule)/app.BuildTime=$(buildtime)' -X '$(buildmodule)/app.Platform=local'" \
-	-o ./out/platform-local ./cmd/platform-m1/main.go
+	-o ./out/platform-local ./cmd/platform-m1/*.go
 
 ## build/darwin/silicon: build the application for Apple Silicon
 .PHONY: build/darwin/silicon
@@ -150,12 +150,25 @@ build/darwin/silicon:
 	go build -ldflags "-X '$(buildmodule)/app.Version=$(buildversion)' -X '$(buildmodule)/app.CommitHash=$(buildcommit)' -X '$(buildmodule)/app.BuildTime=$(buildtime)' -X '$(buildmodule)/app.Platform=darwin'" \
 	-o ./out/simtezilo-macos ./cmd/simtezilo/main.go
 
-## build/windows/64: build the application for Windows 64-bit
-.PHONY: build/windows/64
+## build/windows/amd64: build the application for Windows 64-bit
+.PHONY: build/windows/amd64
 build/windows/64:
 	GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc \
 	go build -ldflags "-X '$(buildmodule)/app.Version=$(buildversion)' -X '$(buildmodule)/app.CommitHash=$(buildcommit)' -X '$(buildmodule)/app.BuildTime=$(buildtime)' -X '$(buildmodule)/app.Platform=windows' -s" \
 	-o ./out/simtezilo.exe ./cmd/simtezilo/main.go
+
+## build/linux/amd64: build the application for Linux 64-bit
+.PHONY: build/linux/amd64
+build/linux/amd64:
+	@docker build \
+	--build-arg GOOS=linux --build-arg GOARCH=amd64 \
+	--build-arg BUILDMODULE=$(buildmodule) \
+	--build-arg BUILDTIME=$(buildtime) \
+	--build-arg BUILDVERSION=$(buildversion) \
+	--build-arg BUILDCOMMIT=$(buildcommit) \
+	--build-arg PLATFORM="simtezilo" \
+	--output=out --target=binaries-amd64 --progress=plain \
+	-f build/docker/Dockerfile .
 
 ## build/rpi: build the application for Raspberry Pi using ARMHF (any version)
 .PHONY: build/rpi
