@@ -143,8 +143,8 @@ github.com/theojulienne/go-wireless v1.2.0 h1:9ElC6Tv17jqiIXwskVH4GuScK5qAzvLAuL
 github.com/theojulienne/go-wireless v1.2.0/go.mod h1:VgY9MuPShbRUwTVQArIgfwYJwAs9Q1zObxJiQFiVK8E=
 github.com/xo/terminfo v0.0.0-20210125001918-ca9a967f8778 h1:QldyIu/L63oPpyvQmHgvgickp1Yw510KJOqX7H24mg8=
 github.com/xo/terminfo v0.0.0-20210125001918-ca9a967f8778/go.mod h1:2MuV+tbUrU1zIOPMxZ5EncGwgmMJsa+9ucAQZXxsObs=
-github.com/zetetos/gt-telemetry v1.11.1-0.20260115061009-be721e86afd7 h1:9uvHp1jJdrkyfsiho9TAhVk8J2L0fQfmXRlXviwjpQM=
-github.com/zetetos/gt-telemetry v1.11.1-0.20260115061009-be721e86afd7/go.mod h1:aXrdXG3D/CNtonuIUmGG8/YVPi/5MItIpqq34mjT2qQ=
+github.com/zetetos/gt-telemetry v1.11.1-0.20260121123344-6b10aded0cfd h1:69TUZFqIyi5FBW6zRan5YqSTS74tCEMOu6Swtg3hsFI=
+github.com/zetetos/gt-telemetry v1.11.1-0.20260121123344-6b10aded0cfd/go.mod h1:aXrdXG3D/CNtonuIUmGG8/YVPi/5MItIpqq34mjT2qQ=
 go.yaml.in/yaml/v3 v3.0.4 h1:tfq32ie2Jv2UxXFdLJdh3jXuOzWiL1fo0bu/FbuKpbc=
 go.yaml.in/yaml/v3 v3.0.4/go.mod h1:DhzuOOF2ATzADvBadXxruRBLzYTpT36CKvDb3+aBEFg=
 golang.org/x/crypto v0.0.0-20210421170649-83a5a9bb288b/go.mod h1:T9bdIzuCu7OtxOm1hfPfRQxPLYneinmdGuTeoZ9dtd4=
