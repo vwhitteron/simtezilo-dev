@@ -126,11 +126,14 @@ func New(config Config) (*Discord, error) {
 }
 
 func (d *Discord) BackgroundTask() {
+	ticker := time.NewTicker(d.messageGap)
+	defer ticker.Stop()
+
 	for {
 		select {
 		case <-d.ctx.Done():
 			return
-		default:
+		case <-ticker.C:
 			if !d.enabled {
 				return
 			}
@@ -140,8 +143,6 @@ func (d *Discord) BackgroundTask() {
 
 				continue
 			}
-
-			time.Sleep(d.messageGap)
 
 			d.dispatchMessages()
 		}
@@ -226,7 +227,12 @@ func (d *Discord) handleReconnection() {
 			Str("result", "failure").
 			Msg("voice channel connect")
 
-		time.Sleep(5 * time.Second)
+		// Use select to allow context cancellation during sleep
+		select {
+		case <-d.ctx.Done():
+			return
+		case <-time.After(5 * time.Second):
+		}
 
 		return
 	}
@@ -239,7 +245,11 @@ func (d *Discord) handleReconnection() {
 
 	// connect anti-spam just in case
 	if d.messageGap < 1*time.Second {
-		time.Sleep(1 * time.Second)
+		select {
+		case <-d.ctx.Done():
+			return
+		case <-time.After(1 * time.Second):
+		}
 	}
 }
 
@@ -383,7 +393,8 @@ func (d *Discord) joinVoiceChannel() error {
 		return nil
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	// Use a derived context that respects both the 10s timeout and the main context
+	ctx, cancel := context.WithTimeout(d.ctx, 10*time.Second)
 	defer cancel()
 
 	vc, err := d.session.ChannelVoiceJoin(ctx, d.guildID, d.voiceChannelID, false, false)
@@ -394,11 +405,14 @@ func (d *Discord) joinVoiceChannel() error {
 	d.voiceConn = vc
 
 	// Wait for voice connection to be ready
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
 			return fmt.Errorf("timeout waiting for voice connection to be ready: %w", ctx.Err())
-		default:
+		case <-ticker.C:
 			if d.voiceConn.Status == discordgo.VoiceConnectionStatusReady && d.voiceConn.OpusSend != nil {
 				d.log.Debug().
 					Str("guild_id", d.guildID).
@@ -407,8 +421,6 @@ func (d *Discord) joinVoiceChannel() error {
 
 				return nil
 			}
-
-			time.Sleep(100 * time.Millisecond)
 		}
 	}
 }

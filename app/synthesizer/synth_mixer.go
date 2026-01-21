@@ -1,6 +1,7 @@
 package synthesizer
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"math"
@@ -35,6 +36,10 @@ type Mixer struct {
 	lastHealthCheck     time.Time
 	healthCheckInterval time.Duration
 
+	// Lifecycle management
+	ctx    context.Context //nolint:containedctx // Context for managing lifecycle
+	cancel context.CancelFunc
+
 	mu sync.RWMutex
 }
 
@@ -59,6 +64,8 @@ func NewMixer(mixerConfig MixerConfig) (*Mixer, error) {
 		return nil, errors.New("config must be a valid pointer")
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+
 	mixer := &Mixer{
 		config: mixerConfig.Config,
 
@@ -77,6 +84,10 @@ func NewMixer(mixerConfig MixerConfig) (*Mixer, error) {
 		// Initialize buffer monitoring
 		lastHealthCheck:     time.Now(),
 		healthCheckInterval: 5 * time.Second,
+
+		// Lifecycle management
+		ctx:    ctx,
+		cancel: cancel,
 	}
 
 	// Initialize master with lock-free config read
@@ -95,6 +106,11 @@ func NewMixer(mixerConfig MixerConfig) (*Mixer, error) {
 // Close gracefully shuts down the mixer, silencing output.
 func (m *Mixer) Close() {
 	_ = m.SetChannelGain(ChannelMaster, config.MinimumGain)
+
+	// Cancel context to stop background goroutines
+	if m.cancel != nil {
+		m.cancel()
+	}
 }
 
 // GetBufferCapacity returns the configured buffer length duration in samples.
@@ -651,8 +667,17 @@ func (m *Mixer) watchForConfigChanges() {
 	// Track previous mute states to detect changes
 	previousMuteStates := make(map[string]bool)
 
+	ticker := time.NewTicker(200 * time.Millisecond)
+	defer ticker.Stop()
+
 	for {
-		time.Sleep(200 * time.Millisecond)
+		select {
+		case <-m.ctx.Done():
+			m.log.Debug().Str("event", "stop").Msg("config watch")
+
+			return
+		case <-ticker.C:
+		}
 
 		if m.fadeInActive || m.silenced {
 			continue
