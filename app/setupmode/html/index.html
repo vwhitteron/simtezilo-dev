@@ -1148,6 +1148,21 @@
                 return true;
             }
 
+            function validatePrefix(prefix, errorElementId) {
+                const errorElement = document.getElementById(errorElementId);
+                if (!prefix || prefix.trim() === '') {
+                    errorElement.textContent = i18n ? t('setupmode.validation.required') : 'This field is required';
+                    return false;
+                }
+                const prefixNum = parseInt(prefix.trim(), 10);
+                if (isNaN(prefixNum) || prefixNum < 1 || prefixNum > 30) {
+                    errorElement.textContent = i18n ? t('setupmode.validation.invalidprefix') : 'Prefix must be a number between 1 and 30';
+                    return false;
+                }
+                errorElement.textContent = '';
+                return true;
+            }
+
             function validatePassword() {
                 const password = passwordInput.value;
                 const errorElement = document.getElementById('password-error');
@@ -1190,7 +1205,7 @@
 
                 let isValid = true;
                 isValid = validateIPAddress(document.getElementById('ip-address').value, 'ip-address-error') && isValid;
-                isValid = validateIPAddress(document.getElementById('prefix').value, 'prefix-error') && isValid;
+                isValid = validatePrefix(document.getElementById('prefix').value, 'prefix-error') && isValid;
                 isValid = validateIPAddress(document.getElementById('gateway').value, 'gateway-error') && isValid;
                 isValid = validateDNS(document.getElementById('dns').value, 'dns-error') && isValid;
                 return isValid;
@@ -1241,7 +1256,7 @@
 
             document.getElementById('prefix').addEventListener('blur', function () {
                 if (document.querySelector('input[name="ip-config"]:checked').value === 'static') {
-                    validateIPAddress(this.value, 'prefix-error');
+                    validatePrefix(this.value, 'prefix-error');
                     updateSaveButtonState();
                 }
             });
