@@ -14,7 +14,7 @@ import (
 
 // TODO: add cache eviction policy (LRU, TTL, max size, etc).
 
-// Cache manages the storage of geneerated data to the local filesystem.
+// Cache manages the storage of generated data to the local filesystem.
 type Cache struct {
 	log       zerolog.Logger // Logger instance
 	directory string         // Directory for caching TTS audio files
