@@ -3,7 +3,6 @@ package synthesizer
 import (
 	"github.com/gopxl/beep"
 	"github.com/rs/zerolog"
-	"github.com/vwhitteron/simtezilo-dev/app/calibrator"
 )
 
 type OutputDevice struct {
@@ -55,36 +54,48 @@ type Streamer struct {
 	synth *Synthesizer
 }
 
+// OutputChannelSettings holds the settings for an output channel.
+type OutputChannelSettings struct {
+	Gain float64
+	Mute bool
+}
+
 func (s *Streamer) Stream(samples [][2]float64) (n int, ok bool) {
-	buffer := s.synth.ReadBuffer(len(samples))
+	// Trigger mixing to all master channels
+	s.synth.mixer.MixToMaster(len(samples))
 
-	// Check if we're in calibration mode
-	if s.synth.calibrator != nil && s.synth.calibrator.IsEnabled() {
-		channel := s.synth.GetCalibrationChannel()
+	// If master is muted, fill output with zeros and return early
+	if s.synth.mixer.GetMasterMute() {
+		return zeroFill(samples), true
+	}
 
-		for index := range samples {
-			sample := s.synth.ApplyMasterGain(buffer[index])
+	// Read from output channels
+	buffers := make([][]float64, NumOutputChannels)
+	for ch := range NumOutputChannels {
+		channelName := OutputChannelName(ch)
+		buffers[ch] = s.synth.mixer.ReadChannel(channelName, len(samples))
+	}
 
-			// Apply channel selection
-			switch channel {
-			case calibrator.OutputChannelLeft:
-				samples[index][0] = sample
-				samples[index][1] = 0 // Mute right channel
-			case calibrator.OutputChannelRight:
-				samples[index][0] = 0 // Mute left channel
-				samples[index][1] = sample
-			case calibrator.OutputChannelBoth:
-				fallthrough
-			default: // OutputChannelBoth
-				samples[index][0] = sample
-				samples[index][1] = sample
+	// Get combined gains and mute states for all channels
+	outputChannels := s.getOutputChannels()
+
+	// Fill output from master channel buffers, applying gain and mute
+	// Calibration signal is generated in MixToMaster() with proper phase tracking
+	for chanelIndex := range buffers {
+		buf := buffers[chanelIndex]
+		gain := outputChannels[chanelIndex].Gain
+		mute := outputChannels[chanelIndex].Mute
+
+		for sampleIndex := range samples {
+			if buf != nil && sampleIndex < len(buf) {
+				if mute {
+					samples[sampleIndex][chanelIndex] = 0
+				} else {
+					samples[sampleIndex][chanelIndex] = buf[sampleIndex] * gain
+				}
+			} else {
+				samples[sampleIndex][chanelIndex] = 0
 			}
-		}
-	} else {
-		// Normal mode - duplicate mono to both channels
-		for i := range samples {
-			samples[i][0] = s.synth.ApplyMasterGain(buffer[i])
-			samples[i][1] = s.synth.ApplyMasterGain(buffer[i])
 		}
 	}
 
@@ -102,4 +113,33 @@ func (b *HapticStream) Stream(samples [][2]float64) (n int, ok bool) {
 
 func (b *HapticStream) Err() error {
 	return b.streamer.Err()
+}
+
+// getOutputChannels retrieves the combined gains and mute states for all channels.
+// Note: Master mute is handled earlier in Stream() for efficiency.
+func (s *Streamer) getOutputChannels() []OutputChannelSettings {
+	masterGainDB, _ := s.synth.mixer.GetChannelGain(ChannelMaster)
+
+	channelGains := make([]OutputChannelSettings, NumOutputChannels)
+
+	for ch := range NumOutputChannels {
+		channelName := OutputChannelName(ch)
+		channelGainDB, _ := s.synth.mixer.GetChannelGain(channelName)
+		channelGains[ch] = OutputChannelSettings{
+			Gain: GainToPowerRatio(channelGainDB + masterGainDB),
+			Mute: s.synth.GetChannelMute(ch),
+		}
+	}
+
+	return channelGains
+}
+
+// zeroFill fills all samples with zeros and returns the sample count.
+func zeroFill(samples [][2]float64) int {
+	for i := range samples {
+		samples[i][0] = 0
+		samples[i][1] = 0
+	}
+
+	return len(samples)
 }

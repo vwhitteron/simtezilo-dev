@@ -3,6 +3,7 @@ package app
 import (
 	"strconv"
 
+	"github.com/vwhitteron/simtezilo-dev/app/calibrator"
 	"github.com/vwhitteron/simtezilo-dev/app/i18n/languagedb"
 )
 
@@ -37,6 +38,14 @@ func (a *App) settingAction(setting languagedb.Key, action string) string {
 		languagedb.UIMenuSynthTransmissionGainMinRace:   a.handleTransmissionGainMinRaceSetting,
 		languagedb.UIMenuSynthTransmissionGainMinStreet: a.handleTransmissionGainMinStreetSetting,
 		languagedb.UIMenuSynthEqEnabled:                 a.handleEqEnableSetting,
+
+		// Calibration handlers
+		languagedb.UIMenuSynthCalibrationEnable:     a.handleCalibrationEnableSetting,
+		languagedb.UIMenuSynthCalibrationGain:       a.handleCalibrationGainSetting,
+		languagedb.UIMenuSynthCalibrationChannel:    a.handleCalibrationChannelSetting,
+		languagedb.UIMenuSynthCalibrationFrequency:  a.handleCalibrationFrequencySetting,
+		languagedb.UIMenuSynthCalibrationSweep:      a.handleCalibrationSweepSetting,
+		languagedb.UIMenuSynthCalibrationSweepRange: a.handleCalibrationSweepRangeSetting,
 
 		// Haptics handlers
 		languagedb.UIMenuHapticsOutputMode:              a.handleOutputModeSetting,
@@ -199,13 +208,18 @@ func (a *App) handleEqEnableSetting(action string) string {
 
 	switch action {
 	case "increase":
-		a.config.SetSynthEqEnabled(true)
+		// Enable EQ for all channels
+		a.config.SetSynthChannelEqEnabled(0, true)
+		a.config.SetSynthChannelEqEnabled(1, true)
 
 		value = settingStateOn
 	case "decrease":
-		a.config.SetSynthEqEnabled(false)
+		// Disable EQ for all channels
+		a.config.SetSynthChannelEqEnabled(0, false)
+		a.config.SetSynthChannelEqEnabled(1, false)
 	default:
-		enabled := a.config.GetSynthEqEnabled()
+		// Check if EQ is enabled on any channel
+		enabled := a.config.GetSynthChannelEqEnabled(0) || a.config.GetSynthChannelEqEnabled(1)
 		if enabled {
 			value = settingStateOn
 		}
@@ -1009,4 +1023,111 @@ func formatSampleRate(hz int) string {
 	}
 
 	return strconv.Itoa(hz) + "Hz"
+}
+
+// Calibration handlers.
+func (a *App) handleCalibrationEnableSetting(action string) string {
+	switch action {
+	case "increase":
+		a.calibrator.SetEnabled(true)
+	case "decrease":
+		a.calibrator.SetEnabled(false)
+	default:
+		// Just return current state
+	}
+
+	if a.calibrator.IsEnabled() {
+		return settingStateOn
+	}
+
+	return settingStateOff
+}
+
+func (a *App) handleCalibrationGainSetting(action string) string {
+	var value float64
+
+	switch action {
+	case "increase":
+		value = a.calibrator.IncreaseGain()
+	case "decrease":
+		value = a.calibrator.DecreaseGain()
+	default:
+		value = a.calibrator.GetGain()
+	}
+
+	return strconv.FormatFloat(value, 'f', 2, 64) + " dB"
+}
+
+func (a *App) handleCalibrationChannelSetting(action string) string {
+	channels := []calibrator.OutputChannel{
+		calibrator.OutputChannelBoth,
+		calibrator.OutputChannelLeft,
+		calibrator.OutputChannelRight,
+	}
+
+	current := a.calibrator.GetChannel()
+	currentIdx := 0
+
+	for i, ch := range channels {
+		if ch == current {
+			currentIdx = i
+
+			break
+		}
+	}
+
+	switch action {
+	case "increase":
+		currentIdx = (currentIdx + 1) % len(channels)
+		a.calibrator.SetChannel(channels[currentIdx])
+	case "decrease":
+		currentIdx = (currentIdx - 1 + len(channels)) % len(channels)
+		a.calibrator.SetChannel(channels[currentIdx])
+	}
+
+	return string(a.calibrator.GetChannel())
+}
+
+func (a *App) handleCalibrationFrequencySetting(action string) string {
+	var value float64
+
+	switch action {
+	case "increase":
+		value = a.calibrator.IncreaseFrequency()
+	case "decrease":
+		value = a.calibrator.DecreaseFrequency()
+	default:
+		value = a.calibrator.GetFrequency()
+	}
+
+	return strconv.FormatFloat(value, 'f', 0, 64) + "Hz"
+}
+
+func (a *App) handleCalibrationSweepSetting(action string) string {
+	switch action {
+	case "increase":
+		a.calibrator.StartSweep()
+	case "decrease":
+		a.calibrator.StopSweep()
+	default:
+		// Just return current state
+	}
+
+	if a.calibrator.IsSweeping() {
+		return settingStateOn
+	}
+
+	return settingStateOff
+}
+
+func (a *App) handleCalibrationSweepRangeSetting(action string) string {
+	switch action {
+	case "increase", "decrease":
+		// Toggle between haptic and full range
+		mode := a.calibrator.ToggleSweepRangeMode()
+
+		return string(mode)
+	default:
+		return string(a.calibrator.GetSweepRangeMode())
+	}
 }

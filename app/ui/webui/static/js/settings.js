@@ -1949,6 +1949,7 @@ class ConfigManager {
 
     // Initialize equalizer controls
     initEqualizer() {
+        const channelSelect = document.getElementById('eq-channel-select');
         const bandSelect = document.getElementById('eq-band-select');
         const frequencySlider = document.getElementById('eq-frequency-slider');
         const gainSlider = document.getElementById('eq-gain-slider');
@@ -1963,37 +1964,85 @@ class ConfigManager {
             return;
         }
 
-        // Set EQ enabled checkbox
+        // Initialize current channel
+        this.currentChannel = 0;
+
+        // Get EQ bands array (per-channel: [[{frequency, gain, q}, ...], [{frequency, gain, q}, ...]])
+        // Deep copy to avoid reference issues with config object
+        let eqBandsAll = JSON.parse(JSON.stringify(this.config.synthesizer.eq || []));
+
+        // Default bands for both channels
+        const defaultBands = [
+            { frequency: 12, gain: 0.0, q: 2.0 },
+            { frequency: 16, gain: 0.0, q: 2.0 },
+            { frequency: 20, gain: 0.0, q: 2.0 },
+            { frequency: 25, gain: 0.0, q: 2.0 },
+            { frequency: 30, gain: 0.0, q: 2.0 },
+            { frequency: 38, gain: 0.0, q: 2.0 },
+            { frequency: 48, gain: 0.0, q: 2.0 },
+            { frequency: 58, gain: 0.0, q: 2.0 }
+        ];
+
+        // Initialize eqBandsAll as array of 2 channels
+        if (!Array.isArray(eqBandsAll) || eqBandsAll.length !== 2) {
+            eqBandsAll = [
+                JSON.parse(JSON.stringify(defaultBands)),
+                JSON.parse(JSON.stringify(defaultBands))
+            ];
+        } else {
+            // Validate each channel has 8 bands
+            for (let ch = 0; ch < 2; ch++) {
+                if (!Array.isArray(eqBandsAll[ch]) || eqBandsAll[ch].length !== 8) {
+                    eqBandsAll[ch] = JSON.parse(JSON.stringify(defaultBands));
+                }
+            }
+        }
+
+        // Store all channel bands
+        this.eqBandsAll = eqBandsAll;
+        // Set current working bands (for current channel)
+        this.eqBands = this.eqBandsAll[this.currentChannel];
+        this.currentBandIndex = 0;
+        this.isDraggingBand = false;
+        this.draggedBandIndex = -1;
+
+        // Set EQ enabled checkbox (use current channel's enabled state)
         if (eqEnabledCheckbox) {
-            eqEnabledCheckbox.checked = this.config.synthesizer.enableEQ || false;
+            const enableEQ = this.config.synthesizer.enableEQ;
+            if (Array.isArray(enableEQ) && enableEQ.length > this.currentChannel) {
+                eqEnabledCheckbox.checked = enableEQ[this.currentChannel];
+            } else {
+                eqEnabledCheckbox.checked = false;
+            }
             // Listen for checkbox changes and trigger EQ save
             eqEnabledCheckbox.addEventListener('change', () => {
                 this.debounceEqSave();
             });
         }
 
-        // Get EQ bands array (parametric format: [{frequency, gain, q}, ...])
-        let eqBands = this.config.synthesizer.eq;
+        // Channel select change event
+        if (channelSelect) {
+            channelSelect.addEventListener('change', (e) => {
+                this.currentChannel = parseInt(e.target.value);
+                this.eqBands = this.eqBandsAll[this.currentChannel];
+                this.currentBandIndex = 0;
 
-        // If eq is not in the expected format or missing, use defaults
-        if (!Array.isArray(eqBands) || eqBands.length !== 8) {
-            eqBands = [
-                { frequency: 12, gain: 0.0, q: 2.0 },
-                { frequency: 16, gain: 0.0, q: 2.0 },
-                { frequency: 20, gain: 0.0, q: 2.0 },
-                { frequency: 25, gain: 0.0, q: 2.0 },
-                { frequency: 30, gain: 0.0, q: 2.0 },
-                { frequency: 38, gain: 0.0, q: 2.0 },
-                { frequency: 48, gain: 0.0, q: 2.0 },
-                { frequency: 58, gain: 0.0, q: 2.0 }
-            ];
+                // Update EQ enabled checkbox for this channel
+                if (eqEnabledCheckbox) {
+                    const enableEQ = this.config.synthesizer.enableEQ;
+                    if (Array.isArray(enableEQ) && enableEQ.length > this.currentChannel) {
+                        eqEnabledCheckbox.checked = enableEQ[this.currentChannel];
+                    } else {
+                        eqEnabledCheckbox.checked = false;
+                    }
+                }
+
+                this.updateBandSelect();
+                this.loadBandValues(0);
+                this.updateFrequencyConstraints();
+                this.drawEqCurve();
+            });
         }
-
-        // Store bands in config
-        this.eqBands = eqBands;
-        this.currentBandIndex = 0;
-        this.isDraggingBand = false;
-        this.draggedBandIndex = -1;
 
         // Populate band select dropdown
         this.updateBandSelect();
@@ -2075,7 +2124,9 @@ class ConfigManager {
                     { frequency: 48, gain: 0.0, q: 2.0 },
                     { frequency: 58, gain: 0.0, q: 2.0 }
                 ];
-                this.eqBands = defaultBands;
+                // Reset current channel's bands
+                this.eqBandsAll[this.currentChannel] = JSON.parse(JSON.stringify(defaultBands));
+                this.eqBands = this.eqBandsAll[this.currentChannel];
                 this.updateBandSelect();
                 this.loadBandValues(this.currentBandIndex);
                 this.saveEqualizer();
@@ -2322,7 +2373,9 @@ class ConfigManager {
         const ctx = canvas.getContext('2d');
         const width = canvas.width;
         const height = canvas.height;
-        const curve = this.config.eqCurve.curve || [];
+        // Get the curve for the current channel
+        const curves = this.config.eqCurve.curve || [];
+        const curve = Array.isArray(curves[this.currentChannel]) ? curves[this.currentChannel] : [];
         const minFreq = this.config.eqCurve.minFreq || 10;
         const resolution = this.config.eqCurve.resolution || 0.5;
 
@@ -2422,9 +2475,17 @@ class ConfigManager {
     async saveEqualizer() {
         const eqEnabledCheckbox = document.getElementById('synth-eqenabled');
 
-        if (!this.eqBands || this.eqBands.length !== 8) {
-            console.error('EQ must have exactly 8 bands');
+        if (!this.eqBandsAll || this.eqBandsAll.length !== 2) {
+            console.error('EQ must have exactly 2 channels');
             return;
+        }
+
+        // Validate each channel has 8 bands
+        for (let ch = 0; ch < 2; ch++) {
+            if (!this.eqBandsAll[ch] || this.eqBandsAll[ch].length !== 8) {
+                console.error(`Channel ${ch} must have exactly 8 bands`);
+                return;
+            }
         }
 
         try {
@@ -2433,24 +2494,33 @@ class ConfigManager {
                 window.showNavbarStatus('saving');
             }
 
-            // Normalize bands to ensure lowercase field names
-            const normalizedBands = this.eqBands.map(band => ({
-                frequency: band.frequency !== undefined ? band.frequency : (band.Frequency !== undefined ? band.Frequency : 0),
-                gain: band.gain !== undefined ? band.gain : (band.Gain !== undefined ? band.Gain : 0),
-                q: band.q !== undefined ? band.q : (band.Q !== undefined ? band.Q : 2.0)
-            }));
+            // Normalize bands for all channels to ensure lowercase field names
+            const normalizedBandsAll = this.eqBandsAll.map(channelBands =>
+                channelBands.map(band => ({
+                    frequency: band.frequency !== undefined ? band.frequency : (band.Frequency !== undefined ? band.Frequency : 0),
+                    gain: band.gain !== undefined ? band.gain : (band.Gain !== undefined ? band.Gain : 0),
+                    q: band.q !== undefined ? band.q : (band.Q !== undefined ? band.Q : 2.0)
+                }))
+            );
+
+            // Update enableEQ for the current channel
+            let enableEQArray = this.config.synthesizer.enableEQ;
+            if (!Array.isArray(enableEQArray) || enableEQArray.length !== 2) {
+                enableEQArray = [false, false];
+            }
+            if (eqEnabledCheckbox) {
+                enableEQArray[this.currentChannel] = eqEnabledCheckbox.checked;
+            }
 
             // Update local config
-            this.config.synthesizer.eq = normalizedBands;
-            if (eqEnabledCheckbox) {
-                this.config.synthesizer.enableEQ = eqEnabledCheckbox.checked;
-            }
+            this.config.synthesizer.eq = normalizedBandsAll;
+            this.config.synthesizer.enableEQ = enableEQArray;
 
             // Save to server
             const formData = {
                 synthesizer: {
-                    enableEQ: eqEnabledCheckbox ? eqEnabledCheckbox.checked : false,
-                    eq: normalizedBands
+                    enableEQ: enableEQArray,
+                    eq: normalizedBandsAll
                 }
             };
 

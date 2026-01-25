@@ -76,11 +76,11 @@ type App struct {
 	i18n    *i18n.I18n       // Language translations
 	display hardware.Display // Hardware display interface
 
-	gtClient   *gttelemetry.Client      // GT telemetry client
-	pitRadio   pitradio.PitRadio        // Pit radio notification service
-	kinematics kinematics.State         // Vehicle kinematics tracker
-	synth      *synthesizer.Synthesizer // Audio synthesizer for haptic feedback
-	calibrator *calibrator.Calibrator   // Calibration mode manager
+	gtClient   *gttelemetry.Client       // GT telemetry client
+	pitRadio   pitradio.PitRadio         // Pit radio notification service
+	kinematics kinematics.State          // Vehicle kinematics tracker
+	synth      *synthesizer.Synthesizer  // Audio synthesizer for haptic feedback
+	calibrator *calibrator.ToneGenerator // Calibration mode manager
 
 	odometer  *odometer.Odometer  // Odometer for distance tracking
 	fuelRange fuelrange.Estimator // Fuel range estimator
@@ -147,7 +147,6 @@ func New(opts Options) (*App, error) {
 		cancel:             cancel,
 		state:              NewGameState(opts.Logger),
 		kinematics:         kinematics.NewKinematicsState(),
-		calibrator:         calibrator.New(),
 		telemetryChartFeed: make(chan map[string]float32, 600),
 		vehicleInfoFeed:    make(chan map[string]any, 10),
 		circuitInfoFeed:    make(chan map[string]string, 10),
@@ -159,7 +158,15 @@ func New(opts Options) (*App, error) {
 
 	newApp.initializeConfig(opts)
 
-	err := newApp.initializeI18n(opts)
+	// Initialize calibrator with config reference
+	var err error
+
+	newApp.calibrator, err = calibrator.NewToneGenerator(newApp.config)
+	if err != nil {
+		return nil, err
+	}
+
+	err = newApp.initializeI18n(opts)
 	if err != nil {
 		return nil, err
 	}

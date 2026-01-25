@@ -2,8 +2,11 @@ package calibrator
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"time"
+
+	"github.com/vwhitteron/simtezilo-dev/app/config"
 )
 
 // OutputChannel represents which audio channels should receive the calibration tone.
@@ -20,37 +23,61 @@ const (
 	OutputChannelRight OutputChannel = "right"
 )
 
-// Calibrator manages tone generation state for calibration mode.
-type Calibrator struct {
-	isEnabled      bool
-	isStopping     bool // Signal to continue generating until zero crossing
-	frequency      float64
-	volume         float64
-	channel        OutputChannel
-	mu             sync.RWMutex
-	isSweeping     bool
-	sweepCancel    context.CancelFunc
-	sweepFrequency float64 // Current frequency during sweep
-	sweepMin       float64 // Minimum sweep frequency
-	sweepMax       float64 // Maximum sweep frequency
-	sweepDuration  float64 // Sweep duration in seconds
+// SweepRangeMode represents the frequency range used for sweeps.
+type SweepRangeMode string
+
+const (
+	// SweepRangeHaptic uses a haptic-optimized frequency range (5-80Hz).
+	SweepRangeHaptic SweepRangeMode = "haptic"
+
+	// SweepRangeFull uses the full frequency range (5-160Hz).
+	SweepRangeFull SweepRangeMode = "full"
+)
+
+// ToneGenerator manages tone generation state for calibration mode.
+type ToneGenerator struct {
+	isEnabled          bool
+	isStopping         bool // Signal to continue generating until zero crossing
+	frequency          float64
+	gain               float64
+	channel            OutputChannel
+	frequencyIncrement float64        // Frequency adjustment increment in Hz
+	config             *config.Config // Reference to config for accessing haptic range and gain increment
+	mu                 sync.RWMutex
+	isSweeping         bool
+	sweepCancel        context.CancelFunc
+	sweepFrequency     float64        // Current frequency during sweep
+	sweepMin           float64        // Minimum sweep frequency
+	sweepMax           float64        // Maximum sweep frequency
+	sweepDuration      float64        // Sweep duration in seconds
+	sweepRangeMode     SweepRangeMode // Current sweep range mode
 }
 
-// New creates a new Calibrator instance with default values.
-func New() *Calibrator {
-	return &Calibrator{
-		isEnabled:     false,
-		frequency:     5,
-		volume:        -30,
-		channel:       OutputChannelBoth,
-		sweepMin:      5,
-		sweepMax:      160,
-		sweepDuration: 10,
+// NewToneGenerator creates a new Calibrator instance with default values.
+// Returns an error if cfg is nil.
+func NewToneGenerator(cfg *config.Config) (*ToneGenerator, error) {
+	if cfg == nil {
+		return nil, errors.New("config cannot be nil")
 	}
+
+	newCalibrator := &ToneGenerator{
+		isEnabled:          false,
+		frequency:          5,
+		gain:               -30,
+		channel:            OutputChannelBoth,
+		frequencyIncrement: 1.0, // Default 1Hz increment
+		config:             cfg,
+		sweepDuration:      10,
+		sweepRangeMode:     SweepRangeHaptic,
+		sweepMin:           cfg.GetHapticsPulseMinHz(),
+		sweepMax:           cfg.GetHapticsPulseMaxHz(),
+	}
+
+	return newCalibrator, nil
 }
 
 // IsEnabled returns whether calibration mode is enabled.
-func (c *Calibrator) IsEnabled() bool {
+func (c *ToneGenerator) IsEnabled() bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
@@ -58,7 +85,7 @@ func (c *Calibrator) IsEnabled() bool {
 }
 
 // IsStopping returns whether calibration is waiting to stop at zero crossing.
-func (c *Calibrator) IsStopping() bool {
+func (c *ToneGenerator) IsStopping() bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
@@ -66,7 +93,7 @@ func (c *Calibrator) IsStopping() bool {
 }
 
 // ConfirmStopped marks calibration as fully stopped (called after zero crossing).
-func (c *Calibrator) ConfirmStopped() {
+func (c *ToneGenerator) ConfirmStopped() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -75,7 +102,7 @@ func (c *Calibrator) ConfirmStopped() {
 }
 
 // SetEnabled sets whether calibration mode is enabled.
-func (c *Calibrator) SetEnabled(requestEnable bool) {
+func (c *ToneGenerator) SetEnabled(requestEnable bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -99,7 +126,7 @@ func (c *Calibrator) SetEnabled(requestEnable bool) {
 }
 
 // GetFrequency returns the calibrator frequency in Hz.
-func (c *Calibrator) GetFrequency() float64 {
+func (c *ToneGenerator) GetFrequency() float64 {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
@@ -107,49 +134,83 @@ func (c *Calibrator) GetFrequency() float64 {
 }
 
 // SetFrequency sets the calibrator frequency in Hz.
-func (c *Calibrator) SetFrequency(frequency float64) {
+func (c *ToneGenerator) SetFrequency(frequency float64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	// Clamp frequency between 5 and 160 Hz
-	if frequency < 5 {
-		frequency = 5
-	}
-
-	if frequency > 160 {
-		frequency = 160
-	}
-
-	c.frequency = frequency
+	c.frequency = max(5, min(160, frequency))
 }
 
-// GetVolume returns the calibrator volume in dB.
-func (c *Calibrator) GetVolume() float64 {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.volume
-}
-
-// SetVolume sets the calibrator volume in dB.
-func (c *Calibrator) SetVolume(volume float64) {
+// IncreaseFrequency increases the calibrator frequency by the configured frequency increment.
+func (c *ToneGenerator) IncreaseFrequency() float64 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// Clamp volume between -60 and 0 dB
-	if volume > 0 {
-		volume = 0
+	c.frequency = max(5, min(160, c.frequency+c.frequencyIncrement))
+
+	return c.frequency
+}
+
+// DecreaseFrequency decreases the calibrator frequency by the configured frequency increment.
+func (c *ToneGenerator) DecreaseFrequency() float64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.frequency = max(5, min(160, c.frequency-c.frequencyIncrement))
+
+	return c.frequency
+}
+
+// GetGain returns the calibrator volume in dB.
+func (c *ToneGenerator) GetGain() float64 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.gain
+}
+
+// SetGain sets the calibrator gain in dB.
+func (c *ToneGenerator) SetGain(volume float64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// Clamp gain between -60 and 0 dB
+	c.gain = max(-60, min(0, volume))
+}
+
+// IncreaseGain increases the calibrator gain by the configured gain increment.
+func (c *ToneGenerator) IncreaseGain() float64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	increment := 0.25
+	if c.config != nil {
+		increment = c.config.GetSynthGainIncrement()
 	}
 
-	if volume < -60 {
-		volume = -60
+	c.gain = max(-60, min(0, c.gain+increment))
+
+	return c.gain
+}
+
+// DecreaseGain decreases the calibrator gain by the configured gain increment.
+func (c *ToneGenerator) DecreaseGain() float64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	increment := 0.25
+	if c.config != nil {
+		increment = c.config.GetSynthGainIncrement()
 	}
 
-	c.volume = volume
+	c.gain = max(-60, min(0, c.gain-increment))
+
+	return c.gain
 }
 
 // GetChannel returns the calibrator output channel selection.
-func (c *Calibrator) GetChannel() OutputChannel {
+func (c *ToneGenerator) GetChannel() OutputChannel {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
@@ -157,7 +218,7 @@ func (c *Calibrator) GetChannel() OutputChannel {
 }
 
 // SetChannel sets the calibrator output channel selection.
-func (c *Calibrator) SetChannel(channel OutputChannel) {
+func (c *ToneGenerator) SetChannel(channel OutputChannel) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -171,7 +232,7 @@ func (c *Calibrator) SetChannel(channel OutputChannel) {
 }
 
 // GetSweepMin returns the minimum sweep frequency in Hz.
-func (c *Calibrator) GetSweepMin() float64 {
+func (c *ToneGenerator) GetSweepMin() float64 {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
@@ -179,24 +240,16 @@ func (c *Calibrator) GetSweepMin() float64 {
 }
 
 // SetSweepMin sets the minimum sweep frequency in Hz.
-func (c *Calibrator) SetSweepMin(freq float64) {
+func (c *ToneGenerator) SetSweepMin(freq float64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	// Clamp between 5 and sweepMax-1
-	if freq < 5 {
-		freq = 5
-	}
-
-	if freq >= c.sweepMax {
-		freq = c.sweepMax - 1
-	}
-
-	c.sweepMin = freq
+	c.sweepMin = max(5, min(c.sweepMax-1, freq))
 }
 
 // GetSweepMax returns the maximum sweep frequency in Hz.
-func (c *Calibrator) GetSweepMax() float64 {
+func (c *ToneGenerator) GetSweepMax() float64 {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
@@ -204,24 +257,16 @@ func (c *Calibrator) GetSweepMax() float64 {
 }
 
 // SetSweepMax sets the maximum sweep frequency in Hz.
-func (c *Calibrator) SetSweepMax(freq float64) {
+func (c *ToneGenerator) SetSweepMax(freq float64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	// Clamp between sweepMin+1 and 160
-	if freq > 160 {
-		freq = 160
-	}
-
-	if freq <= c.sweepMin {
-		freq = c.sweepMin + 1
-	}
-
-	c.sweepMax = freq
+	c.sweepMax = max(c.sweepMin+1, min(160, freq))
 }
 
 // GetSweepDuration returns the sweep duration in seconds.
-func (c *Calibrator) GetSweepDuration() float64 {
+func (c *ToneGenerator) GetSweepDuration() float64 {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
@@ -229,33 +274,79 @@ func (c *Calibrator) GetSweepDuration() float64 {
 }
 
 // SetSweepDuration sets the sweep duration in seconds.
-func (c *Calibrator) SetSweepDuration(duration float64) {
+func (c *ToneGenerator) SetSweepDuration(duration float64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	// Clamp between 1 and 60 seconds
-	if duration < 1 {
-		duration = 1
+	c.sweepDuration = max(1, min(60, duration))
+}
+
+// getHapticRangeFromConfig returns the haptic frequency range from config.
+// Must be called with lock held.
+func (c *ToneGenerator) getHapticRangeFromConfig() (minHz, maxHz float64) {
+	if c.config != nil {
+		return c.config.GetHapticsPulseMinHz(), c.config.GetHapticsPulseMaxHz()
 	}
 
-	if duration > 60 {
-		duration = 60
-	}
-
-	c.sweepDuration = duration
+	return 5, 80
 }
 
 // IsSweeping returns whether a frequency sweep is currently active.
-func (c *Calibrator) IsSweeping() bool {
+func (c *ToneGenerator) IsSweeping() bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
 	return c.isSweeping
 }
 
+// GetSweepRangeMode returns the current sweep range mode.
+func (c *ToneGenerator) GetSweepRangeMode() SweepRangeMode {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.sweepRangeMode
+}
+
+// SetSweepRangeMode sets the sweep range mode and adjusts min/max accordingly.
+func (c *ToneGenerator) SetSweepRangeMode(mode SweepRangeMode) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.sweepRangeMode = mode
+
+	switch mode {
+	case SweepRangeHaptic:
+		c.sweepMin, c.sweepMax = c.getHapticRangeFromConfig()
+	case SweepRangeFull:
+		c.sweepMin = 5
+		c.sweepMax = 160
+	default:
+		c.sweepRangeMode = SweepRangeHaptic
+		c.sweepMin, c.sweepMax = c.getHapticRangeFromConfig()
+	}
+}
+
+// ToggleSweepRangeMode toggles between haptic and full range modes.
+func (c *ToneGenerator) ToggleSweepRangeMode() SweepRangeMode {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.sweepRangeMode == SweepRangeHaptic {
+		c.sweepRangeMode = SweepRangeFull
+		c.sweepMin = 5
+		c.sweepMax = 160
+	} else {
+		c.sweepRangeMode = SweepRangeHaptic
+		c.sweepMin, c.sweepMax = c.getHapticRangeFromConfig()
+	}
+
+	return c.sweepRangeMode
+}
+
 // GetSweepFrequency returns the current frequency during a sweep.
 // Returns the static frequency if not sweeping.
-func (c *Calibrator) GetSweepFrequency() float64 {
+func (c *ToneGenerator) GetSweepFrequency() float64 {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
@@ -269,7 +360,7 @@ func (c *Calibrator) GetSweepFrequency() float64 {
 // StartSweep starts a frequency sweep from sweepMin to sweepMax.
 // The sweep takes approximately 10 seconds to complete.
 // If calibration is not enabled, it will be enabled automatically.
-func (c *Calibrator) StartSweep() {
+func (c *ToneGenerator) StartSweep() {
 	c.mu.Lock()
 
 	// Stop any existing sweep
@@ -296,7 +387,7 @@ func (c *Calibrator) StartSweep() {
 }
 
 // StopSweep stops an active frequency sweep.
-func (c *Calibrator) StopSweep() {
+func (c *ToneGenerator) StopSweep() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -310,7 +401,7 @@ func (c *Calibrator) StopSweep() {
 }
 
 // runSweep executes the frequency sweep loop.
-func (c *Calibrator) runSweep(ctx context.Context) {
+func (c *ToneGenerator) runSweep(ctx context.Context) {
 	const stepSize = 1.0
 
 	// Helper function to calculate step duration based on current range and sweep duration

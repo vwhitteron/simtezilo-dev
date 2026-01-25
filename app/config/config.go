@@ -106,26 +106,28 @@ type EQBand struct {
 
 // Synthesizer represents an audio synthesizer used for haptic feedback.
 type Synthesizer struct {
-	InternalSampleRateHz      int       `toml:"internalSampleRateHz"`
-	OutputSampleRateHz        int       `toml:"outputSampleRateHz"`
-	OutputFile                string    `toml:"outputFile"`
-	MasterMute                bool      `toml:"masterMute"`
-	MasterGain                float64   `toml:"masterGain"`
-	ChassisMute               bool      `toml:"chassisMute"`
-	ChassisGain               float64   `toml:"chassisGain"`
-	TransmissionMute          bool      `toml:"transmissionMute"`
-	TransmissionGain          float64   `toml:"transmissionGain"`
-	TransmissionGainMinRace   float64   `toml:"transmissionGainMinRace"`
-	TransmissionGainMinStreet float64   `toml:"transmissionGainMinStreet"`
-	EngineMute                bool      `toml:"engineMute"`
-	EngineGain                float64   `toml:"engineGain"`
-	GainIncrement             float64   `toml:"gainIncrement"`
-	EnableEq                  bool      `toml:"enableEq"`
-	EqBands                   []EQBand  `toml:"eqBands"`
-	_eqCurve                  []float64 `toml:"-"` // Computed curve for fast lookup
-	_eqMinFreq                float64   `toml:"-"` // Minimum frequency for curve
-	_eqMaxFreq                float64   `toml:"-"` // Maximum frequency for curve
-	_eqResolution             float64   `toml:"-"` // Frequency resolution (Hz per bucket)
+	InternalSampleRateHz      int         `toml:"internalSampleRateHz"`
+	OutputSampleRateHz        int         `toml:"outputSampleRateHz"`
+	OutputFile                string      `toml:"outputFile"`
+	MasterMute                bool        `toml:"masterMute"`
+	MasterGain                float64     `toml:"masterGain"`
+	ChannelMute               []bool      `toml:"channelMute"`
+	ChannelGain               []float64   `toml:"channelGain"`
+	ChassisMute               bool        `toml:"chassisMute"`
+	ChassisGain               float64     `toml:"chassisGain"`
+	TransmissionMute          bool        `toml:"transmissionMute"`
+	TransmissionGain          float64     `toml:"transmissionGain"`
+	TransmissionGainMinRace   float64     `toml:"transmissionGainMinRace"`
+	TransmissionGainMinStreet float64     `toml:"transmissionGainMinStreet"`
+	EngineMute                bool        `toml:"engineMute"`
+	EngineGain                float64     `toml:"engineGain"`
+	GainIncrement             float64     `toml:"gainIncrement"`
+	EnableEq                  []bool      `toml:"enableEq"`
+	EqBands                   [][]EQBand  `toml:"eqBands"`
+	_eqCurve                  [][]float64 `toml:"-"` // Computed curve for fast lookup (per channel)
+	_eqMinFreq                float64     `toml:"-"` // Minimum frequency for curve
+	_eqMaxFreq                float64     `toml:"-"` // Maximum frequency for curve
+	_eqResolution             float64     `toml:"-"` // Frequency resolution (Hz per bucket)
 }
 
 // Telemetry represents the telemetry data source configuration.
@@ -168,6 +170,8 @@ type Snapshot struct {
 	// Synthesizer gain settings
 	MasterMute                bool
 	MasterGain                float64
+	ChannelMute               []bool
+	ChannelGain               []float64
 	ChassisMute               bool
 	ChassisGain               float64
 	TransmissionMute          bool
@@ -202,8 +206,8 @@ type Snapshot struct {
 	DynamicTransmissionCurve     int
 	DynamicTransmissionGforceMax float64
 
-	// EQ settings
-	EqEnabled bool
+	// EQ settings (per channel)
+	EqEnabled []bool
 
 	// Monitoring flags
 	FuelMonitoringEnabled bool
@@ -2336,6 +2340,102 @@ func (c *Config) DecreaseSynthMasterGain() float64 {
 	return result
 }
 
+// GetSynthChannelGain returns the gain for a specific channel of the synthesizer
+// 0.0 is maximum gain and -60.0 will mute haptic output.
+func (c *Config) GetSynthChannelGain(channel int) float64 {
+	snap := c.snapshot.Load()
+	if channel < 0 || channel >= len(snap.ChannelGain) {
+		return 0.0
+	}
+
+	return snap.ChannelGain[channel]
+}
+
+// SetSynthChannelGain sets the gain for a specific channel of the synthesizer
+// 0.0 is maximum gain and -60.0 will mute haptic output.
+func (c *Config) SetSynthChannelGain(channel int, value float64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if channel < 0 || channel >= len(c.viper.Synthesizer.ChannelGain) {
+		return
+	}
+
+	c.viper.Synthesizer.ChannelGain[channel] = max(MinimumGain, min(MaximumGain, value))
+
+	c.rebuildSnapshot()
+	c.registerUpdate(false)
+}
+
+// GetSynthChannelMute returns whether a specific channel is muted.
+func (c *Config) GetSynthChannelMute(channel int) bool {
+	snap := c.snapshot.Load()
+	if channel >= 0 && channel < len(snap.ChannelMute) {
+		return snap.ChannelMute[channel]
+	}
+
+	return false
+}
+
+// SetSynthChannelMute sets whether a specific channel is muted.
+func (c *Config) SetSynthChannelMute(channel int, mute bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if channel < 0 || channel >= len(c.viper.Synthesizer.ChannelMute) {
+		return
+	}
+
+	c.viper.Synthesizer.ChannelMute[channel] = mute
+
+	c.rebuildSnapshot()
+	c.registerUpdate(false)
+}
+
+// IncreaseSynthChannelGain increases the gain for a specific channel by the configured gain increment.
+func (c *Config) IncreaseSynthChannelGain(channel int) float64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if channel < 0 || channel >= len(c.viper.Synthesizer.ChannelGain) {
+		return 0.0
+	}
+
+	currentGain := c.viper.Synthesizer.ChannelGain[channel]
+	c.viper.Synthesizer.ChannelGain[channel] = min(
+		MaximumGain,
+		currentGain+c.viper.Synthesizer.GainIncrement,
+	)
+	result := c.viper.Synthesizer.ChannelGain[channel]
+
+	c.rebuildSnapshot()
+	c.registerUpdate(false)
+
+	return result
+}
+
+// DecreaseSynthChannelGain decreases the gain for a specific channel by the configured gain increment.
+func (c *Config) DecreaseSynthChannelGain(channel int) float64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if channel > 0 || channel >= len(c.viper.Synthesizer.ChannelGain) {
+		return 0.0
+	}
+
+	currentGain := c.viper.Synthesizer.ChannelGain[channel]
+	c.viper.Synthesizer.ChannelGain[channel] = max(
+		MinimumGain,
+		currentGain-c.viper.Synthesizer.GainIncrement,
+	)
+	result := c.viper.Synthesizer.ChannelGain[channel]
+
+	c.rebuildSnapshot()
+	c.registerUpdate(false)
+
+	return result
+}
+
 // GetSynthChassisGain returns the chassis gain of the synthesizer (i.e. the volume level for chassis bump haptics).
 // 0.0 is maximum gain and -60.0 will mute chassis bump haptic output.
 func (c *Config) GetSynthChassisGain() float64 {
@@ -2622,49 +2722,113 @@ func (c *Config) SetSynthEngineProfile(name string, profile appHaptics.EnginePro
 	c.registerUpdate(false)
 }
 
-// GetSynthEqEnabled returns whether the equalizer is enabled.
-func (c *Config) GetSynthEqEnabled() bool {
-	return c.snapshot.Load().EqEnabled
+// GetSynthChannelEqEnabled returns whether the equalizer is enabled for a specific channel.
+func (c *Config) GetSynthChannelEqEnabled(channel int) bool {
+	snap := c.snapshot.Load()
+	if channel >= 0 && channel < len(snap.EqEnabled) {
+		return snap.EqEnabled[channel]
+	}
+
+	return false
 }
 
-// SetSynthEqEnabled sets whether the equalizer is enabled.
-func (c *Config) SetSynthEqEnabled(enabled bool) {
-	c.mu.Lock()
-	c.viper.Synthesizer.EnableEq = enabled
-	c.rebuildSnapshot()
-	c.registerUpdate(false)
-	c.mu.Unlock()
-}
-
-// GetSynthEq returns the equalizer bands.
-func (c *Config) GetSynthEq() []EQBand {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.Synthesizer.EqBands
-}
-
-// SetSynthEq sets the equalizer bands and recomputes the curve.
-func (c *Config) SetSynthEq(bands []EQBand) {
+// SetSynthChannelEqEnabled sets whether the equalizer is enabled for a specific channel.
+func (c *Config) SetSynthChannelEqEnabled(channel int, enabled bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	if channel < 0 || channel >= len(c.viper.Synthesizer.EnableEq) {
+		return
+	}
+
+	c.viper.Synthesizer.EnableEq[channel] = enabled
+	c.rebuildSnapshot()
+	c.registerUpdate(false)
+}
+
+// GetSynthChannelEq returns the equalizer bands for a specific channel.
+func (c *Config) GetSynthChannelEq(channel int) []EQBand {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if channel < 0 || channel >= len(c.viper.Synthesizer.EqBands) {
+		return nil
+	}
+
+	return c.viper.Synthesizer.EqBands[channel]
+}
+
+// SetSynthChannelEq sets the equalizer bands for a specific channel and recomputes the curve.
+func (c *Config) SetSynthChannelEq(channel int, bands []EQBand) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if channel < 0 || channel >= len(c.viper.Synthesizer.EqBands) {
+		log.Warn().Int("channel", channel).Int("eqBandsLen", len(c.viper.Synthesizer.EqBands)).Msg("SetSynthChannelEq: channel out of range")
+
+		return
+	}
+
 	if len(bands) == 8 {
-		c.viper.Synthesizer.EqBands = bands
-		c.computeEqCurve()
+		c.viper.Synthesizer.EqBands[channel] = bands
+		c.computeEqCurve(channel)
 		c.registerUpdate(false)
 	}
 }
 
-// GetSynthEqCurve returns the computed EQ curve for fast lookup.
+// GetSynthChannelEqCurve returns the computed EQ curve for fast lookup for a specific channel.
 // Returns the curve, minimum frequency, and resolution (Hz per bucket).
-func (c *Config) GetSynthEqCurve() ([]float64, float64, float64) {
+func (c *Config) GetSynthChannelEqCurve(channel int) ([]float64, float64, float64) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	return c.viper.Synthesizer._eqCurve,
+	if channel < 0 || channel >= len(c.viper.Synthesizer._eqCurve) {
+		log.Warn().Int("channel", channel).Int("eqCurveLen", len(c.viper.Synthesizer._eqCurve)).Msg("GetSynthChannelEqCurve: channel out of range")
+
+		return nil, 0, 0
+	}
+
+	return c.viper.Synthesizer._eqCurve[channel],
 		c.viper.Synthesizer._eqMinFreq,
 		c.viper.Synthesizer._eqResolution
+}
+
+// GetSynthChannelsEqEnabled returns the EQ enabled state for all channels.
+func (c *Config) GetSynthChannelsEqEnabled() []bool {
+	snap := c.snapshot.Load()
+	result := make([]bool, len(snap.EqEnabled))
+	copy(result, snap.EqEnabled)
+
+	return result
+}
+
+// GetSynthChannelsEq returns the EQ bands for all channels.
+func (c *Config) GetSynthChannelsEq() [][]EQBand {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	result := make([][]EQBand, len(c.viper.Synthesizer.EqBands))
+	for ch, bands := range c.viper.Synthesizer.EqBands {
+		result[ch] = make([]EQBand, len(bands))
+		copy(result[ch], bands)
+	}
+
+	return result
+}
+
+// GetSynthChannelsEqCurve returns the computed EQ curves for all channels.
+// Returns the curves, minimum frequency, and resolution (Hz per bucket).
+func (c *Config) GetSynthChannelsEqCurve() ([][]float64, float64, float64) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	result := make([][]float64, len(c.viper.Synthesizer._eqCurve))
+	for ch, curve := range c.viper.Synthesizer._eqCurve {
+		result[ch] = make([]float64, len(curve))
+		copy(result[ch], curve)
+	}
+
+	return result, c.viper.Synthesizer._eqMinFreq, c.viper.Synthesizer._eqResolution
 }
 
 // ****************************************************************************
@@ -2807,24 +2971,57 @@ func (c *Config) GetConfigFilePath() string {
 func (c *Config) finalise() {
 	c.mu.Lock()
 
-	if len(c.viper.Synthesizer.EqBands) != 8 {
-		log.Warn().Int("length", len(c.viper.Synthesizer.EqBands)).Msg("invalid synthesizer EQ bands length")
+	// Ensure we have exactly 2 channels of EQ bands
+	numChannels := 2
+	if len(c.viper.Synthesizer.EqBands) != numChannels {
+		log.Warn().Int("length", len(c.viper.Synthesizer.EqBands)).Msg("invalid synthesizer EQ bands length, initializing defaults")
 
-		// Initialize with 8 default bands spanning 10-60 Hz
-		c.viper.Synthesizer.EqBands = []EQBand{
-			{Frequency: 12, Gain: 0.0},
-			{Frequency: 16, Gain: 0.0},
-			{Frequency: 20, Gain: 0.0},
-			{Frequency: 25, Gain: 0.0},
-			{Frequency: 30, Gain: 0.0},
-			{Frequency: 38, Gain: 0.0},
-			{Frequency: 48, Gain: 0.0},
-			{Frequency: 58, Gain: 0.0},
+		// Initialize with default bands for each channel
+		defaultBands := []EQBand{
+			{Frequency: 12, Gain: 0.0, Q: 2.0},
+			{Frequency: 16, Gain: 0.0, Q: 2.0},
+			{Frequency: 20, Gain: 0.0, Q: 2.0},
+			{Frequency: 25, Gain: 0.0, Q: 2.0},
+			{Frequency: 30, Gain: 0.0, Q: 2.0},
+			{Frequency: 38, Gain: 0.0, Q: 2.0},
+			{Frequency: 48, Gain: 0.0, Q: 2.0},
+			{Frequency: 58, Gain: 0.0, Q: 2.0},
+		}
+
+		c.viper.Synthesizer.EqBands = make([][]EQBand, numChannels)
+		for ch := range numChannels {
+			c.viper.Synthesizer.EqBands[ch] = make([]EQBand, len(defaultBands))
+			copy(c.viper.Synthesizer.EqBands[ch], defaultBands)
 		}
 	}
 
-	// Compute the EQ curve for efficient runtime application
-	c.computeEqCurve()
+	// Validate each channel has 8 bands
+	for ch := range c.viper.Synthesizer.EqBands {
+		if len(c.viper.Synthesizer.EqBands[ch]) != 8 {
+			log.Warn().Int("channel", ch).Int("length", len(c.viper.Synthesizer.EqBands[ch])).Msg("invalid EQ bands length for channel, initializing defaults")
+
+			c.viper.Synthesizer.EqBands[ch] = []EQBand{
+				{Frequency: 12, Gain: 0.0, Q: 2.0},
+				{Frequency: 16, Gain: 0.0, Q: 2.0},
+				{Frequency: 20, Gain: 0.0, Q: 2.0},
+				{Frequency: 25, Gain: 0.0, Q: 2.0},
+				{Frequency: 30, Gain: 0.0, Q: 2.0},
+				{Frequency: 38, Gain: 0.0, Q: 2.0},
+				{Frequency: 48, Gain: 0.0, Q: 2.0},
+				{Frequency: 58, Gain: 0.0, Q: 2.0},
+			}
+		}
+	}
+
+	// Ensure we have 2 channels of EQ enabled flags
+	if len(c.viper.Synthesizer.EnableEq) < numChannels {
+		c.viper.Synthesizer.EnableEq = make([]bool, numChannels)
+	}
+
+	// Compute the EQ curve for each channel
+	for ch := range c.viper.Synthesizer.EqBands {
+		c.computeEqCurve(ch)
+	}
 
 	// Update pulse width extents (inline since we hold the lock)
 	c.viper.Haptics._pulseWidthMin = float64(c.viper.Synthesizer.InternalSampleRateHz) /
@@ -2860,14 +3057,18 @@ func (c *Config) updateSnapScale() {
 	c.mu.Unlock()
 }
 
-// computeEqCurve computes the EQ curve based on the current bands.
+// computeEqCurve computes the EQ curve for a specific channel based on its bands.
 // Uses 8-band parametric EQ with bell filters.
-func (c *Config) computeEqCurve() {
+func (c *Config) computeEqCurve(channel int) {
 	const (
 		minFreqHz    = 10.0
 		maxFreqHz    = 70.0
 		resolutionHz = 0.5
 	)
+
+	if channel < 0 || channel >= len(c.viper.Synthesizer.EqBands) {
+		return
+	}
 
 	numBuckets := int((maxFreqHz-minFreqHz)/resolutionHz) + 1
 	curve := make([]float64, numBuckets)
@@ -2880,7 +3081,7 @@ func (c *Config) computeEqCurve() {
 		amplitudeRatio := 1.0
 
 		// Apply each band's bell filter by multiplication in linear space
-		for _, band := range c.viper.Synthesizer.EqBands {
+		for _, band := range c.viper.Synthesizer.EqBands[channel] {
 			// Calculate bell filter response at this frequency
 			// Using per-band Q factor for bandwidth control
 			if band.Gain != 0.0 {
@@ -2912,7 +3113,12 @@ func (c *Config) computeEqCurve() {
 		curve[bucketNum] = amplitudeRatio
 	}
 
-	c.viper.Synthesizer._eqCurve = curve
+	// Ensure the curves slice is large enough
+	for len(c.viper.Synthesizer._eqCurve) <= channel {
+		c.viper.Synthesizer._eqCurve = append(c.viper.Synthesizer._eqCurve, nil)
+	}
+
+	c.viper.Synthesizer._eqCurve[channel] = curve
 	c.viper.Synthesizer._eqMinFreq = minFreqHz
 	c.viper.Synthesizer._eqMaxFreq = maxFreqHz
 	c.viper.Synthesizer._eqResolution = resolutionHz
@@ -2931,9 +3137,18 @@ func (c *Config) registerUpdate(restartRequired bool) {
 // rebuildSnapshot creates a new immutable snapshot for lock-free reads.
 // Assumes that the caller holds the write lock.
 func (c *Config) rebuildSnapshot() {
+	// Copy channel arrays
+	channelMute := make([]bool, len(c.viper.Synthesizer.ChannelMute))
+	copy(channelMute, c.viper.Synthesizer.ChannelMute)
+
+	channelGain := make([]float64, len(c.viper.Synthesizer.ChannelGain))
+	copy(channelGain, c.viper.Synthesizer.ChannelGain)
+
 	newSnap := &Snapshot{
 		MasterMute:                c.viper.Synthesizer.MasterMute,
 		MasterGain:                c.viper.Synthesizer.MasterGain,
+		ChannelMute:               channelMute,
+		ChannelGain:               channelGain,
 		ChassisMute:               c.viper.Synthesizer.ChassisMute,
 		ChassisGain:               c.viper.Synthesizer.ChassisGain,
 		TransmissionMute:          c.viper.Synthesizer.TransmissionMute,
@@ -2964,7 +3179,12 @@ func (c *Config) rebuildSnapshot() {
 		DynamicTransmissionCurve:     c.viper.Haptics.DynamicTransmissionCurve,
 		DynamicTransmissionGforceMax: c.viper.Haptics.DynamicTransmissionGforceMax,
 
-		EqEnabled: c.viper.Synthesizer.EnableEq,
+		EqEnabled: func() []bool {
+			eqEnabled := make([]bool, len(c.viper.Synthesizer.EnableEq))
+			copy(eqEnabled, c.viper.Synthesizer.EnableEq)
+
+			return eqEnabled
+		}(),
 
 		FuelMonitoringEnabled: c.viper.PitRadio.FuelMonitoring.Enabled,
 		TyreMonitoringEnabled: c.viper.PitRadio.TyreMonitoring.Enabled,

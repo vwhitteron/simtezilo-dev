@@ -161,6 +161,24 @@ func NewMenuSystem() *MenuSystem {
 		parent:   synthNode,
 		children: make([]*MenuNode, 0),
 	}
+	// Gain Controls -> Calibration submenu
+	calibrationNode := &MenuNode{
+		name:     languagedb.UIMenuSynthCalibration,
+		nodeType: NodeTypeBranch,
+		context:  PageContextAlways,
+		parent:   gainControlsNode,
+		children: make([]*MenuNode, 0),
+	}
+	calibrationNode.children = append(calibrationNode.children,
+		&MenuNode{name: languagedb.UIMenuReturn, nodeType: NodeTypeBranch, context: PageContextAlways, parent: calibrationNode},
+		&MenuNode{name: languagedb.UIMenuSynthCalibrationEnable, nodeType: NodeTypeLeaf, context: PageContextAlways, parent: calibrationNode},
+		&MenuNode{name: languagedb.UIMenuSynthCalibrationGain, nodeType: NodeTypeLeaf, context: PageContextAlways, parent: calibrationNode},
+		&MenuNode{name: languagedb.UIMenuSynthCalibrationChannel, nodeType: NodeTypeLeaf, context: PageContextAlways, parent: calibrationNode},
+		&MenuNode{name: languagedb.UIMenuSynthCalibrationFrequency, nodeType: NodeTypeLeaf, context: PageContextAlways, parent: calibrationNode},
+		&MenuNode{name: languagedb.UIMenuSynthCalibrationSweep, nodeType: NodeTypeLeaf, context: PageContextAlways, parent: calibrationNode},
+		&MenuNode{name: languagedb.UIMenuSynthCalibrationSweepRange, nodeType: NodeTypeLeaf, context: PageContextAlways, parent: calibrationNode},
+	)
+
 	gainControlsNode.children = append(gainControlsNode.children,
 		&MenuNode{name: languagedb.UIMenuReturn, nodeType: NodeTypeBranch, context: PageContextAlways, parent: gainControlsNode},
 		&MenuNode{name: languagedb.UIMenuSynthMasterGain, nodeType: NodeTypeLeaf, context: PageContextAlways, parent: gainControlsNode},
@@ -170,6 +188,7 @@ func NewMenuSystem() *MenuSystem {
 		&MenuNode{name: languagedb.UIMenuSynthTransmissionGainMinRace, nodeType: NodeTypeLeaf, context: PageContextAlways, parent: gainControlsNode},
 		&MenuNode{name: languagedb.UIMenuSynthTransmissionGainMinStreet, nodeType: NodeTypeLeaf, context: PageContextAlways, parent: gainControlsNode},
 		&MenuNode{name: languagedb.UIMenuSynthEqEnabled, nodeType: NodeTypeLeaf, context: PageContextAlways, parent: gainControlsNode},
+		calibrationNode,
 	)
 
 	synthNode.children = append(synthNode.children, sampleRatesNode, gainControlsNode)

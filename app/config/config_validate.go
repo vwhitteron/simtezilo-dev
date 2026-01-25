@@ -204,35 +204,56 @@ func validateSynthesizer(synth *Synthesizer, result *ValidationResult) {
 	}
 
 	validateGain("synthesizer.masterGain", synth.MasterGain)
+
+	// Validate channel gains
+	for i, gain := range synth.ChannelGain {
+		validateGain(fmt.Sprintf("synthesizer.channelGain[%d]", i), gain)
+	}
+
 	validateGain("synthesizer.chassisGain", synth.ChassisGain)
 	validateGain("synthesizer.transmissionGain", synth.TransmissionGain)
 	validateGain("synthesizer.transmissionGainMinRace", synth.TransmissionGainMinRace)
 	validateGain("synthesizer.transmissionGainMinStreet", synth.TransmissionGainMinStreet)
 	validateGain("synthesizer.engineGain", synth.EngineGain)
 
-	// Validate EQ bands (8-band parametric EQ)
-	if len(synth.EqBands) != 8 {
-		addError(result, "synthesizer.eqBands", fmt.Sprintf("EQ must have exactly 8 bands, got %d", len(synth.EqBands)))
+	// Validate EQ bands (per channel, 8-band parametric EQ each)
+	numChannels := 2
+	if len(synth.EqBands) != numChannels {
+		addError(result, "synthesizer.eqBands", fmt.Sprintf("EQ must have exactly %d channels, got %d", numChannels, len(synth.EqBands)))
 	} else {
-		for bandID, band := range synth.EqBands {
-			// Validate frequency range (10-70 Hz covers haptic range)
-			if band.Frequency < 10.0 || band.Frequency > 70.0 {
-				addError(result, fmt.Sprintf("synthesizer.eqBands[%d].frequency", bandID),
-					fmt.Sprintf("frequency %.2f Hz is out of valid range (10.0-70.0 Hz)", band.Frequency))
+		for channelID, channelBands := range synth.EqBands {
+			if len(channelBands) != 8 {
+				addError(result, fmt.Sprintf("synthesizer.eqBands[%d]", channelID),
+					fmt.Sprintf("channel %d EQ must have exactly 8 bands, got %d", channelID, len(channelBands)))
+
+				continue
 			}
 
-			// Validate gain range
-			if band.Gain < -12.0 || band.Gain > 6.0 {
-				addError(result, fmt.Sprintf("synthesizer.eqBands[%d].gain", bandID),
-					fmt.Sprintf("gain %.2f dB is out of valid range (-12.0 to +6.0 dB)", band.Gain))
-			}
+			for bandID, band := range channelBands {
+				// Validate frequency range (10-70 Hz covers haptic range)
+				if band.Frequency < 10.0 || band.Frequency > 70.0 {
+					addError(result, fmt.Sprintf("synthesizer.eqBands[%d][%d].frequency", channelID, bandID),
+						fmt.Sprintf("frequency %.2f Hz is out of valid range (10.0-70.0 Hz)", band.Frequency))
+				}
 
-			// Validate Q factor range
-			if band.Q < 0.1 || band.Q > 20.0 {
-				addError(result, fmt.Sprintf("synthesizer.eqBands[%d].q", bandID),
-					fmt.Sprintf("Q factor %.2f is out of valid range (0.1-20.0)", band.Q))
+				// Validate gain range
+				if band.Gain < -12.0 || band.Gain > 6.0 {
+					addError(result, fmt.Sprintf("synthesizer.eqBands[%d][%d].gain", channelID, bandID),
+						fmt.Sprintf("gain %.2f dB is out of valid range (-12.0 to +6.0 dB)", band.Gain))
+				}
+
+				// Validate Q factor range
+				if band.Q < 0.1 || band.Q > 20.0 {
+					addError(result, fmt.Sprintf("synthesizer.eqBands[%d][%d].q", channelID, bandID),
+						fmt.Sprintf("Q factor %.2f is out of valid range (0.1-20.0)", band.Q))
+				}
 			}
 		}
+	}
+
+	// Validate EQ enabled array
+	if len(synth.EnableEq) != numChannels {
+		addError(result, "synthesizer.enableEq", fmt.Sprintf("enableEq must have exactly %d channels, got %d", numChannels, len(synth.EnableEq)))
 	}
 }
 

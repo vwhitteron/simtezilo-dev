@@ -14,8 +14,41 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/signal"
 )
 
-// Mixer handles multiple audio channels, mixing them into a master output channel.
-type Mixer struct {
+// Mixer defines the methods required for mixer operations.
+type Mixer interface { //nolint:interfacebloat // Large interface for core mixer functionality
+	// Core mixing operations
+	MixToMaster(length int)
+	ReadChannel(name string, length int) []float64
+
+	// Channel management
+	AddChannel(name string, gain float64) error
+	GetChannelGain(name string) (float64, error)
+	SetChannelGain(name string, gain float64) error
+	GetChannelPowerRatio(name string) (float64, error)
+	WriteChannel(name string, samples []float64, magnitude float64, offset int, accumulate bool) error
+	ClearChannelBuffer(name string)
+	ClearBuffers()
+	InspectChannelBuffer(name string, length int, offset int) []float64
+	GetBufferCapacity() int
+
+	// Fader control
+	FadeIn(period time.Duration)
+	SetFader(gain float64)
+
+	// Calibration
+	ResetSineWavePhase()
+
+	// Lifecycle
+	Close()
+
+	// Config access for mute state
+	GetChannelMute(channel int) bool
+	GetMasterMute() bool
+	SetSilenced(silenced bool)
+}
+
+// StereoMixer handles two audio channels, mixing them into a master output channel.
+type StereoMixer struct {
 	config *config.Config
 
 	channels     map[string]*MixerChannel
@@ -27,10 +60,9 @@ type Mixer struct {
 	silenced     bool
 
 	// Calibration mode state
-	calibrator        *calibrator.Calibrator
-	sineWavePhaseL    float64
-	sineWavePhaseR    float64
-	calibrationStereo bool
+	calibrator     calibrator.Calibrator
+	sineWavePhaseL float64
+	sineWavePhaseR float64
 
 	// Buffer monitoring
 	lastHealthCheck     time.Time
@@ -49,37 +81,36 @@ type MixerChannel struct {
 	buffer     Buffer
 }
 
-// MixerConfig holds configuration options for the Mixer.
-type MixerConfig struct {
-	Config       *config.Config         // Full config reference for lock-free reads
-	Calibrator   *calibrator.Calibrator // Calibration mode signal manager
-	BufferLength time.Duration          // Duration of audio the buffer should hold
-	SampleRateHz int                    // Sample rate in Hz
-	Log          zerolog.Logger         // Logger instance for logging
+// StereoMixerConfig holds configuration options for the Mixer.
+type StereoMixerConfig struct {
+	Config       *config.Config        // Full config reference for lock-free reads
+	Calibrator   calibrator.Calibrator // Calibration mode signal manager
+	BufferLength time.Duration         // Duration of audio the buffer should hold
+	SampleRateHz int                   // Sample rate in Hz
+	Log          zerolog.Logger        // Logger instance for logging
 }
 
-// NewMixer creates a new Mixer instance with the provided configuration.
-func NewMixer(mixerConfig MixerConfig) (*Mixer, error) {
+// NewStereoMixer creates a new Mixer instance with the provided configuration.
+func NewStereoMixer(mixerConfig StereoMixerConfig) (*StereoMixer, error) {
 	if mixerConfig.Config == nil {
 		return nil, errors.New("config must be a valid pointer")
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	mixer := &Mixer{
+	mixer := &StereoMixer{
 		config: mixerConfig.Config,
 
-		bufferLength:      mixerConfig.BufferLength,
-		sampleRateHz:      mixerConfig.SampleRateHz,
-		channels:          map[string]*MixerChannel{},
-		log:               mixerConfig.Log,
-		faderGain:         config.MinimumGain,
-		fadeInActive:      false,
-		silenced:          true,
-		calibrator:        mixerConfig.Calibrator,
-		sineWavePhaseL:    0,
-		sineWavePhaseR:    0,
-		calibrationStereo: false,
+		bufferLength:   mixerConfig.BufferLength,
+		sampleRateHz:   mixerConfig.SampleRateHz,
+		channels:       map[string]*MixerChannel{},
+		log:            mixerConfig.Log,
+		faderGain:      config.MinimumGain,
+		fadeInActive:   false,
+		silenced:       true,
+		calibrator:     mixerConfig.Calibrator,
+		sineWavePhaseL: 0,
+		sineWavePhaseR: 0,
 
 		// Initialize buffer monitoring
 		lastHealthCheck:     time.Now(),
@@ -98,13 +129,23 @@ func NewMixer(mixerConfig MixerConfig) (*Mixer, error) {
 		return nil, fmt.Errorf("add master channel: %w", err)
 	}
 
+	// Initialize per-channel output channels
+	for ch := range NumOutputChannels {
+		channelGain := mixer.config.GetSynthChannelGain(ch)
+
+		err = mixer.AddChannel(OutputChannelName(ch), channelGain)
+		if err != nil {
+			return nil, fmt.Errorf("add output channel %d: %w", ch, err)
+		}
+	}
+
 	go mixer.watchForConfigChanges()
 
 	return mixer, nil
 }
 
 // Close gracefully shuts down the mixer, silencing output.
-func (m *Mixer) Close() {
+func (m *StereoMixer) Close() {
 	_ = m.SetChannelGain(ChannelMaster, config.MinimumGain)
 
 	// Cancel context to stop background goroutines
@@ -114,12 +155,12 @@ func (m *Mixer) Close() {
 }
 
 // GetBufferCapacity returns the configured buffer length duration in samples.
-func (m *Mixer) GetBufferCapacity() int {
+func (m *StereoMixer) GetBufferCapacity() int {
 	return int(m.bufferLength.Seconds() * float64(m.sampleRateHz))
 }
 
 // AddChannel adds a new channel to the mixer with the specified name and initial gain.
-func (m *Mixer) AddChannel(name string, initialGain float64) error {
+func (m *StereoMixer) AddChannel(name string, initialGain float64) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -149,7 +190,7 @@ func (m *MixerChannel) Write(samples []float64, magnitude float64, offset int, o
 }
 
 // WriteChannel writes the provided sample data to the specified channel buffer at the given offset.
-func (m *Mixer) WriteChannel(name string, samples []float64, magnitude float64, offset int, overwrite bool) error {
+func (m *StereoMixer) WriteChannel(name string, samples []float64, magnitude float64, offset int, overwrite bool) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -163,7 +204,7 @@ func (m *Mixer) WriteChannel(name string, samples []float64, magnitude float64, 
 }
 
 // ReadChannel reads the specified number of samples from the channel's buffer.
-func (m *Mixer) ReadChannel(name string, length int) []float64 {
+func (m *StereoMixer) ReadChannel(name string, length int) []float64 {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -175,16 +216,16 @@ func (m *Mixer) ReadChannel(name string, length int) []float64 {
 	// Check if channel is muted using lock-free config reads
 	var muted bool
 
-	switch name {
-	case ChannelMaster:
+	switch {
+	case name == ChannelMaster:
 		muted = m.config.GetSynthMasterMute()
-	case ChannelChassis:
+	case IsChassisChannel(name):
 		muted = m.config.GetSynthChassisMute()
-	case ChannelTransmission:
+	case name == ChannelTransmission:
 		muted = m.config.GetSynthTransmissionMute()
-	case ChannelEngine:
+	case name == ChannelEngine:
 		muted = m.config.GetSynthEngineMute()
-	case ChannelCalibrator:
+	case name == ChannelCalibrator:
 		muted = false
 	}
 
@@ -200,7 +241,7 @@ func (m *Mixer) ReadChannel(name string, length int) []float64 {
 }
 
 // InspectChannelBuffer returns a copy of the specified channel buffer for inspection.
-func (m *Mixer) InspectChannelBuffer(name string, length int, offset int) []float64 {
+func (m *StereoMixer) InspectChannelBuffer(name string, length int, offset int) []float64 {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -212,7 +253,7 @@ func (m *Mixer) InspectChannelBuffer(name string, length int, offset int) []floa
 }
 
 // GetChannelBufferLength returns the current length of samples in the specified channel's buffer.
-func (m *Mixer) GetChannelBufferLength(name string) int {
+func (m *StereoMixer) GetChannelBufferLength(name string) int {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -224,7 +265,7 @@ func (m *Mixer) GetChannelBufferLength(name string) int {
 }
 
 // GetChannelNames returns a list of all channel names configured in the mixer.
-func (m *Mixer) GetChannelNames() []string {
+func (m *StereoMixer) GetChannelNames() []string {
 	names := []string{}
 
 	m.mu.RLock()
@@ -243,7 +284,7 @@ func (m *Mixer) GetChannelNames() []string {
 }
 
 // GetChannelGain returns the current gain of the specified channel.
-func (m *Mixer) GetChannelGain(name string) (float64, error) {
+func (m *StereoMixer) GetChannelGain(name string) (float64, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -256,7 +297,7 @@ func (m *Mixer) GetChannelGain(name string) (float64, error) {
 }
 
 // SetChannelGain sets the gain of the specified channel.
-func (m *Mixer) SetChannelGain(name string, gain float64) error {
+func (m *StereoMixer) SetChannelGain(name string, gain float64) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -276,7 +317,7 @@ func (m *Mixer) SetChannelGain(name string, gain float64) error {
 }
 
 // GetChannelPowerRatio returns the current power ratio of the specified channel.
-func (m *Mixer) GetChannelPowerRatio(name string) (float64, error) {
+func (m *StereoMixer) GetChannelPowerRatio(name string) (float64, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -289,7 +330,7 @@ func (m *Mixer) GetChannelPowerRatio(name string) (float64, error) {
 }
 
 // GetChannelAmplitudeRatio returns the current amplitude ratio of the specified channel.
-func (m *Mixer) GetChannelAmplitudeRatio(name string) (float64, error) {
+func (m *StereoMixer) GetChannelAmplitudeRatio(name string) (float64, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -302,7 +343,7 @@ func (m *Mixer) GetChannelAmplitudeRatio(name string) (float64, error) {
 }
 
 // SetFader sets the fader gain, which controls the overall output level.
-func (m *Mixer) SetFader(gain float64) {
+func (m *StereoMixer) SetFader(gain float64) {
 	m.mu.Lock()
 	m.faderGain = gain
 	m.mu.Unlock()
@@ -311,7 +352,7 @@ func (m *Mixer) SetFader(gain float64) {
 }
 
 // FadeIn gradually increases the master gain from minimum to the configured level over the specified period.
-func (m *Mixer) FadeIn(period time.Duration) {
+func (m *StereoMixer) FadeIn(period time.Duration) {
 	m.mu.RLock()
 	master := m.channels[ChannelMaster]
 	m.mu.RUnlock()
@@ -370,7 +411,7 @@ func (m *Mixer) FadeIn(period time.Duration) {
 }
 
 // MixToMaster mixes all active channels into the master channel buffer using an alternative algorithm.
-func (m *Mixer) MixToMaster(length int) {
+func (m *StereoMixer) MixToMaster(length int) {
 	outSamples := make([]float64, length)
 
 	m.mu.RLock()
@@ -378,22 +419,30 @@ func (m *Mixer) MixToMaster(length int) {
 	// Check if calibration mode is enabled or stopping (waiting for zero crossing)
 	if m.calibrator != nil && (m.calibrator.IsEnabled() || m.calibrator.IsStopping()) {
 		frequency := m.calibrator.GetSweepFrequency() // Use sweep frequency if sweeping, otherwise static frequency
-		channel := m.calibrator.GetChannel()
 		isStopping := m.calibrator.IsStopping()
 
-		// Get EQ amplitude multiplier for this frequency
-		eqAmplitude := 1.0
+		// Get per-channel EQ amplitude multipliers
+		eqAmplitudes := make([]float64, NumOutputChannels)
+		for ch := range NumOutputChannels {
+			eqAmplitudes[ch] = 1.0
 
-		if m.config.GetSynthEqEnabled() {
-			curve, minFreq, resolution := m.config.GetSynthEqCurve()
-			if len(curve) > 0 {
-				// Calculate bucket index for this frequency
-				index := int((frequency - minFreq) / resolution)
-				// Apply EQ if frequency is within range
-				if index >= 0 && index < len(curve) {
-					eqAmplitude = curve[index]
+			if m.config.GetSynthChannelEqEnabled(ch) {
+				curve, minFreq, resolution := m.config.GetSynthChannelEqCurve(ch)
+				if len(curve) > 0 {
+					// Calculate bucket index for this frequency
+					index := int((frequency - minFreq) / resolution)
+					// Apply EQ if frequency is within range
+					if index >= 0 && index < len(curve) {
+						eqAmplitudes[ch] = curve[index]
+					}
 				}
 			}
+		}
+
+		// Create per-channel output buffers
+		channelSamples := make([][]float64, NumOutputChannels)
+		for ch := range NumOutputChannels {
+			channelSamples[ch] = make([]float64, length)
 		}
 
 		var prevPhase float64
@@ -402,8 +451,14 @@ func (m *Mixer) MixToMaster(length int) {
 		for offset := range outSamples {
 			prevPhase = m.sineWavePhaseL
 
-			// For mono (both channels), use phase L only and apply EQ
-			outSamples[offset] = math.Sin(m.sineWavePhaseL) * eqAmplitude
+			// Generate base sine wave (mono source)
+			baseSample := math.Sin(m.sineWavePhaseL)
+			outSamples[offset] = baseSample // Master gets unmodified
+
+			// Apply per-channel EQ
+			for ch := range NumOutputChannels {
+				channelSamples[ch][offset] = baseSample * eqAmplitudes[ch]
+			}
 
 			// Increment phase
 			m.sineWavePhaseL += 2 * math.Pi * frequency / float64(m.sampleRateHz)
@@ -423,92 +478,114 @@ func (m *Mixer) MixToMaster(length int) {
 				if prevSin <= 0 && currSin >= 0 {
 					// Zero crossing detected - stop here
 					outSamples[offset] = 0 // End on zero to ensure clean stop
+					for ch := range NumOutputChannels {
+						channelSamples[ch][offset] = 0
+					}
 
 					m.mu.RUnlock()
 					m.calibrator.ConfirmStopped()
 					// Pad remaining samples with zeros
 					for j := offset + 1; j < len(outSamples); j++ {
 						outSamples[j] = 0
+						for ch := range NumOutputChannels {
+							channelSamples[ch][j] = 0
+						}
 					}
 
-					masterChannel := m.channels[ChannelMaster]
-					masterChannel.Write(outSamples, 1.0, 0, true)
+					// Write calibration output to all channels
+					m.channels[ChannelMaster].Write(outSamples, 1.0, 0, true)
+
+					for ch := range NumOutputChannels {
+						m.channels[OutputChannelName(ch)].Write(channelSamples[ch], 1.0, 0, true)
+					}
 
 					return
 				}
 			}
 		}
 
-		masterChannel := m.channels[ChannelMaster]
 		m.mu.RUnlock()
 
-		// Update stereo flag after releasing read lock
-		m.mu.Lock()
-		m.calibrationStereo = (channel != calibrator.OutputChannelBoth)
-		m.mu.Unlock()
+		// Write calibration output to all channels
+		m.channels[ChannelMaster].Write(outSamples, 1.0, 0, true)
 
-		masterChannel.Write(outSamples, 1.0, 0, true)
+		for ch := range NumOutputChannels {
+			m.channels[OutputChannelName(ch)].Write(channelSamples[ch], 1.0, 0, true)
+		}
 
 		return
 	}
 
-	// Reset calibration stereo mode when not calibrating
-	m.mu.RUnlock()
-	m.mu.Lock()
-	m.calibrationStereo = false
-	m.mu.Unlock()
-	m.mu.RLock()
+	// Normal haptic mode - mix per-channel chassis with transmission and engine
+	// Create separate output buffers for each channel to support per-channel EQ
+	channelSamples := make([][]float64, NumOutputChannels)
+	peaks := make([]float64, NumOutputChannels)
 
-	// Normal haptic mode - mix chassis, transmission, and engine
-	// mix in the chassis and transmission channels with equal priority
-	var peak float64
+	for ch := range NumOutputChannels {
+		channelSamples[ch] = make([]float64, length)
+	}
 
-	for _, name := range []string{ChannelChassis, ChannelTransmission} {
-		channel, ok := m.channels[name]
-		if !ok {
-			m.mu.RUnlock()
-			m.log.Error().Str("channel", name).Msg("channel not found in mixer")
-			m.mu.RLock()
-
-			continue
-		}
-
-		// Lock-free config reads for mute state
-		var muted bool
-		if name == ChannelChassis {
-			muted = m.config.GetSynthChassisMute()
-		} else {
-			muted = m.config.GetSynthTransmissionMute()
-		}
-
-		if muted {
-			continue
-		}
-
-		samples := channel.Read(length)
-
-		for i, sample := range samples {
-			outSamples[i] = mixSampleSum(outSamples[i], sample, &peak)
+	// Mix per-channel chassis with appropriate EQ
+	chassisMuted := m.config.GetSynthChassisMute()
+	if !chassisMuted {
+		for ch := range NumOutputChannels {
+			if chassisCh, ok := m.channels[ChassisChannelName(ch)]; ok {
+				samples := chassisCh.Read(length)
+				for i, sample := range samples {
+					channelSamples[ch][i] = mixSampleSum(channelSamples[ch][i], sample, &peaks[ch])
+				}
+			}
 		}
 	}
 
-	if peak > 1.0 {
-		scaleSamplesPeak(&outSamples, peak)
+	// Mix transmission into all outputs (shared channel)
+	if transmissionChannel, ok := m.channels[ChannelTransmission]; ok {
+		transmissionMuted := m.config.GetSynthTransmissionMute()
+		if !transmissionMuted {
+			samples := transmissionChannel.Read(length)
+			for i, sample := range samples {
+				for ch := range NumOutputChannels {
+					channelSamples[ch][i] = mixSampleSum(channelSamples[ch][i], sample, &peaks[ch])
+				}
+			}
+		}
 	}
 
-	// mix in the engine channel with lower priority
-	m.mixEngineChannel(outSamples, length)
+	// Scale peaks for each channel
+	for ch := range NumOutputChannels {
+		if peaks[ch] > 1.0 {
+			scaleSamplesPeak(&channelSamples[ch], peaks[ch])
+		}
+	}
 
-	masterChannel := m.channels[ChannelMaster]
+	// Mix engine channel into all outputs with lower priority
+	m.mixEngineChannelMulti(channelSamples, length)
+
 	m.mu.RUnlock()
 
 	magnitude := 1.0
 
-	masterChannel.Write(outSamples, magnitude, 0, true)
+	// Mix output channels for master (average of all)
+	masterSamples := make([]float64, length)
+	for sampleIdx := range length {
+		sum := 0.0
+		for channel := range NumOutputChannels {
+			sum += channelSamples[channel][sampleIdx]
+		}
+
+		masterSamples[sampleIdx] = sum / float64(NumOutputChannels)
+	}
+
+	// Write to master and per-channel outputs
+	m.channels[ChannelMaster].Write(masterSamples, magnitude, 0, true)
+
+	for channel := range NumOutputChannels {
+		m.channels[OutputChannelName(channel)].Write(channelSamples[channel], magnitude, 0, true)
+	}
 }
 
 // ClearBuffers clears all channel buffers in the mixer.
-func (m *Mixer) ClearBuffers() {
+func (m *StereoMixer) ClearBuffers() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -518,7 +595,7 @@ func (m *Mixer) ClearBuffers() {
 }
 
 // ClearChannelBuffer clears a specific channel's buffer.
-func (m *Mixer) ClearChannelBuffer(name string) {
+func (m *StereoMixer) ClearChannelBuffer(name string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -528,7 +605,7 @@ func (m *Mixer) ClearChannelBuffer(name string) {
 }
 
 // ResetSineWavePhase resets the sine wave phase to zero for the calibrator.
-func (m *Mixer) ResetSineWavePhase() {
+func (m *StereoMixer) ResetSineWavePhase() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -536,85 +613,8 @@ func (m *Mixer) ResetSineWavePhase() {
 	m.sineWavePhaseR = 0
 }
 
-// IsCalibrationStereo returns whether calibration mode is outputting stereo.
-func (m *Mixer) IsCalibrationStereo() bool {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	return m.calibrationStereo
-}
-
-// GetCalibrationChannel returns the current calibration output channel setting.
-func (m *Mixer) GetCalibrationChannel() calibrator.OutputChannel {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	if m.calibrator == nil {
-		return calibrator.OutputChannelBoth
-	}
-
-	return m.calibrator.GetChannel()
-}
-
-// mixEngineChannel mixes the engine channel into the output samples with lower priority.
-func (m *Mixer) mixEngineChannel(outSamples []float64, length int) {
-	channel, ok := m.channels[ChannelEngine]
-	if !ok {
-		m.mu.RUnlock()
-		m.log.Error().Str("channel", ChannelEngine).Msg("channel not found in mixer")
-		m.mu.RLock()
-
-		return
-	}
-
-	// Lock-free config read for mute state
-	if m.config.GetSynthEngineMute() {
-		return
-	}
-
-	engineSamples := channel.Read(length)
-	if len(engineSamples) == 0 {
-		return
-	}
-
-	m.processEngineSamples(outSamples, engineSamples)
-}
-
-// processEngineSamples processes and mixes engine samples into the output.
-func (m *Mixer) processEngineSamples(outSamples, engineSamples []float64) {
-	outSamplesWork := make([]float64, len(outSamples))
-
-	// Perform direct mix and get the peak value
-	for index, engineSample := range engineSamples {
-		peak := 0.0
-
-		engineScaled := engineSample
-
-		engineMax := 1.0 - signal.Abs(outSamples[index])
-		if engineSample > engineMax || engineSample < -engineMax {
-			engineScaled = engineMax * engineSample
-		}
-
-		mixed := mixSampleSum(outSamples[index], engineScaled, &peak)
-
-		outSamplesWork[index] = mixed
-
-		if mixed > 1.0 || mixed < -1.0 {
-			m.log.Warn().
-				Float64("sample", outSamples[index]).
-				Float64("engine", engineSample).
-				Float64("engineScaled", engineScaled).
-				Float64("mixed", mixed).
-				Float64("peak", peak).
-				Msg("clipping")
-		}
-	}
-
-	copy(outSamples, outSamplesWork)
-}
-
 // checkBufferHealth monitors buffer health and logs issues.
-func (m *Mixer) checkBufferHealth() {
+func (m *StereoMixer) checkBufferHealth() {
 	now := time.Now()
 	if now.Sub(m.lastHealthCheck) < m.healthCheckInterval {
 		return
@@ -630,12 +630,12 @@ func (m *Mixer) checkBufferHealth() {
 		// Check if channel is muted using lock-free config reads
 		var muted bool
 
-		switch name {
-		case ChannelChassis:
+		switch {
+		case IsChassisChannel(name):
 			muted = m.config.GetSynthChassisMute()
-		case ChannelTransmission:
+		case name == ChannelTransmission:
 			muted = m.config.GetSynthTransmissionMute()
-		case ChannelEngine:
+		case name == ChannelEngine:
 			muted = m.config.GetSynthEngineMute()
 		}
 
@@ -661,7 +661,7 @@ func (m *Mixer) checkBufferHealth() {
 }
 
 // watchForConfigChanges monitors configuration changes and applies them to the mixer channels.
-func (m *Mixer) watchForConfigChanges() {
+func (m *StereoMixer) watchForConfigChanges() {
 	m.log.Debug().Str("event", "start").Msg("config watch")
 
 	// Track previous mute states to detect changes
@@ -692,24 +692,27 @@ func (m *Mixer) watchForConfigChanges() {
 				configMute bool
 			)
 
-			switch name {
-			case ChannelMaster:
-				// Master gain updates are skipped during calibration mode
-				if m.calibrator != nil && m.calibrator.IsEnabled() {
-					continue
-				}
-
+			switch {
+			case name == ChannelMaster:
 				configGain = m.config.GetSynthMasterGain()
 				configMute = m.config.GetSynthMasterMute()
-			case ChannelChassis:
+			case IsChassisChannel(name):
 				configGain = m.config.GetSynthChassisGain()
 				configMute = m.config.GetSynthChassisMute()
-			case ChannelTransmission:
+			case name == ChannelTransmission:
 				configGain = m.config.GetSynthTransmissionGain()
 				configMute = m.config.GetSynthTransmissionMute()
-			case ChannelEngine:
+			case name == ChannelEngine:
 				configGain = m.config.GetSynthEngineGain()
 				configMute = m.config.GetSynthEngineMute()
+			case IsOutputChannel(name):
+				chIndex := ParseOutputChannelIndex(name)
+				if chIndex >= 0 {
+					configGain = m.config.GetSynthChannelGain(chIndex)
+					configMute = m.config.GetSynthChannelMute(chIndex)
+				} else {
+					continue
+				}
 			default:
 				continue
 			}
@@ -751,5 +754,75 @@ func (m *Mixer) watchForConfigChanges() {
 		}
 
 		m.mu.RUnlock()
+	}
+}
+
+// GetChannelMute returns the mute state for the specified channel index.
+func (m *StereoMixer) GetChannelMute(channel int) bool {
+	return m.config.GetSynthChannelMute(channel)
+}
+
+// GetMasterMute returns the master mute state.
+func (m *StereoMixer) GetMasterMute() bool {
+	return m.config.GetSynthMasterMute()
+}
+
+// SetSilenced sets the silenced state of the mixer.
+func (m *StereoMixer) SetSilenced(silenced bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.silenced = silenced
+}
+
+// mixEngineChannelMulti mixes the engine channel into all output samples with lower priority.
+func (m *StereoMixer) mixEngineChannelMulti(outSamples [][]float64, length int) {
+	channel, ok := m.channels[ChannelEngine]
+	if !ok {
+		m.mu.RUnlock()
+		m.log.Error().Str("channel", ChannelEngine).Msg("channel not found in mixer")
+		m.mu.RLock()
+
+		return
+	}
+
+	// Lock-free config read for mute state
+	if m.config.GetSynthEngineMute() {
+		return
+	}
+
+	engineSamples := channel.Read(length)
+	if len(engineSamples) == 0 {
+		return
+	}
+
+	// Process engine for all output channels
+	m.processEngineSamplesMulti(outSamples, engineSamples)
+}
+
+// processEngineSamplesMulti processes and mixes engine samples into all output channels.
+func (m *StereoMixer) processEngineSamplesMulti(outSamples [][]float64, engineSamples []float64) {
+	// Create work buffers for each channel
+	outSamplesWork := make([][]float64, len(outSamples))
+	for channel := range outSamples {
+		outSamplesWork[channel] = make([]float64, len(outSamples[channel]))
+	}
+
+	for index, engineSample := range engineSamples {
+		for channel := range outSamples {
+			peak := 0.0
+			engineScaled := engineSample
+			engineMax := 1.0 - signal.Abs(outSamples[channel][index])
+
+			if engineSample > engineMax || engineSample < -engineMax {
+				engineScaled = engineMax * engineSample
+			}
+
+			outSamplesWork[channel][index] = mixSampleSum(outSamples[channel][index], engineScaled, &peak)
+		}
+	}
+
+	for channel := range outSamples {
+		copy(outSamples[channel], outSamplesWork[channel])
 	}
 }

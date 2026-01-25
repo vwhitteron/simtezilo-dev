@@ -213,7 +213,7 @@ type WebUI struct {
 	currentRaceInfo    map[string]any
 	raceInfoMutex      sync.RWMutex
 	config             *appconfig.Config
-	calibrator         *calibrator.Calibrator
+	calibrator         *calibrator.ToneGenerator
 	upgrader           websocket.Upgrader
 	shutdownChan       chan exitcode.Code
 	setupMode          *setupmode.SetupMode
@@ -245,7 +245,7 @@ type Config struct {
 	GameStateFeed      chan string
 	LogStatsFeed       chan map[string]any
 	Config             *appconfig.Config
-	Calibrator         *calibrator.Calibrator
+	Calibrator         *calibrator.ToneGenerator
 	ShutdownChan       chan exitcode.Code
 	SetupMode          *setupmode.SetupMode
 	LogStore           *logstore.Store
@@ -1041,6 +1041,10 @@ func (w *WebUI) handleGetConfig(response http.ResponseWriter, _ *http.Request) {
 			"outputFile":                w.config.GetSynthOutputFile(),
 			"masterMute":                w.config.GetSynthMasterMute(),
 			"masterGain":                w.config.GetSynthMasterGain(),
+			"channel0Mute":              w.config.GetSynthChannelMute(0),
+			"channel0Gain":              w.config.GetSynthChannelGain(0),
+			"channel1Mute":              w.config.GetSynthChannelMute(1),
+			"channel1Gain":              w.config.GetSynthChannelGain(1),
 			"chassisMute":               w.config.GetSynthChassisMute(),
 			"chassisGain":               w.config.GetSynthChassisGain(),
 			"transmissionMute":          w.config.GetSynthTransmissionMute(),
@@ -1051,14 +1055,14 @@ func (w *WebUI) handleGetConfig(response http.ResponseWriter, _ *http.Request) {
 			"engineGain":                w.config.GetSynthEngineGain(),
 			"gainIncrement":             w.config.GetSynthGainIncrement(),
 			"engineProfiles":            w.config.GetSynthEngineProfiles(),
-			"enableEQ":                  w.config.GetSynthEqEnabled(),
-			"eq":                        w.config.GetSynthEq(),
+			"enableEQ":                  w.config.GetSynthChannelsEqEnabled(),
+			"eq":                        w.config.GetSynthChannelsEq(),
 		},
 		"eqCurve": func() map[string]any {
-			curve, minFreq, resolution := w.config.GetSynthEqCurve()
+			curves, minFreq, resolution := w.config.GetSynthChannelsEqCurve()
 
 			return map[string]any{
-				"curve":      curve,
+				"curve":      curves,
 				"minFreq":    minFreq,
 				"resolution": resolution,
 			}
@@ -1069,8 +1073,6 @@ func (w *WebUI) handleGetConfig(response http.ResponseWriter, _ *http.Request) {
 		"calibration": map[string]any{
 			"enabled":       w.calibrator.IsEnabled(),
 			"frequency":     w.calibrator.GetSweepFrequency(),
-			"volume":        w.calibrator.GetVolume(),
-			"channel":       string(w.calibrator.GetChannel()),
 			"sweeping":      w.calibrator.IsSweeping(),
 			"sweepMin":      w.calibrator.GetSweepMin(),
 			"sweepMax":      w.calibrator.GetSweepMax(),
@@ -1144,10 +1146,10 @@ func (w *WebUI) handleSetConfig(response http.ResponseWriter, request *http.Requ
 		"restartRequired": restartRequired,
 		"config": map[string]any{
 			"eqCurve": func() map[string]any {
-				curve, minFreq, resolution := w.config.GetSynthEqCurve()
+				curves, minFreq, resolution := w.config.GetSynthChannelsEqCurve()
 
 				return map[string]any{
-					"curve":      curve,
+					"curve":      curves,
 					"minFreq":    minFreq,
 					"resolution": resolution,
 				}
@@ -1155,8 +1157,6 @@ func (w *WebUI) handleSetConfig(response http.ResponseWriter, request *http.Requ
 			"calibration": map[string]any{
 				"enabled":       w.calibrator.IsEnabled(),
 				"frequency":     w.calibrator.GetSweepFrequency(),
-				"volume":        w.calibrator.GetVolume(),
-				"channel":       string(w.calibrator.GetChannel()),
 				"sweeping":      w.calibrator.IsSweeping(),
 				"sweepMin":      w.calibrator.GetSweepMin(),
 				"sweepMax":      w.calibrator.GetSweepMax(),
@@ -1373,6 +1373,38 @@ func (w *WebUI) applySynthesizerConfig(config map[string]any) []string {
 		}
 	}
 
+	if channel0Gain, ok := config["channel0Gain"]; ok {
+		if gainFloat, ok := channel0Gain.(float64); ok {
+			w.config.SetSynthChannelGain(0, gainFloat)
+		} else {
+			errors = append(errors, "invalid left channel gain value")
+		}
+	}
+
+	if channel0Mute, ok := config["channel0Mute"]; ok {
+		if mute, ok := channel0Mute.(bool); ok {
+			w.config.SetSynthChannelMute(0, mute)
+		} else {
+			errors = append(errors, "invalid left channel mute value")
+		}
+	}
+
+	if channel1Gain, ok := config["channel1Gain"]; ok {
+		if gainFloat, ok := channel1Gain.(float64); ok {
+			w.config.SetSynthChannelGain(1, gainFloat)
+		} else {
+			errors = append(errors, "invalid right channel gain value")
+		}
+	}
+
+	if channel1Mute, ok := config["channel1Mute"]; ok {
+		if mute, ok := channel1Mute.(bool); ok {
+			w.config.SetSynthChannelMute(1, mute)
+		} else {
+			errors = append(errors, "invalid right channel mute value")
+		}
+	}
+
 	if chassisGain, ok := config["chassisGain"]; ok {
 		if gainFloat, ok := chassisGain.(float64); ok {
 			w.config.SetSynthChassisGain(gainFloat)
@@ -1477,48 +1509,60 @@ func (w *WebUI) applySynthesizerConfig(config map[string]any) []string {
 	}
 
 	if eqEnabled, ok := config["enableEQ"]; ok {
-		if enabled, ok := eqEnabled.(bool); ok {
-			w.config.SetSynthEqEnabled(enabled)
+		if enabledArray, ok := eqEnabled.([]any); ok {
+			for channel, val := range enabledArray {
+				if enabled, ok := val.(bool); ok {
+					w.config.SetSynthChannelEqEnabled(channel, enabled)
+				} else {
+					errors = append(errors, fmt.Sprintf("invalid EQ enabled value for channel %d", channel))
+				}
+			}
 		} else {
-			errors = append(errors, "invalid EQ enabled value")
+			errors = append(errors, "invalid EQ enabled value (expected array)")
 		}
 	}
 
-	// Handle EQ bands
+	// Handle EQ bands (per channel)
 	if eq, ok := config["eq"]; ok {
-		if eqArray, ok := eq.([]any); ok {
-			eqBands := make([]appconfig.EQBand, 0, len(eqArray))
-			for idx, val := range eqArray {
-				if bandMap, ok := val.(map[string]any); ok {
-					freq, freqOk := bandMap["frequency"].(float64)
-					gain, gainOk := bandMap["gain"].(float64)
-					qVal, qOk := bandMap["q"].(float64)
+		if channelArray, ok := eq.([]any); ok {
+			for channel, channelVal := range channelArray {
+				if eqArray, ok := channelVal.([]any); ok {
+					eqBands := make([]appconfig.EQBand, 0, len(eqArray))
+					for idx, val := range eqArray {
+						if bandMap, ok := val.(map[string]any); ok {
+							freq, freqOk := bandMap["frequency"].(float64)
+							gain, gainOk := bandMap["gain"].(float64)
+							qVal, qOk := bandMap["q"].(float64)
 
-					if !freqOk || !gainOk || !qOk {
-						errors = append(errors, fmt.Sprintf("invalid EQ band %d: missing or invalid fields", idx+1))
+							if !freqOk || !gainOk || !qOk {
+								errors = append(errors, fmt.Sprintf("invalid EQ band %d for channel %d: missing or invalid fields", idx+1, channel))
 
-						continue // Skip this band but continue processing others
+								continue // Skip this band but continue processing others
+							}
+
+							eqBands = append(eqBands, appconfig.EQBand{
+								Frequency: freq,
+								Gain:      gain,
+								Q:         qVal,
+							})
+						} else {
+							errors = append(errors, fmt.Sprintf("invalid EQ band %d format for channel %d", idx+1, channel))
+
+							continue
+						}
 					}
 
-					eqBands = append(eqBands, appconfig.EQBand{
-						Frequency: freq,
-						Gain:      gain,
-						Q:         qVal,
-					})
+					if len(eqBands) == 8 {
+						w.config.SetSynthChannelEq(channel, eqBands)
+					} else {
+						errors = append(errors, fmt.Sprintf("EQ for channel %d must have exactly 8 bands, got %d", channel, len(eqBands)))
+					}
 				} else {
-					errors = append(errors, fmt.Sprintf("invalid EQ band %d format", idx+1))
-
-					continue
+					errors = append(errors, fmt.Sprintf("invalid EQ format for channel %d", channel))
 				}
 			}
-
-			if len(eqBands) == 8 {
-				w.config.SetSynthEq(eqBands)
-			} else {
-				errors = append(errors, fmt.Sprintf("EQ must have exactly 8 bands, got %d", len(eqBands)))
-			}
 		} else {
-			errors = append(errors, "invalid EQ format")
+			errors = append(errors, "invalid EQ format (expected array of channel arrays)")
 		}
 	}
 
@@ -1640,7 +1684,7 @@ func (w *WebUI) applyCalibrationConfig(config map[string]any) []string {
 			calibrationState := map[string]any{
 				"enabled":       w.calibrator.IsEnabled(),
 				"frequency":     w.calibrator.GetSweepFrequency(),
-				"volume":        w.calibrator.GetVolume(),
+				"volume":        w.calibrator.GetGain(),
 				"channel":       string(w.calibrator.GetChannel()),
 				"sweeping":      w.calibrator.IsSweeping(),
 				"sweepMin":      w.calibrator.GetSweepMin(),
@@ -1668,22 +1712,6 @@ func (w *WebUI) applyCalibrationConfig(config map[string]any) []string {
 			w.calibrator.SetFrequency(freqFloat)
 		} else {
 			errors = append(errors, "invalid calibration frequency value")
-		}
-	}
-
-	if volume, ok := config["volume"]; ok {
-		if volFloat, ok := volume.(float64); ok {
-			w.calibrator.SetVolume(volFloat)
-		} else {
-			errors = append(errors, "invalid calibration volume value")
-		}
-	}
-
-	if channel, ok := config["channel"]; ok {
-		if channelStr, ok := channel.(string); ok {
-			w.calibrator.SetChannel(calibrator.OutputChannel(channelStr))
-		} else {
-			errors = append(errors, "invalid calibration channel value")
 		}
 	}
 

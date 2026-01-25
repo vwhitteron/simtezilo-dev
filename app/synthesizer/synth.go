@@ -16,24 +16,67 @@ import (
 // Mixer channel names.
 const (
 	ChannelMaster       = "_master"
-	ChannelChassis      = "chassis"
 	ChannelEngine       = "engine"
 	ChannelTransmission = "transmission"
 	ChannelCalibrator   = "calibration"
+
+	// NumOutputChannels defines the number of output channels (stereo = 2).
+	NumOutputChannels = 2
+
+	// Channel name prefixes for pattern matching.
+	chassisChannelPrefix = "chassis_"
+	outputChannelPrefix  = "_output_"
 )
+
+// OutputChannelName returns the channel name for output channel n (e.g., "_output_0").
+func OutputChannelName(n int) string {
+	return fmt.Sprintf("%s%d", outputChannelPrefix, n)
+}
+
+// ChassisChannelName returns the channel name for chassis channel n (e.g., "chassis_0").
+func ChassisChannelName(n int) string {
+	return fmt.Sprintf("%s%d", chassisChannelPrefix, n)
+}
+
+// IsChassisChannel returns true if the channel name is a chassis channel.
+func IsChassisChannel(name string) bool {
+	return len(name) > len(chassisChannelPrefix) && name[:len(chassisChannelPrefix)] == chassisChannelPrefix
+}
+
+// IsOutputChannel returns true if the channel name is an output channel.
+func IsOutputChannel(name string) bool {
+	return len(name) > len(outputChannelPrefix) && name[:len(outputChannelPrefix)] == outputChannelPrefix
+}
+
+// ParseOutputChannelIndex extracts the channel index from an output channel name.
+// Returns -1 if the name is not a valid output channel.
+func ParseOutputChannelIndex(name string) int {
+	if !IsOutputChannel(name) {
+		return -1
+	}
+
+	var index int
+
+	_, err := fmt.Sscanf(name, outputChannelPrefix+"%d", &index)
+	if err != nil {
+		return -1
+	}
+
+	return index
+}
 
 // Synthesizer is the main synthesizer structure that holds the mixer, effects, and output device.
 type Synthesizer struct {
 	effects      *EffectsSampleBank
 	log          zerolog.Logger
-	mixer        *Mixer
+	mixer        Mixer
 	outputDevice *OutputDevice
 	kinematics   *kinematics.State
 	sampleRate   int
 	outFile      *os.File
 
 	// Calibration mode state
-	calibrator         *calibrator.Calibrator
+	calibrator         calibrator.Calibrator
 	wasCalibrating     bool
 	originalMasterGain float64
 }
@@ -44,7 +87,7 @@ type SynthOpts struct {
 	BaseConfig *config.Config // Base config for lock-free reads in mixer
 	Logger     zerolog.Logger
 	Kinematics *kinematics.State
-	Calibrator *calibrator.Calibrator
+	Calibrator *calibrator.ToneGenerator
 }
 
 // New creates a new Synthesizer instance with the provided options.
@@ -64,7 +107,7 @@ func New(opts *SynthOpts) (*Synthesizer, error) {
 	bufferLength := 2 * time.Second
 
 	// Pass full config for lock-free reads
-	synthesizer.mixer, err = NewMixer(MixerConfig{
+	synthesizer.mixer, err = NewStereoMixer(StereoMixerConfig{
 		Config:       opts.BaseConfig,
 		Calibrator:   opts.Calibrator,
 		BufferLength: bufferLength,
@@ -77,9 +120,13 @@ func New(opts *SynthOpts) (*Synthesizer, error) {
 
 	// Add channels with initial values from config
 	_ = synthesizer.mixer.AddChannel(ChannelTransmission, opts.Config.TransmissionGain)
-	_ = synthesizer.mixer.AddChannel(ChannelChassis, opts.Config.ChassisGain)
 	_ = synthesizer.mixer.AddChannel(ChannelEngine, opts.Config.EngineGain)
 	_ = synthesizer.mixer.AddChannel(ChannelCalibrator, 0)
+
+	// Add per-channel chassis buffers for per-channel EQ support
+	for ch := range NumOutputChannels {
+		_ = synthesizer.mixer.AddChannel(ChassisChannelName(ch), opts.Config.ChassisGain)
+	}
 
 	synthesizer.outputDevice, err = NewOutputDevice(SynthOutDeviceOpts{
 		Log: opts.Logger.With().Str("package", "synth output device").Logger(),
@@ -133,14 +180,9 @@ func (s *Synthesizer) ReadBuffer(length int) []float64 {
 	return s.mixer.ReadChannel(ChannelMaster, length)
 }
 
-// IsCalibrationStereo returns whether calibration mode is outputting in stereo.
-func (s *Synthesizer) IsCalibrationStereo() bool {
-	return s.mixer.IsCalibrationStereo()
-}
-
-// GetCalibrationChannel returns the current calibration output channel setting.
-func (s *Synthesizer) GetCalibrationChannel() calibrator.OutputChannel {
-	return s.mixer.GetCalibrationChannel()
+// GetChannelMute returns the mute state for the specified channel index.
+func (s *Synthesizer) GetChannelMute(channel int) bool {
+	return s.mixer.GetChannelMute(channel)
 }
 
 // WriteBuffer writes the provided sample data to the specified channel buffer at the given offset.
@@ -187,7 +229,7 @@ func (s *Synthesizer) ApplyMasterGain(value float64) float64 {
 // Silence immediately silences all mixeroutput and clears buffers.
 func (s *Synthesizer) Silence() {
 	s.mixer.SetFader(config.MinimumGain)
-	s.mixer.silenced = true
+	s.mixer.SetSilenced(true)
 
 	s.mixer.ClearBuffers()
 }
@@ -232,17 +274,11 @@ func (s *Synthesizer) UpdateCalibrator() {
 
 	// Handle calibrator state transitions
 	if calibratorEnabled && !s.wasCalibrating {
-		// Entering calibration mode - flush all haptic buffers first, then change master gain
+		// Entering calibration mode - flush all haptic buffers first
 		s.startCalibrator()
 	} else if !calibratorEnabled && !calibratorStopping && s.wasCalibrating {
 		// Exiting calibration mode - zero crossing has been reached
 		s.stopCalibrator()
-	}
-
-	if calibratorEnabled {
-		// Update master gain to match calibration volume in real-time (in dB)
-		calibrationVolume := s.calibrator.GetVolume()
-		_ = s.mixer.SetChannelGain(ChannelMaster, calibrationVolume)
 	}
 }
 
@@ -251,7 +287,10 @@ func (s *Synthesizer) startCalibrator() {
 	s.wasCalibrating = true
 
 	// Clear all haptic channel buffers first to prevent volume spike
-	s.mixer.ClearChannelBuffer(ChannelChassis)
+	for ch := range NumOutputChannels {
+		s.mixer.ClearChannelBuffer(ChassisChannelName(ch))
+	}
+
 	s.mixer.ClearChannelBuffer(ChannelEngine)
 	s.mixer.ClearChannelBuffer(ChannelTransmission)
 	s.log.Debug().Msg("Flushed haptic channel buffers")
@@ -263,19 +302,14 @@ func (s *Synthesizer) startCalibrator() {
 	// Reset sine wave phase to start from zero
 	s.mixer.ResetSineWavePhase()
 
-	// Store original master gain
+	// Store original master gain for restoration after calibration
 	currentGain, err := s.mixer.GetChannelGain(ChannelMaster)
 	if err == nil {
 		s.originalMasterGain = currentGain
 
-		// Clear master buffer to remove any previously mixed audio before gain change
+		// Clear master buffer to remove any previously mixed audio
 		s.mixer.ClearChannelBuffer(ChannelMaster)
 		s.log.Debug().Msg("Flushed master channel buffer")
-
-		// Set master gain to calibration volume (in dB, not converted)
-		calibrationVolume := s.calibrator.GetVolume()
-		_ = s.mixer.SetChannelGain(ChannelMaster, calibrationVolume)
-		s.log.Debug().Float64("original_gain", currentGain).Float64("calibration_volume_db", calibrationVolume).Msg("Set master gain to calibration volume")
 	}
 }
 
@@ -295,7 +329,10 @@ func (s *Synthesizer) stopCalibrator() {
 	s.log.Debug().Msg("Cleared master buffer")
 
 	// Clear all haptic channel buffers to ensure clean start
-	s.mixer.ClearChannelBuffer(ChannelChassis)
+	for ch := range NumOutputChannels {
+		s.mixer.ClearChannelBuffer(ChassisChannelName(ch))
+	}
+
 	s.mixer.ClearChannelBuffer(ChannelEngine)
 	s.mixer.ClearChannelBuffer(ChannelTransmission)
 	s.log.Debug().Msg("Cleared haptic channel buffers")

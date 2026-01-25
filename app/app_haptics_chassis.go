@@ -21,9 +21,6 @@ func (a *App) generateChassisHaptic() {
 
 	pulseAmplitude := a.calculateChassisHapticPulseAmplitude()
 
-	// Apply equalizer based on frequency
-	pulseAmplitude = signal.Equalize(pulseAmplitude, pulseWidth, a.config)
-
 	waveOffset := pulseWidth / 2
 	waveSamplePeriod := math.Pi / pulseWidth
 
@@ -46,23 +43,26 @@ func (a *App) generateChassisHaptic() {
 	// This allows low-frequency pulses to be generated completely
 	bufferSize := max(pulseLength, minSamplesPerFrame)
 
-	pulseBuffer := make([]float64, bufferSize)
+	// Generate pulse buffers for each channel
+	for channel := range synthesizer.NumOutputChannels {
+		// Apply channel-specific equalizer to the pulse amplitude
+		eqAmplitude := signal.Equalize(pulseAmplitude, pulseWidth, channel, a.config)
 
-	// bufferLen := a.synth.GetBufferLength()
-	// pulseBuffer := make([]float64, bufferLen)
+		pulseBuffer := make([]float64, bufferSize)
 
-	// Generate the complete pulse waveform
-	// for i := range int(pulseWidth * 2) {
-	for index := range bufferSize {
-		if index > pulseLength {
-			break
+		// Generate the complete pulse waveform
+		for index := range bufferSize {
+			if index > pulseLength {
+				break
+			}
+
+			phase := waveSamplePeriod * (float64(index) - waveOffset)
+			pulseBuffer[index] = ((eqAmplitude * math.Sin(phase)) + eqAmplitude) / 2
 		}
 
-		phase := waveSamplePeriod * (float64(index) - waveOffset)
-		pulseBuffer[index] = ((pulseAmplitude * math.Sin(phase)) + pulseAmplitude) / 2
+		// Write to the channel-specific chassis buffer
+		a.synth.WriteBuffer(synthesizer.ChassisChannelName(channel), pulseBuffer, 0)
 	}
-
-	a.synth.WriteBuffer(synthesizer.ChannelChassis, pulseBuffer, 0)
 
 	// log large amplitude values
 	if pulseAmplitude > 1.0 || pulseAmplitude < -1.0 {

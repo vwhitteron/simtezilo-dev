@@ -16,18 +16,18 @@ func Abs(value float64) float64 {
 	return value
 }
 
-// Equalize applies equalization based on pulse width and synthesizer settings.
+// Equalize applies equalization based on pulse width and synthesizer settings for a specific channel.
 // Uses a precomputed EQ curve for efficient lookup instead of calculating per-sample.
-func Equalize(value float64, pulseWidth float64, cfg *config.Config) float64 {
-	// Check if EQ is enabled
-	if !cfg.GetSynthEqEnabled() {
+func Equalize(value float64, pulseWidth float64, channel int, cfg *config.Config) float64 {
+	// Check if EQ is enabled for this channel
+	if !cfg.GetSynthChannelEqEnabled(channel) {
 		return value
 	}
 
 	sampleRate := cfg.GetSynthInternalSampleRateHz()
 	freq := float64(sampleRate) / (2 * pulseWidth)
 
-	curve, minFreq, resolution := cfg.GetSynthEqCurve()
+	curve, minFreq, resolution := cfg.GetSynthChannelEqCurve(channel)
 	if len(curve) == 0 {
 		return value // No EQ curve computed
 	}
