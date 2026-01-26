@@ -3061,8 +3061,8 @@ func (c *Config) updateSnapScale() {
 // Uses 8-band parametric EQ with bell filters.
 func (c *Config) computeEqCurve(channel int) {
 	const (
-		minFreqHz    = 10.0
-		maxFreqHz    = 70.0
+		minFreqHz    = 5.0
+		maxFreqHz    = 160.0
 		resolutionHz = 0.5
 	)
 

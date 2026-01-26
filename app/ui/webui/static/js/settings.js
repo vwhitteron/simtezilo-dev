@@ -1947,6 +1947,21 @@ class ConfigManager {
         }
     }
 
+    // Get the minimum EQ frequency from pulse config
+    getEqMinFreq() {
+        return this.config?.haptics?.pulseMinFrequencyHz || 8;
+    }
+
+    // Get the maximum EQ frequency from pulse config
+    getEqMaxFreq() {
+        return this.config?.haptics?.pulseMaxFrequencyHz || 60;
+    }
+
+    // Get the EQ frequency range (max - min)
+    getEqFreqRange() {
+        return this.getEqMaxFreq() - this.getEqMinFreq();
+    }
+
     // Initialize equalizer controls
     initEqualizer() {
         const channelSelect = document.getElementById('eq-channel-select');
@@ -1963,6 +1978,10 @@ class ConfigManager {
         if (!bandSelect || !frequencySlider || !gainSlider || !qSlider || !this.config.synthesizer) {
             return;
         }
+
+        // Update frequency slider bounds from pulse config
+        frequencySlider.min = this.getEqMinFreq();
+        frequencySlider.max = this.getEqMaxFreq();
 
         // Initialize current channel
         this.currentChannel = 0;
@@ -2190,20 +2209,20 @@ class ConfigManager {
         if (!frequencySlider || !this.eqBands) return;
 
         const index = this.currentBandIndex;
-        let minFreq = 10;  // Absolute minimum
-        let maxFreq = 70;  // Absolute maximum
+        let minFreq = this.getEqMinFreq();  // Dynamic minimum from pulse config
+        let maxFreq = this.getEqMaxFreq();  // Dynamic maximum from pulse config
 
         // Get frequency of previous band (if exists)
         if (index > 0) {
             const prevBand = this.eqBands[index - 1];
-            const prevFreq = prevBand.frequency !== undefined ? prevBand.frequency : (prevBand.Frequency !== undefined ? prevBand.Frequency : 10);
+            const prevFreq = prevBand.frequency !== undefined ? prevBand.frequency : (prevBand.Frequency !== undefined ? prevBand.Frequency : minFreq);
             minFreq = prevFreq + 0.5; // Must be at least 0.5 Hz above previous band
         }
 
         // Get frequency of next band (if exists)
         if (index < this.eqBands.length - 1) {
             const nextBand = this.eqBands[index + 1];
-            const nextFreq = nextBand.frequency !== undefined ? nextBand.frequency : (nextBand.Frequency !== undefined ? nextBand.Frequency : 70);
+            const nextFreq = nextBand.frequency !== undefined ? nextBand.frequency : (nextBand.Frequency !== undefined ? nextBand.Frequency : maxFreq);
             maxFreq = nextFreq - 0.5; // Must be at least 0.5 Hz below next band
         }
 
@@ -2235,6 +2254,10 @@ class ConfigManager {
         const width = canvas.width;
         const height = canvas.height;
 
+        // Get dynamic frequency range
+        const eqMinFreq = this.getEqMinFreq();
+        const eqFreqRange = this.getEqFreqRange();
+
         // Check if mouse down is near any band dot
         const clickRadius = 15;
 
@@ -2243,7 +2266,7 @@ class ConfigManager {
             const freq = band.frequency !== undefined ? band.frequency : (band.Frequency !== undefined ? band.Frequency : 12);
             const gain = band.gain !== undefined ? band.gain : (band.Gain !== undefined ? band.Gain : 0.0);
 
-            const bandX = ((freq - 10) / 60) * width;
+            const bandX = ((freq - eqMinFreq) / eqFreqRange) * width;
             const bandY = height / 2 - (gain / 18) * height / 2;
 
             const distance = Math.sqrt(Math.pow(x - bandX, 2) + Math.pow(y - bandY, 2));
@@ -2288,23 +2311,26 @@ class ConfigManager {
         const width = canvas.width;
         const height = canvas.height;
 
-        // Convert x position to frequency (10-70 Hz)
-        let frequency = (x / width) * 60 + 10;
+        // Convert x position to frequency (dynamic range from pulse config)
+        const eqMinFreq = this.getEqMinFreq();
+        const eqMaxFreq = this.getEqMaxFreq();
+        const eqFreqRange = this.getEqFreqRange();
+        let frequency = (x / width) * eqFreqRange + eqMinFreq;
 
         // Apply frequency constraints
         const index = this.draggedBandIndex;
-        let minFreq = 10;
-        let maxFreq = 70;
+        let minFreq = eqMinFreq;
+        let maxFreq = eqMaxFreq;
 
         if (index > 0) {
             const prevBand = this.eqBands[index - 1];
-            const prevFreq = prevBand.frequency !== undefined ? prevBand.frequency : (prevBand.Frequency !== undefined ? prevBand.Frequency : 10);
+            const prevFreq = prevBand.frequency !== undefined ? prevBand.frequency : (prevBand.Frequency !== undefined ? prevBand.Frequency : eqMinFreq);
             minFreq = prevFreq + 0.5;
         }
 
         if (index < this.eqBands.length - 1) {
             const nextBand = this.eqBands[index + 1];
-            const nextFreq = nextBand.frequency !== undefined ? nextBand.frequency : (nextBand.Frequency !== undefined ? nextBand.Frequency : 70);
+            const nextFreq = nextBand.frequency !== undefined ? nextBand.frequency : (nextBand.Frequency !== undefined ? nextBand.Frequency : eqMaxFreq);
             maxFreq = nextFreq - 0.5;
         }
 
@@ -2409,6 +2435,11 @@ class ConfigManager {
         ctx.lineTo(width, height / 2);
         ctx.stroke();
 
+        // Get dynamic frequency range from pulse config
+        const eqMinFreq = this.getEqMinFreq();
+        const eqMaxFreq = this.getEqMaxFreq();
+        const eqFreqRange = this.getEqFreqRange();
+
         // Draw curve
         if (curve.length > 0) {
             ctx.strokeStyle = '#0d6efd';
@@ -2417,7 +2448,7 @@ class ConfigManager {
 
             curve.forEach((value, i) => {
                 const freq = minFreq + i * resolution;
-                const x = ((freq - 10) / 60) * width; // 10-70 Hz range
+                const x = ((freq - eqMinFreq) / eqFreqRange) * width;
                 // Convert amplitude ratio to dB for display
                 const db = 20 * Math.log10(value || 1);
                 const y = height / 2 - (db / 18) * height / 2;
@@ -2438,7 +2469,7 @@ class ConfigManager {
                 const freq = band.frequency !== undefined ? band.frequency : (band.Frequency !== undefined ? band.Frequency : 12);
                 const gain = band.gain !== undefined ? band.gain : (band.Gain !== undefined ? band.Gain : 0.0);
 
-                const x = ((freq - 10) / 60) * width; // 10-70 Hz range
+                const x = ((freq - eqMinFreq) / eqFreqRange) * width;
                 const y = height / 2 - (gain / 18) * height / 2;
 
                 // Draw dot
@@ -2455,14 +2486,16 @@ class ConfigManager {
             });
         }
 
-        // Draw frequency markers
+        // Draw frequency markers dynamically based on range
         ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
         ctx.font = '10px sans-serif';
-        const freqMarkers = [10, 20, 30, 40, 50, 60, 70];
-        freqMarkers.forEach(freq => {
-            const x = ((freq - 10) / 60) * width;
+        // Generate markers at reasonable intervals
+        const markerStep = eqFreqRange <= 60 ? 10 : (eqFreqRange <= 120 ? 20 : 40);
+        const startMarker = Math.ceil(eqMinFreq / markerStep) * markerStep;
+        for (let freq = startMarker; freq <= eqMaxFreq; freq += markerStep) {
+            const x = ((freq - eqMinFreq) / eqFreqRange) * width;
             ctx.fillText(`${freq}Hz`, x - 10, height - 5);
-        });
+        }
     }
 
     // Debounce save for equalizer
