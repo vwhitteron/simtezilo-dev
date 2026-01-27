@@ -116,9 +116,17 @@ func (a *App) prepareEngineBuffer() ([]float64, int, int) {
 	lookback := 20
 
 	// Stitch the new engine samples smoothly with the current buffer contents
+	// Note: There's a small race window between Inspect and the subsequent OverwriteBuffer call.
+	// The offset calculation may become slightly stale, but the impact is minimal (small audio glitch).
+	// The offset is clamped to valid range to prevent out-of-bounds writes.
 	inspectBuffer := a.synth.InspectChannelBuffer(synthesizer.ChannelEngine, samplesPerFrame+lookback, -lookback)
 	if inspectBuffer != nil && len(inspectBuffer) >= samplesPerFrame {
 		offset, lastPolarity = synthesizer.FindSampleZeroCrossing(inspectBuffer[lookback:samplesPerFrame])
+	}
+
+	// Clamp offset to valid range for the buffer we're about to write
+	if offset >= bufferSamples {
+		offset = 0
 	}
 
 	return engineBuffer, offset, lastPolarity

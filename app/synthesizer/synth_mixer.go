@@ -779,9 +779,7 @@ func (m *StereoMixer) SetSilenced(silenced bool) {
 func (m *StereoMixer) mixEngineChannelMulti(outSamples [][]float64, length int) {
 	channel, ok := m.channels[ChannelEngine]
 	if !ok {
-		m.mu.RUnlock()
 		m.log.Error().Str("channel", ChannelEngine).Msg("channel not found in mixer")
-		m.mu.RLock()
 
 		return
 	}

@@ -27,7 +27,15 @@ type AdaptiveBuffer struct {
 // sampleRateHz: sample rate in Hz to calculate buffer size in samples.
 func NewAdaptiveBuffer(length time.Duration, sampleRateHz int) *AdaptiveBuffer {
 	capacity := int(length.Seconds() * float64(sampleRateHz))
+
+	// Calculate read delay as 24ms worth of samples, but cap to 25% of capacity
+	// to ensure there's always room for actual content
 	readDelay := (sampleRateHz / 1000) * 24
+
+	maxReadDelay := capacity / 4
+	if readDelay > maxReadDelay {
+		readDelay = maxReadDelay
+	}
 
 	buffer := &AdaptiveBuffer{
 		buffer:    make([]float64, capacity),
@@ -246,7 +254,7 @@ func (b *AdaptiveBuffer) writeMixMode(samples []float64) {
 		b.buffer[mixPos] = mixedSample
 	}
 
-	b.updateUsedCount(len(samples))
+	b.syncBufferState(len(samples))
 	b.applyPeakLimiting(samples, peak)
 }
 
@@ -262,10 +270,12 @@ func (b *AdaptiveBuffer) mixSampleAtIndex(index int, inputSample float64, peak *
 	return inputSample
 }
 
-// updateUsedCount updates the used sample count if we wrote beyond existing content.
-func (b *AdaptiveBuffer) updateUsedCount(samplesWritten int) {
+// syncBufferState updates used count and writePos if we wrote beyond existing content.
+func (b *AdaptiveBuffer) syncBufferState(samplesWritten int) {
 	if samplesWritten > b.used {
 		b.used = samplesWritten
+		// Update writePos to maintain consistency with used count
+		b.writePos = (b.readPos + b.used) % b.capacity
 	}
 }
 

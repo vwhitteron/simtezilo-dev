@@ -1471,6 +1471,9 @@ func (a *App) resetAppState() {
 
 	a.kinematics = kinematics.NewKinematicsState()
 
+	// Reset engine haptic state to prevent polarity misalignment
+	a.state.engine = engineState{}
+
 	a.state.sessionEnded = false
 	a.state.mainMenuFrameCount = 0
 
