@@ -31,6 +31,7 @@
         "ui.loading": "loading",
         "ui.waiting": "waiting",
         "ui.ready": "ready",
+        "ui.calibrating": "CAL",
         "ui.settings": "settings",
 
         "ui.menu.return": "Return",
@@ -58,6 +59,7 @@
 
         "ui.menu.system": "System",
         "ui.menu.system.setupmode": "Setup Mode",
+        "ui.menu.system.displayorientation": "Display Orientation",
 
         "ui.menu.synth": "Synthesizer",
         "ui.menu.synth.samplerates": "Sample Rates",
@@ -79,6 +81,13 @@
         "ui.menu.synth.calibration.frequency": "Frequency",
         "ui.menu.synth.calibration.sweep": "Sweep",
         "ui.menu.synth.calibration.sweeprange": "Sweep Range",
+        "ui.menu.synth.mute": "Mute",
+        "ui.menu.synth.mute.master": "Master",
+        "ui.menu.synth.mute.left": "Left",
+        "ui.menu.synth.mute.right": "Right",
+        "ui.menu.synth.mute.chassis": "Chassis",
+        "ui.menu.synth.mute.engine": "Engine",
+        "ui.menu.synth.mute.transmission": "Transmission",
         
         "ui.menu.haptics": "Haptics",
         "ui.menu.haptics.outputmode": "Output Mode",

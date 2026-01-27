@@ -1,12 +1,48 @@
 package waveshare
 
 import (
+	"sync"
+
 	"github.com/vwhitteron/simtezilo-dev/app/hardware"
 	"github.com/vwhitteron/simtezilo-dev/app/ui"
 )
 
+// HIDMapper manages the button-to-event mappings for Waveshare hardware,
+// allowing dynamic remapping when display orientation changes.
+type HIDMapper struct {
+	mu           sync.RWMutex
+	dpadMapping  []ui.HIDInputEvent
+	auxMapping   []ui.HIDInputEvent
+	hidEventChan chan ui.HIDInputEvent
+	buttonsSetup bool
+}
+
+var hidMapper *HIDMapper
+
 // SetupHID configures the HID input event mapping of the Waveshare device buttons based on the device orientation.
 func SetupHID(orientation int, hidEvent chan ui.HIDInputEvent) {
+	hidMapper = &HIDMapper{
+		hidEventChan: hidEvent,
+		dpadMapping:  make([]ui.HIDInputEvent, 4),
+		auxMapping:   make([]ui.HIDInputEvent, 3),
+	}
+
+	hidMapper.UpdateOrientation(orientation)
+	hidMapper.setupButtons()
+}
+
+// UpdateOrientation updates the button mappings based on the new orientation.
+func UpdateOrientation(orientation int) {
+	if hidMapper != nil {
+		hidMapper.UpdateOrientation(orientation)
+	}
+}
+
+// UpdateOrientation recalculates the button mappings based on the new orientation.
+func (h *HIDMapper) UpdateOrientation(orientation int) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
 	rotationOffset := (orientation / 90) % 4
 
 	baseDpadMapping := []ui.HIDInputEvent{
@@ -17,9 +53,8 @@ func SetupHID(orientation int, hidEvent chan ui.HIDInputEvent) {
 	}
 
 	// Rotate Dpad mapping based on orientation
-	rotatedDpadMapping := make([]ui.HIDInputEvent, 4)
 	for i := range 4 {
-		rotatedDpadMapping[i] = baseDpadMapping[(i-rotationOffset+4)%4]
+		h.dpadMapping[i] = baseDpadMapping[(i-rotationOffset+4)%4]
 	}
 
 	baseAuxMapping := []ui.HIDInputEvent{
@@ -28,53 +63,90 @@ func SetupHID(orientation int, hidEvent chan ui.HIDInputEvent) {
 		ui.HIDInputPower,  // Button 3
 	}
 
-	// Reverse auxiliary button order at 90 and 180 degree orientation
-	rotatedAuxMapping := make([]ui.HIDInputEvent, 3)
-
+	// Reverse auxiliary button order at 90 and 270 degree orientation
 	if rotationOffset == 1 || rotationOffset == 3 {
 		for i := range 3 {
-			rotatedAuxMapping[i] = baseAuxMapping[3-i]
+			h.auxMapping[i] = baseAuxMapping[2-i]
 		}
+	} else {
+		copy(h.auxMapping, baseAuxMapping)
 	}
+}
+
+// setupButtons registers the GPIO button callbacks. This should only be called once.
+func (h *HIDMapper) setupButtons() {
+	if h.buttonsSetup {
+		return
+	}
+
+	h.buttonsSetup = true
 
 	// OnButtonUpPressed registers a callback function to be called when the up button is pressed.
 	OnButtonUpPressed(func() {
-		hidEvent <- rotatedDpadMapping[0]
+		h.mu.RLock()
+		event := h.dpadMapping[0]
+		h.mu.RUnlock()
+
+		h.hidEventChan <- event
 	})
 
 	// OnButtonRightPressed registers a callback function to be called when the right button is pressed.
 	OnButtonRightPressed(func() {
-		hidEvent <- rotatedDpadMapping[1]
+		h.mu.RLock()
+		event := h.dpadMapping[1]
+		h.mu.RUnlock()
+
+		h.hidEventChan <- event
 	})
 
 	// OnButtonDownPressed registers a callback function to be called when the down button is pressed.
 	OnButtonDownPressed(func() {
-		hidEvent <- rotatedDpadMapping[2]
+		h.mu.RLock()
+		event := h.dpadMapping[2]
+		h.mu.RUnlock()
+
+		h.hidEventChan <- event
 	})
 
 	// OnButtonLeftPressed registers a callback function to be called when the left button is pressed.
 	OnButtonLeftPressed(func() {
-		hidEvent <- rotatedDpadMapping[3]
+		h.mu.RLock()
+		event := h.dpadMapping[3]
+		h.mu.RUnlock()
+
+		h.hidEventChan <- event
 	})
 
 	// OnButtonCenterPressed registers a callback function to be called when the center button is pressed.
 	OnButtonCenterPressed(func() {
-		hidEvent <- ui.HIDInputEnter
+		h.hidEventChan <- ui.HIDInputEnter
 	})
 
 	// OnButtonOnePressed registers a callback function to be called when button 1 is pressed.
 	OnButtonOnePressed(func() {
-		hidEvent <- rotatedAuxMapping[0]
+		h.mu.RLock()
+		event := h.auxMapping[0]
+		h.mu.RUnlock()
+
+		h.hidEventChan <- event
 	})
 
 	// OnButtonTwoPressed registers a callback function to be called when button 2 is pressed.
 	OnButtonTwoPressed(func() {
-		hidEvent <- rotatedAuxMapping[1]
+		h.mu.RLock()
+		event := h.auxMapping[1]
+		h.mu.RUnlock()
+
+		h.hidEventChan <- event
 	})
 
 	// OnButtonThreePressed registers a callback function to be called when button 3 is pressed.
 	OnButtonThreePressed(func() {
-		hidEvent <- rotatedAuxMapping[2]
+		h.mu.RLock()
+		event := h.auxMapping[2]
+		h.mu.RUnlock()
+
+		h.hidEventChan <- event
 	})
 }
 

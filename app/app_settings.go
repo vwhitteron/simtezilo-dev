@@ -26,22 +26,32 @@ func (a *App) settingAction(setting languagedb.Key, action string) string {
 		languagedb.UIMenuAppTelemetrySource: a.handleTelemetrySourceSetting,
 
 		// System handlers
-		languagedb.UIMenuSystemSetupmode: a.handleSetupModeCountdown,
+		languagedb.UIMenuSystemSetupmode:          a.handleSetupModeCountdown,
+		languagedb.UIMenuSystemDisplayOrientation: a.handleDisplayOrientationSetting,
 
 		// Synthesizer handlers
 		languagedb.UIMenuSynthInternalSampleRate:        a.handleInternalSampleRateSetting,
 		languagedb.UIMenuSynthOutputSampleRate:          a.handleOutputSampleRateSetting,
 		languagedb.UIMenuSynthMasterGain:                a.handleMasterGainSetting,
+		languagedb.UIMenuSynthLeftGain:                  a.handleLeftGainSetting,
+		languagedb.UIMenuSynthRightGain:                 a.handleRightGainSetting,
 		languagedb.UIMenuSynthChassisGain:               a.handleChassisGainSetting,
 		languagedb.UIMenuSynthEngineGain:                a.handleEngineGainSetting,
 		languagedb.UIMenuSynthTransmissionGain:          a.handleTransmissionGainSetting,
 		languagedb.UIMenuSynthTransmissionGainMinRace:   a.handleTransmissionGainMinRaceSetting,
 		languagedb.UIMenuSynthTransmissionGainMinStreet: a.handleTransmissionGainMinStreetSetting,
-		languagedb.UIMenuSynthEqEnabled:                 a.handleEqEnableSetting,
+		languagedb.UIMenuSynthEqMode:                    a.handleEqModeSetting,
+
+		// Mute handlers
+		languagedb.UIMenuSynthMuteMaster:       a.handleMasterMuteSetting,
+		languagedb.UIMenuSynthMuteLeft:         a.handleLeftMuteSetting,
+		languagedb.UIMenuSynthMuteRight:        a.handleRightMuteSetting,
+		languagedb.UIMenuSynthMuteChassis:      a.handleChassisMuteSetting,
+		languagedb.UIMenuSynthMuteEngine:       a.handleEngineMuteSetting,
+		languagedb.UIMenuSynthMuteTransmission: a.handleTransmissionMuteSetting,
 
 		// Calibration handlers
 		languagedb.UIMenuSynthCalibrationEnable:     a.handleCalibrationEnableSetting,
-		languagedb.UIMenuSynthCalibrationGain:       a.handleCalibrationGainSetting,
 		languagedb.UIMenuSynthCalibrationChannel:    a.handleCalibrationChannelSetting,
 		languagedb.UIMenuSynthCalibrationFrequency:  a.handleCalibrationFrequencySetting,
 		languagedb.UIMenuSynthCalibrationSweep:      a.handleCalibrationSweepSetting,
@@ -203,29 +213,60 @@ func (a *App) handleEngineGainSetting(action string) string {
 	return strconv.FormatFloat(value, 'f', 2, 64)
 }
 
-func (a *App) handleEqEnableSetting(action string) string {
-	value := settingStateOff
+func (a *App) handleEqModeSetting(action string) string {
+	// EQ modes: off, left, right, left+right
+	leftEnabled := a.config.GetSynthChannelEqEnabled(0)
+	rightEnabled := a.config.GetSynthChannelEqEnabled(1)
+
+	// Determine current mode index: 0=off, 1=left, 2=right, 3=left+right
+	currentMode := a.getEqModeIndex(leftEnabled, rightEnabled)
 
 	switch action {
 	case "increase":
-		// Enable EQ for all channels
+		currentMode = (currentMode + 1) % 4
+	case "decrease":
+		currentMode = (currentMode + 3) % 4 // +3 is equivalent to -1 mod 4
+	}
+
+	return a.applyEqMode(currentMode)
+}
+
+func (a *App) getEqModeIndex(leftEnabled, rightEnabled bool) int {
+	switch {
+	case leftEnabled && rightEnabled:
+		return 3
+	case rightEnabled:
+		return 2
+	case leftEnabled:
+		return 1
+	default:
+		return 0
+	}
+}
+
+func (a *App) applyEqMode(mode int) string {
+	switch mode {
+	case 1: // left
+		a.config.SetSynthChannelEqEnabled(0, true)
+		a.config.SetSynthChannelEqEnabled(1, false)
+
+		return "Left"
+	case 2: // right
+		a.config.SetSynthChannelEqEnabled(0, false)
+		a.config.SetSynthChannelEqEnabled(1, true)
+
+		return "Right"
+	case 3: // left+right
 		a.config.SetSynthChannelEqEnabled(0, true)
 		a.config.SetSynthChannelEqEnabled(1, true)
 
-		value = settingStateOn
-	case "decrease":
-		// Disable EQ for all channels
+		return "Left+Right"
+	default: // off
 		a.config.SetSynthChannelEqEnabled(0, false)
 		a.config.SetSynthChannelEqEnabled(1, false)
-	default:
-		// Check if EQ is enabled on any channel
-		enabled := a.config.GetSynthChannelEqEnabled(0) || a.config.GetSynthChannelEqEnabled(1)
-		if enabled {
-			value = settingStateOn
-		}
-	}
 
-	return value
+		return "Off"
+	}
 }
 
 func (a *App) handleLanguageSetting(action string) string {
@@ -284,6 +325,132 @@ func (a *App) handleMasterGainSetting(action string) string {
 	return strconv.FormatFloat(value, 'f', 2, 64) + " dB"
 }
 
+func (a *App) handleLeftGainSetting(action string) string {
+	var value float64
+
+	switch action {
+	case "increase":
+		value = a.config.IncreaseSynthChannelGain(0)
+	case "decrease":
+		value = a.config.DecreaseSynthChannelGain(0)
+	default:
+		value = a.config.GetSynthChannelGain(0)
+	}
+
+	return strconv.FormatFloat(value, 'f', 2, 64) + " dB"
+}
+
+func (a *App) handleRightGainSetting(action string) string {
+	var value float64
+
+	switch action {
+	case "increase":
+		value = a.config.IncreaseSynthChannelGain(1)
+	case "decrease":
+		value = a.config.DecreaseSynthChannelGain(1)
+	default:
+		value = a.config.GetSynthChannelGain(1)
+	}
+
+	return strconv.FormatFloat(value, 'f', 2, 64) + " dB"
+}
+
+func (a *App) handleMasterMuteSetting(action string) string {
+	muted := a.config.GetSynthMasterMute()
+
+	switch action {
+	case "increase", "decrease":
+		muted = !muted
+		a.config.SetSynthMasterMute(muted)
+	}
+
+	if muted {
+		return settingStateOn
+	}
+
+	return settingStateOff
+}
+
+func (a *App) handleLeftMuteSetting(action string) string {
+	muted := a.config.GetSynthChannelMute(0)
+
+	switch action {
+	case "increase", "decrease":
+		muted = !muted
+		a.config.SetSynthChannelMute(0, muted)
+	}
+
+	if muted {
+		return settingStateOn
+	}
+
+	return settingStateOff
+}
+
+func (a *App) handleRightMuteSetting(action string) string {
+	muted := a.config.GetSynthChannelMute(1)
+
+	switch action {
+	case "increase", "decrease":
+		muted = !muted
+		a.config.SetSynthChannelMute(1, muted)
+	}
+
+	if muted {
+		return settingStateOn
+	}
+
+	return settingStateOff
+}
+
+func (a *App) handleChassisMuteSetting(action string) string {
+	muted := a.config.GetSynthChassisMute()
+
+	switch action {
+	case "increase", "decrease":
+		muted = !muted
+		a.config.SetSynthChassisMute(muted)
+	}
+
+	if muted {
+		return settingStateOn
+	}
+
+	return settingStateOff
+}
+
+func (a *App) handleEngineMuteSetting(action string) string {
+	muted := a.config.GetSynthEngineMute()
+
+	switch action {
+	case "increase", "decrease":
+		muted = !muted
+		a.config.SetSynthEngineMute(muted)
+	}
+
+	if muted {
+		return settingStateOn
+	}
+
+	return settingStateOff
+}
+
+func (a *App) handleTransmissionMuteSetting(action string) string {
+	muted := a.config.GetSynthTransmissionMute()
+
+	switch action {
+	case "increase", "decrease":
+		muted = !muted
+		a.config.SetSynthTransmissionMute(muted)
+	}
+
+	if muted {
+		return settingStateOn
+	}
+
+	return settingStateOff
+}
+
 func (a *App) handleInfoScreen(action string) (value string) {
 	switch action {
 	case "increase":
@@ -317,6 +484,33 @@ func (a *App) handleSetupModeCountdown(action string) string {
 
 		return strconv.Itoa(countdown)
 	}
+}
+
+func (a *App) handleDisplayOrientationSetting(action string) string {
+	orientations := []int{0, 90, 180, 270}
+	current := a.config.GetDisplayOrientation()
+
+	// Find current index
+	currentIndex := 0
+
+	for i, o := range orientations {
+		if o == current {
+			currentIndex = i
+
+			break
+		}
+	}
+
+	switch action {
+	case "increase":
+		currentIndex = (currentIndex + 1) % len(orientations)
+		a.config.SetDisplayOrientation(orientations[currentIndex])
+	case "decrease":
+		currentIndex = (currentIndex - 1 + len(orientations)) % len(orientations)
+		a.config.SetDisplayOrientation(orientations[currentIndex])
+	}
+
+	return strconv.Itoa(a.config.GetDisplayOrientation()) + "°"
 }
 
 func (a *App) handleRecordToggle(action string) string {
@@ -1041,21 +1235,6 @@ func (a *App) handleCalibrationEnableSetting(action string) string {
 	}
 
 	return settingStateOff
-}
-
-func (a *App) handleCalibrationGainSetting(action string) string {
-	var value float64
-
-	switch action {
-	case "increase":
-		value = a.calibrator.IncreaseGain()
-	case "decrease":
-		value = a.calibrator.DecreaseGain()
-	default:
-		value = a.calibrator.GetGain()
-	}
-
-	return strconv.FormatFloat(value, 'f', 2, 64) + " dB"
 }
 
 func (a *App) handleCalibrationChannelSetting(action string) string {

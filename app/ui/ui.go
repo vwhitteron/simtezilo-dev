@@ -29,6 +29,7 @@ type Config struct {
 type LiveData struct {
 	Gear            int
 	TelemetryActive bool
+	Calibrating     bool
 	forceRefresh    bool
 }
 
@@ -161,12 +162,18 @@ func (u *UserInterface) DrawReadyDisplay() {
 // DrawLiveDisplay renders the live data screen on the display.
 func (u *UserInterface) DrawLiveDisplay(data LiveData) {
 	if !u.displayData.forceRefresh {
-		if data.Gear == u.displayData.Gear || data.Gear == kinematics.NullGear {
+		if data.Calibrating == u.displayData.Calibrating &&
+			(data.Gear == u.displayData.Gear || data.Gear == kinematics.NullGear) {
 			return
 		}
 	}
 
-	_ = u.Screen.RenderLiveScreen(kinematics.GearName(data.Gear))
+	displayValue := kinematics.GearName(data.Gear)
+	if data.Calibrating {
+		displayValue = u.i18n.GetString(languagedb.UICalibrating)
+	}
+
+	_ = u.Screen.RenderLiveScreen(displayValue)
 
 	u.displayData = data
 	u.mode = ScreenModeLive
@@ -232,18 +239,22 @@ func (u *UserInterface) IsSetupModeCountdownZero() bool {
 }
 
 // handleSettingsMode handles display updates in settings mode.
+// Uses lastMenuActivity for timeout checks to prevent gear changes from
+// interrupting menu navigation immediately after button presses.
 func (u *UserInterface) handleSettingsMode(data LiveData) {
-	// Check for 10-second inactivity timeout in menu - turn display off
+	// Check for 10-second inactivity timeout in menu
 	if !u.lastMenuActivity.IsZero() && time.Since(u.lastMenuActivity) > 10*time.Second {
-		u.log.Debug().Msg("Menu inactivity timeout - turning display off")
+		u.log.Debug().Msg("Menu inactivity timeout - exiting settings")
 		u.lastMenuActivity = time.Time{} // Reset timer
-		u.DisplaySleep()
 
-		return
-	}
-
-	if u.displayInactiveTimeoutReached() {
-		u.showActiveOrReadyDisplay(data)
+		// Show live display if telemetry is active, otherwise sleep
+		if data.TelemetryActive {
+			// Force refresh to ensure we transition even if gear hasn't changed
+			u.displayData.forceRefresh = true
+			u.DrawLiveDisplay(data)
+		} else {
+			u.DisplaySleep()
+		}
 	}
 }
 

@@ -31,6 +31,7 @@
         "ui.loading": "読み込み中",
         "ui.waiting": "待機中",
         "ui.ready": "準備完了",
+        "ui.calibrating": "CAL",
         "ui.settings": "設定",
 
         "ui.menu.return": "戻る",
@@ -58,6 +59,7 @@
 
         "ui.menu.system": "システム",
         "ui.menu.system.setupmode": "セットアップモード",
+        "ui.menu.system.displayorientation": "ディスプレイの向き",
 
         "ui.menu.synth": "シンセサイザー",
         "ui.menu.synth.samplerates": "サンプルレート",
@@ -79,6 +81,13 @@
         "ui.menu.synth.calibration.frequency": "周波数",
         "ui.menu.synth.calibration.sweep": "スイープ",
         "ui.menu.synth.calibration.sweeprange": "スイープ範囲",
+        "ui.menu.synth.mute": "ミュート",
+        "ui.menu.synth.mute.master": "マスター",
+        "ui.menu.synth.mute.left": "左",
+        "ui.menu.synth.mute.right": "右",
+        "ui.menu.synth.mute.chassis": "シャーシ",
+        "ui.menu.synth.mute.engine": "エンジン",
+        "ui.menu.synth.mute.transmission": "トランスミッション",
         
         "ui.menu.haptics": "ハプティクス",
         "ui.menu.haptics.outputmode": "出力モード",

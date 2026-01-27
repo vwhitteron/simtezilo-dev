@@ -1,12 +1,46 @@
 package pirateaudio
 
 import (
+	"sync"
+
 	"github.com/vwhitteron/simtezilo-dev/app/hardware"
 	"github.com/vwhitteron/simtezilo-dev/app/ui"
 )
 
+// HIDMapper manages the button-to-event mappings for Pirate Audio hardware,
+// allowing dynamic remapping when display orientation changes.
+type HIDMapper struct {
+	mu           sync.RWMutex
+	mapping      []ui.HIDInputEvent
+	hidEventChan chan ui.HIDInputEvent
+	buttonsSetup bool
+}
+
+var hidMapper *HIDMapper
+
 // SetupHID configures the HID input event mapping of the Pirate Audio device buttons based on the device orientation.
 func SetupHID(orientation int, hidEvent chan ui.HIDInputEvent) {
+	hidMapper = &HIDMapper{
+		hidEventChan: hidEvent,
+		mapping:      make([]ui.HIDInputEvent, 4),
+	}
+
+	hidMapper.UpdateOrientation(orientation)
+	hidMapper.setupButtons()
+}
+
+// UpdateOrientation updates the button mappings based on the new orientation.
+func UpdateOrientation(orientation int) {
+	if hidMapper != nil {
+		hidMapper.UpdateOrientation(orientation)
+	}
+}
+
+// UpdateOrientation recalculates the button mappings based on the new orientation.
+func (h *HIDMapper) UpdateOrientation(orientation int) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
 	rotationOffset := (orientation / 90) % 4
 
 	baseMapping := []ui.HIDInputEvent{
@@ -16,25 +50,49 @@ func SetupHID(orientation int, hidEvent chan ui.HIDInputEvent) {
 		ui.HIDInputDown,  // Button B
 	}
 
-	rotatedMapping := make([]ui.HIDInputEvent, 4)
 	for i := range 4 {
-		rotatedMapping[i] = baseMapping[(i-rotationOffset+4)%4]
+		h.mapping[i] = baseMapping[(i-rotationOffset+4)%4]
+	}
+}
+
+// setupButtons registers the GPIO button callbacks. This should only be called once.
+func (h *HIDMapper) setupButtons() {
+	if h.buttonsSetup {
+		return
 	}
 
+	h.buttonsSetup = true
+
 	OnButtonAPressed(func() {
-		hidEvent <- rotatedMapping[0]
+		h.mu.RLock()
+		event := h.mapping[0]
+		h.mu.RUnlock()
+
+		h.hidEventChan <- event
 	})
 
 	OnButtonXPressed(func() {
-		hidEvent <- rotatedMapping[1]
+		h.mu.RLock()
+		event := h.mapping[1]
+		h.mu.RUnlock()
+
+		h.hidEventChan <- event
 	})
 
 	OnButtonYPressed(func() {
-		hidEvent <- rotatedMapping[2]
+		h.mu.RLock()
+		event := h.mapping[2]
+		h.mu.RUnlock()
+
+		h.hidEventChan <- event
 	})
 
 	OnButtonBPressed(func() {
-		hidEvent <- rotatedMapping[3]
+		h.mu.RLock()
+		event := h.mapping[3]
+		h.mu.RUnlock()
+
+		h.hidEventChan <- event
 	})
 }
 

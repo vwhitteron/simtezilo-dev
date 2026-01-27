@@ -1671,13 +1671,6 @@
                                             data-i18n="runmode.settings.synth.equalizer.title">Equalizer</span>
                                     </h5>
                                     <div class="mb-3">
-                                        <div class="form-check form-switch">
-                                            <input type="checkbox" class="form-check-input" id="synth-eqenabled"
-                                                role="switch">
-                                            <label class="form-check-label" for="synth-eqenabled">
-                                                <span data-i18n="runmode.settings.synth.equalizer.enabled">Enable</span>
-                                            </label>
-                                        </div>
                                         <div class="d-flex align-items-center gap-2 mt-2">
                                             <label for="eq-channel-select" class="form-label mb-0"
                                                 data-i18n="runmode.settings.synth.equalizer.channel">Channel</label>
@@ -1689,6 +1682,14 @@
                                                     data-i18n="runmode.settings.synth.equalizer.channel.right">Right
                                                 </option>
                                             </select>
+                                            <div class="form-check form-switch ms-3 mb-0">
+                                                <input type="checkbox" class="form-check-input" id="synth-eqenabled"
+                                                    role="switch">
+                                                <label class="form-check-label" for="synth-eqenabled">
+                                                    <span
+                                                        data-i18n="runmode.settings.synth.equalizer.enabled">Enable</span>
+                                                </label>
+                                            </div>
                                         </div>
                                     </div>
                                     <!-- EQ Curve Visualization -->
@@ -2166,7 +2167,7 @@
                                         <div class="form-check form-switch">
                                             <input type="checkbox" class="form-check-input"
                                                 id="notify-circuitmatching-enabled"
-                                                data-config="pitRadio.notifications.enabledCircuitMatching"
+                                                data-config="pitRadio.notifications.enableCircuitMatching"
                                                 role="switch">
                                         </div>
                                     </div>
@@ -2187,7 +2188,7 @@
                                             data-i18n="runmode.settings.pitradio.notifications.racelaps.enable">Enable</label>
                                         <div class="form-check form-switch">
                                             <input type="checkbox" class="form-check-input" id="notify-racelaps-enabled"
-                                                data-config="pitRadio.notifications.enabledRaceLaps" role="switch">
+                                                data-config="pitRadio.notifications.enableRaceLaps" role="switch">
                                         </div>
                                     </div>
                                     <div class="col-md-6 col-lg-3">

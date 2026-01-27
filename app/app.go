@@ -250,7 +250,14 @@ func (a *App) Close() {
 		a.log.Debug().Msg("Context cancelled")
 	}
 
-	// Stop HTTP server first to prevent new requests
+	// Close WebUI first to stop broadcaster and WebSocket clients
+	if a.webUI != nil {
+		a.log.Debug().Msg("Closing WebUI")
+		a.webUI.Close()
+		a.log.Debug().Msg("WebUI closed")
+	}
+
+	// Stop HTTP server to prevent new requests
 	a.log.Debug().Msg("Stopping HTTP server")
 	a.stopHTTPServer()
 	a.log.Debug().Msg("HTTP server stopped")
@@ -738,6 +745,15 @@ func (a *App) watchDisplayOrientation() {
 			if newOrientation != currentOrientation {
 				currentOrientation = newOrientation
 				a.display.SetOrientation(currentOrientation)
+
+				// Update HID button mappings based on hardware model
+				switch a.config.GetHardwareModel() {
+				case "pirateaudio":
+					pirateaudio.UpdateOrientation(currentOrientation)
+				case "waveshare":
+					waveshare.UpdateOrientation(currentOrientation)
+				}
+
 				a.ui.ForceRedraw()
 				a.log.Debug().Int("orientation", currentOrientation).Msg("display orientation changed")
 			}
@@ -1313,6 +1329,7 @@ func (a *App) handleDisplayTick() {
 	a.ui.UpdateDisplay(ui.LiveData{
 		Gear:            a.kinematics.Current.TransmissionGear,
 		TelemetryActive: a.state.telemetryActive,
+		Calibrating:     a.calibrator.IsEnabled(),
 	})
 }
 

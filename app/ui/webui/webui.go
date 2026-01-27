@@ -233,6 +233,9 @@ type WebUI struct {
 	unifiedSessions    map[string]*wsClient // Track sessions to prevent duplicates
 	unifiedSessionsMux sync.Mutex
 	updater            *updater.Updater // Self-update manager (may be nil)
+	// Shutdown support
+	done      chan struct{}
+	closeOnce sync.Once
 }
 
 type Config struct {
@@ -290,6 +293,7 @@ func New(config Config) *WebUI {
 		unifiedUnsubChan:   make(chan *wsClient, 10),
 		unifiedSessions:    make(map[string]*wsClient),
 		updater:            config.Updater,
+		done:               make(chan struct{}),
 	}
 
 	// Start unified websocket broadcaster
@@ -350,6 +354,29 @@ func (w *WebUI) HasActiveClients() bool {
 	w.unifiedClientsMux.RUnlock()
 
 	return hasUnified || w.webSocketClients > 0
+}
+
+// Close gracefully shuts down the WebUI, closing all WebSocket clients
+// and stopping the broadcaster goroutine.
+func (w *WebUI) Close() {
+	w.closeOnce.Do(func() {
+		w.log.Info().Msg("Closing WebUI")
+
+		// Signal broadcaster to stop
+		close(w.done)
+
+		// Close all websocket clients
+		w.unifiedClientsMux.Lock()
+
+		for _, client := range w.unifiedClients {
+			client.Close()
+		}
+
+		w.unifiedClients = nil
+		w.unifiedClientsMux.Unlock()
+
+		w.log.Debug().Msg("WebUI closed")
+	})
 }
 
 //go:embed html/*
@@ -683,6 +710,11 @@ func (w *WebUI) unifiedWebSocketBroadcaster() {
 
 	for {
 		select {
+		case <-w.done:
+			w.log.Debug().Msg("Broadcaster received shutdown signal")
+
+			return
+
 		case client := <-w.unifiedClientsChan:
 			// Add new client (subscriptions are managed by the client itself)
 			w.unifiedClientsMux.Lock()
@@ -1919,7 +1951,7 @@ func (w *WebUI) applyDiscordConfig(config map[string]any) []string {
 func (w *WebUI) applyNotificationsConfig(config map[string]any) []string {
 	var errors []string
 
-	if raceProgressEnabled, ok := config["raceProgressEnabled"]; ok {
+	if raceProgressEnabled, ok := config["enableRaceProgress"]; ok {
 		if enabledBool, ok := raceProgressEnabled.(bool); ok {
 			w.config.SetPitRadioNotifyRaceProgressEnabled(enabledBool)
 		} else {
@@ -1943,7 +1975,7 @@ func (w *WebUI) applyNotificationsConfig(config map[string]any) []string {
 		}
 	}
 
-	if raceLapsEnabled, ok := config["raceLapsEnabled"]; ok {
+	if raceLapsEnabled, ok := config["enableRaceLaps"]; ok {
 		if enabledBool, ok := raceLapsEnabled.(bool); ok {
 			w.config.SetPitRadioNotifyRaceLapsEnabled(enabledBool)
 		} else {
@@ -1967,7 +1999,7 @@ func (w *WebUI) applyNotificationsConfig(config map[string]any) []string {
 		}
 	}
 
-	if lapTimesEnabled, ok := config["lapTimesEnabled"]; ok {
+	if lapTimesEnabled, ok := config["enableLapTimes"]; ok {
 		if enabledBool, ok := lapTimesEnabled.(bool); ok {
 			w.config.SetPitRadioNotifyLapTimesEnabled(enabledBool)
 		} else {
@@ -1983,7 +2015,7 @@ func (w *WebUI) applyNotificationsConfig(config map[string]any) []string {
 		}
 	}
 
-	if circuitMatchingEnabled, ok := config["circuitMatchingEnabled"]; ok {
+	if circuitMatchingEnabled, ok := config["enableCircuitMatching"]; ok {
 		if enabledBool, ok := circuitMatchingEnabled.(bool); ok {
 			w.config.SetPitRadioNotifyCircuitMatchingEnabled(enabledBool)
 		} else {
