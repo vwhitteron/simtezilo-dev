@@ -59,7 +59,7 @@ func (suite *TelemetryTestSuite) SetupTest() {
 // }
 
 func (suite *TelemetryTestSuite) TestSequenceHasAdvancedReturnsFalseWhenSequenceIDHasNotChanged() {
-	// Arramge
+	// Arrange
 	suite.app.state.current.sequenceNumber = 101
 	suite.app.state.current.sequenceDelta = 0
 

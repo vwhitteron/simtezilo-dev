@@ -311,11 +311,6 @@ func (u *UserInterface) displayPowerOffTimeoutReached() bool {
 	return time.Since(u.lastActivity) > 30*time.Second
 }
 
-// displayInactiveTimeoutReached checks if the inactivity timeout has been reached.
-func (u *UserInterface) displayInactiveTimeoutReached() bool {
-	return time.Since(u.lastActivity) > 5*time.Second
-}
-
 // displaySplashTimeoutReached checks if the splash screen timeout has been reached.
 func (u *UserInterface) displaySplashTimeoutReached() bool {
 	return time.Since(u.lastActivity) > 2*time.Second
