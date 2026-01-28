@@ -60,6 +60,13 @@ type OutputChannelSettings struct {
 	Mute bool
 }
 
+// NewStreamer creates a new Streamer for the given Synthesizer.
+func NewStreamer(synth *Synthesizer) *Streamer {
+	return &Streamer{
+		synth: synth,
+	}
+}
+
 func (s *Streamer) Stream(samples [][2]float64) (n int, ok bool) {
 	// Trigger mixing to all master channels
 	s.synth.mixer.MixToMaster(len(samples))

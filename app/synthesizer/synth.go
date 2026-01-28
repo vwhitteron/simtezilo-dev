@@ -87,7 +87,8 @@ type SynthOpts struct {
 	BaseConfig *config.Config // Base config for lock-free reads in mixer
 	Logger     zerolog.Logger
 	Kinematics *kinematics.State
-	Calibrator *calibrator.ToneGenerator
+	Calibrator calibrator.Calibrator
+	Mixer      Mixer
 }
 
 // New creates a new Synthesizer instance with the provided options.
@@ -98,6 +99,7 @@ func New(opts *SynthOpts) (*Synthesizer, error) {
 		sampleRate:         opts.Config.InternalSampleRateHz,
 		log:                opts.Logger.With().Str("package", "synth").Logger(),
 		calibrator:         opts.Calibrator,
+		mixer:              opts.Mixer,
 		wasCalibrating:     false,
 		originalMasterGain: 0,
 	}
@@ -106,26 +108,28 @@ func New(opts *SynthOpts) (*Synthesizer, error) {
 
 	bufferLength := 2 * time.Second
 
-	// Pass full config for lock-free reads
-	synthesizer.mixer, err = NewStereoMixer(StereoMixerConfig{
-		Config:       opts.BaseConfig,
-		Calibrator:   opts.Calibrator,
-		BufferLength: bufferLength,
-		SampleRateHz: opts.Config.InternalSampleRateHz,
-		Log:          opts.Logger.With().Str("package", "synth mixer").Logger(),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("create mixer: %w", err)
-	}
+	if synthesizer.mixer == nil {
+		// Pass full config for lock-free reads
+		synthesizer.mixer, err = NewStereoMixer(StereoMixerConfig{
+			Config:       opts.BaseConfig,
+			Calibrator:   opts.Calibrator,
+			BufferLength: bufferLength,
+			SampleRateHz: opts.Config.InternalSampleRateHz,
+			Log:          opts.Logger.With().Str("package", "synth mixer").Logger(),
+		})
+		if err != nil {
+			return nil, fmt.Errorf("create mixer: %w", err)
+		}
 
-	// Add channels with initial values from config
-	_ = synthesizer.mixer.AddChannel(ChannelTransmission, opts.Config.TransmissionGain)
-	_ = synthesizer.mixer.AddChannel(ChannelEngine, opts.Config.EngineGain)
-	_ = synthesizer.mixer.AddChannel(ChannelCalibrator, 0)
+		// Add channels with initial values from config
+		_ = synthesizer.mixer.AddChannel(ChannelTransmission, opts.Config.TransmissionGain)
+		_ = synthesizer.mixer.AddChannel(ChannelEngine, opts.Config.EngineGain)
+		_ = synthesizer.mixer.AddChannel(ChannelCalibrator, 0)
 
-	// Add per-channel chassis buffers for per-channel EQ support
-	for ch := range NumOutputChannels {
-		_ = synthesizer.mixer.AddChannel(ChassisChannelName(ch), opts.Config.ChassisGain)
+		// Add per-channel chassis buffers for per-channel EQ support
+		for ch := range NumOutputChannels {
+			_ = synthesizer.mixer.AddChannel(ChassisChannelName(ch), opts.Config.ChassisGain)
+		}
 	}
 
 	synthesizer.outputDevice, err = NewOutputDevice(SynthOutDeviceOpts{
