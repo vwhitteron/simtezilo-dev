@@ -154,6 +154,24 @@ func NewMenuSystem() *MenuSystem {
 		&MenuNode{name: languagedb.UIMenuSynthOutputSampleRate, nodeType: NodeTypeLeaf, context: PageContextAlways, parent: sampleRatesNode},
 	)
 
+	// Synthesizer -> Mute submenu
+	muteControlsNode := &MenuNode{
+		name:     languagedb.UIMenuSynthMute,
+		nodeType: NodeTypeBranch,
+		context:  PageContextAlways,
+		parent:   synthNode,
+		children: make([]*MenuNode, 0),
+	}
+	muteControlsNode.children = append(muteControlsNode.children,
+		&MenuNode{name: languagedb.UIMenuReturn, nodeType: NodeTypeBranch, context: PageContextAlways, parent: muteControlsNode},
+		&MenuNode{name: languagedb.UIMenuSynthMuteMaster, nodeType: NodeTypeLeaf, context: PageContextAlways, parent: muteControlsNode},
+		&MenuNode{name: languagedb.UIMenuSynthMuteLeft, nodeType: NodeTypeLeaf, context: PageContextAlways, parent: muteControlsNode},
+		&MenuNode{name: languagedb.UIMenuSynthMuteRight, nodeType: NodeTypeLeaf, context: PageContextAlways, parent: muteControlsNode},
+		&MenuNode{name: languagedb.UIMenuSynthMuteChassis, nodeType: NodeTypeLeaf, context: PageContextAlways, parent: muteControlsNode},
+		&MenuNode{name: languagedb.UIMenuSynthMuteEngine, nodeType: NodeTypeLeaf, context: PageContextAlways, parent: muteControlsNode},
+		&MenuNode{name: languagedb.UIMenuSynthMuteTransmission, nodeType: NodeTypeLeaf, context: PageContextAlways, parent: muteControlsNode},
+	)
+
 	// Synthesizer -> Gain Controls submenu
 	gainControlsNode := &MenuNode{
 		name:     languagedb.UIMenuSynthGainControls,
@@ -162,6 +180,7 @@ func NewMenuSystem() *MenuSystem {
 		parent:   synthNode,
 		children: make([]*MenuNode, 0),
 	}
+
 	// Gain Controls -> Calibration submenu
 	calibrationNode := &MenuNode{
 		name:     languagedb.UIMenuSynthCalibration,
@@ -179,24 +198,6 @@ func NewMenuSystem() *MenuSystem {
 		&MenuNode{name: languagedb.UIMenuSynthCalibrationSweepRange, nodeType: NodeTypeLeaf, context: PageContextAlways, parent: calibrationNode},
 	)
 
-	// Gain Controls -> Mute submenu
-	muteNode := &MenuNode{
-		name:     languagedb.UIMenuSynthMute,
-		nodeType: NodeTypeBranch,
-		context:  PageContextAlways,
-		parent:   gainControlsNode,
-		children: make([]*MenuNode, 0),
-	}
-	muteNode.children = append(muteNode.children,
-		&MenuNode{name: languagedb.UIMenuReturn, nodeType: NodeTypeBranch, context: PageContextAlways, parent: muteNode},
-		&MenuNode{name: languagedb.UIMenuSynthMuteMaster, nodeType: NodeTypeLeaf, context: PageContextAlways, parent: muteNode},
-		&MenuNode{name: languagedb.UIMenuSynthMuteLeft, nodeType: NodeTypeLeaf, context: PageContextAlways, parent: muteNode},
-		&MenuNode{name: languagedb.UIMenuSynthMuteRight, nodeType: NodeTypeLeaf, context: PageContextAlways, parent: muteNode},
-		&MenuNode{name: languagedb.UIMenuSynthMuteChassis, nodeType: NodeTypeLeaf, context: PageContextAlways, parent: muteNode},
-		&MenuNode{name: languagedb.UIMenuSynthMuteEngine, nodeType: NodeTypeLeaf, context: PageContextAlways, parent: muteNode},
-		&MenuNode{name: languagedb.UIMenuSynthMuteTransmission, nodeType: NodeTypeLeaf, context: PageContextAlways, parent: muteNode},
-	)
-
 	gainControlsNode.children = append(gainControlsNode.children,
 		&MenuNode{name: languagedb.UIMenuReturn, nodeType: NodeTypeBranch, context: PageContextAlways, parent: gainControlsNode},
 		&MenuNode{name: languagedb.UIMenuSynthMasterGain, nodeType: NodeTypeLeaf, context: PageContextAlways, parent: gainControlsNode},
@@ -209,10 +210,9 @@ func NewMenuSystem() *MenuSystem {
 		&MenuNode{name: languagedb.UIMenuSynthTransmissionGainMinStreet, nodeType: NodeTypeLeaf, context: PageContextAlways, parent: gainControlsNode},
 		&MenuNode{name: languagedb.UIMenuSynthEqMode, nodeType: NodeTypeLeaf, context: PageContextAlways, parent: gainControlsNode},
 		calibrationNode,
-		muteNode,
 	)
 
-	synthNode.children = append(synthNode.children, sampleRatesNode, gainControlsNode)
+	synthNode.children = append(synthNode.children, sampleRatesNode, muteControlsNode, gainControlsNode)
 
 	// Settings -> Haptics submenu
 	hapticsNode := &MenuNode{

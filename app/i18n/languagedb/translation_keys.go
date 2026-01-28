@@ -62,7 +62,6 @@ const (
 	UIMenuSynthTransmissionGainMinStreet Key = "ui.menu.synth.transmissiongainminstreet"
 	UIMenuSynthLeftGain                  Key = "ui.menu.synth.leftgain"
 	UIMenuSynthRightGain                 Key = "ui.menu.synth.rightgain"
-	UIMenuSynthEqualizer                 Key = "ui.menu.synth.equalizer"
 	UIMenuSynthEqMode                    Key = "ui.menu.synth.eqmode"
 	UIMenuSynthCalibration               Key = "ui.menu.synth.calibration"
 	UIMenuSynthCalibrationEnable         Key = "ui.menu.synth.calibration.enable"
