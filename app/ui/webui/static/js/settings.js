@@ -1212,8 +1212,8 @@ class ConfigManager {
 
         try {
             // Validate file extension
-            if (!file.name.endsWith('.conf') && !file.name.endsWith('.toml')) {
-                throw new Error('Invalid file type. Please select a .conf or .toml file.');
+            if (!file.name.endsWith('.conf') && !file.name.endsWith('.json')) {
+                throw new Error('Invalid file type. Please select a .conf or .json file.');
             }
 
             // Create FormData to send file

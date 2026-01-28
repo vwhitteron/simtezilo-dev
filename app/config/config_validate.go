@@ -2,24 +2,37 @@ package config
 
 import (
 	"bytes"
+	_ "embed"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 
-	"github.com/rs/zerolog/log"
-	"github.com/spf13/viper"
+	"github.com/santhosh-tekuri/jsonschema/v5"
+)
+
+//go:embed config.schema.json
+var configSchemaJSON []byte
+
+// schemaCompiler is a singleton for the compiled JSON schema.
+var (
+	compiledSchema    *jsonschema.Schema //nolint:gochecknoglobals // schema singleton
+	schemaCompileOnce sync.Once          //nolint:gochecknoglobals // schema singleton
+	errSchemaCompile  error              //nolint:gochecknoglobals // schema singleton
 )
 
 // ValidationError represents a single validation error with field and message.
 type ValidationError struct {
-	Field   string `json:"field"`   //nolint:tagliatelle // lowercase for easy compatibility
-	Message string `json:"message"` //nolint:tagliatelle
+	Field   string `json:"field"`
+	Message string `json:"message"`
 }
 
 // ValidationResult contains the result of configuration validation.
 type ValidationResult struct { //nolint:errname // not applicable
-	Valid  bool              `json:"valid"`            //nolint:tagliatelle // lowercase for easy compatibility
-	Errors []ValidationError `json:"errors,omitempty"` //nolint:tagliatelle
+	Valid  bool              `json:"valid"`
+	Errors []ValidationError `json:"errors,omitempty"`
 }
 
 // Error implements the error interface for ValidationResult.
@@ -28,7 +41,7 @@ func (vr ValidationResult) Error() string {
 		return ""
 	}
 
-	var messages []string //nolint:prealloc // ubknown but small number of errors expected
+	var messages []string //nolint:prealloc // unknown but small number of errors expected
 	for _, err := range vr.Errors {
 		messages = append(messages, fmt.Sprintf("%s: %s", err.Field, err.Message))
 	}
@@ -42,43 +55,68 @@ type Validator interface {
 	Validate() ValidationResult
 }
 
+// getCompiledSchema returns the compiled JSON schema, compiling it on first use.
+func getCompiledSchema() (*jsonschema.Schema, error) {
+	schemaCompileOnce.Do(func() {
+		compiler := jsonschema.NewCompiler()
+		compiler.Draft = jsonschema.Draft7
+
+		err := compiler.AddResource("config.schema.json", bytes.NewReader(configSchemaJSON))
+		if err != nil {
+			errSchemaCompile = fmt.Errorf("failed to add schema resource: %w", err)
+
+			return
+		}
+
+		compiledSchema, errSchemaCompile = compiler.Compile("config.schema.json")
+		if errSchemaCompile != nil {
+			errSchemaCompile = fmt.Errorf("failed to compile schema: %w", errSchemaCompile)
+		}
+	})
+
+	return compiledSchema, errSchemaCompile
+}
+
 // Validate performs comprehensive validation of the configuration.
 // Returns ValidationResult with any validation errors found.
-// This method is designed to be easily replaceable with an external validator.
+// This uses JSON schema validation for structure/type/range checks,
+// plus custom validation for things that can't be expressed in JSON schema.
 func (c *Config) Validate() ValidationResult {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
 	result := ValidationResult{Valid: true, Errors: []ValidationError{}}
 
-	// Validate App section
+	// Convert config to JSON for schema validation
+	jsonData, err := c.toJSON()
+	if err != nil {
+		addError(&result, "config", fmt.Sprintf("failed to serialize config: %v", err))
+		result.Valid = false
+
+		return result
+	}
+
+	// Validate against JSON schema
+	schemaResult := validateJSONSchema(jsonData)
+	if !schemaResult.Valid {
+		result.Errors = append(result.Errors, schemaResult.Errors...)
+	}
+
+	// Custom validations that can't be expressed in JSON schema:
+	// 1. Filesystem checks (baseDir exists)
+	// 2. Cross-field comparisons (pulseMinFrequencyHz < pulseMaxFrequencyHz)
+	// 3. Conditional requirements (Discord guildID required when token is set)
+
 	if c.viper.App != nil {
-		validateApp(c.viper.App, &result)
+		validateAppCustom(c.viper.App, &result)
 	}
 
-	// Validate Hardware section
-	if c.viper.Hardware != nil {
-		validateHardware(c.viper.Hardware, &result)
-	}
-
-	// Validate Synthesizer section
-	if c.viper.Synthesizer != nil {
-		validateSynthesizer(c.viper.Synthesizer, &result)
-	}
-
-	// Validate Haptics section
 	if c.viper.Haptics != nil {
-		validateHaptics(c.viper.Haptics, &result)
+		validateHapticsCustom(c.viper.Haptics, &result)
 	}
 
-	// Validate Telemetry section
-	if c.viper.Telemetry != nil {
-		validateTelemetry(c.viper.Telemetry, &result)
-	}
-
-	// Validate PitRadio section
-	if c.viper.PitRadio != nil {
-		validatePitRadio(c.viper.PitRadio, &result)
+	if c.viper.PitRadio != nil && c.viper.PitRadio.Discord != nil {
+		validateDiscordCustom(c.viper.PitRadio.Discord, &result)
 	}
 
 	result.Valid = len(result.Errors) == 0
@@ -86,45 +124,127 @@ func (c *Config) Validate() ValidationResult {
 	return result
 }
 
-// ValidateConfig validates TOML configuration data without modifying the current config.
+// ValidateConfig validates JSON configuration data without modifying the current config.
 // This method is useful for validating imported/uploaded configuration files.
-func (c *Config) ValidateConfig(tomlData []byte) ValidationResult {
-	// Create a temporary config to validate
-	tempViper := viper.New()
-	tempViper.SetConfigType("toml")
+func (c *Config) ValidateConfig(jsonData []byte) ValidationResult {
+	result := ValidationResult{Valid: true, Errors: []ValidationError{}}
 
-	err := tempViper.ReadConfig(bytes.NewReader(tomlData))
+	// First, validate basic JSON syntax
+	var rawData interface{}
+
+	err := json.Unmarshal(jsonData, &rawData)
 	if err != nil {
 		return ValidationResult{
 			Valid: false,
 			Errors: []ValidationError{{
 				Field:   "config",
-				Message: fmt.Sprintf("failed to parse TOML: %v", err),
+				Message: fmt.Sprintf("failed to parse JSON: %v", err),
 			}},
 		}
 	}
 
-	// Unmarshal into our config structure
+	// Validate against JSON schema
+	schemaResult := validateJSONSchema(jsonData)
+	if !schemaResult.Valid {
+		result.Errors = append(result.Errors, schemaResult.Errors...)
+	}
+
+	// Unmarshal into our config structure for custom validation
 	var tempConfig viperConfig
 
-	err = tempViper.Unmarshal(&tempConfig)
+	err = json.Unmarshal(jsonData, &tempConfig)
 	if err != nil {
-		return ValidationResult{
-			Valid: false,
-			Errors: []ValidationError{{
-				Field:   "config",
-				Message: fmt.Sprintf("failed to unmarshal config: %v", err),
-			}},
+		addError(&result, "config", fmt.Sprintf("failed to unmarshal config: %v", err))
+		result.Valid = false
+
+		return result
+	}
+
+	// Run custom validations
+	if tempConfig.App != nil {
+		validateAppCustom(tempConfig.App, &result)
+	}
+
+	if tempConfig.Haptics != nil {
+		validateHapticsCustom(tempConfig.Haptics, &result)
+	}
+
+	if tempConfig.PitRadio != nil && tempConfig.PitRadio.Discord != nil {
+		validateDiscordCustom(tempConfig.PitRadio.Discord, &result)
+	}
+
+	result.Valid = len(result.Errors) == 0
+
+	return result
+}
+
+// validateJSONSchema validates JSON data against the embedded config schema.
+func validateJSONSchema(jsonData []byte) ValidationResult {
+	result := ValidationResult{Valid: true, Errors: []ValidationError{}}
+
+	schema, err := getCompiledSchema()
+	if err != nil {
+		addError(&result, "schema", fmt.Sprintf("failed to load schema: %v", err))
+		result.Valid = false
+
+		return result
+	}
+
+	var data interface{}
+
+	err = json.Unmarshal(jsonData, &data)
+	if err != nil {
+		addError(&result, "config", fmt.Sprintf("failed to parse JSON: %v", err))
+		result.Valid = false
+
+		return result
+	}
+
+	err = schema.Validate(data)
+	if err != nil {
+		// Convert jsonschema validation errors to our format
+		validationErr := &jsonschema.ValidationError{}
+
+		ok := errors.As(err, &validationErr)
+		if ok {
+			extractValidationErrors(validationErr, &result)
+		} else {
+			addError(&result, "config", fmt.Sprintf("validation error: %v", err))
 		}
+
+		result.Valid = false
 	}
 
-	// Create a temporary Config instance for validation
-	tempConfigInstance := &Config{
-		viper: &tempConfig,
+	return result
+}
+
+// extractValidationErrors recursively extracts validation errors from jsonschema.ValidationError.
+func extractValidationErrors(err *jsonschema.ValidationError, result *ValidationResult) {
+	// If there are causes, recurse into them for more specific errors
+	if len(err.Causes) > 0 {
+		for _, cause := range err.Causes {
+			extractValidationErrors(cause, result)
+		}
+
+		return
 	}
 
-	// Run validation on the temporary config
-	return tempConfigInstance.Validate()
+	// Extract the field path from the instance location
+	field := err.InstanceLocation
+	if field == "" {
+		field = "config"
+	}
+
+	// Clean up the field path (remove leading /)
+	field = strings.TrimPrefix(field, "/")
+	field = strings.ReplaceAll(field, "/", ".")
+
+	addError(result, field, err.Message)
+}
+
+// toJSON converts the current config to JSON for schema validation.
+func (c *Config) toJSON() ([]byte, error) {
+	return json.Marshal(c.viper)
 }
 
 // addError is a helper to add validation errors.
@@ -135,248 +255,29 @@ func addError(result *ValidationResult, field, message string) {
 	})
 }
 
-// validateApp validates the app configuration section.
-func validateApp(app *app, result *ValidationResult) {
-	// Validate language code (basic check - could be enhanced)
-	if app.Language == "" {
-		addError(result, "app.language", "language code is required")
-	}
-
-	// Validate log level
-	validLogLevels := map[string]bool{
-		"trace": true, "debug": true, "info": true,
-		"warn": true, "error": true, "fatal": true, "panic": true,
-	}
-	if !validLogLevels[strings.ToLower(app.LogLevel)] {
-		addError(result, "app.logLevel", fmt.Sprintf("invalid log level '%s', must be one of: trace, debug, info, warn, error, fatal, panic", app.LogLevel))
-	}
-
-	// Validate WebUI port
-	if app.WebUIPort < 1 || app.WebUIPort > 65535 {
-		addError(result, "app.webUIPort", fmt.Sprintf("port %d is out of valid range (1-65535)", app.WebUIPort))
-	}
-
+// validateAppCustom performs custom validation for app settings that can't be done via schema.
+func validateAppCustom(appCfg *app, result *ValidationResult) {
 	// Validate base directory exists if specified
-	if app.BaseDir != "" {
-		_, err := os.Stat(app.BaseDir)
+	if appCfg.BaseDir != "" {
+		_, err := os.Stat(appCfg.BaseDir)
 		if err != nil {
-			addError(result, "app.baseDir", "directory does not exist or is not accessible: "+app.BaseDir)
+			addError(result, "app.baseDir", "directory does not exist or is not accessible: "+appCfg.BaseDir)
 		}
 	}
 }
 
-// validateHardware validates the hardware configuration section.
-func validateHardware(hw *hardware, result *ValidationResult) { //nolint:varnamelen // hw is acceptable
-	// Validate hardware model
-	validModels := map[string]bool{
-		"console":     true,
-		"pirateaudio": true,
-		"spotpear":    true,
-		"waveshare":   true,
-	}
-	if !validModels[hw.Model] {
-		addError(result, "hardware.model", fmt.Sprintf("invalid model '%s', must be one of: console, pirateaudio, spotpear, waveshare", hw.Model))
-	}
-
-	// Validate display orientation
-	validOrientations := map[int]bool{0: true, 90: true, 180: true, 270: true}
-	if !validOrientations[hw.DisplayOrientation] {
-		addError(result, "hardware.displayOrientation", fmt.Sprintf("invalid orientation %d, must be 0, 90, 180, or 270", hw.DisplayOrientation))
-	}
-}
-
-// validateSynthesizer validates the synthesizer configuration section.
-func validateSynthesizer(synth *Synthesizer, result *ValidationResult) {
-	// Validate sample rates
-	if synth.InternalSampleRateHz < 8000 || synth.InternalSampleRateHz > 192000 {
-		addError(result, "synthesizer.internalSampleRateHz", fmt.Sprintf("sample rate %d is out of valid range (8000-192000)", synth.InternalSampleRateHz))
-	}
-
-	if synth.OutputSampleRateHz < 8000 || synth.OutputSampleRateHz > 192000 {
-		addError(result, "synthesizer.outputSampleRateHz", fmt.Sprintf("sample rate %d is out of valid range (8000-192000)", synth.OutputSampleRateHz))
-	}
-
-	// Validate gain value
-	validateGain := func(field string, value float64) {
-		if value < -60.0 || value > 0.0 {
-			addError(result, field, fmt.Sprintf("gain %.2f is out of valid range (-60.0 - 0.0)", value))
-		}
-	}
-
-	validateGain("synthesizer.masterGain", synth.MasterGain)
-
-	// Validate channel gains
-	for i, gain := range synth.ChannelGain {
-		validateGain(fmt.Sprintf("synthesizer.channelGain[%d]", i), gain)
-	}
-
-	validateGain("synthesizer.chassisGain", synth.ChassisGain)
-	validateGain("synthesizer.transmissionGain", synth.TransmissionGain)
-	validateGain("synthesizer.transmissionGainMinRace", synth.TransmissionGainMinRace)
-	validateGain("synthesizer.transmissionGainMinStreet", synth.TransmissionGainMinStreet)
-	validateGain("synthesizer.engineGain", synth.EngineGain)
-
-	// Validate EQ bands (per channel, 8-band parametric EQ each)
-	numChannels := 2
-	if len(synth.EqBands) != numChannels {
-		addError(result, "synthesizer.eqBands", fmt.Sprintf("EQ must have exactly %d channels, got %d", numChannels, len(synth.EqBands)))
-	} else {
-		for channelID, channelBands := range synth.EqBands {
-			if len(channelBands) != 8 {
-				addError(result, fmt.Sprintf("synthesizer.eqBands[%d]", channelID),
-					fmt.Sprintf("channel %d EQ must have exactly 8 bands, got %d", channelID, len(channelBands)))
-
-				continue
-			}
-
-			for bandID, band := range channelBands {
-				// Validate frequency range (10-70 Hz covers haptic range)
-				if band.Frequency < 10.0 || band.Frequency > 70.0 {
-					addError(result, fmt.Sprintf("synthesizer.eqBands[%d][%d].frequency", channelID, bandID),
-						fmt.Sprintf("frequency %.2f Hz is out of valid range (10.0-70.0 Hz)", band.Frequency))
-				}
-
-				// Validate gain range
-				if band.Gain < -12.0 || band.Gain > 6.0 {
-					addError(result, fmt.Sprintf("synthesizer.eqBands[%d][%d].gain", channelID, bandID),
-						fmt.Sprintf("gain %.2f dB is out of valid range (-12.0 to +6.0 dB)", band.Gain))
-				}
-
-				// Validate Q factor range
-				if band.Q < 0.1 || band.Q > 20.0 {
-					addError(result, fmt.Sprintf("synthesizer.eqBands[%d][%d].q", channelID, bandID),
-						fmt.Sprintf("Q factor %.2f is out of valid range (0.1-20.0)", band.Q))
-				}
-			}
-		}
-	}
-
-	// Validate EQ enabled array
-	if len(synth.EnableEq) != numChannels {
-		addError(result, "synthesizer.enableEq", fmt.Sprintf("enableEq must have exactly %d channels, got %d", numChannels, len(synth.EnableEq)))
-	}
-}
-
-// validateHaptics validates the haptics configuration section.
-func validateHaptics(hap *haptics, result *ValidationResult) {
-	// Validate curve values
-	if hap.DynamicTransmissionCurve < 5 || hap.DynamicTransmissionCurve > 955 {
-		addError(result, "haptics.dynamicTransmissionCurve", fmt.Sprintf("curve %d is out of valid range (5-955)", hap.DynamicTransmissionCurve))
-	}
-
-	if hap.JerkCurve < 5 || hap.JerkCurve > 955 {
-		addError(result, "haptics.jerkCurve", fmt.Sprintf("curve %d is out of valid range (5-955)", hap.JerkCurve))
-	}
-
-	if hap.SnapCurve < 5 || hap.SnapCurve > 955 {
-		addError(result, "haptics.snapCurve", fmt.Sprintf("curve %d is out of valid range (5-955)", hap.SnapCurve))
-	}
-
-	// Validate max values
-	if hap.JerkMax < 1 || hap.JerkMax > 200 {
-		addError(result, "haptics.jerkMax", fmt.Sprintf("jerkMax %d is out of valid range (1-200)", hap.JerkMax))
-	}
-
-	if hap.SnapMax < 1 || hap.SnapMax > 200 {
-		addError(result, "haptics.snapMax", fmt.Sprintf("snapMax %d is out of valid range (1-200)", hap.SnapMax))
-	}
-
-	// Validate pulse settings
-	if hap.PulseMaxAmplitude < 0.0 || hap.PulseMaxAmplitude > 1.0 {
-		addError(result, "haptics.pulseMaxAmplitude", fmt.Sprintf("amplitude %.2f is out of valid range (0.0-1.0)", hap.PulseMaxAmplitude))
-	}
-
-	if hap.PulseMaxFrequencyHz <= 20 || hap.PulseMaxFrequencyHz > 200 {
-		addError(result, "haptics.pulseMaxFrequencyHz", fmt.Sprintf("frequency %.2f is out of valid range (20-200)", hap.PulseMaxFrequencyHz))
-	}
-
-	if hap.PulseMinFrequencyHz <= 5 || hap.PulseMinFrequencyHz > 50 {
-		addError(result, "haptics.pulseMinFrequencyHz", fmt.Sprintf("frequency %.2f is out of valid range (5-50)", hap.PulseMinFrequencyHz))
-	}
-
-	// Validate min < max
+// validateHapticsCustom performs custom validation for haptics settings.
+func validateHapticsCustom(hap *haptics, result *ValidationResult) {
+	// Validate min < max for pulse frequency
 	if hap.PulseMinFrequencyHz >= hap.PulseMaxFrequencyHz {
 		addError(result, "haptics.pulseMinFrequencyHz", "pulseMinFrequencyHz must be less than pulseMaxFrequencyHz")
 	}
-
-	if hap.DynamicTransmissionGforceMax <= 0 {
-		addError(result, "haptics.dynamicTransmissionGforceMax", "gforceMax must be greater than 0")
-	}
 }
 
-// validateFuel validates the fuel configuration section.
-func validateFuel(fuel *fuelMonitoring, result *ValidationResult) {
-	// Validate lap values are non-negative
-	if fuel.PreWarnNotifyLaps < 0 {
-		addError(result, "fuel.preWarnNotifyLaps", "laps must be non-negative")
-	}
-
-	if fuel.StrategyNotifyLaps < 0 {
-		addError(result, "fuel.strategyNotifyLaps", "laps must be non-negative")
-	}
-
-	if fuel.RangeSafetyMarginLaps < 0 {
-		addError(result, "fuel.rangeSafetyMarginLaps", "laps must be non-negative")
-	}
-
-	if fuel.RangeSafetyMarginMeters < 0 {
-		addError(result, "fuel.rangeSafetyMarginMeters", "meters must be non-negative")
-	}
-}
-
-// validateTyres validates the tyres configuration section.
-func validateTyres(tyres *tyreMonitoring, result *ValidationResult) {
-	// Validate temperature ranges (reasonable for racing tyres: 0-200°C)
-	if tyres.TemperatureOptimalCelsius < 0 || tyres.TemperatureOptimalCelsius > 200 {
-		addError(result, "tyres.temperatureOptimalCelsius", fmt.Sprintf("temperature %.1f is out of valid range (0-200)", tyres.TemperatureOptimalCelsius))
-	}
-
-	if tyres.TemperatureOperatingWindow < 0 || tyres.TemperatureOperatingWindow > 100 {
-		addError(result, "tyres.temperatureOperatingWindow", fmt.Sprintf("window %.1f is out of valid range (0-100)", tyres.TemperatureOperatingWindow))
-	}
-
-	if tyres.TemperatureMarginCelsius < 0 || tyres.TemperatureMarginCelsius > 50 {
-		addError(result, "tyres.temperatureMarginCelsius", fmt.Sprintf("margin %.1f is out of valid range (0-50)", tyres.TemperatureMarginCelsius))
-	}
-}
-
-// validateTelemetry validates the telemetry configuration section.
-func validateTelemetry(tel *Telemetry, result *ValidationResult) {
-	// Validate telemetry source
-	validSources := map[string]bool{
-		"gt7":            true,
-		"gtsport":        true,
-		"acc":            true,
-		"iracing":        true,
-		"automobilista2": true,
-	}
-
-	if tel.Source == "" {
-		addError(result, "telemetry.source", "telemetry source is required")
-	} else if !validSources[strings.ToLower(tel.Source)] {
-		// Just warn but don't fail - source list may grow
-		log.Warn().Str("source", tel.Source).Msg("unknown telemetry source")
-	}
-}
-
-// validatePitRadio validates the pit radio configuration section.
-func validatePitRadio(radio *pitRadio, result *ValidationResult) {
-	if radio.MessageSendIntervalMs < 0 {
-		addError(result, "pitRadio.messageSendIntervalMs", "interval must be non-negative")
-	}
-
-	// If Discord is configured, validate it
-	if radio.Discord != nil {
-		if radio.Discord.Token != "" && radio.Discord.GuildID == "" {
-			addError(result, "pitRadio.discord.guildID", "guildID is required when token is set")
-		}
-	}
-
-	if radio.FuelMonitoring != nil {
-		validateFuel(radio.FuelMonitoring, result)
-	}
-
-	if radio.TyreMonitoring != nil {
-		validateTyres(radio.TyreMonitoring, result)
+// validateDiscordCustom performs custom validation for Discord settings.
+func validateDiscordCustom(discordCfg *discord, result *ValidationResult) {
+	// If Discord token is set, guildID is required
+	if discordCfg.Token != "" && discordCfg.GuildID == "" {
+		addError(result, "pitRadio.discord.guildID", "guildID is required when token is set")
 	}
 }

@@ -42,8 +42,8 @@ linters:
             - github.com/gorilla/websocket
             - github.com/grafana/pyroscope-go
             - github.com/kennygrant/sanitize
-            - github.com/pelletier/go-toml/v2
             - github.com/rs/zerolog
+            - github.com/santhosh-tekuri/jsonschema/v5
             - github.com/yeqown/go-qrcode
             - github.com/skip2/go-qrcode
             - github.com/spf13/viper
@@ -63,7 +63,7 @@ linters:
     tagliatelle:
       case:
         rules:
-          json: goPascal
+          json: camel
 
 formatters:
   enable:

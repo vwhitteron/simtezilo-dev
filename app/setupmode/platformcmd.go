@@ -12,22 +12,22 @@ import (
 
 // CmdStatus represents the status information returned by the setup CLI tool.
 type CmdStatus struct {
-	ActiveConn       string `json:"activeConn"`          //nolint:tagliatelle // lowercase for easy compatibility
-	Available        bool   `json:"available,omitempty"` //nolint:tagliatelle
-	FlagEnabled      bool   `json:"flagEnabled"`         //nolint:tagliatelle
-	Ready            bool   `json:"ready"`               //nolint:tagliatelle
-	RunModePresent   bool   `json:"runModePresent"`      //nolint:tagliatelle
-	SetupModePresent bool   `json:"setupModePresent"`    //nolint:tagliatelle
-	SetupRequired    bool   `json:"setupRequired"`       //nolint:tagliatelle
-	LCDPresent       bool   `json:"lcdPresent"`          //nolint:tagliatelle
-	SSHEnabled       bool   `json:"sshEnabled"`          //nolint:tagliatelle
+	ActiveConn       string `json:"activeConn"`
+	Available        bool   `json:"available,omitempty"`
+	FlagEnabled      bool   `json:"flagEnabled"`
+	Ready            bool   `json:"ready"`
+	RunModePresent   bool   `json:"runModePresent"`
+	SetupModePresent bool   `json:"setupModePresent"`
+	SetupRequired    bool   `json:"setupRequired"`
+	LCDPresent       bool   `json:"lcdPresent"`
+	SSHEnabled       bool   `json:"sshEnabled"`
 }
 
 // CmdNetworkInfo represents WiFi network information returned by the setup CLI tool.
 type CmdNetworkInfo struct {
-	SSID     string `json:"ssid"`     //nolint:tagliatelle // lowercase for easy compatibility
-	PSK      string `json:"psk"`      //nolint:tagliatelle
-	Security string `json:"security"` //nolint:tagliatelle
+	SSID     string `json:"ssid"`
+	PSK      string `json:"psk"`
+	Security string `json:"security"`
 }
 
 type CmdResult string
@@ -60,12 +60,12 @@ const (
 // CmdResponse represents a response from the setup CLI tool.
 // Different commands populate different optional fields.
 type CmdResponse struct {
-	Result   CmdResult        `json:"result"`             //nolint:tagliatelle // lowercase for compatibility with setup CLI
-	Error    string           `json:"error,omitempty"`    //nolint:tagliatelle
-	Action   CmdAction        `json:"action,omitempty"`   //nolint:tagliatelle
-	Networks []CmdNetworkInfo `json:"networks,omitempty"` //nolint:tagliatelle
-	Status   *CmdStatus       `json:"status,omitempty"`   //nolint:tagliatelle
-	WiFi     *CmdNetworkInfo  `json:"wifi,omitempty"`     //nolint:tagliatelle
+	Result   CmdResult        `json:"result"`
+	Error    string           `json:"error,omitempty"`
+	Action   CmdAction        `json:"action,omitempty"`
+	Networks []CmdNetworkInfo `json:"networks,omitempty"`
+	Status   *CmdStatus       `json:"status,omitempty"`
+	WiFi     *CmdNetworkInfo  `json:"wifi,omitempty"`
 }
 
 // Status checks the current status of setup mode by running the setup command's status action.

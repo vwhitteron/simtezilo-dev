@@ -121,14 +121,14 @@ func (m *manager) provisionRunModeConnection() exitcode.Code {
 
 	// Read JSON from stdin
 	var inputConfig []struct {
-		SSID     string `json:"ssid"`     //nolint:tagliatelle // lowercase for easier compatibility
-		PSK      string `json:"psk"`      //nolint:tagliatelle
-		Security string `json:"security"` //nolint:tagliatelle
-		Method   string `json:"method"`   //nolint:tagliatelle
-		IP       string `json:"ip"`       //nolint:tagliatelle
-		Prefix   string `json:"prefix"`   //nolint:tagliatelle
-		Gateway  string `json:"gateway"`  //nolint:tagliatelle
-		DNS      string `json:"dns"`      //nolint:tagliatelle
+		SSID     string `json:"ssid"`
+		PSK      string `json:"psk"`
+		Security string `json:"security"`
+		Method   string `json:"method"`
+		IP       string `json:"ip"`
+		Prefix   string `json:"prefix"`
+		Gateway  string `json:"gateway"`
+		DNS      string `json:"dns"`
 	}
 
 	decoder := json.NewDecoder(os.Stdin)

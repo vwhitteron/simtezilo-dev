@@ -14,19 +14,19 @@ import (
 
 // Manifest represents the release manifest JSON structure hosted on the update server.
 type Manifest struct {
-	Version           string              `json:"version"`           //nolint:tagliatelle // external API format
-	ReleaseDate       time.Time           `json:"releaseDate"`       //nolint:tagliatelle // external API format
-	Channel           string              `json:"channel"`           //nolint:tagliatelle // external API format
-	MinUpgradeVersion string              `json:"minUpgradeVersion"` //nolint:tagliatelle // external API format
-	Changelog         []string            `json:"changelog"`         //nolint:tagliatelle // external API format
-	Platforms         map[string]Platform `json:"platforms"`         //nolint:tagliatelle // external API format
+	Version           string              `json:"version"`
+	ReleaseDate       time.Time           `json:"releaseDate"`
+	Channel           string              `json:"channel"`
+	MinUpgradeVersion string              `json:"minUpgradeVersion"`
+	Changelog         []string            `json:"changelog"`
+	Platforms         map[string]Platform `json:"platforms"`
 }
 
 // Platform contains platform-specific binary information.
 type Platform struct {
-	URL    string `json:"url"`    //nolint:tagliatelle // external API format
-	SHA256 string `json:"sha256"` //nolint:tagliatelle // external API format
-	Size   int64  `json:"size"`   //nolint:tagliatelle // external API format
+	URL    string `json:"url"`
+	SHA256 string `json:"sha256"`
+	Size   int64  `json:"size"`
 }
 
 // UnmarshalJSON implements custom JSON unmarshaling for Manifest to handle

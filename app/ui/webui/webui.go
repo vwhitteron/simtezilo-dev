@@ -4,7 +4,6 @@ package webui
 import (
 	"archive/tar"
 	"archive/zip"
-	"bytes"
 	"compress/gzip"
 	"context"
 	"embed"
@@ -21,9 +20,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/pelletier/go-toml/v2"
 	"github.com/rs/zerolog"
-	"github.com/spf13/viper"
 	"github.com/vwhitteron/simtezilo-dev/app/calibrator"
 	appconfig "github.com/vwhitteron/simtezilo-dev/app/config"
 	"github.com/vwhitteron/simtezilo-dev/app/exitcode"
@@ -36,9 +33,9 @@ import (
 
 // WSMessage represents a typed message envelope for the unified WebSocket.
 type WSMessage struct {
-	Type      string `json:"type"`      //nolint:tagliatelle // Message type
-	Timestamp int64  `json:"timestamp"` //nolint:tagliatelle // Unix timestamp in milliseconds
-	Data      any    `json:"data"`      //nolint:tagliatelle // Message data
+	Type      string `json:"type"`      // Message type
+	Timestamp int64  `json:"timestamp"` // Unix timestamp in milliseconds
+	Data      any    `json:"data"`      // Message data
 }
 
 // wsMessage is an internal message sent to a client's write goroutine.
@@ -595,8 +592,8 @@ func (w *WebUI) handleWebSocketConnection(response http.ResponseWriter, request 
 
 		// Try to parse as subscription message
 		var subMsg struct {
-			Type          string          `json:"type"`          //nolint:tagliatelle
-			Subscriptions map[string]bool `json:"subscriptions"` //nolint:tagliatelle
+			Type          string          `json:"type"`
+			Subscriptions map[string]bool `json:"subscriptions"`
 		}
 
 		err = json.Unmarshal(message, &subMsg)
@@ -2209,8 +2206,8 @@ func (w *WebUI) handleConfigExport(response http.ResponseWriter, request *http.R
 	}
 
 	// Set headers for file download
-	response.Header().Set("Content-Type", "application/toml")
-	response.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"simtezilo-config-%s.conf\"",
+	response.Header().Set("Content-Type", "application/json")
+	response.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"simtezilo-config-%s.json\"",
 		time.Now().Format("20060102-150405")))
 
 	// Write the config file content
@@ -2264,44 +2261,19 @@ func (w *WebUI) handleConfigImport(response http.ResponseWriter, request *http.R
 		return
 	}
 
-	// Validate the TOML content by attempting to unmarshal it
+	// Validate the JSON content by attempting to unmarshal it
 	var testConfig map[string]any
 
-	err = toml.Unmarshal(fileContent, &testConfig)
+	err = json.Unmarshal(fileContent, &testConfig)
 	if err != nil {
-		w.log.Error().Err(err).Msg("invalid TOML format")
+		w.log.Error().Err(err).Msg("invalid JSON format")
 		response.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(response).Encode(map[string]string{"error": fmt.Sprintf("Invalid TOML format: %v", err)}) //nolint:errchkjson // simple encoding
+		_ = json.NewEncoder(response).Encode(map[string]string{"error": fmt.Sprintf("Invalid JSON format: %v", err)}) //nolint:errchkjson // simple encoding
 
 		return
 	}
 
-	// Load and validate the configuration using viper and our validation logic
-	cfg := viper.New()
-	cfg.SetConfigType("toml")
-
-	err = cfg.ReadConfig(bytes.NewReader(fileContent))
-	if err != nil {
-		w.log.Error().Err(err).Msg("failed to parse config with viper")
-		response.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(response).Encode(map[string]string{"error": fmt.Sprintf("Invalid configuration format: %v", err)}) //nolint:errchkjson // simple encoding
-
-		return
-	}
-
-	// Create a temporary config instance to validate the structure and values
-	tempConfig := &appconfig.Config{}
-
-	err = cfg.Unmarshal(tempConfig)
-	if err != nil {
-		w.log.Error().Err(err).Msg("failed to unmarshal config")
-		response.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(response).Encode(map[string]string{"error": fmt.Sprintf("Configuration structure error: %v", err)}) //nolint:errchkjson // simple encoding
-
-		return
-	}
-
-	// Run comprehensive validation
+	// Run comprehensive validation using JSON schema
 	validationResult := w.config.ValidateConfig(fileContent)
 	if !validationResult.Valid {
 		w.log.Warn().Interface("errors", validationResult.Errors).Msg("config validation failed")
@@ -2385,7 +2357,7 @@ func (w *WebUI) handleCalibrationSweep(response http.ResponseWriter, request *ht
 
 	// Parse request body to determine action
 	var reqData struct {
-		Action string `json:"action"` //nolint:tagliatelle // lowercase for easy compatibility
+		Action string `json:"action"`
 	}
 
 	err := json.NewDecoder(request.Body).Decode(&reqData)
@@ -2675,9 +2647,9 @@ func (w *WebUI) handleLanguagesAPI(response http.ResponseWriter, request *http.R
 
 	// Build response as array of language objects
 	type languageInfo struct {
-		Code           string `json:"code"`           //nolint:tagliatelle // lowercase for interface simpicity
-		Name           string `json:"name"`           //nolint:tagliatelle
-		DefaultCountry string `json:"defaultCountry"` //nolint:tagliatelle
+		Code           string `json:"code"`
+		Name           string `json:"name"`
+		DefaultCountry string `json:"defaultCountry"`
 	}
 
 	languages := make([]languageInfo, 0, len(languagesMap))
@@ -3219,10 +3191,10 @@ func (w *WebUI) handleUpdatesDownload(response http.ResponseWriter, request *htt
 
 // UploadMetadata represents metadata embedded in a custom update archive.
 type UploadMetadata struct {
-	Version     string    `json:"version"`     //nolint:tagliatelle // lowercase for compatibility
-	ReleaseDate time.Time `json:"releaseDate"` //nolint:tagliatelle
-	Changelog   []string  `json:"changelog"`   //nolint:tagliatelle
-	Platform    string    `json:"platform"`    //nolint:tagliatelle
+	Version     string    `json:"version"`
+	ReleaseDate time.Time `json:"releaseDate"`
+	Changelog   []string  `json:"changelog"`
+	Platform    string    `json:"platform"`
 }
 
 // extractMetadataFromArchive attempts to extract manifest.json from an uploaded archive.

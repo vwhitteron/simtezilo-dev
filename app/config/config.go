@@ -3,6 +3,7 @@ package config
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -14,7 +15,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pelletier/go-toml/v2"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
@@ -23,116 +23,116 @@ import (
 )
 
 type app struct {
-	Language       string  `toml:"language"`
-	Accent         string  `toml:"accent"`
-	LogLevel       string  `toml:"logLevel"`
-	BaseDir        string  `toml:"baseDir"`
-	Update         *update `toml:"update"`
-	VehicleDBFile  string  `toml:"vehicleDBFile"`
-	EnabledWebUI   bool    `toml:"enabledWebUI"`
-	WebUIPort      int     `toml:"webUIPort"`
-	EnableDevTools bool    `toml:"enableDevTools"`
+	Language       string  `json:"language"`
+	Accent         string  `json:"accent"`
+	LogLevel       string  `json:"logLevel"`
+	BaseDir        string  `json:"baseDir"`
+	Update         *update `json:"update,omitempty"`
+	VehicleDBFile  string  `json:"vehicleDBFile"` //nolint:tagliatelle // schema uses Go-style acronym
+	EnabledWebUI   bool    `json:"enabledWebUI"`  //nolint:tagliatelle // schema uses Go-style acronym
+	WebUIPort      int     `json:"webUIPort"`     //nolint:tagliatelle // schema uses Go-style acronym
+	EnableDevTools bool    `json:"enableDevTools"`
 }
 
 type discord struct {
-	Token          string `toml:"token"`
-	GuildID        string `toml:"guildID"`
-	ChannelID      string `toml:"channelID"`
-	VoiceChannelID string `toml:"voiceChannelID"`
+	Token          string `json:"token"`
+	GuildID        string `json:"guildID"`        //nolint:tagliatelle // schema uses Go-style acronym
+	ChannelID      string `json:"channelID"`      //nolint:tagliatelle // schema uses Go-style acronym
+	VoiceChannelID string `json:"voiceChannelID"` //nolint:tagliatelle // schema uses Go-style acronym
 }
 
 type fuelMonitoring struct {
-	Enabled                 bool    `toml:"enabled"`
-	PreWarnNotifyLaps       float64 `toml:"preWarnNotifyLaps"`
-	StrategyNotifyLaps      float64 `toml:"strategyNotifyLaps"`
-	RangeSafetyMarginLaps   float64 `toml:"rangeSafetyMarginLaps"`
-	RangeSafetyMarginMeters float64 `toml:"rangeSafetyMarginMeters"`
+	Enabled                 bool    `json:"enabled"`
+	PreWarnNotifyLaps       float64 `json:"preWarnNotifyLaps"`
+	StrategyNotifyLaps      float64 `json:"strategyNotifyLaps"`
+	RangeSafetyMarginLaps   float64 `json:"rangeSafetyMarginLaps"`
+	RangeSafetyMarginMeters float64 `json:"rangeSafetyMarginMeters"`
 }
 
 type haptics struct {
-	EnableReplay                 bool                                `toml:"enableReplay"`
-	DynamicTransmissionFeedback  bool                                `toml:"dynamicTransmissionFeedback"`
-	DynamicTransmissionCurve     int                                 `toml:"dynamicTransmissionCurve"`
-	DynamicTransmissionGforceMax float64                             `toml:"dynamicTransmissionGforceMax"`
-	JerkCurve                    int                                 `toml:"jerkCurve"`
-	JerkMax                      int                                 `toml:"jerkMax"`
-	_jerkScale                   float64                             `toml:"-"`
-	SnapCurve                    int                                 `toml:"snapCurve"`
-	SnapMax                      int                                 `toml:"snapMax"`
-	_snapScale                   float64                             `toml:"-"`
-	PulseMaxAmplitude            float64                             `toml:"pulseMaxAmplitude"`
-	PulseMaxFrequencyHz          float64                             `toml:"pulseMaxFrequencyHz"`
-	PulseMinFrequencyHz          float64                             `toml:"pulseMinFrequencyHz"`
-	_pulseWidthMax               float64                             `toml:"-"`
-	_pulseWidthMin               float64                             `toml:"-"`
-	EngineProfiles               map[string]appHaptics.EngineProfile `toml:"engineProfiles"`
-	_engineProfile               *appHaptics.EngineProfile           `toml:"-"`
-	_engineProfileName           string                              `toml:"-"`
+	EnableReplay                 bool                                `json:"enableReplay"`
+	DynamicTransmissionFeedback  bool                                `json:"dynamicTransmissionFeedback"`
+	DynamicTransmissionCurve     int                                 `json:"dynamicTransmissionCurve"`
+	DynamicTransmissionGforceMax float64                             `json:"dynamicTransmissionGforceMax"`
+	JerkCurve                    int                                 `json:"jerkCurve"`
+	JerkMax                      int                                 `json:"jerkMax"`
+	_jerkScale                   float64                             `json:"-"`
+	SnapCurve                    int                                 `json:"snapCurve"`
+	SnapMax                      int                                 `json:"snapMax"`
+	_snapScale                   float64                             `json:"-"`
+	PulseMaxAmplitude            float64                             `json:"pulseMaxAmplitude"`
+	PulseMaxFrequencyHz          float64                             `json:"pulseMaxFrequencyHz"`
+	PulseMinFrequencyHz          float64                             `json:"pulseMinFrequencyHz"`
+	_pulseWidthMax               float64                             `json:"-"`
+	_pulseWidthMin               float64                             `json:"-"`
+	EngineProfiles               map[string]appHaptics.EngineProfile `json:"engineProfiles,omitempty"`
+	_engineProfile               *appHaptics.EngineProfile           `json:"-"`
+	_engineProfileName           string                              `json:"-"`
 }
 
 type hardware struct {
-	Model              string `toml:"model"`
-	DisplayOrientation int    `toml:"displayOrientation"`
+	Model              string `json:"model"`
+	DisplayOrientation int    `json:"displayOrientation"`
 }
 
 type notifications struct {
-	EnableRaceProgress      bool    `toml:"enableRaceProgress"`
-	RaceProgressMinLaps     int     `toml:"raceProgressMinLaps"`
-	RaceProgressIntervalPc  int     `toml:"raceProgressIntervalPc"`
-	EnableRaceLaps          bool    `toml:"enableRaceLaps"`
-	RaceLapsIntervalLaps    int     `toml:"raceLapsIntervalLaps"`
-	RaceLapsCountdownLaps   int     `toml:"raceLapsCountdownLaps"`
-	EnableLapTimes          bool    `toml:"enableLapTimes"`
-	LapTimesMaxDeltaSeconds float64 `toml:"lapTimesMaxDeltaSeconds"`
-	EnableCircuitMatching   bool    `toml:"enableCircuitMatching"`
+	EnableRaceProgress      bool    `json:"enabledRaceProgress"`
+	RaceProgressMinLaps     int     `json:"raceProgressMinLaps"`
+	RaceProgressIntervalPc  int     `json:"raceProgressIntervalPc"`
+	EnableRaceLaps          bool    `json:"enabledRaceLaps"`
+	RaceLapsIntervalLaps    int     `json:"raceLapsIntervalLaps"`
+	RaceLapsCountdownLaps   int     `json:"raceLapsCountdownLaps"`
+	EnableLapTimes          bool    `json:"enabledLapTimes"`
+	LapTimesMaxDeltaSeconds float64 `json:"lapTimesMaxDeltaSeconds"`
+	EnableCircuitMatching   bool    `json:"enabledCircuitMatching"`
 }
 
 type pitRadio struct {
-	Enabled               bool            `toml:"enabled"`
-	Output                string          `toml:"output"`
-	MessageSendIntervalMs int             `toml:"messageSendIntervalMs"`
-	Notifications         *notifications  `toml:"notifications"`
-	Discord               *discord        `toml:"discord"`
-	FuelMonitoring        *fuelMonitoring `toml:"fuelMonitoring"`
-	TyreMonitoring        *tyreMonitoring `toml:"tyreMonitoring"`
+	Enabled               bool            `json:"enabled"`
+	Output                string          `json:"output"`
+	MessageSendIntervalMs int             `json:"messageSendIntervalMs"`
+	Notifications         *notifications  `json:"notifications,omitempty"`
+	Discord               *discord        `json:"discord,omitempty"`
+	FuelMonitoring        *fuelMonitoring `json:"fuelMonitoring,omitempty"`
+	TyreMonitoring        *tyreMonitoring `json:"tyreMonitoring,omitempty"`
 }
 
 // EQBand represents a parametric equalizer band with center frequency, gain, and Q factor.
 type EQBand struct {
-	Frequency float64 `toml:"frequency"` // Center frequency in Hz
-	Gain      float64 `toml:"gain"`      // Gain in dB (-12 to +6)
-	Q         float64 `toml:"q"`         // Q factor (0.1 to 20, higher = narrower)
+	Frequency float64 `json:"frequency"` // Center frequency in Hz
+	Gain      float64 `json:"gain"`      // Gain in dB (-12 to +6)
+	Q         float64 `json:"q"`         // Q factor (0.1 to 20, higher = narrower)
 }
 
 // Synthesizer represents an audio synthesizer used for haptic feedback.
 type Synthesizer struct {
-	InternalSampleRateHz      int         `toml:"internalSampleRateHz"`
-	OutputSampleRateHz        int         `toml:"outputSampleRateHz"`
-	OutputFile                string      `toml:"outputFile"`
-	MasterMute                bool        `toml:"masterMute"`
-	MasterGain                float64     `toml:"masterGain"`
-	ChannelMute               []bool      `toml:"channelMute"`
-	ChannelGain               []float64   `toml:"channelGain"`
-	ChassisMute               bool        `toml:"chassisMute"`
-	ChassisGain               float64     `toml:"chassisGain"`
-	TransmissionMute          bool        `toml:"transmissionMute"`
-	TransmissionGain          float64     `toml:"transmissionGain"`
-	TransmissionGainMinRace   float64     `toml:"transmissionGainMinRace"`
-	TransmissionGainMinStreet float64     `toml:"transmissionGainMinStreet"`
-	EngineMute                bool        `toml:"engineMute"`
-	EngineGain                float64     `toml:"engineGain"`
-	GainIncrement             float64     `toml:"gainIncrement"`
-	EnableEq                  []bool      `toml:"enableEq"`
-	EqBands                   [][]EQBand  `toml:"eqBands"`
-	_eqCurve                  [][]float64 `toml:"-"` // Computed curve for fast lookup (per channel)
-	_eqMinFreq                float64     `toml:"-"` // Minimum frequency for curve
-	_eqMaxFreq                float64     `toml:"-"` // Maximum frequency for curve
-	_eqResolution             float64     `toml:"-"` // Frequency resolution (Hz per bucket)
+	InternalSampleRateHz      int         `json:"internalSampleRateHz"`
+	OutputSampleRateHz        int         `json:"outputSampleRateHz"`
+	OutputFile                string      `json:"outputFile,omitempty"`
+	MasterMute                bool        `json:"masterMute"`
+	MasterGain                float64     `json:"masterGain"`
+	ChannelMute               []bool      `json:"channelMute"`
+	ChannelGain               []float64   `json:"channelGain"`
+	ChassisMute               bool        `json:"chassisMute"`
+	ChassisGain               float64     `json:"chassisGain"`
+	TransmissionMute          bool        `json:"transmissionMute"`
+	TransmissionGain          float64     `json:"transmissionGain"`
+	TransmissionGainMinRace   float64     `json:"transmissionGainMinRace"`
+	TransmissionGainMinStreet float64     `json:"transmissionGainMinStreet"`
+	EngineMute                bool        `json:"engineMute"`
+	EngineGain                float64     `json:"engineGain"`
+	GainIncrement             float64     `json:"gainIncrement"`
+	EnableEq                  []bool      `json:"enableEq"`
+	EqBands                   [][]EQBand  `json:"eqBands,omitempty"`
+	_eqCurve                  [][]float64 `json:"-"` // Computed curve for fast lookup (per channel)
+	_eqMinFreq                float64     `json:"-"` // Minimum frequency for curve
+	_eqMaxFreq                float64     `json:"-"` // Maximum frequency for curve
+	_eqResolution             float64     `json:"-"` // Frequency resolution (Hz per bucket)}
 }
 
 // Telemetry represents the telemetry data source configuration.
 type Telemetry struct {
-	Source string `toml:"source"`
+	Source string `json:"source"`
 }
 
 // Status represents the status of the configuration.
@@ -142,27 +142,28 @@ type Status struct {
 }
 
 type tyreMonitoring struct {
-	Enabled                    bool    `toml:"enabled"`
-	TemperatureOptimalCelsius  float32 `toml:"temperatureOptimalCelsius"`
-	TemperatureOperatingWindow float32 `toml:"temperatureOperatingWindow"`
-	TemperatureMarginCelsius   float32 `toml:"temperatureMarginCelsius"`
+	Enabled                    bool    `json:"enabled"`
+	TemperatureOptimalCelsius  float32 `json:"temperatureOptimalCelsius"`
+	TemperatureOperatingWindow float32 `json:"temperatureOperatingWindow"`
+	TemperatureMarginCelsius   float32 `json:"temperatureMarginCelsius"`
 }
 
 type update struct {
-	BaseURL              string `toml:"baseURL"`
-	Channel              string `toml:"channel"`
-	AutoCheck            bool   `toml:"autoCheck"`
-	AutoInstall          bool   `toml:"autoInstall"`
-	CheckIntervalMinutes int    `toml:"checkIntervalMinutes"`
+	BaseURL              string `json:"baseURL"` //nolint:tagliatelle // schema uses Go-style acronym
+	Channel              string `json:"channel"`
+	AutoCheck            bool   `json:"autoCheck"`
+	AutoInstall          bool   `json:"autoInstall"`
+	CheckIntervalMinutes int    `json:"checkIntervalMinutes"`
 }
 
 type viperConfig struct {
-	App         *app         `toml:"app"`
-	Hardware    *hardware    `toml:"hardware"`
-	Haptics     *haptics     `toml:"haptics"`
-	PitRadio    *pitRadio    `toml:"pitRadio"`
-	Synthesizer *Synthesizer `toml:"synthesizer"`
-	Telemetry   *Telemetry   `toml:"telemetry"`
+	SchemaVersion string       `json:"schemaVersion"`
+	App           *app         `json:"app,omitempty"`
+	Hardware      *hardware    `json:"hardware,omitempty"`
+	Haptics       *haptics     `json:"haptics,omitempty"`
+	PitRadio      *pitRadio    `json:"pitRadio,omitempty"`
+	Synthesizer   *Synthesizer `json:"synthesizer,omitempty"`
+	Telemetry     *Telemetry   `json:"telemetry,omitempty"`
 }
 
 // Snapshot holds frequently-accessed configuration values for lock-free reads.
@@ -247,7 +248,7 @@ func New(opts Options) *Config {
 	viper.SetEnvPrefix("SIMTEZILO")
 	viper.SetEnvKeyReplacer(strings.NewReplacer(`.`, `_`))
 	viper.AutomaticEnv()
-	viper.SetConfigType("toml")
+	viper.SetConfigType("json")
 
 	if opts.ConfigFile != "" {
 		opts.Logger.Debug().Str("filename", opts.ConfigFile).Msg("Loading config file")
@@ -280,9 +281,9 @@ func New(opts Options) *Config {
 		log.Debug().Str("source", config.configFile).Msg("config loaded")
 
 		// Initialize lastSavedConfig with current state to prevent false restart indicators
-		tomlData, err := toml.Marshal(config.viper)
+		jsonData, err := json.Marshal(config.viper)
 		if err == nil {
-			config.lastSavedConfig = tomlData
+			config.lastSavedConfig = jsonData
 		}
 	}
 
@@ -347,7 +348,7 @@ func (c *Config) SetDefault() {
 			// Create a new config structure
 			newConfig := defaultConfig()
 
-			err = toml.Unmarshal(data, newConfig)
+			err = json.Unmarshal(data, newConfig)
 			if err == nil {
 				c.viper = newConfig
 				c.mu.Unlock()
@@ -2903,14 +2904,14 @@ func (c *Config) SaveConfigToFile() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// Marshal the configuration to TOML
-	tomlData, err := toml.Marshal(c.viper)
+	// Marshal the configuration to JSON
+	jsonData, err := json.MarshalIndent(c.viper, "", "  ")
 	if err != nil {
-		return fmt.Errorf("failed to marshal configuration to TOML: %w", err)
+		return fmt.Errorf("failed to marshal configuration to JSON: %w", err)
 	}
 
 	// Skip write if config hasn't changed (reduces SD card wear)
-	if bytes.Equal(tomlData, c.lastSavedConfig) {
+	if bytes.Equal(jsonData, c.lastSavedConfig) {
 		return nil
 	}
 
@@ -2928,7 +2929,7 @@ func (c *Config) SaveConfigToFile() error {
 		return fmt.Errorf("failed to open config file %s: %w", c.configFile, err)
 	}
 
-	_, err = file.Write(tomlData)
+	_, err = file.Write(jsonData)
 	if err != nil {
 		file.Close()
 
@@ -2949,7 +2950,7 @@ func (c *Config) SaveConfigToFile() error {
 	}
 
 	// Update last saved config
-	c.lastSavedConfig = tomlData
+	c.lastSavedConfig = jsonData
 
 	return nil
 }

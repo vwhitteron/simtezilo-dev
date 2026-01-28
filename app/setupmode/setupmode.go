@@ -222,9 +222,9 @@ func handleAPIGetLanguages(writer http.ResponseWriter, _ *http.Request, logger *
 
 	// Build response as array of language objects
 	type languageInfo struct {
-		Code           string `json:"code"`           //nolint:tagliatelle
-		Name           string `json:"name"`           //nolint:tagliatelle
-		DefaultCountry string `json:"defaultCountry"` //nolint:tagliatelle
+		Code           string `json:"code"`
+		Name           string `json:"name"`
+		DefaultCountry string `json:"defaultCountry"`
 	}
 
 	languages := make([]languageInfo, 0, len(languagesMap))

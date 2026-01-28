@@ -16,15 +16,15 @@ import (
 
 // InstallState tracks the state of a pending installation.
 type InstallState struct {
-	PendingVersion string    `json:"pendingVersion"` //nolint:tagliatelle // external API format
-	CurrentVersion string    `json:"currentVersion"` //nolint:tagliatelle
-	DownloadPath   string    `json:"downloadPath"`   //nolint:tagliatelle
-	ExtractDir     string    `json:"extractDir"`     //nolint:tagliatelle
-	SHA256         string    `json:"sha256"`         //nolint:tagliatelle
-	Timestamp      time.Time `json:"timestamp"`      //nolint:tagliatelle
-	Status         string    `json:"status"`         //nolint:tagliatelle
-	FailCount      int       `json:"failCount"`      //nolint:tagliatelle
-	LastError      string    `json:"lastError"`      //nolint:tagliatelle
+	PendingVersion string    `json:"pendingVersion"`
+	CurrentVersion string    `json:"currentVersion"`
+	DownloadPath   string    `json:"downloadPath"`
+	ExtractDir     string    `json:"extractDir"`
+	SHA256         string    `json:"sha256"`
+	Timestamp      time.Time `json:"timestamp"`
+	Status         string    `json:"status"`
+	FailCount      int       `json:"failCount"`
+	LastError      string    `json:"lastError"`
 }
 
 // Installer handles the installation of downloaded updates.
