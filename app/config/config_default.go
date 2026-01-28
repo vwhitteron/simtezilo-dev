@@ -6,6 +6,7 @@ import appHaptics "github.com/vwhitteron/simtezilo-dev/app/haptics"
 
 func defaultConfig() *viperConfig {
 	return &viperConfig{
+		SchemaVersion: "1.0.0",
 		App: &app{
 			Language:      "en",
 			Accent:        "us",
@@ -32,9 +33,9 @@ func defaultConfig() *viperConfig {
 			DynamicTransmissionFeedback:  true,
 			DynamicTransmissionCurve:     150,
 			DynamicTransmissionGforceMax: 2.0,
-			JerkCurve:                    200,
-			JerkMax:                      40,
-			SnapCurve:                    350,
+			JerkCurve:                    190,
+			JerkMax:                      37,
+			SnapCurve:                    310,
 			SnapMax:                      90,
 			PulseMaxAmplitude:            1,
 			PulseMaxFrequencyHz:          60,
