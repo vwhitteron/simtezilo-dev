@@ -26,32 +26,32 @@ const (
 )
 
 // installDir returns the installation directory path.
-func (m *manager) installDir() string {
-	return filepath.Join(m.baseDir, "bin")
+func (p *platform) installDir() string {
+	return filepath.Join(p.baseDir, "bin")
 }
 
 // initDir returns the init scripts directory path.
-func (m *manager) initDir() string {
-	return filepath.Join(m.baseDir, "init")
+func (p *platform) initDir() string {
+	return filepath.Join(p.baseDir, "init")
 }
 
 // etcDir returns the configuration files directory path.
-func (m *manager) etcDir() string {
-	return filepath.Join(m.baseDir, "etc")
+func (p *platform) etcDir() string {
+	return filepath.Join(p.baseDir, "etc")
 }
 
 // dataDir returns the update data directory path.
-func (m *manager) dataDir() string {
-	return filepath.Join(m.baseDir, "data/update")
+func (p *platform) dataDir() string {
+	return filepath.Join(p.baseDir, "data/update")
 }
 
 // stateFile returns the path to the update state file.
-func (m *manager) stateFile() string {
-	return filepath.Join(m.baseDir, "data/update/update-state.json")
+func (p *platform) stateFile() string {
+	return filepath.Join(p.baseDir, "data/update/update-state.json")
 }
 
-func (m *manager) rollbackArchive() string {
-	return filepath.Join(m.baseDir, "data/update/rollback.tgz")
+func (p *platform) rollbackArchive() string {
+	return filepath.Join(p.baseDir, "data/update/rollback.tgz")
 }
 
 // updateState tracks the state of a pending installation (matches app/updater/installer.go).
@@ -69,8 +69,8 @@ type updateState struct {
 
 // loadUpdateState reads and parses the update state file from disk.
 // Returns nil with no error if the state file does not exist.
-func (m *manager) loadUpdateState() (*updateState, error) {
-	data, err := os.ReadFile(m.stateFile())
+func (p *platform) loadUpdateState() (*updateState, error) {
+	data, err := os.ReadFile(p.stateFile())
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
@@ -91,8 +91,8 @@ func (m *manager) loadUpdateState() (*updateState, error) {
 
 // saveUpdateState persists the update state to disk as JSON, creating the
 // data directory if it doesn't exist.
-func (m *manager) saveUpdateState(state *updateState) error {
-	err := os.MkdirAll(m.dataDir(), 0o755)
+func (p *platform) saveUpdateState(state *updateState) error {
+	err := os.MkdirAll(p.dataDir(), 0o755)
 	if err != nil {
 		return fmt.Errorf("failed to create data directory: %w", err)
 	}
@@ -102,7 +102,7 @@ func (m *manager) saveUpdateState(state *updateState) error {
 		return fmt.Errorf("failed to marshal state: %w", err)
 	}
 
-	err = os.WriteFile(m.stateFile(), data, 0o600)
+	err = os.WriteFile(p.stateFile(), data, 0o600)
 	if err != nil {
 		return fmt.Errorf("failed to write state file: %w", err)
 	}
@@ -111,8 +111,8 @@ func (m *manager) saveUpdateState(state *updateState) error {
 }
 
 // clearUpdateState removes the update state file from disk.
-func (m *manager) clearUpdateState() error {
-	err := os.Remove(m.stateFile())
+func (p *platform) clearUpdateState() error {
+	err := os.Remove(p.stateFile())
 	if err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("failed to remove state file: %w", err)
 	}
@@ -122,10 +122,10 @@ func (m *manager) clearUpdateState() error {
 
 // updateApply processes a pending update based on the current update state.
 // It handles pending, complete, failed, and rolled back states appropriately.
-func (m *manager) updateApply() exitcode.Code {
-	state, err := m.loadUpdateState()
+func (p *platform) updateApply() exitcode.Code {
+	state, err := p.loadUpdateState()
 	if err != nil {
-		m.log.Error().Err(err).Msg("Failed to load update state")
+		p.log.Error().Err(err).Msg("Failed to load update state")
 
 		outputJSON(map[string]any{
 			"result": "failure",
@@ -136,7 +136,7 @@ func (m *manager) updateApply() exitcode.Code {
 	}
 
 	if state == nil {
-		m.log.Debug().Msg("No update state file found, nothing to do")
+		p.log.Debug().Msg("No update state file found, nothing to do")
 
 		outputJSON(map[string]any{
 			"result": "success",
@@ -146,7 +146,7 @@ func (m *manager) updateApply() exitcode.Code {
 		return exitcode.Success
 	}
 
-	m.log.Info().
+	p.log.Info().
 		Str("status", state.Status).
 		Str("pending", state.PendingVersion).
 		Str("current", state.CurrentVersion).
@@ -155,12 +155,12 @@ func (m *manager) updateApply() exitcode.Code {
 
 	switch state.Status {
 	case updateStatusPending:
-		return m.applyPendingUpdate(state)
+		return p.applyPendingUpdate(state)
 	case updateStatusComplete:
-		return m.handleCompleteState(state)
+		return p.handleCompleteState(state)
 	case updateStatusFailed:
 		// If failed, just log and exit - rescue script will handle if needed
-		m.log.Warn().
+		p.log.Warn().
 			Int("failCount", state.FailCount).
 			Str("lastError", state.LastError).
 			Msg("Previous update failed")
@@ -174,7 +174,7 @@ func (m *manager) updateApply() exitcode.Code {
 
 		return exitcode.GeneralErr
 	case updateStatusRolledBack, updateStatusInstalling:
-		m.log.Info().Str("status", state.Status).Msg("No action needed for current state")
+		p.log.Info().Str("status", state.Status).Msg("No action needed for current state")
 
 		outputJSON(map[string]any{
 			"result": "success",
@@ -184,7 +184,7 @@ func (m *manager) updateApply() exitcode.Code {
 
 		return exitcode.Success
 	default:
-		m.log.Warn().Str("status", state.Status).Msg("Unknown update state")
+		p.log.Warn().Str("status", state.Status).Msg("Unknown update state")
 
 		outputJSON(map[string]any{
 			"result": "success",
@@ -198,48 +198,48 @@ func (m *manager) updateApply() exitcode.Code {
 
 // applyPendingUpdate processes an update in pending state by verifying the
 // download, extracting the archive, and installing the new binary.
-func (m *manager) applyPendingUpdate(state *updateState) exitcode.Code {
-	m.log.Info().
+func (p *platform) applyPendingUpdate(state *updateState) exitcode.Code {
+	p.log.Info().
 		Str("from", state.CurrentVersion).
 		Str("to", state.PendingVersion).
 		Msg("Applying pending update")
 
 	// Verify download exists and checksum
-	if code := m.verifyUpdateDownload(state); code != exitcode.Success {
+	if code := p.verifyUpdateDownload(state); code != exitcode.Success {
 		return code
 	}
 
 	// Mark as installing
 	state.Status = updateStatusInstalling
 
-	err := m.saveUpdateState(state)
+	err := p.saveUpdateState(state)
 	if err != nil {
-		m.log.Warn().Err(err).Msg("Failed to update state to installing")
+		p.log.Warn().Err(err).Msg("Failed to update state to installing")
 	}
 
 	// Extract and install update
-	return m.extractAndInstallUpdate(state)
+	return p.extractAndInstallUpdate(state)
 }
 
 // verifyUpdateDownload checks that the downloaded update file exists and
 // verifies its SHA256 checksum if one was provided in the state.
-func (m *manager) verifyUpdateDownload(state *updateState) exitcode.Code {
+func (p *platform) verifyUpdateDownload(state *updateState) exitcode.Code {
 	if state.DownloadPath == "" {
-		return m.markUpdateFailed(state, "download path is empty")
+		return p.markUpdateFailed(state, "download path is empty")
 	}
 
 	_, err := os.Stat(state.DownloadPath)
 	if err != nil {
-		return m.markUpdateFailed(state, fmt.Sprintf("download file not found: %v", err))
+		return p.markUpdateFailed(state, fmt.Sprintf("download file not found: %v", err))
 	}
 
 	if state.SHA256 != "" {
-		checkErr := m.verifyChecksum(state.DownloadPath, state.SHA256)
+		checkErr := p.verifyChecksum(state.DownloadPath, state.SHA256)
 		if checkErr != nil {
-			return m.markUpdateFailed(state, fmt.Sprintf("checksum verification failed: %v", checkErr))
+			return p.markUpdateFailed(state, fmt.Sprintf("checksum verification failed: %v", checkErr))
 		}
 
-		m.log.Debug().Msg("Checksum verified")
+		p.log.Debug().Msg("Checksum verified")
 	}
 
 	return exitcode.Success
@@ -247,86 +247,86 @@ func (m *manager) verifyUpdateDownload(state *updateState) exitcode.Code {
 
 // extractAndInstallUpdate extracts the downloaded archive to a temporary directory
 // and proceeds with installation of the extracted files.
-func (m *manager) extractAndInstallUpdate(state *updateState) exitcode.Code {
+func (p *platform) extractAndInstallUpdate(state *updateState) exitcode.Code {
 	extractDir := state.ExtractDir
 	if extractDir == "" {
-		extractDir = filepath.Join(m.dataDir(), "extract")
+		extractDir = filepath.Join(p.dataDir(), "extract")
 	}
 
 	_ = os.RemoveAll(extractDir)
 
 	err := os.MkdirAll(extractDir, 0o755)
 	if err != nil {
-		return m.markUpdateFailed(state, fmt.Sprintf("failed to create extract directory: %v", err))
+		return p.markUpdateFailed(state, fmt.Sprintf("failed to create extract directory: %v", err))
 	}
 
-	m.log.Info().Str("archive", state.DownloadPath).Str("dest", extractDir).Msg("Extracting archive")
+	p.log.Info().Str("archive", state.DownloadPath).Str("dest", extractDir).Msg("Extracting archive")
 
-	err = m.extractArchive(state.DownloadPath, extractDir)
+	err = p.extractArchive(state.DownloadPath, extractDir)
 	if err != nil {
 		_ = os.RemoveAll(extractDir)
 
-		return m.markUpdateFailed(state, fmt.Sprintf("failed to extract archive: %v", err))
+		return p.markUpdateFailed(state, fmt.Sprintf("failed to extract archive: %v", err))
 	}
 
-	extractRoot := m.findExtractRoot(extractDir)
+	extractRoot := p.findExtractRoot(extractDir)
 
-	return m.installExtractedUpdate(state, extractDir, extractRoot)
+	return p.installExtractedUpdate(state, extractDir, extractRoot)
 }
 
 // installExtractedUpdate installs the extracted update by backing up the current
 // binary, installing the new one, and copying any additional binaries and init scripts.
-func (m *manager) installExtractedUpdate(state *updateState, extractDir, extractRoot string) exitcode.Code {
+func (p *platform) installExtractedUpdate(state *updateState, extractDir, extractRoot string) exitcode.Code {
 	extractedBinary := filepath.Join(extractRoot, "bin", updateBinaryName)
 
 	_, err := os.Stat(extractedBinary)
 	if err != nil {
 		_ = os.RemoveAll(extractDir)
 
-		return m.markUpdateFailed(state, "extracted binary not found at "+extractedBinary)
+		return p.markUpdateFailed(state, "extracted binary not found at "+extractedBinary)
 	}
 
-	currentBinary := filepath.Join(m.installDir(), updateBinaryName)
+	currentBinary := filepath.Join(p.installDir(), updateBinaryName)
 
 	initSourceDir := filepath.Join(extractRoot, "init")
 	etcSourceDir := filepath.Join(extractRoot, "etc")
 
 	// Create rollback archive before making any changes
-	err = m.createRollbackArchive()
+	err = p.createRollbackArchive()
 	if err != nil {
-		m.log.Warn().Err(err).Msg("Failed to create rollback archive")
+		p.log.Warn().Err(err).Msg("Failed to create rollback archive")
 		// Continue anyway - rollback archive is a safety feature, not critical for install
 	}
 
-	err = m.installInitScripts(initSourceDir)
+	err = p.installInitScripts(initSourceDir)
 	if err != nil {
-		m.log.Warn().Err(err).Msg("Failed to install init scripts")
+		p.log.Warn().Err(err).Msg("Failed to install init scripts")
 	}
 
-	err = m.installConfigFiles(etcSourceDir)
+	err = p.installConfigFiles(etcSourceDir)
 	if err != nil {
-		m.log.Warn().Err(err).Msg("Failed to install config files")
+		p.log.Warn().Err(err).Msg("Failed to install config files")
 	}
 
-	m.log.Debug().Str("from", extractedBinary).Str("to", currentBinary).Msg("Installing new binary")
+	p.log.Debug().Str("from", extractedBinary).Str("to", currentBinary).Msg("Installing new binary")
 
-	err = m.copyFile(extractedBinary, currentBinary)
+	err = p.copyFile(extractedBinary, currentBinary)
 	if err != nil {
 		_ = os.RemoveAll(extractDir)
 
-		return m.markUpdateFailed(state, fmt.Sprintf("failed to install new binary: %v", err))
+		return p.markUpdateFailed(state, fmt.Sprintf("failed to install new binary: %v", err))
 	}
 
 	err = os.Chmod(currentBinary, 0o755)
 	if err != nil {
-		m.log.Warn().Err(err).Msg("Failed to set executable permissions")
+		p.log.Warn().Err(err).Msg("Failed to set executable permissions")
 	}
 
 	binSourceDir := filepath.Join(extractRoot, "bin")
 
-	err = m.installAdditionalBinaries(binSourceDir, m.installDir(), updateBinaryName)
+	err = p.installAdditionalBinaries(binSourceDir, p.installDir(), updateBinaryName)
 	if err != nil {
-		m.log.Warn().Err(err).Msg("Failed to install additional binaries")
+		p.log.Warn().Err(err).Msg("Failed to install additional binaries")
 	}
 
 	_ = os.RemoveAll(extractDir)
@@ -334,12 +334,12 @@ func (m *manager) installExtractedUpdate(state *updateState, extractDir, extract
 
 	state.Status = updateStatusComplete
 
-	err = m.saveUpdateState(state)
+	err = p.saveUpdateState(state)
 	if err != nil {
-		m.log.Warn().Err(err).Msg("Failed to save completion state")
+		p.log.Warn().Err(err).Msg("Failed to save completion state")
 	}
 
-	m.log.Info().Str("version", state.PendingVersion).Msg("Update installed successfully")
+	p.log.Info().Str("version", state.PendingVersion).Msg("Update installed successfully")
 
 	outputJSON(map[string]any{
 		"result":  "success",
@@ -352,7 +352,7 @@ func (m *manager) installExtractedUpdate(state *updateState, extractDir, extract
 
 // verifyChecksum calculates the SHA256 hash of a file and compares it against
 // the expected value, returning an error if they don't match.
-func (m *manager) verifyChecksum(filePath, expected string) error {
+func (p *platform) verifyChecksum(filePath, expected string) error {
 	file, err := os.Open(filePath)
 	if err != nil {
 		return fmt.Errorf("failed to open file: %w", err)
@@ -376,7 +376,7 @@ func (m *manager) verifyChecksum(filePath, expected string) error {
 
 // findExtractRoot determines the root directory of the extracted archive contents,
 // checking for a "Simtezilo" subdirectory or returning the extract directory itself.
-func (m *manager) findExtractRoot(extractDir string) string {
+func (p *platform) findExtractRoot(extractDir string) string {
 	// Check for Simtezilo/ subdirectory
 	simteziloDir := filepath.Join(extractDir, "Simtezilo")
 
@@ -390,14 +390,14 @@ func (m *manager) findExtractRoot(extractDir string) string {
 
 // handleCompleteState handles an update that has already completed successfully
 // by cleaning up the rollback archive and clearing the state file.
-func (m *manager) handleCompleteState(_ *updateState) exitcode.Code {
-	m.log.Info().Msg("Update already complete, cleaning up")
+func (p *platform) handleCompleteState(_ *updateState) exitcode.Code {
+	p.log.Info().Msg("Update already complete, cleaning up")
 
 	// Remove rollback archive
-	_ = os.Remove(m.rollbackArchive())
+	_ = os.Remove(p.rollbackArchive())
 
 	// Clear state
-	_ = m.clearUpdateState()
+	_ = p.clearUpdateState()
 
 	outputJSON(map[string]any{
 		"result": "success",
@@ -409,16 +409,16 @@ func (m *manager) handleCompleteState(_ *updateState) exitcode.Code {
 
 // markUpdateFailed records a failure in the update state, incrementing the fail
 // count and persisting the error reason to the state file.
-func (m *manager) markUpdateFailed(state *updateState, reason string) exitcode.Code {
-	m.log.Error().Str("reason", reason).Msg("Update failed")
+func (p *platform) markUpdateFailed(state *updateState, reason string) exitcode.Code {
+	p.log.Error().Str("reason", reason).Msg("Update failed")
 
 	state.Status = updateStatusFailed
 	state.LastError = reason
 	state.FailCount++
 
-	err := m.saveUpdateState(state)
+	err := p.saveUpdateState(state)
 	if err != nil {
-		m.log.Warn().Err(err).Msg("Failed to save failed state")
+		p.log.Warn().Err(err).Msg("Failed to save failed state")
 	}
 
 	outputJSON(map[string]any{
@@ -431,13 +431,13 @@ func (m *manager) markUpdateFailed(state *updateState, reason string) exitcode.C
 }
 
 // updateRollback restores the previous version from the rollback archive.
-func (m *manager) updateRollback() exitcode.Code {
-	m.log.Info().Msg("Rolling back from archive")
+func (p *platform) updateRollback() exitcode.Code {
+	p.log.Info().Msg("Rolling back from archive")
 
 	// Extract archive directly to base directory, overwriting existing files
-	err := m.extractArchive(m.rollbackArchive(), m.baseDir)
+	err := p.extractArchive(p.rollbackArchive(), p.baseDir)
 	if err != nil {
-		m.log.Error().Err(err).Msg("Failed to extract rollback archive")
+		p.log.Error().Err(err).Msg("Failed to extract rollback archive")
 
 		outputJSON(map[string]any{
 			"result": "failure",
@@ -448,13 +448,13 @@ func (m *manager) updateRollback() exitcode.Code {
 	}
 
 	// Update state
-	state, _ := m.loadUpdateState()
+	state, _ := p.loadUpdateState()
 	if state != nil {
 		state.Status = updateStatusRolledBack
-		_ = m.saveUpdateState(state)
+		_ = p.saveUpdateState(state)
 	}
 
-	m.log.Info().Msg("Rollback complete")
+	p.log.Info().Msg("Rollback complete")
 
 	outputJSON(map[string]any{
 		"result": "success",

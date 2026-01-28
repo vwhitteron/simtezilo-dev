@@ -13,7 +13,7 @@ import (
 
 // isNetworkManagerReady checks whether the NetworkManager D-Bus service is available
 // and responding to requests.
-func (m *manager) isNetworkManagerReady() bool {
+func (p *platform) isNetworkManagerReady() bool {
 	_, err := gonetworkmanager.NewNetworkManager()
 
 	return err == nil
@@ -21,22 +21,22 @@ func (m *manager) isNetworkManagerReady() bool {
 
 // waitForNetworkManager blocks until NetworkManager becomes available or the maximum
 // wait time is exceeded. Returns true if NetworkManager is ready, false otherwise.
-func (m *manager) waitForNetworkManager() (ok bool) {
+func (p *platform) waitForNetworkManager() (ok bool) {
 	const (
 		maxWaitAttempts = 30
 		waitInterval    = 1 * time.Second
 	)
 
 	for attempt := 1; attempt <= maxWaitAttempts; attempt++ {
-		if m.isNetworkManagerReady() {
-			m.log.Debug().Int("attempt", attempt).Msg("NetworkManager is ready")
+		if p.isNetworkManagerReady() {
+			p.log.Debug().Int("attempt", attempt).Msg("NetworkManager is ready")
 
 			return true
 		}
 
 		if attempt == maxWaitAttempts {
 			errMsg := "NetworkManager not available after waiting"
-			m.log.Debug().Msg(errMsg)
+			p.log.Debug().Msg(errMsg)
 
 			outputJSON(map[string]any{
 				"error":  errMsg,
@@ -46,7 +46,7 @@ func (m *manager) waitForNetworkManager() (ok bool) {
 			return false
 		}
 
-		m.log.Debug().Int("attempt", attempt).Int("max_attempts", maxWaitAttempts).Msg("Waiting for NetworkManager to start")
+		p.log.Debug().Int("attempt", attempt).Int("max_attempts", maxWaitAttempts).Msg("Waiting for NetworkManager to start")
 
 		time.Sleep(waitInterval)
 	}
@@ -56,7 +56,7 @@ func (m *manager) waitForNetworkManager() (ok bool) {
 
 // status checks and reports the current environment status including setup mode flag,
 // network connection profiles, SSH state, and whether setup is required.
-func (m *manager) status() exitcode.Code {
+func (p *platform) status() exitcode.Code {
 	status := setupmode.CmdStatus{
 		Available:        true,
 		ActiveConn:       "",
@@ -64,23 +64,23 @@ func (m *manager) status() exitcode.Code {
 		RunModePresent:   false,
 		SetupModePresent: false,
 		SetupRequired:    true,
-		Ready:            m.isNetworkManagerReady(),
+		Ready:            p.isNetworkManagerReady(),
 		LCDPresent:       true,
-		SSHEnabled:       m.isSSHEnabled(),
+		SSHEnabled:       p.isSSHEnabled(),
 	}
 
 	// Check if setup mode flag file exists
-	_, err := os.Stat(m.setupModeFlag)
+	_, err := os.Stat(p.setupModeFlag)
 	if err == nil {
-		m.log.Debug().Str("flag", m.setupModeFlag).Msg("Setup mode flag file exists, setup required")
+		p.log.Debug().Str("flag", p.setupModeFlag).Msg("Setup mode flag file exists, setup required")
 
 		status.FlagEnabled = true
 	}
 
-	connections, err := m.getConnections()
+	connections, err := p.getConnections()
 	if err != nil {
 		errMsg := "failed to get network connections: " + err.Error()
-		m.log.Debug().Err(err).Msg(errMsg)
+		p.log.Debug().Err(err).Msg(errMsg)
 
 		outputJSON(map[string]any{
 			"error":  errMsg,
@@ -90,7 +90,7 @@ func (m *manager) status() exitcode.Code {
 		return exitcode.GeneralErr
 	}
 
-	m.log.Debug().Strs("connections", slices.Collect(maps.Keys(connections))).Msg("Existing connections")
+	p.log.Debug().Strs("connections", slices.Collect(maps.Keys(connections))).Msg("Existing connections")
 
 	// Find the active connection
 	for name, isActive := range connections {

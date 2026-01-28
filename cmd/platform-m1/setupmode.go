@@ -12,15 +12,15 @@ import (
 
 // init initializes the setup mode network connection if it does not already exist.
 // This is typically called during first boot or after a factory reset.
-func (m *manager) init() exitcode.Code {
-	if ok := m.waitForNetworkManager(); !ok {
+func (p *platform) init() exitcode.Code {
+	if ok := p.waitForNetworkManager(); !ok {
 		return exitcode.GeneralErr
 	}
 
-	connections, err := m.getConnections()
+	connections, err := p.getConnections()
 	if err != nil {
 		errMsg := "failed to get network connections"
-		m.log.Debug().Err(err).Msg(errMsg)
+		p.log.Debug().Err(err).Msg(errMsg)
 
 		outputJSON(map[string]any{
 			"error":  errMsg,
@@ -30,15 +30,15 @@ func (m *manager) init() exitcode.Code {
 		return exitcode.GeneralErr
 	}
 
-	m.log.Debug().Strs("connections", slices.Collect(maps.Keys(connections))).Msg("Checking for SetupMode connection")
+	p.log.Debug().Strs("connections", slices.Collect(maps.Keys(connections))).Msg("Checking for SetupMode connection")
 
 	if _, exists := connections[setupModeProfile]; !exists {
-		m.log.Info().Msg("SetupMode connection not found, provisioning")
+		p.log.Info().Msg("SetupMode connection not found, provisioning")
 
-		err := m.provisionSetupModeConnection()
+		err := p.provisionSetupModeConnection()
 		if err != nil {
 			errMsg := "failed to provision SetupMode connection"
-			m.log.Debug().Err(err).Msg(errMsg)
+			p.log.Debug().Err(err).Msg(errMsg)
 
 			outputJSON(map[string]any{
 				"error":  errMsg,
@@ -48,7 +48,7 @@ func (m *manager) init() exitcode.Code {
 			return exitcode.GeneralErr
 		}
 
-		m.log.Debug().Msg("SetupMode connection provisioned successfully")
+		p.log.Debug().Msg("SetupMode connection provisioned successfully")
 
 		outputJSON(map[string]any{
 			"result": setupmode.ResultSuccess,
@@ -58,7 +58,7 @@ func (m *manager) init() exitcode.Code {
 		return exitcode.Success
 	}
 
-	m.log.Debug().Msg("SetupMode connection already exists")
+	p.log.Debug().Msg("SetupMode connection already exists")
 	outputJSON(map[string]any{
 		"result": setupmode.ResultSuccess,
 		"action": "none",
@@ -69,33 +69,33 @@ func (m *manager) init() exitcode.Code {
 
 // reset deletes all network connection profiles and reinitializes the setup mode
 // connection, effectively performing a factory reset of network configuration.
-func (m *manager) reset() exitcode.Code {
-	if ok := m.waitForNetworkManager(); !ok {
+func (p *platform) reset() exitcode.Code {
+	if ok := p.waitForNetworkManager(); !ok {
 		return exitcode.GeneralErr
 	}
 
-	err := m.deleteConnectionProfile(setupModeProfile)
+	err := p.deleteConnectionProfile(setupModeProfile)
 	if err != nil {
-		m.log.Debug().Err(err).Msgf("Failed to delete %s connection", setupModeProfile)
+		p.log.Debug().Err(err).Msgf("Failed to delete %s connection", setupModeProfile)
 	}
 
-	err = m.deleteConnectionProfile(runModeProfile)
+	err = p.deleteConnectionProfile(runModeProfile)
 	if err != nil {
-		m.log.Debug().Err(err).Msgf("Failed to delete %s connection", runModeProfile)
+		p.log.Debug().Err(err).Msgf("Failed to delete %s connection", runModeProfile)
 	}
 
-	m.log.Debug().Msgf("Connections deleted, reinitializing %s connection", setupModeProfile)
+	p.log.Debug().Msgf("Connections deleted, reinitializing %s connection", setupModeProfile)
 
-	return m.init()
+	return p.init()
 }
 
 // disableSetupModeFlag removes the setup mode flag file, indicating that initial
 // setup has been completed and the device should boot into run mode.
-func (m *manager) disableSetupModeFlag() exitcode.Code {
+func (p *platform) disableSetupModeFlag() exitcode.Code {
 	err := os.Remove(setupModeFlag)
 	if err != nil && !os.IsNotExist(err) {
 		errMsg := "failed to remove setup mode flag"
-		m.log.Debug().Err(err).Msg(errMsg)
+		p.log.Debug().Err(err).Msg(errMsg)
 
 		outputJSON(map[string]any{
 			"error":  errMsg,
@@ -112,11 +112,11 @@ func (m *manager) disableSetupModeFlag() exitcode.Code {
 
 // enableSetupModeFlag creates the setup mode flag file, which will cause the
 // device to enter setup mode on the next boot.
-func (m *manager) enableSetupModeFlag() exitcode.Code {
+func (p *platform) enableSetupModeFlag() exitcode.Code {
 	file, err := os.Create(setupModeFlag)
 	if err != nil {
 		errMsg := "failed to create setup mode flag"
-		m.log.Debug().Err(err).Msg(errMsg)
+		p.log.Debug().Err(err).Msg(errMsg)
 
 		outputJSON(map[string]any{
 			"error":  errMsg,
@@ -129,7 +129,7 @@ func (m *manager) enableSetupModeFlag() exitcode.Code {
 	err = file.Close()
 	if err != nil {
 		errMsg := "failed to close setup mode flag file"
-		m.log.Debug().Err(err).Msg(errMsg)
+		p.log.Debug().Err(err).Msg(errMsg)
 
 		outputJSON(map[string]any{
 			"error":  errMsg,
@@ -146,15 +146,15 @@ func (m *manager) enableSetupModeFlag() exitcode.Code {
 
 // enterRunMode activates the run mode network connection and stops the dnsmasq
 // service, switching the device from setup mode to normal operation.
-func (m *manager) enterRunMode() exitcode.Code {
-	if ok := m.waitForNetworkManager(); !ok {
+func (p *platform) enterRunMode() exitcode.Code {
+	if ok := p.waitForNetworkManager(); !ok {
 		return exitcode.GeneralErr
 	}
 
-	err := m.activateConnection(runModeProfile)
+	err := p.activateConnection(runModeProfile)
 	if err != nil {
 		errMsg := "failed to activate RunMode connection"
-		m.log.Debug().Err(err).Msg(errMsg)
+		p.log.Debug().Err(err).Msg(errMsg)
 
 		outputJSON(map[string]any{
 			"error":  errMsg,
@@ -165,9 +165,9 @@ func (m *manager) enterRunMode() exitcode.Code {
 	}
 
 	// Stop dnsmasq service when entering run mode
-	_, err = m.controlSystemd("dnsmasq.service", sysctlStop)
+	_, err = p.controlSystemd("dnsmasq.service", sysctlStop)
 	if err != nil {
-		m.log.Debug().Err(err).Msg("failed to stop dnsmasq service")
+		p.log.Debug().Err(err).Msg("failed to stop dnsmasq service")
 	}
 
 	outputJSON(map[string]any{"result": setupmode.ResultSuccess})
@@ -177,15 +177,15 @@ func (m *manager) enterRunMode() exitcode.Code {
 
 // enterSetupMode activates the setup mode network connection (access point) and
 // starts the dnsmasq service to provide DHCP and DNS for connected clients.
-func (m *manager) enterSetupMode() exitcode.Code {
-	if ok := m.waitForNetworkManager(); !ok {
+func (p *platform) enterSetupMode() exitcode.Code {
+	if ok := p.waitForNetworkManager(); !ok {
 		return exitcode.GeneralErr
 	}
 
-	err := m.activateConnection(setupModeProfile)
+	err := p.activateConnection(setupModeProfile)
 	if err != nil {
 		errMsg := "failed to activate SetupMode connection"
-		m.log.Debug().Err(err).Msg(errMsg)
+		p.log.Debug().Err(err).Msg(errMsg)
 
 		outputJSON(map[string]any{
 			"error":  errMsg,
@@ -199,9 +199,9 @@ func (m *manager) enterSetupMode() exitcode.Code {
 	time.Sleep(2 * time.Second)
 
 	// Start dnsmasq service when entering setup mode
-	_, err = m.controlSystemd("dnsmasq.service", sysctlStart)
+	_, err = p.controlSystemd("dnsmasq.service", sysctlStart)
 	if err != nil {
-		m.log.Debug().Err(err).Msg("failed to start dnsmasq service")
+		p.log.Debug().Err(err).Msg("failed to start dnsmasq service")
 	}
 
 	outputJSON(map[string]any{"result": setupmode.ResultSuccess})

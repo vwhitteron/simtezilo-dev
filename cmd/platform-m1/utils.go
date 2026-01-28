@@ -14,8 +14,8 @@ import (
 
 // controlSystemd executes a systemctl command on the specified service with
 // automatic retry logic. Returns the command output and any error.
-func (m *manager) controlSystemd(service string, command systemctlCmd) (stdout string, err error) {
-	m.log.Debug().
+func (p *platform) controlSystemd(service string, command systemctlCmd) (stdout string, err error) {
+	p.log.Debug().
 		Str("service", service).
 		Str("action", string(command)).
 		Msg("Controlling systemd service")
@@ -29,7 +29,7 @@ func (m *manager) controlSystemd(service string, command systemctlCmd) (stdout s
 
 		output, err := cmd.Output()
 		if err == nil {
-			m.log.Debug().
+			p.log.Debug().
 				Str("service", service).
 				Str("action", string(command)).
 				Msg("Successfully controlled systemd service")
@@ -39,7 +39,7 @@ func (m *manager) controlSystemd(service string, command systemctlCmd) (stdout s
 
 		lastErr = err
 		stdout = strings.TrimSpace(string(output))
-		m.log.Debug().
+		p.log.Debug().
 			Err(err).
 			Str("service", service).
 			Str("action", string(command)).
@@ -70,12 +70,12 @@ func outputJSON(v any) {
 
 // getSerial reads the device serial number from /proc/cpuinfo and returns it
 // truncated to 8 characters. Returns "00000000" if the serial cannot be read.
-func (m *manager) getSerial() string {
+func (p *platform) getSerial() string {
 	const defaultSerial = "00000000"
 
 	data, err := os.ReadFile("/proc/cpuinfo")
 	if err != nil {
-		m.log.Debug().Err(err).Msg("Failed to read /proc/cpuinfo")
+		p.log.Debug().Err(err).Msg("Failed to read /proc/cpuinfo")
 
 		return defaultSerial
 	}
@@ -92,22 +92,22 @@ func (m *manager) getSerial() string {
 					serial = serial[1:]
 				}
 
-				m.log.Debug().Str("serial", serial).Msg("Retrieved device serial number")
+				p.log.Debug().Str("serial", serial).Msg("Retrieved device serial number")
 
 				return serial
 			}
 		}
 	}
 
-	m.log.Debug().Msg("Serial number not found in /proc/cpuinfo")
+	p.log.Debug().Msg("Serial number not found in /proc/cpuinfo")
 
 	return defaultSerial
 }
 
 // validateIPConfiguration validates static IP configuration parameters including
 // CIDR format, gateway address, and DNS server addresses.
-func (m *manager) validateIPConfiguration(config networkConfig) error {
-	m.log.Debug().Str("method", config.method).Msg("Validating IP configuration")
+func (p *platform) validateIPConfiguration(config networkConfig) error {
+	p.log.Debug().Str("method", config.method).Msg("Validating IP configuration")
 
 	if config.method != "static" {
 		return nil

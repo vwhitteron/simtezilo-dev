@@ -14,12 +14,12 @@ import (
 
 // extractArchive extracts an archive file to the destination directory, automatically
 // detecting the format based on file extension (.tar.gz, .tgz, .zip, or raw binary).
-func (m *manager) extractArchive(archivePath, destDir string) error {
+func (p *platform) extractArchive(archivePath, destDir string) error {
 	switch {
 	case strings.HasSuffix(archivePath, ".tar.gz") || strings.HasSuffix(archivePath, ".tgz"):
-		return m.extractTarGz(archivePath, destDir)
+		return p.extractTarGz(archivePath, destDir)
 	case strings.HasSuffix(archivePath, ".zip"):
-		return m.extractZip(archivePath, destDir)
+		return p.extractZip(archivePath, destDir)
 	default:
 		// Treat as raw binary
 		destBinDir := filepath.Join(destDir, "Simtezilo", "bin")
@@ -29,13 +29,13 @@ func (m *manager) extractArchive(archivePath, destDir string) error {
 			return err
 		}
 
-		return m.copyFile(archivePath, filepath.Join(destBinDir, updateBinaryName))
+		return p.copyFile(archivePath, filepath.Join(destBinDir, updateBinaryName))
 	}
 }
 
 // extractTarGz extracts a gzip-compressed tar archive to the destination directory,
 // preserving file permissions for executable files.
-func (m *manager) extractTarGz(archivePath, destDir string) error {
+func (p *platform) extractTarGz(archivePath, destDir string) error {
 	file, err := os.Open(archivePath)
 	if err != nil {
 		return fmt.Errorf("failed to open archive: %w", err)
@@ -60,7 +60,7 @@ func (m *manager) extractTarGz(archivePath, destDir string) error {
 			return fmt.Errorf("failed to read tar entry: %w", err)
 		}
 
-		err = m.extractTarEntry(header, tarReader, destDir)
+		err = p.extractTarEntry(header, tarReader, destDir)
 		if err != nil {
 			return err
 		}
@@ -71,7 +71,7 @@ func (m *manager) extractTarGz(archivePath, destDir string) error {
 
 // extractTarEntry processes a single entry from a tar archive, creating directories
 // or extracting files as appropriate with path traversal protection.
-func (m *manager) extractTarEntry(header *tar.Header, tarReader *tar.Reader, destDir string) error {
+func (p *platform) extractTarEntry(header *tar.Header, tarReader *tar.Reader, destDir string) error {
 	target := filepath.Join(destDir, header.Name) //nolint:gosec // controlled input
 
 	if !strings.HasPrefix(filepath.Clean(target), filepath.Clean(destDir)) {
@@ -85,7 +85,7 @@ func (m *manager) extractTarEntry(header *tar.Header, tarReader *tar.Reader, des
 			return fmt.Errorf("failed to create directory: %w", err)
 		}
 	case tar.TypeReg:
-		err := m.extractTarFile(header, tarReader, target)
+		err := p.extractTarFile(header, tarReader, target)
 		if err != nil {
 			return err
 		}
@@ -96,7 +96,7 @@ func (m *manager) extractTarEntry(header *tar.Header, tarReader *tar.Reader, des
 
 // extractTarFile extracts a regular file from a tar archive to the target path,
 // creating parent directories as needed and preserving executable permissions.
-func (m *manager) extractTarFile(header *tar.Header, tarReader *tar.Reader, target string) error {
+func (p *platform) extractTarFile(header *tar.Header, tarReader *tar.Reader, target string) error {
 	err := os.MkdirAll(filepath.Dir(target), 0o755)
 	if err != nil {
 		return fmt.Errorf("failed to create parent directory: %w", err)
@@ -119,7 +119,7 @@ func (m *manager) extractTarFile(header *tar.Header, tarReader *tar.Reader, targ
 	if header.Mode&0o111 != 0 {
 		err = os.Chmod(target, 0o755)
 		if err != nil {
-			m.log.Warn().Err(err).Str("file", target).Msg("Failed to set executable permissions")
+			p.log.Warn().Err(err).Str("file", target).Msg("Failed to set executable permissions")
 		}
 	}
 
@@ -128,7 +128,7 @@ func (m *manager) extractTarFile(header *tar.Header, tarReader *tar.Reader, targ
 
 // extractZip extracts a zip archive to the destination directory, preserving
 // file permissions for executable files.
-func (m *manager) extractZip(archivePath, destDir string) error {
+func (p *platform) extractZip(archivePath, destDir string) error {
 	zipReader, err := zip.OpenReader(archivePath)
 	if err != nil {
 		return fmt.Errorf("failed to open zip: %w", err)
@@ -136,7 +136,7 @@ func (m *manager) extractZip(archivePath, destDir string) error {
 	defer zipReader.Close()
 
 	for _, zipFile := range zipReader.File {
-		err = m.extractZipEntry(zipFile, destDir)
+		err = p.extractZipEntry(zipFile, destDir)
 		if err != nil {
 			return err
 		}
@@ -147,7 +147,7 @@ func (m *manager) extractZip(archivePath, destDir string) error {
 
 // extractZipEntry processes a single entry from a zip archive, creating directories
 // or extracting files as appropriate with path traversal protection.
-func (m *manager) extractZipEntry(zipFile *zip.File, destDir string) error {
+func (p *platform) extractZipEntry(zipFile *zip.File, destDir string) error {
 	target := filepath.Join(destDir, zipFile.Name) //nolint:gosec // controlled input
 
 	if !strings.HasPrefix(filepath.Clean(target), filepath.Clean(destDir)) {
@@ -163,12 +163,12 @@ func (m *manager) extractZipEntry(zipFile *zip.File, destDir string) error {
 		return nil
 	}
 
-	return m.extractZipFile(zipFile, target)
+	return p.extractZipFile(zipFile, target)
 }
 
 // extractZipFile extracts a regular file from a zip archive to the target path,
 // creating parent directories as needed and preserving executable permissions.
-func (m *manager) extractZipFile(zipFile *zip.File, target string) error {
+func (p *platform) extractZipFile(zipFile *zip.File, target string) error {
 	err := os.MkdirAll(filepath.Dir(target), 0o755)
 	if err != nil {
 		return fmt.Errorf("failed to create parent directory: %w", err)
@@ -194,7 +194,7 @@ func (m *manager) extractZipFile(zipFile *zip.File, target string) error {
 	if zipFile.Mode()&0o111 != 0 {
 		err = os.Chmod(target, 0o755)
 		if err != nil {
-			m.log.Warn().Err(err).Str("file", target).Msg("Failed to set executable permissions")
+			p.log.Warn().Err(err).Str("file", target).Msg("Failed to set executable permissions")
 		}
 	}
 
@@ -203,26 +203,26 @@ func (m *manager) extractZipFile(zipFile *zip.File, target string) error {
 
 // installInitScripts copies init scripts from the extracted archive to the
 // system init directory, setting executable permissions on each file.
-func (m *manager) installInitScripts(sourceDir string) error {
-	return m.installFiles(sourceDir, m.initDir(), 0o755, "init scripts")
+func (p *platform) installInitScripts(sourceDir string) error {
+	return p.installFiles(sourceDir, p.initDir(), 0o755, "init scripts")
 }
 
 // installConfigFiles copies configuration files from the extracted archive to the
 // system etc directory, preserving existing configuration unless explicitly updated.
-func (m *manager) installConfigFiles(sourceDir string) error {
-	return m.installFiles(sourceDir, m.etcDir(), 0o644, "config files")
+func (p *platform) installConfigFiles(sourceDir string) error {
+	return p.installFiles(sourceDir, p.etcDir(), 0o644, "config files")
 }
 
 // installFiles copies files from source directory to destination directory with the specified permissions.
-func (m *manager) installFiles(sourceDir, destDir string, fileMode os.FileMode, description string) error {
+func (p *platform) installFiles(sourceDir, destDir string, fileMode os.FileMode, description string) error {
 	_, err := os.Stat(sourceDir)
 	if err != nil {
-		m.log.Debug().Str("type", description).Msg("No files to install")
+		p.log.Debug().Str("type", description).Msg("No files to install")
 
 		return nil //nolint:nilerr // intentionally return nil when source dir doesn't exist
 	}
 
-	m.log.Info().Str("from", sourceDir).Str("to", destDir).Msgf("Installing %s", description)
+	p.log.Info().Str("from", sourceDir).Str("to", destDir).Msgf("Installing %s", description)
 
 	err = os.MkdirAll(destDir, 0o755)
 	if err != nil {
@@ -242,16 +242,16 @@ func (m *manager) installFiles(sourceDir, destDir string, fileMode os.FileMode, 
 		srcPath := filepath.Join(sourceDir, entry.Name())
 		dstPath := filepath.Join(destDir, entry.Name())
 
-		m.log.Debug().Str("file", entry.Name()).Msgf("Installing %s", description)
+		p.log.Debug().Str("file", entry.Name()).Msgf("Installing %s", description)
 
-		err := m.copyFile(srcPath, dstPath)
+		err := p.copyFile(srcPath, dstPath)
 		if err != nil {
 			return fmt.Errorf("failed to copy %s: %w", entry.Name(), err)
 		}
 
 		err = os.Chmod(dstPath, fileMode)
 		if err != nil {
-			m.log.Warn().Err(err).Str("file", dstPath).Msg("Failed to set permissions")
+			p.log.Warn().Err(err).Str("file", dstPath).Msg("Failed to set permissions")
 		}
 	}
 
@@ -260,7 +260,7 @@ func (m *manager) installFiles(sourceDir, destDir string, fileMode os.FileMode, 
 
 // installAdditionalBinaries copies any additional binaries from the extracted
 // archive to the install directory, skipping the main binary which is handled separately.
-func (m *manager) installAdditionalBinaries(sourceDir, destDir, mainBinary string) error {
+func (p *platform) installAdditionalBinaries(sourceDir, destDir, mainBinary string) error {
 	entries, err := os.ReadDir(sourceDir)
 	if err != nil {
 		return fmt.Errorf("failed to read source directory: %w", err)
@@ -279,16 +279,16 @@ func (m *manager) installAdditionalBinaries(sourceDir, destDir, mainBinary strin
 		srcPath := filepath.Join(sourceDir, name)
 		dstPath := filepath.Join(destDir, name)
 
-		m.log.Debug().Str("binary", name).Msg("Installing additional binary")
+		p.log.Debug().Str("binary", name).Msg("Installing additional binary")
 
-		err := m.copyFile(srcPath, dstPath)
+		err := p.copyFile(srcPath, dstPath)
 		if err != nil {
 			return fmt.Errorf("failed to copy %s: %w", name, err)
 		}
 
 		err = os.Chmod(dstPath, 0o755)
 		if err != nil {
-			m.log.Warn().Err(err).Str("file", dstPath).Msg("Failed to set permissions")
+			p.log.Warn().Err(err).Str("file", dstPath).Msg("Failed to set permissions")
 		}
 	}
 
@@ -297,7 +297,7 @@ func (m *manager) installAdditionalBinaries(sourceDir, destDir, mainBinary strin
 
 // copyFile copies a file from src to dst, creating the destination file if it
 // doesn't exist or truncating it if it does.
-func (m *manager) copyFile(src, dst string) error {
+func (p *platform) copyFile(src, dst string) error {
 	srcFile, err := os.Open(src)
 	if err != nil {
 		return fmt.Errorf("failed to open source: %w", err)
@@ -322,23 +322,23 @@ func (m *manager) copyFile(src, dst string) error {
 // of critical system files that can be restored during a rollback operation.
 // Files included: bin/simtezilo, bin/platform, init/simtezilo.service,
 // init/recover.sh, and etc/simtezilo.conf.
-func (m *manager) createRollbackArchive() error {
-	m.log.Info().Str("archive", m.rollbackArchive()).Msg("Creating rollback archive")
+func (p *platform) createRollbackArchive() error {
+	p.log.Info().Str("archive", p.rollbackArchive()).Msg("Creating rollback archive")
 
 	// Define files to backup with their source paths and archive paths
 	filesToBackup := []struct {
 		sourcePath  string
 		archivePath string
 	}{
-		{filepath.Join(m.installDir(), "simtezilo"), "bin/simtezilo"},
-		{filepath.Join(m.installDir(), "platform"), "bin/platform"},
-		{filepath.Join(m.initDir(), "simtezilo.service"), "init/simtezilo.service"},
-		{filepath.Join(m.initDir(), "recover.sh"), "init/recover.sh"},
-		{filepath.Join(m.etcDir(), "simtezilo.conf"), "etc/simtezilo.conf"},
+		{filepath.Join(p.installDir(), "simtezilo"), "bin/simtezilo"},
+		{filepath.Join(p.installDir(), "platform"), "bin/platform"},
+		{filepath.Join(p.initDir(), "simtezilo.service"), "init/simtezilo.service"},
+		{filepath.Join(p.initDir(), "recover.sh"), "init/recover.sh"},
+		{filepath.Join(p.etcDir(), "simtezilo.conf"), "etc/simtezilo.conf"},
 	}
 
 	// Create archive file
-	archiveFile, err := os.Create(m.rollbackArchive())
+	archiveFile, err := os.Create(p.rollbackArchive())
 	if err != nil {
 		return fmt.Errorf("failed to create archive file: %w", err)
 	}
@@ -354,9 +354,9 @@ func (m *manager) createRollbackArchive() error {
 
 	// Add each file to the archive
 	for _, file := range filesToBackup {
-		err := m.addFileToArchive(tarWriter, file.sourcePath, file.archivePath)
+		err := p.addFileToArchive(tarWriter, file.sourcePath, file.archivePath)
 		if err != nil {
-			m.log.Warn().
+			p.log.Warn().
 				Err(err).
 				Str("file", file.sourcePath).
 				Msg("Failed to add file to rollback archive")
@@ -364,18 +364,18 @@ func (m *manager) createRollbackArchive() error {
 		}
 	}
 
-	m.log.Info().Msg("Rollback archive created successfully")
+	p.log.Info().Msg("Rollback archive created successfully")
 
 	return nil
 }
 
 // addFileToArchive adds a single file to a tar archive with the specified path.
-func (m *manager) addFileToArchive(tarWriter *tar.Writer, sourcePath, archivePath string) error {
+func (p *platform) addFileToArchive(tarWriter *tar.Writer, sourcePath, archivePath string) error {
 	// Check if file exists
 	fileInfo, err := os.Stat(sourcePath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			m.log.Debug().Str("file", sourcePath).Msg("File does not exist, skipping")
+			p.log.Debug().Str("file", sourcePath).Msg("File does not exist, skipping")
 
 			return nil
 		}
@@ -415,7 +415,7 @@ func (m *manager) addFileToArchive(tarWriter *tar.Writer, sourcePath, archivePat
 		return fmt.Errorf("failed to write file to archive: %w", err)
 	}
 
-	m.log.Debug().Str("file", archivePath).Msg("Added file to rollback archive")
+	p.log.Debug().Str("file", archivePath).Msg("Added file to rollback archive")
 
 	return nil
 }

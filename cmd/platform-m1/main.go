@@ -44,7 +44,7 @@ type networkConfig struct {
 	dns         []string
 }
 
-type manager struct {
+type platform struct {
 	log              zerolog.Logger
 	wlanInterface    string
 	setupModeConfig  networkConfig
@@ -71,7 +71,7 @@ func main() { //nolint:cyclop // easy enough to understand
 	flag.BoolVar(&version, "v", false, "Print version information")
 	flag.Parse()
 
-	mgr := newManager(zerolog.InfoLevel, baseDir)
+	platform := newPlatform(zerolog.InfoLevel, baseDir)
 
 	if version {
 		action = "version"
@@ -87,48 +87,48 @@ func main() { //nolint:cyclop // easy enough to understand
 			level = zerolog.InfoLevel
 		}
 
-		mgr.log = mgr.log.Level(level).With().Logger()
+		platform.log = platform.log.Level(level).With().Logger()
 	}
 
 	if len(flag.Args()) == 1 {
 		action = flag.Arg(0)
 	} else {
-		mgr.log.Debug().Int("count", len(flag.Args())).Msg("Invalid arg count")
+		platform.log.Debug().Int("count", len(flag.Args())).Msg("Invalid arg count")
 	}
 
 	var exitCode exitcode.Code
 
 	switch action {
 	case "setup-disable":
-		exitCode = mgr.disableSetupModeFlag()
+		exitCode = platform.disableSetupModeFlag()
 	case "setup-enable":
-		exitCode = mgr.enableSetupModeFlag()
+		exitCode = platform.enableSetupModeFlag()
 	case "init":
-		exitCode = mgr.init()
+		exitCode = platform.init()
 	case "mode-run":
-		exitCode = mgr.enterRunMode()
+		exitCode = platform.enterRunMode()
 	case "mode-setup":
-		exitCode = mgr.enterSetupMode()
+		exitCode = platform.enterSetupMode()
 	case "reset":
-		exitCode = mgr.reset()
+		exitCode = platform.reset()
 	case "status":
-		exitCode = mgr.status()
+		exitCode = platform.status()
 	case "ssh-enable":
-		exitCode = mgr.enableSSH()
+		exitCode = platform.enableSSH()
 	case "ssh-disable":
-		exitCode = mgr.disableSSH()
+		exitCode = platform.disableSSH()
 	case "ssh-provision":
-		exitCode = mgr.provisionSSH()
+		exitCode = platform.provisionSSH()
 	case "wifi-access":
-		exitCode = mgr.wifiDetails()
+		exitCode = platform.wifiDetails()
 	case "wifi-provision":
-		exitCode = mgr.provisionRunModeConnection()
+		exitCode = platform.provisionRunModeConnection()
 	case "wifi-scan":
-		exitCode = mgr.scanWiFi()
+		exitCode = platform.scanWiFi()
 	case "update-apply":
-		exitCode = mgr.updateApply()
+		exitCode = platform.updateApply()
 	case "update-rollback":
-		exitCode = mgr.updateRollback()
+		exitCode = platform.updateRollback()
 	case "version":
 		exitCode = printVersion()
 	case "help":
@@ -189,10 +189,10 @@ func printVersion() exitcode.Code {
 	return exitcode.Success
 }
 
-// newManager creates and initializes a new manager instance with the specified
+// newPlatform creates and initializes a new platform instance with the specified
 // log level, base directory, and default configuration for setup mode networking.
-func newManager(logLevel zerolog.Level, baseDir string) *manager {
-	mgr := manager{
+func newPlatform(logLevel zerolog.Level, baseDir string) *platform {
+	mgr := platform{
 		log:              zerolog.New(os.Stderr).With().Timestamp().Logger().Level(logLevel),
 		wlanInterface:    wlanInterface,
 		runModeProfile:   runModeProfile,

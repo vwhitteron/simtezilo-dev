@@ -27,15 +27,15 @@ const (
 
 // scanWiFi triggers a WiFi network scan and returns the list of available networks
 // as JSON output including SSID and security type for each network.
-func (m *manager) scanWiFi() exitcode.Code {
-	if ok := m.waitForNetworkManager(); !ok {
+func (p *platform) scanWiFi() exitcode.Code {
+	if ok := p.waitForNetworkManager(); !ok {
 		return exitcode.GeneralErr
 	}
 
-	networks, err := m.getAvailableNetworks()
+	networks, err := p.getAvailableNetworks()
 	if err != nil {
 		errMsg := "failed to scan WiFi networks"
-		m.log.Debug().Err(err).Msg(errMsg)
+		p.log.Debug().Err(err).Msg(errMsg)
 
 		outputJSON(map[string]any{
 			"error":  errMsg,
@@ -55,15 +55,15 @@ func (m *manager) scanWiFi() exitcode.Code {
 
 // wifiDetails returns the network access details for the setup mode access point
 // including SSID, PSK, and security type. Only works when setup mode is active.
-func (m *manager) wifiDetails() exitcode.Code {
-	if ok := m.waitForNetworkManager(); !ok {
+func (p *platform) wifiDetails() exitcode.Code {
+	if ok := p.waitForNetworkManager(); !ok {
 		return exitcode.GeneralErr
 	}
 
-	connections, err := m.getConnections()
+	connections, err := p.getConnections()
 	if err != nil {
 		errMsg := "failed to get connections"
-		m.log.Debug().Err(err).Msg(errMsg)
+		p.log.Debug().Err(err).Msg(errMsg)
 
 		outputJSON(map[string]any{
 			"error":  errMsg,
@@ -74,10 +74,10 @@ func (m *manager) wifiDetails() exitcode.Code {
 	}
 
 	// Check if SetupMode profile is active
-	isActive, exists := connections[m.setupModeProfile]
+	isActive, exists := connections[p.setupModeProfile]
 	if !exists || !isActive {
 		errMsg := "SetupMode profile is not active"
-		m.log.Debug().Msg(errMsg)
+		p.log.Debug().Msg(errMsg)
 
 		outputJSON(map[string]any{
 			"error":  errMsg,
@@ -90,9 +90,9 @@ func (m *manager) wifiDetails() exitcode.Code {
 	outputJSON(setupmode.CmdResponse{
 		Result: setupmode.ResultSuccess,
 		WiFi: &setupmode.CmdNetworkInfo{
-			SSID:     m.setupModeConfig.ssid,
-			PSK:      m.setupModeConfig.psk,
-			Security: m.setupModeConfig.security,
+			SSID:     p.setupModeConfig.ssid,
+			PSK:      p.setupModeConfig.psk,
+			Security: p.setupModeConfig.security,
 		},
 	})
 
@@ -101,10 +101,10 @@ func (m *manager) wifiDetails() exitcode.Code {
 
 // provisionSetupModeConnection creates the setup mode access point network
 // configuration using the manager's default setup mode settings.
-func (m *manager) provisionSetupModeConnection() error {
-	m.log.Debug().Msg("Provisioning SetupMode connection")
+func (p *platform) provisionSetupModeConnection() error {
+	p.log.Debug().Msg("Provisioning SetupMode connection")
 
-	err := m.saveNetworkConfiguration(m.setupModeConfig)
+	err := p.saveNetworkConfiguration(p.setupModeConfig)
 	if err != nil {
 		return fmt.Errorf("failed to provision network: %w", err)
 	}
@@ -114,8 +114,8 @@ func (m *manager) provisionSetupModeConnection() error {
 
 // provisionRunModeConnection reads network configuration from stdin as JSON and
 // creates the run mode connection profile for connecting to a user's WiFi network.
-func (m *manager) provisionRunModeConnection() exitcode.Code {
-	if ok := m.waitForNetworkManager(); !ok {
+func (p *platform) provisionRunModeConnection() exitcode.Code {
+	if ok := p.waitForNetworkManager(); !ok {
 		return exitcode.GeneralErr
 	}
 
@@ -136,7 +136,7 @@ func (m *manager) provisionRunModeConnection() exitcode.Code {
 	err := decoder.Decode(&inputConfig)
 	if err != nil {
 		errMsg := "failed to parse JSON input"
-		m.log.Debug().Err(err).Msg(errMsg)
+		p.log.Debug().Err(err).Msg(errMsg)
 
 		outputJSON(map[string]any{
 			"error":  errMsg,
@@ -148,7 +148,7 @@ func (m *manager) provisionRunModeConnection() exitcode.Code {
 
 	if len(inputConfig) == 0 {
 		errMsg := "no network configuration provided"
-		m.log.Debug().Msg(errMsg)
+		p.log.Debug().Msg(errMsg)
 
 		outputJSON(map[string]any{
 			"error":  errMsg,
@@ -175,10 +175,10 @@ func (m *manager) provisionRunModeConnection() exitcode.Code {
 		dns:         strings.Split(connData.DNS, ","),
 	}
 
-	err = m.saveNetworkConfiguration(config)
+	err = p.saveNetworkConfiguration(config)
 	if err != nil {
 		errMsg := "failed to provision RunMode connection"
-		m.log.Debug().Err(err).Msg(errMsg)
+		p.log.Debug().Err(err).Msg(errMsg)
 
 		outputJSON(map[string]any{
 			"error":  errMsg,
@@ -195,7 +195,7 @@ func (m *manager) provisionRunModeConnection() exitcode.Code {
 
 // getConnectionsFromFiles reads NetworkManager connection profiles directly from
 // the filesystem. This is used as a fallback when NetworkManager D-Bus is not ready.
-func (m *manager) getConnectionsFromFiles() map[string]bool {
+func (p *platform) getConnectionsFromFiles() map[string]bool {
 	const connectionDir = "/etc/NetworkManager/system-connections"
 
 	connections := make(map[string]bool)
@@ -203,7 +203,7 @@ func (m *manager) getConnectionsFromFiles() map[string]bool {
 	// Read all files in the connection directory
 	entries, err := os.ReadDir(connectionDir)
 	if err != nil {
-		m.log.Debug().Err(err).Str("dir", connectionDir).Msg("Failed to read connection directory")
+		p.log.Debug().Err(err).Str("dir", connectionDir).Msg("Failed to read connection directory")
 
 		return connections
 	}
@@ -218,7 +218,7 @@ func (m *manager) getConnectionsFromFiles() map[string]bool {
 		if strings.HasSuffix(filename, ".nmconnection") {
 			// Strip the .nmconnection extension
 			connName := strings.TrimSuffix(filename, ".nmconnection")
-			m.log.Debug().Str("file", filename).Str("connection", connName).Msg("Found connection file")
+			p.log.Debug().Str("file", filename).Str("connection", connName).Msg("Found connection file")
 			connections[connName] = false // Cannot determine if active from file
 		}
 	}
@@ -228,7 +228,7 @@ func (m *manager) getConnectionsFromFiles() map[string]bool {
 
 // getConnections retrieves all WiFi connection profiles and their active status.
 // Returns a map of connection names to boolean indicating if currently active.
-func (m *manager) getConnections() (map[string]bool, error) {
+func (p *platform) getConnections() (map[string]bool, error) {
 	settings, err := gonetworkmanager.NewSettings()
 	if err != nil {
 		return map[string]bool{}, fmt.Errorf("get network settings: %w", err)
@@ -236,9 +236,9 @@ func (m *manager) getConnections() (map[string]bool, error) {
 
 	connections, err := settings.ListConnections()
 	if err != nil {
-		m.log.Debug().Err(err).Msg("NetworkManager not ready, checking connection files")
+		p.log.Debug().Err(err).Msg("NetworkManager not ready, checking connection files")
 
-		fileConnections := m.getConnectionsFromFiles()
+		fileConnections := p.getConnectionsFromFiles()
 		if len(fileConnections) == 0 {
 			return map[string]bool{}, nil
 		}
@@ -246,17 +246,17 @@ func (m *manager) getConnections() (map[string]bool, error) {
 		return fileConnections, nil
 	}
 
-	activeConnPaths, err := m.getActiveConnectionPaths()
+	activeConnPaths, err := p.getActiveConnectionPaths()
 	if err != nil {
 		return map[string]bool{}, err
 	}
 
-	return m.buildWirelessConnectionMap(connections, activeConnPaths), nil
+	return p.buildWirelessConnectionMap(connections, activeConnPaths), nil
 }
 
 // getActiveConnectionPaths retrieves the D-Bus object paths of all currently
 // active network connections from NetworkManager.
-func (m *manager) getActiveConnectionPaths() (map[string]bool, error) {
+func (p *platform) getActiveConnectionPaths() (map[string]bool, error) {
 	nm, err := gonetworkmanager.NewNetworkManager()
 	if err != nil {
 		return nil, fmt.Errorf("get network manager: %w", err)
@@ -283,7 +283,7 @@ func (m *manager) getActiveConnectionPaths() (map[string]bool, error) {
 
 // buildWirelessConnectionMap filters the connection list to WiFi connections only
 // and marks each as active or inactive based on the provided active paths.
-func (m *manager) buildWirelessConnectionMap(connections []gonetworkmanager.Connection, activeConnPaths map[string]bool) map[string]bool {
+func (p *platform) buildWirelessConnectionMap(connections []gonetworkmanager.Connection, activeConnPaths map[string]bool) map[string]bool {
 	connIDs := map[string]bool{}
 
 	for _, conn := range connections {
@@ -312,10 +312,10 @@ func (m *manager) buildWirelessConnectionMap(connections []gonetworkmanager.Conn
 
 // getAvailableNetworks scans for WiFi networks and returns a deduplicated list
 // of discovered networks with their SSIDs and detected security types.
-func (m *manager) getAvailableNetworks() ([]setupmode.CmdNetworkInfo, error) {
-	m.log.Debug().Msg("Scanning for available WiFi networks")
+func (p *platform) getAvailableNetworks() ([]setupmode.CmdNetworkInfo, error) {
+	p.log.Debug().Msg("Scanning for available WiFi networks")
 
-	wifiDevice, err := m.findWiFiDevice()
+	wifiDevice, err := p.findWiFiDevice()
 	if err != nil {
 		return nil, err
 	}
@@ -330,8 +330,8 @@ func (m *manager) getAvailableNetworks() ([]setupmode.CmdNetworkInfo, error) {
 		return nil, fmt.Errorf("failed to get access points: %w", err)
 	}
 
-	networks := m.buildNetworkList(accessPoints)
-	m.log.Debug().Int("count", len(networks)).Msg("Scan results")
+	networks := p.buildNetworkList(accessPoints)
+	p.log.Debug().Int("count", len(networks)).Msg("Scan results")
 
 	return networks, nil
 }
@@ -340,7 +340,7 @@ func (m *manager) getAvailableNetworks() ([]setupmode.CmdNetworkInfo, error) {
 // WLAN interface name from NetworkManager's device list.
 //
 //nolint:ireturn // NetworkManager API requires interface type
-func (m *manager) findWiFiDevice() (gonetworkmanager.DeviceWireless, error) {
+func (p *platform) findWiFiDevice() (gonetworkmanager.DeviceWireless, error) {
 	nm, err := gonetworkmanager.NewNetworkManager()
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to NetworkManager: %w", err)
@@ -381,7 +381,7 @@ func (m *manager) findWiFiDevice() (gonetworkmanager.DeviceWireless, error) {
 
 // buildNetworkList processes a list of access points and returns a deduplicated
 // list of network information structs with SSID and security type.
-func (m *manager) buildNetworkList(accessPoints []gonetworkmanager.AccessPoint) []setupmode.CmdNetworkInfo {
+func (p *platform) buildNetworkList(accessPoints []gonetworkmanager.AccessPoint) []setupmode.CmdNetworkInfo {
 	seen := make(map[string]bool)
 
 	var networks []setupmode.CmdNetworkInfo
@@ -450,42 +450,42 @@ func detectSecurityType(accessPoint gonetworkmanager.AccessPoint) string {
 
 // saveNetworkConfiguration validates, backs up any existing profile, and creates
 // a new NetworkManager connection profile with the specified configuration.
-func (m *manager) saveNetworkConfiguration(config networkConfig) error {
-	m.log.Debug().Str("name", config.name).Msg("Saving network configuration")
+func (p *platform) saveNetworkConfiguration(config networkConfig) error {
+	p.log.Debug().Str("name", config.name).Msg("Saving network configuration")
 
-	err := m.validateIPConfiguration(config)
+	err := p.validateIPConfiguration(config)
 	if err != nil {
 		log.Debug().Err(err).Msg("IP configuration validation failed")
 
 		return fmt.Errorf("invalid IP configuration: %w", err)
 	}
 
-	err = m.backupConnectionProfile(config.name)
+	err = p.backupConnectionProfile(config.name)
 	if err != nil {
 		log.Warn().Err(err).Msg("Failed to backup existing connection")
 	}
 
-	err = m.deleteConnectionProfile(config.name)
+	err = p.deleteConnectionProfile(config.name)
 	if err != nil {
-		m.restoreConnectionProfile(config.name)
+		p.restoreConnectionProfile(config.name)
 
 		return fmt.Errorf("delete existing connection: %w", err)
 	}
 
-	settings := m.buildBaseConnectionSettings(config)
-	m.addSecuritySettings(settings, config)
+	settings := p.buildBaseConnectionSettings(config)
+	p.addSecuritySettings(settings, config)
 
-	err = m.addIPSettings(settings, config)
+	err = p.addIPSettings(settings, config)
 	if err != nil {
 		return err
 	}
 
-	return m.addAndActivateConnection(settings, config.name)
+	return p.addAndActivateConnection(settings, config.name)
 }
 
 // buildBaseConnectionSettings creates the base NetworkManager connection settings
 // map with connection and WiFi configuration but without security or IP settings.
-func (m *manager) buildBaseConnectionSettings(config networkConfig) gonetworkmanager.ConnectionSettings {
+func (p *platform) buildBaseConnectionSettings(config networkConfig) gonetworkmanager.ConnectionSettings {
 	return gonetworkmanager.ConnectionSettings{
 		"connection": map[string]any{
 			"id":             config.name,
@@ -502,7 +502,7 @@ func (m *manager) buildBaseConnectionSettings(config networkConfig) gonetworkman
 
 // addSecuritySettings adds WiFi security settings to the connection configuration
 // based on the specified security type (WPA3, WPA2, WPA, WEP, or none).
-func (m *manager) addSecuritySettings(settings gonetworkmanager.ConnectionSettings, config networkConfig) {
+func (p *platform) addSecuritySettings(settings gonetworkmanager.ConnectionSettings, config networkConfig) {
 	if config.security == "none" || config.psk == "" {
 		return
 	}
@@ -532,10 +532,10 @@ func (m *manager) addSecuritySettings(settings gonetworkmanager.ConnectionSettin
 
 // addIPSettings adds IPv4 configuration to the connection settings based on
 // whether DHCP or static IP addressing is specified.
-func (m *manager) addIPSettings(settings gonetworkmanager.ConnectionSettings, config networkConfig) error {
+func (p *platform) addIPSettings(settings gonetworkmanager.ConnectionSettings, config networkConfig) error {
 	switch config.method {
 	case "static":
-		ipv4Settings, err := m.buildStaticIPSettings(config)
+		ipv4Settings, err := p.buildStaticIPSettings(config)
 		if err != nil {
 			return err
 		}
@@ -552,7 +552,7 @@ func (m *manager) addIPSettings(settings gonetworkmanager.ConnectionSettings, co
 
 // buildStaticIPSettings constructs the IPv4 settings map for static IP configuration
 // including address, prefix, gateway, and DNS servers.
-func (m *manager) buildStaticIPSettings(config networkConfig) (map[string]any, error) {
+func (p *platform) buildStaticIPSettings(config networkConfig) (map[string]any, error) {
 	var dnsAddr []uint32
 
 	for _, dnsServer := range config.dns {
@@ -596,25 +596,25 @@ func (m *manager) buildStaticIPSettings(config networkConfig) (map[string]any, e
 
 // addAndActivateConnection adds the connection to NetworkManager and optionally
 // activates it if the profile is the run mode connection.
-func (m *manager) addAndActivateConnection(settings gonetworkmanager.ConnectionSettings, profileName string) error {
+func (p *platform) addAndActivateConnection(settings gonetworkmanager.ConnectionSettings, profileName string) error {
 	settingsObj, err := gonetworkmanager.NewSettings()
 	if err != nil {
-		m.restoreConnectionProfile(profileName)
+		p.restoreConnectionProfile(profileName)
 
 		return fmt.Errorf("get network settings: %w", err)
 	}
 
 	_, err = settingsObj.AddConnection(settings)
 	if err != nil {
-		m.restoreConnectionProfile(profileName)
+		p.restoreConnectionProfile(profileName)
 
 		return fmt.Errorf("add connection: %w", err)
 	}
 
 	if profileName == runModeProfile {
-		err = m.activateConnection(runModeProfile)
+		err = p.activateConnection(runModeProfile)
 		if err != nil {
-			m.restoreConnectionProfile(profileName)
+			p.restoreConnectionProfile(profileName)
 
 			return fmt.Errorf("switch to run mode: %w", err)
 		}
@@ -625,20 +625,20 @@ func (m *manager) addAndActivateConnection(settings gonetworkmanager.ConnectionS
 
 // activateConnection activates the specified network connection profile on the
 // WLAN interface through NetworkManager.
-func (m *manager) activateConnection(connName string) error {
-	m.log.Debug().Str("profile", connName).Msg("Activating connection profile")
+func (p *platform) activateConnection(connName string) error {
+	p.log.Debug().Str("profile", connName).Msg("Activating connection profile")
 
 	nm, err := gonetworkmanager.NewNetworkManager() //nolint:varnamelen // not confusing
 	if err != nil {
 		return fmt.Errorf("failed to connect to NetworkManager: %w", err)
 	}
 
-	conn, err := m.findConnectionByName(connName)
+	conn, err := p.findConnectionByName(connName)
 	if err != nil {
 		return err
 	}
 
-	wlanDevice, err := m.findWlanDevice(nm)
+	wlanDevice, err := p.findWlanDevice(nm)
 	if err != nil {
 		return err
 	}
@@ -648,7 +648,7 @@ func (m *manager) activateConnection(connName string) error {
 		return fmt.Errorf("failed to bring up connection %q: %w", connName, err)
 	}
 
-	m.log.Debug().Str("result", "success").Str("name", connName).Msg("Activate connection profile")
+	p.log.Debug().Str("result", "success").Str("name", connName).Msg("Activate connection profile")
 
 	return nil
 }
@@ -657,7 +657,7 @@ func (m *manager) activateConnection(connName string) error {
 // connection object matching the specified name.
 //
 //nolint:ireturn // NetworkManager API requires interface type
-func (m *manager) findConnectionByName(connName string) (gonetworkmanager.Connection, error) {
+func (p *platform) findConnectionByName(connName string) (gonetworkmanager.Connection, error) {
 	settings, err := gonetworkmanager.NewSettings()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get settings: %w", err)
@@ -690,7 +690,7 @@ func (m *manager) findConnectionByName(connName string) (gonetworkmanager.Connec
 // findWlanDevice locates and returns the WLAN network device from NetworkManager.
 //
 //nolint:ireturn // NetworkManager API requires interface type
-func (m *manager) findWlanDevice(nm gonetworkmanager.NetworkManager) (gonetworkmanager.Device, error) {
+func (p *platform) findWlanDevice(nm gonetworkmanager.NetworkManager) (gonetworkmanager.Device, error) {
 	devices, err := nm.GetDevices()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get devices: %w", err)
@@ -708,12 +708,12 @@ func (m *manager) findWlanDevice(nm gonetworkmanager.NetworkManager) (gonetworkm
 
 // backupConnectionProfile creates a backup copy of an existing connection profile
 // with "-Backup" suffix for potential restoration if the new configuration fails.
-func (m *manager) backupConnectionProfile(profileName string) error {
+func (p *platform) backupConnectionProfile(profileName string) error {
 	backupName := profileName + "-Backup"
-	m.log.Debug().Str("profile", profileName).Msg("Backing up connection profile")
+	p.log.Debug().Str("profile", profileName).Msg("Backing up connection profile")
 
 	// First, delete any existing backup
-	err := m.deleteConnectionProfile(backupName)
+	err := p.deleteConnectionProfile(backupName)
 	if err != nil {
 		return fmt.Errorf("failed to delete existing backup: %w", err)
 	}
@@ -750,51 +750,51 @@ func (m *manager) backupConnectionProfile(profileName string) error {
 				return fmt.Errorf("failed to create backup connection profile: %w", err)
 			}
 
-			m.log.Debug().Str("from", profileName).Str("to", backupName).Msg("Connection profile backup")
+			p.log.Debug().Str("from", profileName).Str("to", backupName).Msg("Connection profile backup")
 
 			return nil
 		}
 	}
 
-	m.log.Debug().Str("profile", profileName).Msg("No existing connection profile to backup")
+	p.log.Debug().Str("profile", profileName).Msg("No existing connection profile to backup")
 
 	return nil
 }
 
 // restoreConnectionProfile restores a previously backed up connection profile,
 // deleting the current profile and recreating it from the backup.
-func (m *manager) restoreConnectionProfile(profileName string) {
+func (p *platform) restoreConnectionProfile(profileName string) {
 	backupName := profileName + "-Backup"
-	m.log.Debug().Str("profile", profileName).Msg("Restoring connection profile from backup")
+	p.log.Debug().Str("profile", profileName).Msg("Restoring connection profile from backup")
 
 	settings, err := gonetworkmanager.NewSettings()
 	if err != nil {
-		m.log.Debug().Err(err).Str("profile", profileName).Msg("Failed to restore connection profile")
+		p.log.Debug().Err(err).Str("profile", profileName).Msg("Failed to restore connection profile")
 
 		return
 	}
 
-	backupConn, backupSettings := m.findBackupConnection(settings, backupName)
+	backupConn, backupSettings := p.findBackupConnection(settings, backupName)
 	if backupConn == nil {
-		m.log.Debug().Msg("No backup connection found to restore")
+		p.log.Debug().Msg("No backup connection found to restore")
 
 		return
 	}
 
-	m.performRestore(settings, backupConn, backupSettings, profileName, backupName)
+	p.performRestore(settings, backupConn, backupSettings, profileName, backupName)
 }
 
 // findBackupConnection searches for a backup connection profile by name and
 // returns both the connection object and its settings for restoration.
 //
 //nolint:ireturn // NetworkManager API requires interface type
-func (m *manager) findBackupConnection(
+func (p *platform) findBackupConnection(
 	settings gonetworkmanager.Settings,
 	backupName string,
 ) (gonetworkmanager.Connection, gonetworkmanager.ConnectionSettings) {
 	connections, err := settings.ListConnections()
 	if err != nil {
-		m.log.Debug().Err(err).Msg("Failed to list connections for restore")
+		p.log.Debug().Err(err).Msg("Failed to list connections for restore")
 
 		return nil, nil
 	}
@@ -820,15 +820,15 @@ func (m *manager) findBackupConnection(
 
 // performRestore executes the actual restoration of a connection profile from
 // backup, deleting the current profile and recreating it with the backup settings.
-func (m *manager) performRestore(
+func (p *platform) performRestore(
 	settings gonetworkmanager.Settings,
 	backupConn gonetworkmanager.Connection,
 	backupSettings gonetworkmanager.ConnectionSettings,
 	profileName, backupName string,
 ) {
-	err := m.deleteConnectionProfile(profileName)
+	err := p.deleteConnectionProfile(profileName)
 	if err != nil {
-		m.log.Debug().Err(err).Str("profile", profileName).Msg("Delete connection profile")
+		p.log.Debug().Err(err).Str("profile", profileName).Msg("Delete connection profile")
 	}
 
 	if connMap, ok := backupSettings["connection"]; ok {
@@ -838,21 +838,21 @@ func (m *manager) performRestore(
 
 	_, err = settings.AddConnection(backupSettings)
 	if err != nil {
-		m.log.Debug().Err(err).Str("profile", profileName).Msg("Restore connection profile")
+		p.log.Debug().Err(err).Str("profile", profileName).Msg("Restore connection profile")
 
 		return
 	}
 
 	err = backupConn.Delete()
 	if err != nil {
-		m.log.Debug().Err(err).Str("profile", backupName).Msg("Delete connection profile")
+		p.log.Debug().Err(err).Str("profile", backupName).Msg("Delete connection profile")
 	}
 }
 
 // deleteConnectionProfile removes a NetworkManager connection profile by name.
 // Returns nil if the profile doesn't exist.
-func (m *manager) deleteConnectionProfile(profileName string) error {
-	m.log.Debug().Str("profile", profileName).Msg("Deleting connection profile")
+func (p *platform) deleteConnectionProfile(profileName string) error {
+	p.log.Debug().Str("profile", profileName).Msg("Deleting connection profile")
 
 	settings, err := gonetworkmanager.NewSettings()
 	if err != nil {
@@ -881,13 +881,13 @@ func (m *manager) deleteConnectionProfile(profileName string) error {
 				return fmt.Errorf("failed to delete connection profile: %w", err)
 			}
 
-			m.log.Debug().Str("result", "success").Str("profile", profileName).Msg("Delete connection profile")
+			p.log.Debug().Str("result", "success").Str("profile", profileName).Msg("Delete connection profile")
 
 			return nil
 		}
 	}
 
-	m.log.Debug().Str("profile", profileName).Msg("No existing connection profile to delete")
+	p.log.Debug().Str("profile", profileName).Msg("No existing connection profile to delete")
 
 	return nil
 }
