@@ -15,9 +15,12 @@ set -euo pipefail
 # =============================================================================
 
 INSTALL_DIR="${INSTALL_DIR:-/opt/simtezilo/bin}"
+INIT_DIR="${INIT_DIR:-/opt/simtezilo/init}"
+ETC_DIR="${ETC_DIR:-/opt/simtezilo/etc}"
 DATA_DIR="${DATA_DIR:-/opt/simtezilo/data/update}"
 BINARY_NAME="${BINARY_NAME:-simtezilo}"
 STATE_FILE="${DATA_DIR}/update-state.json"
+ROLLBACK_ARCHIVE="${DATA_DIR}/rollback.tgz"
 LOG_TAG="simtezilo-rescue"
 
 # Maximum failures before automatic rollback
@@ -64,33 +67,23 @@ update_state() {
 # =============================================================================
 
 perform_rollback() {
-    local current="${INSTALL_DIR}/${BINARY_NAME}"
-    local rollback="${INSTALL_DIR}/${BINARY_NAME}.rollback"
-    
-    if [[ ! -f "$rollback" ]]; then
-        log "No rollback binary available at $rollback"
+    if [[ ! -f "$ROLLBACK_ARCHIVE" ]]; then
+        log "No rollback archive available at $ROLLBACK_ARCHIVE"
         return 1
     fi
 
-    log "Performing emergency rollback"
+    log "Performing emergency rollback from archive"
 
-    # Move current to .failed
-    if [[ -f "$current" ]]; then
-        mv "$current" "${current}.failed" 2>/dev/null || true
-    fi
-
-    # Restore rollback binary
-    if ! mv "$rollback" "$current"; then
-        log "Failed to restore rollback binary"
-        # Try to restore the failed binary
-        mv "${current}.failed" "$current" 2>/dev/null || true
+    # Extract archive directly to /opt/simtezilo, overwriting existing files
+    if ! tar -xzf "$ROLLBACK_ARCHIVE" -C /opt/simtezilo 2>/dev/null; then
+        log "Failed to extract rollback archive"
         return 1
     fi
 
     # Update state
     update_state '.status = "rolled_back"'
     
-    log "Rollback complete - restored previous version"
+    log "Rollback complete - restored previous version from archive"
     return 0
 }
 

@@ -14,12 +14,8 @@ import (
 )
 
 const (
-	// Update-related paths.
-	updateInstallDir = "/opt/simtezilo/bin"
-	updateInitDir    = "/opt/simtezilo/init"
-	updateDataDir    = "/opt/simtezilo/data/update"
+	// Update binary name.
 	updateBinaryName = "simtezilo"
-	updateStateFile  = "/opt/simtezilo/data/update/update-state.json"
 
 	// Update status constants.
 	updateStatusPending    = "pending"
@@ -28,6 +24,35 @@ const (
 	updateStatusFailed     = "failed"
 	updateStatusRolledBack = "rolled_back"
 )
+
+// installDir returns the installation directory path.
+func (m *manager) installDir() string {
+	return filepath.Join(m.baseDir, "bin")
+}
+
+// initDir returns the init scripts directory path.
+func (m *manager) initDir() string {
+	return filepath.Join(m.baseDir, "init")
+}
+
+// etcDir returns the configuration files directory path.
+func (m *manager) etcDir() string {
+	return filepath.Join(m.baseDir, "etc")
+}
+
+// dataDir returns the update data directory path.
+func (m *manager) dataDir() string {
+	return filepath.Join(m.baseDir, "data/update")
+}
+
+// stateFile returns the path to the update state file.
+func (m *manager) stateFile() string {
+	return filepath.Join(m.baseDir, "data/update/update-state.json")
+}
+
+func (m *manager) rollbackArchive() string {
+	return filepath.Join(m.baseDir, "data/update/rollback.tgz")
+}
 
 // updateState tracks the state of a pending installation (matches app/updater/installer.go).
 type updateState struct {
@@ -45,7 +70,7 @@ type updateState struct {
 // loadUpdateState reads and parses the update state file from disk.
 // Returns nil with no error if the state file does not exist.
 func (m *manager) loadUpdateState() (*updateState, error) {
-	data, err := os.ReadFile(updateStateFile)
+	data, err := os.ReadFile(m.stateFile())
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
@@ -67,7 +92,7 @@ func (m *manager) loadUpdateState() (*updateState, error) {
 // saveUpdateState persists the update state to disk as JSON, creating the
 // data directory if it doesn't exist.
 func (m *manager) saveUpdateState(state *updateState) error {
-	err := os.MkdirAll(updateDataDir, 0o755)
+	err := os.MkdirAll(m.dataDir(), 0o755)
 	if err != nil {
 		return fmt.Errorf("failed to create data directory: %w", err)
 	}
@@ -77,7 +102,7 @@ func (m *manager) saveUpdateState(state *updateState) error {
 		return fmt.Errorf("failed to marshal state: %w", err)
 	}
 
-	err = os.WriteFile(updateStateFile, data, 0o600)
+	err = os.WriteFile(m.stateFile(), data, 0o600)
 	if err != nil {
 		return fmt.Errorf("failed to write state file: %w", err)
 	}
@@ -87,7 +112,7 @@ func (m *manager) saveUpdateState(state *updateState) error {
 
 // clearUpdateState removes the update state file from disk.
 func (m *manager) clearUpdateState() error {
-	err := os.Remove(updateStateFile)
+	err := os.Remove(m.stateFile())
 	if err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("failed to remove state file: %w", err)
 	}
@@ -225,7 +250,7 @@ func (m *manager) verifyUpdateDownload(state *updateState) exitcode.Code {
 func (m *manager) extractAndInstallUpdate(state *updateState) exitcode.Code {
 	extractDir := state.ExtractDir
 	if extractDir == "" {
-		extractDir = filepath.Join(updateDataDir, "extract")
+		extractDir = filepath.Join(m.dataDir(), "extract")
 	}
 
 	_ = os.RemoveAll(extractDir)
@@ -261,33 +286,32 @@ func (m *manager) installExtractedUpdate(state *updateState, extractDir, extract
 		return m.markUpdateFailed(state, "extracted binary not found at "+extractedBinary)
 	}
 
-	currentBinary := filepath.Join(updateInstallDir, updateBinaryName)
-	rollbackBinary := filepath.Join(updateInstallDir, updateBinaryName+".rollback")
+	currentBinary := filepath.Join(m.installDir(), updateBinaryName)
 
 	initSourceDir := filepath.Join(extractRoot, "init")
+	etcSourceDir := filepath.Join(extractRoot, "etc")
+
+	// Create rollback archive before making any changes
+	err = m.createRollbackArchive()
+	if err != nil {
+		m.log.Warn().Err(err).Msg("Failed to create rollback archive")
+		// Continue anyway - rollback archive is a safety feature, not critical for install
+	}
 
 	err = m.installInitScripts(initSourceDir)
 	if err != nil {
 		m.log.Warn().Err(err).Msg("Failed to install init scripts")
 	}
 
-	_, err = os.Stat(currentBinary)
-	if err == nil {
-		m.log.Debug().Str("to", rollbackBinary).Msg("Backing up current binary")
-
-		copyErr := m.copyFile(currentBinary, rollbackBinary)
-		if copyErr != nil {
-			_ = os.RemoveAll(extractDir)
-
-			return m.markUpdateFailed(state, fmt.Sprintf("failed to backup current binary: %v", copyErr))
-		}
+	err = m.installConfigFiles(etcSourceDir)
+	if err != nil {
+		m.log.Warn().Err(err).Msg("Failed to install config files")
 	}
 
 	m.log.Debug().Str("from", extractedBinary).Str("to", currentBinary).Msg("Installing new binary")
 
 	err = m.copyFile(extractedBinary, currentBinary)
 	if err != nil {
-		_ = m.copyFile(rollbackBinary, currentBinary)
 		_ = os.RemoveAll(extractDir)
 
 		return m.markUpdateFailed(state, fmt.Sprintf("failed to install new binary: %v", err))
@@ -300,7 +324,7 @@ func (m *manager) installExtractedUpdate(state *updateState, extractDir, extract
 
 	binSourceDir := filepath.Join(extractRoot, "bin")
 
-	err = m.installAdditionalBinaries(binSourceDir, updateInstallDir, updateBinaryName)
+	err = m.installAdditionalBinaries(binSourceDir, m.installDir(), updateBinaryName)
 	if err != nil {
 		m.log.Warn().Err(err).Msg("Failed to install additional binaries")
 	}
@@ -365,13 +389,12 @@ func (m *manager) findExtractRoot(extractDir string) string {
 }
 
 // handleCompleteState handles an update that has already completed successfully
-// by cleaning up the rollback binary and clearing the state file.
+// by cleaning up the rollback archive and clearing the state file.
 func (m *manager) handleCompleteState(_ *updateState) exitcode.Code {
 	m.log.Info().Msg("Update already complete, cleaning up")
 
-	// Remove rollback binary
-	rollbackBinary := filepath.Join(updateInstallDir, updateBinaryName+".rollback")
-	_ = os.Remove(rollbackBinary)
+	// Remove rollback archive
+	_ = os.Remove(m.rollbackArchive())
 
 	// Clear state
 	_ = m.clearUpdateState()
@@ -407,55 +430,18 @@ func (m *manager) markUpdateFailed(state *updateState, reason string) exitcode.C
 	return exitcode.GeneralErr
 }
 
-// updateRollback restores the previous binary version from the rollback backup,
-// moving the current (failed) binary aside and updating the state file.
+// updateRollback restores the previous version from the rollback archive.
 func (m *manager) updateRollback() exitcode.Code {
-	currentBinary := filepath.Join(updateInstallDir, updateBinaryName)
-	rollbackBinary := filepath.Join(updateInstallDir, updateBinaryName+".rollback")
+	m.log.Info().Msg("Rolling back from archive")
 
-	_, err := os.Stat(rollbackBinary)
+	// Extract archive directly to base directory, overwriting existing files
+	err := m.extractArchive(m.rollbackArchive(), m.baseDir)
 	if err != nil {
-		m.log.Error().Msg("No rollback binary available")
+		m.log.Error().Err(err).Msg("Failed to extract rollback archive")
 
 		outputJSON(map[string]any{
 			"result": "failure",
-			"error":  "no rollback binary available",
-		})
-
-		return exitcode.GeneralErr
-	}
-
-	m.log.Info().Msg("Rolling back to previous version")
-
-	// Move current to .failed
-	failedBinary := filepath.Join(updateInstallDir, updateBinaryName+".failed")
-
-	_, err = os.Stat(currentBinary)
-	if err == nil {
-		renameErr := os.Rename(currentBinary, failedBinary)
-		if renameErr != nil {
-			m.log.Error().Err(renameErr).Msg("Failed to move current binary to .failed")
-
-			outputJSON(map[string]any{
-				"result": "failure",
-				"error":  fmt.Sprintf("failed to move current binary: %v", renameErr),
-			})
-
-			return exitcode.GeneralErr
-		}
-	}
-
-	// Restore rollback
-	err = os.Rename(rollbackBinary, currentBinary)
-	if err != nil {
-		m.log.Error().Err(err).Msg("Failed to restore rollback binary")
-
-		// Try to restore the failed binary
-		_ = os.Rename(failedBinary, currentBinary)
-
-		outputJSON(map[string]any{
-			"result": "failure",
-			"error":  fmt.Sprintf("failed to restore rollback binary: %v", err),
+			"error":  fmt.Sprintf("failed to extract rollback archive: %v", err),
 		})
 
 		return exitcode.GeneralErr

@@ -51,24 +51,27 @@ type manager struct {
 	runModeProfile   string
 	setupModeProfile string
 	setupModeFlag    string
+	baseDir          string
 }
 
 // main is the entry point for the platform management command. It parses command-line
 // arguments and dispatches to the appropriate subcommand handler.
 func main() { //nolint:cyclop // easy enough to understand
-	mgr := newManager(zerolog.InfoLevel)
-
 	var (
 		action   string
+		baseDir  string
 		help     bool
 		logLevel string
 		version  bool
 	)
 
+	flag.StringVar(&baseDir, "b", "/opt/simtezilo", "Base directory for Simtezilo installation")
 	flag.BoolVar(&help, "h", false, "Show help message")
 	flag.StringVar(&logLevel, "l", "info", "Log level. Default is 'info'")
 	flag.BoolVar(&version, "v", false, "Print version information")
 	flag.Parse()
+
+	mgr := newManager(zerolog.InfoLevel, baseDir)
 
 	if version {
 		action = "version"
@@ -142,6 +145,7 @@ func main() { //nolint:cyclop // easy enough to understand
 func printUsage() exitcode.Code {
 	fmt.Fprintf(os.Stderr, "Usage: %s <command>\n", os.Args[0])
 	fmt.Fprintf(os.Stderr, "\nOptions:\n")
+	fmt.Fprintf(os.Stderr, "  -b <dir>          Base directory for installation (default: /opt/simtezilo)\n")
 	fmt.Fprintf(os.Stderr, "  -h                Show this help message\n")
 	fmt.Fprintf(os.Stderr, "  -l <level>        Set log level (debug, info, warn, error)\n")
 	fmt.Fprintf(os.Stderr, "  -v                Show version information\n")
@@ -186,14 +190,15 @@ func printVersion() exitcode.Code {
 }
 
 // newManager creates and initializes a new manager instance with the specified
-// log level and default configuration for setup mode networking.
-func newManager(logLevel zerolog.Level) *manager {
+// log level, base directory, and default configuration for setup mode networking.
+func newManager(logLevel zerolog.Level, baseDir string) *manager {
 	mgr := manager{
 		log:              zerolog.New(os.Stderr).With().Timestamp().Logger().Level(logLevel),
 		wlanInterface:    wlanInterface,
 		runModeProfile:   runModeProfile,
 		setupModeProfile: setupModeProfile,
 		setupModeFlag:    setupModeFlag,
+		baseDir:          baseDir,
 		setupModeConfig: networkConfig{
 			name:        setupModeProfile,
 			autoconnect: false,
