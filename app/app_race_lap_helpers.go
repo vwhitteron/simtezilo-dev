@@ -129,5 +129,5 @@ func PronounceTime(minutes string, seconds string, milliseconds string, includeU
 		announce = append(announce, char)
 	}
 
-	return strings.Join(announce, " ")
+	return strings.Join(announce, ";")
 }
