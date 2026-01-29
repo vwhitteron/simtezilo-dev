@@ -16,7 +16,7 @@ type HIDMapper struct {
 	buttonsSetup bool
 }
 
-var hidMapper *HIDMapper
+var hidMapper *HIDMapper //nolint:gochecknoglobals // singleton for hardware HID mapping
 
 // SetupHID configures the HID input event mapping of the Pirate Audio device buttons based on the device orientation.
 func SetupHID(orientation int, hidEvent chan ui.HIDInputEvent) {

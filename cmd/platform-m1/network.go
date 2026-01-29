@@ -215,9 +215,9 @@ func (p *manager) getConnectionsFromFiles() map[string]bool {
 		}
 
 		filename := entry.Name()
-		if strings.HasSuffix(filename, ".nmconnection") {
-			// Strip the .nmconnection extension
-			connName := strings.TrimSuffix(filename, ".nmconnection")
+
+		// Strip the .nmconnection extension
+		if connName, ok := strings.CutSuffix(filename, ".nmconnection"); ok {
 			p.log.Debug().Str("file", filename).Str("connection", connName).Msg("Found connection file")
 			connections[connName] = false // Cannot determine if active from file
 		}

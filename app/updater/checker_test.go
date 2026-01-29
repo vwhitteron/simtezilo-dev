@@ -497,8 +497,7 @@ func TestCheckerStartsAndStopsWithoutPanic(t *testing.T) {
 		t.Fatalf("NewChecker() error = %v", err)
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	checker.Start(ctx)
 

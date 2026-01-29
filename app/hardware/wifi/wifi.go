@@ -41,7 +41,7 @@ func Scan() []Network {
 
 	wifiNetworks := []Network{}
 
-	for _, line := range strings.Split(string(output), "\n") {
+	for line := range strings.SplitSeq(string(output), "\n") {
 		if len(line) == 0 {
 			continue
 		}

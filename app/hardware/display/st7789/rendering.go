@@ -76,7 +76,7 @@ func (d *Device) DrawRAW(img image.Image) {
 	rgbaimg := image.NewRGBA(rect)
 	draw.Draw(rgbaimg, rect, img, rect.Min, draw.Src)
 
-	data := []uint8{}
+	data := make([]uint8, 0, int(d.pixelColumns)*int(d.pixelRows)*2)
 
 	for column := range d.pixelColumns {
 		for row := range d.pixelRows {

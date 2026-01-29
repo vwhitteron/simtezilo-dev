@@ -2035,10 +2035,7 @@ func (a *App) logStatsBroadcaster() {
 			// Calculate total pages based on default page size of 100
 			pageSize := 100
 
-			totalPages := (totalCount + pageSize - 1) / pageSize
-			if totalPages < 1 {
-				totalPages = 1
-			}
+			totalPages := max((totalCount+pageSize-1)/pageSize, 1)
 
 			logStats := map[string]any{
 				"stats":      stats,

@@ -131,10 +131,7 @@ func (b *AdaptiveBuffer) Inspect(length int, offset int) []float64 {
 		}
 	} else {
 		// Reading backward (historical samples)
-		maxAvailable = b.used + offset
-		if maxAvailable < 0 {
-			maxAvailable = 0
-		}
+		maxAvailable = max(b.used+offset, 0)
 	}
 
 	if length > maxAvailable {

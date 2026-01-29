@@ -28,7 +28,7 @@ func (c *MockCalibrator) IsStopping() bool {
 	return false
 }
 
-// SetEnabled sets the calibration mode state.
+// GetFrequency returns the calibration mode frequency.
 func (c *MockCalibrator) GetFrequency() float64 {
 	return c.frequency
 }
@@ -43,7 +43,7 @@ func (c *MockCalibrator) GetChannel() OutputChannel {
 	return c.channel
 }
 
-// GetSweepMin returns the minimum sweep frequency.
+// GetSweepFrequency returns the sweep frequency for calibration.
 func (c *MockCalibrator) GetSweepFrequency() float64 {
 	return c.frequency
 }

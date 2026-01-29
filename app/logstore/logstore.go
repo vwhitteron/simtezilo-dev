@@ -88,10 +88,7 @@ func (s *Store) GetRecent(wantCount int) []LogEntry {
 
 	if !s.full {
 		// Not full yet, return the last n entries
-		start := s.index - wantCount
-		if start < 0 {
-			start = 0
-		}
+		start := max(s.index-wantCount, 0)
 
 		copy(result, s.entries[start:s.index])
 

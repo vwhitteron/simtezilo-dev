@@ -41,7 +41,7 @@ func (vr ValidationResult) Error() string {
 		return ""
 	}
 
-	var messages []string //nolint:prealloc // unknown but small number of errors expected
+	var messages []string
 	for _, err := range vr.Errors {
 		messages = append(messages, fmt.Sprintf("%s: %s", err.Field, err.Message))
 	}
@@ -130,7 +130,7 @@ func (c *Config) ValidateConfig(jsonData []byte) ValidationResult {
 	result := ValidationResult{Valid: true, Errors: []ValidationError{}}
 
 	// First, validate basic JSON syntax
-	var rawData interface{}
+	var rawData any
 
 	err := json.Unmarshal(jsonData, &rawData)
 	if err != nil {
@@ -190,7 +190,7 @@ func validateJSONSchema(jsonData []byte) ValidationResult {
 		return result
 	}
 
-	var data interface{}
+	var data any
 
 	err = json.Unmarshal(jsonData, &data)
 	if err != nil {

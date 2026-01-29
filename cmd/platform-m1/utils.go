@@ -39,6 +39,7 @@ func (p *manager) controlSystemd(service string, command systemctlCmd) (stdout s
 
 		lastErr = err
 		stdout = strings.TrimSpace(string(output))
+
 		p.log.Debug().
 			Err(err).
 			Str("service", service).
@@ -65,7 +66,7 @@ func outputJSON(v any) {
 		return
 	}
 
-	fmt.Fprint(os.Stdout, string(data))
+	fmt.Fprintln(os.Stdout, string(data))
 }
 
 // getSerial reads the device serial number from /proc/cpuinfo and returns it

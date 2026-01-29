@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"mime"
 	"net/http"
 	"os"
@@ -170,9 +171,7 @@ func (c *wsClient) UpdateSubscriptions(subs map[string]bool) {
 	c.subMu.Lock()
 	defer c.subMu.Unlock()
 
-	for dataType, subscribed := range subs {
-		c.subscriptions[dataType] = subscribed
-	}
+	maps.Copy(c.subscriptions, subs)
 }
 
 // Close gracefully shuts down the client.
@@ -1310,6 +1309,7 @@ func (w *WebUI) applyAppConfig(config map[string]any) []string {
 				if channelStr, ok := channel.(string); ok {
 					w.config.SetAppUpdateChannel(channelStr)
 					// Update the updater's channel immediately
+					// TODO: this should probably be done outside of the config update function
 					if w.updater != nil {
 						w.updater.SetChannel(channelStr)
 						// Check for existing downloads in the new channel
@@ -2813,10 +2813,7 @@ func (w *WebUI) handleLogsAPI(response http.ResponseWriter, request *http.Reques
 	// Calculate pagination based on filtered results
 	totalCount := len(filteredLogs)
 
-	totalPages := (totalCount + pageSize - 1) / pageSize
-	if totalPages < 1 {
-		totalPages = 1
-	}
+	totalPages := max((totalCount+pageSize-1)/pageSize, 1)
 
 	// Validate page number
 	if page > totalPages {
@@ -2826,10 +2823,7 @@ func (w *WebUI) handleLogsAPI(response http.ResponseWriter, request *http.Reques
 	// Calculate offset and slice the filtered logs
 	offset := (page - 1) * pageSize
 
-	endIdx := offset + pageSize
-	if endIdx > totalCount {
-		endIdx = totalCount
-	}
+	endIdx := min(offset+pageSize, totalCount)
 
 	var logs []logstore.LogEntry
 	if offset < totalCount {

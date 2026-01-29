@@ -282,16 +282,6 @@ func (c *ToneGenerator) SetSweepDuration(duration float64) {
 	c.sweepDuration = max(1, min(60, duration))
 }
 
-// getHapticRangeFromConfig returns the haptic frequency range from config.
-// Must be called with lock held.
-func (c *ToneGenerator) getHapticRangeFromConfig() (minHz, maxHz float64) {
-	if c.config != nil {
-		return c.config.GetHapticsPulseMinHz(), c.config.GetHapticsPulseMaxHz()
-	}
-
-	return 5, 80
-}
-
 // IsSweeping returns whether a frequency sweep is currently active.
 func (c *ToneGenerator) IsSweeping() bool {
 	c.mu.RLock()
@@ -476,4 +466,14 @@ func (c *ToneGenerator) runSweep(ctx context.Context) {
 			}
 		}
 	}
+}
+
+// getHapticRangeFromConfig returns the haptic frequency range from config.
+// Must be called with lock held.
+func (c *ToneGenerator) getHapticRangeFromConfig() (minHz, maxHz float64) {
+	if c.config != nil {
+		return c.config.GetHapticsPulseMinHz(), c.config.GetHapticsPulseMaxHz()
+	}
+
+	return 5, 80
 }
