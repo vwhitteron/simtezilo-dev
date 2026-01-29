@@ -25,35 +25,6 @@ const (
 	updateStatusRolledBack = "rolled_back"
 )
 
-// installDir returns the installation directory path.
-func (p *platform) installDir() string {
-	return filepath.Join(p.baseDir, "bin")
-}
-
-// initDir returns the init scripts directory path.
-func (p *platform) initDir() string {
-	return filepath.Join(p.baseDir, "init")
-}
-
-// etcDir returns the configuration files directory path.
-func (p *platform) etcDir() string {
-	return filepath.Join(p.baseDir, "etc")
-}
-
-// dataDir returns the update data directory path.
-func (p *platform) dataDir() string {
-	return filepath.Join(p.baseDir, "data/update")
-}
-
-// stateFile returns the path to the update state file.
-func (p *platform) stateFile() string {
-	return filepath.Join(p.baseDir, "data/update/update-state.json")
-}
-
-func (p *platform) rollbackArchive() string {
-	return filepath.Join(p.baseDir, "data/update/rollback.tgz")
-}
-
 // updateState tracks the state of a pending installation (matches app/updater/installer.go).
 type updateState struct {
 	PendingVersion string    `json:"pendingVersion"`
@@ -69,7 +40,7 @@ type updateState struct {
 
 // loadUpdateState reads and parses the update state file from disk.
 // Returns nil with no error if the state file does not exist.
-func (p *platform) loadUpdateState() (*updateState, error) {
+func (p *manager) loadUpdateState() (*updateState, error) {
 	data, err := os.ReadFile(p.stateFile())
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -91,8 +62,8 @@ func (p *platform) loadUpdateState() (*updateState, error) {
 
 // saveUpdateState persists the update state to disk as JSON, creating the
 // data directory if it doesn't exist.
-func (p *platform) saveUpdateState(state *updateState) error {
-	err := os.MkdirAll(p.dataDir(), 0o755)
+func (p *manager) saveUpdateState(state *updateState) error {
+	err := os.MkdirAll(p.updateDir(), 0o755)
 	if err != nil {
 		return fmt.Errorf("failed to create data directory: %w", err)
 	}
@@ -111,7 +82,7 @@ func (p *platform) saveUpdateState(state *updateState) error {
 }
 
 // clearUpdateState removes the update state file from disk.
-func (p *platform) clearUpdateState() error {
+func (p *manager) clearUpdateState() error {
 	err := os.Remove(p.stateFile())
 	if err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("failed to remove state file: %w", err)
@@ -122,7 +93,7 @@ func (p *platform) clearUpdateState() error {
 
 // updateApply processes a pending update based on the current update state.
 // It handles pending, complete, failed, and rolled back states appropriately.
-func (p *platform) updateApply() exitcode.Code {
+func (p *manager) updateApply() exitcode.Code {
 	state, err := p.loadUpdateState()
 	if err != nil {
 		p.log.Error().Err(err).Msg("Failed to load update state")
@@ -159,7 +130,7 @@ func (p *platform) updateApply() exitcode.Code {
 	case updateStatusComplete:
 		return p.handleCompleteState(state)
 	case updateStatusFailed:
-		// If failed, just log and exit - rescue script will handle if needed
+		// If failed, just log and exit - recovery script will handle if needed
 		p.log.Warn().
 			Int("failCount", state.FailCount).
 			Str("lastError", state.LastError).
@@ -198,7 +169,7 @@ func (p *platform) updateApply() exitcode.Code {
 
 // applyPendingUpdate processes an update in pending state by verifying the
 // download, extracting the archive, and installing the new binary.
-func (p *platform) applyPendingUpdate(state *updateState) exitcode.Code {
+func (p *manager) applyPendingUpdate(state *updateState) exitcode.Code {
 	p.log.Info().
 		Str("from", state.CurrentVersion).
 		Str("to", state.PendingVersion).
@@ -223,7 +194,7 @@ func (p *platform) applyPendingUpdate(state *updateState) exitcode.Code {
 
 // verifyUpdateDownload checks that the downloaded update file exists and
 // verifies its SHA256 checksum if one was provided in the state.
-func (p *platform) verifyUpdateDownload(state *updateState) exitcode.Code {
+func (p *manager) verifyUpdateDownload(state *updateState) exitcode.Code {
 	if state.DownloadPath == "" {
 		return p.markUpdateFailed(state, "download path is empty")
 	}
@@ -247,10 +218,10 @@ func (p *platform) verifyUpdateDownload(state *updateState) exitcode.Code {
 
 // extractAndInstallUpdate extracts the downloaded archive to a temporary directory
 // and proceeds with installation of the extracted files.
-func (p *platform) extractAndInstallUpdate(state *updateState) exitcode.Code {
+func (p *manager) extractAndInstallUpdate(state *updateState) exitcode.Code {
 	extractDir := state.ExtractDir
 	if extractDir == "" {
-		extractDir = filepath.Join(p.dataDir(), "extract")
+		extractDir = filepath.Join(p.updateDir(), "extract")
 	}
 
 	_ = os.RemoveAll(extractDir)
@@ -276,7 +247,7 @@ func (p *platform) extractAndInstallUpdate(state *updateState) exitcode.Code {
 
 // installExtractedUpdate installs the extracted update by backing up the current
 // binary, installing the new one, and copying any additional binaries and init scripts.
-func (p *platform) installExtractedUpdate(state *updateState, extractDir, extractRoot string) exitcode.Code {
+func (p *manager) installExtractedUpdate(state *updateState, extractDir, extractRoot string) exitcode.Code {
 	extractedBinary := filepath.Join(extractRoot, "bin", updateBinaryName)
 
 	_, err := os.Stat(extractedBinary)
@@ -352,7 +323,7 @@ func (p *platform) installExtractedUpdate(state *updateState, extractDir, extrac
 
 // verifyChecksum calculates the SHA256 hash of a file and compares it against
 // the expected value, returning an error if they don't match.
-func (p *platform) verifyChecksum(filePath, expected string) error {
+func (p *manager) verifyChecksum(filePath, expected string) error {
 	file, err := os.Open(filePath)
 	if err != nil {
 		return fmt.Errorf("failed to open file: %w", err)
@@ -376,7 +347,7 @@ func (p *platform) verifyChecksum(filePath, expected string) error {
 
 // findExtractRoot determines the root directory of the extracted archive contents,
 // checking for a "Simtezilo" subdirectory or returning the extract directory itself.
-func (p *platform) findExtractRoot(extractDir string) string {
+func (p *manager) findExtractRoot(extractDir string) string {
 	// Check for Simtezilo/ subdirectory
 	simteziloDir := filepath.Join(extractDir, "Simtezilo")
 
@@ -389,12 +360,15 @@ func (p *platform) findExtractRoot(extractDir string) string {
 }
 
 // handleCompleteState handles an update that has already completed successfully
-// by cleaning up the rollback archive and clearing the state file.
-func (p *platform) handleCompleteState(_ *updateState) exitcode.Code {
+// by cleaning up the rollback archive, failed start counter, and clearing the state file.
+func (p *manager) handleCompleteState(_ *updateState) exitcode.Code {
 	p.log.Info().Msg("Update already complete, cleaning up")
 
 	// Remove rollback archive
 	_ = os.Remove(p.rollbackArchive())
+
+	// Failed start counter
+	_ = os.Remove(p.failedStartCounter())
 
 	// Clear state
 	_ = p.clearUpdateState()
@@ -409,7 +383,7 @@ func (p *platform) handleCompleteState(_ *updateState) exitcode.Code {
 
 // markUpdateFailed records a failure in the update state, incrementing the fail
 // count and persisting the error reason to the state file.
-func (p *platform) markUpdateFailed(state *updateState, reason string) exitcode.Code {
+func (p *manager) markUpdateFailed(state *updateState, reason string) exitcode.Code {
 	p.log.Error().Str("reason", reason).Msg("Update failed")
 
 	state.Status = updateStatusFailed
@@ -431,7 +405,7 @@ func (p *platform) markUpdateFailed(state *updateState, reason string) exitcode.
 }
 
 // updateRollback restores the previous version from the rollback archive.
-func (p *platform) updateRollback() exitcode.Code {
+func (p *manager) updateRollback() exitcode.Code {
 	p.log.Info().Msg("Rolling back from archive")
 
 	// Extract archive directly to base directory, overwriting existing files

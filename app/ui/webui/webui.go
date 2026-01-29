@@ -24,8 +24,9 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/calibrator"
 	appconfig "github.com/vwhitteron/simtezilo-dev/app/config"
 	"github.com/vwhitteron/simtezilo-dev/app/exitcode"
-	appHaptics "github.com/vwhitteron/simtezilo-dev/app/haptics"
+	"github.com/vwhitteron/simtezilo-dev/app/haptics"
 	"github.com/vwhitteron/simtezilo-dev/app/logstore"
+	"github.com/vwhitteron/simtezilo-dev/app/platform"
 	"github.com/vwhitteron/simtezilo-dev/app/setupmode"
 	"github.com/vwhitteron/simtezilo-dev/app/ui/webui/webcommon"
 	"github.com/vwhitteron/simtezilo-dev/app/updater"
@@ -1511,7 +1512,7 @@ func (w *WebUI) applySynthesizerConfig(config map[string]any) []string {
 		if profilesMap, ok := engineProfiles.(map[string]any); ok {
 			for name, profileData := range profilesMap {
 				if profileMap, ok := profileData.(map[string]any); ok {
-					profile := appHaptics.EngineProfile{}
+					profile := haptics.EngineProfile{}
 
 					if pb, ok := profileMap["PrimaryBalance"].(float64); ok {
 						profile.PrimaryBalance = pb
@@ -2415,7 +2416,7 @@ func (w *WebUI) handleSetupMode(response http.ResponseWriter, request *http.Requ
 	ctx, cancel := context.WithTimeout(request.Context(), 10*time.Second)
 	defer cancel()
 
-	_, err := w.setupMode.RunPlatformCommand(ctx, setupmode.CmdActionSetupEnable, nil)
+	_, err := w.setupMode.PlatformAction(ctx, platform.SetupEnable, nil)
 	if err != nil {
 		w.log.Error().Err(err).Msg("failed to enable setup mode")
 		response.WriteHeader(http.StatusInternalServerError)
@@ -2446,15 +2447,15 @@ func (w *WebUI) handleSetupMode(response http.ResponseWriter, request *http.Requ
 
 // handleSSHEnable handles POST requests to enable SSH.
 func (w *WebUI) handleSSHEnable(response http.ResponseWriter, request *http.Request) {
-	w.manageSSHEnablement(setupmode.CmdActionSSHEnable, response, request)
+	w.manageSSHEnablement(platform.SSHEnable, response, request)
 }
 
 // handleSSHDisable handles POST requests to disable SSH.
 func (w *WebUI) handleSSHDisable(response http.ResponseWriter, request *http.Request) {
-	w.manageSSHEnablement(setupmode.CmdActionSSHDisable, response, request)
+	w.manageSSHEnablement(platform.SSHDisable, response, request)
 }
 
-func (w *WebUI) manageSSHEnablement(action setupmode.CmdAction, response http.ResponseWriter, request *http.Request) {
+func (w *WebUI) manageSSHEnablement(action platform.Command, response http.ResponseWriter, request *http.Request) {
 	if request.Method != http.MethodPost {
 		response.WriteHeader(http.StatusMethodNotAllowed)
 
@@ -2464,9 +2465,9 @@ func (w *WebUI) manageSSHEnablement(action setupmode.CmdAction, response http.Re
 	var actionStr string
 
 	switch action { //nolint:exhaustive // only interested in enable/disable cases
-	case setupmode.CmdActionSSHEnable:
+	case platform.SSHEnable:
 		actionStr = "enable"
-	case setupmode.CmdActionSSHDisable:
+	case platform.SSHDisable:
 		actionStr = "disable"
 	default:
 		response.WriteHeader(http.StatusBadRequest)
@@ -2485,7 +2486,7 @@ func (w *WebUI) manageSSHEnablement(action setupmode.CmdAction, response http.Re
 	ctx, cancel := context.WithTimeout(request.Context(), 10*time.Second)
 	defer cancel()
 
-	_, err := w.setupMode.RunPlatformCommand(ctx, action, nil)
+	_, err := w.setupMode.PlatformAction(ctx, action, nil)
 	if err != nil {
 		w.log.Error().Err(err).Msgf("failed to %s SSH", actionStr)
 		response.WriteHeader(http.StatusInternalServerError)
@@ -2532,7 +2533,7 @@ func (w *WebUI) handleSSHProvision(response http.ResponseWriter, request *http.R
 	ctx, cancel := context.WithTimeout(request.Context(), 10*time.Second)
 	defer cancel()
 
-	_, err = w.setupMode.RunPlatformCommand(ctx, setupmode.CmdActionSSHProvision, publicKey)
+	_, err = w.setupMode.PlatformAction(ctx, platform.SSHProvision, publicKey)
 	if err != nil {
 		w.log.Error().Err(err).Msg("failed to provision SSH key")
 		response.WriteHeader(http.StatusInternalServerError)
@@ -2566,7 +2567,7 @@ func (w *WebUI) handleFactoryReset(response http.ResponseWriter, request *http.R
 	ctx, cancel := context.WithTimeout(request.Context(), 30*time.Second)
 	defer cancel()
 
-	_, err := w.setupMode.RunPlatformCommand(ctx, setupmode.CmdActionReset, nil)
+	_, err := w.setupMode.PlatformAction(ctx, platform.Reset, nil)
 	if err != nil {
 		w.log.Error().Err(err).Msg("failed to perform factory reset")
 

@@ -7,12 +7,12 @@ import (
 	"time"
 
 	"github.com/vwhitteron/simtezilo-dev/app/exitcode"
-	"github.com/vwhitteron/simtezilo-dev/app/setupmode"
+	"github.com/vwhitteron/simtezilo-dev/app/platform"
 )
 
 // init initializes the setup mode network connection if it does not already exist.
 // This is typically called during first boot or after a factory reset.
-func (p *platform) init() exitcode.Code {
+func (p *manager) init() exitcode.Code {
 	if ok := p.waitForNetworkManager(); !ok {
 		return exitcode.GeneralErr
 	}
@@ -24,7 +24,7 @@ func (p *platform) init() exitcode.Code {
 
 		outputJSON(map[string]any{
 			"error":  errMsg,
-			"result": setupmode.ResultFailure,
+			"result": platform.Failure,
 		})
 
 		return exitcode.GeneralErr
@@ -42,7 +42,7 @@ func (p *platform) init() exitcode.Code {
 
 			outputJSON(map[string]any{
 				"error":  errMsg,
-				"result": setupmode.ResultFailure,
+				"result": platform.Failure,
 			})
 
 			return exitcode.GeneralErr
@@ -51,7 +51,7 @@ func (p *platform) init() exitcode.Code {
 		p.log.Debug().Msg("SetupMode connection provisioned successfully")
 
 		outputJSON(map[string]any{
-			"result": setupmode.ResultSuccess,
+			"result": platform.Success,
 			"action": "create",
 		})
 
@@ -60,7 +60,7 @@ func (p *platform) init() exitcode.Code {
 
 	p.log.Debug().Msg("SetupMode connection already exists")
 	outputJSON(map[string]any{
-		"result": setupmode.ResultSuccess,
+		"result": platform.Success,
 		"action": "none",
 	})
 
@@ -69,7 +69,7 @@ func (p *platform) init() exitcode.Code {
 
 // reset deletes all network connection profiles and reinitializes the setup mode
 // connection, effectively performing a factory reset of network configuration.
-func (p *platform) reset() exitcode.Code {
+func (p *manager) reset() exitcode.Code {
 	if ok := p.waitForNetworkManager(); !ok {
 		return exitcode.GeneralErr
 	}
@@ -91,7 +91,7 @@ func (p *platform) reset() exitcode.Code {
 
 // disableSetupModeFlag removes the setup mode flag file, indicating that initial
 // setup has been completed and the device should boot into run mode.
-func (p *platform) disableSetupModeFlag() exitcode.Code {
+func (p *manager) disableSetupModeFlag() exitcode.Code {
 	err := os.Remove(setupModeFlag)
 	if err != nil && !os.IsNotExist(err) {
 		errMsg := "failed to remove setup mode flag"
@@ -99,20 +99,20 @@ func (p *platform) disableSetupModeFlag() exitcode.Code {
 
 		outputJSON(map[string]any{
 			"error":  errMsg,
-			"result": setupmode.ResultFailure,
+			"result": platform.Failure,
 		})
 
 		return exitcode.GeneralErr
 	}
 
-	outputJSON(map[string]any{"result": setupmode.ResultSuccess})
+	outputJSON(map[string]any{"result": platform.Success})
 
 	return exitcode.Success
 }
 
 // enableSetupModeFlag creates the setup mode flag file, which will cause the
 // device to enter setup mode on the next boot.
-func (p *platform) enableSetupModeFlag() exitcode.Code {
+func (p *manager) enableSetupModeFlag() exitcode.Code {
 	file, err := os.Create(setupModeFlag)
 	if err != nil {
 		errMsg := "failed to create setup mode flag"
@@ -120,7 +120,7 @@ func (p *platform) enableSetupModeFlag() exitcode.Code {
 
 		outputJSON(map[string]any{
 			"error":  errMsg,
-			"result": setupmode.ResultFailure,
+			"result": platform.Failure,
 		})
 
 		return exitcode.GeneralErr
@@ -133,20 +133,20 @@ func (p *platform) enableSetupModeFlag() exitcode.Code {
 
 		outputJSON(map[string]any{
 			"error":  errMsg,
-			"result": setupmode.ResultFailure,
+			"result": platform.Failure,
 		})
 
 		return exitcode.GeneralErr
 	}
 
-	outputJSON(map[string]any{"result": setupmode.ResultSuccess})
+	outputJSON(map[string]any{"result": platform.Success})
 
 	return exitcode.Success
 }
 
 // enterRunMode activates the run mode network connection and stops the dnsmasq
 // service, switching the device from setup mode to normal operation.
-func (p *platform) enterRunMode() exitcode.Code {
+func (p *manager) enterRunMode() exitcode.Code {
 	if ok := p.waitForNetworkManager(); !ok {
 		return exitcode.GeneralErr
 	}
@@ -158,7 +158,7 @@ func (p *platform) enterRunMode() exitcode.Code {
 
 		outputJSON(map[string]any{
 			"error":  errMsg,
-			"result": setupmode.ResultFailure,
+			"result": platform.Failure,
 		})
 
 		return exitcode.GeneralErr
@@ -170,14 +170,14 @@ func (p *platform) enterRunMode() exitcode.Code {
 		p.log.Debug().Err(err).Msg("failed to stop dnsmasq service")
 	}
 
-	outputJSON(map[string]any{"result": setupmode.ResultSuccess})
+	outputJSON(map[string]any{"result": platform.Success})
 
 	return exitcode.Success
 }
 
 // enterSetupMode activates the setup mode network connection (access point) and
 // starts the dnsmasq service to provide DHCP and DNS for connected clients.
-func (p *platform) enterSetupMode() exitcode.Code {
+func (p *manager) enterSetupMode() exitcode.Code {
 	if ok := p.waitForNetworkManager(); !ok {
 		return exitcode.GeneralErr
 	}
@@ -189,7 +189,7 @@ func (p *platform) enterSetupMode() exitcode.Code {
 
 		outputJSON(map[string]any{
 			"error":  errMsg,
-			"result": setupmode.ResultFailure,
+			"result": platform.Failure,
 		})
 
 		return exitcode.GeneralErr
@@ -204,7 +204,7 @@ func (p *platform) enterSetupMode() exitcode.Code {
 		p.log.Debug().Err(err).Msg("failed to start dnsmasq service")
 	}
 
-	outputJSON(map[string]any{"result": setupmode.ResultSuccess})
+	outputJSON(map[string]any{"result": platform.Success})
 
 	return exitcode.Success
 }

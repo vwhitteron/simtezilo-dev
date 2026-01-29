@@ -14,7 +14,7 @@ import (
 
 // controlSystemd executes a systemctl command on the specified service with
 // automatic retry logic. Returns the command output and any error.
-func (p *platform) controlSystemd(service string, command systemctlCmd) (stdout string, err error) {
+func (p *manager) controlSystemd(service string, command systemctlCmd) (stdout string, err error) {
 	p.log.Debug().
 		Str("service", service).
 		Str("action", string(command)).
@@ -70,7 +70,7 @@ func outputJSON(v any) {
 
 // getSerial reads the device serial number from /proc/cpuinfo and returns it
 // truncated to 8 characters. Returns "00000000" if the serial cannot be read.
-func (p *platform) getSerial() string {
+func (p *manager) getSerial() string {
 	const defaultSerial = "00000000"
 
 	data, err := os.ReadFile("/proc/cpuinfo")
@@ -106,7 +106,7 @@ func (p *platform) getSerial() string {
 
 // validateIPConfiguration validates static IP configuration parameters including
 // CIDR format, gateway address, and DNS server addresses.
-func (p *platform) validateIPConfiguration(config networkConfig) error {
+func (p *manager) validateIPConfiguration(config networkConfig) error {
 	p.log.Debug().Str("method", config.method).Msg("Validating IP configuration")
 
 	if config.method != "static" {

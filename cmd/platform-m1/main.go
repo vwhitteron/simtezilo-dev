@@ -8,6 +8,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/vwhitteron/simtezilo-dev/app"
 	"github.com/vwhitteron/simtezilo-dev/app/exitcode"
+	"github.com/vwhitteron/simtezilo-dev/app/platform"
 )
 
 type (
@@ -44,7 +45,7 @@ type networkConfig struct {
 	dns         []string
 }
 
-type platform struct {
+type manager struct {
 	log              zerolog.Logger
 	wlanInterface    string
 	setupModeConfig  networkConfig
@@ -71,7 +72,7 @@ func main() { //nolint:cyclop // easy enough to understand
 	flag.BoolVar(&version, "v", false, "Print version information")
 	flag.Parse()
 
-	platform := newPlatform(zerolog.InfoLevel, baseDir)
+	platformManager := newManager(zerolog.InfoLevel, baseDir)
 
 	if version {
 		action = "version"
@@ -87,48 +88,50 @@ func main() { //nolint:cyclop // easy enough to understand
 			level = zerolog.InfoLevel
 		}
 
-		platform.log = platform.log.Level(level).With().Logger()
+		platformManager.log = platformManager.log.Level(level).With().Logger()
 	}
 
 	if len(flag.Args()) == 1 {
 		action = flag.Arg(0)
 	} else {
-		platform.log.Debug().Int("count", len(flag.Args())).Msg("Invalid arg count")
+		platformManager.log.Debug().Int("count", len(flag.Args())).Msg("Invalid arg count")
 	}
 
 	var exitCode exitcode.Code
 
 	switch action {
-	case "setup-disable":
-		exitCode = platform.disableSetupModeFlag()
-	case "setup-enable":
-		exitCode = platform.enableSetupModeFlag()
-	case "init":
-		exitCode = platform.init()
-	case "mode-run":
-		exitCode = platform.enterRunMode()
-	case "mode-setup":
-		exitCode = platform.enterSetupMode()
-	case "reset":
-		exitCode = platform.reset()
-	case "status":
-		exitCode = platform.status()
-	case "ssh-enable":
-		exitCode = platform.enableSSH()
-	case "ssh-disable":
-		exitCode = platform.disableSSH()
-	case "ssh-provision":
-		exitCode = platform.provisionSSH()
-	case "wifi-access":
-		exitCode = platform.wifiDetails()
-	case "wifi-provision":
-		exitCode = platform.provisionRunModeConnection()
-	case "wifi-scan":
-		exitCode = platform.scanWiFi()
-	case "update-apply":
-		exitCode = platform.updateApply()
-	case "update-rollback":
-		exitCode = platform.updateRollback()
+	case platform.SetupDisable.String():
+		exitCode = platformManager.disableSetupModeFlag()
+	case platform.SetupEnable.String():
+		exitCode = platformManager.enableSetupModeFlag()
+	case platform.Init.String():
+		exitCode = platformManager.init()
+	case platform.ModeRun.String():
+		exitCode = platformManager.enterRunMode()
+	case platform.ModeSetup.String():
+		exitCode = platformManager.enterSetupMode()
+	case platform.Reset.String():
+		exitCode = platformManager.reset()
+	case platform.Status.String():
+		exitCode = platformManager.status()
+	case platform.SSHEnable.String():
+		exitCode = platformManager.enableSSH()
+	case platform.SSHDisable.String():
+		exitCode = platformManager.disableSSH()
+	case platform.SSHProvision.String():
+		exitCode = platformManager.provisionSSH()
+	case platform.WifiAccess.String():
+		exitCode = platformManager.wifiDetails()
+	case platform.WifiProvision.String():
+		exitCode = platformManager.provisionRunModeConnection()
+	case platform.WifiScan.String():
+		exitCode = platformManager.scanWiFi()
+	case platform.UpdateApply.String():
+		exitCode = platformManager.updateApply()
+	case platform.UpdateRollback.String():
+		exitCode = platformManager.updateRollback()
+	case platform.SignalStart.String():
+		exitCode = platformManager.signalStartupSuccess()
 	case "version":
 		exitCode = printVersion()
 	case "help":
@@ -166,6 +169,7 @@ func printUsage() exitcode.Code {
 	fmt.Fprintf(os.Stderr, "  wifi-access       Provide the network access details for the setup mode network\n")
 	fmt.Fprintf(os.Stderr, "  wifi-provision    Provision network connection\n")
 	fmt.Fprintf(os.Stderr, "  wifi-scan         Scan for available WiFi networks\n")
+	fmt.Fprintf(os.Stderr, "  signal-start      Signal successful startup\n")
 	fmt.Fprintf(os.Stderr, "\n  provision takes JSON on stdin with the following format:\n")
 	fmt.Fprintf(os.Stderr, "  [{\n")
 	fmt.Fprintf(os.Stderr, `    "ssid":"<string>",`+"\n")
@@ -189,10 +193,10 @@ func printVersion() exitcode.Code {
 	return exitcode.Success
 }
 
-// newPlatform creates and initializes a new platform instance with the specified
+// newManager creates and initializes a newplatform  manager instance with the specified
 // log level, base directory, and default configuration for setup mode networking.
-func newPlatform(logLevel zerolog.Level, baseDir string) *platform {
-	mgr := platform{
+func newManager(logLevel zerolog.Level, baseDir string) *manager {
+	mgr := manager{
 		log:              zerolog.New(os.Stderr).With().Timestamp().Logger().Level(logLevel),
 		wlanInterface:    wlanInterface,
 		runModeProfile:   runModeProfile,

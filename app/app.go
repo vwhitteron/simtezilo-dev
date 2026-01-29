@@ -3,7 +3,6 @@ package app
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -35,6 +34,7 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/odometer"
 	"github.com/vwhitteron/simtezilo-dev/app/pitradio"
 	"github.com/vwhitteron/simtezilo-dev/app/pitradio/discord"
+	"github.com/vwhitteron/simtezilo-dev/app/platform"
 	"github.com/vwhitteron/simtezilo-dev/app/setupmode"
 	"github.com/vwhitteron/simtezilo-dev/app/synthesizer"
 	"github.com/vwhitteron/simtezilo-dev/app/tyres"
@@ -1064,115 +1064,6 @@ func (a *App) getDisplayLCD() *display.ST7789LCD {
 	return nil
 }
 
-// startBackgroundTasks launches all necessary background goroutines for the application.
-func (a *App) startBackgroundTasks() {
-	a.wg.Add(1)
-
-	go func() {
-		defer func() {
-			a.log.Debug().Msg("HIDEventHandler goroutine exiting")
-			a.wg.Done()
-		}()
-
-		a.ui.HIDEventHandler(a.ctx)
-	}()
-
-	a.wg.Add(1)
-
-	go func() {
-		defer func() {
-			a.log.Debug().Msg("newLapHandler goroutine exiting")
-			a.wg.Done()
-		}()
-
-		a.newLapHandler()
-	}()
-
-	if a.pitRadio != nil {
-		a.wg.Add(1)
-
-		go func() {
-			defer func() {
-				a.log.Debug().Msg("pitRadio.BackgroundTask goroutine exiting")
-				a.wg.Done()
-			}()
-
-			a.pitRadio.BackgroundTask()
-		}()
-	}
-
-	// Start log stats broadcaster for WebUI
-	if a.config.GetAppWebUIEnabled() && a.logStore != nil {
-		a.wg.Add(1)
-
-		go func() {
-			defer func() {
-				a.log.Debug().Msg("logStatsBroadcaster goroutine exiting")
-				a.wg.Done()
-			}()
-
-			a.logStatsBroadcaster()
-		}()
-	}
-
-	// Start IP address updater
-	a.wg.Add(1)
-
-	go func() {
-		defer func() {
-			a.log.Debug().Msg("updateIPAddress goroutine exiting")
-			a.wg.Done()
-		}()
-
-		a.updateIPAddress()
-	}()
-
-	// Start GT client with context support
-	a.wg.Add(1)
-
-	go func() {
-		defer func() {
-			a.log.Debug().Msg("GT client goroutine exiting")
-			a.wg.Done()
-		}()
-
-		for {
-			select {
-			case <-a.ctx.Done():
-				return
-			default:
-				recoverable, err := a.gtClient.Run(a.ctx)
-				if err != nil {
-					// Check if error is due to context cancellation
-					if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-						a.log.Debug().Msg("GT client stopped due to context cancellation")
-
-						return
-					}
-
-					_ = a.ui.Screen.RenderSplashScreen("GT client error")
-
-					if recoverable {
-						a.log.Error().
-							Err(err).
-							Str("component", "gt client").
-							Str("result", "failure").
-							Msg("run")
-
-						continue
-					}
-
-					a.log.Fatal().
-						Err(err).
-						Str("component", "gt client").
-						Str("result", "failure").
-						Msg("run")
-				}
-			}
-		}
-	}()
-}
-
 func (a *App) startAudioOutput() {
 	outputSampleRate := beep.SampleRate(a.config.GetSynthOutputSampleRateHz())
 
@@ -1204,7 +1095,7 @@ func (a *App) switchToSetupMode() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	_, err := a.setupMode.RunPlatformCommand(ctx, setupmode.CmdActionSetupEnable, nil)
+	_, err := a.setupMode.PlatformAction(ctx, platform.SetupEnable, nil)
 	if err != nil {
 		_ = a.ui.Screen.RenderErrorScreen("Setup enable")
 
@@ -1226,9 +1117,29 @@ func (a *App) switchToSetupMode() {
 	a.exitCodeChan <- exitcode.SetupMode
 }
 
+// signalStartupSuccess calls the platform command to signal successful application startup.
+// This resets the failed start counter to prevent automatic rollback.
+func (a *App) signalStartupSuccess() {
+	platformCommand := filepath.Join(a.config.GetAppBaseDir(), "bin", "platform")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	_, err := platform.RunCommand(ctx, platformCommand, a.log, platform.SignalStart, nil)
+	if err != nil {
+		a.log.Warn().
+			Err(err).
+			Msg("Failed to signal startup success to platform command")
+
+		return
+	}
+
+	a.log.Info().Msg("Successfully signaled startup to platform, failed start counter reset")
+}
+
 // mainLoop is the primary application loop handling telemetry updates, haptics, UI updates, and pit radio
 // notifications.
-func (a *App) mainLoop() {
+func (a *App) mainLoop() { //nolint:cyclop // compact and simple enough
 	tickerHaptics := time.NewTicker((1000 / hapticFrameRate) * time.Millisecond)
 	tickerGeneral := time.NewTicker((1000 / telemetryFrameRate) * time.Millisecond)
 	tickerEngineHaptics := time.NewTicker((1000 / engineHapticFrameRate) * time.Millisecond)
@@ -1242,12 +1153,10 @@ func (a *App) mainLoop() {
 	for {
 		select {
 		case <-a.ctx.Done():
-			// Context cancelled - exit main loop
 			a.log.Debug().Msg("mainLoop exiting due to context cancellation")
 
 			return
 		case <-a.exitCodeChan:
-			// Exit code signal received - exit main loop
 			return
 		case <-tickerHaptics.C:
 			a.handleHapticsTick()
@@ -1540,6 +1449,7 @@ func (a *App) handleGameStateChange() bool {
 	return true
 }
 
+// sessionFinished checks if the telemetry session has finished and resets state if so.
 func (a *App) sessionFinished() bool {
 	if !a.gtClient.Finished {
 		return false
@@ -1555,6 +1465,7 @@ func (a *App) sessionFinished() bool {
 	return true
 }
 
+// resetAllState resets all application, vehicle, and race states.
 func (a *App) resetAllState(reason string) {
 	// App states
 	a.disableHaptics(reason)
@@ -1577,6 +1488,7 @@ func (a *App) resetAllState(reason string) {
 	a.log.Info().Str("reason", reason).Msg("Reset all state")
 }
 
+// resetRaceState resets race-specific states.
 func (a *App) resetRaceState(reason string) {
 	// App states
 	a.disableHaptics(reason)
@@ -1594,6 +1506,7 @@ func (a *App) resetRaceState(reason string) {
 	a.log.Debug().Str("reason", reason).Msg("Reset race state")
 }
 
+// handleContinuityFlags processes continuity-related flags such as time of day reset and loading.
 func (a *App) handleContinuityFlags() {
 	if a.timeOfDayHasReset() {
 		// App state

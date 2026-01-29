@@ -8,12 +8,12 @@ import (
 
 	"github.com/Wifx/gonetworkmanager/v2"
 	"github.com/vwhitteron/simtezilo-dev/app/exitcode"
-	"github.com/vwhitteron/simtezilo-dev/app/setupmode"
+	"github.com/vwhitteron/simtezilo-dev/app/platform"
 )
 
 // isNetworkManagerReady checks whether the NetworkManager D-Bus service is available
 // and responding to requests.
-func (p *platform) isNetworkManagerReady() bool {
+func (p *manager) isNetworkManagerReady() bool {
 	_, err := gonetworkmanager.NewNetworkManager()
 
 	return err == nil
@@ -21,7 +21,7 @@ func (p *platform) isNetworkManagerReady() bool {
 
 // waitForNetworkManager blocks until NetworkManager becomes available or the maximum
 // wait time is exceeded. Returns true if NetworkManager is ready, false otherwise.
-func (p *platform) waitForNetworkManager() (ok bool) {
+func (p *manager) waitForNetworkManager() (ok bool) {
 	const (
 		maxWaitAttempts = 30
 		waitInterval    = 1 * time.Second
@@ -40,7 +40,7 @@ func (p *platform) waitForNetworkManager() (ok bool) {
 
 			outputJSON(map[string]any{
 				"error":  errMsg,
-				"result": setupmode.ResultFailure,
+				"result": platform.Failure,
 			})
 
 			return false
@@ -56,8 +56,8 @@ func (p *platform) waitForNetworkManager() (ok bool) {
 
 // status checks and reports the current environment status including setup mode flag,
 // network connection profiles, SSH state, and whether setup is required.
-func (p *platform) status() exitcode.Code {
-	status := setupmode.CmdStatus{
+func (p *manager) status() exitcode.Code {
+	status := platform.CmdStatus{
 		Available:        true,
 		ActiveConn:       "",
 		FlagEnabled:      false,
@@ -112,13 +112,38 @@ func (p *platform) status() exitcode.Code {
 	status.SetupRequired = !status.SetupModePresent || !status.RunModePresent
 
 	outputJSON(map[string]any{
-		"result": setupmode.ResultSuccess,
+		"result": platform.Success,
 		"status": status,
 	})
 
 	if status.SetupRequired {
 		return exitcode.SetupRequired
 	}
+
+	return exitcode.Success
+}
+
+// signalStartupSuccess signals that the application has started successfully.
+// This resets the failed start counter to prevent unnecessary recovery actions when the service next starts.
+func (p *manager) signalStartupSuccess() exitcode.Code {
+	err := os.Remove(p.failedStartCounter())
+	if err != nil && !os.IsNotExist(err) {
+		p.log.Warn().Err(err).Msg("Failed to reset failed start counter")
+
+		outputJSON(map[string]any{
+			"result": "failure",
+			"error":  err.Error(),
+		})
+
+		return exitcode.GeneralErr
+	}
+
+	p.log.Debug().Msg("Failed start counter reset")
+
+	outputJSON(map[string]any{
+		"result": "success",
+		"action": "failed_start_counter_reset",
+	})
 
 	return exitcode.Success
 }

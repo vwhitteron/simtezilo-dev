@@ -21,6 +21,7 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/exitcode"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/display"
 	"github.com/vwhitteron/simtezilo-dev/app/i18n"
+	"github.com/vwhitteron/simtezilo-dev/app/platform"
 	"github.com/vwhitteron/simtezilo-dev/app/ui/gui"
 	"github.com/vwhitteron/simtezilo-dev/app/ui/sprites"
 	"github.com/vwhitteron/simtezilo-dev/app/ui/webui/webcommon"
@@ -129,7 +130,7 @@ func (s *SetupMode) Run() {
 		initCtx, initCancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer initCancel()
 
-		_, err := s.RunPlatformCommand(initCtx, CmdActionInit, nil)
+		_, err := s.PlatformAction(initCtx, platform.Init, nil)
 		if err != nil {
 			s.log.Error().Err(err).Msg("Failed to initialize setup mode")
 			s.showErrorSprite()
@@ -150,7 +151,7 @@ func (s *SetupMode) Run() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	_, err := s.RunPlatformCommand(ctx, CmdActionModeSetup, nil)
+	_, err := s.PlatformAction(ctx, platform.ModeSetup, nil)
 	if err != nil {
 		s.log.Error().Err(err).Msg("Failed to activate setup mode, attempting to continue")
 	} else {
@@ -170,6 +171,41 @@ func (s *SetupMode) Run() {
 // IsAvailable returns whether setup mode is available on this platform.
 func (s *SetupMode) IsAvailable() bool {
 	return s.available
+}
+
+// Status checks the current status of setup mode by running the setup command's status action.
+// It returns CmdStatus and a boolean indicating whether the status command was run or not.
+func (s *SetupMode) Status(ctx context.Context) (status platform.CmdStatus) {
+	defaultStatus := platform.CmdStatus{
+		Available: false,
+	}
+
+	// Check if command exists
+	if s.command == "" {
+		return defaultStatus
+	}
+
+	// Run the status action
+	response, err := s.PlatformAction(ctx, platform.Status, nil)
+	if err != nil {
+		s.log.Error().Err(err).Msg("Failed to run status command")
+
+		return defaultStatus
+	}
+
+	if response.Status == nil {
+		s.log.Error().Msg("Status command returned no status data")
+
+		return defaultStatus
+	}
+
+	return *response.Status
+}
+
+// PlatformAction executes a platform management command with optional input and unmarshals the response.
+// This is a convenience wrapper around platform.RunCommand for SetupMode.
+func (s *SetupMode) PlatformAction(ctx context.Context, action platform.Command, stdin []byte) (*platform.CmdResponse, error) {
+	return platform.RunCommand(ctx, s.command, s.log, action, stdin)
 }
 
 //go:embed html/index.html
@@ -390,7 +426,7 @@ func (s *SetupMode) handleAPIConfigSave(writer http.ResponseWriter, request *htt
 
 	s.log.Info().Msg("Configuration saved successfully, switching to run mode")
 
-	_, err = s.RunPlatformCommand(ctx, CmdActionModeRun, nil)
+	_, err = s.PlatformAction(ctx, platform.ModeRun, nil)
 	if err != nil {
 		writer.Header().Set("Content-Type", "application/json")
 		fmt.Fprintf(writer, `{"success":false,"error":"Failed to enter run mode: %v"}`, err)
@@ -400,7 +436,7 @@ func (s *SetupMode) handleAPIConfigSave(writer http.ResponseWriter, request *htt
 		return
 	}
 
-	_, err = s.RunPlatformCommand(ctx, CmdActionSetupDisable, nil)
+	_, err = s.PlatformAction(ctx, platform.SetupDisable, nil)
 	if err != nil {
 		writer.Header().Set("Content-Type", "application/json")
 		fmt.Fprintf(writer, `{"success":false,"error":"Failed to disable setup mode: %v"}`, err)
@@ -433,7 +469,7 @@ func (s *SetupMode) handleModeRun(writer http.ResponseWriter, request *http.Requ
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	_, err := s.RunPlatformCommand(ctx, CmdActionModeRun, nil)
+	_, err := s.PlatformAction(ctx, platform.ModeRun, nil)
 	if err != nil {
 		s.log.Error().Err(err).Msg("Failed to enter run mode")
 		writer.Header().Set("Content-Type", "application/json")
@@ -442,7 +478,7 @@ func (s *SetupMode) handleModeRun(writer http.ResponseWriter, request *http.Requ
 		return
 	}
 
-	_, err = s.RunPlatformCommand(ctx, CmdActionSetupDisable, nil)
+	_, err = s.PlatformAction(ctx, platform.SetupDisable, nil)
 	if err != nil {
 		s.log.Error().Err(err).Msg("Failed to disable setup mode flag")
 		writer.Header().Set("Content-Type", "application/json")
@@ -499,7 +535,7 @@ func (s *SetupMode) getAvailableNetworks(ctx context.Context) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	response, err := s.RunPlatformCommand(ctx, CmdActionWifiScan, nil)
+	response, err := s.PlatformAction(ctx, platform.WifiScan, nil)
 	if err != nil {
 		s.log.Error().Err(err).Msg("Failed to scan WiFi networks")
 
@@ -521,7 +557,7 @@ func (s *SetupMode) getNetworkAccessDetails() (string, string, string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	response, err := s.RunPlatformCommand(ctx, CmdActionWifiAccess, nil)
+	response, err := s.PlatformAction(ctx, platform.WifiAccess, nil)
 	if err != nil {
 		return "", "", "", fmt.Errorf("run setup access command: %w", err)
 	}
@@ -557,7 +593,7 @@ func (s *SetupMode) saveNetworkConfiguration(ctx context.Context, ssid, password
 	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 
-	_, err = s.RunPlatformCommand(ctx, CmdActionWifiProvision, configJSON)
+	_, err = s.PlatformAction(ctx, platform.WifiProvision, configJSON)
 	if err != nil {
 		s.log.Error().Err(err).Msg("Failed to provision network")
 

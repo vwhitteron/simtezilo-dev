@@ -44,7 +44,6 @@ This three-phase approach ensures safe updates:
 │             │                                                 ▼             │
 │             │                                       ┌───────────────────┐   │
 │             │                                       │    recover.sh     │   │
-│             │                                       │  (rescue check)   │   │
 │             │                                       └───────────────────┘   │
 │             │                                                 │             │
 │             ▼                                                 ▼             │

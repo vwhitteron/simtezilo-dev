@@ -7,12 +7,12 @@ import (
 	"strings"
 
 	"github.com/vwhitteron/simtezilo-dev/app/exitcode"
-	"github.com/vwhitteron/simtezilo-dev/app/setupmode"
+	"github.com/vwhitteron/simtezilo-dev/app/platform"
 	"golang.org/x/crypto/ssh"
 )
 
 // isSSHEnabled checks whether the SSH service is both enabled and currently active.
-func (p *platform) isSSHEnabled() bool {
+func (p *manager) isSSHEnabled() bool {
 	enabled, _ := p.controlSystemd("ssh.service", sysctlIsEnabled)
 	active, _ := p.controlSystemd("ssh.service", sysctlIsActive)
 
@@ -20,24 +20,24 @@ func (p *platform) isSSHEnabled() bool {
 }
 
 // enableSSH enables and starts the SSH service using systemctl.
-func (p *platform) enableSSH() exitcode.Code {
+func (p *manager) enableSSH() exitcode.Code {
 	return p.controlSSH([]systemctlCmd{sysctlEnable, sysctlStart})
 }
 
 // disableSSH stops and disables the SSH service using systemctl.
-func (p *platform) disableSSH() exitcode.Code {
+func (p *manager) disableSSH() exitcode.Code {
 	return p.controlSSH([]systemctlCmd{sysctlStop, sysctlDisable})
 }
 
 // controlSSH executes a sequence of systemctl actions on the SSH service.
-func (p *platform) controlSSH(actions []systemctlCmd) exitcode.Code {
+func (p *manager) controlSSH(actions []systemctlCmd) exitcode.Code {
 	for _, action := range actions {
 		_, err := p.controlSystemd("ssh.service", sysctlStart)
 		if err != nil {
 			p.log.Debug().Err(err).Msgf("failed to %s sshd service", action)
 
 			outputJSON(map[string]any{
-				"result": setupmode.ResultFailure,
+				"result": platform.Failure,
 				"error":  fmt.Errorf("failed to %s sshd service", action),
 			})
 
@@ -45,14 +45,14 @@ func (p *platform) controlSSH(actions []systemctlCmd) exitcode.Code {
 		}
 	}
 
-	outputJSON(map[string]any{"result": setupmode.ResultSuccess})
+	outputJSON(map[string]any{"result": platform.Success})
 
 	return exitcode.Success
 }
 
 // provisionSSH reads an SSH public key from stdin and installs it to the admin
 // user's authorized_keys file, creating the .ssh directory if needed.
-func (p *platform) provisionSSH() exitcode.Code {
+func (p *manager) provisionSSH() exitcode.Code {
 	// Read public key from stdin
 	data, err := io.ReadAll(os.Stdin)
 	if err != nil {
@@ -61,7 +61,7 @@ func (p *platform) provisionSSH() exitcode.Code {
 
 		outputJSON(map[string]any{
 			"error":  errMsg,
-			"result": setupmode.ResultFailure,
+			"result": platform.Failure,
 		})
 
 		return exitcode.DataFormatErr
@@ -74,7 +74,7 @@ func (p *platform) provisionSSH() exitcode.Code {
 
 		outputJSON(map[string]any{
 			"error":  errMsg,
-			"result": setupmode.ResultFailure,
+			"result": platform.Failure,
 		})
 
 		return exitcode.DataFormatErr
@@ -88,7 +88,7 @@ func (p *platform) provisionSSH() exitcode.Code {
 
 		outputJSON(map[string]any{
 			"error":  errMsg,
-			"result": setupmode.ResultFailure,
+			"result": platform.Failure,
 		})
 
 		return exitcode.DataFormatErr
@@ -106,7 +106,7 @@ func (p *platform) provisionSSH() exitcode.Code {
 
 		outputJSON(map[string]any{
 			"error":  "failed to create .ssh directory",
-			"result": setupmode.ResultFailure,
+			"result": platform.Failure,
 		})
 
 		return exitcode.GeneralErr
@@ -124,7 +124,7 @@ func (p *platform) provisionSSH() exitcode.Code {
 
 		outputJSON(map[string]any{
 			"error":  "failed to write authorized_keys file",
-			"result": setupmode.ResultFailure,
+			"result": platform.Failure,
 		})
 
 		return exitcode.GeneralErr
@@ -132,7 +132,7 @@ func (p *platform) provisionSSH() exitcode.Code {
 
 	p.log.Debug().Str("path", authorizedKeysPath).Msg("SSH key provisioned successfully")
 
-	outputJSON(map[string]any{"result": setupmode.ResultSuccess})
+	outputJSON(map[string]any{"result": platform.Success})
 
 	return exitcode.Success
 }
