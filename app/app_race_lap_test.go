@@ -276,64 +276,7 @@ func TestPluraliseDeltaHandlesSingularAndPluralForms(t *testing.T) {
 	}
 }
 
-func TestFormatDurationConvertsLapTimesToSpeechFormat(t *testing.T) {
-	t.Parallel()
-
-	testCases := []struct {
-		name     string
-		duration time.Duration
-		expected string
-	}{
-		{
-			name:     "1 minute 30.123 seconds",
-			duration: 1*time.Minute + 30*time.Second + 123*time.Millisecond,
-			expected: "1 30 1 2 3",
-		},
-		{
-			name:     "30.123 seconds (no minutes)",
-			duration: 30*time.Second + 123*time.Millisecond,
-			expected: "30 1 2 3",
-		},
-		{
-			name:     "1 minute 0.500 seconds",
-			duration: 1*time.Minute + 500*time.Millisecond,
-			expected: "1 0 5 oh oh",
-		},
-		{
-			name:     "0.001 seconds",
-			duration: 1 * time.Millisecond,
-			expected: "0 oh oh 1",
-		},
-		{
-			name:     "2 minutes 5.050 seconds",
-			duration: 2*time.Minute + 5*time.Second + 50*time.Millisecond,
-			expected: "2 05 oh 5 oh",
-		},
-		{
-			name:     "exactly 1 minute",
-			duration: 1 * time.Minute,
-			expected: "1 0 oh oh oh",
-		},
-		{
-			name:     "59.999 seconds",
-			duration: 59*time.Second + 999*time.Millisecond,
-			expected: "59 9 9 9",
-		},
-	}
-
-	for _, testCase := range testCases {
-		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
-
-			result := app.FormatDuration(testCase.duration)
-			if result != testCase.expected {
-				t.Errorf("formatDuration(%v) = %q, want %q", testCase.duration, result, testCase.expected)
-			}
-		})
-	}
-}
-
-func TestPronounceTimeFormatsTimeComponentsForSpeech(t *testing.T) {
+func TestPronounceTimeFormatsTimeComponentsForSpeechWithUnits(t *testing.T) {
 	t.Parallel()
 
 	testCases := []struct {
@@ -341,56 +284,112 @@ func TestPronounceTimeFormatsTimeComponentsForSpeech(t *testing.T) {
 		minutes      string
 		seconds      string
 		milliseconds string
-		includeUnits bool
 		expected     string
 	}{
 		{
-			name:         "with minutes, without units",
+			name:         "seconds, milliseconds",
+			minutes:      "0",
+			seconds:      "06",
+			milliseconds: "504",
+			expected:     "6.504 seconds",
+		},
+		{
+			name:         "minute, milliseconds",
 			minutes:      "1",
-			seconds:      "30",
-			milliseconds: "123",
-			includeUnits: false,
-			expected:     "1 30 1 2 3",
+			seconds:      "00",
+			milliseconds: "456",
+			expected:     "1 minute 0.456 seconds",
 		},
 		{
-			name:         "with minutes, with units",
+			name:         "single digit seconds, milliseconds",
+			minutes:      "0",
+			seconds:      "02",
+			milliseconds: "001",
+			expected:     "2.001 seconds",
+		},
+		{
+			name:         "double digit seconds, milliseconds",
+			minutes:      "0",
+			seconds:      "30",
+			milliseconds: "001",
+			expected:     "30.001 seconds",
+		},
+		{
+			name:         "minute, second",
 			minutes:      "1",
-			seconds:      "30",
-			milliseconds: "123",
-			includeUnits: true,
-			expected:     "1 minutes 30 point 1 2 3",
+			seconds:      "01",
+			milliseconds: "000",
+			expected:     "1 minute 1 second flat",
 		},
 		{
-			name:         "no minutes, without units",
-			minutes:      "0",
-			seconds:      "30",
-			milliseconds: "123",
-			includeUnits: false,
-			expected:     "30 1 2 3",
+			name:         "minutes, seconds",
+			minutes:      "1",
+			seconds:      "02",
+			milliseconds: "000",
+			expected:     "1 minute 2 seconds flat",
 		},
 		{
-			name:         "no minutes, with units",
-			minutes:      "0",
-			seconds:      "30",
-			milliseconds: "123",
-			includeUnits: true,
-			expected:     "30 point 1 2 3",
+			name:         "minute, second, milliseconds",
+			minutes:      "1",
+			seconds:      "01",
+			milliseconds: "001",
+			expected:     "1 minute 1.001 seconds",
 		},
 		{
-			name:         "zeros become 'oh'",
-			minutes:      "0",
-			seconds:      "5",
-			milliseconds: "050",
-			includeUnits: false,
-			expected:     "5 oh 5 oh",
+			name:         "minutes, second, milliseconds",
+			minutes:      "2",
+			seconds:      "01",
+			milliseconds: "001",
+			expected:     "2 minutes 1.001 seconds",
 		},
 		{
-			name:         "all zeros",
+			name:         "minutes, seconds, milliseconds",
+			minutes:      "2",
+			seconds:      "02",
+			milliseconds: "001",
+			expected:     "2 minutes 2.001 seconds",
+		},
+		{
+			name:         "exactly 1 second",
 			minutes:      "0",
+			seconds:      "01",
+			milliseconds: "000",
+			expected:     "1 second flat",
+		},
+		{
+			name:         "exactly 2 seconds",
+			minutes:      "0",
+			seconds:      "02",
+			milliseconds: "000",
+			expected:     "2 seconds flat",
+		},
+		{
+			name:         "exactly 1 minute",
+			minutes:      "1",
 			seconds:      "0",
 			milliseconds: "000",
-			includeUnits: false,
-			expected:     "0 oh oh oh",
+			expected:     "1 minute flat",
+		},
+		{
+			name:         "exactly 2 minutes",
+			minutes:      "2",
+			seconds:      "00",
+			milliseconds: "000",
+			expected:     "2 minutes flat",
+		},
+		{
+			name:         "seconds leading zeros stripped",
+			minutes:      "1",
+			seconds:      "02",
+			milliseconds: "123",
+			expected:     "1 minute 2.123 seconds",
+		},
+		{
+			name:         "millisecond trailing zeros stripped",
+			minutes:      "0",
+			seconds:      "05",
+			milliseconds: "050",
+			expected:     "5.05 seconds",
 		},
 	}
 
@@ -398,10 +397,233 @@ func TestPronounceTimeFormatsTimeComponentsForSpeech(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := app.PronounceTime(testCase.minutes, testCase.seconds, testCase.milliseconds, testCase.includeUnits)
+			result := app.PronounceTime(testCase.minutes, testCase.seconds, testCase.milliseconds, true)
 			if result != testCase.expected {
 				t.Errorf("pronounceTime(%q, %q, %q, %v) = %q, want %q",
-					testCase.minutes, testCase.seconds, testCase.milliseconds, testCase.includeUnits, result, testCase.expected)
+					testCase.minutes, testCase.seconds, testCase.milliseconds, true, result, testCase.expected)
+			}
+		})
+	}
+}
+
+func TestPronounceTimeFormatsTimeComponentsForSpeechWithoutUnits(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name         string
+		minutes      string
+		seconds      string
+		milliseconds string
+		expected     string
+	}{
+		{
+			name:         "single digit seconds, milliseconds",
+			minutes:      "0",
+			seconds:      "06",
+			milliseconds: "504",
+			expected:     "6.504",
+		},
+		{
+			name:         "double digit seconds, milliseconds",
+			minutes:      "0",
+			seconds:      "30",
+			milliseconds: "001",
+			expected:     "30.001",
+		},
+		{
+			name:         "minutes, milliseconds",
+			minutes:      "1",
+			seconds:      "00",
+			milliseconds: "456",
+			expected:     "1 0.456",
+		},
+		{
+			name:         "minutes, second",
+			minutes:      "1",
+			seconds:      "02",
+			milliseconds: "000",
+			expected:     "1:02 flat",
+		},
+		{
+			name:         "minutes, second, milliseconds",
+			minutes:      "1",
+			seconds:      "01",
+			milliseconds: "001",
+			expected:     "1:01.001",
+		},
+		{
+			name:         "exactly 1 second",
+			minutes:      "0",
+			seconds:      "01",
+			milliseconds: "000",
+			expected:     "1 second flat",
+		},
+		{
+			name:         "exactly 2 seconds",
+			minutes:      "0",
+			seconds:      "06",
+			milliseconds: "000",
+			expected:     "6 seconds flat",
+		},
+		{
+			name:         "exactly 1 minute",
+			minutes:      "1",
+			seconds:      "00",
+			milliseconds: "000",
+			expected:     "1 minute flat",
+		},
+		{
+			name:         "exactly 2 minutes",
+			minutes:      "2",
+			seconds:      "00",
+			milliseconds: "000",
+			expected:     "2 minutes flat",
+		},
+		{
+			name:         "seconds leading zeros not stripped",
+			minutes:      "1",
+			seconds:      "02",
+			milliseconds: "123",
+			expected:     "1:02.123",
+		},
+		{
+			name:         "millisecond trailing zeros not stripped",
+			minutes:      "1",
+			seconds:      "02",
+			milliseconds: "050",
+			expected:     "1:02.050",
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := app.PronounceTime(testCase.minutes, testCase.seconds, testCase.milliseconds, false)
+			if result != testCase.expected {
+				t.Errorf("pronounceTime(%q, %q, %q, %v) = %q, want %q",
+					testCase.minutes, testCase.seconds, testCase.milliseconds, false, result, testCase.expected)
+			}
+		})
+	}
+}
+
+func TestFormatDurationFormatsLapTimesCorrectly(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name     string
+		duration time.Duration
+		expected string
+	}{
+		// Zero and sub-second times
+		{
+			name:     "zero duration",
+			duration: 0,
+			expected: "0 seconds flat",
+		},
+		{
+			name:     "sub-second with milliseconds",
+			duration: 500 * time.Millisecond,
+			expected: "0.500",
+		},
+		{
+			name:     "sub-second with partial milliseconds",
+			duration: 123 * time.Millisecond,
+			expected: "0.123",
+		},
+
+		// Seconds only (flat times)
+		{
+			name:     "exactly 1 second",
+			duration: 1 * time.Second,
+			expected: "1 second flat",
+		},
+		{
+			name:     "multiple seconds flat",
+			duration: 30 * time.Second,
+			expected: "30 seconds flat",
+		},
+
+		// Seconds with milliseconds
+		{
+			name:     "seconds with milliseconds",
+			duration: 5*time.Second + 123*time.Millisecond,
+			expected: "5.123",
+		},
+		{
+			name:     "seconds with trailing zero milliseconds",
+			duration: 12*time.Second + 50*time.Millisecond,
+			expected: "12.050",
+		},
+
+		// Minutes only (flat times)
+		{
+			name:     "exactly 1 minute",
+			duration: 1 * time.Minute,
+			expected: "1 minute flat",
+		},
+		{
+			name:     "multiple minutes flat",
+			duration: 2 * time.Minute,
+			expected: "2 minutes flat",
+		},
+
+		// Minutes with seconds (flat times)
+		{
+			name:     "minutes and seconds flat",
+			duration: 1*time.Minute + 30*time.Second,
+			expected: "1:30 flat",
+		},
+		{
+			name:     "minutes with leading zero seconds flat",
+			duration: 1*time.Minute + 5*time.Second,
+			expected: "1:05 flat",
+		},
+
+		// Minutes with milliseconds only (no whole seconds)
+		{
+			name:     "minutes with only milliseconds",
+			duration: 1*time.Minute + 500*time.Millisecond,
+			expected: "1 0.500",
+		},
+
+		// Full lap times (minutes, seconds, milliseconds)
+		{
+			name:     "typical lap time",
+			duration: 1*time.Minute + 34*time.Second + 567*time.Millisecond,
+			expected: "1:34.567",
+		},
+		{
+			name:     "lap time with leading zero seconds",
+			duration: 1*time.Minute + 5*time.Second + 123*time.Millisecond,
+			expected: "1:05.123",
+		},
+		{
+			name:     "lap time with trailing zero milliseconds",
+			duration: 2*time.Minute + 15*time.Second + 50*time.Millisecond,
+			expected: "2:15.050",
+		},
+		{
+			name:     "longer lap time",
+			duration: 8*time.Minute + 42*time.Second + 999*time.Millisecond,
+			expected: "8:42.999",
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			// Arrange
+			duration := testCase.duration
+
+			// Act
+			result := app.FormatDuration(duration)
+
+			// Assert
+			if result != testCase.expected {
+				t.Errorf("FormatDuration(%v) = %q, want %q", duration, result, testCase.expected)
 			}
 		})
 	}

@@ -87,16 +87,13 @@ func FormatDuration(lapTime time.Duration) string {
 	minutesStr := strconv.Itoa(minutes)
 
 	var secondsStr string
-	if seconds == 0 {
-		secondsStr = "0"
-	} else {
-		secondsFmt := "%02d"
-		if minutesStr == "0" {
-			secondsFmt = "%d"
-		}
 
-		secondsStr = fmt.Sprintf(secondsFmt, seconds)
+	secondsFmt := "%02d"
+	if minutesStr == "0" {
+		secondsFmt = "%d"
 	}
+
+	secondsStr = fmt.Sprintf(secondsFmt, seconds)
 
 	millisecondsStr := fmt.Sprintf("%03d", milliseconds)
 
@@ -105,29 +102,101 @@ func FormatDuration(lapTime time.Duration) string {
 
 // PronounceTime formats minutes, seconds and millisecond time components for text and speech output.
 func PronounceTime(minutes string, seconds string, milliseconds string, includeUnits bool) string {
-	announce := []string{}
-
-	if minutes != "0" {
-		announce = append(announce, minutes)
-		if includeUnits {
-			announce = append(announce, "minutes")
-		}
+	secondsStripped := strings.TrimLeft(seconds, "0")
+	if secondsStripped == "" {
+		secondsStripped = "0"
 	}
 
-	announce = append(announce, seconds)
+	hasMinutes := minutes != "0"
+	hasSeconds := secondsStripped != "0"
+	hasMilliseconds := milliseconds != "000"
+
 	if includeUnits {
-		announce = append(announce, "point")
+		return pronounceTimeWithUnits(minutes, secondsStripped, milliseconds, hasMinutes, hasSeconds, hasMilliseconds)
 	}
 
-	for _, r := range milliseconds {
-		char := string(r)
+	return pronounceTimeWithoutUnits(minutes, seconds, secondsStripped, milliseconds, hasMinutes, hasSeconds, hasMilliseconds)
+}
 
-		if char == "0" {
-			char = "oh"
+func pronounceTimeWithUnits(minutes, seconds, milliseconds string, hasMinutes, hasSeconds, hasMilliseconds bool) string {
+	var parts []string
+
+	if hasMinutes {
+		unit := "minute"
+		if minutes != "1" {
+			unit = "minutes"
 		}
 
-		announce = append(announce, char)
+		if !hasSeconds && !hasMilliseconds {
+			return minutes + " " + unit + " flat"
+		}
+
+		parts = append(parts, minutes+" "+unit)
 	}
 
-	return strings.Join(announce, ";")
+	secondsPart := seconds
+	if hasMilliseconds {
+		secondsPart += "." + strings.TrimRight(milliseconds, "0")
+	}
+
+	switch {
+	case hasMilliseconds:
+		parts = append(parts, secondsPart+" seconds")
+	case seconds == "1":
+		parts = append(parts, seconds+" second flat")
+	default:
+		parts = append(parts, seconds+" seconds flat")
+	}
+
+	return strings.Join(parts, " ")
+}
+
+func pronounceTimeWithoutUnits(minutes, seconds, secondsStripped, milliseconds string, hasMinutes, hasSeconds, hasMilliseconds bool) string {
+	// Has milliseconds - format with decimal
+	if hasMilliseconds {
+		return formatWithMilliseconds(minutes, seconds, secondsStripped, milliseconds, hasMinutes, hasSeconds)
+	}
+
+	// No milliseconds - format as "flat" time
+	return formatFlatTime(minutes, seconds, secondsStripped, hasMinutes, hasSeconds)
+}
+
+func formatWithMilliseconds(minutes, seconds, secondsStripped, milliseconds string, hasMinutes, hasSeconds bool) string {
+	// No minutes: strip leading zeros from seconds
+	if !hasMinutes {
+		return secondsStripped + "." + milliseconds
+	}
+
+	// Minutes but 0 seconds: "M 0.xxx" (space separator)
+	if !hasSeconds {
+		return minutes + " 0." + milliseconds
+	}
+
+	// Minutes, seconds, and milliseconds: "M:SS.xxx"
+	return minutes + ":" + seconds + "." + milliseconds
+}
+
+func formatFlatTime(minutes, seconds, secondsStripped string, hasMinutes, hasSeconds bool) string {
+	// Only seconds, no minutes: "X second(s) flat"
+	if !hasMinutes {
+		unit := "seconds"
+		if secondsStripped == "1" {
+			unit = "second"
+		}
+
+		return secondsStripped + " " + unit + " flat"
+	}
+
+	// Minutes but no seconds: "X minute(s) flat"
+	if !hasSeconds {
+		unit := "minute"
+		if minutes != "1" {
+			unit = "minutes"
+		}
+
+		return minutes + " " + unit + " flat"
+	}
+
+	// Minutes and seconds: "M:SS flat"
+	return minutes + ":" + seconds + " flat"
 }
