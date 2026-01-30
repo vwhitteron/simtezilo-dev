@@ -120,6 +120,11 @@ func RunCommand(ctx context.Context, commandPath string, log zerolog.Logger, act
 		if errors.As(cmdErr, &exitErr) {
 			exitCode = exitErr.ExitCode()
 		}
+
+		// If we got no output at all, return the command error directly
+		if len(output) == 0 {
+			return nil, fmt.Errorf("platform command %s failed with no output: %w", action, cmdErr)
+		}
 	}
 
 	var response CmdResponse
