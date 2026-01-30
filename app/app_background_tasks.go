@@ -15,6 +15,7 @@ func (a *App) startBackgroundTasks() {
 	a.startIPAddressUpdater()
 	a.startGTClient()
 	a.startStartupSignaler()
+	a.startCrashLogManager()
 }
 
 // startHIDEventHandler starts the HID event handler goroutine.
@@ -161,4 +162,25 @@ func (a *App) startStartupSignaler() {
 			return
 		}
 	}()
+}
+
+// startCrashLogManager performs a single crash log rotation on startup.
+// This ensures any pending rotation/compression happens outside of panic handling.
+func (a *App) startCrashLogManager() {
+	if a.crashLogger == nil {
+		return
+	}
+
+	a.log.Info().
+		Str("component", "crashlog").
+		Str("path", a.crashLogger.LogPath()).
+		Msg("Crash log manager started")
+
+	err := a.crashLogger.Rotate()
+	if err != nil {
+		a.log.Warn().
+			Err(err).
+			Str("component", "crashlog").
+			Msg("Failed to rotate crash log")
+	}
 }

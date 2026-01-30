@@ -19,6 +19,7 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/calibrator"
 	"github.com/vwhitteron/simtezilo-dev/app/circuit"
 	"github.com/vwhitteron/simtezilo-dev/app/config"
+	"github.com/vwhitteron/simtezilo-dev/app/crashlog"
 	"github.com/vwhitteron/simtezilo-dev/app/exitcode"
 	"github.com/vwhitteron/simtezilo-dev/app/fuelrange"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware"
@@ -114,6 +115,8 @@ type App struct {
 
 	updater *updater.Updater // Self-update manager
 
+	crashLogger *crashlog.CrashLogger // Crash log manager for panic capture
+
 	// Chassis haptics state
 	jerkPeakHold         float64       // Peak hold value for jerk to prevent cancellation
 	jerkPeakHoldTime     time.Time     // Time when peak hold was last updated
@@ -128,10 +131,11 @@ type App struct {
 
 // Options holds configuration options for initializing the App.
 type Options struct {
-	ConfigFile   string             // Path to configuration file
-	ExitCodeChan chan exitcode.Code // Channel to signal application shutdown with exit code
-	Logger       *zerolog.Logger    // Logger instance for application logging
-	LogStore     *logstore.Store    // In-memory log storage
+	ConfigFile   string                // Path to configuration file
+	ExitCodeChan chan exitcode.Code    // Channel to signal application shutdown with exit code
+	Logger       *zerolog.Logger       // Logger instance for application logging
+	LogStore     *logstore.Store       // In-memory log storage
+	CrashLogger  *crashlog.CrashLogger // Crash log manager for panic capture
 }
 
 // New creates a new App instance and sets up all components based on the provided options.
@@ -154,6 +158,7 @@ func New(opts Options) (*App, error) {
 		gameStateFeed:      make(chan string, 10),
 		logStatsFeed:       make(chan map[string]any, 10),
 		lapStartEvents:     make(chan uint32),
+		crashLogger:        opts.CrashLogger,
 	}
 
 	newApp.initializeConfig(opts)

@@ -5,7 +5,7 @@ Wants=local-fs.target network-online.target
 
 [Service]
 ExecStartPre=/opt/simtezilo/init/recover.sh
-ExecStart=/opt/simtezilo/bin/simtezilo
+ExecStart=/opt/simtezilo/bin/simtezilo -d /opt/simtezilo/data/crashlogs
 Type=simple
 Restart=always
 RestartSec=5

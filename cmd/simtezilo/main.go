@@ -7,62 +7,139 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
 	"github.com/rs/zerolog"
 	"github.com/vwhitteron/simtezilo-dev/app"
+	"github.com/vwhitteron/simtezilo-dev/app/crashlog"
 	"github.com/vwhitteron/simtezilo-dev/app/exitcode"
 	"github.com/vwhitteron/simtezilo-dev/app/logstore"
 	"github.com/vwhitteron/simtezilo-dev/app/profiler"
 )
 
+type cliFlags struct {
+	configFile       string
+	crashLogDir      string
+	logLevel         string
+	profilerEndpoint string
+	version          bool
+}
+
 func main() {
+	exitSignal := make(chan exitcode.Code, 1)
+	setupSignalHandler(exitSignal)
+
+	flags := parseFlags()
+
+	if flags.version {
+		printVersion()
+		os.Exit(0)
+	}
+
+	crashLogger := initCrashLogger(flags.crashLogDir)
+	defer crashLogger.Close()
+
+	defer handlePanic(crashLogger)
+
+	loggerWithStore := initLogger(flags.logLevel)
+	logger := loggerWithStore.Logger
+
+	logStartupInfo(&logger)
+
+	prof, err := startPyroscope(flags.profilerEndpoint, &logger)
+	if err != nil {
+		logger.Fatal().Err(err).Msg("Failed to setup Pyroscope profiler")
+	}
+
+	exitCode := runApp(flags.configFile, exitSignal, &logger, loggerWithStore.Store, crashLogger)
+
+	shutdownProfiler(prof, &logger)
+
+	logger.Info().Int("exitCode", int(exitCode)).Msg("Exiting app")
+
+	os.Exit(int(exitCode)) //nolint:gocritic // defers run before this exit at end of main
+}
+
+func initCrashLogger(crashLogDir string) *crashlog.CrashLogger {
+	logDir := crashLogDir
+	if logDir == "" {
+		logDir = filepath.Join(os.TempDir(), "simtezilo")
+	}
+
+	err := crashlog.EnsureLogDir(logDir)
+	if err != nil {
+		log.Printf("Warning: Failed to create crash log directory: %v", err)
+	}
+
+	return crashlog.New(crashlog.Options{
+		LogDir:     logDir,
+		MaxSize:    10,
+		MaxBackups: 5,
+		MaxAge:     30,
+		Compress:   true,
+	})
+}
+
+func handlePanic(crashLogger *crashlog.CrashLogger) {
+	if r := recover(); r != nil {
+		crashLogger.WritePanic(r, app.Version, app.CommitHash, app.BuildTime, app.Platform)
+		_ = crashLogger.Close()
+
+		os.Exit(1)
+	}
+}
+
+func setupSignalHandler(exitCodeChan chan exitcode.Code) {
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 
-	exitCodeChan := make(chan exitcode.Code, 1)
-
-	// Signal handler - forward signal to exit code channel as Success exit code
 	go func() {
 		sig := <-sigs
 		log.Printf("Received %v signal, shutting down\n", sig)
 
 		exitCodeChan <- exitcode.Success
 
-		close(exitCodeChan) // Close so all readers can detect the shutdown
+		close(exitCodeChan)
 	}()
+}
 
-	var (
-		configFile       string
-		logLevelArg      string
-		profilerEndpoint string
-		version          bool
-	)
+func parseFlags() cliFlags {
+	var flags cliFlags
 
-	flag.StringVar(&configFile, "c", "", "Configuration file to load")
-	flag.StringVar(&logLevelArg, "l", "info", "Log level. Default is 'info'")
-	flag.StringVar(&profilerEndpoint, "p", "", "Send profiles to this Pyroscope endpoint (http://host:port). Default is off")
-	flag.BoolVar(&version, "v", false, "Print version information and exit")
+	flag.StringVar(&flags.configFile, "c", "", "Configuration file to load")
+	flag.StringVar(&flags.crashLogDir, "d", "", "Directory for crash logs. Default is $TMPDIR/simtezilo")
+	flag.StringVar(&flags.logLevel, "l", "info", "Log level. Default is 'info'")
+	flag.StringVar(&flags.profilerEndpoint, "p", "", "Send profiles to this Pyroscope endpoint (http://host:port). Default is off")
+	flag.BoolVar(&flags.version, "v", false, "Print version information and exit")
 
 	flag.Parse()
 
-	if version {
-		fmt.Fprintf(os.Stdout, "Version: %s  Commit Hash: %s  Build Time: %s  Platform: %s\n", app.Version, app.CommitHash, app.BuildTime, app.Platform)
+	return flags
+}
 
-		os.Exit(0)
-	}
+func printVersion() {
+	fmt.Fprintf(
+		os.Stdout,
+		"Version: %s  Commit Hash: %s  Build Time: %s  Platform: %s\n",
+		app.Version,
+		app.CommitHash,
+		app.BuildTime,
+		app.Platform,
+	)
+}
 
-	// Initialize logger early so setup wizard can use it
+func initLogger(logLevelArg string) *logstore.LoggerWithStore {
 	logLevel, err := zerolog.ParseLevel(logLevelArg)
 	if err != nil {
 		log.Fatalf("Invalid log level: %s", err)
 	}
 
-	// Create logger with in-memory store (max 5000 entries)
-	loggerWithStore := logstore.NewLoggerWithStore(logLevel, 5000)
-	logger := loggerWithStore.Logger
+	return logstore.NewLoggerWithStore(logLevel, 5000)
+}
 
+func logStartupInfo(logger *zerolog.Logger) {
 	if app.BuildTime == "" {
 		app.BuildTime = time.Now().Format("2006-01-02_15:04:05")
 	}
@@ -73,48 +150,50 @@ func main() {
 		Str("BuildTime", app.BuildTime).
 		Str("Platform", app.Platform).
 		Msg("Starting Simtezilo")
+}
 
-	profiler, err := startPyroscope(profilerEndpoint, &logger)
-	if err != nil {
-		logger.Fatal().Err(err).Msg("Failed to setup Pyroscope profiler")
-	}
-
-	var exitCode exitcode.Code
-
-	app, err := app.New(app.Options{
+func runApp(
+	configFile string,
+	exitCodeChan chan exitcode.Code,
+	logger *zerolog.Logger,
+	logStore *logstore.Store,
+	crashLogger *crashlog.CrashLogger,
+) exitcode.Code {
+	application, err := app.New(app.Options{
 		ConfigFile:   configFile,
 		ExitCodeChan: exitCodeChan,
-		Logger:       &logger,
-		LogStore:     loggerWithStore.Store,
+		Logger:       logger,
+		LogStore:     logStore,
+		CrashLogger:  crashLogger,
 	})
 	if err != nil {
 		logger.Fatal().Err(err).Msg("Error creating app")
 	}
 
-	go app.Start()
+	go application.Start()
 
-	exitCode = <-exitCodeChan
+	exitCode := <-exitCodeChan
 
-	app.Close()
+	application.Close()
 
 	if exitCode == exitcode.RestartApp {
 		logger.Info().Msg("Restarting application - exiting to allow process restart")
 
-		// Exit with success code so systemd will restart the process
-		// This ensures all resources (speaker, sockets) are properly released
-		exitCode = exitcode.Success
+		return exitcode.Success
 	}
 
-	if profiler != nil {
-		err = profiler.Shutdown()
-		if err != nil {
-			logger.Fatal().Err(err).Msg("Error shutting down Pyroscope profiler")
-		}
+	return exitCode
+}
+
+func shutdownProfiler(prof *profiler.PyroscopeProfiler, logger *zerolog.Logger) {
+	if prof == nil {
+		return
 	}
 
-	logger.Info().Int("exitCode", int(exitCode)).Msg("Exiting app")
-
-	os.Exit(int(exitCode))
+	err := prof.Shutdown()
+	if err != nil {
+		logger.Fatal().Err(err).Msg("Error shutting down Pyroscope profiler")
+	}
 }
 
 func startPyroscope(endpoint string, logger *zerolog.Logger) (*profiler.PyroscopeProfiler, error) {

@@ -52,6 +52,7 @@ linters:
             - github.com/zetetos/gt-telemetry
             - golang.org/x/crypto/ssh
             - golang.org/x/image
+            - gopkg.in/natefinch/lumberjack.v2
             - layeh.com/gopus
             - periph.io/x/conn/v3
             - periph.io/x/host/v3
