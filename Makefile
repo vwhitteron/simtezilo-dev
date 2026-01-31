@@ -74,16 +74,36 @@ lint:
 lint/fix:
 	@golangci-lint run --fix
 
-## dist: create a distribution archive
+## dist: create distribution archives in dist/releases/<channel>/v<version>/
 .PHONY: dist
 dist: build/rpi/v8/64 build/windows/64 build/darwin/silicon
+	@chmod +x ./build/scripts/gen_dist.sh
 	@./build/scripts/gen_dist.sh
 
-## release/manifest: generate a release manifest JSON for the update system
+## release/manifest: generate release manifest JSON (run after dist)
 .PHONY: release/manifest
 release/manifest:
 	@chmod +x ./build/scripts/gen_release_manifest.sh
-	@./build/scripts/gen_release_manifest.sh "$(buildversion)" "stable" "out/releases/latest.json"
+	@./build/scripts/gen_release_manifest.sh
+
+## release: build all platforms, create archives, and generate manifest
+.PHONY: release
+release: dist release/manifest
+	@echo ""
+	@echo "Release ready at: dist/releases/stable/"
+	@echo "To publish: make release/publish"
+
+## release/publish: upload release artifacts to Cloudflare R2
+# R2_REMOTE must be set to the rclone remote name for the R2 bucket
+# e.g., "R2_REMOTE=r2:mybucker make release/publish"
+.PHONY: release/publish
+release/publish:
+	@if [ -z "$(R2_REMOTE)" ]; then echo "Error: R2_REMOTE is not set"; exit 1; fi
+	@echo "Uploading release to Cloudflare R2..."
+	@rclone sync dist/releases/ $(R2_REMOTE)/releases/ \
+		--exclude ".DS_Store" \
+		--progress
+	@echo "Release published to R2 remote: $(R2_REMOTE)"
 
 ## version/validate: validate VERSION file format
 .PHONY: version/validate

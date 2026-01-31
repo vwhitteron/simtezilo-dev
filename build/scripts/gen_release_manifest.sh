@@ -2,62 +2,51 @@
 # gen_release_manifest.sh - Generate release manifest JSON for the update system
 #
 # Usage:
-#   ./gen_release_manifest.sh <version> <channel> [output_file]
+#   ./gen_release_manifest.sh
+#
+# The channel is automatically derived from the version string:
+#   v1.0.0           -> stable
+#   v1.0.0-beta.1    -> beta
+#   v1.0.0-rc.1      -> beta
+#   v1.0.0-alpha.1   -> dev
+#   v1.0.0-dev.1     -> dev
 #
 # Environment variables:
 #   BASE_URL        - Base URL for binary downloads (default: https://updates.simtezilo.com)
-#   OUT_DIR         - Directory containing built binaries (default: ./out)
+#   DIST_DIR        - Directory containing distribution archives (default: ./dist/releases)
 #   MIN_VERSION     - Minimum version required to upgrade (optional)
+#   CHANGELOG       - Release changelog text (optional)
 #
 # Example:
-#   BUILDVERSION=1.2.3 ./gen_release_manifest.sh 1.2.3 stable releases/latest.json
+#   ./gen_release_manifest.sh
 #
-# This script expects binaries to exist at:
-#   ${OUT_DIR}/simtezilo-linux-arm64
-#   ${OUT_DIR}/simtezilo-linux-amd64
-#   ${OUT_DIR}/simtezilo-macos
-#   ${OUT_DIR}/simtezilo.exe
+# This script expects distribution archives to exist at:
+#   ${DIST_DIR}/<channel>/v<version>/simtezilo-v<version>-<platform>.tar.gz|.zip
 
 set -euo pipefail
 
-VERSION="${1:-}"
-CHANNEL="${2:-stable}"
-OUTPUT="${3:-releases/latest.json}"
+# Load version utilities
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/lib/version.sh"
+
 BASE_URL="${BASE_URL:-https://updates.simtezilo.com}"
-OUT_DIR="${OUT_DIR:-./out}"
+DIST_DIR="${DIST_DIR:-./dist/releases}"
 MIN_VERSION="${MIN_VERSION:-}"
 CHANGELOG="${CHANGELOG:-}"
 
-if [[ -z "$VERSION" ]]; then
-    echo "Usage: $0 <version> [channel] [output_file]"
-    echo ""
-    echo "Arguments:"
-    echo "  version     - Release version (e.g., 1.2.3 or v1.2.3)"
-    echo "  channel     - Release channel: stable, beta, dev (default: stable)"
-    echo "  output_file - Output JSON file (default: releases/latest.json)"
-    echo ""
-    echo "Environment variables:"
-    echo "  BASE_URL    - Base URL for downloads (default: https://updates.simtezilo.com)"
-    echo "  OUT_DIR     - Directory with binaries (default: ./out)"
-    echo "  MIN_VERSION - Minimum upgrade version (optional)"
-    echo "  CHANGELOG   - Release changelog text (optional)"
-    exit 1
-fi
-
-# Normalize version (ensure it starts with v for URL, but store without v)
-VERSION_CLEAN="${VERSION#v}"
-VERSION_TAG="v${VERSION_CLEAN}"
+# Archive directory for this release
+ARCHIVE_DIR="${DIST_DIR}/${VERSION_CHANNEL}/${VERSION_TAG}"
+OUTPUT="${ARCHIVE_DIR}/manifest.json"
 
 RELEASE_DATE=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
 
-# Platform binary mappings (using parallel arrays for bash 3.x compatibility on macOS)
-PLATFORM_KEYS="linux-arm64-6 linux-arm64-8 linux-arm64 linux-amd64 darwin-arm64 windows-amd64"
-get_binary_name() {
+# Platform archive mappings
+get_archive_name() {
     case "$1" in
-        "linux-arm64")   echo "simtezilo-linux-arm64" ;;
-        "linux-amd64")   echo "simtezilo-linux-amd64" ;;
-        "darwin-arm64")  echo "simtezilo-macos" ;;
-        "windows-amd64") echo "simtezilo.exe" ;;
+        "linux-arm64")   echo "simtezilo-${VERSION_TAG}-linux-arm64.tar.gz" ;;
+        "linux-amd64")   echo "simtezilo-${VERSION_TAG}-linux-amd64.tar.gz" ;;
+        "darwin-arm64")  echo "simtezilo-${VERSION_TAG}-darwin-arm64.tar.gz" ;;
+        "windows-amd64") echo "simtezilo-${VERSION_TAG}-windows-amd64.zip" ;;
     esac
 }
 
@@ -88,16 +77,18 @@ get_file_size() {
 get_file_info() {
     local file="$1"
     local platform="$2"
-    local binary_name="$3"
+    local archive_name="$3"
     
     if [[ ! -f "$file" ]]; then
         echo "null"
         return
     fi
 
-    local url="${BASE_URL}/releases/${VERSION_TAG}/${binary_name}"
-    local sha256=$(get_sha256 "$file")
-    local size=$(get_file_size "$file")
+    local url="${BASE_URL}/releases/${VERSION_CHANNEL}/${VERSION_TAG}/${archive_name}"
+    local sha256
+    sha256=$(get_sha256 "$file")
+    local size
+    size=$(get_file_size "$file")
 
     cat <<EOF
 {
@@ -108,15 +99,25 @@ get_file_info() {
 EOF
 }
 
+# Check archive directory exists
+if [[ ! -d "$ARCHIVE_DIR" ]]; then
+    echo "Error: Archive directory not found: ${ARCHIVE_DIR}"
+    echo "Run 'make dist' first to generate distribution archives."
+    exit 1
+fi
+
+# Platform keys
+PLATFORM_KEYS="linux-arm64 linux-amd64 darwin-arm64 windows-amd64"
+
 # Build platforms JSON
 PLATFORMS_JSON=""
 FIRST=true
 
 for platform in $PLATFORM_KEYS; do
-    binary_name=$(get_binary_name "$platform")
-    file="${OUT_DIR}/${binary_name}"
+    archive_name=$(get_archive_name "$platform")
+    file="${ARCHIVE_DIR}/${archive_name}"
     
-    info=$(get_file_info "$file" "$platform" "$binary_name")
+    info=$(get_file_info "$file" "$platform" "$archive_name")
     
     if [[ "$info" != "null" ]]; then
         if [[ "$FIRST" != "true" ]]; then
@@ -125,9 +126,9 @@ for platform in $PLATFORM_KEYS; do
         PLATFORMS_JSON+="
     \"${platform}\": ${info}"
         FIRST=false
-        echo "✓ Found ${platform}: ${binary_name}"
+        echo "✓ Found ${platform}: ${archive_name}"
     else
-        echo "⚠ Missing ${platform}: ${binary_name}"
+        echo "⚠ Missing ${platform}: ${archive_name}"
     fi
 done
 
@@ -147,14 +148,12 @@ if [[ -n "$CHANGELOG" ]]; then
   \"changelog\": \"${CHANGELOG_ESCAPED}\","
 fi
 
-# Generate manifest
-mkdir -p "$(dirname "$OUTPUT")"
-
+# Generate manifest in the archive directory
 cat > "$OUTPUT" <<EOF
 {
-  "version": "${VERSION_CLEAN}",
+  "version": "${VERSION}",
   "releaseDate": "${RELEASE_DATE}",
-  "channel": "${CHANNEL}",${MIN_VERSION_JSON}${CHANGELOG_JSON}
+  "channel": "${VERSION_CHANNEL}",${MIN_VERSION_JSON}${CHANGELOG_JSON}
   "platforms": {${PLATFORMS_JSON}
   }
 }
@@ -162,23 +161,17 @@ EOF
 
 echo ""
 echo "Generated manifest: $OUTPUT"
-echo "Version: ${VERSION_CLEAN}"
-echo "Channel: ${CHANNEL}"
+echo "Version: ${VERSION}"
+echo "Channel: ${VERSION_CHANNEL}"
 echo "Release Date: ${RELEASE_DATE}"
 
-# Also generate individual checksum files
+# Copy manifest to channel root as latest.json for update checks
+CHANNEL_LATEST="${DIST_DIR}/${VERSION_CHANNEL}/latest.json"
+cp "$OUTPUT" "$CHANNEL_LATEST"
 echo ""
-echo "Generating checksum files..."
-for platform in $PLATFORM_KEYS; do
-    binary_name=$(get_binary_name "$platform")
-    file="${OUT_DIR}/${binary_name}"
-    
-    if [[ -f "$file" ]]; then
-        checksum_file="${file}.sha256"
-        get_sha256 "$file" > "$checksum_file"
-        echo "✓ ${checksum_file}"
-    fi
-done
+echo "Copied to channel root: ${CHANNEL_LATEST}"
 
+echo ""
+echo "Ready to publish: scp -r ${DIST_DIR}/${VERSION_CHANNEL}/ <server>:/var/www/updates/releases/"
 echo ""
 echo "Done!"
