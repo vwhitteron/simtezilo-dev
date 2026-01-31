@@ -272,11 +272,19 @@ func (c *Checker) Channel() string {
 }
 
 // SetChannel updates the channel for update checking.
+// This clears any cached update information since it may not apply to the new channel.
 func (c *Checker) SetChannel(channel string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	if c.channel == channel {
+		return
+	}
+
 	c.channel = channel
+	c.availableInfo = nil
+	c.lastError = nil
+	c.status = UpdateStatusIdle
 	c.log.Info().Str("channel", channel).Msg("Update channel changed")
 }
 

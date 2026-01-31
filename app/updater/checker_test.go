@@ -722,30 +722,20 @@ func TestSwitchingChannelsClearsStaleUpdateInfo(t *testing.T) {
 		t.Fatal("Custom update should be set")
 	}
 
-	// Switch to stable channel (which will fail to fetch)
+	// Switch to stable channel - this should immediately clear the update info
 	checker.SetChannel("stable")
 
-	// Attempt to check - this should fail and clear the custom update info
-	info, err := checker.CheckNow()
-	if err == nil {
-		t.Error("CheckNow() should error when fetching from unreachable server")
-	}
-
-	if info != nil {
-		t.Error("CheckNow() should return nil on error")
-	}
-
-	// Verify that availableInfo was cleared
+	// Verify that availableInfo was cleared immediately on channel switch
 	if checker.AvailableUpdate() != nil {
-		t.Error("AvailableUpdate should be nil after failed fetch on non-custom channel")
+		t.Error("AvailableUpdate should be nil immediately after channel switch")
 	}
 
-	if checker.Status() != updater.UpdateStatusError {
-		t.Errorf("Status should be Error after failed fetch, got %v", checker.Status())
+	if checker.Status() != updater.UpdateStatusIdle {
+		t.Errorf("Status should be Idle after channel switch, got %v", checker.Status())
 	}
 }
 
-func TestCustomChannelPreservesInfoWhenSwitchingBack(t *testing.T) {
+func TestSetChannelSameChannelNoOp(t *testing.T) {
 	t.Parallel()
 
 	log := zerolog.Nop()
@@ -765,28 +755,28 @@ func TestCustomChannelPreservesInfoWhenSwitchingBack(t *testing.T) {
 		t.Fatalf("NewChecker() error = %v", err)
 	}
 
-	// Set custom update info
-	customUpdate := &updater.UpdateInfo{
+	// Set update info
+	updateInfo := &updater.UpdateInfo{
 		CurrentVersion:   "1.0.0",
 		AvailableVersion: "2.0.0",
-		Channel:          "custom",
-		Changelog:        []string{"Custom update"},
+		Channel:          "stable",
+		Changelog:        []string{"Stable update"},
 	}
-	checker.SetAvailableUpdate(customUpdate)
+	checker.SetAvailableUpdate(updateInfo)
 
-	// Simulate a check on stable channel that finds no update
-	// (this would normally clear availableInfo, but should preserve custom)
+	// Set status to something other than Idle
+	checker.SetStatus(updater.UpdateStatusUpdateAvailable)
+
+	// Switch to the same channel - this should be a no-op
 	checker.SetChannel("stable")
 
-	// The actual CheckNow would fail without a server, but the logic
-	// in the code preserves custom updates when checking other channels
-	// Let's verify the SetAvailableUpdate persists
+	// Verify that update info is preserved when switching to the same channel
 	if checker.AvailableUpdate() == nil {
-		t.Error("Custom update should still be available")
+		t.Error("Update info should be preserved when switching to the same channel")
 	}
 
-	if checker.AvailableUpdate().Channel != "custom" {
-		t.Errorf("Update channel should be custom, got %v", checker.AvailableUpdate().Channel)
+	if checker.Status() != updater.UpdateStatusUpdateAvailable {
+		t.Errorf("Status should remain UpdateAvailable, got %v", checker.Status())
 	}
 }
 
