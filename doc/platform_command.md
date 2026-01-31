@@ -10,36 +10,36 @@ platform [options] <command>
 
 ## Options
 
-No options are required at this time. The following options are suggested for 
-
-|    Option    |                   Description                    |
-|--------------|--------------------------------------------------|
-| `-h`         | Show help message                                |
-| `-l <level>` | Set log level (`debug`, `info`, `warn`, `error`) |
-| `-v`         | Show version information                         |
+| Option       | Description                                               |
+|--------------|-----------------------------------------------------------|
+| `-b <dir>`   | Base directory for installation (default: /opt/simtezilo) |
+| `-h`         | Show help message                                         |
+| `-l <level>` | Set log level (`debug`, `info`, `warn`, `error`)          |
+| `-v`         | Show version information                                  |
 
 ## Commands
 
-The following commands are required and __must__ be implmented for the platform integration to work correctly.
+The following commands are required and **must** be implemented for the platform integration to work correctly.
 
-|     Command     |                      Description                               |
-|-----------------|----------------------------------------------------------------|
-| init            | Initialize setup mode connection if not present                |
-| mode-run        | Enter run mode                                                 |
-| mode-setup      | Enter setup mode                                               |
-| reset           | Delete all connections and reinitialize setup mode             |
-| setup-disable   | Disable setup mode flag                                        |
-| setup-enable    | Enable setup mode flag                                         |
-| ssh-enable      | Enable SSH service                                             |
-| ssh-disable     | Disable SSH service                                            |
-| ssh-provision   | Provision SSH access                                           |
-| status          | Check current environment status                               |
-| update-apply    | Apply a pending update (extracts, installs, swaps binaries)    |
-| update-rollback | Rollback to the previous version                               |
-| version         | Print version information                                      |
-| wifi-access     | Provide the network access details for the setup mode network  |
-| wifi-provision  | Provision network connection                                   |
-| wifi-scan       | Scan for available WiFi networks                               |
+| Command         | Description                                                   |
+|-----------------|---------------------------------------------------------------|
+| init            | Initialize setup mode connection if not present               |
+| mode-run        | Enter run mode                                                |
+| mode-setup      | Enter setup mode                                              |
+| reset           | Delete all connections and reinitialize setup mode            |
+| setup-disable   | Disable setup mode flag                                       |
+| setup-enable    | Enable setup mode flag                                        |
+| signal-start    | Signal successful startup                                     |
+| ssh-enable      | Enable SSH service                                            |
+| ssh-disable     | Disable SSH service                                           |
+| ssh-provision   | Provision SSH access                                          |
+| status          | Check current environment status                              |
+| update-apply    | Apply a pending update (extracts, installs, swaps binaries)   |
+| update-rollback | Rollback to the previous version                              |
+| version         | Print version information                                     |
+| wifi-access     | Provide the network access details for the setup mode network |
+| wifi-provision  | Provision network connection                                  |
+| wifi-scan       | Scan for available WiFi networks                              |
 
 ## Exit Codes
 
@@ -161,9 +161,39 @@ Check and report the current environment status including setup mode flag, netwo
 }
 ```
 
+**Status Fields:**
+
+| Field              | Type    | Description                                      |
+|--------------------|---------|--------------------------------------------------|
+| `available`        | bool    | Whether the platform command is available        |
+| `activeConn`       | string  | Name of the active network connection            |
+| `flagEnabled`      | bool    | Whether setup mode flag file exists              |
+| `runModePresent`   | bool    | Whether RunMode connection profile exists        |
+| `setupModePresent` | bool    | Whether SetupMode connection profile exists      |
+| `setupRequired`    | bool    | Whether initial setup is incomplete              |
+| `ready`            | bool    | Whether NetworkManager is ready                  |
+| `lcdPresent`       | bool    | Whether LCD display is detected                  |
+| `sshEnabled`       | bool    | Whether SSH service is enabled                   |
+
 **Exit Codes:**
 - `0` (Success): All setup complete
 - `31` (SetupRequired): Setup is incomplete
+
+---
+
+### Startup Signaling
+
+#### `signal-start`
+
+Signal that the application has started successfully. This resets the failed start counter to prevent unnecessary recovery actions when the service next starts.
+
+**Output:**
+```json
+{
+  "result": "success",
+  "action": "failed_start_counter_reset"
+}
+```
 
 ---
 
@@ -364,7 +394,7 @@ Display usage information for all commands.
 
 ## Update State File
 
-The update system uses a state file at `/opt/simtezilo/data/update/update-state.json`:
+The update system uses a state file at `<base_dir>/data/update/update-state.json` (default: `/opt/simtezilo/data/update/update-state.json`):
 
 ```json
 {
@@ -381,11 +411,32 @@ The update system uses a state file at `/opt/simtezilo/data/update/update-state.
 ```
 
 **Status Values:**
-- `pending`:     Update downloaded and ready to install
-- `installing`:  Installation in progress
-- `complete`:    Installation completed successfully
-- `failed`:      Installation failed
-- `rolled_back`: Previous version restored
+
+| Status       | Description                            |
+|--------------|----------------------------------------|
+| `pending`    | Update downloaded and ready to install |
+| `installing` | Installation in progress               |
+| `complete`   | Installation completed successfully    |
+| `failed`     | Installation failed                    |
+| `rolled_back`| Previous version restored              |
+
+---
+
+## Directory Structure
+
+The platform command uses the following directory structure under the base directory (configurable via `-b`, default `/opt/simtezilo`):
+
+```
+/opt/simtezilo/
+├── bin/
+│   └── simtezilo                # Main application binary
+├── data/
+│   └── update/
+│       ├── update-state.json    # Update state tracking
+│       ├── extract/             # Temporary extraction directory
+│       └── *.tar.gz             # Downloaded update archives
+└── failed-starts                # Failed start counter file
+```
 
 ---
 
@@ -419,3 +470,28 @@ All commands return JSON with an `error` field on failure:
 - SSH keys are validated before installation
 - Update archives are verified against SHA256 checksums when provided
 - The setup mode access point uses a device-specific SSID based on serial number
+- Default setup mode password is `5imtezil0`
+
+---
+
+## Implementation Notes
+
+The platform command is implemented in Go and uses:
+
+- **NetworkManager** via D-Bus for network configuration
+- **systemd** for service management (SSH, dnsmasq)
+- **JSON** for all structured input/output
+
+### Source Files
+
+| File           | Purpose                                |
+|----------------|----------------------------------------|
+| `main.go`      | Command dispatch and initialization    |
+| `archive.go`   | Archive extraction utilities           |
+| `filesystem.go`| File system operations                 |
+| `network.go`   | NetworkManager integration             |
+| `setupmode.go` | Setup mode flag management             |
+| `ssh.go`       | SSH service and key provisioning       |
+| `status.go`    | Status reporting and startup signaling |
+| `update.go`    | Update installation and rollback       |
+| `utils.go`     | Helper utilities and JSON output       |

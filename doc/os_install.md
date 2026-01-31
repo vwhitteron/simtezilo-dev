@@ -1,6 +1,5 @@
 # Operating System Install
 
-
 ## Log2Ram
 
 Install [Log2Ram](https://github.com/azlux/log2ram)
