@@ -108,6 +108,13 @@ cat dist/releases/stable/latest.json
 
 #### 4. Publish
 
+**Using rclone (Cloudflare R2):**
+```bash
+# Upload to Cloudflare R2 (requires R2_REMOTE env var)
+R2_REMOTE=r2:mybucket make release/publish
+```
+
+**Using scp:**
 ```bash
 # Single command to upload everything
 scp -r dist/releases/stable/ server:/var/www/updates/releases/
@@ -143,6 +150,11 @@ The release process uses these scripts in `build/scripts/`:
 | `DIST_DIR`    | `./dist/releases`                  | Output directory for archives   |
 | `MIN_VERSION` | (none)                             | Minimum version to upgrade from |
 | `CHANGELOG`   | (none)                             | Release notes text              |
+| `R2_REMOTE`   | (none)                             | rclone remote name for R2 bucket|
+
+### Changelog Generation
+
+The project uses **git-cliff** with conventional commits to generate changelogs. Configuration is in `cliff.toml`. See [Version Management](version_management.md) for commit format details and how commit types map to changelog sections.
 
 ### Makefile Targets
 
@@ -150,4 +162,5 @@ The release process uses these scripts in `build/scripts/`:
 make dist              # Create distribution archives
 make release/manifest  # Generate update manifest
 make release           # Both: dist + manifest
+make release/publish   # Upload to Cloudflare R2 (requires R2_REMOTE)
 ```

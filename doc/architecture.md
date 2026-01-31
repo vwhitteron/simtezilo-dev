@@ -6,6 +6,7 @@ graph TD
     - Signal handling
     - CLI flags
     - Profiler setup
+    - Crash logging
     - App initialization`"]
 
     %% Core App Module
@@ -14,21 +15,25 @@ graph TD
     - Main application state
     - Telemetry processing
     - Haptic event coordination
-    - Module orchestration`"]
+    - Module orchestration
+    - HTTP server management`"]
 
     %% Configuration
     Config["`**app/config/**
     Configuration Management
     - config.go: Main config
     - config_constants.go: Constants
-    - Viper-based config loading`"]
+    - config_default.go: Defaults
+    - config_validate.go: Validation
+    - config.schema.json: Schema`"]
 
     %% Hardware Layer
     Hardware["`**app/hardware/**
     Hardware Abstraction
     - hardware.go: Base interface
     - hardware_hid.go: HID events
-    - hardware_display.go: Display interface`"]
+    - hardware_display.go: Display interface
+    - hardware_rpi.go: RPi detection`"]
     
     HW_Console["`**hardware/console/**
     Console Hardware
@@ -42,11 +47,26 @@ graph TD
     
     HW_SpotPear["`**hardware/spotpear/**
     SpotPear Hardware
-    - spotpear_display.go`"]
+    - spotpear_display.go
+    - spotpear_hid.go`"]
     
     HW_Waveshare["`**hardware/waveshare/**
     Waveshare HAT
+    - waveshare_display.go
     - waveshare_hid.go`"]
+
+    HW_Virtual["`**hardware/virtual/**
+    Virtual Hardware
+    - virtual_display.go`"]
+
+    HW_Display["`**hardware/display/**
+    Display Drivers
+    - display.go: Interface
+    - st7789_lcd.go: ST7789 driver`"]
+
+    HW_WiFi["`**hardware/wifi/**
+    WiFi Management
+    - wifi.go: WiFi control`"]
 
     %% UI Layer
     UI["`**app/ui/**
@@ -58,37 +78,36 @@ graph TD
     
     GUI["`**ui/gui/**
     GUI Components
-    - Screen rendering
-    - Display primitives`"]
+    - gui.go: Screen rendering
+    - gui_constants.go: Display constants`"]
     
     WebUI["`**ui/webui/**
     Web Interface
     - webui.go: HTTP server
     - HTML templates
-    - SciChart integration
-    - WebSocket telemetry`"]
+    - WebSocket telemetry
+    - Static assets`"]
 
     %% Internationalization
     I18N["`**app/i18n/**
     Internationalization
     - i18n.go: Language manager
-    - i18n_language.go: Language support
-    - i18n_font.go: Font handling
-    - Language files (en/, ja/)`"]
+    - font/: Font handling
+    - languagedb/: Language data`"]
 
     %% Kinematics Engine
     Kinematics["`**app/kinematics/**
     Kinematics Processing
     - kinematics.go: Main tracker
-    - kinematics_helpers.go: Calculations
-    - Motion analysis & physics`"]
+    - kinematics_constants.go: Constants
+    - kinematics_helpers.go: Calculations`"]
     
     KIN_Translation["`**kinematics/translationalenvelope/**
     Translational Motion
     - Linear motion analysis
     - G-force calculations`"]
     
-    KIN_Rotation["`**kinematics/rotataionalenvelope/**
+    KIN_Rotation["`**kinematics/rotationalenvelope/**
     Rotational Motion
     - Angular motion analysis
     - Rotation derivatives`"]
@@ -99,25 +118,27 @@ graph TD
     - Mathematical utilities`"]
 
     %% Audio Synthesis
-    Synth["`**app/synth/**
+    Synth["`**app/synthesizer/**
     Audio Synthesis
     - synth.go: Main synthesizer
     - synth_mixer.go: Audio mixing
+    - synth_mixer_stereo.go: Stereo output
     - synth_buffer.go: Buffer management
+    - synth_buffer_adaptive.go: Adaptive buffering
+    - synth_buffer_linear.go: Linear buffer
+    - synth_buffer_ring.go: Ring buffer
     - synth_effects.go: Effects processing
-    - synth_output.go: Output handling
-    - synth_utils.go: Utilities`"]
+    - synth_output.go: Output handling`"]
 
     %% Signal Processing
     Signal["`**app/signal/**
     Signal Processing
-    - signal_functions.go: DSP functions
-    - Signal transformation
-    - Mathematical operations`"]
+    - signal.go: DSP functions
+    - Signal transformation`"]
 
     %% Telemetry Client
     TelemetryClient["`**GT Telemetry Client**
-    External Library
+    External Library (gt-telemetry)
     - Real-time telemetry data
     - Gran Turismo integration
     - UDP packet processing`"]
@@ -125,48 +146,141 @@ graph TD
     %% Profiler
     Profiler["`**app/profiler/**
     Performance Profiling
-    - profiler.go: Pyroscope integration
-    - Performance monitoring
-    - Runtime profiling`"]
+    - profiler.go: Pyroscope integration`"]
 
     %% Haptics
-    Haptics["`**app/app_haptics*.go**
+    Haptics["`**app/haptics/**
+    Haptics Engine
+    - engine_profiles.go: Engine profiles`"]
+
+    HapticsProcessing["`**app/app_haptics*.go**
     Haptics Processing
     - app_haptics.go: Main haptics
     - app_haptics_chassis.go: Chassis effects
     - app_haptics_engine.go: Engine effects
     - app_haptics_transmission.go: Transmission effects`"]
 
-    %% Utilities
-    Utils["`**app/utils/**
-    Utilities
-    - utils.go: Helper functions
-    - Common utilities`"]
+    %% Pit Radio
+    PitRadio["`**app/pitradio/**
+    Pit Radio System
+    - pitradio.go: Notification manager`"]
+
+    PitRadio_TTS["`**pitradio/tts/**
+    Text-to-Speech
+    - tts.go: TTS engine`"]
+
+    PitRadio_Discord["`**pitradio/discord/**
+    Discord Integration
+    - discord.go: Discord notifications`"]
 
     %% External Audio Library
     AudioLib["`**Beep Audio Library**
     External Dependency
     - Audio output
-    - Speaker management
-    - Audio streaming`"]
+    - Speaker management`"]
 
-    %% Build Info
-    BuildInfo["`**app/app_buildinfo.go**
-    Build Information
-    - Version management
-    - Build timestamps`"]
+    %% Codec Support
+    Codec["`**app/codec/**
+    Audio Codecs
+    - codec.go: Interface
+    - dca.go: DCA format
+    - mp3.go: MP3 format
+    - pcm_float64.go: PCM float
+    - pcm_int16.go: PCM int16`"]
 
     %% Application State
     AppState["`**Application State**
     - app_constants.go: Constants
     - app_settings.go: Settings
-    - app_telemetry.go: Telemetry handling
+    - app_state.go: State management
+    - app_telemetry.go: Telemetry
     - app_webtelemetry.go: Web telemetry`"]
 
-    %% Connections
+    %% Race Management
+    RaceMgmt["`**Race Management**
+    - app_race_lap.go: Lap tracking
+    - app_race_lap_helpers.go: Lap helpers
+    - app_race_position.go: Position tracking
+    - app_fuel_management.go: Fuel strategy
+    - app_tyre_management.go: Tyre wear`"]
+
+    %% Circuit Management
+    Circuit["`**app/circuit/**
+    Circuit Manager
+    - circuit.go: Circuit interface
+    - matcher.go: Circuit matching`"]
+
+    %% Vehicle Management
+    Vehicle["`**app/vehicle/**
+    Vehicle Info
+    - vehicle.go: Vehicle characteristics`"]
+
+    %% Tyre Management
+    Tyres["`**app/tyres/**
+    Tyre Monitoring
+    - tyres.go: Tyre state tracking`"]
+
+    %% Fuel Range
+    FuelRange["`**app/fuelrange/**
+    Fuel Estimator
+    - fuelrange.go: Range calculation`"]
+
+    %% Calibrator
+    Calibrator["`**app/calibrator/**
+    Audio Calibration
+    - callibrator.go: Calibration manager
+    - tone_generator.go: Test tones`"]
+
+    %% Updater
+    Updater["`**app/updater/**
+    Self-Update System
+    - updater.go: Update manager
+    - checker.go: Version check
+    - downloader.go: Download handler
+    - installer.go: Install handler
+    - manifest.go: Update manifest
+    - version.go: Version parsing`"]
+
+    %% Setup Mode
+    SetupMode["`**app/setupmode/**
+    Setup Mode
+    - setupmode.go: Initial setup
+    - html/: Setup UI templates`"]
+
+    %% Support Services
+    Cache["`**app/cache/**
+    Cache Manager
+    - cache.go: Caching layer`"]
+
+    CrashLog["`**app/crashlog/**
+    Crash Logging
+    - crashlog.go: Panic capture`"]
+
+    LogStore["`**app/logstore/**
+    Log Storage
+    - logstore.go: In-memory logs
+    - logger.go: Log interface`"]
+
+    Odometer["`**app/odometer/**
+    Distance Tracking
+    - odometer.go: Odometer`"]
+
+    Platform["`**app/platform/**
+    Platform Detection
+    - platform.go: OS/arch detection`"]
+
+    ExitCode["`**app/exitcode/**
+    Exit Codes
+    - exitcode.go: Exit code definitions`"]
+
+    %% Connections - Main
     Main --> App
     Main --> Profiler
+    Main --> CrashLog
+    Main --> LogStore
+    Main --> ExitCode
     
+    %% Connections - Core App
     App --> Config
     App --> Hardware
     App --> UI
@@ -174,39 +288,64 @@ graph TD
     App --> Kinematics
     App --> Synth
     App --> TelemetryClient
-    App --> Haptics
+    App --> HapticsProcessing
     App --> AppState
-    App --> BuildInfo
+    App --> RaceMgmt
+    App --> PitRadio
+    App --> Circuit
+    App --> Vehicle
+    App --> Tyres
+    App --> FuelRange
+    App --> Calibrator
+    App --> Updater
+    App --> SetupMode
+    App --> Cache
+    App --> CrashLog
+    App --> LogStore
+    App --> Odometer
+    App --> Platform
     
+    %% Connections - Hardware
     Hardware --> HW_Console
     Hardware --> HW_PirateAudio
     Hardware --> HW_SpotPear
     Hardware --> HW_Waveshare
+    Hardware --> HW_Virtual
+    Hardware --> HW_Display
+    Hardware --> HW_WiFi
     
+    %% Connections - UI
     UI --> GUI
     UI --> WebUI
     UI --> Hardware
     UI --> I18N
     
+    %% Connections - Kinematics
     Kinematics --> KIN_Translation
     Kinematics --> KIN_Rotation
     Kinematics --> KIN_Vector
     Kinematics --> Signal
-    Kinematics --> TelemetryClient
     
+    %% Connections - Synthesizer
     Synth --> Signal
-    Synth --> Kinematics
     Synth --> Config
     Synth --> AudioLib
+    Synth --> Codec
     
-    Haptics --> Kinematics
-    Haptics --> Synth
-    Haptics --> Config
-    Haptics --> Signal
+    %% Connections - Haptics
+    HapticsProcessing --> Kinematics
+    HapticsProcessing --> Synth
+    HapticsProcessing --> Haptics
+    HapticsProcessing --> Config
+    HapticsProcessing --> Signal
     
+    %% Connections - Pit Radio
+    PitRadio --> PitRadio_TTS
+    PitRadio --> PitRadio_Discord
+    PitRadio --> Codec
+    
+    %% Connections - Web UI
     WebUI --> TelemetryClient
-    
-    App --> Utils
 
     %% Styling
     classDef entryPoint fill:#ff6b6b,stroke:#d63031,stroke-width:3px,color:#fff
@@ -216,12 +355,14 @@ graph TD
     classDef processingModule fill:#fd79a8,stroke:#e84393,stroke-width:2px,color:#fff
     classDef externalLib fill:#636e72,stroke:#2d3436,stroke-width:2px,color:#fff
     classDef utilityModule fill:#00b894,stroke:#00a085,stroke-width:2px,color:#fff
+    classDef raceModule fill:#74b9ff,stroke:#0984e3,stroke-width:2px,color:#fff
 
     class Main entryPoint
-    class App,Config,AppState,BuildInfo coreModule
-    class Hardware,HW_Console,HW_PirateAudio,HW_SpotPear,HW_Waveshare hardwareModule
+    class App,Config,AppState coreModule
+    class Hardware,HW_Console,HW_PirateAudio,HW_SpotPear,HW_Waveshare,HW_Virtual,HW_Display,HW_WiFi hardwareModule
     class UI,GUI,WebUI,I18N uiModule
-    class Kinematics,KIN_Translation,KIN_Rotation,KIN_Vector,Synth,Signal,Haptics processingModule
+    class Kinematics,KIN_Translation,KIN_Rotation,KIN_Vector,Synth,Signal,Haptics,HapticsProcessing,Calibrator,Codec processingModule
     class TelemetryClient,AudioLib,Profiler externalLib
-    class Utils utilityModule
+    class Cache,CrashLog,LogStore,Odometer,Platform,ExitCode,Updater,SetupMode utilityModule
+    class RaceMgmt,Circuit,Vehicle,Tyres,FuelRange,PitRadio,PitRadio_TTS,PitRadio_Discord raceModule
 ```

@@ -57,6 +57,22 @@ The automatic version detection follows the [Conventional Commits](https://www.c
 | `perf:`                        |  **Patch**   | `perf: optimize database queries` |
 | `feat!:` or `BREAKING CHANGE:` |  **Major**   | `feat!: redesign API`             |
 
+### Changelog Mapping
+
+Commit types are mapped to changelog sections by **git-cliff** (configured in `cliff.toml`):
+
+| Commit Type                  | Changelog Section |
+|------------------------------|-------------------|
+| `feat:`                      | Added             |
+| `fix:`                       | Fixed             |
+| `doc:`                       | Documentation     |
+| `perf:`                      | Performance       |
+| `refactor:`                  | Changed           |
+| `style:`                     | Changed           |
+| `chore:`                     | Changed           |
+| `revert:`                    | Removed           |
+| `test:`, `ci:`, `build:`     | Skipped           |
+
 ### Examples
 
 **Patch bump (bug fixes):**
