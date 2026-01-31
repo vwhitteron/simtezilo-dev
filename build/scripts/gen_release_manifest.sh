@@ -34,6 +34,50 @@ DIST_DIR="${DIST_DIR:-./dist/releases}"
 MIN_VERSION="${MIN_VERSION:-}"
 CHANGELOG="${CHANGELOG:-}"
 
+# Generate changelog from git commits using git-cliff (Keep a Changelog format)
+generate_changelog() {
+    # Check if git-cliff is available
+    if ! command -v git-cliff &> /dev/null; then
+        echo "Warning: git-cliff not found, changelog will be empty" >&2
+        return
+    fi
+    
+    # Get the previous tag for the range
+    local current_tag
+    current_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+    local previous_tag
+    previous_tag=$(git describe --tags --abbrev=0 "${current_tag}^" 2>/dev/null || echo "")
+    
+    local range_arg=""
+    if [ -n "$previous_tag" ] && [ -n "$current_tag" ]; then
+        range_arg="${previous_tag}..${current_tag}"
+    elif [ -n "$current_tag" ]; then
+        range_arg="${current_tag}"
+    fi
+    
+    # Generate changelog using git-cliff, strip the header, and output just the release content
+    # Use --strip header to remove the changelog header, keeping just the version section
+    if [ -n "$range_arg" ]; then
+        git-cliff --config "${SCRIPT_DIR}/../../cliff.toml" --strip header "$range_arg" 2>/dev/null | \
+            sed '1{/^$/d;}' | \
+            sed '1{/^## /d;}' | \
+            awk 'NF {p=1} p'
+    else
+        git-cliff --config "${SCRIPT_DIR}/../../cliff.toml" --strip header --unreleased 2>/dev/null | \
+            sed '1{/^$/d;}' | \
+            sed '1{/^## /d;}' | \
+            awk 'NF {p=1} p'
+    fi
+}
+
+# Auto-generate changelog if not provided via environment variable
+if [ -z "$CHANGELOG" ]; then
+    CHANGELOG=$(generate_changelog)
+    if [ -n "$CHANGELOG" ]; then
+        echo "Generated changelog from git commits (via git-cliff)"
+    fi
+fi
+
 # Archive directory for this release
 ARCHIVE_DIR="${DIST_DIR}/${VERSION_CHANNEL}/${VERSION_TAG}"
 OUTPUT="${ARCHIVE_DIR}/manifest.json"
@@ -139,13 +183,19 @@ if [[ -n "$MIN_VERSION" ]]; then
   \"minUpgradeVersion\": \"${MIN_VERSION}\","
 fi
 
-# Build changelog field
+# Build changelog field as JSON array of lines
 CHANGELOG_JSON=""
 if [[ -n "$CHANGELOG" ]]; then
-    # Escape newlines and quotes for JSON
-    CHANGELOG_ESCAPED=$(echo "$CHANGELOG" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n/g')
+    # Convert changelog to JSON array of strings (one per line)
+    CHANGELOG_ARRAY=$(printf '%s\n' "$CHANGELOG" | \
+        sed 's/\\/\\\\/g' | \
+        sed 's/"/\\"/g' | \
+        awk 'BEGIN { printf "[" } 
+             NR==1 { printf "\n    \"%s\"", $0; next }
+             { printf ",\n    \"%s\"", $0 }
+             END { print "\n  ]" }')
     CHANGELOG_JSON="
-  \"changelog\": \"${CHANGELOG_ESCAPED}\","
+  \"changelog\": ${CHANGELOG_ARRAY},"
 fi
 
 # Generate manifest in the archive directory
