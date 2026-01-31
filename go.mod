@@ -20,6 +20,7 @@ require (
 	github.com/zetetos/gt-telemetry v1.11.1-0.20260129113145-4891239895b5
 	golang.org/x/crypto v0.45.0
 	golang.org/x/image v0.34.0
+	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	layeh.com/gopus v0.0.0-20210501142526-1ee02d434e32
 	periph.io/x/conn/v3 v3.7.2
 	periph.io/x/host/v3 v3.8.5
@@ -54,7 +55,6 @@ require (
 	golang.org/x/net v0.47.0 // indirect
 	golang.org/x/sys v0.38.0 // indirect
 	golang.org/x/text v0.32.0 // indirect
-	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
