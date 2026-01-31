@@ -157,6 +157,7 @@ type update struct {
 }
 
 type viperConfig struct {
+	Schema        string       `json:"$schema,omitempty"`
 	SchemaVersion string       `json:"schemaVersion"`
 	App           *app         `json:"app,omitempty"`
 	Hardware      *hardware    `json:"hardware,omitempty"`

@@ -356,7 +356,7 @@ func TestValidateJSONSchema_EQBandFrequencyRange(t *testing.T) {
 					{"frequency": 50, "gain": 0, "q": 1},
 					{"frequency": 60, "gain": 0, "q": 1},
 					{"frequency": 65, "gain": 0, "q": 1},
-					{"frequency": 70, "gain": 0, "q": 1}
+					{"frequency": 200, "gain": 0, "q": 1}
 				],
 				[
 					{"frequency": 20, "gain": 0, "q": 1},
@@ -643,7 +643,7 @@ func TestConfig_Validate_Integration(t *testing.T) {
 func TestValidateJSONSchema_ValidHardwareModels(t *testing.T) {
 	t.Parallel()
 
-	validModels := []string{"console", "pirateaudio", "spotpear", "waveshare"}
+	validModels := []string{"none", "console", "pirateaudio", "spotpear", "waveshare"}
 
 	for _, model := range validModels {
 		t.Run(model, func(t *testing.T) {

@@ -6,6 +6,7 @@ import appHaptics "github.com/vwhitteron/simtezilo-dev/app/haptics"
 
 func defaultConfig() *viperConfig {
 	return &viperConfig{
+		Schema:        "https://simtezilo.com/schemas/config/v1.0.0/config.schema.json",
 		SchemaVersion: "1.0.0",
 		App: &app{
 			Language:      "en",
@@ -137,24 +138,24 @@ func defaultConfig() *viperConfig {
 			EnableEq:                  []bool{false, false},
 			EqBands: [][]EQBand{
 				{ // Channel 0 (Left)
-					{Frequency: 12, Gain: 0.0, Q: 2.0},
-					{Frequency: 16, Gain: 0.0, Q: 2.0},
-					{Frequency: 20, Gain: 0.0, Q: 2.0},
-					{Frequency: 25, Gain: 0.0, Q: 2.0},
+					{Frequency: 8, Gain: 0.0, Q: 2.0},
+					{Frequency: 10, Gain: 0.0, Q: 2.0},
+					{Frequency: 13, Gain: 0.0, Q: 2.0},
+					{Frequency: 17, Gain: 0.0, Q: 2.0},
+					{Frequency: 22, Gain: 0.0, Q: 2.0},
 					{Frequency: 30, Gain: 0.0, Q: 2.0},
-					{Frequency: 38, Gain: 0.0, Q: 2.0},
-					{Frequency: 48, Gain: 0.0, Q: 2.0},
-					{Frequency: 58, Gain: 0.0, Q: 2.0},
+					{Frequency: 40, Gain: 0.0, Q: 2.0},
+					{Frequency: 50, Gain: 0.0, Q: 2.0},
 				},
 				{ // Channel 1 (Right)
-					{Frequency: 12, Gain: 0.0, Q: 2.0},
-					{Frequency: 16, Gain: 0.0, Q: 2.0},
-					{Frequency: 20, Gain: 0.0, Q: 2.0},
-					{Frequency: 25, Gain: 0.0, Q: 2.0},
+					{Frequency: 8, Gain: 0.0, Q: 2.0},
+					{Frequency: 10, Gain: 0.0, Q: 2.0},
+					{Frequency: 13, Gain: 0.0, Q: 2.0},
+					{Frequency: 17, Gain: 0.0, Q: 2.0},
+					{Frequency: 22, Gain: 0.0, Q: 2.0},
 					{Frequency: 30, Gain: 0.0, Q: 2.0},
-					{Frequency: 38, Gain: 0.0, Q: 2.0},
-					{Frequency: 48, Gain: 0.0, Q: 2.0},
-					{Frequency: 58, Gain: 0.0, Q: 2.0},
+					{Frequency: 40, Gain: 0.0, Q: 2.0},
+					{Frequency: 50, Gain: 0.0, Q: 2.0},
 				},
 			},
 		},

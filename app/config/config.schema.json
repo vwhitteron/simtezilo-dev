@@ -83,6 +83,7 @@
                 "model": {
                     "type": "string",
                     "enum": [
+                        "none",
                         "console",
                         "pirateaudio",
                         "spotpear",
@@ -556,8 +557,8 @@
                 "frequency": {
                     "type": "number",
                     "description": "Center frequency in Hz",
-                    "minimum": 10.0,
-                    "maximum": 70.0
+                    "minimum": 5.0,
+                    "maximum": 160.0
                 },
                 "gain": {
                     "type": "number",
