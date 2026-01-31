@@ -74,16 +74,24 @@ lint:
 lint/fix:
 	@golangci-lint run --fix
 
-## dist: create a distribution archive
+## dist: create distribution archives in dist/releases/<channel>/v<version>/
 .PHONY: dist
 dist: build/rpi/v8/64 build/windows/64 build/darwin/silicon
+	@chmod +x ./build/scripts/gen_dist.sh
 	@./build/scripts/gen_dist.sh
 
-## release/manifest: generate a release manifest JSON for the update system
+## release/manifest: generate release manifest JSON (run after dist)
 .PHONY: release/manifest
 release/manifest:
 	@chmod +x ./build/scripts/gen_release_manifest.sh
-	@./build/scripts/gen_release_manifest.sh "$(buildversion)" "stable" "out/releases/latest.json"
+	@./build/scripts/gen_release_manifest.sh
+
+## release: build all platforms, create archives, and generate manifest
+.PHONY: release
+release: dist release/manifest
+	@echo ""
+	@echo "Release ready at: dist/releases/stable/"
+	@echo "To publish: scp -r dist/releases/stable/ <server>:/var/www/updates/releases/"
 
 ## version/validate: validate VERSION file format
 .PHONY: version/validate
