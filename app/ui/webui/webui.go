@@ -26,6 +26,7 @@ import (
 	appconfig "github.com/vwhitteron/simtezilo-dev/app/config"
 	"github.com/vwhitteron/simtezilo-dev/app/exitcode"
 	"github.com/vwhitteron/simtezilo-dev/app/haptics"
+	"github.com/vwhitteron/simtezilo-dev/app/hardware"
 	"github.com/vwhitteron/simtezilo-dev/app/logstore"
 	"github.com/vwhitteron/simtezilo-dev/app/platform"
 	"github.com/vwhitteron/simtezilo-dev/app/setupmode"
@@ -2691,8 +2692,7 @@ func (w *WebUI) handleSystemInfo(response http.ResponseWriter, request *http.Req
 		return
 	}
 
-	// platform := hardware.Platform().String()
-	platform := "rpi"
+	platform := hardware.Platform().String()
 
 	setupModeAvailable := false
 	sshEnabled := false
