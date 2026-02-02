@@ -212,6 +212,13 @@
         "setupmode.result.returning": "実行モードに戻っています。",
         "setupmode.result.networkerror": "ネットワークエラー：{error}",
 
+        "setupmode.status.savinglanguage": "言語を保存中...",
+        "setupmode.status.savingwifi": "WiFi保存中...",
+        "setupmode.status.switchingmode": "モード切替中...",
+        "setupmode.status.finalizing": "最終処理中...",
+        "setupmode.status.restarting": "再起動中",
+        "setupmode.status.failed": "失敗",
+
         "runmode.nav.telemetry": "テレメトリー",
         "runmode.nav.race": "レース",
         "runmode.nav.developer": "開発者",

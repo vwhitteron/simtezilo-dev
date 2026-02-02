@@ -212,6 +212,13 @@
         "setupmode.result.returning": "Returning to Run Mode.",
         "setupmode.result.networkerror": "Network error: {error}",
 
+        "setupmode.status.savinglanguage": "Saving language",
+        "setupmode.status.savingwifi": "Saving WiFi",
+        "setupmode.status.switchingmode": "Switching mode",
+        "setupmode.status.finalizing": "Finalizing",
+        "setupmode.status.restarting": "Restarting",
+        "setupmode.status.failed": "Failed",
+
         "runmode.nav.telemetry": "Telemetry",
         "runmode.nav.race": "Race",
         "runmode.nav.developer": "Developer",

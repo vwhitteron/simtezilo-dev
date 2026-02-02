@@ -201,6 +201,13 @@ const (
 	SetupmodeResultReturning    Key = "setupmode.result.returning"
 	SetupmodeResultNetworkerror Key = "setupmode.result.networkerror"
 
+	SetupmodeStatusSavinglanguage Key = "setupmode.status.savinglanguage"
+	SetupmodeStatusSavingwifi     Key = "setupmode.status.savingwifi"
+	SetupmodeStatusSwitchingmode  Key = "setupmode.status.switchingmode"
+	SetupmodeStatusFinalizing     Key = "setupmode.status.finalizing"
+	SetupmodeStatusRestarting     Key = "setupmode.status.restarting"
+	SetupmodeStatusFailed         Key = "setupmode.status.failed"
+
 	RunmodeNavTelemetry Key = "runmode.nav.telemetry"
 	RunmodeNavRace      Key = "runmode.nav.race"
 	RunmodeNavDeveloper Key = "runmode.nav.developer"

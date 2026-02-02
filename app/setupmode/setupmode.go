@@ -21,6 +21,7 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/exitcode"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/display"
 	"github.com/vwhitteron/simtezilo-dev/app/i18n"
+	"github.com/vwhitteron/simtezilo-dev/app/i18n/languagedb"
 	"github.com/vwhitteron/simtezilo-dev/app/platform"
 	"github.com/vwhitteron/simtezilo-dev/app/ui/gui"
 	"github.com/vwhitteron/simtezilo-dev/app/ui/sprites"
@@ -35,6 +36,8 @@ type SetupMode struct {
 	done      chan<- exitcode.Code
 	shutdown  chan struct{}
 	lcd       *display.ST7789LCD
+	screen    *gui.Screen
+	i18n      *i18n.I18n
 }
 
 type Options struct {
@@ -48,14 +51,39 @@ func New(opts Options) *SetupMode {
 	// Create a local channel to signal when we should exit
 	shutdown := make(chan struct{})
 
+	logger := opts.Logger.With().Str("component", "setupmode").Logger()
+
 	newSetupMode := &SetupMode{
-		log:       opts.Logger.With().Str("component", "setupmode").Logger(),
+		log:       logger,
 		config:    opts.Config,
 		command:   filepath.Join(opts.Config.GetAppBaseDir(), "bin", "platform"),
 		available: false,
 		done:      opts.ExitCodeChan,
 		shutdown:  shutdown,
 		lcd:       opts.Display,
+	}
+
+	// Initialize i18n for localized messages
+	lang := opts.Config.GetAppLanguage()
+
+	i18nInstance, err := i18n.New(lang, logger)
+	if err != nil {
+		logger.Warn().Err(err).Msg("Failed to initialize i18n, using defaults")
+	} else {
+		newSetupMode.i18n = i18nInstance
+	}
+
+	// Initialize GUI screen for LCD rendering if display is available
+	if opts.Display != nil && newSetupMode.i18n != nil {
+		screen, err := gui.NewScreen(&gui.Config{
+			DisplayDevice: opts.Display,
+			I18n:          newSetupMode.i18n,
+		})
+		if err != nil {
+			logger.Warn().Err(err).Msg("Failed to initialize GUI screen")
+		} else {
+			newSetupMode.screen = screen
+		}
 	}
 
 	// check if command exists and is executable
@@ -364,6 +392,12 @@ func (s *SetupMode) handleAPISetupStatus(writer http.ResponseWriter, request *ht
 	}
 }
 
+// writeJSONError writes a JSON error response to the writer.
+func writeJSONError(writer http.ResponseWriter, message string, err error) {
+	writer.Header().Set("Content-Type", "application/json")
+	fmt.Fprintf(writer, `{"success":false,"error":"%s: %v"}`, message, err)
+}
+
 func (s *SetupMode) handleAPIConfigSave(writer http.ResponseWriter, request *http.Request) {
 	if request.Method != http.MethodPost {
 		http.Error(writer, "Method not allowed", http.StatusMethodNotAllowed)
@@ -371,12 +405,49 @@ func (s *SetupMode) handleAPIConfigSave(writer http.ResponseWriter, request *htt
 		return
 	}
 
-	ctx := request.Context()
-
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	ctx, cancel := context.WithTimeout(request.Context(), 10*time.Second)
 	defer cancel()
 
-	// Save language and accent to config if provided
+	err := s.applyLanguageSettings(request)
+	if err != nil {
+		s.showFailureMessage()
+		writeJSONError(writer, "Failed to save language settings", err)
+
+		return
+	}
+
+	err = s.applyNetworkSettings(ctx, request)
+	if err != nil {
+		s.showFailureMessage()
+		writeJSONError(writer, "Failed to save configuration", err)
+
+		return
+	}
+
+	err = s.transitionToRunMode(ctx)
+	if err != nil {
+		s.showFailureMessage()
+		writeJSONError(writer, "Failed to transition to run mode", err)
+
+		return
+	}
+
+	s.showSplashMessage(languagedb.SetupmodeStatusRestarting)
+
+	writer.Header().Set("Content-Type", "application/json")
+	fmt.Fprint(writer, `{"success":true,"message":"Configuration saved successfully"}`)
+
+	if flusher, ok := writer.(http.Flusher); ok {
+		flusher.Flush()
+	}
+
+	s.log.Info().Int("exitCode", int(exitcode.Success)).Msg("Network configuration completed successfully, sending exit code")
+
+	close(s.shutdown)
+}
+
+// applyLanguageSettings saves language and accent settings if provided.
+func (s *SetupMode) applyLanguageSettings(request *http.Request) error {
 	language := request.FormValue("language")
 	accent := request.FormValue("accent")
 
@@ -390,19 +461,27 @@ func (s *SetupMode) handleAPIConfigSave(writer http.ResponseWriter, request *htt
 		s.log.Info().Str("accent", accent).Msg("Accent set")
 	}
 
-	// Save config to file to persist language and accent changes
-	if language != "" || accent != "" {
-		err := s.config.SaveConfigToFile()
-		if err != nil {
-			s.log.Error().Err(err).Msg("Failed to save config file")
-			writer.Header().Set("Content-Type", "application/json")
-			fmt.Fprintf(writer, `{"success":false,"error":"Failed to save language settings: %v"}`, err)
-
-			return
-		}
-
-		s.log.Info().Msg("Language and accent saved to config file")
+	if language == "" && accent == "" {
+		return nil
 	}
+
+	s.showSplashMessage(languagedb.SetupmodeStatusSavinglanguage)
+
+	err := s.config.SaveConfigToFile()
+	if err != nil {
+		s.log.Error().Err(err).Msg("Failed to save config file")
+
+		return err
+	}
+
+	s.log.Info().Msg("Language and accent saved to config file")
+
+	return nil
+}
+
+// applyNetworkSettings saves the network configuration.
+func (s *SetupMode) applyNetworkSettings(ctx context.Context, request *http.Request) error {
+	s.showSplashMessage(languagedb.SetupmodeStatusSavingwifi)
 
 	err := s.saveNetworkConfiguration(
 		ctx,
@@ -416,49 +495,37 @@ func (s *SetupMode) handleAPIConfigSave(writer http.ResponseWriter, request *htt
 		request.FormValue("dns"),
 	)
 	if err != nil {
-		writer.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(writer, `{"success":false,"error":"Failed to save configuration: %v"}`, err)
-
 		s.log.Error().Err(err).Msg("Save configuration failed")
 
-		return
+		return err
 	}
 
 	s.log.Info().Msg("Configuration saved successfully, switching to run mode")
 
-	_, err = s.PlatformAction(ctx, platform.ModeRun, nil)
-	if err != nil {
-		writer.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(writer, `{"success":false,"error":"Failed to enter run mode: %v"}`, err)
+	return nil
+}
 
+// transitionToRunMode switches from setup mode to run mode.
+func (s *SetupMode) transitionToRunMode(ctx context.Context) error {
+	s.showSplashMessage(languagedb.SetupmodeStatusSwitchingmode)
+
+	_, err := s.PlatformAction(ctx, platform.ModeRun, nil)
+	if err != nil {
 		s.log.Error().Err(err).Msg("Failed to enter run mode")
 
-		return
+		return err
 	}
+
+	s.showSplashMessage(languagedb.SetupmodeStatusFinalizing)
 
 	_, err = s.PlatformAction(ctx, platform.SetupDisable, nil)
 	if err != nil {
-		writer.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(writer, `{"success":false,"error":"Failed to disable setup mode: %v"}`, err)
-
 		s.log.Error().Err(err).Msg("Failed to disable setup mode flag")
 
-		return
+		return err
 	}
 
-	writer.Header().Set("Content-Type", "application/json")
-	fmt.Fprint(writer, `{"success":true,"message":"Configuration saved successfully"}`)
-
-	// Explicitly flush the response to ensure it reaches the client
-	if flusher, ok := writer.(http.Flusher); ok {
-		flusher.Flush()
-	}
-
-	s.log.Info().Int("exitCode", int(exitcode.Success)).Msg("Network configuration completed successfully, sending exit code")
-
-	// Do not send to exit code channel for normal config save; handled by return flow
-
-	close(s.shutdown)
+	return nil
 }
 
 func (s *SetupMode) handleModeRun(writer http.ResponseWriter, request *http.Request) {
@@ -678,5 +745,27 @@ func (s *SetupMode) showErrorSprite() {
 	s.lcd.Wakeup()
 
 	// Give time for the user to see the error sprite
+	time.Sleep(3 * time.Second)
+}
+
+// showSplashMessage displays the splash screen with a localized status message at the bottom.
+func (s *SetupMode) showSplashMessage(key languagedb.Key) {
+	if s.screen == nil {
+		s.log.Warn().Msg("Screen not initialized, cannot display splash message")
+
+		return
+	}
+
+	message := s.i18n.GetString(key)
+
+	err := s.screen.RenderSplashScreen(message)
+	if err != nil {
+		s.log.Error().Err(err).Msg("Failed to render splash screen")
+	}
+}
+
+// showFailureMessage displays the splash screen with "Failed" message and waits 3 seconds.
+func (s *SetupMode) showFailureMessage() {
+	s.showSplashMessage(languagedb.SetupmodeStatusFailed)
 	time.Sleep(3 * time.Second)
 }
