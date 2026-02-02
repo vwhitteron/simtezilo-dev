@@ -463,7 +463,7 @@
         "runmode.settings.system.advanced.title": "Advanced",
         "runmode.settings.system.sshaccess.title": "SSH Access",
         "runmode.settings.system.sshaccess.enabled": "Enable",
-        "runmode.settings.system.sshaccess.enabled.tooltip": "Enable or disable SSH access to the device. When enabled, you can connect to the device via SSH using the provisioned key.",
+        "runmode.settings.system.sshaccess.enabled.tooltip": "Enable or disable SSH access to the device. When enabled, you can connect to the device via SSH as the admin user using the provisioned key. Make sure to reset the admin user password.",
         "runmode.settings.system.sshaccess.publickey": "Public Key",
         "runmode.settings.system.sshaccess.publickey.tooltip": "An SSH public key is required to be able to login to the device over.",
         "runmode.settings.system.sshaccess.provision": "Install SSH Key",

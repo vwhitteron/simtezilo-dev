@@ -462,7 +462,7 @@
         "runmode.settings.system.advanced.title": "詳細設定",
         "runmode.settings.system.sshaccess.title": "SSHアクセス",
         "runmode.settings.system.sshaccess.enabled": "有効化",
-        "runmode.settings.system.sshaccess.enabled.tooltip": "デバイスへのSSHアクセスを有効または無効にします。有効にすると、プロビジョニングされたキーを使用してデバイスにSSH経由で接続できます。",
+        "runmode.settings.system.sshaccess.enabled.tooltip": "デバイスへのSSHアクセスを有効または無効にします。有効にすると、プロビジョニングされたキーを使用して、adminユーザーとしてSSH経由でデバイスに接続できます。adminユーザーのパスワードを必ずリセットしてください。",
         "runmode.settings.system.sshaccess.publickey": "公開鍵",
         "runmode.settings.system.sshaccess.publickey.tooltip": "デバイスにログインするには、SSH公開鍵が必要です。",
         "runmode.settings.system.sshaccess.provision": "SSHキーをインストール",
