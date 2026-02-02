@@ -32,7 +32,7 @@ func (p *manager) disableSSH() exitcode.Code {
 // controlSSH executes a sequence of systemctl actions on the SSH service.
 func (p *manager) controlSSH(actions []systemctlCmd) exitcode.Code {
 	for _, action := range actions {
-		_, err := p.controlSystemd("ssh.service", sysctlStart)
+		_, err := p.controlSystemd("ssh.service", action)
 		if err != nil {
 			p.log.Debug().Err(err).Msgf("failed to %s sshd service", action)
 
