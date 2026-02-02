@@ -328,32 +328,25 @@ func (a *App) runSetupMode() RunResult {
 
 	a.activeHTTPHandler = a.setupMode.GetHTTPHandler()
 
+	// Run() blocks until setup completes or is cancelled (via shutdown channel)
 	a.setupMode.Run()
 
-	// Block waiting for either shutdown signal or setup completion
-	ticker := time.NewTicker(500 * time.Millisecond)
-	defer ticker.Stop()
+	// Check if we received an exit code while setup was running
+	select {
+	case exitCode := <-a.exitCodeChan:
+		if exitCode == exitcode.Success || exitCode == exitcode.SetupMode {
+			a.log.Info().Msg("Setup mode signaled switch to run mode")
 
-	for {
-		select {
-		case exitCode := <-a.exitCodeChan:
-			if exitCode == exitcode.Success || exitCode == exitcode.SetupMode {
-				a.log.Info().Msg("Setup mode signaled switch to run mode")
-
-				return RunResultSwitchMode
-			}
-
-			// Shutdown requested
-			return RunResultExit
-		case <-ticker.C:
-			// Check if setup has completed
-			status := a.setupMode.Status(context.Background())
-			if status.Available && !status.FlagEnabled {
-				a.log.Info().Msg("Setup mode completed, switching to run mode")
-
-				return RunResultSwitchMode
-			}
+			return RunResultSwitchMode
 		}
+
+		// Shutdown requested
+		return RunResultExit
+	default:
+		// No exit code - setup completed normally
+		a.log.Info().Msg("Setup mode completed, switching to run mode")
+
+		return RunResultSwitchMode
 	}
 }
 

@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -29,15 +30,16 @@ import (
 )
 
 type SetupMode struct {
-	log       zerolog.Logger
-	config    *config.Config
-	command   string
-	available bool
-	done      chan<- exitcode.Code
-	shutdown  chan struct{}
-	lcd       *display.ST7789LCD
-	screen    *gui.Screen
-	i18n      *i18n.I18n
+	log        zerolog.Logger
+	config     *config.Config
+	command    string
+	available  bool
+	done       chan<- exitcode.Code
+	shutdown   chan struct{}
+	lcd        *display.ST7789LCD
+	screen     *gui.Screen
+	i18n       *i18n.I18n
+	platformMu sync.Mutex
 }
 
 type Options struct {
@@ -232,7 +234,11 @@ func (s *SetupMode) Status(ctx context.Context) (status platform.CmdStatus) {
 
 // PlatformAction executes a platform management command with optional input and unmarshals the response.
 // This is a convenience wrapper around platform.RunCommand for SetupMode.
+// Serializes calls to prevent concurrent execution of the platform binary.
 func (s *SetupMode) PlatformAction(ctx context.Context, action platform.Command, stdin []byte) (*platform.CmdResponse, error) {
+	s.platformMu.Lock()
+	defer s.platformMu.Unlock()
+
 	return platform.RunCommand(ctx, s.command, s.log, action, stdin)
 }
 
