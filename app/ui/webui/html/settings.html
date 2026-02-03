@@ -3248,6 +3248,11 @@
                     const response = await fetch('/api/updates/install', { method: 'POST' });
                     if (!response.ok) throw new Error('Failed to install update');
 
+                    // Show restart overlay (same as regular restart)
+                    if (window.configManager && typeof window.configManager.showRestartOverlay === 'function') {
+                        window.configManager.showRestartOverlay();
+                    }
+
                     // Poll for service to come back up
                     setTimeout(() => this.pollServiceRestart(), 5000);
                 } catch (error) {
@@ -3393,6 +3398,11 @@
                 try {
                     const response = await fetch('/api/updates/rollback', { method: 'POST' });
                     if (!response.ok) throw new Error('Failed to rollback');
+
+                    // Show restart overlay (same as regular restart)
+                    if (window.configManager && typeof window.configManager.showRestartOverlay === 'function') {
+                        window.configManager.showRestartOverlay();
+                    }
 
                     setTimeout(() => this.pollServiceRestart(), 5000);
                 } catch (error) {

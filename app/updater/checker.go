@@ -67,12 +67,13 @@ type Checker struct {
 
 	currentVersion *Version
 
-	mu             sync.RWMutex
-	status         UpdateStatus
-	lastCheck      time.Time
-	lastError      error
-	availableInfo  *UpdateInfo
-	cachedManifest *Manifest
+	mu               sync.RWMutex
+	status           UpdateStatus
+	downloadProgress float64 // Download progress percentage (0-100)
+	lastCheck        time.Time
+	lastError        error
+	availableInfo    *UpdateInfo
+	cachedManifest   *Manifest
 
 	// Lifecycle management using context and WaitGroup pattern
 	// - cancel is called to signal shutdown to the background goroutine
@@ -209,6 +210,27 @@ func (c *Checker) SetStatus(status UpdateStatus) {
 	defer c.mu.Unlock()
 
 	c.status = status
+
+	// Reset download progress when status changes away from downloading
+	if status != UpdateStatusDownloading {
+		c.downloadProgress = 0
+	}
+}
+
+// DownloadProgress returns the current download progress percentage (0-100).
+func (c *Checker) DownloadProgress() float64 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.downloadProgress
+}
+
+// SetDownloadProgress updates the current download progress percentage.
+func (c *Checker) SetDownloadProgress(percent float64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.downloadProgress = percent
 }
 
 // SetAvailableUpdate sets the available update information (for custom uploads).
@@ -333,8 +355,11 @@ func (c *Checker) manifestChannelIsValid(manifest *Manifest) bool {
 	return true
 }
 
-// parseAndValidateVersion parses the manifest version and checks if it's newer than current.
+// parseAndValidateVersion parses the manifest version and checks if it's applicable.
 // Returns the parsed version, or nil if not applicable (with reason logged).
+// This function allows updates in these scenarios:
+// - The available version is newer than the current version (normal upgrade)
+// - The target channel differs from the inferred channel of the current version
 // This is a pure function that does not modify checker state.
 func (c *Checker) parseAndValidateVersion(manifest *Manifest) (*Version, error) {
 	availableVer, err := ParseVersion(manifest.Version)
@@ -352,16 +377,35 @@ func (c *Checker) parseAndValidateVersion(manifest *Manifest) (*Version, error) 
 		}
 	}
 
-	if !availableVer.GreaterThan(c.currentVersion) {
-		c.log.Debug().
-			Str("current", c.currentVersion.String()).
-			Str("available", availableVer.String()).
-			Msg("Already running latest version")
-
-		return nil, nil
+	// Allow update if the available version is newer
+	if availableVer.GreaterThan(c.currentVersion) {
+		return availableVer, nil
 	}
 
-	return availableVer, nil
+	// Allow cross-channel updates when the target channel differs from the
+	// inferred channel of the currently installed version.
+	// This enables scenarios like:
+	// - beta v0.8.0-beta.1 → stable v0.7.5
+	// - stable v0.7.5 → dev v0.7.0-dev.10
+	// - beta v0.8.0-beta.1 → dev v0.7.0-dev.5
+	currentInferredChannel := c.currentVersion.InferredChannel()
+	if manifest.Channel != currentInferredChannel && !availableVer.Equal(c.currentVersion) {
+		c.log.Info().
+			Str("current", c.currentVersion.String()).
+			Str("available", availableVer.String()).
+			Str("currentChannel", currentInferredChannel).
+			Str("targetChannel", manifest.Channel).
+			Msg("Cross-channel update available")
+
+		return availableVer, nil
+	}
+
+	c.log.Debug().
+		Str("current", c.currentVersion.String()).
+		Str("available", availableVer.String()).
+		Msg("Already running latest version")
+
+	return nil, nil
 }
 
 // processManifestUpdate processes a manifest and updates checker state accordingly.

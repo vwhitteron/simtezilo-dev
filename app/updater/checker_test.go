@@ -829,3 +829,132 @@ func TestCheckNowClearsAvailableInfoOnError(t *testing.T) {
 		t.Error("LastError should be set after failed check")
 	}
 }
+
+func TestCheckNowAllowsCrossChannelUpdates(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name            string
+		currentVersion  string
+		manifestVersion string
+		manifestChannel string
+		checkerChannel  string
+		expectUpdate    bool
+	}{
+		{
+			name:            "beta to older stable",
+			currentVersion:  "0.8.0-beta.1",
+			manifestVersion: "0.7.5",
+			manifestChannel: "stable",
+			checkerChannel:  "stable",
+			expectUpdate:    true,
+		},
+		{
+			name:            "stable to older beta",
+			currentVersion:  "0.8.0",
+			manifestVersion: "0.7.5-beta.2",
+			manifestChannel: "beta",
+			checkerChannel:  "beta",
+			expectUpdate:    true,
+		},
+		{
+			name:            "beta to older dev",
+			currentVersion:  "0.8.0-beta.1",
+			manifestVersion: "0.7.0-dev.42",
+			manifestChannel: "dev",
+			checkerChannel:  "dev",
+			expectUpdate:    true,
+		},
+		{
+			name:            "dev to older beta",
+			currentVersion:  "0.9.0-dev.10",
+			manifestVersion: "0.8.0-beta.1",
+			manifestChannel: "beta",
+			checkerChannel:  "beta",
+			expectUpdate:    true,
+		},
+		{
+			name:            "same channel older version not allowed",
+			currentVersion:  "1.0.0",
+			manifestVersion: "0.9.0",
+			manifestChannel: "stable",
+			checkerChannel:  "stable",
+			expectUpdate:    false,
+		},
+		{
+			name:            "same channel newer version allowed",
+			currentVersion:  "1.0.0",
+			manifestVersion: "2.0.0",
+			manifestChannel: "stable",
+			checkerChannel:  "stable",
+			expectUpdate:    true,
+		},
+		{
+			name:            "beta to newer stable allowed",
+			currentVersion:  "0.8.0-beta.1",
+			manifestVersion: "0.9.0",
+			manifestChannel: "stable",
+			checkerChannel:  "stable",
+			expectUpdate:    true,
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			manifest := updater.Manifest{
+				Version:     testCase.manifestVersion,
+				ReleaseDate: time.Now().UTC(),
+				Channel:     testCase.manifestChannel,
+				Platforms: map[string]updater.Platform{
+					updater.GetPlatformKey(): {
+						URL:    "https://example.com/binary",
+						SHA256: "abc123",
+						Size:   1024,
+					},
+				},
+			}
+
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(manifest)
+			}))
+			defer server.Close()
+
+			log := zerolog.Nop()
+
+			cfg := updater.CheckerConfig{
+				BaseURL:        server.URL,
+				CheckInterval:  1 * time.Hour,
+				HTTPTimeout:    10 * time.Second,
+				Channel:        testCase.checkerChannel,
+				CurrentVersion: testCase.currentVersion,
+				DataDir:        t.TempDir(),
+			}
+
+			checker, err := updater.NewChecker(cfg, log)
+			if err != nil {
+				t.Fatalf("NewChecker() error = %v", err)
+			}
+
+			info, err := checker.CheckNow()
+			if err != nil {
+				t.Fatalf("CheckNow() error = %v", err)
+			}
+
+			if testCase.expectUpdate {
+				if info == nil {
+					t.Error("Expected update to be available, got nil")
+				} else if info.AvailableVersion != "v"+testCase.manifestVersion &&
+					info.AvailableVersion != testCase.manifestVersion {
+					t.Errorf("AvailableVersion = %v, want %v", info.AvailableVersion, testCase.manifestVersion)
+				}
+			} else {
+				if info != nil {
+					t.Errorf("Expected no update, got %+v", info)
+				}
+			}
+		})
+	}
+}

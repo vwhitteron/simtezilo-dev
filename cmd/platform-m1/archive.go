@@ -201,108 +201,20 @@ func (p *manager) extractZipFile(zipFile *zip.File, target string) error {
 	return nil
 }
 
-// installInitScripts copies init scripts from the extracted archive to the
-// system init directory, setting executable permissions on each file.
-func (p *manager) installInitScripts(sourceDir string) error {
-	return p.installFiles(sourceDir, p.initDir(), 0o755, "init scripts")
-}
-
-// installConfigFiles copies configuration files from the extracted archive to the
-// system etc directory, preserving existing configuration unless explicitly updated.
-func (p *manager) installConfigFiles(sourceDir string) error {
-	return p.installFiles(sourceDir, p.etcDir(), 0o644, "config files")
-}
-
-// installFiles copies files from source directory to destination directory with the specified permissions.
-func (p *manager) installFiles(sourceDir, destDir string, fileMode os.FileMode, description string) error {
-	_, err := os.Stat(sourceDir)
-	if err != nil {
-		p.log.Debug().Str("type", description).Msg("No files to install")
-
-		return nil //nolint:nilerr // intentionally return nil when source dir doesn't exist
-	}
-
-	p.log.Info().Str("from", sourceDir).Str("to", destDir).Msgf("Installing %s", description)
-
-	err = os.MkdirAll(destDir, 0o755)
-	if err != nil {
-		return fmt.Errorf("failed to create destination directory: %w", err)
-	}
-
-	entries, err := os.ReadDir(sourceDir)
-	if err != nil {
-		return fmt.Errorf("failed to read source directory: %w", err)
-	}
-
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-
-		srcPath := filepath.Join(sourceDir, entry.Name())
-		dstPath := filepath.Join(destDir, entry.Name())
-
-		p.log.Debug().Str("file", entry.Name()).Msgf("Installing %s", description)
-
-		err := p.copyFile(srcPath, dstPath)
-		if err != nil {
-			return fmt.Errorf("failed to copy %s: %w", entry.Name(), err)
-		}
-
-		err = os.Chmod(dstPath, fileMode)
-		if err != nil {
-			p.log.Warn().Err(err).Str("file", dstPath).Msg("Failed to set permissions")
-		}
-	}
-
-	return nil
-}
-
-// installAdditionalBinaries copies any additional binaries from the extracted
-// archive to the install directory, skipping the main binary which is handled separately.
-func (p *manager) installAdditionalBinaries(sourceDir, destDir, mainBinary string) error {
-	entries, err := os.ReadDir(sourceDir)
-	if err != nil {
-		return fmt.Errorf("failed to read source directory: %w", err)
-	}
-
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-
-		name := entry.Name()
-		if name == mainBinary {
-			continue // Already installed
-		}
-
-		srcPath := filepath.Join(sourceDir, name)
-		dstPath := filepath.Join(destDir, name)
-
-		p.log.Debug().Str("binary", name).Msg("Installing additional binary")
-
-		err := p.copyFile(srcPath, dstPath)
-		if err != nil {
-			return fmt.Errorf("failed to copy %s: %w", name, err)
-		}
-
-		err = os.Chmod(dstPath, 0o755)
-		if err != nil {
-			p.log.Warn().Err(err).Str("file", dstPath).Msg("Failed to set permissions")
-		}
-	}
-
-	return nil
-}
-
 // copyFile copies a file from src to dst, creating the destination file if it
-// doesn't exist or truncating it if it does.
+// doesn't exist or truncating it if it does. It removes the destination first
+// to handle the case where the destination is a running executable (which can't
+// be overwritten directly but can be unlinked).
 func (p *manager) copyFile(src, dst string) error {
 	srcFile, err := os.Open(src)
 	if err != nil {
 		return fmt.Errorf("failed to open source: %w", err)
 	}
 	defer srcFile.Close()
+
+	// Remove destination first - this allows replacing running executables
+	// (the old file stays in memory until the process exits)
+	_ = os.Remove(dst)
 
 	dstFile, err := os.Create(dst)
 	if err != nil {
@@ -318,23 +230,25 @@ func (p *manager) copyFile(src, dst string) error {
 	return nil
 }
 
-// createRollbackArchive creates a tgz archive containing the current versions
-// of critical system files that can be restored during a rollback operation.
-// Files included: bin/simtezilo, bin/platform, init/simtezilo.service,
-// init/recover.sh, and etc/simtezilo.conf.
-func (p *manager) createRollbackArchive() error {
-	p.log.Info().Str("archive", p.rollbackArchive()).Msg("Creating rollback archive")
+// createRollbackArchiveFromStaging creates a tgz archive from the contents of the
+// staging directory. This is called after a successful update to preserve the
+// original files for potential rollback.
+func (p *manager) createRollbackArchiveFromStaging(stagingDir string) error {
+	p.log.Info().
+		Str("archive", p.rollbackArchive()).
+		Str("staging", stagingDir).
+		Msg("Creating rollback archive from staging")
 
-	// Define files to backup with their source paths and archive paths
-	filesToBackup := []struct {
-		sourcePath  string
-		archivePath string
-	}{
-		{filepath.Join(p.installDir(), "simtezilo"), "bin/simtezilo"},
-		{filepath.Join(p.installDir(), "platform"), "bin/platform"},
-		{filepath.Join(p.initDir(), "simtezilo.service"), "init/simtezilo.service"},
-		{filepath.Join(p.initDir(), "recover.sh"), "init/recover.sh"},
-		{filepath.Join(p.etcDir(), "simtezilo.conf"), "etc/simtezilo.conf"},
+	// Check if staging directory exists and has files
+	entries, err := os.ReadDir(stagingDir)
+	if err != nil {
+		return fmt.Errorf("failed to read staging directory: %w", err)
+	}
+
+	if len(entries) == 0 {
+		p.log.Warn().Msg("Staging directory is empty, no rollback archive created")
+
+		return nil
 	}
 
 	// Create archive file
@@ -352,19 +266,51 @@ func (p *manager) createRollbackArchive() error {
 	tarWriter := tar.NewWriter(gzipWriter)
 	defer tarWriter.Close()
 
-	// Add each file to the archive
-	for _, file := range filesToBackup {
-		err := p.addFileToArchive(tarWriter, file.sourcePath, file.archivePath)
-		if err != nil {
+	// Walk the staging directory and add all files to the archive
+	fileCount := 0
+
+	walkErr := filepath.Walk(stagingDir, func(path string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+
+		// Skip the root staging directory itself
+		if path == stagingDir {
+			return nil
+		}
+
+		// Skip directories (we'll create them implicitly via file paths)
+		if info.IsDir() {
+			return nil
+		}
+
+		// Calculate relative path for archive entry
+		relPath, relErr := filepath.Rel(stagingDir, path)
+		if relErr != nil {
+			p.log.Warn().Err(relErr).Str("path", path).Msg("Failed to get relative path")
+
+			return nil
+		}
+
+		// Add file to archive
+		addErr := p.addFileToArchive(tarWriter, path, relPath)
+		if addErr != nil {
 			p.log.Warn().
-				Err(err).
-				Str("file", file.sourcePath).
+				Err(addErr).
+				Str("file", path).
 				Msg("Failed to add file to rollback archive")
 			// Continue adding other files even if one fails
+		} else {
+			fileCount++
 		}
+
+		return nil
+	})
+	if walkErr != nil {
+		return fmt.Errorf("failed to walk staging directory: %w", walkErr)
 	}
 
-	p.log.Info().Msg("Rollback archive created successfully")
+	p.log.Info().Int("fileCount", fileCount).Msg("Rollback archive created from staging")
 
 	return nil
 }

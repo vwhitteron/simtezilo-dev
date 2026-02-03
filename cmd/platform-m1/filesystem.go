@@ -49,3 +49,11 @@ func (p *manager) failedStartCounter() string {
 
 	return filepath.Join(prefix, "failed_start.counter")
 }
+
+// stagingDir returns the path to the staging directory used during atomic updates.
+// Original files are moved here before new files are installed.
+func (p *manager) stagingDir() string {
+	prefix := p.updateDir()
+
+	return filepath.Join(prefix, "staging")
+}

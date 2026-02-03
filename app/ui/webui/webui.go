@@ -3014,11 +3014,24 @@ func (w *WebUI) handleUpdatesStatus(response http.ResponseWriter, request *http.
 		availableUpdate := w.updater.AvailableUpdate()
 		lastCheck := w.updater.Checker().LastCheck()
 		lastError := w.updater.Checker().LastError()
+		currentChannel := w.config.GetAppUpdateChannel()
 
 		responseData["status"] = status.String()
-		responseData["downloadReady"] = status == updater.UpdateStatusReadyToInstall
 		responseData["rollbackAvailable"] = w.updater.RollbackAvailable()
 		responseData["rollbackVersion"] = w.updater.RollbackVersion()
+
+		// Only show as download ready if the update is for the current channel
+		downloadReady := status == updater.UpdateStatusReadyToInstall
+		if downloadReady && availableUpdate != nil {
+			downloadReady = availableUpdate.Channel == currentChannel
+		}
+
+		responseData["downloadReady"] = downloadReady
+
+		// Include download progress when downloading
+		if status == updater.UpdateStatusDownloading {
+			responseData["download_progress"] = w.updater.Checker().DownloadProgress()
+		}
 
 		if !lastCheck.IsZero() {
 			responseData["lastChecked"] = lastCheck.Format(time.RFC3339)
@@ -3035,6 +3048,7 @@ func (w *WebUI) handleUpdatesStatus(response http.ResponseWriter, request *http.
 				"changelog":   availableUpdate.Changelog,
 				"downloadURL": availableUpdate.DownloadURL,
 				"size":        availableUpdate.DownloadSize,
+				"channel":     availableUpdate.Channel,
 			}
 		}
 	}
@@ -3148,9 +3162,11 @@ func (w *WebUI) handleUpdatesDownload(response http.ResponseWriter, request *htt
 		Str("version", availableUpdate.AvailableVersion).
 		Msg("starting update download")
 
-	// Download and prepare the update
-
+	// Download and prepare the update with progress tracking
 	err := w.updater.DownloadAndPrepare(request.Context(), func(progress updater.DownloadProgress) {
+		// Store progress in checker so status endpoint can return it
+		w.updater.Checker().SetDownloadProgress(progress.Percent)
+
 		w.log.Debug().
 			Int64("downloaded", progress.DownloadedBytes).
 			Int64("total", progress.TotalBytes).
@@ -3477,6 +3493,9 @@ func (w *WebUI) handleUpdatesInstall(response http.ResponseWriter, request *http
 
 	w.log.Info().Msg("triggering service restart to apply update")
 
+	// Set status to installing before we signal shutdown
+	w.updater.SetStatus(updater.UpdateStatusInstalling)
+
 	// Send success response before triggering restart
 	response.Header().Set("Content-Type", "application/json")
 
@@ -3488,16 +3507,13 @@ func (w *WebUI) handleUpdatesInstall(response http.ResponseWriter, request *http
 		w.log.Error().Err(err).Msg("failed to encode install response")
 	}
 
-	// Trigger restart in a goroutine so response can be sent first
-	//nolint:contextcheck // restart is independent of request context
+	// Signal graceful shutdown - systemd will restart us due to Restart=always,
+	// and the ExecStartPre script will apply the staged update.
 	go func() {
 		// Small delay to ensure response is sent
 		time.Sleep(500 * time.Millisecond)
 
-		err := w.updater.RestartToApply()
-		if err != nil {
-			w.log.Error().Err(err).Msg("failed to restart service for update")
-		}
+		w.shutdownChan <- exitcode.RestartApp
 	}()
 }
 
@@ -3546,15 +3562,11 @@ func (w *WebUI) handleUpdatesRollback(response http.ResponseWriter, request *htt
 		w.log.Error().Err(encErr).Msg("failed to encode rollback response")
 	}
 
-	// Trigger restart in a goroutine so response can be sent first
-	//nolint:contextcheck // restart is independent of request context
+	// Signal graceful shutdown - systemd will restart us due to Restart=always
 	go func() {
 		// Small delay to ensure response is sent
 		time.Sleep(500 * time.Millisecond)
 
-		restartErr := w.updater.Installer().RestartService("simtezilo")
-		if restartErr != nil {
-			w.log.Error().Err(restartErr).Msg("failed to restart service after rollback")
-		}
+		w.shutdownChan <- exitcode.RestartApp
 	}()
 }

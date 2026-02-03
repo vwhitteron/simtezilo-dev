@@ -1,14 +1,11 @@
 package updater
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -18,6 +15,7 @@ import (
 type InstallState struct {
 	PendingVersion string    `json:"pendingVersion"`
 	CurrentVersion string    `json:"currentVersion"`
+	Channel        string    `json:"channel"`
 	DownloadPath   string    `json:"downloadPath"`
 	ExtractDir     string    `json:"extractDir"`
 	SHA256         string    `json:"sha256"`
@@ -147,6 +145,7 @@ func (i *Installer) Prepare(downloadPath string, info *UpdateInfo, currentVersio
 	state := &InstallState{
 		PendingVersion: info.AvailableVersion,
 		CurrentVersion: currentVersion,
+		Channel:        info.Channel,
 		DownloadPath:   downloadPath,
 		SHA256:         info.SHA256,
 		Timestamp:      time.Now(),
@@ -305,33 +304,6 @@ func (i *Installer) RollbackVersion() string {
 
 	// The current version in state is the version we backed up
 	return state.CurrentVersion
-}
-
-// RestartService triggers a service restart via systemd.
-func (i *Installer) RestartService(serviceName string) error {
-	if runtime.GOOS != "linux" {
-		return errors.New("systemd restart only supported on Linux")
-	}
-
-	if !i.useSystemd {
-		return errors.New("systemd integration not enabled")
-	}
-
-	i.log.Info().Str("service", serviceName).Msg("Requesting service restart")
-
-	// Use a short timeout context - we just need to start the command
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, "systemctl", "restart", serviceName)
-
-	err := cmd.Start()
-	if err != nil {
-		return fmt.Errorf("failed to restart service: %w", err)
-	}
-
-	// Don't wait for completion - we'll be killed by the restart
-	return nil
 }
 
 // ShouldAutoRollback checks if automatic rollback should be triggered.

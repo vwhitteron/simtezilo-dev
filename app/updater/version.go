@@ -124,6 +124,44 @@ func (v *Version) Equal(other *Version) bool {
 	return v.Compare(other) == 0
 }
 
+// IsPreRelease returns true if the version has a pre-release tag (e.g., beta.1, alpha).
+func (v *Version) IsPreRelease() bool {
+	return v.PreRelease != ""
+}
+
+// InferredChannel returns the likely channel based on the version's pre-release tag.
+// Returns "stable" for release versions, or extracts the channel identifier from
+// the pre-release tag (e.g., "beta" from "beta.1" or "beta1").
+// Versions with "custom-" prefix always return "custom" channel.
+func (v *Version) InferredChannel() string {
+	if v.PreRelease == "" {
+		return "stable"
+	}
+
+	prerelease := strings.ToLower(v.PreRelease)
+
+	// Custom uploads are prefixed with "custom-" and should only match custom channel
+	if strings.HasPrefix(prerelease, "custom") {
+		return "custom"
+	}
+
+	// Check for known channel prefixes
+	knownChannels := []string{"alpha", "beta", "dev", "rc", "nightly"}
+	for _, channel := range knownChannels {
+		if strings.HasPrefix(prerelease, channel) {
+			return channel
+		}
+	}
+
+	// Fallback: extract the first part before any dot
+	parts := strings.Split(prerelease, ".")
+	if len(parts) > 0 {
+		return parts[0]
+	}
+
+	return "unknown"
+}
+
 // comparePreRelease compares pre-release identifiers.
 // Follows semver spec: identifiers are compared left to right.
 func comparePreRelease(first, second string) int {

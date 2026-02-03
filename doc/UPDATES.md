@@ -4,16 +4,15 @@ This document describes how the Simtezilo update system works, including the upd
 
 ## Architecture Overview
 
-The update system consists of three main components:
+The update system consists of two main components:
 
 1. **`app/updater` package** (Go):      Runs within the simtezilo application to check for updates, download them, and stage them for installation
-2. **`platform update-apply`** (Go):    Runs at service startup via systemd to extract archives, swap binaries, and install updates
-3. **`recover.sh` script** (Bash): Rescue/rollback safety net that runs after platform command to handle repeated failures
+2. **`platform update-apply`** (Go):    Runs at service startup via systemd to extract archives, perform atomic installation with staging, and handle failure recovery
 
-This three-phase approach ensures safe updates:
+This two-phase approach ensures safe updates:
 - The running application never replaces itself while running
-- The platform command handles all system-specific installation logic
-- The rescue script provides a bulletproof fallback if the Go code fails
+- The platform command handles all system-specific installation logic with atomic operations
+- Failed installations are automatically recovered via staging directory rollback
 
 ## Update Flow
 
@@ -31,19 +30,15 @@ This three-phase approach ensures safe updates:
 │             │                                                 ▼             │
 │             │                                       ┌───────────────────┐   │
 │             │                                       │ update-state.json │   │
+│             │                                       │  status: pending  │   │
 │             │                                       └───────────────────┘   │
 │             │                                                 │             │
 │  ─ ─ ─ ─ ─ ─│─ ─ ─ ─ ─ ─ ─  SERVICE RESTART  ─ ─ ─ ─ ─ ─ ─ ─ ─│─ ─ ─ ─ ─ ─  │
 │             │                                                 │             │
 │             │                                                 ▼             │
 │             │                                       ┌───────────────────┐   │
-│             │                                       │ platform update-  │   │
-│             │                                       │      apply        │   │
-│             │                                       └───────────────────┘   │
-│             │                                                 │             │
-│             │                                                 ▼             │
-│             │                                       ┌───────────────────┐   │
 │             │                                       │    recover.sh     │   │
+│             │                                       │  [update-apply]   │   │
 │             │                                       └───────────────────┘   │
 │             │                                                 │             │
 │             ▼                                                 ▼             │
@@ -77,27 +72,27 @@ The main application handles **platform-agnostic** update operations:
 
 ### Platform Command (`platform update-apply`)
 
-The platform command handles **system-specific** installation:
+The platform command handles **system-specific** installation with atomic operations:
 
 **Responsibilities:**
 - Read state file
 - Verify checksums
 - Extract archives (tar.gz, zip)
-- Backup current binary to `.rollback`
-- Install new binaries
-- Install init scripts
+- Perform atomic installation using staging directory
+- Handle interrupted installations (restore from staging)
+- Create rollback archive from staged original files
 - Update state file
 - Handle complete/failed states
 
-### Rescue Script (`recover.sh`)
+### Helper Script (`recover.sh`)
 
-A minimal bash script that provides **emergency rollback**:
+A bash script that invokes the platform command and provides emergency rollback:
 
 **Responsibilities:**
-- Detect repeated failures (3+ times)
-- Perform emergency rollback to previous version
-- Handle crashed platform command (stale "installing" state)
-- Log to syslog for alerting
+- Invoke `platform update-apply` command
+- Track consecutive startup failures
+- Perform automatic rollback after repeated failures (catches buggy updates)
+- Reload systemd daemon after updates
 
 ## Update States
 
@@ -106,10 +101,24 @@ The system tracks updates through these states in `update-state.json`:
 | Status       | Description                                         |
 |--------------|-----------------------------------------------------|
 | `pending`    | Update downloaded and staged, waiting for restart   |
-| `installing` | Installation in progress (set by platform command)  |
+| `installing` | Installation in progress (atomic staging active)    |
 | `complete`   | Installation succeeded, awaiting confirmation       |
-| `failed`     | Installation failed, may retry or rollback          |
-| `rolled_back`| Rolled back to previous version after failures      |
+| `failed`     | Installation failed, user must manually retry       |
+| `rolled_back`| Rolled back to previous version                     |
+
+### State Transitions
+
+```
+pending ────► installing ────► complete ────► (cleared)
+                 │                               
+                 │ (failure)                     
+                 ▼                               
+              failed
+                 │
+                 │ (user retry via web UI)
+                 ▼
+              pending
+```
 
 ### State File Format
 
@@ -152,83 +161,118 @@ The `platform update-apply` command runs as a systemd `ExecStartPre` hook.
 The update archive must follow this structure:
 
 ```
-Simtezilo/
+simtezilo/
 ├── bin/
 │   ├── simtezilo          # Main binary (INSTALLED)
 │   └── platform           # Helper binary (INSTALLED)
 ├── init/
-│   ├── recover.sh    # Rescue script (INSTALLED)
+│   ├── recover.sh         # Helper script (INSTALLED)
 │   └── simtezilo.service  # Systemd unit (INSTALLED)
 ├── etc/
-│   └── simtezilo.conf     # Config file (NOT overwritten)
+│   └── simtezilo.conf     # Config file (NOT overwritten if exists)
 └── data/
     └── replays/           # User data (NOT overwritten)
 ```
 
-### Installation Process
+### Atomic Installation Process
+
+The installation uses a staging directory for atomic operations:
 
 1. **Load state**              - Read update-state.json
 2. **Verify download**         - Check file exists and checksum matches
 3. **Mark installing**         - Set status to "installing"
-4. **Extract archive**         - Supports tar.gz, zip, or raw binary
-5. **Install init scripts**    - Update recover.sh and service files
-6. **Backup current binary**   - Create `.rollback` file for recovery
-7. **Install new binaries**    - Copy from extracted archive
-8. **Cleanup**                 - Remove extracted files and archive
-9. **Mark complete**           - Set status to "complete"
+4. **Extract archive**         - Extract to temporary directory
+5. **Create staging dir**      - Create `data/update/staging/`
+6. **Install files atomically**:
+   - For each file to install:
+     - Move original → staging (atomic)
+     - Move new → destination (atomic)
+   - Install order: init scripts, config, additional binaries, **main binary last**
+7. **On success**:
+   - Create rollback archive from staging
+   - Clean up staging and extract directories
+   - Mark status "complete"
+8. **On failure**:
+   - Restore all files from staging
+   - Clean up
+   - Mark status "failed"
 
-## Phase 3: Rescue Check (recover.sh)
+### Handling Interrupted Installation
 
-After the platform command runs, the rescue script performs safety checks:
+If the system reboots or crashes during installation (status = "installing"):
 
-```bash
-# Check for repeated failures
-if [[ "$status" == "failed" && "$fail_count" -ge 3 ]]; then
-    perform_rollback
-fi
+1. Platform command detects "installing" status on next boot
+2. Walks staging directory and restores all files to original locations
+3. Cleans up staging and extract directories
+4. Marks status "failed" with reason "interrupted installation"
 
-# Check for crashed platform command
-if [[ "$status" == "installing" ]]; then
-    # Platform command crashed mid-install
-    mark_failed "platform command crashed during install"
-fi
-```
+### Rollback Archive
 
-### Rollback Mechanism
+After successful installation, the original files are preserved in `rollback.tgz`:
 
-If the application fails to start 3 times after an update:
-
-1. Rescue script detects `status: "failed"` with `failCount >= 3`
-2. Current binary moved to `.failed`
-3. Rollback binary (`.rollback`) restored as current
-4. State updated to `rolled_back`
+- Created from the staging directory contents
+- Contains original versions of all replaced files
+- Used by `recover.sh` for automatic rollback on runtime failures
+- Can be used for manual rollback via `platform update-rollback`
+- Automatically deleted after `installer.ConfirmSuccess()` is called
 
 ### Success Confirmation
 
 After successful startup, the application calls `installer.ConfirmSuccess()`:
 
-1. Removes `.rollback` binary (no longer needed)
+1. Removes `rollback.tgz` archive (no longer needed)
 2. Clears the state file
-3. Update cycle complete
+3. Resets startup failure counter
+4. Update cycle complete
+
+## Failure Handling
+
+There are two types of failures handled by different components:
+
+### Installation Failures (platform command)
+
+When an update fails to install (extraction error, file copy error, etc.):
+
+- Platform command restores files from staging directory
+- Status is set to "failed" with error reason in `lastError`
+- User must manually trigger retry via web UI
+- No automatic retry prevents boot loops from repeatedly failing installs
+
+### Runtime Failures (recover.sh)
+
+When a successfully installed update causes the application to crash repeatedly:
+
+- `recover.sh` tracks consecutive startup failures via counter file
+- After 10 consecutive failures, automatic rollback is triggered
+- Previous version is restored from `rollback.tgz`
+- This catches bugs that cause panics or immediate crashes
+
+### User Actions for Failed Updates
+
+Via the web UI, users can:
+1. **Retry** - Resets status to "pending" and retries on next restart
+2. **Delete** - Clears the update state, removes downloaded archive
+3. **Rollback** - Manually restore previous version from rollback archive
 
 ## Configuration
 
 ### Environment Variables (recover.sh)
 
-| Variable      | Default                      | Description                   |
-|---------------|------------------------------|-------------------------------|
-| `INSTALL_DIR` | `/opt/simtezilo/bin`         | Binary installation directory |
-| `DATA_DIR`    | `/opt/simtezilo/data/update` | State and download directory  |
-| `BINARY_NAME` | `simtezilo`                  | Name of the main binary       |
+| Variable       | Default          | Description                              |
+|----------------|------------------|------------------------------------------|
+| `BASE_DIR`     | `/opt/simtezilo` | Base installation directory              |
+| `MAX_FAILURES` | `10`             | Consecutive failures before rollback     |
 
-### Platform Command Constants
+### Platform Command Directories
 
-| Constant           | Value                          | Description                   |
-|--------------------|--------------------------------|-------------------------------|
-| `updateInstallDir` | `/opt/simtezilo/bin`           | Binary installation directory |
-| `updateInitDir`    | `/opt/simtezilo/init`          | Init scripts directory        |
-| `updateDataDir`    | `/opt/simtezilo/data/update`   | State and download directory  |
-| `updateBinaryName` | `simtezilo`                    | Name of the main binary       |
+| Directory    | Path                           | Description                      |
+|--------------|--------------------------------|----------------------------------|
+| Install      | `{base}/bin`                   | Binary installation directory    |
+| Init         | `{base}/init`                  | Init scripts directory           |
+| Etc          | `{base}/etc`                   | Configuration files directory    |
+| Update data  | `{base}/data/update`           | State, downloads, staging        |
+| Staging      | `{base}/data/update/staging`   | Atomic staging directory         |
+| Extract      | `{base}/data/update/extract`   | Temporary archive extraction     |
 
 ### Application Config
 
@@ -250,22 +294,20 @@ updater.Config{
 
 ## Systemd Integration
 
-The service unit should include both the platform command and rescue script:
+The service unit should include the recover.sh script as ExecStartPre:
 
 ```ini
 [Service]
-ExecStartPre=/opt/simtezilo/bin/platform update-apply
 ExecStartPre=/opt/simtezilo/init/recover.sh
 ExecStart=/opt/simtezilo/bin/simtezilo
 Restart=on-failure
 RestartSec=5
 ```
 
-This ensures:
-1. Platform command attempts to apply any pending update
-2. Rescue script checks for failures and performs rollback if needed
-3. Service starts with the (potentially new) binary
-4. Restart policy allows for automatic rollback detection
+The recover.sh script:
+1. Calls `platform update-apply` to handle any pending/failed/installing states
+2. Tracks startup attempts for monitoring purposes
+3. Reloads systemd daemon if service file was updated
 
 ---
 

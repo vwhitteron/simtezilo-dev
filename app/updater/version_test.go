@@ -171,3 +171,73 @@ func TestVersionLessThanGreaterThan(t *testing.T) {
 		t.Error("Expected 1.0.0 == 1.0.0")
 	}
 }
+
+func TestIsPreRelease(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		input string
+		want  bool
+	}{
+		{name: "stable version", input: "1.0.0", want: false},
+		{name: "beta version", input: "1.0.0-beta.1", want: true},
+		{name: "dev version", input: "1.0.0-dev.42", want: true},
+		{name: "alpha version", input: "1.0.0-alpha", want: true},
+		{name: "rc version", input: "2.0.0-rc.1", want: true},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			v, err := ParseVersion(testCase.input)
+			if err != nil {
+				t.Fatalf("ParseVersion() error = %v", err)
+			}
+
+			if got := v.IsPreRelease(); got != testCase.want {
+				t.Errorf("IsPreRelease() = %v, want %v", got, testCase.want)
+			}
+		})
+	}
+}
+
+func TestInferredChannel(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{name: "stable version", input: "1.0.0", want: "stable"},
+		{name: "beta version with dot", input: "1.0.0-beta.1", want: "beta"},
+		{name: "beta version without dot", input: "1.0.0-beta1", want: "beta"},
+		{name: "dev version with dot", input: "1.0.0-dev.42", want: "dev"},
+		{name: "dev version without dot", input: "1.0.0-dev42", want: "dev"},
+		{name: "alpha version", input: "1.0.0-alpha", want: "alpha"},
+		{name: "rc version", input: "2.0.0-rc.1", want: "rc"},
+		{name: "rc version without dot", input: "2.0.0-rc1", want: "rc"},
+		{name: "beta with uppercase", input: "1.0.0-BETA.1", want: "beta"},
+		{name: "beta with uppercase no dot", input: "1.0.0-BETA1", want: "beta"},
+		{name: "custom version", input: "1.0.0-custom", want: "custom"},
+		{name: "custom with suffix", input: "1.0.0-custom-beta.1", want: "custom"},
+		{name: "custom with beta suffix", input: "1.0.0-custom-mybuild", want: "custom"},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			v, err := ParseVersion(testCase.input)
+			if err != nil {
+				t.Fatalf("ParseVersion() error = %v", err)
+			}
+
+			if got := v.InferredChannel(); got != testCase.want {
+				t.Errorf("InferredChannel() = %v, want %v", got, testCase.want)
+			}
+		})
+	}
+}

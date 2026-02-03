@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -130,6 +131,11 @@ func (u *Updater) Status() UpdateStatus {
 	return u.checker.Status()
 }
 
+// SetStatus updates the current update status.
+func (u *Updater) SetStatus(status UpdateStatus) {
+	u.checker.SetStatus(status)
+}
+
 // AvailableUpdate returns information about an available update.
 func (u *Updater) AvailableUpdate() *UpdateInfo {
 	return u.checker.AvailableUpdate()
@@ -164,13 +170,6 @@ func (u *Updater) PrepareInstall(downloadPath string) error {
 	}
 
 	return u.installer.Prepare(downloadPath, info, u.currentVersion)
-}
-
-// RestartToApply requests a service restart to apply the update.
-func (u *Updater) RestartToApply() error {
-	u.checker.SetStatus(UpdateStatusInstalling)
-
-	return u.installer.RestartService(u.cfg.ServiceName)
 }
 
 // DownloadAndPrepare is a convenience method that downloads and prepares an update.
@@ -223,7 +222,61 @@ func (u *Updater) SetChannel(channel string) {
 // CheckExistingDownloads checks if there are any valid downloaded updates in the download directory.
 // If a valid newer version is found, it sets the status to ReadyToInstall.
 func (u *Updater) CheckExistingDownloads() {
-	// First, check for updates to get the latest version info
+	// First, check the installer state for a pending update
+	// This handles the case where a download completed and was prepared but the app restarted
+	state, err := u.installer.LoadState()
+	if err != nil {
+		u.log.Warn().Err(err).Msg("Could not load installer state")
+	}
+
+	currentChannel := u.checker.Channel()
+
+	if state != nil && state.Status == InstallStatusPending {
+		// Determine the channel of the pending update
+		// Use explicit channel if available, otherwise infer from version or filename
+		pendingChannel := state.Channel
+		if pendingChannel == "" {
+			// Check if this is a custom upload (filename starts with "custom-")
+			if strings.Contains(state.DownloadPath, "/custom-") {
+				pendingChannel = "custom"
+			} else {
+				pendingVer, parseErr := ParseVersion(state.PendingVersion)
+				if parseErr == nil {
+					pendingChannel = pendingVer.InferredChannel()
+				}
+			}
+		}
+
+		// Only restore if the channel matches
+		if pendingChannel != currentChannel {
+			u.log.Info().
+				Str("version", state.PendingVersion).
+				Str("pendingChannel", pendingChannel).
+				Str("currentChannel", currentChannel).
+				Msg("Found pending update from previous session but channel doesn't match, ignoring")
+
+			return
+		}
+
+		u.log.Info().
+			Str("version", state.PendingVersion).
+			Str("channel", pendingChannel).
+			Str("path", state.DownloadPath).
+			Msg("Found pending update from previous session")
+
+		// Set the available update info from the state
+		u.checker.SetAvailableUpdate(&UpdateInfo{
+			CurrentVersion:   state.CurrentVersion,
+			AvailableVersion: state.PendingVersion,
+			Channel:          pendingChannel,
+			SHA256:           state.SHA256,
+		})
+		u.checker.SetStatus(UpdateStatusReadyToInstall)
+
+		return
+	}
+
+	// No pending state, check for updates to get the latest version info
 	updateInfo, err := u.checker.CheckNow()
 	if err != nil {
 		u.log.Debug().Err(err).Msg("Could not check for updates during startup")

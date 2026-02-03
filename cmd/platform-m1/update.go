@@ -29,6 +29,7 @@ const (
 type updateState struct {
 	PendingVersion string    `json:"pendingVersion"`
 	CurrentVersion string    `json:"currentVersion"`
+	Channel        string    `json:"channel"`
 	DownloadPath   string    `json:"downloadPath"`
 	ExtractDir     string    `json:"extractDir"`
 	SHA256         string    `json:"sha256"`
@@ -36,6 +37,12 @@ type updateState struct {
 	Status         string    `json:"status"`
 	FailCount      int       `json:"failCount"`
 	LastError      string    `json:"lastError"`
+}
+
+// stagedFile tracks a file that has been moved to staging during installation.
+type stagedFile struct {
+	originalPath string
+	stagingPath  string
 }
 
 // loadUpdateState reads and parses the update state file from disk.
@@ -127,24 +134,13 @@ func (p *manager) updateApply() exitcode.Code {
 	switch state.Status {
 	case updateStatusPending:
 		return p.applyPendingUpdate(state)
+	case updateStatusInstalling:
+		return p.handleInstallingState(state)
 	case updateStatusComplete:
 		return p.handleCompleteState(state)
 	case updateStatusFailed:
-		// If failed, just log and exit - recovery script will handle if needed
-		p.log.Warn().
-			Int("failCount", state.FailCount).
-			Str("lastError", state.LastError).
-			Msg("Previous update failed")
-
-		outputJSON(map[string]any{
-			"result":    "failure",
-			"status":    state.Status,
-			"failCount": state.FailCount,
-			"lastError": state.LastError,
-		})
-
-		return exitcode.GeneralErr
-	case updateStatusRolledBack, updateStatusInstalling:
+		return p.handleFailedState(state)
+	case updateStatusRolledBack:
 		p.log.Info().Str("status", state.Status).Msg("No action needed for current state")
 
 		outputJSON(map[string]any{
@@ -245,8 +241,10 @@ func (p *manager) extractAndInstallUpdate(state *updateState) exitcode.Code {
 	return p.installExtractedUpdate(state, extractDir, extractRoot)
 }
 
-// installExtractedUpdate installs the extracted update by backing up the current
-// binary, installing the new one, and copying any additional binaries and init scripts.
+// installExtractedUpdate installs the extracted update using atomic moves with a staging directory.
+// Original files are moved to staging first, then new files are moved to their destinations.
+// If any step fails, files are restored from staging before marking the update as failed.
+// Binary files are installed last to ensure a clean rollback is possible.
 func (p *manager) installExtractedUpdate(state *updateState, extractDir, extractRoot string) exitcode.Code {
 	extractedBinary := filepath.Join(extractRoot, "bin", updateBinaryName)
 
@@ -257,32 +255,40 @@ func (p *manager) installExtractedUpdate(state *updateState, extractDir, extract
 		return p.markUpdateFailed(state, "extracted binary not found at "+extractedBinary)
 	}
 
-	currentBinary := filepath.Join(p.installDir(), updateBinaryName)
+	// Clean up and create staging directory
+	stagingDir := p.stagingDir()
+	_ = os.RemoveAll(stagingDir)
 
+	err = os.MkdirAll(stagingDir, 0o755)
+	if err != nil {
+		_ = os.RemoveAll(extractDir)
+
+		return p.markUpdateFailed(state, fmt.Sprintf("failed to create staging directory: %v", err))
+	}
+
+	// Track files that have been moved to staging for potential rollback
+	var stagedFiles []stagedFile
+
+	// Install init scripts first (non-critical, but install early)
 	initSourceDir := filepath.Join(extractRoot, "init")
+	stagedFiles = p.installInitScriptsFromExtract(initSourceDir, stagingDir, stagedFiles)
+
+	// Install config files (only if they don't exist)
 	etcSourceDir := filepath.Join(extractRoot, "etc")
+	stagedFiles = p.installConfigFilesFromExtract(etcSourceDir, stagingDir, stagedFiles)
 
-	// Create rollback archive before making any changes
-	err = p.createRollbackArchive()
-	if err != nil {
-		p.log.Warn().Err(err).Msg("Failed to create rollback archive")
-		// Continue anyway - rollback archive is a safety feature, not critical for install
-	}
+	// Install additional binaries (excluding main binary, which is installed last)
+	binSourceDir := filepath.Join(extractRoot, "bin")
+	stagedFiles = p.installAdditionalBinariesFromExtract(binSourceDir, stagingDir, stagedFiles)
 
-	err = p.installInitScripts(initSourceDir)
-	if err != nil {
-		p.log.Warn().Err(err).Msg("Failed to install init scripts")
-	}
-
-	err = p.installConfigFiles(etcSourceDir)
-	if err != nil {
-		p.log.Warn().Err(err).Msg("Failed to install config files")
-	}
-
+	// Install main binary LAST (critical step)
+	currentBinary := filepath.Join(p.installDir(), updateBinaryName)
 	p.log.Debug().Str("from", extractedBinary).Str("to", currentBinary).Msg("Installing new binary")
 
-	err = p.copyFile(extractedBinary, currentBinary)
+	stagedFiles, err = p.installFileToStaging(extractedBinary, currentBinary, filepath.Join("bin", updateBinaryName), stagingDir, stagedFiles)
 	if err != nil {
+		p.restoreStagedFiles(stagedFiles, stagingDir)
+
 		_ = os.RemoveAll(extractDir)
 
 		return p.markUpdateFailed(state, fmt.Sprintf("failed to install new binary: %v", err))
@@ -293,13 +299,15 @@ func (p *manager) installExtractedUpdate(state *updateState, extractDir, extract
 		p.log.Warn().Err(err).Msg("Failed to set executable permissions")
 	}
 
-	binSourceDir := filepath.Join(extractRoot, "bin")
-
-	err = p.installAdditionalBinaries(binSourceDir, p.installDir(), updateBinaryName)
+	// Installation successful - create rollback archive from staging, then clean up
+	err = p.createRollbackArchiveFromStaging(stagingDir)
 	if err != nil {
-		p.log.Warn().Err(err).Msg("Failed to install additional binaries")
+		p.log.Warn().Err(err).Msg("Failed to create rollback archive from staging")
+		// Continue anyway - rollback archive is a safety feature, not critical
 	}
 
+	// Clean up staging and extract directories
+	_ = os.RemoveAll(stagingDir)
 	_ = os.RemoveAll(extractDir)
 	_ = os.Remove(state.DownloadPath)
 
@@ -319,6 +327,169 @@ func (p *manager) installExtractedUpdate(state *updateState, extractDir, extract
 	})
 
 	return exitcode.Success
+}
+
+// installFileToStaging moves an original file to staging and installs a new file in its place.
+// Returns the updated list of staged files for rollback tracking.
+func (p *manager) installFileToStaging(sourcePath, destPath, stagingSubPath, stagingDir string, stagedFiles []stagedFile) ([]stagedFile, error) {
+	_, statErr := os.Stat(sourcePath)
+	if statErr != nil {
+		if os.IsNotExist(statErr) {
+			return stagedFiles, nil // Source doesn't exist, nothing to install
+		}
+
+		return stagedFiles, fmt.Errorf("failed to stat source: %w", statErr)
+	}
+
+	// Create staging subdirectory if needed
+	stagingPath := filepath.Join(stagingDir, stagingSubPath)
+	stagingParent := filepath.Dir(stagingPath)
+
+	mkErr := os.MkdirAll(stagingParent, 0o755)
+	if mkErr != nil {
+		return stagedFiles, fmt.Errorf("failed to create staging subdirectory: %w", mkErr)
+	}
+
+	// Move original to staging if it exists
+	_, destStatErr := os.Stat(destPath)
+	if destStatErr == nil {
+		renameErr := os.Rename(destPath, stagingPath)
+		if renameErr != nil {
+			return stagedFiles, fmt.Errorf("failed to move original to staging: %w", renameErr)
+		}
+
+		stagedFiles = append(stagedFiles, stagedFile{originalPath: destPath, stagingPath: stagingPath})
+	}
+
+	// Move new file to destination
+	destParent := filepath.Dir(destPath)
+
+	mkDestErr := os.MkdirAll(destParent, 0o755)
+	if mkDestErr != nil {
+		return stagedFiles, fmt.Errorf("failed to create destination directory: %w", mkDestErr)
+	}
+
+	renameErr := os.Rename(sourcePath, destPath)
+	if renameErr != nil {
+		return stagedFiles, fmt.Errorf("failed to move new file to destination: %w", renameErr)
+	}
+
+	return stagedFiles, nil
+}
+
+// restoreStagedFiles restores all files from staging back to their original locations.
+// Used to rollback a partial installation on failure.
+func (p *manager) restoreStagedFiles(stagedFiles []stagedFile, stagingDir string) {
+	p.log.Info().Int("count", len(stagedFiles)).Msg("Restoring files from staging")
+
+	for idx := len(stagedFiles) - 1; idx >= 0; idx-- {
+		staged := stagedFiles[idx]
+
+		renameErr := os.Rename(staged.stagingPath, staged.originalPath)
+		if renameErr != nil {
+			p.log.Warn().
+				Err(renameErr).
+				Str("staging", staged.stagingPath).
+				Str("original", staged.originalPath).
+				Msg("Failed to restore file from staging")
+		}
+	}
+
+	_ = os.RemoveAll(stagingDir)
+}
+
+// installInitScriptsFromExtract installs init scripts from the extract directory.
+func (p *manager) installInitScriptsFromExtract(initSourceDir, stagingDir string, stagedFiles []stagedFile) []stagedFile {
+	entries, readErr := os.ReadDir(initSourceDir)
+	if readErr != nil {
+		return stagedFiles
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		sourcePath := filepath.Join(initSourceDir, entry.Name())
+		destPath := filepath.Join(p.initDir(), entry.Name())
+		stagingSubPath := filepath.Join("init", entry.Name())
+
+		var installErr error
+
+		stagedFiles, installErr = p.installFileToStaging(sourcePath, destPath, stagingSubPath, stagingDir, stagedFiles)
+		if installErr != nil {
+			p.log.Warn().Err(installErr).Str("file", entry.Name()).Msg("Failed to install init script")
+		}
+	}
+
+	return stagedFiles
+}
+
+// installConfigFilesFromExtract installs config files from the extract directory.
+// Only installs files that don't already exist (won't overwrite user config).
+func (p *manager) installConfigFilesFromExtract(etcSourceDir, stagingDir string, stagedFiles []stagedFile) []stagedFile {
+	entries, readErr := os.ReadDir(etcSourceDir)
+	if readErr != nil {
+		return stagedFiles
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		destPath := filepath.Join(p.etcDir(), entry.Name())
+
+		// Only install config if it doesn't exist (don't overwrite user config)
+		_, destStatErr := os.Stat(destPath)
+		if destStatErr == nil {
+			continue
+		}
+
+		sourcePath := filepath.Join(etcSourceDir, entry.Name())
+		stagingSubPath := filepath.Join("etc", entry.Name())
+
+		var installErr error
+
+		stagedFiles, installErr = p.installFileToStaging(sourcePath, destPath, stagingSubPath, stagingDir, stagedFiles)
+		if installErr != nil {
+			p.log.Warn().Err(installErr).Str("file", entry.Name()).Msg("Failed to install config file")
+		}
+	}
+
+	return stagedFiles
+}
+
+// installAdditionalBinariesFromExtract installs additional binaries from the extract directory.
+// Excludes the main binary which is installed separately.
+func (p *manager) installAdditionalBinariesFromExtract(binSourceDir, stagingDir string, stagedFiles []stagedFile) []stagedFile {
+	entries, readErr := os.ReadDir(binSourceDir)
+	if readErr != nil {
+		return stagedFiles
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() || entry.Name() == updateBinaryName {
+			continue
+		}
+
+		sourcePath := filepath.Join(binSourceDir, entry.Name())
+		destPath := filepath.Join(p.installDir(), entry.Name())
+		stagingSubPath := filepath.Join("bin", entry.Name())
+
+		var installErr error
+
+		stagedFiles, installErr = p.installFileToStaging(sourcePath, destPath, stagingSubPath, stagingDir, stagedFiles)
+		if installErr != nil {
+			p.log.Warn().Err(installErr).Str("file", entry.Name()).Msg("Failed to install additional binary")
+			// Non-critical, continue
+		} else {
+			// Set executable permissions
+			_ = os.Chmod(destPath, 0o755)
+		}
+	}
+
+	return stagedFiles
 }
 
 // verifyChecksum calculates the SHA256 hash of a file and compares it against
@@ -346,10 +517,9 @@ func (p *manager) verifyChecksum(filePath, expected string) error {
 }
 
 // findExtractRoot determines the root directory of the extracted archive contents,
-// checking for a "Simtezilo" subdirectory or returning the extract directory itself.
+// checking for a "simtezilo" subdirectory or returning the extract directory itself.
 func (p *manager) findExtractRoot(extractDir string) string {
-	// Check for Simtezilo/ subdirectory
-	simteziloDir := filepath.Join(extractDir, "Simtezilo")
+	simteziloDir := filepath.Join(extractDir, "simtezilo")
 
 	_, err := os.Stat(simteziloDir)
 	if err == nil {
@@ -381,14 +551,118 @@ func (p *manager) handleCompleteState(_ *updateState) exitcode.Code {
 	return exitcode.Success
 }
 
-// markUpdateFailed records a failure in the update state, incrementing the fail
-// count and persisting the error reason to the state file.
+// handleFailedState reports the failed update status without retrying.
+// The user must manually trigger a retry via the web UI or delete the failed update.
+func (p *manager) handleFailedState(state *updateState) exitcode.Code {
+	p.log.Warn().
+		Str("lastError", state.LastError).
+		Str("version", state.PendingVersion).
+		Msg("Update in failed state, awaiting user action")
+
+	outputJSON(map[string]any{
+		"result":    "failure",
+		"status":    state.Status,
+		"version":   state.PendingVersion,
+		"lastError": state.LastError,
+	})
+
+	return exitcode.Success // Return success to not block service startup
+}
+
+// handleInstallingState handles an interrupted installation by restoring files
+// from the staging directory and marking the update as failed.
+func (p *manager) handleInstallingState(state *updateState) exitcode.Code {
+	p.log.Warn().
+		Str("version", state.PendingVersion).
+		Msg("Found interrupted installation, restoring from staging")
+
+	stagingDir := p.stagingDir()
+
+	// Check if staging directory exists
+	_, statErr := os.Stat(stagingDir)
+	if os.IsNotExist(statErr) {
+		p.log.Warn().Msg("No staging directory found, cannot restore - marking as failed")
+
+		return p.markUpdateFailed(state, "interrupted installation with no staging directory")
+	}
+
+	// Walk the staging directory and restore files to their original locations
+	restoredCount := 0
+
+	restoreErr := filepath.Walk(stagingDir, func(path string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+
+		if info.IsDir() {
+			return nil
+		}
+
+		// Calculate the relative path from staging directory
+		relPath, relErr := filepath.Rel(stagingDir, path)
+		if relErr != nil {
+			p.log.Warn().Err(relErr).Str("path", path).Msg("Failed to get relative path")
+
+			return nil
+		}
+
+		// Calculate the original destination path
+		destPath := filepath.Join(p.baseDir, relPath)
+
+		// Ensure destination directory exists
+		destDir := filepath.Dir(destPath)
+
+		mkErr := os.MkdirAll(destDir, 0o755)
+		if mkErr != nil {
+			p.log.Warn().Err(mkErr).Str("dir", destDir).Msg("Failed to create destination directory")
+
+			return nil
+		}
+
+		// Move file from staging back to original location
+		renameErr := os.Rename(path, destPath)
+		if renameErr != nil {
+			p.log.Warn().
+				Err(renameErr).
+				Str("staging", path).
+				Str("dest", destPath).
+				Msg("Failed to restore file from staging")
+
+			return nil
+		}
+
+		p.log.Debug().Str("file", relPath).Msg("Restored file from staging")
+
+		restoredCount++
+
+		return nil
+	})
+	if restoreErr != nil {
+		p.log.Warn().Err(restoreErr).Msg("Error walking staging directory")
+	}
+
+	p.log.Info().Int("count", restoredCount).Msg("Files restored from staging")
+
+	// Clean up staging directory and extract directory
+	_ = os.RemoveAll(stagingDir)
+
+	extractDir := state.ExtractDir
+	if extractDir == "" {
+		extractDir = filepath.Join(p.updateDir(), "extract")
+	}
+
+	_ = os.RemoveAll(extractDir)
+
+	return p.markUpdateFailed(state, "interrupted installation, restored from staging")
+}
+
+// markUpdateFailed records a failure in the update state, persisting the
+// error reason to the state file. The user must manually trigger a retry.
 func (p *manager) markUpdateFailed(state *updateState, reason string) exitcode.Code {
 	p.log.Error().Str("reason", reason).Msg("Update failed")
 
 	state.Status = updateStatusFailed
 	state.LastError = reason
-	state.FailCount++
 
 	err := p.saveUpdateState(state)
 	if err != nil {
@@ -396,9 +670,8 @@ func (p *manager) markUpdateFailed(state *updateState, reason string) exitcode.C
 	}
 
 	outputJSON(map[string]any{
-		"result":    "failure",
-		"error":     reason,
-		"failCount": state.FailCount,
+		"result": "failure",
+		"error":  reason,
 	})
 
 	return exitcode.GeneralErr
