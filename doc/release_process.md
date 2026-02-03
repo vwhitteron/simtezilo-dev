@@ -56,7 +56,7 @@ The `latest.json` manifest contains URLs, checksums, and sizes for each platform
   "channel": "stable",
   "platforms": {
     "darwin-arm64": {
-      "url": "https://updates.simtezilo.com/releases/stable/v0.8.0/simtezilo-v0.8.0-darwin-arm64.tar.gz",
+      "url": "https://static.simtezilo.com/releases/stable/v0.8.0/simtezilo-v0.8.0-darwin-arm64.tar.gz",
       "sha256": "2db6048c3edcd2911b7856a4adffff011e5f0f7e03af966c7a5e4614f0abb20d",
       "size": 27983027
     },
@@ -143,14 +143,14 @@ The release process uses these scripts in `build/scripts/`:
 
 ### Environment Variables
 
-| Variable      | Default                            | Description                     |
-|---------------|------------------------------------|---------------------------------|
-| `BASE_URL`    | `https://updates.simtezilo.com`    | Base URL for download links     |
-| `OUT_DIR`     | `./out`                            | Directory with built binaries   |
-| `DIST_DIR`    | `./dist/releases`                  | Output directory for archives   |
-| `MIN_VERSION` | (none)                             | Minimum version to upgrade from |
-| `CHANGELOG`   | (none)                             | Release notes text              |
-| `R2_REMOTE`   | (none)                             | rclone remote name for R2 bucket|
+| Variable      | Default                                 | Description                     |
+|---------------|-----------------------------------------|---------------------------------|
+| `BASE_URL`    | `https://static.simtezilo.com/releases` | Base URL for download links     |
+| `OUT_DIR`     | `./out`                                 | Directory with built binaries   |
+| `DIST_DIR`    | `./dist/releases`                       | Output directory for archives   |
+| `MIN_VERSION` | (none)                                  | Minimum version to upgrade from |
+| `CHANGELOG`   | (none)                                  | Release notes text              |
+| `R2_REMOTE`   | (none)                                  | rclone remote name for R2 bucket|
 
 ### Changelog Generation
 

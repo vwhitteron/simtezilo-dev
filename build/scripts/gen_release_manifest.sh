@@ -12,7 +12,7 @@
 #   v1.0.0-dev.1     -> dev
 #
 # Environment variables:
-#   BASE_URL        - Base URL for binary downloads (default: https://updates.simtezilo.com)
+#   BASE_URL        - Base URL for binary downloads (default: https://static.simtezilo.com/releases)
 #   DIST_DIR        - Directory containing distribution archives (default: ./dist/releases)
 #   MIN_VERSION     - Minimum version required to upgrade (optional)
 #   CHANGELOG       - Release changelog text (optional)
@@ -29,7 +29,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/lib/version.sh"
 
-BASE_URL="${BASE_URL:-https://updates.simtezilo.com}"
+BASE_URL="${BASE_URL:-https://static.simtezilo.com/releases}"
 DIST_DIR="${DIST_DIR:-./dist/releases}"
 MIN_VERSION="${MIN_VERSION:-}"
 CHANGELOG="${CHANGELOG:-}"
@@ -128,7 +128,7 @@ get_file_info() {
         return
     fi
 
-    local url="${BASE_URL}/releases/${VERSION_CHANNEL}/${VERSION_TAG}/${archive_name}"
+    local url="${BASE_URL}/${VERSION_CHANNEL}/${VERSION_TAG}/${archive_name}"
     local sha256
     sha256=$(get_sha256 "$file")
     local size
