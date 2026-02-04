@@ -272,7 +272,7 @@ func TestValidateJSONSchema_FuelMonitoringNonNegative(t *testing.T) {
 		{"preWarnNotifyLaps", "preWarnNotifyLaps"},
 		{"strategyNotifyLaps", "strategyNotifyLaps"},
 		{"rangeSafetyMarginLaps", "rangeSafetyMarginLaps"},
-		{"rangeSafetyMarginMeters", "rangeSafetyMarginMeters"},
+		{"rangeSafetyMarginMetres", "rangeSafetyMarginMetres"},
 	}
 
 	for _, testCase := range tests {

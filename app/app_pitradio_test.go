@@ -51,7 +51,7 @@ func createTestI18n() *i18n.I18n {
 
 // fuelRangeMock implements fuelrange.Estimator interface for testing.
 type fuelRangeMock struct {
-	distanceMeters float64
+	distanceMetres float64
 	distanceLaps   float64
 	usageRate      float64
 }
@@ -65,17 +65,17 @@ func (m *fuelRangeMock) IsReady() bool               { return true }
 func (m *fuelRangeMock) SetLive(_ bool)              {}
 func (m *fuelRangeMock) Update(_ float64, _ float32) {}
 
-func (m *fuelRangeMock) DistanceMeters() float64 {
-	return m.distanceMeters
+func (m *fuelRangeMock) DistanceMetres() float64 {
+	return m.distanceMetres
 }
 
-func (m *fuelRangeMock) DistanceLaps(lengthMeters float64) float64 {
+func (m *fuelRangeMock) DistanceLaps(lengthMetres float64) float64 {
 	if m.distanceLaps > 0 {
 		return m.distanceLaps
 	}
 
-	if lengthMeters > 0 && m.distanceMeters > 0 {
-		return m.distanceMeters / lengthMeters
+	if lengthMetres > 0 && m.distanceMetres > 0 {
+		return m.distanceMetres / lengthMetres
 	}
 
 	return 0
@@ -86,8 +86,8 @@ func (m *fuelRangeMock) UsageRatePerKm() float64 {
 }
 
 // SetFuelRange allows tests to configure fuel range values.
-func (m *fuelRangeMock) SetFuelRange(distanceMeters, distanceLaps, usageRatePerKm float64) {
-	m.distanceMeters = distanceMeters
+func (m *fuelRangeMock) SetFuelRange(distanceMetres, distanceLaps, usageRatePerKm float64) {
+	m.distanceMetres = distanceMetres
 	m.distanceLaps = distanceLaps
 	m.usageRate = usageRatePerKm
 }
@@ -95,7 +95,7 @@ func (m *fuelRangeMock) SetFuelRange(distanceMeters, distanceLaps, usageRatePerK
 // circuitMock implements circuit.Manager interface for testing.
 type circuitMock struct {
 	name                 string
-	lengthMeters         float64
+	lengthMetres         float64
 	lapProgress          float64
 	lapProgressRemaining float64
 }
@@ -109,7 +109,7 @@ func (m *circuitMock) Name() string          { return m.name }
 func (m *circuitMock) Variation() string     { return "" }
 func (m *circuitMock) Country() string       { return "" }
 func (m *circuitMock) CandidateCount() int   { return 0 }
-func (m *circuitMock) LengthMeters() float64 { return m.lengthMeters }
+func (m *circuitMock) LengthMetres() float64 { return m.lengthMetres }
 
 func (m *circuitMock) LapProgress() float64 {
 	return m.lapProgress
@@ -182,13 +182,13 @@ func (suite *PitRadioTestSuite) SetupTest() {
 	suite.i18n = createTestI18n()
 
 	suite.fuelRange = fuelRangeMock{
-		distanceMeters: 10000,
+		distanceMetres: 10000,
 		distanceLaps:   0, // Will be calculated based on circuit length
 	}
 
 	suite.circuit = circuitMock{
 		name:                 "Mock Circuit",
-		lengthMeters:         1000,
+		lengthMetres:         1000,
 		lapProgress:          0.0,
 		lapProgressRemaining: 1.0,
 	}
@@ -274,7 +274,7 @@ func (suite *PitRadioTestSuite) TestNotifyOutOfFuel() {
 
 func (suite *PitRadioTestSuite) TestNotifyFuelCritical() {
 	// Arrange - critical fuel scenario: fuel range <= distance to pit box
-	// For critical: fuelRangeMeters <= distanceToPitBox
+	// For critical: fuelRangeMetres <= distanceToPitBox
 	// distanceToPitBox = (1.0 - 0.5) * 5000 = 2500m
 	// We need fuel range to be <= 2500m to trigger critical
 	suite.setupDistanceBasedScenario(8, 10, 0.5, 2000.0, 5000.0) // 2000m < 2500m distance to pit
@@ -316,9 +316,9 @@ func (suite *PitRadioTestSuite) TestNotifyFuelPreWarn() {
 	_, _, preWarnThreshold := suite.calculateWarningDistances(lapProgress, circuitLength, 0.3, 2.0)
 
 	// Set fuel range just below the pre-warning threshold to trigger the warning
-	fuelRangeMeters := preWarnThreshold - 100.0 // 100m below threshold
+	fuelRangeMetres := preWarnThreshold - 100.0 // 100m below threshold
 
-	suite.setupDistanceBasedScenario(5, 10, lapProgress, fuelRangeMeters, circuitLength)
+	suite.setupDistanceBasedScenario(5, 10, lapProgress, fuelRangeMetres, circuitLength)
 
 	// Act
 	suite.app.notifyFuelWarnings()
@@ -365,17 +365,17 @@ func (suite *PitRadioTestSuite) TestNotifyFuelStrategyUpdateNotSentOnNonNotifyLa
 // TestFuelRangeDataIsPopulated tests that fuel range interface can be properly configured with mock data.
 func (suite *PitRadioTestSuite) TestFuelRangeDataIsPopulated() {
 	// Arrange - Set up test data for fuel range validation
-	expectedRangeMeters := 15000.0
+	expectedRangeMetres := 15000.0
 	expectedUsageRate := 1.67
 	circuitLength := 5000.0
 
 	// Act - Configure fuel range with test data
-	suite.fuelRange.SetFuelRange(expectedRangeMeters, 0, expectedUsageRate)
+	suite.fuelRange.SetFuelRange(expectedRangeMetres, 0, expectedUsageRate)
 
 	// Assert - Verify fuel range data is correct
 	suite.NotNil(suite.app.fuelRange, "Fuel range should be available")
-	suite.InEpsilon(expectedRangeMeters, suite.app.fuelRange.DistanceMeters(), 0.001, "Distance should match")
-	suite.InEpsilon(expectedRangeMeters/circuitLength, suite.app.fuelRange.DistanceLaps(circuitLength), 0.001, "Laps should be calculated correctly")
+	suite.InEpsilon(expectedRangeMetres, suite.app.fuelRange.DistanceMetres(), 0.001, "Distance should match")
+	suite.InEpsilon(expectedRangeMetres/circuitLength, suite.app.fuelRange.DistanceLaps(circuitLength), 0.001, "Laps should be calculated correctly")
 	suite.InEpsilon(expectedUsageRate, suite.app.fuelRange.UsageRatePerKm(), 0.001, "Usage rate should match")
 }
 
@@ -520,10 +520,10 @@ func (suite *PitRadioTestSuite) TestFuelWarningPriority() {
 	suite.True(suite.app.pitRadioState.fuelNotifyEmptyIssued, "Should mark empty fuel as notified")
 }
 
-// setupFuelRangeMeters configures the fuel range mock with distance in meters.
-func (suite *PitRadioTestSuite) setupFuelRangeMeters(rangeMeters float64) {
-	rangeLaps := rangeMeters / suite.circuit.lengthMeters
-	suite.fuelRange.SetFuelRange(rangeMeters, rangeLaps, 2.0)
+// setupFuelRangeMetres configures the fuel range mock with distance in metres.
+func (suite *PitRadioTestSuite) setupFuelRangeMetres(rangeMetres float64) {
+	rangeLaps := rangeMetres / suite.circuit.lengthMetres
+	suite.fuelRange.SetFuelRange(rangeMetres, rangeLaps, 2.0)
 }
 
 // setupDistanceBasedScenario configures a complete test scenario with distance-based parameters.
@@ -531,8 +531,8 @@ func (suite *PitRadioTestSuite) setupFuelRangeMeters(rangeMeters float64) {
 func (suite *PitRadioTestSuite) setupDistanceBasedScenario(
 	currentLap, totalLaps int16,
 	lapProgress float64,
-	fuelRangeMeters float64,
-	circuitLengthMeters float64, //nolint:unparam // Keep for clarity in tests
+	fuelRangeMetres float64,
+	circuitLengthMetres float64, //nolint:unparam // Keep for clarity in tests
 ) {
 	// Set up basic race configuration and telemetry
 	suite.app.config = createBasicConfig()
@@ -546,34 +546,34 @@ func (suite *PitRadioTestSuite) setupDistanceBasedScenario(
 
 	// Set up circuit with specified parameters
 	suite.circuit.name = "Test Circuit"
-	suite.circuit.lengthMeters = circuitLengthMeters
+	suite.circuit.lengthMetres = circuitLengthMetres
 	suite.circuit.lapProgress = lapProgress
 	suite.circuit.lapProgressRemaining = 1.0 - lapProgress
 
 	// Set up fuel range
-	suite.setupFuelRangeMeters(fuelRangeMeters)
+	suite.setupFuelRangeMetres(fuelRangeMetres)
 	suite.clearPitRadioState()
 }
 
 // calculateWarningDistances helps calculate the distances at which different warnings should trigger.
-// Returns distances in meters for: critical, boxThisLap, preWarn thresholds based on current position and config.
+// Returns distances in metres for: critical, boxThisLap, preWarn thresholds based on current position and config.
 func (suite *PitRadioTestSuite) calculateWarningDistances(
 	lapProgress float64,
-	circuitLengthMeters float64, //nolint:unparam // Keep for clarity in tests
+	circuitLengthMetres float64, //nolint:unparam // Keep for clarity in tests
 	safetyMarginLaps float64,
 	preWarnNotifyLaps float64, //nolint:unparam // Keep for clarity in tests
 ) (critical, boxThisLap, preWarn float64) {
-	distanceToPitBox := (1.0 - lapProgress) * circuitLengthMeters
-	safetyMarginMeters := safetyMarginLaps * circuitLengthMeters
+	distanceToPitBox := (1.0 - lapProgress) * circuitLengthMetres
+	safetyMarginMetres := safetyMarginLaps * circuitLengthMetres
 
 	// Critical: fuel range (with safety margin) <= distance to pit box
-	critical = distanceToPitBox + safetyMarginMeters
+	critical = distanceToPitBox + safetyMarginMetres
 
 	// Box this lap: fuel range (with safety margin) <= distance to pit box + one full lap
-	boxThisLap = distanceToPitBox + circuitLengthMeters + safetyMarginMeters
+	boxThisLap = distanceToPitBox + circuitLengthMetres + safetyMarginMetres
 
 	// Pre-warning: fuel range (with safety margin) <= distance to pit box + preWarnNotifyLaps
-	preWarn = distanceToPitBox + (preWarnNotifyLaps * circuitLengthMeters) + safetyMarginMeters
+	preWarn = distanceToPitBox + (preWarnNotifyLaps * circuitLengthMetres) + safetyMarginMetres
 
 	return critical, boxThisLap, preWarn
 }

@@ -1,6 +1,6 @@
 {
     "name": "Goodwood Motor Circuit",
-    "length_meters": 3809,
+    "length_metres": 3809,
     "coordinates": {
         "circuit": [
             { "x": 320, "y": 0, "z": 64 },

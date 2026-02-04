@@ -1,6 +1,6 @@
 {
     "name": "Deep Forest Raceway",
-    "length_meters": 4190,
+    "length_metres": 4190,
     "coordinates": {
         "circuit": [
             { "x": 0, "y": 0, "z": -256 },

@@ -1,6 +1,6 @@
 {
     "name": "Mount Panorama Motor Racing Circuit",
-    "length_meters": 6164,
+    "length_metres": 6164,
     "coordinates": {
         "circuit": [
             { "x": 320, "y": -72, "z": -1024 },

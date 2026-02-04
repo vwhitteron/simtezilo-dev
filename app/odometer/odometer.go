@@ -15,7 +15,7 @@ const (
 // Odometer tracks the total distance travelled based on coordinate updates.
 type Odometer struct {
 	log            zerolog.Logger    // Logger instance
-	distanceMeters float64           // Total distance in meters
+	distanceMetres float64           // Total distance in metres
 	lastCoordinate models.Coordinate // Last known coordinate for distance tracking
 }
 
@@ -23,7 +23,7 @@ type Odometer struct {
 func New(logger zerolog.Logger) *Odometer {
 	odometer := Odometer{
 		log:            logger.With().Str("package", "odometer").Logger(),
-		distanceMeters: 0,
+		distanceMetres: 0,
 		lastCoordinate: models.Coordinate{},
 	}
 
@@ -32,7 +32,7 @@ func New(logger zerolog.Logger) *Odometer {
 
 // Reset clears the odometer distance and last known coordinate.
 func (m *Odometer) Reset() {
-	m.distanceMeters = 0
+	m.distanceMetres = 0
 	m.lastCoordinate = models.Coordinate{}
 
 	m.log.Debug().Msg("Odometer reset")
@@ -55,24 +55,24 @@ func (m *Odometer) Add(currentPos models.Coordinate) float64 {
 
 		m.lastCoordinate = currentPos
 
-		return m.distanceMeters
+		return m.distanceMetres
 	}
 
-	m.distanceMeters += distance
+	m.distanceMetres += distance
 	m.lastCoordinate = currentPos
 
-	return m.distanceMeters
+	return m.distanceMetres
 }
 
-// Read returns the current odometer reading in meters.
+// Read returns the current odometer reading in metres.
 func (m *Odometer) Read() float64 {
-	if math.IsNaN(m.distanceMeters) {
+	if math.IsNaN(m.distanceMetres) {
 		return 0
 	}
 
-	if math.IsInf(m.distanceMeters, 0) {
+	if math.IsInf(m.distanceMetres, 0) {
 		return 999999.9
 	}
 
-	return m.distanceMeters
+	return m.distanceMetres
 }

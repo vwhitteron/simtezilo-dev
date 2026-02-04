@@ -1,6 +1,6 @@
 {
     "name": "Watkins Glen Long Course",
-    "length_meters": 5410,
+    "length_metres": 5410,
     "coordinates": {
         "circuit": [
             { "x": -320, "y": 0, "z": -512 },

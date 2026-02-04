@@ -1,6 +1,6 @@
 {
     "name": "High Speed Ring",
-    "length_meters": 4343,
+    "length_metres": 4343,
     "coordinates": {
         "circuit": [
             { "x": 64, "y": 0, "z": -384 },

@@ -1,6 +1,6 @@
 {
     "name": "Circuit de Spa-Francorchamps",
-    "length_meters": 6937,
+    "length_metres": 6937,
     "coordinates": {
         "circuit": [
             { "x": -256, "y": 112, "z": -576 },

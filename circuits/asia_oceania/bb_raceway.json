@@ -1,6 +1,6 @@
 {
     "name": "BB Raceway",
-    "length_meters": 1690,
+    "length_metres": 1690,
     "coordinates": {
         "circuit": [
             { "x": 0, "y": 0, "z": 192 },

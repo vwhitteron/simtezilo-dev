@@ -1,6 +1,6 @@
 {
     "name": "Alsace - Village",
-    "length_meters": 5344,
+    "length_metres": 5344,
     "coordinates": {
         "circuit": [
             { "x": 768, "y": 56, "z": -704 },

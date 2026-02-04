@@ -1,6 +1,6 @@
 {
     "name": "Daytona Road Course",
-    "length_meters": 5701,
+    "length_metres": 5701,
     "coordinates": {
         "circuit": [
             { "x": -384, "y": 0, "z": -256 },

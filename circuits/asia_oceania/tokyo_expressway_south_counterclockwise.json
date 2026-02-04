@@ -1,6 +1,6 @@
 {
     "name": "Tokyo Expressway - South Counterclockwise",
-    "length_meters": 6497,
+    "length_metres": 6497,
     "coordinates": {
         "circuit": [
             { "x": -256, "y": 0, "z": 0 },

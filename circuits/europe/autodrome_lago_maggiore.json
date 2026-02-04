@@ -1,6 +1,6 @@
 {
     "name": "Autodrome Lao Maggiore",
-    "length_meters": 5716,
+    "length_metres": 5716,
     "coordinates": {
         "circuit": [
             { "x": 0, "y": 8, "z": 0 },

@@ -1,6 +1,6 @@
 {
     "name": "Trial Mountain Circuit",
-    "length_meters": 5331,
+    "length_metres": 5331,
     "coordinates": {
         "circuit": [
             { "x": 128, "y": -8, "z": 256 },

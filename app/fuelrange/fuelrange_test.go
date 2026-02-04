@@ -26,13 +26,13 @@ func (suite *FuelRangeTestSuite) SetupTest() {
 func (suite *FuelRangeTestSuite) TestBasicFuelRangeCalculation() {
 	// Arrange - Initialize with full fuel tank
 	suite.fuelRange.Update(1000.0, 100.0)
-	suite.InEpsilon(rangeDistanceUnknown, suite.fuelRange.DistanceMeters(), 0.001)
+	suite.InEpsilon(rangeDistanceUnknown, suite.fuelRange.DistanceMetres(), 0.001)
 
 	// Act - Simulate consumption: 5km distance, 10% fuel used
 	suite.simulateConsumption(1000.0, 5000.0, 100.0, 10.0)
 
 	// Assert - Should calculate range: 90% fuel remaining should give ~45km range
-	calculatedRange := suite.fuelRange.DistanceMeters()
+	calculatedRange := suite.fuelRange.DistanceMetres()
 	suite.NotEqual(rangeDistanceUnknown, calculatedRange)
 	suite.InDelta(45000.0, calculatedRange, 4500.0) // 10% tolerance
 }
@@ -53,7 +53,7 @@ func (suite *FuelRangeTestSuite) TestFuelRangeWithRefueling() {
 	suite.setFuelRange(20000.0, 20.0)
 
 	// Verify we have a calculated range before refueling
-	initialRange := suite.fuelRange.DistanceMeters()
+	initialRange := suite.fuelRange.DistanceMetres()
 	suite.NotEqual(rangeDistanceUnknown, initialRange)
 
 	// Act - Simulate refueling (fuel level increases from 20% to 95%)
@@ -61,7 +61,7 @@ func (suite *FuelRangeTestSuite) TestFuelRangeWithRefueling() {
 	suite.fuelRange.Update(10000.0, 95.0)
 
 	// Assert - Range should reset to unknown after refueling
-	suite.InEpsilon(rangeDistanceUnknown, suite.fuelRange.DistanceMeters(), 0.001)
+	suite.InEpsilon(rangeDistanceUnknown, suite.fuelRange.DistanceMetres(), 0.001)
 }
 
 func (suite *FuelRangeTestSuite) TestNormalFuelConsumptionPreservesRange() {
@@ -69,7 +69,7 @@ func (suite *FuelRangeTestSuite) TestNormalFuelConsumptionPreservesRange() {
 	suite.setFuelRange(20000.0, 20.0)
 
 	// Verify we have a calculated range
-	initialRange := suite.fuelRange.DistanceMeters()
+	initialRange := suite.fuelRange.DistanceMetres()
 	suite.NotEqual(rangeDistanceUnknown, initialRange)
 
 	// Act - Simulate normal fuel consumption with some distance traveled
@@ -77,7 +77,7 @@ func (suite *FuelRangeTestSuite) TestNormalFuelConsumptionPreservesRange() {
 	suite.simulateConsumption(21000.0, 1000.0, 20.0, 1.0) // Drive 1km, use 1% fuel
 
 	// Assert - Range should still be calculated (not reset to unknown)
-	newRange := suite.fuelRange.DistanceMeters()
+	newRange := suite.fuelRange.DistanceMetres()
 	suite.NotEqual(rangeDistanceUnknown, newRange)
 	suite.Greater(newRange, 0.0)
 }
@@ -89,7 +89,7 @@ func (suite *FuelRangeTestSuite) TestInsufficientSamples() {
 	}
 
 	// Assert - Should return unknown range
-	suite.InEpsilon(rangeDistanceUnknown, suite.fuelRange.DistanceMeters(), 0.001)
+	suite.InEpsilon(rangeDistanceUnknown, suite.fuelRange.DistanceMetres(), 0.001)
 }
 
 func (suite *FuelRangeTestSuite) TestLowFuelRangeCalculation() {
@@ -118,27 +118,27 @@ func (suite *FuelRangeTestSuite) TestZeroAndNegativeCircuitLength() {
 func (suite *FuelRangeTestSuite) TestOdometerRollback() {
 	// Arrange - Setup consumption pattern
 	suite.setFuelRange(30000.0, 30.0)
-	initialRange := suite.fuelRange.DistanceMeters()
+	initialRange := suite.fuelRange.DistanceMetres()
 	suite.NotEqual(rangeDistanceUnknown, initialRange)
 
 	// Act - Simulate odometer rollback (odometer goes backwards)
 	suite.fuelRange.Update(500.0, 25.0) // Much lower odometer reading
 
 	// Assert - Should reset the fuel range due to odometer rollback
-	suite.InEpsilon(rangeDistanceUnknown, suite.fuelRange.DistanceMeters(), 0.001)
+	suite.InEpsilon(rangeDistanceUnknown, suite.fuelRange.DistanceMetres(), 0.001)
 }
 
 func (suite *FuelRangeTestSuite) TestSmallFuelIncreasePreservesRange() {
 	// Arrange - Setup known consumption pattern (ending at 20% fuel)
 	suite.setFuelRange(20000.0, 20.0)
-	initialRange := suite.fuelRange.DistanceMeters()
+	initialRange := suite.fuelRange.DistanceMetres()
 	suite.NotEqual(rangeDistanceUnknown, initialRange)
 
 	// Act - Simulate small fuel increase (≤0.04% - should not trigger refuel detection)
 	suite.fuelRange.Update(22000.0, 20.04) // Only 0.04% increase
 
 	// Assert - Range should NOT reset (small increase is not considered refueling)
-	newRange := suite.fuelRange.DistanceMeters()
+	newRange := suite.fuelRange.DistanceMetres()
 	suite.NotEqual(rangeDistanceUnknown, newRange)
 }
 
@@ -150,7 +150,7 @@ func (suite *FuelRangeTestSuite) TestZeroFuelLevel() {
 	suite.fuelRange.Update(25000.0, 0.0)
 
 	// Assert - Should return zero range
-	calculatedRange := suite.fuelRange.DistanceMeters()
+	calculatedRange := suite.fuelRange.DistanceMetres()
 	suite.InDelta(0.0, calculatedRange, 0.001)
 }
 
@@ -162,7 +162,7 @@ func (suite *FuelRangeTestSuite) TestNegativeFuelLevel() {
 	suite.fuelRange.Update(25000.0, -5.0)
 
 	// Assert - Should return negative range (system allows negative fuel calculations)
-	calculatedRange := suite.fuelRange.DistanceMeters()
+	calculatedRange := suite.fuelRange.DistanceMetres()
 	suite.Less(calculatedRange, 0.0)
 }
 
@@ -174,31 +174,31 @@ func (suite *FuelRangeTestSuite) TestFuelLevelAbove100PercentTriggersRefuel() {
 	suite.fuelRange.Update(25000.0, 150.0)
 
 	// Assert - Should reset range due to excessive fuel increase
-	suite.InEpsilon(rangeDistanceUnknown, suite.fuelRange.DistanceMeters(), 0.001)
+	suite.InEpsilon(rangeDistanceUnknown, suite.fuelRange.DistanceMetres(), 0.001)
 }
 
 func (suite *FuelRangeTestSuite) TestResetFunctionality() {
 	// Arrange - Setup known consumption
 	suite.setFuelRange(20000.0, 20.0)
-	suite.NotEqual(rangeDistanceUnknown, suite.fuelRange.DistanceMeters())
+	suite.NotEqual(rangeDistanceUnknown, suite.fuelRange.DistanceMetres())
 
 	// Act - Reset the fuel range
 	suite.fuelRange.Reset()
 
 	// Assert - Should return unknown range after reset
-	suite.InEpsilon(rangeDistanceUnknown, suite.fuelRange.DistanceMeters(), 0.001)
+	suite.InEpsilon(rangeDistanceUnknown, suite.fuelRange.DistanceMetres(), 0.001)
 }
 
 func (suite *FuelRangeTestSuite) TestResetEstimateFunctionality() {
 	// Arrange - Setup known consumption
 	suite.setFuelRange(20000.0, 20.0)
-	suite.NotEqual(rangeDistanceUnknown, suite.fuelRange.DistanceMeters())
+	suite.NotEqual(rangeDistanceUnknown, suite.fuelRange.DistanceMetres())
 
 	// Act - Reset only the estimate (not the entire state)
 	suite.fuelRange.ResetEstimate()
 
 	// Assert - Should return unknown range after estimate reset
-	suite.InEpsilon(rangeDistanceUnknown, suite.fuelRange.DistanceMeters(), 0.001)
+	suite.InEpsilon(rangeDistanceUnknown, suite.fuelRange.DistanceMetres(), 0.001)
 }
 
 func (suite *FuelRangeTestSuite) TestUsageRatePerKm() {
@@ -237,11 +237,11 @@ func (suite *FuelRangeTestSuite) simulateConsumption(initialOdometer, distance f
 }
 
 // setFuelRange sets up a known consumption rate for testing.
-func (suite *FuelRangeTestSuite) setFuelRange(expectedRangeMeters, currentFuelPercent float64) {
+func (suite *FuelRangeTestSuite) setFuelRange(expectedRangeMetres, currentFuelPercent float64) {
 	initialOdometer := 1000.0 // start at 1km
 	distance := 20000.0       // travel 20km to establish rate
 
-	consumptionRate := currentFuelPercent / expectedRangeMeters
+	consumptionRate := currentFuelPercent / expectedRangeMetres
 	consumedFuel := consumptionRate * distance
 	initialFuel := float32(currentFuelPercent + consumedFuel)
 

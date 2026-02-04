@@ -88,7 +88,7 @@ func (a *App) settingAction(setting languagedb.Key, action string) string {
 		languagedb.UIMenuPitRadioFuelPreWarn:          a.handlePitradioFuelPreWarnSetting,
 		languagedb.UIMenuPitRadioFuelStrategy:         a.handlePitradioFuelStrategySetting,
 		languagedb.UIMenuPitRadioFuelSafetyLaps:       a.handlePitradioFuelSafetyLapsSetting,
-		languagedb.UIMenuPitRadioFuelSafetyMeters:     a.handlePitradioFuelSafetyMetersSetting,
+		languagedb.UIMenuPitRadioFuelSafetyMetres:     a.handlePitradioFuelSafetyMetresSetting,
 		languagedb.UIMenuPitRadioTyreEnable:           a.handlePitRadioTyreEnableSetting,
 		languagedb.UIMenuPitRadioTyreTempOptimal:      a.handlePitradioTyreTempOptimalSetting,
 		languagedb.UIMenuPitRadioTyreTempWindow:       a.handlePitradioTyreTempWindowSetting,
@@ -874,16 +874,16 @@ func (a *App) handlePitradioFuelSafetyLapsSetting(action string) string {
 	return strconv.FormatFloat(value, 'f', 2, 64)
 }
 
-func (a *App) handlePitradioFuelSafetyMetersSetting(action string) string {
+func (a *App) handlePitradioFuelSafetyMetresSetting(action string) string {
 	var value float64
 
 	switch action {
 	case "increase":
-		value = a.config.IncreasePitRadioFuelRangeSafetyMarginMeters()
+		value = a.config.IncreasePitRadioFuelRangeSafetyMarginMetres()
 	case "decrease":
-		value = a.config.DecreasePitRadioFuelRangeSafetyMarginMeters()
+		value = a.config.DecreasePitRadioFuelRangeSafetyMarginMetres()
 	default:
-		value = a.config.GetPitRadioFuelRangeSafetyMarginMeters()
+		value = a.config.GetPitRadioFuelRangeSafetyMarginMetres()
 	}
 
 	return strconv.FormatFloat(value, 'f', 0, 64) + "m"

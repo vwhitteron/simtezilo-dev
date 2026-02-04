@@ -1,6 +1,6 @@
 {
     "name": "Grand Valley - Highway 1",
-    "length_meters": 5019,
+    "length_metres": 5019,
     "coordinates": {
         "circuit": [
             { "x": 64, "y": 120, "z": 896 },

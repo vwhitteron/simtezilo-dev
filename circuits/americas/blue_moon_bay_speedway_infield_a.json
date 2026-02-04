@@ -1,6 +1,6 @@
 {
     "name": "Blue Moon Bay Speedway - Infield A",
-    "length_meters": 3322,
+    "length_metres": 3322,
     "coordinates": {
         "circuit": [
             { "x": 0, "y": 0, "z": 320 },

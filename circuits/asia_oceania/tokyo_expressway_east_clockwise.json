@@ -1,6 +1,6 @@
 {
     "name": "Tokyo Expressway - East Clockwise",
-    "length_meters": 7266,
+    "length_metres": 7266,
     "coordinates": {
         "circuit": [
             { "x": -64, "y": -16, "z": -64 },

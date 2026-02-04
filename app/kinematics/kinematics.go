@@ -137,7 +137,7 @@ func (k *State) Update(windowSeconds float64, vehicleDimensions vehicle.Dimensio
 	k.Current.SixDOFRotation.AccelMag = vector.Magnitude(k.Current.SixDOFRotation.Acceleration)
 
 	// 6DOF rotational envelope - calculated angular velocity vector
-	// Convert from radians to meters at the wheels using vehicle dimensions
+	// Convert from radians to metres at the wheels using vehicle dimensions
 	k.Current.SixDOFRotationCalc.Velocity = vector.Scale(
 		k.Current.SixDOFRotation.Velocity,
 		vehicleDimensions.LongitudinalRadius,
@@ -150,7 +150,7 @@ func (k *State) Update(windowSeconds float64, vehicleDimensions vehicle.Dimensio
 	k.Current.SixDOFRotationCalc.Jerk = (k.Current.SixDOFRotationCalc.AccelMag - k.Last.SixDOFRotationCalc.AccelMag) / windowSeconds
 	k.Current.SixDOFRotationCalc.Snap = (k.Current.SixDOFRotationCalc.Jerk - k.Last.SixDOFRotationCalc.Jerk) / windowSeconds
 
-	k.Current.GroundSpeed = float64(gtclient.Telemetry.GroundSpeedMetersPerSecond())
+	k.Current.GroundSpeed = float64(gtclient.Telemetry.GroundSpeedMetresPerSecond())
 	k.Current.TransmissionGear = gtclient.Telemetry.CurrentGear()
 	k.Current.SurgeCalculated = signal.Abs(float64(k.Current.SixDOFRotationCalc.Acceleration.X))
 }

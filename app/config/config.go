@@ -46,7 +46,7 @@ type fuelMonitoring struct {
 	PreWarnNotifyLaps       float64 `json:"preWarnNotifyLaps"`
 	StrategyNotifyLaps      float64 `json:"strategyNotifyLaps"`
 	RangeSafetyMarginLaps   float64 `json:"rangeSafetyMarginLaps"`
-	RangeSafetyMarginMeters float64 `json:"rangeSafetyMarginMeters"`
+	RangeSafetyMarginMetres float64 `json:"rangeSafetyMarginMetres"`
 }
 
 type haptics struct {
@@ -1967,44 +1967,44 @@ func (c *Config) DecreasePitRadioFuelRangeSafetyMarginLaps() float64 {
 	return c.viper.PitRadio.FuelMonitoring.RangeSafetyMarginLaps
 }
 
-// GetPitRadioFuelRangeSafetyMarginMeters returns the safety margin in meters to apply when calculating fuel range.
-func (c *Config) GetPitRadioFuelRangeSafetyMarginMeters() float64 {
+// GetPitRadioFuelRangeSafetyMarginMetres returns the safety margin in metres to apply when calculating fuel range.
+func (c *Config) GetPitRadioFuelRangeSafetyMarginMetres() float64 {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	return c.viper.PitRadio.FuelMonitoring.RangeSafetyMarginMeters
+	return c.viper.PitRadio.FuelMonitoring.RangeSafetyMarginMetres
 }
 
-// SetPitRadioFuelRangeSafetyMarginMeters sets the safety margin in meters to apply when calculating fuel range.
-func (c *Config) SetPitRadioFuelRangeSafetyMarginMeters(value float64) {
+// SetPitRadioFuelRangeSafetyMarginMetres sets the safety margin in metres to apply when calculating fuel range.
+func (c *Config) SetPitRadioFuelRangeSafetyMarginMetres(value float64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.viper.PitRadio.FuelMonitoring.RangeSafetyMarginMeters = min(2000.0, max(0.0, value))
+	c.viper.PitRadio.FuelMonitoring.RangeSafetyMarginMetres = min(2000.0, max(0.0, value))
 
 	c.registerUpdate(false)
 }
 
-// IncreasePitRadioFuelRangeSafetyMarginMeters increases the safety margin by 50 meters (max 2000).
-func (c *Config) IncreasePitRadioFuelRangeSafetyMarginMeters() float64 {
+// IncreasePitRadioFuelRangeSafetyMarginMetres increases the safety margin by 50 metres (max 2000).
+func (c *Config) IncreasePitRadioFuelRangeSafetyMarginMetres() float64 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.viper.PitRadio.FuelMonitoring.RangeSafetyMarginMeters = min(2000.0, c.viper.PitRadio.FuelMonitoring.RangeSafetyMarginMeters+50)
+	c.viper.PitRadio.FuelMonitoring.RangeSafetyMarginMetres = min(2000.0, c.viper.PitRadio.FuelMonitoring.RangeSafetyMarginMetres+50)
 	c.registerUpdate(false)
 
-	return c.viper.PitRadio.FuelMonitoring.RangeSafetyMarginMeters
+	return c.viper.PitRadio.FuelMonitoring.RangeSafetyMarginMetres
 }
 
-// DecreasePitRadioFuelRangeSafetyMarginMeters decreases the safety margin by 50 meters (min 0).
-func (c *Config) DecreasePitRadioFuelRangeSafetyMarginMeters() float64 {
+// DecreasePitRadioFuelRangeSafetyMarginMetres decreases the safety margin by 50 metres (min 0).
+func (c *Config) DecreasePitRadioFuelRangeSafetyMarginMetres() float64 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.viper.PitRadio.FuelMonitoring.RangeSafetyMarginMeters = max(0.0, c.viper.PitRadio.FuelMonitoring.RangeSafetyMarginMeters-50)
+	c.viper.PitRadio.FuelMonitoring.RangeSafetyMarginMetres = max(0.0, c.viper.PitRadio.FuelMonitoring.RangeSafetyMarginMetres-50)
 	c.registerUpdate(false)
 
-	return c.viper.PitRadio.FuelMonitoring.RangeSafetyMarginMeters
+	return c.viper.PitRadio.FuelMonitoring.RangeSafetyMarginMetres
 }
 
 // GetPitRadioTyreMonitoringEnabled returns whether tyre monitoring is enabled.

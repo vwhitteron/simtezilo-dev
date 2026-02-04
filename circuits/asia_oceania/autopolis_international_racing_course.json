@@ -1,6 +1,6 @@
 {
     "name": "Autopolis International Racing Course",
-    "length_meters": 4605,
+    "length_metres": 4605,
     "coordinates": {
         "circuit": [
             { "x": -64, "y": -8, "z": 0 },

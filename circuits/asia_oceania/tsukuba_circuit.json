@@ -1,6 +1,6 @@
 {
     "name": "Tsukuba Circuit",
-    "length_meters": 2069,
+    "length_metres": 2069,
     "coordinates": {
         "circuit": [
             { "x": -128, "y": 8, "z": -128 },

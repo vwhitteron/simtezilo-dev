@@ -1,6 +1,6 @@
 {
     "name": "Fishermans Ranch",
-    "length_meters": 6699,
+    "length_metres": 6699,
     "coordinates": {
         "circuit": [
             { "x": -384, "y": 32, "z": 576 },

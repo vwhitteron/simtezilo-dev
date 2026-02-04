@@ -35,8 +35,8 @@ func (s *KinematicsTestSuite) SetupTest() {
 	s.gtClient.Telemetry.SetFormatStandard()
 
 	s.dims = vehicle.Dimensions{
-		WheelbaseMeters:    2.5,
-		TrackWidthMeters:   1.6,
+		WheelbaseMetres:    2.5,
+		TrackWidthMetres:   1.6,
 		LongitudinalRadius: 1.25,
 		TransverseRadius:   0.8,
 	}

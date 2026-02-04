@@ -1,6 +1,6 @@
 {
     "name": "Eiger Nordwand",
-    "length_meters": 2358,
+    "length_metres": 2358,
     "coordinates": {
         "circuit": [
             { "x": 64, "y": 40, "z": -256 },

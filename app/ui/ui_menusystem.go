@@ -371,7 +371,7 @@ func NewMenuSystem() *MenuSystem {
 		&MenuNode{name: languagedb.UIMenuPitRadioFuelPreWarn, nodeType: NodeTypeLeaf, context: PageContextAlways, parent: pitRadioFuelNode},
 		&MenuNode{name: languagedb.UIMenuPitRadioFuelStrategy, nodeType: NodeTypeLeaf, context: PageContextAlways, parent: pitRadioFuelNode},
 		&MenuNode{name: languagedb.UIMenuPitRadioFuelSafetyLaps, nodeType: NodeTypeLeaf, context: PageContextAlways, parent: pitRadioFuelNode},
-		&MenuNode{name: languagedb.UIMenuPitRadioFuelSafetyMeters, nodeType: NodeTypeLeaf, context: PageContextAlways, parent: pitRadioFuelNode},
+		&MenuNode{name: languagedb.UIMenuPitRadioFuelSafetyMetres, nodeType: NodeTypeLeaf, context: PageContextAlways, parent: pitRadioFuelNode},
 	)
 
 	// Settings -> Pit Radio -> Tyre Management submenu

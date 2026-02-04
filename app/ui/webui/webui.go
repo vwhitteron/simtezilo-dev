@@ -1050,7 +1050,7 @@ func (w *WebUI) handleGetConfig(response http.ResponseWriter, _ *http.Request) {
 				"preWarnNotifyLaps":       w.config.GetPitRadioFuelPreWarnNotifyLaps(),
 				"strategyNotifyLaps":      w.config.GetPitRadioFuelStrategyNotifyLaps(),
 				"rangeSafetyMarginLaps":   w.config.GetPitRadioFuelRangeSafetyMarginLaps(),
-				"rangeSafetyMarginMeters": w.config.GetPitRadioFuelRangeSafetyMarginMeters(),
+				"rangeSafetyMarginMetres": w.config.GetPitRadioFuelRangeSafetyMarginMetres(),
 			},
 			"tyreMonitoring": map[string]any{
 				"enabled":                    w.config.GetPitRadioTyreMonitoringEnabled(),
@@ -1836,11 +1836,11 @@ func (w *WebUI) applyFuelConfig(config map[string]any) []string {
 		}
 	}
 
-	if safetyMarginMeters, ok := config["rangeSafetyMarginMeters"]; ok {
-		if marginFloat, ok := safetyMarginMeters.(float64); ok {
-			w.config.SetPitRadioFuelRangeSafetyMarginMeters(marginFloat)
+	if safetyMarginMetres, ok := config["rangeSafetyMarginMetres"]; ok {
+		if marginFloat, ok := safetyMarginMetres.(float64); ok {
+			w.config.SetPitRadioFuelRangeSafetyMarginMetres(marginFloat)
 		} else {
-			errors = append(errors, "invalid range safety margin meters value")
+			errors = append(errors, "invalid range safety margin metres value")
 		}
 	}
 

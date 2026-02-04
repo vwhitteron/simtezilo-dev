@@ -1,6 +1,6 @@
 {
     "name": "Lake Louise",
-    "length_meters": 3663,
+    "length_metres": 3663,
     "coordinates": {
         "circuit": [
             { "x": 128, "y": -8, "z": 128 },

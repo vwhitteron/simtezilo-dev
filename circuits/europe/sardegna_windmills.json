@@ -1,6 +1,6 @@
 {
     "name": "Sardegna - Windills",
-    "length_meters": 3236,
+    "length_metres": 3236,
     "coordinates": {
         "circuit": [
             { "x": 0, "y": 40, "z": 128 },

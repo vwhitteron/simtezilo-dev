@@ -109,7 +109,7 @@ func defaultConfig() *viperConfig {
 				PreWarnNotifyLaps:       2.0,
 				StrategyNotifyLaps:      5.0,
 				RangeSafetyMarginLaps:   0.2,
-				RangeSafetyMarginMeters: 750,
+				RangeSafetyMarginMetres: 750,
 			},
 			TyreMonitoring: &tyreMonitoring{
 				Enabled:                    true,

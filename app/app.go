@@ -1301,9 +1301,9 @@ func (a *App) handleDebugTick() {
 		Float32("percent", a.gtClient.Telemetry.FuelLevelPercent()).
 		Int("odometer", int(a.odometer.Read())).
 		Float64("rate", a.fuelRange.UsageRatePerKm()).
-		Int("range_meters", int(a.fuelRange.DistanceMeters())).
+		Int("range_metres", int(a.fuelRange.DistanceMetres())).
 		Int("lap_remaining_pc", int(a.circuit.LapProgressRemaining()*100)).
-		Int("circuit_length", int(a.circuit.LengthMeters())).
+		Int("circuit_length", int(a.circuit.LengthMetres())).
 		Msg("debug fuel range")
 
 	averageTemp := (a.gtClient.Telemetry.TyreTemperatureCelsius().FrontLeft +
@@ -1546,32 +1546,32 @@ func (a *App) updateVehicle() {
 
 	a.adjustEngineHaptics(&engine, revLimit)
 
-	var wheelbaseMeters float32
+	var wheelbaseMetres float32
 
-	var trackFrontMeters float32
+	var trackFrontMetres float32
 
-	var trackRearMeters float32
+	var trackRearMetres float32
 
-	wheelbase := a.gtClient.Telemetry.VehicleWheelbaseMillimeters()
+	wheelbase := a.gtClient.Telemetry.VehicleWheelbaseMillimetres()
 
 	if wheelbase > 0 {
-		wheelbaseMeters = float32(wheelbase) / 1000
+		wheelbaseMetres = float32(wheelbase) / 1000
 	} else {
-		wheelbaseMeters = (float32(a.gtClient.Telemetry.VehicleLengthMillimeters()) / 1000) * 0.55
+		wheelbaseMetres = (float32(a.gtClient.Telemetry.VehicleLengthMillimetres()) / 1000) * 0.55
 	}
 
-	trackFront := a.gtClient.Telemetry.VehicleTrackFrontMillimeters()
-	trackRear := a.gtClient.Telemetry.VehicleTrackRearMillimeters()
+	trackFront := a.gtClient.Telemetry.VehicleTrackFrontMillimetres()
 
+	trackRear := a.gtClient.Telemetry.VehicleTrackRearMillimetres()
 	if trackFront > 0 || trackRear > 0 {
-		trackFrontMeters = float32(trackFront) / 1000
-		trackRearMeters = float32(trackRear) / 1000
+		trackFrontMetres = float32(trackFront) / 1000
+		trackRearMetres = float32(trackRear) / 1000
 	} else {
-		trackFrontMeters = (float32(a.gtClient.Telemetry.VehicleWidthMillimeters()) / 1000) * 0.85
-		trackRearMeters = trackFrontMeters
+		trackFrontMetres = (float32(a.gtClient.Telemetry.VehicleWidthMillimetres()) / 1000) * 0.85
+		trackRearMetres = trackFrontMetres
 	}
 
-	trackWidthMeters := (trackFrontMeters + trackRearMeters) / 2
+	trackWidthMetres := (trackFrontMetres + trackRearMetres) / 2
 
 	a.vehicle = vehicle.Characteristics{
 		ID:          a.gtClient.Telemetry.VehicleID(),
@@ -1579,10 +1579,10 @@ func (a *App) updateVehicle() {
 		Engine:      engine,
 		RevLimit:    a.normalizeRevLimit(revLimit),
 		Dimensions: vehicle.Dimensions{
-			WheelbaseMeters:    wheelbaseMeters,
-			TrackWidthMeters:   trackWidthMeters,
-			LongitudinalRadius: wheelbaseMeters / 2,
-			TransverseRadius:   trackWidthMeters / 2,
+			WheelbaseMetres:    wheelbaseMetres,
+			TrackWidthMetres:   trackWidthMetres,
+			LongitudinalRadius: wheelbaseMetres / 2,
+			TransverseRadius:   trackWidthMetres / 2,
 		},
 	}
 
@@ -1677,8 +1677,8 @@ func (a *App) logVehicleUpdate(engine vehicle.EngineCharacteristics, revLimit ui
 		Str("model", a.gtClient.Telemetry.VehicleModel()).
 		Str("type", string(a.vehicle.VehicleType)).
 		Str("engine", a.vehicle.Engine.DBEntry).
-		Str("wheelbase", fmt.Sprintf("%.2f m", a.vehicle.Dimensions.WheelbaseMeters)).
-		Str("track_width", fmt.Sprintf("%.2f m", a.vehicle.Dimensions.TrackWidthMeters)).
+		Str("wheelbase", fmt.Sprintf("%.2f m", a.vehicle.Dimensions.WheelbaseMetres)).
+		Str("track_width", fmt.Sprintf("%.2f m", a.vehicle.Dimensions.TrackWidthMetres)).
 		Msg("vehicle update")
 }
 
@@ -1791,7 +1791,7 @@ func (a *App) pushCircuitInfo() {
 	circuitName := a.circuit.Name()
 	circuitVariation := a.circuit.Variation()
 	circuitCountry := a.circuit.Country()
-	circuitLength := a.circuit.LengthMeters()
+	circuitLength := a.circuit.LengthMetres()
 	candidateCount := a.circuit.CandidateCount()
 
 	a.log.Debug().
@@ -1807,7 +1807,7 @@ func (a *App) pushCircuitInfo() {
 		"name":       circuitName,
 		"variation":  circuitVariation,
 		"country":    circuitCountry,
-		"length":     fmt.Sprintf("%.2f", circuitLength/1000.0), // Convert meters to km
+		"length":     fmt.Sprintf("%.2f", circuitLength/1000.0), // Convert metres to km
 		"candidates": strconv.Itoa(candidateCount),
 	}
 

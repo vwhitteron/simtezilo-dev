@@ -1,6 +1,6 @@
 {
     "name": "Brands Hatch Grand Prix Circuit",
-    "length_meters": 3889,
+    "length_metres": 3889,
     "coordinates": {
         "circuit": [
             { "x": -128, "y": 0, "z": -384 },

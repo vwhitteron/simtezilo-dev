@@ -257,16 +257,16 @@ func (a *App) notifyRaceProgress() {
 		return
 	}
 
-	circuitLengthMeters := a.circuit.LengthMeters()
-	if circuitLengthMeters <= 0 {
+	circuitLengthMetres := a.circuit.LengthMetres()
+	if circuitLengthMetres <= 0 {
 		return
 	}
 
-	// Calculate race progress based on distance in meters
-	totalRaceDistanceMeters := float64(raceLaps) * circuitLengthMeters
-	currentRaceDistanceMeters := float64(currentLap-1)*circuitLengthMeters + a.circuit.LapProgress()*circuitLengthMeters
+	// Calculate race progress based on distance in metres
+	totalRaceDistanceMetres := float64(raceLaps) * circuitLengthMetres
+	currentRaceDistanceMetres := float64(currentLap-1)*circuitLengthMetres + a.circuit.LapProgress()*circuitLengthMetres
 
-	raceProgressPercent := int8(100 * currentRaceDistanceMeters / totalRaceDistanceMeters)
+	raceProgressPercent := int8(100 * currentRaceDistanceMetres / totalRaceDistanceMetres)
 
 	// Calculate current progress interval based on progressInterval
 	currentProgressInterval := (raceProgressPercent / int8(progressIntervalPc)) * int8(progressIntervalPc) //nolint:gosec // percent value will not overflow

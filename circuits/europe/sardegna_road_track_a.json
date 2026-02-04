@@ -1,6 +1,6 @@
 {
     "name": "Sardegna - Raod Track - A",
-    "length_meters": 5085,
+    "length_metres": 5085,
     "coordinates": {
         "circuit": [
             { "x": -384, "y": 8, "z": 192 },

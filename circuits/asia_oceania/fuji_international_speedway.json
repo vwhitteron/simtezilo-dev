@@ -1,6 +1,6 @@
 {
     "name": "Fuji International Speedway",
-    "length_meters": 4498,
+    "length_metres": 4498,
     "coordinates": {
         "circuit": [
             { "x": 0, "y": 16, "z": -128 },

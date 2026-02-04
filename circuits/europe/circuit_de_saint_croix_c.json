@@ -1,6 +1,6 @@
 {
     "name": "Circuit de Saint-Croix - C",
-    "length_meters": 10759,
+    "length_metres": 10759,
     "coordinates": {
         "circuit": [
             { "x": -640, "y": 16, "z": -576 },

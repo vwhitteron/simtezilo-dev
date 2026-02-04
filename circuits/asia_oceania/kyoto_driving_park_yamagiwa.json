@@ -1,6 +1,6 @@
 {
     "name": "Kyoto Driving Park - Yamagiwa",
-    "length_meters": 4842,
+    "length_metres": 4842,
     "coordinates": {
         "circuit": [
             { "x": 0, "y": 104, "z": 0 },

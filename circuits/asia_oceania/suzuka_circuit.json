@@ -1,6 +1,6 @@
 {
     "name": "Suzukia Circuit",
-    "length_meters": 5741,
+    "length_metres": 5741,
     "coordinates": {
         "circuit": [
             { "x": 512, "y": 0, "z": -128 },

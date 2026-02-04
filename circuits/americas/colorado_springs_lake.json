@@ -1,6 +1,6 @@
 {
     "name": "Colorado Springs - Lake",
-    "length_meters": 2931,
+    "length_metres": 2931,
     "coordinates": {
         "circuit": [
             { "x": -192, "y": 16, "z": -512 },

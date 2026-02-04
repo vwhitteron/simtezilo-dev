@@ -1,6 +1,6 @@
 {
     "name": "Tokyo Expressway - Central Clockwise",
-    "length_meters": 4393,
+    "length_metres": 4393,
     "coordinates": {
         "circuit": [
             { "x": 0, "y": 8, "z": 768 },

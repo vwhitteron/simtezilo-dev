@@ -118,7 +118,7 @@ const (
 	UIMenuPitRadioFuelPreWarn          Key = "ui.menu.pitradio.fuelprewarn"
 	UIMenuPitRadioFuelStrategy         Key = "ui.menu.pitradio.fuelstrategy"
 	UIMenuPitRadioFuelSafetyLaps       Key = "ui.menu.pitradio.fuelsafetylaps"
-	UIMenuPitRadioFuelSafetyMeters     Key = "ui.menu.pitradio.fuelsafetymeters"
+	UIMenuPitRadioFuelSafetyMetres     Key = "ui.menu.pitradio.fuelsafetymetres"
 	UIMenuPitRadioTyre                 Key = "ui.menu.pitradio.tyre"
 	UIMenuPitRadioTyreEnable           Key = "ui.menu.pitradio.tyreenable"
 	UIMenuPitRadioTyreTempOptimal      Key = "ui.menu.pitradio.tyretempoptimal"

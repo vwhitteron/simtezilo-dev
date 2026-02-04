@@ -502,9 +502,9 @@
                             "maximum": 25.0,
                             "default": 0.2
                         },
-                        "rangeSafetyMarginMeters": {
+                        "rangeSafetyMarginMetres": {
                             "type": "number",
-                            "description": "Safety margin in meters for fuel range calculations",
+                            "description": "Safety margin in metres for fuel range calculations",
                             "minimum": 0.0,
                             "maximum": 50000.0,
                             "default": 750.0

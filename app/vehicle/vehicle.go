@@ -24,10 +24,10 @@ type EngineCharacteristics struct {
 }
 
 type Dimensions struct {
-	WheelbaseMeters    float32 // Distance between front and rear axles
-	TrackWidthMeters   float32 // Distance between left and right wheels on the same axle
-	LongitudinalRadius float32 // Fore/Aft rotational radius in meters (wheelbase / 2)
-	TransverseRadius   float32 // Lateral rotational radius in meters (track width / 2)
+	WheelbaseMetres    float32 // Distance between front and rear axles
+	TrackWidthMetres   float32 // Distance between left and right wheels on the same axle
+	LongitudinalRadius float32 // Fore/Aft rotational radius in metres (wheelbase / 2)
+	TransverseRadius   float32 // Lateral rotational radius in metres (track width / 2)
 }
 
 // Characteristics holds static vehicle data loaded from the GT vehicle database.
