@@ -2421,7 +2421,7 @@ func (c *Config) DecreaseSynthChannelGain(channel int) float64 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if channel > 0 || channel >= len(c.viper.Synthesizer.ChannelGain) {
+	if channel < 0 || channel >= len(c.viper.Synthesizer.ChannelGain) {
 		return 0.0
 	}
 
