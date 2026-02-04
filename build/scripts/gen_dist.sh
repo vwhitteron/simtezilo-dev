@@ -80,7 +80,7 @@ prep_common() {
             "./${release_dir}"
 
    cp support/README.md "${archive_dir}/"
-   cp support/simtezilo-dist.conf "${archive_dir}/etc/simtezilo.conf"
+   cp support/simtezilo.conf "${archive_dir}/etc/simtezilo.conf"
    cp data/replays/20251012.173043-suzuka-circuit-bmw-mclaren-f1-gtr-race-car-97.gtz "${archive_dir}/data/replays/demo.gtz"
 }
 
