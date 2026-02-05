@@ -584,25 +584,25 @@
             "type": "object",
             "description": "Engine haptic profile",
             "properties": {
-                "PrimaryBalance": {
+                "primaryBalance": {
                     "type": "number",
                     "description": "Primary balance factor",
                     "minimum": 0.0,
                     "maximum": 1.0
                 },
-                "SecondaryBalance": {
+                "secondaryBalance": {
                     "type": "number",
                     "description": "Secondary balance factor",
                     "minimum": 0.0,
                     "maximum": 1.0
                 },
-                "Gain": {
+                "gain": {
                     "type": "number",
                     "description": "Profile gain in dB",
                     "minimum": -24.0,
                     "maximum": 0.0
                 },
-                "PulseScale": {
+                "pulseScale": {
                     "type": "number",
                     "description": "Pulse interval scale factor",
                     "minimum": 0.0,
@@ -610,10 +610,10 @@
                 }
             },
             "required": [
-                "PrimaryBalance",
-                "SecondaryBalance",
-                "Gain",
-                "PulseScale"
+                "primaryBalance",
+                "secondaryBalance",
+                "gain",
+                "pulseScale"
             ],
             "additionalProperties": true
         }

@@ -81,6 +81,47 @@ func newWSClient(conn *websocket.Conn, log zerolog.Logger) *wsClient {
 	}
 }
 
+// Send queues a message to be sent to the client.
+// Returns false if the client is closed or the send buffer is full.
+func (c *wsClient) Send(msgType string, data []byte, isInitState bool) bool {
+	select {
+	case <-c.done:
+		return false
+	case c.send <- wsMessage{msgType: msgType, data: data, isInitState: isInitState}:
+		return true
+	default:
+		// Buffer full, client is slow - drop message
+		c.log.Debug().Str("msgType", msgType).Msg("dropping message, client buffer full")
+
+		return false
+	}
+}
+
+// UpdateSubscriptions updates what message types this client receives.
+func (c *wsClient) UpdateSubscriptions(subs map[string]bool) {
+	c.subMu.Lock()
+	defer c.subMu.Unlock()
+
+	maps.Copy(c.subscriptions, subs)
+}
+
+// Close gracefully shuts down the client.
+func (c *wsClient) Close() {
+	c.closeOnce.Do(func() {
+		close(c.done)
+	})
+}
+
+// IsClosed returns true if the client has been closed.
+func (c *wsClient) IsClosed() bool {
+	select {
+	case <-c.done:
+		return true
+	default:
+		return false
+	}
+}
+
 // writePump handles all writes to the websocket connection.
 // It runs in its own goroutine and is the only code that writes to the connection.
 func (c *wsClient) writePump() {
@@ -148,47 +189,6 @@ func (c *wsClient) writePump() {
 				return
 			}
 		}
-	}
-}
-
-// Send queues a message to be sent to the client.
-// Returns false if the client is closed or the send buffer is full.
-func (c *wsClient) Send(msgType string, data []byte, isInitState bool) bool {
-	select {
-	case <-c.done:
-		return false
-	case c.send <- wsMessage{msgType: msgType, data: data, isInitState: isInitState}:
-		return true
-	default:
-		// Buffer full, client is slow - drop message
-		c.log.Debug().Str("msgType", msgType).Msg("dropping message, client buffer full")
-
-		return false
-	}
-}
-
-// UpdateSubscriptions updates what message types this client receives.
-func (c *wsClient) UpdateSubscriptions(subs map[string]bool) {
-	c.subMu.Lock()
-	defer c.subMu.Unlock()
-
-	maps.Copy(c.subscriptions, subs)
-}
-
-// Close gracefully shuts down the client.
-func (c *wsClient) Close() {
-	c.closeOnce.Do(func() {
-		close(c.done)
-	})
-}
-
-// IsClosed returns true if the client has been closed.
-func (c *wsClient) IsClosed() bool {
-	select {
-	case <-c.done:
-		return true
-	default:
-		return false
 	}
 }
 
@@ -3439,6 +3439,16 @@ func (w *WebUI) handleUpdatesUpload(response http.ResponseWriter, request *http.
 		SHA256:           "",
 		ReleaseDate:      releaseDate,
 	})
+
+	// Prepare the update for installation (creates state file for platform script)
+	err = w.updater.PrepareInstall(destPath)
+	if err != nil {
+		w.log.Error().Err(err).Msg("failed to prepare custom update for installation")
+		response.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(response).Encode(map[string]string{"error": "Failed to prepare update for installation"}) //nolint:errchkjson // simple encoding
+
+		return
+	}
 
 	w.log.Info().
 		Str("filename", prefixedFilename).
