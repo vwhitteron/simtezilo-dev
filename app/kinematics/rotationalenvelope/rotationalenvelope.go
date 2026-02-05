@@ -4,7 +4,7 @@ package rotationalenvelope
 import (
 	"math"
 
-	"github.com/zetetos/gt-telemetry/pkg/models"
+	"github.com/zetetos/gt-telemetry/v2/pkg/models"
 )
 
 // Delta returns the difference between two rotational envelopes.

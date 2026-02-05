@@ -5,7 +5,7 @@ import (
 
 	"github.com/vwhitteron/simtezilo-dev/app/i18n/languagedb"
 	"github.com/vwhitteron/simtezilo-dev/app/pitradio"
-	"github.com/zetetos/gt-telemetry/pkg/models"
+	"github.com/zetetos/gt-telemetry/v2/pkg/models"
 )
 
 // updateCircuit checks for circuit changes and resets odometer and fuel range if needed.

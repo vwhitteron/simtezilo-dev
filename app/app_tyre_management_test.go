@@ -9,8 +9,8 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/config"
 	"github.com/vwhitteron/simtezilo-dev/app/pitradio"
 	"github.com/vwhitteron/simtezilo-dev/app/tyres"
-	gttelemetry "github.com/zetetos/gt-telemetry"
-	"github.com/zetetos/gt-telemetry/pkg/models"
+	gttelemetry "github.com/zetetos/gt-telemetry/v2"
+	"github.com/zetetos/gt-telemetry/v2/pkg/models"
 )
 
 type TyreIntegrationTestSuite struct {

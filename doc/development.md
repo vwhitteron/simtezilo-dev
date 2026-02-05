@@ -270,7 +270,7 @@ simtezilo-dev/
 
 ### Key Dependencies
 
-* **gt-telemetry** - Gran Turismo telemetry parsing (`github.com/zetetos/gt-telemetry`)
+* **gt-telemetry** - Gran Turismo telemetry parsing (`github.com/zetetos/gt-telemetry/v2`)
 * **viper** - Configuration management
 * **zerolog** - Structured logging
 * **testify** - Test assertions
@@ -282,7 +282,7 @@ simtezilo-dev/
 To develop against a local copy of `gt-telemetry`, uncomment the replace directive in `go.mod`:
 
 ```go
-replace github.com/zetetos/gt-telemetry => /path/to/local/gt-telemetry
+replace github.com/zetetos/gt-telemetry/v2 => /path/to/local/gt-telemetry
 ```
 
 ---

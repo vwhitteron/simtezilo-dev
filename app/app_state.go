@@ -5,7 +5,7 @@ import (
 
 	"github.com/rs/zerolog"
 	"github.com/vwhitteron/simtezilo-dev/app/kinematics"
-	gtmodels "github.com/zetetos/gt-telemetry/pkg/models"
+	gtmodels "github.com/zetetos/gt-telemetry/v2/pkg/models"
 )
 
 // raceState holds transient race data for haptic generation and pit radio notifications.

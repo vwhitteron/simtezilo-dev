@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 	"github.com/vwhitteron/simtezilo-dev/app/tyres"
-	"github.com/zetetos/gt-telemetry/pkg/models"
+	"github.com/zetetos/gt-telemetry/v2/pkg/models"
 )
 
 type TyreTestSuite struct {

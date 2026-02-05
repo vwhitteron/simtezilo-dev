@@ -1,7 +1,7 @@
 package tyres
 
 import (
-	"github.com/zetetos/gt-telemetry/pkg/models"
+	"github.com/zetetos/gt-telemetry/v2/pkg/models"
 )
 
 // attribute holds the temperature and condition of a single tyre.

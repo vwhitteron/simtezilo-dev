@@ -3,7 +3,7 @@ package circuit
 import (
 	"math"
 
-	"github.com/zetetos/gt-telemetry/pkg/circuits"
+	"github.com/zetetos/gt-telemetry/v2/pkg/circuits"
 )
 
 // Candidate represents a potential circuit match with confidence tracking.

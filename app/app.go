@@ -43,8 +43,8 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/ui/webui"
 	"github.com/vwhitteron/simtezilo-dev/app/updater"
 	"github.com/vwhitteron/simtezilo-dev/app/vehicle"
-	gttelemetry "github.com/zetetos/gt-telemetry"
-	gtmodels "github.com/zetetos/gt-telemetry/pkg/models"
+	gttelemetry "github.com/zetetos/gt-telemetry/v2"
+	gtmodels "github.com/zetetos/gt-telemetry/v2/pkg/models"
 )
 
 // lapEvent represents a single lap completion event.

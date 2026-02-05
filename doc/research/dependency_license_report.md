@@ -58,7 +58,7 @@
 | github.com/spf13/viper                        | MIT            | [LICENSE](https://github.com/spf13/viper/blob/v1.21.0/LICENSE)                                 |
 | github.com/subosito/gotenv                    | MIT            | [LICENSE](https://github.com/subosito/gotenv/blob/v1.6.0/LICENSE)                              |
 | github.com/theojulienne/go-wireless           | MIT            | [LICENSE](https://github.com/theojulienne/go-wireless/blob/v1.2.0/LICENSE)                     |
-| github.com/zetetos/gt-telemetry               | MIT            | [LICENSE](https://github.com/zetetos/gt-telemetry/blob/4891239895b5/LICENSE)                   |
+| github.com/zetetos/gt-telemetry/v2               | MIT            | [LICENSE](https://github.com/zetetos/gt-telemetry/v2/blob/4891239895b5/LICENSE)                   |
 | go.yaml.in/yaml/v3                            | MIT            | [LICENSE](https://github.com/yaml/go-yaml/blob/v3.0.4/LICENSE)                                 |
 | gopkg.in/natefinch/lumberjack.v2              | MIT            | [LICENSE](https://github.com/natefinch/lumberjack/blob/v2.2.1/LICENSE)                         |
 | github.com/golang/freetype                    | FreeType / GPL | Dual-licensed: FreeType License OR GPL 2.0+. Choose GPL option for GPL 3.0 project.            |

@@ -8,8 +8,8 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/kinematics/vector"
 	"github.com/vwhitteron/simtezilo-dev/app/signal"
 	"github.com/vwhitteron/simtezilo-dev/app/vehicle"
-	gttelemetry "github.com/zetetos/gt-telemetry"
-	"github.com/zetetos/gt-telemetry/pkg/models"
+	gttelemetry "github.com/zetetos/gt-telemetry/v2"
+	"github.com/zetetos/gt-telemetry/v2/pkg/models"
 )
 
 // PositionalDerivatives holds values for the 2nd to 5th derivatives of position.

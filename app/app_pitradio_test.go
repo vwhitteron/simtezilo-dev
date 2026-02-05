@@ -12,8 +12,8 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/fuelrange"
 	"github.com/vwhitteron/simtezilo-dev/app/i18n"
 	"github.com/vwhitteron/simtezilo-dev/app/pitradio"
-	gttelemetry "github.com/zetetos/gt-telemetry"
-	"github.com/zetetos/gt-telemetry/pkg/models"
+	gttelemetry "github.com/zetetos/gt-telemetry/v2"
+	"github.com/zetetos/gt-telemetry/v2/pkg/models"
 )
 
 // --- Mocks and stubs ---

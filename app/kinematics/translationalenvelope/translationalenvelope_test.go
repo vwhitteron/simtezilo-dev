@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/vwhitteron/simtezilo-dev/app/kinematics/translationalenvelope"
-	"github.com/zetetos/gt-telemetry/pkg/models"
+	"github.com/zetetos/gt-telemetry/v2/pkg/models"
 )
 
 func TestDeltaReturnsDifferenceBetweenEnvelopes(t *testing.T) {

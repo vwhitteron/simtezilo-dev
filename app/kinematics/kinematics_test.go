@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/vwhitteron/simtezilo-dev/app/kinematics"
 	"github.com/vwhitteron/simtezilo-dev/app/vehicle"
-	gttelemetry "github.com/zetetos/gt-telemetry"
+	gttelemetry "github.com/zetetos/gt-telemetry/v2"
 )
 
 type KinematicsTestSuite struct {

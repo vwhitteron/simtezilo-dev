@@ -1,7 +1,7 @@
 package app
 
 import (
-	gtmodels "github.com/zetetos/gt-telemetry/pkg/models"
+	gtmodels "github.com/zetetos/gt-telemetry/v2/pkg/models"
 )
 
 // checkForNewLap sends an event to the lapStartEvents channel when a new lap is detected.

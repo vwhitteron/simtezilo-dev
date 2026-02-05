@@ -6,7 +6,7 @@ Simtezilo processes Gran Turismo 7 telemetry data and transforms it into haptic 
 
 Simtezilo arose from a fairly simple idea of getting some audio feedback about race state so that on-screen overlays could be disabled when racing in VR (Virtual Reality). During early experimentation the idea quickly evolved into a solution for producing full haptic feedback through tactile transducers (aka "bass shakers"), with support for running on a small Raspberry Pi to avoid the need for a bulky desktop or laptop machine that other existing solutions require.
 
-The [gt-telemetry](http://github.com/zetetos/gt-telemetry) library was the first component to be built, providing an easy way to read telemetry from the game using Golang. This library is still a core part of Simtezilo.
+The [gt-telemetry](http://github.com/zetetos/gt-telemetry/v2) library was the first component to be built, providing an easy way to read telemetry from the game using Golang. This library is still a core part of Simtezilo.
 
 Today Simtezilo outputs haptic feedback through audio devices, voice notifications through Discord, and provides both a web-based dashboard and an SPI LCD interface for Raspberry Pi hardware.
 

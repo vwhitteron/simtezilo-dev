@@ -49,7 +49,7 @@ linters:
             - github.com/spf13/viper
             - github.com/stretchr/testify
             - github.com/vwhitteron/simtezilo-dev
-            - github.com/zetetos/gt-telemetry
+            - github.com/zetetos/gt-telemetry/v2
             - golang.org/x/crypto/ssh
             - golang.org/x/image
             - gopkg.in/natefinch/lumberjack.v2

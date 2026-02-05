@@ -4,7 +4,7 @@ package translationalenvelope
 import (
 	"math"
 
-	"github.com/zetetos/gt-telemetry/pkg/models"
+	"github.com/zetetos/gt-telemetry/v2/pkg/models"
 )
 
 // Delta computes the difference between two translational envelopes.
