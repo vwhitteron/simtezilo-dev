@@ -79,9 +79,9 @@ prep_common() {
             "./${archive_dir}/data/replays" \
             "./${release_dir}"
 
-   cp support/README.md "${archive_dir}/"
+   cp README.md "${archive_dir}/"
    cp support/simtezilo.conf "${archive_dir}/etc/simtezilo.conf"
-   cp data/replays/20251012.173043-suzuka-circuit-bmw-mclaren-f1-gtr-race-car-97.gtz "${archive_dir}/data/replays/demo.gtz"
+   cp data/replays/demo.gtz "${archive_dir}/data/replays/demo.gtz"
 }
 
 gen_windows_amd64() {
