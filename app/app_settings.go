@@ -69,10 +69,10 @@ func (a *App) settingAction(setting languagedb.Key, action string) string {
 		languagedb.UIMenuHapticsTransmissionFFBStrength: a.handletransmissionFFBStrengthSetting,
 		languagedb.UIMenuHapticsTransmissionCurve:       a.handleTransmissionCurveSetting,
 		languagedb.UIMenuHapticsTransmissionGforceMax:   a.handleTransmissionGforceMaxSetting,
-		languagedb.UIMenuHapticsEnginePrimaryBalance:    a.handlePrimaryBalanceSetting,
-		languagedb.UIMenuHapticsEngineSecondaryBalance:  a.handleSecondaryBalanceSetting,
+		languagedb.UIMenuHapticsEnginePrimaryBalance:    a.handleEnginePrimaryBalanceSetting,
+		languagedb.UIMenuHapticsEngineSecondaryBalance:  a.handleEngineSecondaryBalanceSetting,
 		languagedb.UIMenuHapticsEnginePulseGain:         a.handleEnginePulseGainSetting,
-		languagedb.UIMenuHapticsEnginePulseScale:        a.handlePulseScaleSetting,
+		languagedb.UIMenuHapticsEnginePulseScale:        a.handleEnginePulseScaleSetting,
 
 		// Pit Radio handlers
 		languagedb.UIMenuPitRadioEnable:               a.handlePitRadioEnableSetting,
@@ -138,7 +138,7 @@ func (a *App) handleChassisGainSetting(action string) string {
 	return strconv.FormatFloat(value, 'f', 2, 64)
 }
 
-func (a *App) handleEnginePulseVolSetting(action string) string {
+func (a *App) handleEnginePulseGainSetting(action string) string {
 	var value float64
 
 	switch action {
@@ -153,7 +153,7 @@ func (a *App) handleEnginePulseVolSetting(action string) string {
 	return strconv.FormatFloat(value, 'f', 2, 64)
 }
 
-func (a *App) handleEnginePrimarySetting(action string) string {
+func (a *App) handleEnginePrimaryBalanceSetting(action string) string {
 	var value float64
 
 	switch action {
@@ -183,7 +183,7 @@ func (a *App) handleEnginePulseScaleSetting(action string) string {
 	return strconv.FormatFloat(value, 'f', 2, 64)
 }
 
-func (a *App) handleEngineSecondarySetting(action string) string {
+func (a *App) handleEngineSecondaryBalanceSetting(action string) string {
 	var value float64
 
 	switch action {
@@ -1154,23 +1154,6 @@ func (a *App) handleTransmissionGforceMaxSetting(action string) string {
 	}
 
 	return strconv.FormatFloat(value, 'f', 1, 64) + "G"
-}
-
-// Haptics - Engine Profile handlers (these are aliases to existing handlers).
-func (a *App) handlePrimaryBalanceSetting(action string) string {
-	return a.handleEnginePrimarySetting(action)
-}
-
-func (a *App) handleSecondaryBalanceSetting(action string) string {
-	return a.handleEngineSecondarySetting(action)
-}
-
-func (a *App) handleEnginePulseGainSetting(action string) string {
-	return a.handleEnginePulseVolSetting(action)
-}
-
-func (a *App) handlePulseScaleSetting(action string) string {
-	return a.handleEnginePulseScaleSetting(action)
 }
 
 // cycleSampleRate handles cycling through sample rates based on the action.
