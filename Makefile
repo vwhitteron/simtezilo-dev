@@ -76,7 +76,7 @@ lint/fix:
 
 ## dist: create distribution archives in dist/releases/<channel>/v<version>/
 .PHONY: dist
-dist: build/rpi/v8/64 build/windows/64 build/darwin/silicon
+dist: build/rpi/v8/64 build/linux/amd64 build/windows/64 build/darwin/silicon
 	@chmod +x ./build/scripts/gen_dist.sh
 	@./build/scripts/gen_dist.sh
 
@@ -95,7 +95,7 @@ release: dist release/manifest
 
 ## release/publish: upload release artifacts to Cloudflare R2
 # R2_REMOTE must be set to the rclone remote name for the R2 bucket
-# e.g., "R2_REMOTE=r2:mybucker make release/publish"
+# e.g., "R2_REMOTE=r2:mybucket make release/publish"
 .PHONY: release/publish
 release/publish:
 	@if [ -z "$(R2_REMOTE)" ]; then echo "Error: R2_REMOTE is not set"; exit 1; fi
@@ -260,7 +260,7 @@ build/rpi/v8/64:
 run:
 	@go run cmd/simtezilo/main.go -l info
 
-## run: run the application locally with denug logging enabled
+## run/debug: run the application locally with denug logging enabled
 .PHONY: run/debug
 run/debug:
 	@go run cmd/simtezilo/main.go -l debug -w=true
@@ -292,8 +292,8 @@ start-pyroscope:
 	grafana/pyroscope:latest
 	@echo "Pyroscope started. Access it at http://localhost:4040"
 
-## start-pyroscope: start the Pyroscope profiler Docker container
-.PHONY: start-pyroscope
+## stop-pyroscope: stop the Pyroscope profiler Docker container
+.PHONY: stop-pyroscope
 stop-pyroscope:
 	@docker stop pyroscope
 
@@ -303,7 +303,7 @@ clean:
 	@rm -rf out
 	@go clean -cache
 
-## clean: clean up project and return to a pristine state
+## distclean: clean up project and return to a pristine state
 .PHONY: distclean
 distclean: clean
 	@rm -rf dist
