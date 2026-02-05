@@ -1,24 +1,24 @@
 {
-    "Metadata": {
-        "Code": "ja",
-        "DefaultCountry": "jp",
-        "Name": "日本語"
+    "metadata": {
+        "code": "ja",
+        "defaultCountry": "jp",
+        "name": "日本語"
     },
-    "Fonts": {
-        "Regular": {
-            "File": "LINESeedJP_TTF_Bd.ttf",
-            "Size": 0.8
+    "fonts": {
+        "regular": {
+            "file": "LINESeedJP_TTF_Bd.ttf",
+            "size": 0.8
         },
-        "Italic": {
-            "File": "LINESeedJP_TTF_Bd.ttf",
-            "Size": 0.8
+        "italic": {
+            "file": "LINESeedJP_TTF_Bd.ttf",
+            "size": 0.8
         },
-        "Value": {
-            "File": "LeagueGothic-Regular.ttf",
-            "Size": 1
+        "value": {
+            "file": "LeagueGothic-Regular.ttf",
+            "size": 1
         }
     },
-    "Translations": {
+    "translations": {
         "app.name": "シムテジロ",
         "app.description": "シンセサイザーのエミュレーション",
         "app.version": "バージョン",

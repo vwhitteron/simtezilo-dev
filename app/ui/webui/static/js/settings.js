@@ -687,6 +687,11 @@ class ConfigManager {
             // Update local config
             this.setNestedValue(this.config, configPath, newValue);
 
+            // If gain increment was changed, update step attribute on all gain inputs
+            if (configPath === 'synthesizer.gainIncrement') {
+                this.updateGainInputSteps();
+            }
+
         } catch (error) {
             console.error(`Failed to save ${configPath}:`, error);
             this.showInputStatus(input, 'error');
@@ -879,12 +884,31 @@ class ConfigManager {
         // Update visibility of dev-only elements
         this.updateDevToolsVisibility();
 
+        // Update step attribute on all gain inputs based on gainIncrement config
+        this.updateGainInputSteps();
+
         // Notify UpdateManager to sync its state with the channel dropdown
         if (typeof UpdateManager !== 'undefined' && typeof UpdateManager.syncChannelState === 'function') {
             UpdateManager.syncChannelState();
         }
 
         this.isPopulating = false; // Clear flag after population complete
+    }
+
+    // Update step attribute on all gain inputs to match the configured gainIncrement
+    updateGainInputSteps() {
+        const gainIncrement = this.getNestedValue(this.config, 'synthesizer.gainIncrement');
+        if (gainIncrement && gainIncrement > 0) {
+            const gainInputs = document.querySelectorAll('.gain-input');
+            gainInputs.forEach(input => {
+                input.step = gainIncrement;
+                // Also update any cloned touch spinner inputs that mirror this input
+                const touchInputs = document.querySelectorAll(`[data-touch-for="${input.id}"]`);
+                touchInputs.forEach(touchInput => {
+                    touchInput.step = gainIncrement;
+                });
+            });
+        }
     }
 
     // Update all mute icons based on their corresponding checkbox states
@@ -1874,10 +1898,10 @@ class ConfigManager {
 
     // Load engine profile data into form
     loadEngineProfile(profileName, profile) {
-        document.getElementById('engine-primarybalance').value = this.formatDecimalValue(profile.PrimaryBalance);
-        document.getElementById('engine-secondarybalance').value = this.formatDecimalValue(profile.SecondaryBalance);
-        document.getElementById('engine-gain').value = profile.Gain;
-        document.getElementById('engine-pulsescale').value = this.formatDecimalValue(profile.PulseScale);
+        document.getElementById('engine-primarybalance').value = this.formatDecimalValue(profile.primaryBalance);
+        document.getElementById('engine-secondarybalance').value = this.formatDecimalValue(profile.secondaryBalance);
+        document.getElementById('engine-gain').value = profile.gain;
+        document.getElementById('engine-pulsescale').value = this.formatDecimalValue(profile.pulseScale);
     }
 
     // Debounce save for engine profile
@@ -1894,10 +1918,10 @@ class ConfigManager {
         if (!selectedProfile) return;
 
         const profile = {
-            PrimaryBalance: parseFloat(document.getElementById('engine-primarybalance').value),
-            SecondaryBalance: parseFloat(document.getElementById('engine-secondarybalance').value),
-            Gain: parseFloat(document.getElementById('engine-gain').value),
-            PulseScale: parseFloat(document.getElementById('engine-pulsescale').value)
+            primaryBalance: parseFloat(document.getElementById('engine-primarybalance').value),
+            secondaryBalance: parseFloat(document.getElementById('engine-secondarybalance').value),
+            gain: parseFloat(document.getElementById('engine-gain').value),
+            pulseScale: parseFloat(document.getElementById('engine-pulsescale').value)
         };
 
         try {

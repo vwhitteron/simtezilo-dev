@@ -583,10 +583,41 @@
                 });
             }
 
+            // Helper function to get the current gain increment from config or DOM
+            function getGainIncrement(defaultStep) {
+                // Try to get from config manager first (most reliable source)
+                if (window.configManager && window.configManager.config &&
+                    window.configManager.config.synthesizer &&
+                    typeof window.configManager.config.synthesizer.gainIncrement === 'number') {
+                    const val = window.configManager.config.synthesizer.gainIncrement;
+                    if (val > 0) {
+                        return val;
+                    }
+                }
+                // Fallback to reading from the input element
+                const gainIncrementInput = document.getElementById('synth-gainincrement');
+                if (gainIncrementInput) {
+                    const val = Math.abs(parseFloat(gainIncrementInput.value));
+                    if (!isNaN(val) && val > 0) {
+                        return val;
+                    }
+                }
+                return defaultStep;
+            }
+
             function addSpinnerButtonsToGroup(input, group) {
-                const step = parseFloat(input.step) || 1;
+                const defaultStep = parseFloat(input.step) || 1;
                 const min = input.min !== '' ? parseFloat(input.min) : -Infinity;
                 const max = input.max !== '' ? parseFloat(input.max) : Infinity;
+                const isGainInput = input.classList.contains('gain-input');
+
+                // Function to get the current step value for gain inputs
+                function getStep() {
+                    if (isGainInput) {
+                        return getGainIncrement(defaultStep);
+                    }
+                    return defaultStep;
+                }
 
                 // Create decrease button
                 const decreaseBtn = document.createElement('button');
@@ -618,6 +649,7 @@
 
                 // Handle decrease
                 decreaseBtn.addEventListener('click', function () {
+                    const step = getStep();
                     const currentValue = parseFloat(input.value) || 0;
                     const newValue = Math.max(currentValue - step, min);
                     input.value = roundToStep(newValue, step);
@@ -626,6 +658,7 @@
 
                 // Handle increase
                 increaseBtn.addEventListener('click', function () {
+                    const step = getStep();
                     const currentValue = parseFloat(input.value) || 0;
                     const newValue = Math.min(currentValue + step, max);
                     input.value = roundToStep(newValue, step);
@@ -634,9 +667,18 @@
             }
 
             function createTouchSpinnerWrapper(input) {
-                const step = parseFloat(input.step) || 1;
+                const defaultStep = parseFloat(input.step) || 1;
                 const min = input.min !== '' ? parseFloat(input.min) : -Infinity;
                 const max = input.max !== '' ? parseFloat(input.max) : Infinity;
+                const isGainInput = input.classList.contains('gain-input');
+
+                // Function to get the current step value for gain inputs
+                function getStep() {
+                    if (isGainInput) {
+                        return getGainIncrement(defaultStep);
+                    }
+                    return defaultStep;
+                }
 
                 // Check if input is inside input-with-suffix wrapper
                 const suffixWrapper = input.closest('.input-with-suffix');
@@ -703,6 +745,7 @@
                 }
 
                 decreaseBtn.addEventListener('click', function () {
+                    const step = getStep();
                     const currentValue = parseFloat(touchInput.value) || 0;
                     const newValue = Math.max(currentValue - step, min);
                     touchInput.value = roundToStep(newValue, step);
@@ -710,6 +753,7 @@
                 });
 
                 increaseBtn.addEventListener('click', function () {
+                    const step = getStep();
                     const currentValue = parseFloat(touchInput.value) || 0;
                     const newValue = Math.min(currentValue + step, max);
                     touchInput.value = roundToStep(newValue, step);
@@ -1531,8 +1575,8 @@
                                     </label>
                                     <div class="input-with-suffix" style="flex: 1;">
                                         <input type="number" id="synth-gainincrement"
-                                            class="form-control text-center gain-input"
-                                            data-config="synthesizer.gainIncrement" min="0.05" max="1.0" step="0.05">
+                                            class="form-control text-center decimal-input"
+                                            data-config="synthesizer.gainIncrement" min="0.05" max="3.0" step="0.05">
                                         <span class="input-suffix">dB</span>
                                     </div>
                                 </div>

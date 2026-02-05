@@ -1,24 +1,24 @@
 {
-    "Metadata": {
-        "Code": "en",
-        "DefaultCountry": "gb",
-        "Name": "English"
+    "metadata": {
+        "code": "en",
+        "defaultCountry": "gb",
+        "name": "English"
     },
-    "Fonts": {
-        "Regular": {
-            "File": "LeagueGothic-Regular.ttf",
-            "Size": 1
+    "fonts": {
+        "regular": {
+            "file": "LeagueGothic-Regular.ttf",
+            "size": 1
         },
-        "Italic": {
-            "File": "LeagueGothic-Italic.ttf",
-            "Size": 1
+        "italic": {
+            "file": "LeagueGothic-Italic.ttf",
+            "size": 1
         },
-        "Value": {
-            "File": "LeagueGothic-Regular.ttf",
-            "Size": 1
+        "value": {
+            "file": "LeagueGothic-Regular.ttf",
+            "size": 1
         }
     },
-    "Translations": {
+    "translations": {
         "app.name": "Simtezilo",
         "app.description": "Sim Racing Haptics Synthesizer",
         "app.version": "version",

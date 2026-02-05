@@ -14,15 +14,15 @@ import (
 
 // LanguageMetadata holds the metadata for a language.
 type LanguageMetadata struct {
-	Code           string `json:"Code"`
-	DefaultCountry string `json:"DefaultCountry"`
-	Name           string `json:"Name"`
+	Code           string `json:"code"`
+	DefaultCountry string `json:"defaultCountry"`
+	Name           string `json:"name"`
 }
 
 // languageFont holds the font file name and size for a language.
 type languageFont struct {
-	File string  `json:"File"`
-	Size float64 `json:"Size"`
+	File string  `json:"file"`
+	Size float64 `json:"size"`
 }
 
 // languageFonts holds a list of font variations and sizes for a language.
@@ -33,9 +33,9 @@ type languageTranslations map[string]string
 
 // languageData holds the data and attributes for a language.
 type languageData struct {
-	Metadata     LanguageMetadata     `json:"Metadata"`
-	Fonts        languageFonts        `json:"Fonts"`
-	Translations languageTranslations `json:"Translations"`
+	Metadata     LanguageMetadata     `json:"metadata"`
+	Fonts        languageFonts        `json:"fonts"`
+	Translations languageTranslations `json:"translations"`
 }
 
 // LanguageDB manages the loading and retrieval of translations for multiple languages.
@@ -184,17 +184,17 @@ func (l *LanguageDB) getFont(variation string, code string) font.Font {
 
 		switch strings.ToLower(variation) {
 		case "regular":
-			fontName = language.Fonts["Regular"].File
-			fontSize = language.Fonts["Regular"].Size
+			fontName = language.Fonts["regular"].File
+			fontSize = language.Fonts["regular"].Size
 		case "italic":
-			fontName = language.Fonts["Italic"].File
-			fontSize = language.Fonts["Italic"].Size
+			fontName = language.Fonts["italic"].File
+			fontSize = language.Fonts["italic"].Size
 		case "value":
-			fontName = language.Fonts["Value"].File
-			fontSize = language.Fonts["Value"].Size
+			fontName = language.Fonts["value"].File
+			fontSize = language.Fonts["value"].Size
 		default:
-			fontName = language.Fonts["Regular"].File
-			fontSize = language.Fonts["Regular"].Size
+			fontName = language.Fonts["regular"].File
+			fontSize = language.Fonts["regular"].Size
 
 			l.log.Warn().
 				Str("variation", variation).

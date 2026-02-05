@@ -1515,19 +1515,19 @@ func (w *WebUI) applySynthesizerConfig(config map[string]any) []string {
 				if profileMap, ok := profileData.(map[string]any); ok {
 					profile := haptics.EngineProfile{}
 
-					if pb, ok := profileMap["PrimaryBalance"].(float64); ok {
+					if pb, ok := profileMap["primaryBalance"].(float64); ok {
 						profile.PrimaryBalance = pb
 					}
 
-					if sb, ok := profileMap["SecondaryBalance"].(float64); ok {
+					if sb, ok := profileMap["secondaryBalance"].(float64); ok {
 						profile.SecondaryBalance = sb
 					}
 
-					if g, ok := profileMap["Gain"].(float64); ok {
+					if g, ok := profileMap["gain"].(float64); ok {
 						profile.Gain = g
 					}
 
-					if ps, ok := profileMap["PulseScale"].(float64); ok {
+					if ps, ok := profileMap["pulseScale"].(float64); ok {
 						profile.PulseScale = ps
 					}
 
