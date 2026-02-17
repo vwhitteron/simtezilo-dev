@@ -1715,9 +1715,25 @@
                                             data-i18n="runmode.settings.synth.equalizer.title">Equalizer</span>
                                     </h5>
                                     <div class="mb-3">
-                                        <div class="d-flex align-items-center gap-2 mt-2">
-                                            <label for="eq-channel-select" class="form-label mb-0"
-                                                data-i18n="runmode.settings.synth.equalizer.channel">Channel</label>
+                                        <h6 class="mb-2">
+                                            <span data-i18n="runmode.settings.synth.equalizer.drx">DRX</span>
+                                            <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
+                                                role="button"
+                                                data-i18n-tooltip="runmode.settings.synth.equalizer.drx.tooltip"></i>
+                                        </h6>
+                                        <div class="form-check form-switch">
+                                            <input type="checkbox" class="form-check-input" id="synth-drxenabled"
+                                                role="switch">
+                                            <label class="form-check-label" for="synth-drxenabled">
+                                                <span data-i18n="runmode.settings.synth.equalizer.enabled">Enable</span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="mb-3">
+                                        <h6 class="mb-2">
+                                            <span data-i18n="runmode.settings.synth.equalizer.channel">Channel</span>
+                                        </h6>
+                                        <div class="d-flex align-items-center gap-2">
                                             <select id="eq-channel-select" class="form-select" style="width: auto;">
                                                 <option value="0"
                                                     data-i18n="runmode.settings.synth.equalizer.channel.left">Left
@@ -1734,6 +1750,7 @@
                                                         data-i18n="runmode.settings.synth.equalizer.enabled">Enable</span>
                                                 </label>
                                             </div>
+                                            <span id="drx-headroom-display" class="text-muted ms-auto small"></span>
                                         </div>
                                     </div>
                                     <!-- EQ Curve Visualization -->

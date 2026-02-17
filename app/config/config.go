@@ -123,11 +123,13 @@ type Synthesizer struct {
 	EngineGain                float64     `json:"engineGain"`
 	GainIncrement             float64     `json:"gainIncrement"`
 	EnableEq                  []bool      `json:"enableEq"`
+	EnableDRX                 bool        `json:"enableDrx"`
 	EqBands                   [][]EQBand  `json:"eqBands,omitempty"`
 	_eqCurve                  [][]float64 `json:"-"` // Computed curve for fast lookup (per channel)
 	_eqMinFreq                float64     `json:"-"` // Minimum frequency for curve
 	_eqMaxFreq                float64     `json:"-"` // Maximum frequency for curve
-	_eqResolution             float64     `json:"-"` // Frequency resolution (Hz per bucket)}
+	_eqResolution             float64     `json:"-"` // Frequency resolution (Hz per bucket)
+	_drxHeadroom              []float64   `json:"-"` // Deepest EQ attenuation in dB per channel (DRX headroom)
 }
 
 // Telemetry represents the telemetry data source configuration.
@@ -202,6 +204,9 @@ type Snapshot struct {
 	PulseMinFrequencyHz float64
 	PulseWidthMin       float64
 	PulseWidthMax       float64
+
+	// DRX (Dynamic Range Extension) setting
+	DRXEnabled bool
 
 	// Dynamic transmission settings
 	DynamicTransmissionFeedback  bool
@@ -1493,6 +1498,29 @@ func (c *Config) SetHapticsPulseMinFrequencyHz(value float64) {
 	c.viper.Haptics.PulseMinFrequencyHz = value
 	c.updatePulseWidthExtents()
 	c.mu.Unlock()
+}
+
+// ****************************************************************************
+// DRX (Dynamic Range Extension) section methods.
+// ****************************************************************************
+
+// GetSynthDRXEnabled returns whether DRX (Dynamic Range Extension) is enabled.
+// When enabled, high impact events shift pulse frequency into EQ-attenuated ranges
+// and bypass equalisation to produce stronger haptic output.
+func (c *Config) GetSynthDRXEnabled() bool {
+	snap := c.snapshot.Load()
+
+	return snap.DRXEnabled
+}
+
+// SetSynthDRXEnabled sets whether DRX (Dynamic Range Extension) is enabled.
+func (c *Config) SetSynthDRXEnabled(enabled bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.Synthesizer.EnableDRX = enabled
+	c.rebuildSnapshot()
+	c.registerUpdate(false)
 }
 
 // ****************************************************************************
@@ -2795,6 +2823,19 @@ func (c *Config) GetSynthChannelEqCurve(channel int) ([]float64, float64, float6
 		c.viper.Synthesizer._eqResolution
 }
 
+// GetSynthChannelDRXHeadroom returns the deepest EQ attenuation in dB for the given channel.
+// A value of 0.0 means no attenuation (no DRX headroom); negative values indicate available headroom.
+func (c *Config) GetSynthChannelDRXHeadroom(channel int) float64 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if channel < 0 || channel >= len(c.viper.Synthesizer._drxHeadroom) {
+		return 0.0
+	}
+
+	return c.viper.Synthesizer._drxHeadroom[channel]
+}
+
 // GetSynthChannelsEqEnabled returns the EQ enabled state for all channels.
 func (c *Config) GetSynthChannelsEqEnabled() []bool {
 	snap := c.snapshot.Load()
@@ -3084,46 +3125,69 @@ func (c *Config) computeEqCurve(channel int) {
 
 		// Apply each band's bell filter by multiplication in linear space
 		for _, band := range c.viper.Synthesizer.EqBands[channel] {
-			// Calculate bell filter response at this frequency
-			// Using per-band Q factor for bandwidth control
-			if band.Gain != 0.0 {
-				// Use band's qFactor value, default to 2.0 if not set
-				qFactor := band.Q
-				if qFactor <= 0 {
-					qFactor = 2.0
-				}
-
-				freqRatio := freq / band.Frequency
-				if freqRatio > 0 {
-					// Bell filter magnitude response in dB
-					// H(f) = G / sqrt(1 + Q^2 * (f/fc - fc/f)^2)
-					// At center frequency (f = fc), delta = 0, denom = 1, so gain = G (exact)
-					delta := freqRatio - 1.0/freqRatio
-					denom := math.Sqrt(1.0 + qFactor*qFactor*delta*delta)
-
-					if denom > 0 {
-						// Calculate this band's gain at this frequency in dB
-						bandGainDB := band.Gain / denom
-						// Convert to amplitude ratio and multiply
-						amplitudeRatio *= math.Pow(10, bandGainDB/20)
-					}
-				}
-			}
+			amplitudeRatio *= bellFilterResponse(freq, band)
 		}
 
 		// Store the final amplitude ratio for efficient multiplication
 		curve[bucketNum] = amplitudeRatio
 	}
 
+	// Find the deepest attenuation (lowest ratio below 1.0) for DRX headroom
+	deepestRatio := 1.0
+	for _, ratio := range curve {
+		if ratio < deepestRatio {
+			deepestRatio = ratio
+		}
+	}
+
+	// Convert to dB: 0 dB means no headroom, negative values indicate available headroom
+	drxHeadroomDB := 20 * math.Log10(deepestRatio)
+
 	// Ensure the curves slice is large enough
 	for len(c.viper.Synthesizer._eqCurve) <= channel {
 		c.viper.Synthesizer._eqCurve = append(c.viper.Synthesizer._eqCurve, nil)
 	}
 
+	for len(c.viper.Synthesizer._drxHeadroom) <= channel {
+		c.viper.Synthesizer._drxHeadroom = append(c.viper.Synthesizer._drxHeadroom, 0.0)
+	}
+
 	c.viper.Synthesizer._eqCurve[channel] = curve
+	c.viper.Synthesizer._drxHeadroom[channel] = drxHeadroomDB
 	c.viper.Synthesizer._eqMinFreq = minFreqHz
 	c.viper.Synthesizer._eqMaxFreq = maxFreqHz
 	c.viper.Synthesizer._eqResolution = resolutionHz
+}
+
+// bellFilterResponse returns the amplitude ratio contribution of a single EQ band
+// at the given frequency. Returns 1.0 (unity) if the band has no effect.
+//
+// Uses bell filter magnitude response: H(f) = G / sqrt(1 + Q² × (f/fc - fc/f)²).
+func bellFilterResponse(freq float64, band EQBand) float64 {
+	if band.Gain == 0.0 {
+		return 1.0
+	}
+
+	qFactor := band.Q
+	if qFactor <= 0 {
+		qFactor = 2.0
+	}
+
+	freqRatio := freq / band.Frequency
+	if freqRatio <= 0 {
+		return 1.0
+	}
+
+	delta := freqRatio - 1.0/freqRatio
+	denom := math.Sqrt(1.0 + qFactor*qFactor*delta*delta)
+
+	if denom <= 0 {
+		return 1.0
+	}
+
+	bandGainDB := band.Gain / denom
+
+	return math.Pow(10, bandGainDB/20)
 }
 
 // registerUpdate records the time of the last configuration update.
@@ -3176,6 +3240,8 @@ func (c *Config) rebuildSnapshot() {
 		PulseMinFrequencyHz: c.viper.Haptics.PulseMinFrequencyHz,
 		PulseWidthMin:       c.viper.Haptics._pulseWidthMin,
 		PulseWidthMax:       c.viper.Haptics._pulseWidthMax,
+
+		DRXEnabled: c.viper.Synthesizer.EnableDRX,
 
 		DynamicTransmissionFeedback:  c.viper.Haptics.DynamicTransmissionFeedback,
 		DynamicTransmissionCurve:     c.viper.Haptics.DynamicTransmissionCurve,

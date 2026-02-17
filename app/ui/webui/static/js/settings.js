@@ -1998,9 +1998,19 @@ class ConfigManager {
         const qFactor = document.getElementById('eq-q-factor');
         const resetBtn = document.getElementById('eq-reset-btn');
         const eqEnabledCheckbox = document.getElementById('synth-eqenabled');
+        const drxEnabledCheckbox = document.getElementById('synth-drxenabled');
 
         if (!bandSelect || !frequencySlider || !gainSlider || !qSlider || !this.config.synthesizer) {
             return;
+        }
+
+        // Set DRX enabled checkbox (global setting)
+        if (drxEnabledCheckbox) {
+            drxEnabledCheckbox.checked = !!this.config.synthesizer.enableDrx;
+            drxEnabledCheckbox.addEventListener('change', () => {
+                this.updateDrxHeadroomDisplay();
+                this.debounceEqSave();
+            });
         }
 
         // Update frequency slider bounds from pulse config
@@ -2080,6 +2090,7 @@ class ConfigManager {
                     }
                 }
 
+                this.updateDrxHeadroomDisplay();
                 this.updateBandSelect();
                 this.loadBandValues(0);
                 this.updateFrequencyConstraints();
@@ -2092,6 +2103,9 @@ class ConfigManager {
 
         // Load initial band values
         this.loadBandValues(0);
+
+        // Display DRX headroom for current channel
+        this.updateDrxHeadroomDisplay();
 
         // Band select change event
         bandSelect.addEventListener('change', (e) => {
@@ -2522,6 +2536,38 @@ class ConfigManager {
         }
     }
 
+    // Update DRX headroom display for the current channel
+    updateDrxHeadroomDisplay() {
+        const display = document.getElementById('drx-headroom-display');
+        if (!display) return;
+
+        const drxEnabled = document.getElementById('synth-drxenabled');
+        if (!drxEnabled || !drxEnabled.checked) {
+            display.textContent = '';
+            return;
+        }
+
+        const headroom = this.config.drxHeadroom;
+        if (!Array.isArray(headroom) || headroom.length <= this.currentChannel) {
+            display.textContent = '';
+            return;
+        }
+
+        const value = headroom[this.currentChannel];
+        if (value === 0.0) {
+            const noneText = t('runmode.settings.synth.equalizer.drx.headroom.none');
+            display.textContent = noneText || 'DRX boost: none';
+        } else {
+            const tmpl = t('runmode.settings.synth.equalizer.drx.headroom');
+            const formatted = '+' + Math.abs(value).toFixed(1);
+            if (tmpl) {
+                display.textContent = tmpl.replace('{{value}}', formatted);
+            } else {
+                display.textContent = `DRX boost: ${formatted} dB`;
+            }
+        }
+    }
+
     // Debounce save for equalizer
     debounceEqSave() {
         clearTimeout(this.eqSaveTimeout);
@@ -2569,14 +2615,23 @@ class ConfigManager {
                 enableEQArray[this.currentChannel] = eqEnabledCheckbox.checked;
             }
 
+            // Update DRX enabled (global setting)
+            const drxEnabledCheckbox = document.getElementById('synth-drxenabled');
+            let enableDrx = false;
+            if (drxEnabledCheckbox) {
+                enableDrx = drxEnabledCheckbox.checked;
+            }
+
             // Update local config
             this.config.synthesizer.eq = normalizedBandsAll;
             this.config.synthesizer.enableEQ = enableEQArray;
+            this.config.synthesizer.enableDrx = enableDrx;
 
             // Save to server
             const formData = {
                 synthesizer: {
                     enableEQ: enableEQArray,
+                    enableDrx: enableDrx,
                     eq: normalizedBandsAll
                 }
             };
@@ -2599,6 +2654,12 @@ class ConfigManager {
             if (result.config && result.config.eqCurve) {
                 this.config.eqCurve = result.config.eqCurve;
                 this.drawEqCurve();
+            }
+
+            // Update DRX headroom from save response
+            if (result.config && result.config.drxHeadroom) {
+                this.config.drxHeadroom = result.config.drxHeadroom;
+                this.updateDrxHeadroomDisplay();
             }
 
             // Show success indicator

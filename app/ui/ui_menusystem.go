@@ -209,6 +209,7 @@ func NewMenuSystem() *MenuSystem {
 		&MenuNode{name: languagedb.UIMenuSynthTransmissionGainMinRace, nodeType: NodeTypeLeaf, context: PageContextAlways, parent: gainControlsNode},
 		&MenuNode{name: languagedb.UIMenuSynthTransmissionGainMinStreet, nodeType: NodeTypeLeaf, context: PageContextAlways, parent: gainControlsNode},
 		&MenuNode{name: languagedb.UIMenuSynthEqMode, nodeType: NodeTypeLeaf, context: PageContextAlways, parent: gainControlsNode},
+		&MenuNode{name: languagedb.UIMenuSynthDrx, nodeType: NodeTypeLeaf, context: PageContextAlways, parent: gainControlsNode},
 		calibrationNode,
 	)
 

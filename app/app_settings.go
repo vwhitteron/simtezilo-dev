@@ -41,6 +41,7 @@ func (a *App) settingAction(setting languagedb.Key, action string) string {
 		languagedb.UIMenuSynthTransmissionGainMinRace:   a.handleTransmissionGainMinRaceSetting,
 		languagedb.UIMenuSynthTransmissionGainMinStreet: a.handleTransmissionGainMinStreetSetting,
 		languagedb.UIMenuSynthEqMode:                    a.handleEqModeSetting,
+		languagedb.UIMenuSynthDrx:                       a.handleDrxSetting,
 
 		// Mute handlers
 		languagedb.UIMenuSynthMuteMaster:       a.handleMasterMuteSetting,
@@ -267,6 +268,22 @@ func (a *App) applyEqMode(mode int) string {
 
 		return "Off"
 	}
+}
+
+func (a *App) handleDrxSetting(action string) string {
+	enabled := a.config.GetSynthDRXEnabled()
+
+	switch action {
+	case "increase", "decrease":
+		enabled = !enabled
+		a.config.SetSynthDRXEnabled(enabled)
+	}
+
+	if enabled {
+		return settingStateOn
+	}
+
+	return settingStateOff
 }
 
 func (a *App) handleLanguageSetting(action string) string {

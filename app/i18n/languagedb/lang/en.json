@@ -75,6 +75,7 @@
         "ui.menu.synth.transmissiongainminrace": "Trans Min Race",
         "ui.menu.synth.transmissiongainminstreet": "Trans Min Street",
         "ui.menu.synth.eqmode": "EQ Mode",
+        "ui.menu.synth.drx": "DRX",
         "ui.menu.synth.calibration": "Calibration",
         "ui.menu.synth.calibration.enable": "Enable",
         "ui.menu.synth.calibration.gain": "Gain",
@@ -419,6 +420,10 @@
         "runmode.settings.synth.calibration.sweepMax": "Sweep Max",
         "runmode.settings.synth.equalizer.title": "Equalizer",
         "runmode.settings.synth.equalizer.tooltip": "An 8-band parametric equalizer to adjust the frequency response of the synthesized audio signal. Avoid boosting values above zero as it can result in distortion and could damage your equipment. Instead try reducing stronger frequencies down to match the weaker frequencies.",
+        "runmode.settings.synth.equalizer.drx": "DRX",
+        "runmode.settings.synth.equalizer.drx.tooltip": "Dynamic Range Extension (DRX) boosts the physical intensity of strong impacts beyond normal limits by exploiting unused headroom in EQ-attenuated frequency bands. Requires at least one EQ band with negative gain to be effective.",
+        "runmode.settings.synth.equalizer.drx.headroom": "DRX boost: {{value}} dB",
+        "runmode.settings.synth.equalizer.drx.headroom.none": "DRX boost: none",
         "runmode.settings.synth.equalizer.enabled": "Enable",
         "runmode.settings.synth.equalizer.channel": "Channel",
         "runmode.settings.synth.equalizer.channel.left": "Left",
@@ -530,7 +535,6 @@
         "runmode.telemetry.chart.snap": "6DOF Snap",
         "runmode.telemetry.chart.translationalaccel": "6DOF Translational Acceleration",
         "runmode.telemetry.chart.rotationalaccel": "6DOF Rotational Acceleration",
-        "runmode.telemetry.chart.synthoutput": "Synthesizer Outputs",
         "runmode.telemetry.chart.computetime": "Compute Time"
     }
 }

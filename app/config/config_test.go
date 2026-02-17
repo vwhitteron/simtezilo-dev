@@ -868,7 +868,7 @@ func testHapticsTransmissionGforceMaxIncreaseDecrease(t *testing.T) {
 	assert.InDelta(t, 2.0, result, 0.001)
 }
 
-func TestHapticsCoreSection(t *testing.T) {
+func TestHapticsCoreSection(t *testing.T) { //nolint:dupl // Test runners have similar structure by design
 	t.Parallel()
 
 	t.Run("testHapticsDynamicTransFeedbackEnabled", testHapticsDynamicTransFeedbackEnabled)
@@ -893,6 +893,33 @@ func TestHapticsCoreSection(t *testing.T) {
 	t.Run("testHapticsTransmissionGforceMaxGetSet", testHapticsTransmissionGforceMaxGetSet)
 	t.Run("testHapticsTransmissionGforceMaxClamping", testHapticsTransmissionGforceMaxClamping)
 	t.Run("testHapticsTransmissionGforceMaxIncreaseDecrease", testHapticsTransmissionGforceMaxIncreaseDecrease)
+	t.Run("testSynthDRXEnabledGetSet", testSynthDRXEnabledGetSet)
+}
+
+// ****************************************************************************
+// DRX (Dynamic Range Extension) tests
+// ****************************************************************************
+
+func testSynthDRXEnabledGetSet(t *testing.T) {
+	t.Parallel()
+
+	// Arrange
+	cfg := newTestConfig()
+
+	// Act & Assert - default is false
+	assert.True(t, cfg.GetSynthDRXEnabled())
+
+	// Act - enable DRX
+	cfg.SetSynthDRXEnabled(false)
+
+	// Assert
+	assert.False(t, cfg.GetSynthDRXEnabled())
+
+	// Act - disable DRX
+	cfg.SetSynthDRXEnabled(true)
+
+	// Assert
+	assert.True(t, cfg.GetSynthDRXEnabled())
 }
 
 // ****************************************************************************
@@ -2089,7 +2116,7 @@ func testPitRadioTyreTemperatureMarginCelsiusIncreaseDecrease(t *testing.T) {
 	assert.InDelta(t, 5, result, 0.001)
 }
 
-func TestPitRadioFuelAndTyreMonitoring(t *testing.T) {
+func TestPitRadioFuelAndTyreMonitoring(t *testing.T) { //nolint:dupl // Test runners have similar structure by design
 	t.Parallel()
 
 	t.Run("testPitRadioFuelMonitoringEnabled", testPitRadioFuelMonitoringEnabled)

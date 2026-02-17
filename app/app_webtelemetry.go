@@ -2,7 +2,6 @@ package app
 
 import (
 	"github.com/vwhitteron/simtezilo-dev/app/kinematics"
-	"github.com/vwhitteron/simtezilo-dev/app/signal"
 )
 
 func (a *App) sendTelemetryChartData() {
@@ -61,8 +60,10 @@ func (a *App) sendTelemetryChartData() {
 			"SixDOFRotationalAccelX":      float32(a.kinematics.Current.SixDOFRotationCalc.Acceleration.X),
 			"SixDOFRotationalAccelY":      float32(a.kinematics.Current.SixDOFRotationCalc.Acceleration.Y),
 			"SixDOFRotationalAccelZ":      float32(a.kinematics.Current.SixDOFRotationCalc.Acceleration.Z),
-			"synthOutputAmplitude":        float32(signal.Abs(float64(a.kinematics.Current.SynthOutputAmplitude))),
-			"synthOutputFrequency":        float32(a.kinematics.Current.SynthOutputFrequency),
+			"synthChannelAmplitudeL":      float32(a.kinematics.Current.SynthChannelAmplitude[0]),
+			"synthChannelFrequencyL":      float32(a.kinematics.Current.SynthChannelFrequency[0]),
+			"synthChannelAmplitudeR":      float32(a.kinematics.Current.SynthChannelAmplitude[1]),
+			"synthChannelFrequencyR":      float32(a.kinematics.Current.SynthChannelFrequency[1]),
 			"engineVibrationEnabled": func() float32 {
 				if a.gtClient.Telemetry.EngineRPM() > 0 {
 					return 1
