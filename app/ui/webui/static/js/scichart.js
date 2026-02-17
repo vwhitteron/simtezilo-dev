@@ -185,8 +185,9 @@ const CHART_CONFIGURATIONS = {
         { id: 'rotational-acceleration', containerId: 'scichart-root-2', enabled: true },
         { id: 'jerk', containerId: 'scichart-root-3', enabled: true },
         { id: 'snap', containerId: 'scichart-root-4', enabled: true },
-        { id: 'synthesizer-output', containerId: 'scichart-root-5', enabled: true },
-        { id: 'compute-time', containerId: 'scichart-root-6', enabled: true }
+        { id: 'channel-output-left', containerId: 'scichart-root-5', enabled: true },
+        { id: 'channel-output-right', containerId: 'scichart-root-6', enabled: true },
+        { id: 'compute-time', containerId: 'scichart-root-7', enabled: true }
     ],
 
     // Default/fallback - all charts enabled
@@ -199,8 +200,7 @@ const CHART_CONFIGURATIONS = {
         { id: 'rotational-acceleration', containerId: 'scichart-root-6', enabled: true },
         { id: 'jerk', containerId: 'scichart-root-7', enabled: true },
         { id: 'snap', containerId: 'scichart-root-8', enabled: true },
-        { id: 'synthesizer-output', containerId: 'scichart-root-9', enabled: true },
-        { id: 'compute-time', containerId: 'scichart-root-10', enabled: true }
+        { id: 'compute-time', containerId: 'scichart-root-9', enabled: true }
     ]
 };
 
@@ -916,70 +916,6 @@ async function initSciChart() {
             }
         },
 
-        'synthesizer-output': {
-            title: 'Synthesizer Outputs',
-            titleKey: 'runmode.telemetry.chart.synthoutput',
-            create: async (containerId) => {
-                const { sciChartSurface, wasmContext } = await SciChart.SciChartSurface.create(containerId);
-
-                addHorizontalZoomModifiers(sciChartSurface);
-
-                const xAxis = createAxisWithOptions(wasmContext, { autoRange: SciChart.EAutoRange.Never });
-                const yAxisAmplitude = createAxisWithOptions(wasmContext, {
-                    id: "ID_Y_AXIS_AMPLITUDE",
-                    axisAlignment: SciChart.EAxisAlignment.Left,
-                    visibleRange: new SciChart.NumberRange(0, 1),
-                    labelPrecision: 3,
-                    labelStyle: { color: "#fcdd5fff" }
-                });
-                const yAxisFrequency = createAxisWithOptions(wasmContext, {
-                    id: "ID_Y_AXIS_FREQUENCY",
-                    axisAlignment: SciChart.EAxisAlignment.Right,
-                    visibleRange: new SciChart.NumberRange(0, 60),
-                    labelPrecision: 0,
-                    labelStyle: { color: "#38b0faff" }
-                });
-
-                sciChartSurface.xAxes.add(xAxis);
-                sciChartSurface.yAxes.add(yAxisAmplitude, yAxisFrequency);
-
-                const amplitudeSeries = createDataSeries(wasmContext, "Amplitude");
-                const frequencySeries = createDataSeries(wasmContext, "Frequency (Hz)");
-
-                sciChartSurface.renderableSeries.add(
-                    new SciChart.FastMountainRenderableSeries(wasmContext, {
-                        dataSeries: amplitudeSeries,
-                        dataSeriesName: "Amplitude",
-                        yAxisId: "ID_Y_AXIS_AMPLITUDE",
-                        strokeThickness: 1,
-                        stroke: "#fcca5fdf",
-                        fillLinearGradient: new SciChart.GradientParams(new SciChart.Point(0, 0), new SciChart.Point(0, 1), [
-                            { color: "#fcca5f99", offset: 0 },
-                            { color: "#fcca5f1b", offset: 1 },
-                        ]),
-
-                    }),
-                    new SciChart.FastLineRenderableSeries(wasmContext, {
-                        dataSeries: frequencySeries,
-                        dataSeriesName: "Frequency (Hz)",
-                        yAxisId: "ID_Y_AXIS_FREQUENCY",
-                        strokeThickness: 2,
-                        stroke: "#38b0faff"
-                    })
-                );
-
-                return {
-                    surface: sciChartSurface,
-                    xAxis,
-                    dataSeries: {
-                        synthAmplitude: amplitudeSeries,
-                        synthFrequency: frequencySeries
-                    },
-                    dataFields: ['synthOutputAmplitude', 'synthOutputFrequency']
-                };
-            }
-        },
-
         'compute-time': {
             title: 'Compute Time (µs)',
             titleKey: 'runmode.telemetry.chart.computetime',
@@ -1010,6 +946,132 @@ async function initSciChart() {
                         computeTime: series
                     },
                     dataFields: ['computeTime']
+                };
+            }
+        },
+
+        'channel-output-left': {
+            title: 'Left Channel Output',
+            titleKey: 'runmode.telemetry.chart.channeloutputleft',
+            create: async (containerId) => {
+                const { sciChartSurface, wasmContext } = await SciChart.SciChartSurface.create(containerId);
+
+                addHorizontalZoomModifiers(sciChartSurface);
+
+                const xAxis = createAxisWithOptions(wasmContext, { autoRange: SciChart.EAutoRange.Never });
+                const yAxisAmplitude = createAxisWithOptions(wasmContext, {
+                    id: "ID_Y_AXIS_AMPLITUDE",
+                    axisAlignment: SciChart.EAxisAlignment.Left,
+                    visibleRange: new SciChart.NumberRange(0, 1),
+                    labelPrecision: 3,
+                    labelStyle: { color: "#fcdd5fff" }
+                });
+                const yAxisFrequency = createAxisWithOptions(wasmContext, {
+                    id: "ID_Y_AXIS_FREQUENCY",
+                    axisAlignment: SciChart.EAxisAlignment.Right,
+                    visibleRange: new SciChart.NumberRange(0, 60),
+                    labelPrecision: 0,
+                    labelStyle: { color: "#38b0faff" }
+                });
+
+                sciChartSurface.xAxes.add(xAxis);
+                sciChartSurface.yAxes.add(yAxisAmplitude, yAxisFrequency);
+
+                const amplitudeSeries = createDataSeries(wasmContext, "Amplitude (L)");
+                const frequencySeries = createDataSeries(wasmContext, "Frequency (L)");
+
+                sciChartSurface.renderableSeries.add(
+                    new SciChart.FastMountainRenderableSeries(wasmContext, {
+                        dataSeries: amplitudeSeries,
+                        dataSeriesName: "Amplitude (L)",
+                        yAxisId: "ID_Y_AXIS_AMPLITUDE",
+                        strokeThickness: 1,
+                        stroke: "#fcca5fdf",
+                        fillLinearGradient: new SciChart.GradientParams(new SciChart.Point(0, 0), new SciChart.Point(0, 1), [
+                            { color: "#fcca5f99", offset: 0 },
+                            { color: "#fcca5f1b", offset: 1 },
+                        ]),
+                    }),
+                    new SciChart.FastLineRenderableSeries(wasmContext, {
+                        dataSeries: frequencySeries,
+                        dataSeriesName: "Frequency (L)",
+                        yAxisId: "ID_Y_AXIS_FREQUENCY",
+                        strokeThickness: 2,
+                        stroke: "#38b0faff"
+                    })
+                );
+
+                return {
+                    surface: sciChartSurface,
+                    xAxis,
+                    dataSeries: {
+                        channelAmplitudeL: amplitudeSeries,
+                        channelFrequencyL: frequencySeries
+                    },
+                    dataFields: ['synthChannelAmplitudeL', 'synthChannelFrequencyL']
+                };
+            }
+        },
+
+        'channel-output-right': {
+            title: 'Right Channel Output',
+            titleKey: 'runmode.telemetry.chart.channeloutputright',
+            create: async (containerId) => {
+                const { sciChartSurface, wasmContext } = await SciChart.SciChartSurface.create(containerId);
+
+                addHorizontalZoomModifiers(sciChartSurface);
+
+                const xAxis = createAxisWithOptions(wasmContext, { autoRange: SciChart.EAutoRange.Never });
+                const yAxisAmplitude = createAxisWithOptions(wasmContext, {
+                    id: "ID_Y_AXIS_AMPLITUDE",
+                    axisAlignment: SciChart.EAxisAlignment.Left,
+                    visibleRange: new SciChart.NumberRange(0, 1),
+                    labelPrecision: 3,
+                    labelStyle: { color: "#fcdd5fff" }
+                });
+                const yAxisFrequency = createAxisWithOptions(wasmContext, {
+                    id: "ID_Y_AXIS_FREQUENCY",
+                    axisAlignment: SciChart.EAxisAlignment.Right,
+                    visibleRange: new SciChart.NumberRange(0, 60),
+                    labelPrecision: 0,
+                    labelStyle: { color: "#38b0faff" }
+                });
+
+                sciChartSurface.xAxes.add(xAxis);
+                sciChartSurface.yAxes.add(yAxisAmplitude, yAxisFrequency);
+
+                const amplitudeSeries = createDataSeries(wasmContext, "Amplitude (R)");
+                const frequencySeries = createDataSeries(wasmContext, "Frequency (R)");
+
+                sciChartSurface.renderableSeries.add(
+                    new SciChart.FastMountainRenderableSeries(wasmContext, {
+                        dataSeries: amplitudeSeries,
+                        dataSeriesName: "Amplitude (R)",
+                        yAxisId: "ID_Y_AXIS_AMPLITUDE",
+                        strokeThickness: 1,
+                        stroke: "#fcca5fdf",
+                        fillLinearGradient: new SciChart.GradientParams(new SciChart.Point(0, 0), new SciChart.Point(0, 1), [
+                            { color: "#fcca5f99", offset: 0 },
+                            { color: "#fcca5f1b", offset: 1 },
+                        ]),
+                    }),
+                    new SciChart.FastLineRenderableSeries(wasmContext, {
+                        dataSeries: frequencySeries,
+                        dataSeriesName: "Frequency (R)",
+                        yAxisId: "ID_Y_AXIS_FREQUENCY",
+                        strokeThickness: 2,
+                        stroke: "#38b0faff"
+                    })
+                );
+
+                return {
+                    surface: sciChartSurface,
+                    xAxis,
+                    dataSeries: {
+                        channelAmplitudeR: amplitudeSeries,
+                        channelFrequencyR: frequencySeries
+                    },
+                    dataFields: ['synthChannelAmplitudeR', 'synthChannelFrequencyR']
                 };
             }
         }
@@ -1178,8 +1240,10 @@ async function initSciChart() {
                             "SixDOFRotationalAccelX": 'rotationalAccelerationX',
                             "SixDOFRotationalAccelY": 'rotationalAccelerationY',
                             "SixDOFRotationalAccelZ": 'rotationalAccelerationZ',
-                            'synthOutputAmplitude': 'synthAmplitude',
-                            'synthOutputFrequency': 'synthFrequency'
+                            'synthChannelAmplitudeL': 'channelAmplitudeL',
+                            'synthChannelFrequencyL': 'channelFrequencyL',
+                            'synthChannelAmplitudeR': 'channelAmplitudeR',
+                            'synthChannelFrequencyR': 'channelFrequencyR'
                         };
                         return fieldMappings[fieldName] === key || fieldName === key;
                     });

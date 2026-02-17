@@ -71,8 +71,8 @@ type Kinematics struct {
 	GroundSpeed     float64
 	SurgeCalculated float64
 
-	SynthOutputAmplitude float64
-	SynthOutputFrequency int
+	SynthChannelAmplitude [2]float64
+	SynthChannelFrequency [2]float64
 }
 
 // State tracks the current and previous kinematic states of the vehicle.
@@ -99,8 +99,8 @@ func newKinematics() Kinematics {
 		TransmissionGear:      -100,
 		GroundSpeed:           0,
 		SurgeCalculated:       0,
-		SynthOutputAmplitude:  0,
-		SynthOutputFrequency:  0,
+		SynthChannelAmplitude: [2]float64{},
+		SynthChannelFrequency: [2]float64{},
 		Format:                "A",
 	}
 }

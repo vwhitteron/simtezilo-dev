@@ -17,52 +17,54 @@ func (a *App) generateChassisHaptic() {
 
 	pulseFrequencyHz := a.calculateChassisHapticPulseFrequency()
 
-	pulseWidth := math.Round(float64(a.config.GetSynthInternalSampleRateHz()) / (2 * pulseFrequencyHz))
+	pulseAmplitude, unclampedAmplitude := a.calculateChassisHapticPulseAmplitude()
 
-	pulseAmplitude := a.calculateChassisHapticPulseAmplitude()
-
-	waveOffset := pulseWidth / 2
-	waveSamplePeriod := math.Pi / pulseWidth
-
-	// Calculate buffer size based on the actual pulse waveform length
-	// The pulse needs pulseWidth * 2 samples for a complete cycle
-	// Low frequency pulses (8Hz) need ~1000 samples (125ms)
-	// High frequency pulses (60Hz) need ~134 samples (17ms)
-	pulseLength := int(pulseWidth * 2)
-
-	// Calculate the duration of this pulse for peak hold
-	// This ensures peak hold matches the impact duration
-	pulseDuration := time.Duration(float64(pulseLength)/float64(a.config.GetSynthInternalSampleRateHz())*1000) * time.Millisecond
-	a.jerkPeakHoldDuration = pulseDuration
-
-	// Ensure minimum buffer size for very high frequency pulses
 	sampleRate := float64(a.config.GetSynthInternalSampleRateHz())
 	minSamplesPerFrame := int(sampleRate / hapticFrameRate)
 
-	// Use the larger of: complete pulse length or minimum frame size
-	// This allows low-frequency pulses to be generated completely
-	bufferSize := max(pulseLength, minSamplesPerFrame)
-
 	// Generate pulse buffers for each channel
 	for channel := range synthesizer.NumOutputChannels {
-		// Apply channel-specific equalizer to the pulse amplitude
-		eqAmplitude := signal.Equalize(pulseAmplitude, pulseWidth, channel, a.config)
+		channelFreqHz, channelAmplitude, drxActive := a.applyDRX(
+			pulseFrequencyHz, pulseAmplitude, unclampedAmplitude, channel,
+		)
+
+		channelPulseWidth := math.Round(sampleRate / (2 * channelFreqHz))
+
+		if !drxActive {
+			channelAmplitude = signal.Equalize(channelAmplitude, channelPulseWidth, channel, a.config)
+		}
+
+		// Store per-channel output for telemetry charting (absolute amplitude for graphing)
+		a.kinematics.Current.SynthChannelAmplitude[channel] = signal.Abs(channelAmplitude)
+		a.kinematics.Current.SynthChannelFrequency[channel] = channelFreqHz
+
+		channelPulseLength := int(channelPulseWidth * 2)
+		bufferSize := max(channelPulseLength, minSamplesPerFrame)
+
+		waveOffset := channelPulseWidth / 2
+		waveSamplePeriod := math.Pi / channelPulseWidth
 
 		pulseBuffer := make([]float64, bufferSize)
 
 		// Generate the complete pulse waveform
 		for index := range bufferSize {
-			if index > pulseLength {
+			if index > channelPulseLength {
 				break
 			}
 
 			phase := waveSamplePeriod * (float64(index) - waveOffset)
-			pulseBuffer[index] = ((eqAmplitude * math.Sin(phase)) + eqAmplitude) / 2
+			pulseBuffer[index] = ((channelAmplitude * math.Sin(phase)) + channelAmplitude) / 2
 		}
 
 		// Write to the channel-specific chassis buffer
 		a.synth.WriteBuffer(synthesizer.ChassisChannelName(channel), pulseBuffer, 0)
 	}
+
+	// Calculate shared pulse metrics for peak hold using the base frequency
+	pulseWidth := math.Round(sampleRate / (2 * pulseFrequencyHz))
+	pulseLength := int(pulseWidth * 2)
+	pulseDuration := time.Duration(float64(pulseLength)/sampleRate*1000) * time.Millisecond
+	a.jerkPeakHoldDuration = pulseDuration
 
 	// log large amplitude values
 	if pulseAmplitude > 1.0 || pulseAmplitude < -1.0 {
@@ -74,36 +76,60 @@ func (a *App) generateChassisHaptic() {
 			Msg("Bump inputs")
 		a.log.Debug().
 			Float64("amplitude", pulseAmplitude).
-			Float64("samplePeriod", waveSamplePeriod).
 			Float64("pulseWidth", pulseWidth).
 			Msg("Bump outputs")
 	}
 }
 
-func (a *App) calculateChassisHapticPulseAmplitude() float64 {
+// applyDRX checks for DRX activation on the given channel, shifting frequency into
+// EQ-attenuated ranges for high impact events.
+// Returns the shifted frequency, amplitude, and whether DRX was activated.
+// When DRX is not active the original frequency and amplitude are returned with active=false.
+func (a *App) applyDRX(
+	pulseFrequencyHz, pulseAmplitude, unclampedAmplitude float64,
+	channel int,
+) (freqHz, amplitude float64, active bool) {
+	drxFreq, drxAmp, drxBucketRatio, active := signal.DRXShift(
+		pulseFrequencyHz, unclampedAmplitude, channel, a.config,
+	)
+	if !active {
+		return pulseFrequencyHz, pulseAmplitude, false
+	}
+
+	eqAttenDB := signal.AmplitudeToDecibels(drxBucketRatio)
+	desiredBoostDB := signal.AmplitudeToDecibels(unclampedAmplitude / a.config.GetHapticsPulseMaxAmplitude())
+
+	a.log.Info().
+		Float64("original_freq", pulseFrequencyHz).
+		Float64("drx_freq", drxFreq).
+		Float64("eq_atten_db", eqAttenDB).
+		Float64("desired_boost_db", desiredBoostDB).
+		Float64("drx_amplitude", drxAmp).
+		Float64("jerk", a.kinematics.Current.SixDOFTranslationCalc.Jerk).
+		Int("channel", channel).
+		Msg("DRX activated for chassis haptic")
+
+	return drxFreq, drxAmp, true
+}
+
+func (a *App) calculateChassisHapticPulseAmplitude() (pulseAmplitude float64, unclampedAmplitude float64) {
 	jerk := signal.LargestMagnitude(
 		a.kinematics.Current.SixDOFTranslationCalc.Jerk,
 		a.kinematics.Current.SixDOFRotationCalc.Jerk,
 	)
 
 	// Process the signal normally first
-	pulseAmplitude := signal.Exponent(jerk, a.config.GethapticsJerkCurve()/1000)
+	pulseAmplitude = signal.Exponent(jerk, a.config.GethapticsJerkCurve()/1000)
 	pulseAmplitude = signal.Scale(pulseAmplitude, a.config.GetHapticsJerkScale())
 
-	p1 := pulseAmplitude
+	unclampedAmplitude = signal.Abs(pulseAmplitude)
 
-	pulseAmplitude, wasLimited := signal.LimitMax(pulseAmplitude, a.config.GetHapticsPulseMaxAmplitude())
-	if wasLimited {
-		a.log.Debug().Float64("pulse", p1).Msg("limiter")
-	}
+	pulseAmplitude, _ = signal.LimitMax(pulseAmplitude, a.config.GetHapticsPulseMaxAmplitude())
 
 	// Apply peak hold to the processed amplitude to prevent cancellation from inverse jerks
-	pulseAmplitude = a.applyJerkPeakHold(jerk, pulseAmplitude)
+	// pulseAmplitude = a.applyJerkPeakHold(jerk, pulseAmplitude)
 
-	a.kinematics.Last.SynthOutputAmplitude = a.kinematics.Current.SynthOutputAmplitude
-	a.kinematics.Current.SynthOutputAmplitude = pulseAmplitude
-
-	return pulseAmplitude
+	return pulseAmplitude, unclampedAmplitude
 }
 
 // applyJerkPeakHold implements peak hold with decay to prevent waveform cancellation.
@@ -198,9 +224,6 @@ func (a *App) calculateChassisHapticPulseFrequency() float64 {
 	} else if pulseFrequencyHz > a.config.GetHapticsPulseMaxHz() {
 		pulseFrequencyHz = a.config.GetHapticsPulseMaxHz()
 	}
-
-	a.kinematics.Last.SynthOutputFrequency = a.kinematics.Current.SynthOutputFrequency
-	a.kinematics.Current.SynthOutputFrequency = int(pulseFrequencyHz)
 
 	return pulseFrequencyHz
 }

@@ -136,6 +136,7 @@ func defaultConfig() *viperConfig {
 			EngineMute:                false,
 			EngineGain:                -4.25,
 			EnableEq:                  []bool{false, false},
+			EnableDRX:                 true,
 			EqBands: [][]EQBand{
 				{ // Channel 0 (Left)
 					{Frequency: 8, Gain: 0.0, Q: 2.0},

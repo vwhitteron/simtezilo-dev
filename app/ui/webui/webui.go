@@ -1086,6 +1086,7 @@ func (w *WebUI) handleGetConfig(response http.ResponseWriter, _ *http.Request) {
 			"gainIncrement":             w.config.GetSynthGainIncrement(),
 			"engineProfiles":            w.config.GetSynthEngineProfiles(),
 			"enableEQ":                  w.config.GetSynthChannelsEqEnabled(),
+			"enableDrx":                 w.config.GetSynthDRXEnabled(),
 			"eq":                        w.config.GetSynthChannelsEq(),
 		},
 		"eqCurve": func() map[string]any {
@@ -1097,6 +1098,10 @@ func (w *WebUI) handleGetConfig(response http.ResponseWriter, _ *http.Request) {
 				"resolution": resolution,
 			}
 		}(),
+		"drxHeadroom": []float64{
+			w.config.GetSynthChannelDRXHeadroom(0),
+			w.config.GetSynthChannelDRXHeadroom(1),
+		},
 		"telemetry": map[string]any{
 			"source": w.config.GetTelemetrySource(),
 		},
@@ -1184,6 +1189,10 @@ func (w *WebUI) handleSetConfig(response http.ResponseWriter, request *http.Requ
 					"resolution": resolution,
 				}
 			}(),
+			"drxHeadroom": []float64{
+				w.config.GetSynthChannelDRXHeadroom(0),
+				w.config.GetSynthChannelDRXHeadroom(1),
+			},
 			"calibration": map[string]any{
 				"enabled":       w.calibrator.IsEnabled(),
 				"frequency":     w.calibrator.GetSweepFrequency(),
@@ -1550,6 +1559,14 @@ func (w *WebUI) applySynthesizerConfig(config map[string]any) []string {
 			}
 		} else {
 			errors = append(errors, "invalid EQ enabled value (expected array)")
+		}
+	}
+
+	if drxEnabled, ok := config["enableDrx"]; ok {
+		if enabled, ok := drxEnabled.(bool); ok {
+			w.config.SetSynthDRXEnabled(enabled)
+		} else {
+			errors = append(errors, "invalid DRX enabled value (expected bool)")
 		}
 	}
 
