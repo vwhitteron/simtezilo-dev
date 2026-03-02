@@ -809,9 +809,7 @@ func (a *App) initializeComponents(opts Options) error {
 	a.fuelRange = fuelrange.New(*opts.Logger)
 
 	a.tyres = tyres.New(
-		a.config.GetPitRadioTyreTemperatureOptimalCelsius(),
-		a.config.GetPitRadioTyreTemperatureOperatingWindow(),
-		a.config.GetPitRadioTyreTemperatureMarginCelsius(),
+		a.config,
 		gtmodels.CornerSet{},
 	)
 
@@ -1247,9 +1245,9 @@ func (a *App) handlePitRadioTick() {
 		return
 	}
 
-	if !a.gtClient.Telemetry.IsOnCircuit() {
-		return
-	}
+	// if !a.gtClient.Telemetry.IsOnCircuit() {
+	// 	return
+	// }
 
 	a.sendPitRadioMessage()
 }
