@@ -104,8 +104,37 @@ class ConfigManager {
             if (status.lastUpdate > this.configTimestamp) {
                 await this.loadConfiguration();
             }
+
+            // Sync ephemeral fan speed (may change via hardware menu)
+            this.syncFanSpeed();
         } catch (error) {
             console.error('Failed to check config status:', error);
+        }
+    }
+
+    // Sync ephemeral fan speed from backend
+    async syncFanSpeed() {
+        const slider = document.getElementById('fan-manual-speed');
+        const label = document.getElementById('fan-manual-speed-value');
+
+        if (!slider || !label) {
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/fan/speed');
+            if (!response.ok) {
+                return;
+            }
+
+            const data = await response.json();
+
+            if (parseInt(slider.value, 10) !== data.speed) {
+                slider.value = data.speed;
+                label.textContent = data.speed;
+            }
+        } catch {
+            // Ignore fetch errors
         }
     }
 

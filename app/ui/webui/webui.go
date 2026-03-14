@@ -3,6 +3,7 @@ package webui
 
 import (
 	"embed"
+	"encoding/json"
 	"image"
 	"mime"
 	"net/http"
@@ -42,6 +43,8 @@ type Options struct {
 	BuildTime          string
 	BuildPlatform      string
 	Updater            *updater.Updater
+	GetManualFanDuty   func() int    // Callback to get the manual fan duty step (0-10)
+	SetManualFanDuty   func(int) int // Callback to set the manual fan duty step (0-10); returns clamped value
 }
 
 // WebUI composes a Broadcaster with focused sub-handlers for config, system, and update APIs.
@@ -54,6 +57,9 @@ type WebUI struct {
 	cfgHandler  *configHandler
 	sysHandler  *systemHandler
 	updHandler  *updateHandler
+
+	getManualFanDuty func() int    // Callback to get the manual fan duty step (0-10)
+	setManualFanDuty func(int) int // Callback to set the manual fan duty step (0-10)
 }
 
 // New creates a new WebUI instance and starts the WebSocket broadcaster.
@@ -96,6 +102,8 @@ func New(opts Options) *WebUI {
 			buildVersion: opts.BuildVersion,
 			shutdownChan: opts.ShutdownChan,
 		}),
+		getManualFanDuty: opts.GetManualFanDuty,
+		setManualFanDuty: opts.SetManualFanDuty,
 	}
 
 	go broadcaster.run()
@@ -123,6 +131,9 @@ func (w *WebUI) GetHTTPHandler() http.Handler {
 	mux.HandleFunc("/api/config/import", w.cfgHandler.handleConfigImport)
 	mux.HandleFunc("/api/config/reset", w.cfgHandler.handleConfigReset)
 	mux.HandleFunc("/api/config/status", w.cfgHandler.handleConfigStatus)
+
+	// Fan API (ephemeral manual fan speed, not persisted)
+	mux.HandleFunc("/api/fan/speed", w.handleFanSpeedAPI)
 
 	// System API
 	mux.HandleFunc("/api/hardware/input", w.sysHandler.handleHardwareInput)
@@ -289,4 +300,39 @@ func getContentType(filename string) string {
 	}
 
 	return contentType
+}
+
+// handleFanSpeedAPI handles GET and POST requests for the ephemeral manual fan speed.
+// This is intentionally separate from the config API since the value is not persisted.
+func (w *WebUI) handleFanSpeedAPI(response http.ResponseWriter, request *http.Request) {
+	response.Header().Set("Content-Type", "application/json")
+
+	switch request.Method {
+	case http.MethodGet:
+		_ = json.NewEncoder(response).Encode(map[string]any{ //nolint:errchkjson // simple encoding
+			"speed": w.getManualFanDuty(),
+		})
+
+	case http.MethodPost:
+		var body struct {
+			Speed int `json:"speed"`
+		}
+
+		err := json.NewDecoder(request.Body).Decode(&body)
+		if err != nil {
+			response.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(response).Encode(map[string]string{"error": "Invalid JSON data"}) //nolint:errchkjson // simple encoding
+
+			return
+		}
+
+		clamped := w.setManualFanDuty(body.Speed)
+		_ = json.NewEncoder(response).Encode(map[string]any{ //nolint:errchkjson // simple encoding
+			"speed": clamped,
+		})
+
+	default:
+		response.WriteHeader(http.StatusMethodNotAllowed)
+		_ = json.NewEncoder(response).Encode(map[string]string{"error": "Method not allowed"}) //nolint:errchkjson // simple encoding
+	}
 }

@@ -7,7 +7,8 @@ toolchain go1.25.11
 require (
 	atomicgo.dev/keyboard v0.2.10
 	github.com/Wifx/gonetworkmanager/v2 v2.2.0
-	github.com/bwmarrin/discordgo v0.29.0
+	github.com/bwmarrin/discordgo v0.0.0-00010101000000-000000000000
+	github.com/go-ble/ble v0.0.0-20240122180141-8c5522f54333
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0
 	github.com/gopxl/beep v1.4.1
 	github.com/gorilla/websocket v1.5.3
@@ -29,6 +30,7 @@ require (
 )
 
 require (
+	github.com/JuulLabs-OSS/cbgo v0.0.1 // indirect
 	github.com/containerd/console v1.0.5 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/ebitengine/oto/v3 v3.3.3 // indirect
@@ -40,12 +42,17 @@ require (
 	github.com/hajimehoshi/go-mp3 v0.3.4 // indirect
 	github.com/kaitai-io/kaitai_struct_go_runtime v0.11.0 // indirect
 	github.com/klauspost/compress v1.18.6 // indirect
+	github.com/konsorten/go-windows-terminal-sequences v1.0.1 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
+	github.com/mgutz/ansi v0.0.0-20170206155736-9520e82c474b // indirect
+	github.com/mgutz/logxi v0.0.0-20161027140823-aebf8a7d67ab // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
+	github.com/raff/goble v0.0.0-20190909174656-72afc67d6a99 // indirect
 	github.com/sagikazarmark/locafero v0.11.0 // indirect
+	github.com/sirupsen/logrus v1.5.0 // indirect
 	github.com/sourcegraph/conc v0.3.1-0.20240121214520-5f936abd7ae8 // indirect
 	github.com/spf13/afero v1.15.0 // indirect
 	github.com/spf13/cast v1.10.0 // indirect

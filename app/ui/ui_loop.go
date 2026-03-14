@@ -103,6 +103,8 @@ func (u *UserInterface) handleHIDEvent(key HIDInputEvent) {
 func (u *UserInterface) enterLiveView(view languagedb.Key) {
 	u.state.activeLiveView = view
 	u.state.lastMenuActivity = u.now()
+	// Entering or paging between live views reverts the live-view +/- control to fan speed.
+	u.state.activeSetting = languagedb.UIMenuFanManualSpeed
 	u.registerActivity()
 
 	if u.state.lastData.Gear == kinematics.NullGear {

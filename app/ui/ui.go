@@ -54,10 +54,14 @@ type uiState struct {
 	mode           ScreenMode
 	lastData       LiveData       // most recent telemetry tick
 	activeLiveView languagedb.Key // gear view or dashboard
-	gearText       string         // resolved gear/status text (NULL gears keep the last value)
-	flashOn        bool           // rev-limit background flash toggle
-	forceRedraw    bool           // redraw next frame even if the scene is unchanged
-	menuScene      scene          // scene for the current menu page, set during navigation
+	// activeSetting tracks which setting Up/Down adjusts while on the live view.
+	// Defaults to fan speed; updated to the last actively-edited settings leaf, and
+	// reset to fan speed when the user navigates to a Return screen or enters the live view.
+	activeSetting languagedb.Key
+	gearText      string // resolved gear/status text (NULL gears keep the last value)
+	flashOn       bool   // rev-limit background flash toggle
+	forceRedraw   bool   // redraw next frame even if the scene is unchanged
+	menuScene     scene  // scene for the current menu page, set during navigation
 
 	startTime        time.Time
 	lastActivity     time.Time
@@ -106,6 +110,7 @@ func NewUserInterface(config *Config) *UserInterface {
 			mode:           ScreenModeStartup,
 			lastData:       LiveData{Gear: kinematics.NullGear},
 			activeLiveView: languagedb.UIMenuLiveView,
+			activeSetting:  languagedb.UIMenuFanManualSpeed,
 			startTime:      now(),
 			lastActivity:   now(),
 		},

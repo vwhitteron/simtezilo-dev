@@ -123,6 +123,13 @@ sudo nmcli -f SSID -t d wifi list ifname wlan0 --rescan auto
 nmcli -f AP dev show wlan0 | awk '/\.SSID:/ {print $NF}'
 ```
 
+## Bluetooth notes
+
+Bluetooth is disabled by default
+```
+sudo rfkill unblock bluetooth
+```
+
 ## Raspberry Pi HAT setup
 
 ### Pimoroni Pirate Audio

@@ -24,6 +24,13 @@ func defaultConfig() *viperConfig {
 			},
 			EnableDevTools: false,
 		},
+		Fan: &fan{
+			Enabled:          false,
+			Mode:             fanModeManual,
+			DeviceName:       "windsim",
+			CommandTimeoutMs: 1000,
+			MaxSpeedKPH:      300,
+		},
 		Hardware: &hardware{
 			Model:              "none",
 			DisplayOrientation: 0,

@@ -129,13 +129,22 @@ func (u *UserInterface) handleMenuNavigation(key HIDInputEvent) (title string, v
 	}
 }
 
-// handleUpKey handles the up key for navigating to parent node.
+// handleUpKey handles the up key for navigating to parent node or increasing a value.
 func (u *UserInterface) handleUpKey() (title string, value string) {
 	// Reset inactivity timer on any menu interaction
 	u.state.lastMenuActivity = u.now()
 
+	// On the live view leaf, +/- controls fan speed (or the last active setting).
+	if u.menuSystem.GetCurrentMenuPage() == languagedb.UIMenuLiveView {
+		return u.handleLiveViewAdjust(actionIncrease)
+	}
+
 	node, action := u.menuSystem.NavigateUp()
 	menuPage := node.name
+
+	if menuPage == languagedb.UIMenuReturn {
+		u.state.activeSetting = languagedb.UIMenuFanManualSpeed
+	}
 
 	switch action {
 	case actionExit:
@@ -147,12 +156,12 @@ func (u *UserInterface) handleUpKey() (title string, value string) {
 			Msg("HID event")
 
 		value = ""
-		// If exited to a branch, don't get value
 		if u.menuSystem.IsCurrentNodeBranch() {
 			return string(menuPage), value
 		}
 	case actionIncrease:
 		// On a leaf node - increase value
+		u.state.activeSetting = menuPage
 		value = u.settingAction(menuPage, actionIncrease)
 		u.log.Debug().
 			Str("key", "up").
@@ -164,7 +173,6 @@ func (u *UserInterface) handleUpKey() (title string, value string) {
 		return string(menuPage), value
 	}
 
-	// Get current value if we're on a leaf
 	if u.menuSystem.IsCurrentNodeLeaf() {
 		value = u.settingAction(menuPage, actionGet)
 	}
@@ -172,13 +180,38 @@ func (u *UserInterface) handleUpKey() (title string, value string) {
 	return string(menuPage), value
 }
 
+// handleLiveViewAdjust adjusts the active setting (or fan speed) without leaving the live view.
+// It calls the settings callback directly to avoid switching the display to settings mode.
+func (u *UserInterface) handleLiveViewAdjust(action string) (title string, value string) {
+	u.registerActivity()
+	value = u.settingsCallback(u.state.activeSetting, action)
+
+	u.log.Debug().
+		Str("key", action).
+		Str("action", action).
+		Str("type", string(u.state.activeSetting)).
+		Str("value", value).
+		Msg("HID event")
+
+	return string(languagedb.UIMenuLiveView), value
+}
+
 // handleDownKey handles the down key for entering branches or navigating.
 func (u *UserInterface) handleDownKey() (title string, value string) {
 	// Reset inactivity timer on any menu interaction
 	u.state.lastMenuActivity = u.now()
 
+	// On the live view leaf, +/- controls fan speed (or the last active setting).
+	if u.menuSystem.GetCurrentMenuPage() == languagedb.UIMenuLiveView {
+		return u.handleLiveViewAdjust(actionDecrease)
+	}
+
 	node, action := u.menuSystem.NavigateDown()
 	menuPage := node.name
+
+	if menuPage == languagedb.UIMenuReturn {
+		u.state.activeSetting = languagedb.UIMenuFanManualSpeed
+	}
 
 	switch action {
 	case actionEnter:
@@ -197,12 +230,12 @@ func (u *UserInterface) handleDownKey() (title string, value string) {
 			Msg("HID event")
 
 		value = ""
-		// If exited to a branch, don't get value
 		if u.menuSystem.IsCurrentNodeBranch() {
 			return string(menuPage), value
 		}
 	case actionDecrease:
 		// On a leaf node - decrease value
+		u.state.activeSetting = menuPage
 		value = u.settingAction(menuPage, actionDecrease)
 		u.log.Debug().
 			Str("key", "down").

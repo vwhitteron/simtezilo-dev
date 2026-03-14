@@ -75,6 +75,13 @@ func (a *App) settingAction(setting languagedb.Key, action string) string {
 		languagedb.UIMenuHapticsEnginePulseGain:         a.handleEnginePulseGainSetting,
 		languagedb.UIMenuHapticsEnginePulseScale:        a.handleEnginePulseScaleSetting,
 
+		// Wind Simulator handlers
+		languagedb.UIMenuFanEnable:          a.handleFanEnableSetting,
+		languagedb.UIMenuFanManualSpeed:     a.handleFanManualSpeedSetting,
+		languagedb.UIMenuFanMode:            a.handleFanModeSetting,
+		languagedb.UIMenuFanWindSimMaxSpeed: a.handleFanMaxSpeedSetting,
+		languagedb.UIMenuFanCommandTimeout:  a.handleFanCommandTimeoutSetting,
+
 		// Pit Radio handlers
 		languagedb.UIMenuPitRadioEnable:               a.handlePitRadioEnableSetting,
 		languagedb.UIMenuPitRadioLapTimesEnable:       a.handlePitradioLapTimesEnableSetting,
@@ -694,6 +701,93 @@ func (a *App) cycleTelemetrySourceBackward(current, currentMode string) string {
 	}
 
 	return currentMode
+}
+
+// Fan handlers.
+
+func (a *App) handleFanEnableSetting(action string) string {
+	switch action {
+	case "increase", "decrease":
+		current := a.config.FanEnabled()
+		a.config.SetFanEnabled(!current)
+	}
+
+	if a.config.FanEnabled() {
+		return settingStateOn
+	}
+
+	return settingStateOff
+}
+
+func (a *App) handleFanManualSpeedSetting(action string) string {
+	var speed int
+
+	switch action {
+	case "increase":
+		speed = a.setManualFanDuty(int(a.manualFanDuty.Load()) + 1)
+	case "decrease":
+		speed = a.setManualFanDuty(int(a.manualFanDuty.Load()) - 1)
+	default:
+		speed = int(a.manualFanDuty.Load())
+	}
+
+	return strconv.Itoa(speed)
+}
+
+func (a *App) handleFanModeSetting(action string) string {
+	var mode string
+
+	switch action {
+	case "increase":
+		mode = a.config.CycleFanMode(true)
+	case "decrease":
+		mode = a.config.CycleFanMode(false)
+	default:
+		mode = a.config.GetFanMode()
+	}
+
+	return a.fanModeDisplay(mode)
+}
+
+func (a *App) fanModeDisplay(mode string) string {
+	switch mode {
+	case "open":
+		return a.i18n.GetString(languagedb.UIMenuFanModeOpenCockpit)
+	case "all":
+		return a.i18n.GetString(languagedb.UIMenuFanModeAll)
+	default:
+		return a.i18n.GetString(languagedb.UIMenuFanModeManual)
+	}
+}
+
+func (a *App) handleFanMaxSpeedSetting(action string) string {
+	var value int
+
+	switch action {
+	case "increase":
+		value = a.config.IncreaseFanMaxSpeedKPH()
+	case "decrease":
+		value = a.config.DecreaseFanMaxSpeedKPH()
+	default:
+		value = a.config.GetFanMaxSpeedKPH()
+	}
+
+	return strconv.Itoa(value) + "kph"
+}
+
+func (a *App) handleFanCommandTimeoutSetting(action string) string {
+	var value int
+
+	switch action {
+	case "increase":
+		value = a.config.IncreaseFanCommandTimeoutMs()
+	case "decrease":
+		value = a.config.DecreaseFanCommandTimeoutMs()
+	default:
+		value = a.config.GetFanCommandTimeoutMs()
+	}
+
+	return strconv.Itoa(value) + "ms"
 }
 
 func (a *App) handlePitRadioEnableSetting(action string) string {

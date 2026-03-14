@@ -22,6 +22,12 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/i18n"
 )
 
+const (
+	fanModeManual = "manual"
+	fanModeOpen   = "open"
+	fanModeAll    = "all"
+)
+
 type app struct {
 	Language       string  `json:"language"`
 	Accent         string  `json:"accent"`
@@ -73,6 +79,14 @@ type haptics struct {
 type hardware struct {
 	Model              string `json:"model"`
 	DisplayOrientation int    `json:"displayOrientation"`
+}
+
+type fan struct {
+	Enabled          bool   `json:"enabled"`
+	Mode             string `json:"mode"`
+	DeviceName       string `json:"deviceName"`
+	CommandTimeoutMs int    `json:"commandTimeoutMs"`
+	MaxSpeedKPH      int    `json:"maxSpeedKph"`
 }
 
 type notifications struct {
@@ -168,6 +182,7 @@ type viperConfig struct {
 	PitRadio      *pitRadio    `json:"pitRadio,omitempty"`
 	Synthesizer   *Synthesizer `json:"synthesizer,omitempty"`
 	Telemetry     *Telemetry   `json:"telemetry,omitempty"`
+	Fan           *fan         `json:"fan,omitempty"`
 }
 
 // Snapshot holds frequently-accessed configuration values for lock-free reads.
@@ -737,6 +752,239 @@ func (c *Config) SetDevToolsEnabled(enabled bool) {
 	c.viper.App.EnableDevTools = enabled
 
 	c.registerUpdate(false)
+}
+
+// ****************************************************************************
+// Fan methods.
+// ****************************************************************************
+
+// FanEnabled returns true if the fan controller is enabled.
+func (c *Config) FanEnabled() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if c.viper.Fan == nil {
+		return false
+	}
+
+	return c.viper.Fan.Enabled
+}
+
+// SetFanEnabled sets whether the fan controller is enabled.
+func (c *Config) SetFanEnabled(value bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.Fan.Enabled = value
+
+	c.registerUpdate(true)
+}
+
+// GetFanMode returns the fan operating mode.
+// Allowed values are: off, open, all.
+func (c *Config) GetFanMode() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if c.viper.Fan == nil {
+		return fanModeManual
+	}
+
+	mode := strings.ToLower(strings.TrimSpace(c.viper.Fan.Mode))
+
+	switch mode {
+	case fanModeManual, fanModeOpen, fanModeAll:
+		return mode
+	default:
+		return fanModeManual
+	}
+}
+
+// IsFanModeValid returns true when the configured fan mode is valid.
+func (c *Config) IsFanModeValid() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if c.viper.Fan == nil {
+		return true
+	}
+
+	mode := strings.ToLower(strings.TrimSpace(c.viper.Fan.Mode))
+
+	switch mode {
+	case "", fanModeManual, fanModeOpen, fanModeAll:
+		return true
+	default:
+		return false
+	}
+}
+
+// GetFanConfiguredMode returns the configured fan mode without normalization.
+func (c *Config) GetFanConfiguredMode() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if c.viper.Fan == nil {
+		return ""
+	}
+
+	return c.viper.Fan.Mode
+}
+
+// GetFanDeviceName returns the exact BLE device name used to identify the fan device.
+func (c *Config) GetFanDeviceName() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if c.viper.Fan == nil || c.viper.Fan.DeviceName == "" {
+		return "windsim"
+	}
+
+	return c.viper.Fan.DeviceName
+}
+
+// GetFanCommandTimeoutMs returns the BLE command timeout in milliseconds.
+func (c *Config) GetFanCommandTimeoutMs() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if c.viper.Fan == nil || c.viper.Fan.CommandTimeoutMs <= 0 {
+		return 5000
+	}
+
+	return c.viper.Fan.CommandTimeoutMs
+}
+
+// GetFanMaxSpeedKPH returns the vehicle speed in km/h that maps to 100% fan duty.
+func (c *Config) GetFanMaxSpeedKPH() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if c.viper.Fan == nil || c.viper.Fan.MaxSpeedKPH <= 0 {
+		return 250
+	}
+
+	return c.viper.Fan.MaxSpeedKPH
+}
+
+// SetFanMode sets the fan operating mode.
+func (c *Config) SetFanMode(value string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.Fan.Mode = value
+
+	c.registerUpdate(false)
+}
+
+// SetFanDeviceName sets the BLE device name for the fan device.
+func (c *Config) SetFanDeviceName(value string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.Fan.DeviceName = value
+
+	c.registerUpdate(false)
+}
+
+// SetFanCommandTimeoutMs sets the BLE command timeout in milliseconds.
+func (c *Config) SetFanCommandTimeoutMs(value int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.Fan.CommandTimeoutMs = value
+
+	c.registerUpdate(false)
+}
+
+// SetFanMaxSpeedKPH sets the vehicle speed in km/h that maps to 100% fan duty.
+func (c *Config) SetFanMaxSpeedKPH(value int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.Fan.MaxSpeedKPH = value
+
+	c.registerUpdate(false)
+}
+
+// CycleFanMode cycles the fan mode forward or backward.
+// The order is: off -> open -> all -> off.
+func (c *Config) CycleFanMode(forward bool) string {
+	modes := []string{fanModeManual, fanModeOpen, fanModeAll}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	current := strings.ToLower(strings.TrimSpace(c.viper.Fan.Mode))
+
+	idx := 0
+
+	for i, m := range modes {
+		if m == current {
+			idx = i
+
+			break
+		}
+	}
+
+	if forward {
+		idx = (idx + 1) % len(modes)
+	} else {
+		idx = (idx + len(modes) - 1) % len(modes)
+	}
+
+	c.viper.Fan.Mode = modes[idx]
+	c.registerUpdate(false)
+
+	return modes[idx]
+}
+
+// IncreaseFanMaxSpeedKPH increases the max speed by 10 km/h, capped at 500.
+func (c *Config) IncreaseFanMaxSpeedKPH() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.Fan.MaxSpeedKPH = min(500, c.viper.Fan.MaxSpeedKPH+10)
+
+	c.registerUpdate(false)
+
+	return c.viper.Fan.MaxSpeedKPH
+}
+
+// DecreaseFanMaxSpeedKPH decreases the max speed by 10 km/h, floored at 50.
+func (c *Config) DecreaseFanMaxSpeedKPH() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.Fan.MaxSpeedKPH = max(50, c.viper.Fan.MaxSpeedKPH-10)
+
+	c.registerUpdate(false)
+
+	return c.viper.Fan.MaxSpeedKPH
+}
+
+// IncreaseFanCommandTimeoutMs increases the command timeout by 500 ms, capped at 10000.
+func (c *Config) IncreaseFanCommandTimeoutMs() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.Fan.CommandTimeoutMs = min(10000, c.viper.Fan.CommandTimeoutMs+100)
+
+	c.registerUpdate(false)
+
+	return c.viper.Fan.CommandTimeoutMs
+}
+
+// DecreaseFanCommandTimeoutMs decreases the command timeout by 100 ms, floored at 100.
+func (c *Config) DecreaseFanCommandTimeoutMs() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.Fan.CommandTimeoutMs = max(100, c.viper.Fan.CommandTimeoutMs-100)
+
+	c.registerUpdate(false)
+
+	return c.viper.Fan.CommandTimeoutMs
 }
 
 // ****************************************************************************

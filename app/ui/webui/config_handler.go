@@ -164,6 +164,13 @@ func (h *configHandler) handleGetConfig(response http.ResponseWriter, _ *http.Re
 			"source":    h.config.GetTelemetrySource(),
 			"updateURL": h.config.GetTelemetryUpdateURL(),
 		},
+		"fan": map[string]any{
+			"enabled":          h.config.FanEnabled(),
+			"mode":             h.config.GetFanMode(),
+			"deviceName":       h.config.GetFanDeviceName(),
+			"commandTimeoutMs": h.config.GetFanCommandTimeoutMs(),
+			"maxSpeedKph":      h.config.GetFanMaxSpeedKPH(),
+		},
 		"calibration": map[string]any{
 			"enabled":       h.calibrator.IsEnabled(),
 			"frequency":     h.calibrator.GetSweepFrequency(),
@@ -270,6 +277,7 @@ func (h *configHandler) applyConfigChanges(configData map[string]any) []string {
 		"discord":     h.applyDiscordConfig,
 		"calibration": h.applyCalibrationConfig,
 		"pitRadio":    h.applyPitRadioConfig,
+		"fan":         h.applyFanConfig,
 	}
 
 	var errors []string
@@ -813,6 +821,23 @@ func (h *configHandler) applyPitRadioConfig(config map[string]any) []string {
 	errors = append(errors, applySubMap(config, "discord", "invalid discord configuration structure", h.applyDiscordConfig)...)
 	errors = append(errors, applySubMap(config, "fuelMonitoring", "invalid fuel monitoring configuration structure", h.applyFuelConfig)...)
 	errors = append(errors, applySubMap(config, "tyreMonitoring", "invalid tyre monitoring configuration structure", h.applyTyresConfig)...)
+
+	return errors
+}
+
+// applyFanConfig applies fan device configuration changes.
+func (h *configHandler) applyFanConfig(config map[string]any) []string {
+	var errors []string
+
+	errors = appendErr(errors, applyField(config, "enabled", "invalid fan enabled value", h.config.SetFanEnabled))
+	errors = appendErr(errors, applyField(config, "mode", "invalid fan mode value", h.config.SetFanMode))
+	errors = appendErr(errors, applyField(config, "deviceName", "invalid fan device name value", h.config.SetFanDeviceName))
+	errors = appendErr(errors, applyField[float64](config, "commandTimeoutMs", "invalid fan command timeout value", func(f float64) {
+		h.config.SetFanCommandTimeoutMs(int(f))
+	}))
+	errors = appendErr(errors, applyField[float64](config, "maxSpeedKph", "invalid fan max speed value", func(f float64) {
+		h.config.SetFanMaxSpeedKPH(int(f))
+	}))
 
 	return errors
 }

@@ -120,6 +120,43 @@
             },
             "additionalProperties": true
         },
+        "fan": {
+            "type": "object",
+            "description": "Fan device configuration",
+            "properties": {
+                "mode": {
+                    "type": "string",
+                    "description": "Fan operating mode",
+                    "enum": [
+                        "manual",
+                        "open",
+                        "all"
+                    ],
+                    "default": "manual"
+                },
+                "deviceName": {
+                    "type": "string",
+                    "description": "Exact BLE device name",
+                    "minLength": 1,
+                    "default": "windsim"
+                },
+                "commandTimeoutMs": {
+                    "type": "integer",
+                    "description": "BLE command timeout in milliseconds",
+                    "minimum": 100,
+                    "maximum": 120000,
+                    "default": 5000
+                },
+                "maxSpeedKph": {
+                    "type": "integer",
+                    "description": "Vehicle speed in km/h that maps to 100% fan duty",
+                    "minimum": 1,
+                    "maximum": 500,
+                    "default": 250
+                }
+            },
+            "additionalProperties": true
+        },
         "synthesizer": {
             "type": "object",
             "description": "Audio synthesizer settings",

@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gopxl/beep"
@@ -26,6 +27,7 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/hardware"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/console"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/display"
+	"github.com/vwhitteron/simtezilo-dev/app/hardware/fancontroller"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/pirateaudio"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/spotpear"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/virtual"
@@ -126,6 +128,10 @@ type App struct {
 	jerkPeakHoldTime     time.Time     // Time when peak hold was last updated
 	jerkPeakHoldDuration time.Duration // Duration to hold peak based on pulse length
 
+	fanController  *fancontroller.Client // Wind simulator BLE client
+	fanControlChan chan int              // Channel for sending wind duty from mainLoop to BLE goroutine
+	manualFanDuty  atomic.Int32          // Manual fan duty (0-10 steps, each step = 10% duty cycle)
+
 	// Telemetry source management
 	customTelemetrySource string // Stores custom telemetry source when user switches to auto/demo
 
@@ -210,6 +216,7 @@ func New(opts Options) (*App, error) {
 	}
 
 	newApp.initializePitRadio(opts)
+	newApp.initializeFanController()
 
 	newApp.log.Debug().
 		Str("component", "app").
@@ -267,6 +274,8 @@ func (a *App) Close() {
 		a.webUI.Close()
 		a.log.Debug().Msg("WebUI closed")
 	}
+
+	a.closeFanController()
 
 	// Stop HTTP server to prevent new requests
 	a.log.Debug().Msg("Stopping HTTP server")
@@ -395,6 +404,8 @@ func (a *App) runAppMode() RunResult {
 			BuildTime:          BuildTime,
 			BuildPlatform:      Platform,
 			Updater:            a.updater,
+			GetManualFanDuty:   func() int { return int(a.manualFanDuty.Load()) },
+			SetManualFanDuty:   a.setManualFanDuty,
 		})
 	}
 
@@ -1171,6 +1182,7 @@ func (a *App) mainLoop() { //nolint:cyclop // compact and simple enough
 	tickerDisplay := time.NewTicker((1000 / displayFrameRate) * time.Millisecond)
 	tickerPitRadio := time.NewTicker((1000 / pitRadioFrameRate) * time.Millisecond)
 	tickerRaceData := time.NewTicker(500 * time.Millisecond)
+	tickerFanControl := time.NewTicker((1000 / FanControlFrameRate) * time.Millisecond)
 	tickerDebug := time.NewTicker(30 * time.Second)
 
 	a.log.Debug().Str("component", "app").Str("result", "success").Msg("main loop started")
@@ -1195,6 +1207,8 @@ func (a *App) mainLoop() { //nolint:cyclop // compact and simple enough
 			a.handlePitRadioTick()
 		case <-tickerRaceData.C:
 			a.handleRaceDataTick()
+		case <-tickerFanControl.C:
+			a.handleFanControlTick()
 		case <-tickerDebug.C:
 			a.handleDebugTick()
 		}

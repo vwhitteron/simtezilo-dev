@@ -38,6 +38,7 @@ linters:
             - github.com/Wifx/gonetworkmanager
             - github.com/bwmarrin/discordgo
             - github.com/golang/freetype
+            - github.com/go-ble/ble
             - github.com/gopxl/beep
             - github.com/gorilla/websocket
             - github.com/grafana/pyroscope-go

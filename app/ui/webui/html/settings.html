@@ -800,6 +800,7 @@
                     <option value="system">System</option>
                     <option value="synthesizer">Synthesizer</option>
                     <option value="haptics">Haptics</option>
+                    <option value="fan">Fan</option>
                     <option value="pitradio">Pit Radio</option>
                 </select>
             </div>
@@ -831,6 +832,12 @@
                                 <a class="settings-nav-link" data-section="haptics">
                                     <span class="icon" data-icon="wave-square"></span>
                                     <span data-i18n="runmode.settings.haptics.title">Haptics</span>
+                                </a>
+                            </li>
+                            <li class="settings-nav-item">
+                                <a class="settings-nav-link" data-section="fan">
+                                    <span class="icon" data-icon="fan"></span>
+                                    <span data-i18n="runmode.settings.fan.title">Fan</span>
                                 </a>
                             </li>
                             <li class="settings-nav-item">
@@ -2098,6 +2105,92 @@
                     </div>
                 </div>
 
+                <!-- Fan Section -->
+                <div class="settings-section-card" data-section-content="fan">
+                    <div class="card">
+                        <div class="card-body">
+                            <h5 class="mb-3"><span class="icon" data-icon="gear"></span><span
+                                    data-i18n="runmode.settings.fan.general.title">General</span></h5>
+
+                            <div class="row g-3 mb-4">
+                                <div class="col-md-6 col-lg-3">
+                                    <div class="form-check form-switch">
+                                        <input type="checkbox" class="form-check-input" id="fan-enabled"
+                                            data-config="fan.enabled" role="switch">
+                                        <label class="form-check-label" for="fan-enabled">
+                                            <span data-i18n="runmode.settings.fan.enabled">Enabled</span>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div class="col-md-6 col-lg-3">
+                                    <label for="fan-manual-speed" class="form-label">
+                                        <span data-i18n="runmode.settings.fan.manualspeed">Manual Speed</span>
+                                    </label>
+                                    <input type="range" id="fan-manual-speed" class="form-range" min="0" max="10"
+                                        step="1" value="0">
+                                    <div class="text-center">
+                                        <small id="fan-manual-speed-value">0</small>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="row g-3 mb-4">
+                                <div class="col-md-6 col-lg-3">
+                                    <label for="fan-devicename" class="form-label">
+                                        <span data-i18n="runmode.settings.fan.devicename">Device Name</span>
+                                    </label>
+                                    <input type="text" id="fan-devicename" class="form-control text-center"
+                                        data-config="fan.deviceName" placeholder="windsim">
+                                </div>
+
+                                <div class="col-md-6 col-lg-3">
+                                    <label for="fan-timeout" class="form-label">
+                                        <span data-i18n="runmode.settings.fan.commandtimeout">Command
+                                            Timeout</span>
+                                    </label>
+                                    <div class="input-with-suffix">
+                                        <input type="number" id="fan-timeout" class="form-control text-center"
+                                            data-config="fan.commandTimeoutMs" min="500" max="30000" step="500">
+                                        <span class="input-suffix">ms</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <h5 class="mb-3"><span class="icon" data-icon="wind"></span><span
+                                    data-i18n="runmode.settings.fan.windsim.title">Wind Simulator</span></h5>
+
+                            <div class="row g-3 mb-4">
+                                <div class="col-md-6 col-lg-3">
+                                    <label for="fan-mode" class="form-label">
+                                        <span data-i18n="runmode.settings.fan.mode">Mode</span>
+                                    </label>
+                                    <select id="fan-mode" class="form-select text-center" data-config="fan.mode">
+                                        <option value="manual" data-i18n="runmode.settings.fan.mode.manual">Manual
+                                        </option>
+                                        <option value="open" data-i18n="runmode.settings.fan.mode.open">Open Cockpit
+                                        </option>
+                                        <option value="all" data-i18n="runmode.settings.fan.mode.all">All Vehicles
+                                        </option>
+                                    </select>
+                                </div>
+
+                                <div class="col-md-6 col-lg-3">
+                                    <label for="fan-maxspeed" class="form-label">
+                                        <span data-i18n="runmode.settings.fan.windsim.maxspeed">Max Speed</span>
+                                    </label>
+                                    <div class="input-with-suffix">
+                                        <input type="number" id="fan-maxspeed" class="form-control text-center"
+                                            data-config="fan.maxSpeedKph" min="50" max="500" step="10">
+                                        <span class="input-suffix">km/h</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Pit Radio Section -->
                 <div class="settings-section-card" data-section-content="pitradio">
                     <div class="card">
@@ -2793,6 +2886,40 @@
 
         // Replace all Font Awesome icons with SVG icons
         document.addEventListener('DOMContentLoaded', function () {
+            // Manual fan speed slider (ephemeral, not stored in config)
+            const fanSpeedSlider = document.getElementById('fan-manual-speed');
+            const fanSpeedValue = document.getElementById('fan-manual-speed-value');
+
+            if (fanSpeedSlider && fanSpeedValue) {
+                // Load current value from server
+                fetch('/api/fan/speed')
+                    .then(r => r.json())
+                    .then(data => {
+                        fanSpeedSlider.value = data.speed;
+                        fanSpeedValue.textContent = data.speed;
+                    })
+                    .catch(() => { });
+
+                fanSpeedSlider.addEventListener('input', function () {
+                    fanSpeedValue.textContent = this.value;
+                });
+
+                fanSpeedSlider.addEventListener('change', function () {
+                    const speed = parseInt(this.value, 10);
+                    fetch('/api/fan/speed', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ speed: speed })
+                    })
+                        .then(r => r.json())
+                        .then(data => {
+                            fanSpeedSlider.value = data.speed;
+                            fanSpeedValue.textContent = data.speed;
+                        })
+                        .catch(err => console.error('Failed to set fan speed:', err));
+                });
+            }
+
             if (typeof IconHelper !== 'undefined') {
                 // Map Font Awesome classes to SVG icon names
                 const iconMap = {
