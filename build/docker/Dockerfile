@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
-ARG GO_VERSION=1.25.6
+ARG GOVERSION=1.25.0
 
-FROM golang:${GO_VERSION}-trixie AS base
+FROM golang:${GOVERSION}-trixie AS base
 WORKDIR /src
 RUN --mount=type=cache,target=/go/pkg/mod/ \
     --mount=type=bind,source=go.sum,target=go.sum \

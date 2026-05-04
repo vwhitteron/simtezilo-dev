@@ -58,6 +58,7 @@ upgradeable:
 # DEVELOPMENT
 # ==================================================================================== #
 
+goversion := $(shell grep 'toolchain' go.mod | sed 's/.*go//')
 buildmodule := $(shell awk '/module/ {print $$NF}' go.mod)
 buildversion := $(shell cat VERSION 2>/dev/null || echo "v0.0.1-dev.1")
 buildcommit := $(shell git describe --tags --always --dirty)
@@ -182,6 +183,7 @@ build/windows/64:
 build/linux/amd64:
 	@docker build \
 	--build-arg GOOS=linux --build-arg GOARCH=amd64 \
+	--build-arg GOVERSION=$(goversion) \
 	--build-arg BUILDMODULE=$(buildmodule) \
 	--build-arg BUILDTIME=$(buildtime) \
 	--build-arg BUILDVERSION=$(buildversion) \
@@ -195,6 +197,7 @@ build/linux/amd64:
 build/rpi:
 	@docker build \
 	--build-arg GOOS=linux --build-arg GOARCH=arm \
+	--build-arg GOVERSION=$(goversion) \
 	--build-arg BUILDMODULE=$(buildmodule) \
 	--build-arg BUILDTIME=$(buildtime) \
 	--build-arg BUILDVERSION=$(buildversion) \
@@ -208,6 +211,7 @@ build/rpi:
 build/rpi/v6:
 	@docker build \
 	--build-arg GOOS=linux --build-arg GOARCH=arm --build-arg GOARM=6 \
+	--build-arg GOVERSION=$(goversion) \
 	--build-arg BUILDMODULE=$(buildmodule) \
 	--build-arg BUILDTIME=$(buildtime) \
 	--build-arg BUILDVERSION=$(buildversion) \
@@ -221,6 +225,7 @@ build/rpi/v6:
 build/rpi/v7:
 	@docker build \
 	--build-arg GOOS=linux --build-arg GOARM=7 \
+	--build-arg GOVERSION=$(goversion) \
 	--build-arg BUILDMODULE=$(buildmodule) \
 	--build-arg BUILDTIME=$(buildtime) \
 	--build-arg BUILDVERSION=$(buildversion) \
@@ -234,6 +239,7 @@ build/rpi/v7:
 build/rpi/v8/32:
 	@docker build \
 	--build-arg GOOS=linux \
+	--build-arg GOVERSION=$(goversion) \
 	--build-arg BUILDMODULE=$(buildmodule) \
 	--build-arg BUILDTIME=$(buildtime) \
 	--build-arg BUILDVERSION=$(buildversion) \
@@ -247,6 +253,7 @@ build/rpi/v8/32:
 build/rpi/v8/64:
 	@docker build \
 	--build-arg GOOS=linux --build-arg GOARCH=arm64 \
+	--build-arg GOVERSION=$(goversion) \
 	--build-arg BUILDMODULE=$(buildmodule) \
 	--build-arg BUILDTIME=$(buildtime) \
 	--build-arg BUILDVERSION=$(buildversion) \

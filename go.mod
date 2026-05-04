@@ -2,6 +2,8 @@ module github.com/vwhitteron/simtezilo-dev
 
 go 1.25.6
 
+toolchain go1.25.9
+
 require (
 	atomicgo.dev/keyboard v0.2.9
 	github.com/Wifx/gonetworkmanager/v2 v2.2.0
