@@ -1,12 +1,50 @@
 package tyres_test
 
 import (
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/suite"
 	"github.com/vwhitteron/simtezilo-dev/app/tyres"
 	"github.com/zetetos/gt-telemetry/v2/pkg/models"
 )
+
+// mockConfigProvider implements tyres.ConfigProvider for testing.
+type mockConfigProvider struct {
+	mu      sync.RWMutex
+	optimal float32
+	window  float32
+	margin  float32
+}
+
+func (m *mockConfigProvider) GetPitRadioTyreTemperatureOptimalCelsius() float32 {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	return m.optimal
+}
+
+func (m *mockConfigProvider) GetPitRadioTyreTemperatureOperatingWindow() float32 {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	return m.window
+}
+
+func (m *mockConfigProvider) GetPitRadioTyreTemperatureMarginCelsius() float32 {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	return m.margin
+}
+
+func (m *mockConfigProvider) setWindow(w float32) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.window = w
+}
 
 type TyreTestSuite struct {
 	suite.Suite
@@ -20,9 +58,7 @@ func TestTyreTestSuite(t *testing.T) {
 
 func (suite *TyreTestSuite) TestNewTyreAttributes() {
 	// Arrange
-	optimalCenter := float32(80.0)
-	optimalWindow := float32(10.0)
-	margin := float32(5.0)
+	cfg := &mockConfigProvider{optimal: 80.0, window: 10.0, margin: 5.0}
 	tyreTemps := models.CornerSet{
 		FrontLeft:  75.0, // Optimal
 		FrontRight: 95.0, // Hot
@@ -31,18 +67,14 @@ func (suite *TyreTestSuite) TestNewTyreAttributes() {
 	}
 
 	// Act
-	attributes := tyres.New(optimalCenter, optimalWindow, margin, tyreTemps)
+	attributes := tyres.New(cfg, tyreTemps)
 
 	// Assert
-	// Note: Internal thresholds are not directly accessible, which is fine for encapsulation
-
-	// Check individual tyre conditions
 	suite.Equal(tyres.ConditionOptimal, attributes.ConditionAtPosition(tyres.PositionFrontLeft))
 	suite.Equal(tyres.ConditionHot, attributes.ConditionAtPosition(tyres.PositionFrontRight))
 	suite.Equal(tyres.ConditionCold, attributes.ConditionAtPosition(tyres.PositionRearLeft))
 	suite.Equal(tyres.ConditionInvalid, attributes.ConditionAtPosition(tyres.PositionRearRight))
 
-	// Check individual tyre temperatures
 	suite.InDelta(float32(75.0), attributes.TemperatureAtPosition(tyres.PositionFrontLeft), 0.001)
 	suite.InDelta(float32(95.0), attributes.TemperatureAtPosition(tyres.PositionFrontRight), 0.001)
 	suite.InDelta(float32(65.0), attributes.TemperatureAtPosition(tyres.PositionRearLeft), 0.001)
@@ -52,9 +84,7 @@ func (suite *TyreTestSuite) TestNewTyreAttributes() {
 func (suite *TyreTestSuite) TestIndividualTyreConditionCalculations() {
 	// Test configuration: optimal = 80°C, window = 10°C, margin = 5°C
 	// Cold: < 70°C, Optimal: 75-85°C, Hot: > 90°C
-	optimalCenter := float32(80.0)
-	optimalWindow := float32(10.0)
-	margin := float32(5.0)
+	cfg := &mockConfigProvider{optimal: 80.0, window: 10.0, margin: 5.0}
 
 	testCases := []struct {
 		name        string
@@ -78,7 +108,7 @@ func (suite *TyreTestSuite) TestIndividualTyreConditionCalculations() {
 
 	for _, testCase := range testCases {
 		suite.Run(testCase.name, func() {
-			// Create attributes with a single tyre at the test temperature
+			// Arrange
 			tyreTemps := models.CornerSet{
 				FrontLeft:  testCase.temperature,
 				FrontRight: 80.0, // Optimal
@@ -87,7 +117,7 @@ func (suite *TyreTestSuite) TestIndividualTyreConditionCalculations() {
 			}
 
 			// Act
-			attributes := tyres.New(optimalCenter, optimalWindow, margin, tyreTemps)
+			attributes := tyres.New(cfg, tyreTemps)
 
 			// Assert
 			result := attributes.ConditionAtPosition(tyres.PositionFrontLeft)
@@ -98,13 +128,14 @@ func (suite *TyreTestSuite) TestIndividualTyreConditionCalculations() {
 
 func (suite *TyreTestSuite) TestAverageTemperature() {
 	// Arrange
+	cfg := &mockConfigProvider{optimal: 80.0, window: 10.0, margin: 5.0}
 	tyreTemps := models.CornerSet{
 		FrontLeft:  70.0,
 		FrontRight: 80.0,
 		RearLeft:   90.0,
 		RearRight:  100.0,
 	}
-	attributes := tyres.New(80.0, 10.0, 5.0, tyreTemps)
+	attributes := tyres.New(cfg, tyreTemps)
 
 	// Act
 	average := attributes.GeneralTemperature()
@@ -116,13 +147,14 @@ func (suite *TyreTestSuite) TestAverageTemperature() {
 
 func (suite *TyreTestSuite) TestPositionsInCondition() {
 	// Arrange
+	cfg := &mockConfigProvider{optimal: 80.0, window: 10.0, margin: 5.0}
 	tyreTemps := models.CornerSet{
 		FrontLeft:  65.0, // Cold
 		FrontRight: 80.0, // Optimal
 		RearLeft:   95.0, // Hot
 		RearRight:  0.0,  // Invalid
 	}
-	attributes := tyres.New(80.0, 10.0, 5.0, tyreTemps)
+	attributes := tyres.New(cfg, tyreTemps)
 
 	// Act & Assert
 	suite.Len(attributes.PositionsInCondition(tyres.ConditionCold), 1)
@@ -132,6 +164,8 @@ func (suite *TyreTestSuite) TestPositionsInCondition() {
 }
 
 func (suite *TyreTestSuite) TestConditionOptimal() {
+	cfg := &mockConfigProvider{optimal: 80.0, window: 10.0, margin: 5.0}
+
 	testCases := []struct {
 		name     string
 		temps    models.CornerSet
@@ -182,12 +216,149 @@ func (suite *TyreTestSuite) TestConditionOptimal() {
 	for _, testCase := range testCases {
 		suite.Run(testCase.name, func() {
 			// Act
-			attributes := tyres.New(80.0, 10.0, 5.0, testCase.temps)
+			attributes := tyres.New(cfg, testCase.temps)
 
 			// Assert
 			suite.Equal(testCase.expected, attributes.ConditionOptimal())
 		})
 	}
+}
+
+func (suite *TyreTestSuite) TestOptimalWithWideWindow() {
+	// Settings: centre=81, window=15, margin=3
+	// Thresholds: optimalLower=73.5, optimalUpper=88.5, cold<70.5, hot>91.5
+	cfg := &mockConfigProvider{optimal: 81.0, window: 15.0, margin: 3.0}
+
+	testCases := []struct {
+		name              string
+		temps             models.CornerSet
+		expectedOptimal   bool
+		expectedCondition tyres.Condition
+	}{
+		{
+			name: "All tyres at centre - should be optimal",
+			temps: models.CornerSet{
+				FrontLeft:  81.0,
+				FrontRight: 81.0,
+				RearLeft:   81.0,
+				RearRight:  81.0,
+			},
+			expectedOptimal:   true,
+			expectedCondition: tyres.ConditionOptimal,
+		},
+		{
+			name: "All tyres at 76 - should be optimal",
+			temps: models.CornerSet{
+				FrontLeft:  76.0,
+				FrontRight: 76.0,
+				RearLeft:   76.0,
+				RearRight:  76.0,
+			},
+			expectedOptimal:   true,
+			expectedCondition: tyres.ConditionOptimal,
+		},
+		{
+			name: "All tyres at 84 - should be optimal",
+			temps: models.CornerSet{
+				FrontLeft:  84.0,
+				FrontRight: 84.0,
+				RearLeft:   84.0,
+				RearRight:  84.0,
+			},
+			expectedOptimal:   true,
+			expectedCondition: tyres.ConditionOptimal,
+		},
+		{
+			name: "Mixed temps 76-84 - should be optimal",
+			temps: models.CornerSet{
+				FrontLeft:  76.0,
+				FrontRight: 84.0,
+				RearLeft:   79.0,
+				RearRight:  82.0,
+			},
+			expectedOptimal:   true,
+			expectedCondition: tyres.ConditionOptimal,
+		},
+		{
+			name: "All at lower bound 73.5 - should be optimal",
+			temps: models.CornerSet{
+				FrontLeft:  73.5,
+				FrontRight: 73.5,
+				RearLeft:   73.5,
+				RearRight:  73.5,
+			},
+			expectedOptimal:   true,
+			expectedCondition: tyres.ConditionOptimal,
+		},
+		{
+			name: "All at upper bound 88.5 - should be optimal",
+			temps: models.CornerSet{
+				FrontLeft:  88.5,
+				FrontRight: 88.5,
+				RearLeft:   88.5,
+				RearRight:  88.5,
+			},
+			expectedOptimal:   true,
+			expectedCondition: tyres.ConditionOptimal,
+		},
+	}
+
+	for _, testCase := range testCases {
+		suite.Run(testCase.name, func() {
+			// Arrange
+			attributes := tyres.New(cfg, testCase.temps)
+
+			// Act
+			isOptimal := attributes.ConditionOptimal()
+			generalCondition := attributes.GeneralCondition()
+
+			// Assert
+			suite.Equal(testCase.expectedOptimal, isOptimal, "ConditionOptimal()")
+			suite.Equal(testCase.expectedCondition, generalCondition, "GeneralCondition()")
+
+			// Also verify each individual tyre is optimal
+			suite.Equal(tyres.ConditionOptimal, attributes.ConditionAtPosition(tyres.PositionFrontLeft), "FL condition")
+			suite.Equal(tyres.ConditionOptimal, attributes.ConditionAtPosition(tyres.PositionFrontRight), "FR condition")
+			suite.Equal(tyres.ConditionOptimal, attributes.ConditionAtPosition(tyres.PositionRearLeft), "RL condition")
+			suite.Equal(tyres.ConditionOptimal, attributes.ConditionAtPosition(tyres.PositionRearRight), "RR condition")
+		})
+	}
+}
+
+func (suite *TyreTestSuite) TestConfigWatcherUpdatesThresholds() {
+	// Arrange: Create tyres with default settings (centre=81, window=6, margin=3)
+	// Thresholds: optimalLower=78, optimalUpper=84, cold<75, hot>87
+	cfg := &mockConfigProvider{optimal: 81.0, window: 6.0, margin: 3.0}
+	attributes := tyres.New(cfg, models.CornerSet{
+		FrontLeft:  76.0,
+		FrontRight: 84.0,
+		RearLeft:   79.0,
+		RearRight:  82.0,
+	})
+
+	// With window=6, 76°C average (80.25) is within 78-84, but individual FL at 76 is marginal.
+	// GeneralCondition should be optimal since avg is in range and no tyre is hot/cold.
+	suite.True(attributes.ConditionOptimal(), "should be optimal with initial config")
+
+	// Act: Simulate user changing config to window=15 at runtime
+	cfg.setWindow(15.0)
+
+	// Wait for the config watcher to pick up the change
+	time.Sleep(300 * time.Millisecond)
+
+	// Verify new temps at edges of the wider window are now optimal
+	attributes.SetTemperatures(models.CornerSet{
+		FrontLeft:  74.0, // Below old optimalLower=78, within new optimalLower=73.5
+		FrontRight: 88.0, // Above old optimalUpper=84, within new optimalUpper=88.5
+		RearLeft:   81.0,
+		RearRight:  81.0,
+	})
+
+	// Assert - with updated thresholds from watcher, all temps are within optimal range
+	suite.True(attributes.ConditionOptimal(), "ConditionOptimal() should be true after config watcher update")
+	suite.Equal(tyres.ConditionOptimal, attributes.GeneralCondition(), "GeneralCondition() should be optimal")
+	suite.Equal(tyres.ConditionOptimal, attributes.ConditionAtPosition(tyres.PositionFrontLeft), "FL at 74 should be optimal with window=15")
+	suite.Equal(tyres.ConditionOptimal, attributes.ConditionAtPosition(tyres.PositionFrontRight), "FR at 88 should be optimal with window=15")
 }
 
 func (suite *TyreTestSuite) TestPositionString() {

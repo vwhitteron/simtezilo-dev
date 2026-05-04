@@ -1,8 +1,20 @@
 package tyres
 
 import (
+	"sync"
+	"time"
+
 	"github.com/zetetos/gt-telemetry/v2/pkg/models"
 )
+
+const configWatchInterval = 200 * time.Millisecond
+
+// ConfigProvider provides tyre temperature threshold configuration values.
+type ConfigProvider interface {
+	GetPitRadioTyreTemperatureOptimalCelsius() float32
+	GetPitRadioTyreTemperatureOperatingWindow() float32
+	GetPitRadioTyreTemperatureMarginCelsius() float32
+}
 
 // attribute holds the temperature and condition of a single tyre.
 type attribute struct {
@@ -12,6 +24,8 @@ type attribute struct {
 
 // Tyre provides temperature and condition information for all four tyres.
 type Tyre struct {
+	config        ConfigProvider
+	mu            sync.RWMutex
 	optimalLower  float32
 	optimalUpper  float32
 	coldThreshold float32
@@ -72,18 +86,15 @@ func (p *Position) String() string {
 }
 
 // New creates a tyreAttributes struct from the given tyre temperatures.
-func New(optimalCenter float32, optimalWindow float32, margin float32, tyreTemps models.CornerSet) *Tyre {
-	optimalMin := optimalCenter - (optimalWindow / 2)
-	optimalMax := optimalCenter + (optimalWindow / 2)
-
+func New(config ConfigProvider, tyreTemps models.CornerSet) *Tyre {
 	attributes := Tyre{
-		optimalLower:  optimalMin,
-		optimalUpper:  optimalMax,
-		coldThreshold: optimalMin - margin,
-		hotThreshold:  optimalMax + margin,
+		config: config,
 	}
 
+	attributes.updateThresholds()
 	attributes.SetTemperatures(tyreTemps)
+
+	go attributes.watchForConfigChanges()
 
 	return &attributes
 }
@@ -224,19 +235,77 @@ func (a *Tyre) ConditionOptimal() bool {
 
 	averageTemp := a.GeneralTemperature()
 
-	if averageTemp < a.optimalLower {
+	a.mu.RLock()
+	optLo := a.optimalLower
+	optHi := a.optimalUpper
+	a.mu.RUnlock()
+
+	if averageTemp < optLo {
 		return false
 	}
 
-	if averageTemp > a.optimalUpper {
+	if averageTemp > optHi {
 		return false
 	}
 
 	return true
 }
 
+// updateThresholds recalculates the optimal and hot/cold thresholds from current config.
+func (a *Tyre) updateThresholds() {
+	optimalCenter := a.config.GetPitRadioTyreTemperatureOptimalCelsius()
+	optimalWindow := a.config.GetPitRadioTyreTemperatureOperatingWindow()
+	margin := a.config.GetPitRadioTyreTemperatureMarginCelsius()
+
+	optimalMin := optimalCenter - (optimalWindow / 2)
+	optimalMax := optimalCenter + (optimalWindow / 2)
+
+	a.optimalLower = optimalMin
+	a.optimalUpper = optimalMax
+	a.coldThreshold = optimalMin - margin
+	a.hotThreshold = optimalMax + margin
+}
+
+// watchForConfigChanges monitors tyre temperature configuration and updates thresholds when changed.
+// Conditions are not reassessed here; the next SetTemperatures call will reassess with the new thresholds.
+func (a *Tyre) watchForConfigChanges() {
+	ticker := time.NewTicker(configWatchInterval)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		optimalCenter := a.config.GetPitRadioTyreTemperatureOptimalCelsius()
+		optimalWindow := a.config.GetPitRadioTyreTemperatureOperatingWindow()
+		margin := a.config.GetPitRadioTyreTemperatureMarginCelsius()
+
+		optimalMin := optimalCenter - (optimalWindow / 2)
+		optimalMax := optimalCenter + (optimalWindow / 2)
+
+		a.mu.RLock()
+		unchanged := a.optimalLower == optimalMin &&
+			a.optimalUpper == optimalMax &&
+			a.coldThreshold == optimalMin-margin &&
+			a.hotThreshold == optimalMax+margin
+		a.mu.RUnlock()
+
+		if unchanged {
+			continue
+		}
+
+		a.mu.Lock()
+		a.updateThresholds()
+		a.mu.Unlock()
+	}
+}
+
 // assessTyreConditions evaluates and sets the condition for each tyre based on its temperature.
 func (a *Tyre) assessTyreConditions() {
+	a.mu.RLock()
+	cold := a.coldThreshold
+	hot := a.hotThreshold
+	optLo := a.optimalLower
+	optHi := a.optimalUpper
+	a.mu.RUnlock()
+
 	corners := []*attribute{&a.frontLeft, &a.frontRight, &a.rearLeft, &a.rearRight}
 
 	for _, corner := range corners {
@@ -249,11 +318,11 @@ func (a *Tyre) assessTyreConditions() {
 		}
 
 		switch {
-		case temp < a.coldThreshold:
+		case temp < cold:
 			corner.condition = ConditionCold
-		case temp > a.hotThreshold:
+		case temp > hot:
 			corner.condition = ConditionHot
-		case temp >= a.optimalLower && temp <= a.optimalUpper:
+		case temp >= optLo && temp <= optHi:
 			corner.condition = ConditionOptimal
 		default:
 			// In warming-up range, treat as optimal even though not strictly optimal/cold/hot
