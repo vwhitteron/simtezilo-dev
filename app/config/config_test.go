@@ -283,13 +283,13 @@ func testStatusAndRestartRequired(t *testing.T) {
 	cfg := newTestConfig()
 
 	// Act & Assert - initially no restart required
-	assert.False(t, cfg.RestartRequired(), 0.001)
+	assert.False(t, cfg.IsRestartRequired(), 0.001)
 
 	// Act - mark restart required
 	cfg.MarkRestartRequired()
 
 	// Assert
-	assert.True(t, cfg.RestartRequired(), 0.001)
+	assert.True(t, cfg.IsRestartRequired(), 0.001)
 	assert.True(t, cfg.Status().RestartRequired)
 	assert.Positive(t, cfg.Status().LastUpdate)
 }

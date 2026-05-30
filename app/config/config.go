@@ -412,8 +412,8 @@ func (c *Config) IsUpToDate(timestamp int64) bool {
 	return timestamp < c.status.LastUpdate
 }
 
-// RestartRequired returns true if a restart is required for configuration changes to take effect.
-func (c *Config) RestartRequired() bool {
+// IsRestartRequired returns true if a restart is required for configuration changes to take effect.
+func (c *Config) IsRestartRequired() bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
