@@ -907,19 +907,19 @@ func testSynthDRXEnabledGetSet(t *testing.T) {
 	cfg := newTestConfig()
 
 	// Act & Assert - default is false
-	assert.True(t, cfg.GetSynthDRXEnabled())
-
-	// Act - enable DRX
-	cfg.SetSynthDRXEnabled(false)
-
-	// Assert
 	assert.False(t, cfg.GetSynthDRXEnabled())
 
-	// Act - disable DRX
+	// Act - enable DRX
 	cfg.SetSynthDRXEnabled(true)
 
 	// Assert
 	assert.True(t, cfg.GetSynthDRXEnabled())
+
+	// Act - disable DRX
+	cfg.SetSynthDRXEnabled(false)
+
+	// Assert
+	assert.False(t, cfg.GetSynthDRXEnabled())
 }
 
 // ****************************************************************************
