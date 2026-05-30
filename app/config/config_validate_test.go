@@ -68,7 +68,8 @@ func TestValidateJSONSchema_ValidConfig(t *testing.T) {
 			"displayOrientation": 90
 		},
 		"telemetry": {
-			"source": "gt7"
+			"source": "gt7",
+			"updateURL": "https://example.com/data/gt7"
 		}
 	}`
 
@@ -549,7 +550,8 @@ func TestValidateConfig_ValidJSON(t *testing.T) {
 			"displayOrientation": 90
 		},
 		"telemetry": {
-			"source": "gt7"
+			"source": "gt7",
+			"updateURL": "https://example.com/data/gt7"
 		},
 		"haptics": {
 			"pulseMinFrequencyHz": 10,
@@ -606,7 +608,8 @@ func TestConfig_Validate_Integration(t *testing.T) {
 				DisplayOrientation: 90,
 			},
 			Telemetry: &Telemetry{
-				Source: "gt7",
+				Source:    "gt7",
+				UpdateURL: "https://example.com/data/gt7",
 			},
 			Haptics: &haptics{
 				JerkCurve:                    190,

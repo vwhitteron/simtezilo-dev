@@ -160,7 +160,8 @@ func defaultConfig() *viperConfig {
 			},
 		},
 		Telemetry: &Telemetry{
-			Source: "udp://255.255.255.255:33739",
+			Source:    "udp://255.255.255.255:33739",
+			UpdateURL: "https://static.zetetos.com/data/gt7",
 		},
 	}
 }

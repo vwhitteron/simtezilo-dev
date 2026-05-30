@@ -78,6 +78,11 @@ func (c *Cache) Write(identifier string, data []byte) error {
 	return nil
 }
 
+// Path returns the directory path where cache files are stored.
+func (c *Cache) Path() string {
+	return c.directory
+}
+
 // generateFilename creates a hashed filename for a given identifier.
 func (c *Cache) generateFilename(identifier string) string {
 	hash := sha256.Sum256([]byte(identifier))

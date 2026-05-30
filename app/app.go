@@ -787,10 +787,12 @@ func (a *App) initializeComponents(opts Options) error {
 	gtClientLogger := opts.Logger.With().Str("component", "gt client").Logger()
 
 	a.gtClient, err = gttelemetry.New(gttelemetry.Options{
-		Source:    a.config.GetTelemetrySource(),
-		Logger:    &gtClientLogger,
-		LogLevel:  a.config.GetAppLogLevel(),
-		VehicleDB: a.config.GetAppVehicleDBFile(),
+		Source:        a.config.GetTelemetrySource(),
+		Logger:        &gtClientLogger,
+		LogLevel:      a.config.GetAppLogLevel(),
+		VehicleDB:     a.config.GetAppVehicleDBFile(),
+		UpdateBaseURL: a.config.GetTelemetryUpdateURL(),
+		CachePath:     filepath.Join(a.cache.Path(), "gtclient"),
 	})
 	if err != nil {
 		a.log.Error().

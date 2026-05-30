@@ -1103,7 +1103,8 @@ func (w *WebUI) handleGetConfig(response http.ResponseWriter, _ *http.Request) {
 			w.config.GetSynthChannelDRXHeadroom(1),
 		},
 		"telemetry": map[string]any{
-			"source": w.config.GetTelemetrySource(),
+			"source":    w.config.GetTelemetrySource(),
+			"updateURL": w.config.GetTelemetryUpdateURL(),
 		},
 		"calibration": map[string]any{
 			"enabled":       w.calibrator.IsEnabled(),

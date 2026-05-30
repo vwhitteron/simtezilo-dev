@@ -2238,10 +2238,24 @@ func testTelemetrySource(t *testing.T) {
 	assert.Equal(t, "gt7", cfg.GetTelemetrySource(), 0.001)
 }
 
+func testTelemetryUpdateURL(t *testing.T) {
+	t.Parallel()
+
+	// Arrange
+	cfg := newTestConfig()
+
+	// Act - set new value
+	cfg.SetTelemetryUpdateURL("http://example.com/update")
+
+	// Assert
+	assert.Equal(t, "http://example.com/update", cfg.GetTelemetryUpdateURL(), 0.001)
+}
+
 func TestTelemetrySection(t *testing.T) {
 	t.Parallel()
 
 	t.Run("testTelemetrySource", testTelemetrySource)
+	t.Run("testTelemetryUpdateURL", testTelemetryUpdateURL)
 }
 
 // ****************************************************************************

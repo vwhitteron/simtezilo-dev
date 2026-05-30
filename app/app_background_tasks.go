@@ -111,7 +111,7 @@ func (a *App) startGTClient() {
 			case <-a.ctx.Done():
 				return
 			default:
-				recoverable, err := a.gtClient.Run(a.ctx)
+				recoverable, err := a.gtClient.Stream(a.ctx)
 				if err != nil {
 					// Check if error is due to context cancellation
 					if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {

@@ -134,7 +134,8 @@ type Synthesizer struct {
 
 // Telemetry represents the telemetry data source configuration.
 type Telemetry struct {
-	Source string `json:"source"`
+	Source    string `json:"source"`
+	UpdateURL string `json:"updateURL"` //nolint:tagliatelle // schema uses Go-style acronym
 }
 
 // Status represents the status of the configuration.
@@ -2894,6 +2895,24 @@ func (c *Config) SetTelemetrySource(value string) {
 	// TODO: validate value
 
 	c.viper.Telemetry.Source = value
+
+	c.registerUpdate(true)
+}
+
+// GetTelemetryUpdateURL returns the configured telemetry update URL.
+func (c *Config) GetTelemetryUpdateURL() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.Telemetry.UpdateURL
+}
+
+// SetTelemetryUpdateURL sets the telemetry update URL.
+func (c *Config) SetTelemetryUpdateURL(value string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.Telemetry.UpdateURL = value
 
 	c.registerUpdate(true)
 }

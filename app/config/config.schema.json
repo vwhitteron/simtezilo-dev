@@ -111,6 +111,11 @@
                     "type": "string",
                     "description": "Telemetry data source identifier",
                     "minLength": 1
+                },
+                "updateURL": {
+                    "type": "string",
+                    "description": "URL for telemetry updates",
+                    "default": ""
                 }
             },
             "additionalProperties": true
