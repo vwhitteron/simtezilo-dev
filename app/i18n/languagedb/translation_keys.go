@@ -267,7 +267,6 @@ const (
 	RunmodeSettingsAppGeneralAccentTooltip          Key = "runmode.settings.app.general.accent.tooltip"
 	RunmodeSettingsAppGeneralLoglevel               Key = "runmode.settings.app.general.loglevel"
 	RunmodeSettingsAppGeneralBasedir                Key = "runmode.settings.app.general.basedir"
-	RunmodeSettingsAppGeneralVehicledbfile          Key = "runmode.settings.app.general.vehicledbfile"
 	RunmodeSettingsAppGeneralTelemetrySource        Key = "runmode.settings.app.general.telemetry.source"
 	RunmodeSettingsAppGeneralTelemetrySourceTooltip Key = "runmode.settings.app.general.telemetry.source.tooltip"
 	RunmodeSettingsAppGeneralTelemetryAuto          Key = "runmode.settings.app.general.telemetry.auto"

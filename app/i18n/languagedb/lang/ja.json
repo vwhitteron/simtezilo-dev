@@ -264,7 +264,6 @@
         "runmode.settings.app.general.accent.tooltip": "小文字の<a href='https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2' target='_blank' rel='noopener noreferrer'>ISO 3166-1 alpha-2</a>国コードを入力してください。",
         "runmode.settings.app.general.loglevel": "ログレベル",
         "runmode.settings.app.general.basedir": "ベースディレクトリ",
-        "runmode.settings.app.general.vehicledbfile": "車両データベースファイル",
         "runmode.settings.app.general.telemetry.source": "テレメトリーソース",
         "runmode.settings.app.general.telemetry.source.tooltip": "udp://<ip_address>:<port>形式のUDPアドレス、またはfile://path/to/replay.<gtr|gtz>形式のリプレイファイルパスを入力してください。自動ボタンを使用すると、ローカルネットワーク上で実行されているGT7に自動的に接続します。",
         "runmode.settings.app.general.telemetry.auto": "自動",

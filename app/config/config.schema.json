@@ -51,11 +51,6 @@
                     "description": "Base directory for application data",
                     "default": "/opt/simtezilo"
                 },
-                "vehicleDBFile": {
-                    "type": "string",
-                    "description": "Path to the vehicle database file",
-                    "default": ""
-                },
                 "enabledWebUI": {
                     "type": "boolean",
                     "description": "Enable the web-based user interface",

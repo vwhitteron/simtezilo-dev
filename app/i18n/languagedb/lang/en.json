@@ -264,7 +264,6 @@
         "runmode.settings.app.general.accent.tooltip": "Enter a lowercase <a href='https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2' target='_blank' rel='noopener noreferrer'>ISO 3166-1 alpha-2</a> country code.",
         "runmode.settings.app.general.loglevel": "Log Level",
         "runmode.settings.app.general.basedir": "Base Directory",
-        "runmode.settings.app.general.vehicledbfile": "Vehicle Database File",
         "runmode.settings.app.general.telemetry.source": "Telemetry Source",
         "runmode.settings.app.general.telemetry.source.tooltip": "Accepts a UDP address in the format udp://<ip_address>:<port> or a replay file path in the format file://path/to/replay.<gtr|gtz>. Use the Auto button to automatically connect to GT7 running on the local network.",
         "runmode.settings.app.general.telemetry.auto": "Auto",
