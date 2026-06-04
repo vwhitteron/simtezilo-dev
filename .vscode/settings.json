@@ -1,4 +1,7 @@
 {
+    "go.toolsEnvVars": {
+        "CGO_ENABLED": "1"
+    },
     "go.formatTool": "goimports",
     "go.lintTool": "golangci-lint-v2",
     "go.useLanguageServer": true,
