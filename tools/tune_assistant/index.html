@@ -1,0 +1,983 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Snap vs Jerk - Telemetry Scatter Chart</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background: #1a1a2e;
+            color: #e0e0e0;
+            padding: 20px;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 16px;
+            font-size: 1.4em;
+            color: #f0f0f0;
+        }
+
+        .lap-row {
+            display: flex;
+            justify-content: flex-start;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+
+        .lap-row .lap-group {
+            margin-left: 28px;
+        }
+
+        .lap-row label {
+            font-size: 0.95em;
+            color: #ccc;
+        }
+
+        .lap-row select {
+            background: #16213e;
+            color: #e0e0e0;
+            border: 1px solid #0f3460;
+            border-radius: 6px;
+            padding: 6px 14px;
+            font-size: 0.9em;
+            cursor: pointer;
+        }
+
+        .lap-row select:focus {
+            outline: none;
+            border-color: #e94560;
+        }
+
+        .range-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .range-label {
+            font-size: 0.78em;
+            color: #888;
+            min-width: 54px;
+            text-align: center;
+        }
+
+        .range-track {
+            position: relative;
+            flex: 1;
+            height: 20px;
+        }
+
+        .range-fill {
+            position: absolute;
+            top: 50%;
+            left: 0;
+            right: 0;
+            height: 4px;
+            transform: translateY(-50%);
+            border-radius: 2px;
+            pointer-events: none;
+        }
+
+        .range-track input[type=range] {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
+            margin: 0;
+            pointer-events: none;
+            -webkit-appearance: none;
+            appearance: none;
+            background: transparent;
+            outline: none;
+        }
+
+        .range-track input[type=range]::-webkit-slider-runnable-track {
+            background: transparent;
+            height: 4px;
+        }
+
+        .range-track input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            pointer-events: all;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: #e94560;
+            cursor: pointer;
+            border: 2px solid #1a1a2e;
+            margin-top: -5px;
+        }
+
+        .range-track input[type=range]::-moz-range-track {
+            background: transparent;
+            height: 4px;
+        }
+
+        .range-track input[type=range]::-moz-range-thumb {
+            pointer-events: all;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #e94560;
+            cursor: pointer;
+            border: 2px solid #1a1a2e;
+            box-sizing: border-box;
+        }
+
+        .chart-container {
+            position: relative;
+            flex: 1 1 500px;
+            min-width: 0;
+            transition: flex-basis 0.3s ease, width 0.3s ease;
+        }
+
+        canvas {
+            background: #16213e;
+            border-radius: 8px;
+            transition: width 0.3s ease, height 0.3s ease;
+        }
+
+        .stats {
+            text-align: center;
+            margin-top: 12px;
+            font-size: 0.85em;
+            color: #888;
+        }
+
+        .content-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            align-items: flex-start;
+            justify-content: center;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .map-widget {
+            background: #16213e;
+            border: 1px solid #0f3460;
+            border-radius: 8px;
+            padding: 8px 8px 6px;
+        }
+
+        .map-widget h3 {
+            text-align: center;
+            font-size: 0.72em;
+            color: #888;
+            margin-bottom: 6px;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+        }
+
+        #map-canvas {
+            display: block;
+            cursor: grab;
+        }
+
+        #map-canvas.dragging {
+            cursor: grabbing;
+        }
+
+
+
+        .info-widget {
+            flex: 0 0 220px;
+            background: #16213e;
+            border: 1px solid #0f3460;
+            border-radius: 8px;
+            padding: 8px 12px 10px;
+        }
+
+        .info-widget h3 {
+            text-align: center;
+            font-size: 0.72em;
+            color: #888;
+            margin-bottom: 8px;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+        }
+
+        .info-widget dl {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 3px 8px;
+            font-size: 0.78em;
+        }
+
+        .info-widget dt {
+            color: #888;
+            text-align: right;
+        }
+
+        .info-widget dd {
+            color: #e0e0e0;
+            margin: 0;
+        }
+
+        .sidebar {
+            flex: 0 0 220px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Snap vs Jerk &mdash; Telemetry Scatter Chart</h1>
+    <div class="lap-row">
+        <label for="replay-select">Replay:</label>
+        <select id="replay-select"></select>
+        <label class="lap-group" for="lap-select">Lap:</label>
+        <select id="lap-select"></select>
+    </div>
+    <div class="content-row">
+        <div class="chart-container">
+            <div class="range-row">
+                <span class="range-label" id="range-start-label">0%</span>
+                <div class="range-track">
+                    <div class="range-fill" id="range-fill"></div>
+                    <input type="range" id="range-start" min="0" max="100" value="0">
+                    <input type="range" id="range-end" min="0" max="100" value="100">
+                </div>
+                <span class="range-label" id="range-end-label">100%</span>
+            </div>
+            <canvas id="chart"></canvas>
+            <div class="stats" id="stats"></div>
+        </div>
+        <div class="sidebar">
+            <div class="map-widget">
+                <h3 id="map-title">Circuit Map</h3>
+                <canvas id="map-canvas" width="220" height="220"></canvas>
+            </div>
+            <div class="info-widget" id="vehicle-widget">
+                <h3>Vehicle</h3>
+                <dl>
+                    <dt>Make</dt>
+                    <dd id="v-make">—</dd>
+                    <dt>Model</dt>
+                    <dd id="v-model">—</dd>
+                    <dt>Year</dt>
+                    <dd id="v-year">—</dd>
+                    <dt>Category</dt>
+                    <dd id="v-category">—</dd>
+                    <dt>Drivetrain</dt>
+                    <dd id="v-drivetrain">—</dd>
+                </dl>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const surfaceColors = {
+            tarmac: { bg: 'rgba(54, 162, 235, 0.5)', border: 'rgba(54, 162, 235, 1)' },
+            concrete: { bg: 'rgba(153, 102, 255, 0.5)', border: 'rgba(153, 102, 255, 1)' },
+            grass: { bg: 'rgba(75, 192, 75, 0.5)', border: 'rgba(75, 192, 75, 1)' },
+            dirt: { bg: 'rgba(205, 133, 63, 0.5)', border: 'rgba(205, 133, 63, 1)' },
+            sand: { bg: 'rgba(244, 208, 63, 0.5)', border: 'rgba(244, 208, 63, 1)' },
+            unknown: { bg: 'rgba(160, 160, 160, 0.5)', border: 'rgba(160, 160, 160, 1)' },
+        };
+
+        let lapData = {};
+        let mapData = {};
+        let allData = [];
+        let chart = null;
+        let rangeStart = 0;
+        let rangeEnd = 100;
+        let currentLapKey = null;
+        let cumulativeDists = [];
+        let totalDist = 0;
+        let mapZoom = 1;
+        let mapPanX = 0;
+        let mapPanY = 0;
+        let mapZoomedToRange = false;
+        let hoveredFrame = null;
+        let hoveredColor = null;
+
+        let fadeRaf = null;
+        let fadeStartTime = null;
+        const FADE_DURATION = 250;
+
+        // Scale chase animation state
+        const SCALE_LERP = 0.12;          // per-frame lerp factor (0–1, higher = faster)
+        const SCALE_SNAP_THRESHOLD = 0.5; // close-enough threshold to stop lerping
+        let scaleChaseRaf = null;
+        let displayedScales = null;       // { xMin, xMax, yMin, yMax } currently shown
+        let targetScales = null;          // { xMin, xMax, yMin, yMax } we're chasing toward
+
+        function alphaScale(colorStr, t) {
+            return colorStr.replace(/,([\s\d.]+)\)$/, (_, a) => `,${parseFloat(a) * t})`);
+        }
+
+        async function init() {
+            const replaysResp = await fetch('/replays');
+            const replaysJson = await replaysResp.json();
+            const replayFiles = replaysJson.replays || [];
+
+            const replaySelectEl = document.getElementById('replay-select');
+            replayFiles.forEach(name => {
+                const opt = document.createElement('option');
+                opt.value = name;
+                opt.textContent = name;
+                replaySelectEl.appendChild(opt);
+            });
+
+            replaySelectEl.addEventListener('change', () => loadReplay(replaySelectEl.value));
+
+            document.getElementById('lap-select').addEventListener('change', (e) => selectLap(e.target.value));
+
+            const startInput = document.getElementById('range-start');
+            const endInput = document.getElementById('range-end');
+
+            startInput.addEventListener('input', () => {
+                rangeStart = Math.min(parseInt(startInput.value), rangeEnd - 50);
+                startInput.value = rangeStart;
+                updateRangeFill();
+                updateChart();
+                drawMap(currentLapKey);
+            });
+            endInput.addEventListener('input', () => {
+                rangeEnd = Math.max(parseInt(endInput.value), rangeStart + 50);
+                endInput.value = rangeEnd;
+                updateRangeFill();
+                updateChart();
+                drawMap(currentLapKey);
+            });
+
+            initMapInteraction();
+
+            if (replayFiles.length > 0) {
+                await loadReplay(replayFiles[0]);
+            }
+        }
+
+        async function loadReplay(filename) {
+            const replaySelectEl = document.getElementById('replay-select');
+            replaySelectEl.disabled = true;
+
+            const resp = await fetch('/data?replay=' + encodeURIComponent(filename));
+            const json = await resp.json();
+
+            lapData = json.data;
+            mapData = json.map || {};
+
+            // Populate metadata panels
+            const meta = json.metadata || {};
+            document.getElementById('map-title').textContent = meta.circuitVariation || meta.circuitName || 'Circuit Map';
+            document.getElementById('v-make').textContent = meta.vehicleMake || '—';
+            document.getElementById('v-model').textContent = meta.vehicleModel || '—';
+            document.getElementById('v-year').textContent = meta.vehicleYear || '—';
+            document.getElementById('v-category').textContent = meta.vehicleCategory || '—';
+            document.getElementById('v-drivetrain').textContent = meta.vehicleDrivetrain || '—';
+
+            // Rebuild lap dropdown
+            const lapSelectEl = document.getElementById('lap-select');
+            lapSelectEl.innerHTML = '';
+            json.laps.forEach(lap => {
+                const opt = document.createElement('option');
+                opt.value = String(lap);
+                opt.textContent = String(lap);
+                lapSelectEl.appendChild(opt);
+            });
+
+            if (json.laps.length > 0) {
+                selectLap(String(json.laps[0]));
+            }
+
+            replaySelectEl.disabled = false;
+        }
+
+        function selectLap(lapKey) {
+            currentLapKey = lapKey;
+            allData = lapData[lapKey] || [];
+
+            const coords = mapData[lapKey] || [];
+            cumulativeDists = [0];
+            for (let i = 1; i < coords.length; i++) {
+                const dx = coords[i].x - coords[i - 1].x;
+                const dz = coords[i].z - coords[i - 1].z;
+                cumulativeDists.push(cumulativeDists[i - 1] + Math.sqrt(dx * dx + dz * dz));
+            }
+            totalDist = cumulativeDists.length > 0 ? cumulativeDists[cumulativeDists.length - 1] : 0;
+            const sliderMax = Math.ceil(totalDist / 50) * 50;
+
+            mapZoom = 1;
+            mapPanX = 0;
+            mapPanY = 0;
+            mapZoomedToRange = false;
+
+            rangeStart = 0;
+            rangeEnd = sliderMax;
+            const startInput = document.getElementById('range-start');
+            const endInput = document.getElementById('range-end');
+            startInput.min = 0; startInput.max = sliderMax; startInput.step = 50; startInput.value = 0;
+            endInput.min = 0; endInput.max = sliderMax; endInput.step = 50; endInput.value = sliderMax;
+            updateRangeFill();
+            if (!chart) {
+                createChart();
+            }
+            // Reset scale chase so new lap snaps to correct bounds immediately
+            if (scaleChaseRaf) { cancelAnimationFrame(scaleChaseRaf); scaleChaseRaf = null; }
+            displayedScales = null;
+            targetScales = null;
+            updateChart();
+            drawMap(lapKey);
+        }
+
+        function distToFrame(dist) {
+            if (cumulativeDists.length === 0) return 0;
+            let lo = 0, hi = cumulativeDists.length - 1;
+            while (lo < hi) {
+                const mid = (lo + hi) >> 1;
+                if (cumulativeDists[mid] < dist) lo = mid + 1;
+                else hi = mid;
+            }
+            return lo;
+        }
+
+        function getFrameRange(coordCount) {
+            const startFrame = distToFrame(rangeStart);
+            const endFrame = distToFrame(rangeEnd);
+            return { startFrame, endFrame };
+        }
+
+        function formatDist(meters) {
+            return meters >= 1000
+                ? (meters / 1000).toFixed(2) + '\u202fkm'
+                : Math.round(meters) + '\u202fm';
+        }
+
+        function updateRangeFill() {
+            const startPct = totalDist > 0 ? rangeStart / totalDist * 100 : 0;
+            const endPct = totalDist > 0 ? rangeEnd / totalDist * 100 : 100;
+            document.getElementById('range-fill').style.background =
+                `linear-gradient(to right, #0f3460 ${startPct}%, rgba(255,180,0,0.7) ${startPct}%, rgba(255,180,0,0.7) ${endPct}%, #0f3460 ${endPct}%)`;
+            document.getElementById('range-start-label').textContent = totalDist > 0 ? formatDist(rangeStart) : '—';
+            document.getElementById('range-end-label').textContent = totalDist > 0 ? formatDist(rangeEnd) : '—';
+        }
+
+        // Compute pan/zoom so the selected range fills the map canvas with a margin.
+        // Uses the same coordinate-to-canvas mapping as drawMap (at identity transform).
+        function zoomMapToSelection() {
+            const coords = mapData[currentLapKey] || [];
+            const canvas = document.getElementById('map-canvas');
+            const W = canvas.width;
+            const H = canvas.height;
+
+            if (coords.length < 2) return;
+
+            let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+            coords.forEach(c => {
+                if (c.x < minX) minX = c.x;
+                if (c.x > maxX) maxX = c.x;
+                if (c.z < minZ) minZ = c.z;
+                if (c.z > maxZ) maxZ = c.z;
+            });
+
+            const pad = 12;
+            const rangeX = maxX - minX || 1;
+            const rangeZ = maxZ - minZ || 1;
+            const scale = Math.min((W - pad * 2) / rangeX, (H - pad * 2) / rangeZ);
+            const offsetX = pad + ((W - pad * 2) - rangeX * scale) / 2;
+            const offsetZ = pad + ((H - pad * 2) - rangeZ * scale) / 2;
+
+            const toCanvas = (x, z) => ({
+                cx: offsetX + (x - minX) * scale,
+                cy: offsetZ + (z - minZ) * scale,
+            });
+
+            const { startFrame, endFrame } = getFrameRange(coords.length);
+            const selStart = Math.max(0, Math.min(startFrame, coords.length - 1));
+            const selEnd = Math.max(0, Math.min(endFrame, coords.length - 1));
+
+            if (selEnd <= selStart) return;
+
+            let cxMin = Infinity, cxMax = -Infinity, cyMin = Infinity, cyMax = -Infinity;
+            for (let i = selStart; i <= selEnd; i++) {
+                const pt = toCanvas(coords[i].x, coords[i].z);
+                if (pt.cx < cxMin) cxMin = pt.cx;
+                if (pt.cx > cxMax) cxMax = pt.cx;
+                if (pt.cy < cyMin) cyMin = pt.cy;
+                if (pt.cy > cyMax) cyMax = pt.cy;
+            }
+
+            const MARGIN = 20; // canvas pixels of margin around the selection
+            const selW = cxMax - cxMin || 1;
+            const selH = cyMax - cyMin || 1;
+            const zoom = Math.min((W - MARGIN * 2) / selW, (H - MARGIN * 2) / selH);
+
+            // Centre of the selection in canvas space
+            const selCX = (cxMin + cxMax) / 2;
+            const selCY = (cyMin + cyMax) / 2;
+
+            // After applying the transform (translate to centre, scale, translate back),
+            // the canvas-space point (selCX, selCY) maps to W/2, H/2 when pan is:
+            mapZoom = zoom;
+            // Transform: tx = zoom*(cx - W/2) + W/2 + panX; centre selCX → W/2 => panX = zoom*(W/2 - selCX)
+            mapPanX = zoom * (W / 2 - selCX);
+            mapPanY = zoom * (H / 2 - selCY);
+        }
+
+        function initMapInteraction() {
+            const canvas = document.getElementById('map-canvas');
+            let isDragging = false;
+            let dragLastX = 0, dragLastY = 0;
+
+            canvas.addEventListener('mousedown', (e) => {
+                isDragging = true;
+                dragLastX = e.clientX;
+                dragLastY = e.clientY;
+                canvas.classList.add('dragging');
+                e.preventDefault();
+            });
+
+            window.addEventListener('mousemove', (e) => {
+                if (!isDragging) return;
+                mapPanX += e.clientX - dragLastX;
+                mapPanY += e.clientY - dragLastY;
+                dragLastX = e.clientX;
+                dragLastY = e.clientY;
+                mapZoomedToRange = false;
+                drawMap(currentLapKey);
+            });
+
+            window.addEventListener('mouseup', () => {
+                if (isDragging) {
+                    isDragging = false;
+                    canvas.classList.remove('dragging');
+                }
+            });
+
+            canvas.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                const rect = canvas.getBoundingClientRect();
+                // Mouse position relative to canvas element, scaled to canvas resolution
+                const scaleX = canvas.width / rect.width;
+                const scaleY = canvas.height / rect.height;
+                const mx = (e.clientX - rect.left) * scaleX;
+                const my = (e.clientY - rect.top) * scaleY;
+                const cxCenter = canvas.width / 2;
+                const cyCenter = canvas.height / 2;
+                const f = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+                // Zoom around cursor: keep the world point under the cursor fixed
+                mapPanX = mx - cxCenter + f * (mapPanX - mx + cxCenter);
+                mapPanY = my - cyCenter + f * (mapPanY - my + cyCenter);
+                mapZoom = Math.max(0.5, Math.min(mapZoom * f, 20));
+                mapZoomedToRange = false;
+                drawMap(currentLapKey);
+            }, { passive: false });
+
+            canvas.addEventListener('dblclick', () => {
+                if (mapZoomedToRange) {
+                    // Return to full circuit view
+                    mapZoom = 1;
+                    mapPanX = 0;
+                    mapPanY = 0;
+                    mapZoomedToRange = false;
+                } else {
+                    // Zoom to framed selection
+                    zoomMapToSelection();
+                    mapZoomedToRange = true;
+                }
+                drawMap(currentLapKey);
+            });
+        }
+
+        function drawMap(lapKey) {
+            const coords = mapData[lapKey] || [];
+            const canvas = document.getElementById('map-canvas');
+            const ctx = canvas.getContext('2d');
+            const W = canvas.width;
+            const H = canvas.height;
+
+            ctx.clearRect(0, 0, W, H);
+
+            if (coords.length < 2) return;
+
+            let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+            coords.forEach(c => {
+                if (c.x < minX) minX = c.x;
+                if (c.x > maxX) maxX = c.x;
+                if (c.z < minZ) minZ = c.z;
+                if (c.z > maxZ) maxZ = c.z;
+            });
+
+            const pad = 12;
+            const rangeX = maxX - minX || 1;
+            const rangeZ = maxZ - minZ || 1;
+            const scale = Math.min((W - pad * 2) / rangeX, (H - pad * 2) / rangeZ);
+            const offsetX = pad + ((W - pad * 2) - rangeX * scale) / 2;
+            const offsetZ = pad + ((H - pad * 2) - rangeZ * scale) / 2;
+
+            // Apply user pan/zoom transform around canvas centre
+            ctx.save();
+            ctx.translate(W / 2 + mapPanX, H / 2 + mapPanY);
+            ctx.scale(mapZoom, mapZoom);
+            ctx.translate(-W / 2, -H / 2);
+
+            const toCanvas = (x, z) => ({
+                cx: offsetX + (x - minX) * scale,
+                cy: offsetZ + (z - minZ) * scale,
+            });
+
+            // Scale line widths sub-linearly with zoom so they don't appear too thick when zoomed in.
+            // Visual width = base * mapZoom^0.35; achieved by setting lineWidth = base / mapZoom^0.65.
+            const lwScale = 1 / Math.pow(mapZoom, 0.65);
+
+            // Full circuit (dimmed)
+            ctx.strokeStyle = 'rgba(54, 162, 235, 0.25)';
+            ctx.lineWidth = 1.5 * lwScale;
+            ctx.lineJoin = 'round';
+            ctx.beginPath();
+            const first = toCanvas(coords[0].x, coords[0].z);
+            ctx.moveTo(first.cx, first.cy);
+            for (let idx = 1; idx < coords.length; idx++) {
+                const pt = toCanvas(coords[idx].x, coords[idx].z);
+                ctx.lineTo(pt.cx, pt.cy);
+            }
+            ctx.stroke();
+
+            // Selected range (highlighted, coloured by surface type)
+            const { startFrame, endFrame } = getFrameRange(coords.length);
+            const selStart = Math.max(0, Math.min(startFrame, coords.length - 1));
+            const selEnd = Math.max(0, Math.min(endFrame, coords.length - 1));
+            if (selEnd > selStart) {
+                ctx.lineWidth = 2 * lwScale;
+                ctx.lineJoin = 'round';
+
+                // When hovering, gray out all segments and then redraw just the hovered point on top.
+                // Otherwise draw each segment in its surface colour.
+                const isHovering = hoveredFrame !== null && hoveredFrame >= selStart && hoveredFrame <= selEnd;
+
+                // Build set of surface types that are currently hidden in the chart legend
+                const hiddenSurfaces = new Set();
+                if (chart) {
+                    chart.data.datasets.forEach((ds, i) => {
+                        if (chart.getDatasetMeta(i).hidden) hiddenSurfaces.add(ds.label);
+                    });
+                }
+
+                // Group consecutive frames with the same surface into one path per group
+                let segStart = selStart;
+                for (let idx = selStart + 1; idx <= selEnd + 1; idx++) {
+                    const atEnd = idx > selEnd;
+                    const surfaceChanged = atEnd || coords[idx].surface !== coords[segStart].surface;
+                    if (surfaceChanged) {
+                        const surface = coords[segStart].surface || 'tarmac';
+                        const c = surfaceColors[surface] || surfaceColors.unknown;
+                        const dimmed = isHovering || hiddenSurfaces.has(surface);
+                        ctx.strokeStyle = dimmed ? c.border.replace(/,([\s\d.]+)\)$/, ', 0.15)') : c.border;
+                        ctx.beginPath();
+                        const segFirst = toCanvas(coords[segStart].x, coords[segStart].z);
+                        ctx.moveTo(segFirst.cx, segFirst.cy);
+                        const segEnd = Math.min(idx, selEnd);
+                        for (let jdx = segStart + 1; jdx <= segEnd; jdx++) {
+                            const pt = toCanvas(coords[jdx].x, coords[jdx].z);
+                            ctx.lineTo(pt.cx, pt.cy);
+                        }
+                        ctx.stroke();
+                        segStart = idx;
+                    }
+                }
+
+                // Redraw the hovered point's segment at full colour on top of the faded track
+                if (isHovering) {
+                    const surface = coords[hoveredFrame].surface || 'tarmac';
+                    const c = surfaceColors[surface] || surfaceColors.unknown;
+                    ctx.strokeStyle = c.border;
+                    ctx.beginPath();
+                    const hc = toCanvas(coords[hoveredFrame].x, coords[hoveredFrame].z);
+                    // Connect to the previous frame so the segment has visible length
+                    const prev = hoveredFrame > 0 ? toCanvas(coords[hoveredFrame - 1].x, coords[hoveredFrame - 1].z) : hc;
+                    ctx.moveTo(prev.cx, prev.cy);
+                    ctx.lineTo(hc.cx, hc.cy);
+                    ctx.stroke();
+                    // Small filled dot — just large enough to stand out from the line
+                    ctx.fillStyle = c.border;
+                    ctx.beginPath();
+                    ctx.arc(hc.cx, hc.cy, ctx.lineWidth * 0.75, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+
+            const startPt = toCanvas(coords[0].x, coords[0].z);
+            const nextPt = toCanvas(coords[1].x, coords[1].z);
+            const dx = nextPt.cx - startPt.cx;
+            const dy = nextPt.cy - startPt.cy;
+            const len = Math.sqrt(dx * dx + dy * dy) || 1;
+            const perpX = -dy / len;
+            const perpY = dx / len;
+            const halfLen = 7 * lwScale;
+            ctx.strokeStyle = '#e94560';
+            ctx.lineWidth = 2 * lwScale;
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.moveTo(startPt.cx - perpX * halfLen, startPt.cy - perpY * halfLen);
+            ctx.lineTo(startPt.cx + perpX * halfLen, startPt.cy + perpY * halfLen);
+            ctx.stroke();
+
+            ctx.restore();
+        }
+
+        function createChart() {
+            const ctx = document.getElementById('chart').getContext('2d');
+            chart = new Chart(ctx, {
+                type: 'scatter',
+                data: { datasets: [] },
+                options: {
+                    animation: false,
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    aspectRatio: 1.4,
+                    onHover: (_event, elements) => {
+                        const frame = elements.length > 0
+                            ? (chart.data.datasets[elements[0].datasetIndex].data[elements[0].index].frame ?? null)
+                            : null;
+                        const color = elements.length > 0
+                            ? chart.data.datasets[elements[0].datasetIndex].borderColor
+                            : null;
+                        if (frame !== hoveredFrame) {
+                            hoveredFrame = frame !== undefined ? frame : null;
+                            hoveredColor = color;
+                            drawMap(currentLapKey);
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: true,
+                            labels: { color: '#ccc', usePointStyle: true, pointStyle: 'circle' },
+                            onClick(e, legendItem, legend) {
+                                // Run the default toggle
+                                Chart.defaults.plugins.legend.onClick.call(this, e, legendItem, legend);
+                                // Recompute bounds from visible datasets only
+                                const visibleDatasets = chart.data.datasets.filter((_, i) => chart.isDatasetVisible(i));
+                                const niceBounds = computeNiceBounds(visibleDatasets);
+                                targetScales = { ...niceBounds };
+                                startScaleChase();
+                                // Reflect visibility on the circuit map
+                                drawMap(currentLapKey);
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: (ctx) => {
+                                    const dist = ctx.raw.dist ?? 0;
+                                    const distStr = dist >= 1000
+                                        ? `${(dist / 1000).toFixed(2)} km`
+                                        : `${dist.toFixed(0)} m`;
+                                    return `Jerk: ${ctx.parsed.x.toFixed(1)}, Snap: ${ctx.parsed.y.toFixed(1)}, Distance: ${distStr}`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            title: { display: true, text: 'Jerk (m/s³)', color: '#aaa', font: { size: 14 } },
+                            ticks: {
+                                color: '#888',
+                                callback: function (value) {
+                                    return value.toLocaleString();
+                                }
+                            },
+                            grid: { color: 'rgba(255,255,255,0.06)' }
+                        },
+                        y: {
+                            title: { display: true, text: 'Snap (m/s⁴)', color: '#aaa', font: { size: 14 } },
+                            ticks: {
+                                color: '#888',
+                                callback: function (value) {
+                                    return value.toLocaleString();
+                                }
+                            },
+                            grid: { color: 'rgba(255,255,255,0.06)' }
+                        }
+                    }
+                }
+            });
+        }
+
+        function lerp(a, b, t) { return a + (b - a) * t; }
+
+        function scalesCloseEnough(a, b) {
+            return Math.abs(a.xMin - b.xMin) < SCALE_SNAP_THRESHOLD &&
+                Math.abs(a.xMax - b.xMax) < SCALE_SNAP_THRESHOLD &&
+                Math.abs(a.yMin - b.yMin) < SCALE_SNAP_THRESHOLD &&
+                Math.abs(a.yMax - b.yMax) < SCALE_SNAP_THRESHOLD;
+        }
+
+        function startScaleChase() {
+            if (scaleChaseRaf) return; // already running
+            function step() {
+                if (!displayedScales || !targetScales) {
+                    scaleChaseRaf = null;
+                    return;
+                }
+                if (scalesCloseEnough(displayedScales, targetScales)) {
+                    // Arrived — snap to exact target values
+                    displayedScales = { ...targetScales };
+                    applyScalesToChart(displayedScales);
+                    chart.update('none');
+                    scaleChaseRaf = null;
+                    return;
+                }
+                displayedScales.xMin = lerp(displayedScales.xMin, targetScales.xMin, SCALE_LERP);
+                displayedScales.xMax = lerp(displayedScales.xMax, targetScales.xMax, SCALE_LERP);
+                displayedScales.yMin = lerp(displayedScales.yMin, targetScales.yMin, SCALE_LERP);
+                displayedScales.yMax = lerp(displayedScales.yMax, targetScales.yMax, SCALE_LERP);
+
+                applyScalesToChart(displayedScales);
+                chart.update('none');
+                scaleChaseRaf = requestAnimationFrame(step);
+            }
+            scaleChaseRaf = requestAnimationFrame(step);
+        }
+
+        // Apply displayedScales to chart, rounding min/max to niceAxisStep precision to prevent
+        // label jitter from floating-point lerp values.
+        function applyScalesToChart(scales) {
+            const xStep = niceAxisStep(scales.xMax - scales.xMin || 1);
+            const yStep = niceAxisStep(scales.yMax - scales.yMin || 1);
+            chart.options.scales.x.min = Math.round(scales.xMin / xStep) * xStep;
+            chart.options.scales.x.max = Math.round(scales.xMax / xStep) * xStep;
+            chart.options.scales.y.min = Math.round(scales.yMin / yStep) * yStep;
+            chart.options.scales.y.max = Math.round(scales.yMax / yStep) * yStep;
+        }
+
+        // Round to a "nice" number: 1, 2, 5, 10, 20, 50, 100, ...
+        function niceStep(range) {
+            const rough = Math.pow(10, Math.floor(Math.log10(range)));
+            const frac = range / rough;
+            if (frac <= 1.5) return rough;
+            if (frac <= 3.5) return rough * 2;
+            if (frac <= 7.5) return rough * 5;
+            return rough * 10;
+        }
+
+        // A finer step for axis bounds: targets ~12 tick intervals so min/max
+        // hug the data rather than overshoot by a full order of magnitude.
+        function niceAxisStep(range) {
+            return niceStep(range / 12);
+        }
+
+        function niceMinMax(dataMin, dataMax) {
+            const range = dataMax - dataMin || 1;
+            const step = niceAxisStep(range);
+            return {
+                min: Math.floor(dataMin / step) * step,
+                max: Math.ceil(dataMax / step) * step,
+            };
+        }
+
+        // Compute nice bounds directly from data points — no Chart.js render needed
+        function computeNiceBounds(datasets) {
+            let xMin = Infinity, xMax = -Infinity, yMin = Infinity, yMax = -Infinity;
+            datasets.forEach(ds => {
+                ds.data.forEach(pt => {
+                    if (pt.x < xMin) xMin = pt.x;
+                    if (pt.x > xMax) xMax = pt.x;
+                    if (pt.y < yMin) yMin = pt.y;
+                    if (pt.y > yMax) yMax = pt.y;
+                });
+            });
+            if (!isFinite(xMin)) { xMin = -1; xMax = 1; yMin = -1; yMax = 1; }
+            const xNice = niceMinMax(xMin, xMax);
+            const yNice = niceMinMax(yMin, yMax);
+            return { xMin: xNice.min, xMax: xNice.max, yMin: yNice.min, yMax: yNice.max };
+        }
+
+        function updateChart() {
+            const coords = mapData[currentLapKey] || [];
+            const n = coords.length || allData.length;
+            const { startFrame, endFrame } = getFrameRange(n);
+            const grouped = {};
+            let shown = 0;
+            allData.forEach(d => {
+                if (d.frame < startFrame || d.frame > endFrame) return;
+                shown++;
+                if (!grouped[d.surface]) grouped[d.surface] = [];
+                grouped[d.surface].push({ x: d.jerk, y: d.snap, dist: cumulativeDists[d.frame] ?? 0, frame: d.frame });
+            });
+
+            const existing = new Map(chart.data.datasets.map(ds => [ds.label, ds]));
+            const newDatasets = [];
+
+            chart.data.datasets = Object.entries(grouped).map(([surface, data]) => {
+                const c = surfaceColors[surface] || surfaceColors.unknown;
+                if (existing.has(surface)) {
+                    const ds = existing.get(surface);
+                    ds.data = data;
+                    ds.backgroundColor = c.bg;
+                    ds.borderColor = c.border;
+                    return ds;
+                }
+                const ds = {
+                    label: surface,
+                    data,
+                    backgroundColor: alphaScale(c.bg, 0),
+                    borderColor: alphaScale(c.border, 0),
+                    _targetBg: c.bg,
+                    _targetBorder: c.border,
+                    borderWidth: 1,
+                    pointRadius: 2.5,
+                    pointHoverRadius: 5,
+                };
+                newDatasets.push(ds);
+                return ds;
+            });
+
+            // Compute nice target bounds directly from data — no extra renders
+            const niceBounds = computeNiceBounds(chart.data.datasets);
+
+            if (!displayedScales) {
+                // First render — snap immediately, no animation
+                displayedScales = { ...niceBounds };
+                targetScales = { ...niceBounds };
+            } else {
+                // Set chase target; the animation loop will smoothly lerp toward it
+                targetScales = { ...niceBounds };
+                startScaleChase();
+            }
+
+            // Apply current displayed scales and render once
+            applyScalesToChart(displayedScales);
+            chart.update('none');
+
+            if (fadeRaf) cancelAnimationFrame(fadeRaf);
+            fadeStartTime = null;
+
+            if (newDatasets.length > 0) {
+                function fadeStep(ts) {
+                    if (!fadeStartTime) fadeStartTime = ts;
+                    const t = Math.min((ts - fadeStartTime) / FADE_DURATION, 1);
+                    newDatasets.forEach(ds => {
+                        ds.backgroundColor = alphaScale(ds._targetBg, t);
+                        ds.borderColor = alphaScale(ds._targetBorder, t);
+                    });
+                    chart.update('none');
+                    fadeRaf = t < 1 ? requestAnimationFrame(fadeStep) : null;
+                }
+                fadeRaf = requestAnimationFrame(fadeStep);
+            }
+
+            document.getElementById('stats').textContent = `Showing ${shown} of ${allData.length} data points`;
+        }
+
+        init();
+    </script>
+</body>
+
+</html>
