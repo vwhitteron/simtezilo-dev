@@ -1,7 +1,11 @@
 // Package pitradio provides an interface for sending text and voice messages as a pit radio analog.
 package pitradio
 
-import "github.com/rs/zerolog"
+import (
+	"sync"
+
+	"github.com/rs/zerolog"
+)
 
 // MessageType defines the type of message to be sent.
 type MessageType int
@@ -63,4 +67,70 @@ func (p *LogOutput) Send(message Message) error {
 		Msg("Pit radio message sent")
 
 	return nil
+}
+
+// MultiOutput fans a single stream of pit-radio messages out to several
+// PitRadio implementations (for example Discord and a local audio device),
+// so the same notifications can be delivered through multiple channels.
+type MultiOutput struct {
+	outputs []PitRadio
+	log     zerolog.Logger
+}
+
+// NewMultiOutput creates a MultiOutput delivering to each of the given outputs.
+func NewMultiOutput(logger zerolog.Logger, outputs ...PitRadio) *MultiOutput {
+	return &MultiOutput{
+		outputs: outputs,
+		log:     logger.With().Str("component", "pitradioMulti").Logger(),
+	}
+}
+
+// BackgroundTask runs every output's background task concurrently and blocks
+// until they all return.
+func (m *MultiOutput) BackgroundTask() {
+	var wg sync.WaitGroup
+
+	for _, output := range m.outputs {
+		wg.Add(1)
+
+		go func(o PitRadio) {
+			defer wg.Done()
+
+			o.BackgroundTask()
+		}(output)
+	}
+
+	wg.Wait()
+}
+
+// Send delivers the message to every output, returning the first error.
+func (m *MultiOutput) Send(message Message) error {
+	var firstErr error
+
+	for _, output := range m.outputs {
+		if err := output.Send(message); err != nil {
+			m.log.Warn().Err(err).Msg("deliver pit-radio message")
+
+			if firstErr == nil {
+				firstErr = err
+			}
+		}
+	}
+
+	return firstErr
+}
+
+// Close closes every output, returning the first error.
+func (m *MultiOutput) Close() error {
+	var firstErr error
+
+	for _, output := range m.outputs {
+		if err := output.Close(); err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+		}
+	}
+
+	return firstErr
 }

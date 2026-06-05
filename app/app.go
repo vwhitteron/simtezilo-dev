@@ -34,6 +34,7 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/odometer"
 	"github.com/vwhitteron/simtezilo-dev/app/pitradio"
 	"github.com/vwhitteron/simtezilo-dev/app/pitradio/discord"
+	"github.com/vwhitteron/simtezilo-dev/app/pitradio/local"
 	"github.com/vwhitteron/simtezilo-dev/app/platform"
 	"github.com/vwhitteron/simtezilo-dev/app/setupmode"
 	"github.com/vwhitteron/simtezilo-dev/app/synthesizer"
@@ -905,7 +906,65 @@ func (a *App) initializePitRadio(opts Options) {
 		return
 	}
 
+	a.enableLocalPitRadioOutput()
+
 	a.resetPitRadioState()
+}
+
+// enableLocalPitRadioOutput wraps the primary pit-radio output so messages are
+// also played on a local audio device, when audio.pitRadio is enabled. The beep
+// backend drives a single global stereo device shared with haptics, so local
+// pit-radio output requires the malgo or portaudio backend.
+func (a *App) enableLocalPitRadioOutput() {
+	if a.pitRadio == nil || !a.config.GetAudioPitRadioEnabled() {
+		return
+	}
+
+	backendName := a.config.GetAudioBackend()
+	if backendName == audio.BackendBeep {
+		a.log.Warn().
+			Str("component", "pit radio local").
+			Str("backend", backendName).
+			Msg("local pit-radio output requires the malgo or portaudio backend; skipping")
+
+		return
+	}
+
+	backend, err := audio.New(backendName, a.log)
+	if err != nil {
+		a.log.Warn().
+			Err(err).
+			Str("component", "pit radio local").
+			Str("backend", backendName).
+			Msg("audio backend unavailable; skipping local pit-radio output")
+
+		return
+	}
+
+	localOutput, err := local.New(local.Config{
+		Backend:    backend,
+		Device:     a.config.GetAudioPitRadioDevice(),
+		SampleRate: a.config.GetAudioPitRadioSampleRate(),
+		MessageGap: time.Duration(a.config.GetPitRadioMessageSendIntervalMs()) * time.Millisecond,
+		Logger:     a.log,
+	})
+	if err != nil {
+		_ = backend.Close()
+
+		a.log.Warn().
+			Err(err).
+			Str("component", "pit radio local").
+			Msg("create local pit-radio output; skipping")
+
+		return
+	}
+
+	a.pitRadio = pitradio.NewMultiOutput(a.log, a.pitRadio, localOutput)
+
+	a.log.Info().
+		Str("component", "pit radio local").
+		Str("device", a.config.GetAudioPitRadioDevice()).
+		Msg("local pit-radio output enabled")
 }
 
 // initialiseDiscord sets up Discord pit radio bot.
