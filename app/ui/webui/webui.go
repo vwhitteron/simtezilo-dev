@@ -22,6 +22,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/rs/zerolog"
+	"github.com/vwhitteron/simtezilo-dev/app/audio"
 	"github.com/vwhitteron/simtezilo-dev/app/calibrator"
 	appconfig "github.com/vwhitteron/simtezilo-dev/app/config"
 	"github.com/vwhitteron/simtezilo-dev/app/exitcode"
@@ -310,6 +311,8 @@ func (w *WebUI) GetHTTPHandler() http.Handler {
 	mux.HandleFunc("/js/", w.sciChartJSHandlerFunc())
 	mux.HandleFunc("/ws", w.handleWebSocketConnection)
 	mux.HandleFunc("/api/calibration/sweep", w.handleCalibrationSweep)
+	mux.HandleFunc("/api/audio/devices", w.handleAudioDevices)
+	mux.HandleFunc("/api/audio/test", w.handleAudioTest)
 	mux.HandleFunc("/api/config", w.handleConfigAPI)
 	mux.HandleFunc("/api/config/export", w.handleConfigExport)
 	mux.HandleFunc("/api/config/import", w.handleConfigImport)
@@ -1106,6 +1109,21 @@ func (w *WebUI) handleGetConfig(response http.ResponseWriter, _ *http.Request) {
 			"source":    w.config.GetTelemetrySource(),
 			"updateURL": w.config.GetTelemetryUpdateURL(),
 		},
+		"audio": map[string]any{
+			"backend":           w.config.GetAudioBackend(),
+			"availableBackends": audio.AvailableBackends(),
+			"haptics": map[string]any{
+				"device":     w.config.GetAudioHapticsDevice(),
+				"channels":   w.config.GetAudioHapticsChannels(),
+				"sampleRate": w.config.GetAudioHapticsSampleRate(),
+				"latencyMs":  w.config.GetAudioHapticsLatencyMs(),
+			},
+			"pitRadio": map[string]any{
+				"enabled":    w.config.GetAudioPitRadioEnabled(),
+				"device":     w.config.GetAudioPitRadioDevice(),
+				"sampleRate": w.config.GetAudioPitRadioSampleRate(),
+			},
+		},
 		"calibration": map[string]any{
 			"enabled":       w.calibrator.IsEnabled(),
 			"frequency":     w.calibrator.GetSweepFrequency(),
@@ -1230,6 +1248,8 @@ func (w *WebUI) applyConfigChanges(configData map[string]any) []string {
 			errors = append(errors, w.applyHardwareConfig(sectionMap)...)
 		case "telemetry":
 			errors = append(errors, w.applyTelemetryConfig(sectionMap)...)
+		case "audio":
+			errors = append(errors, w.applyAudioConfig(sectionMap)...)
 		case "discord":
 			errors = append(errors, w.applyDiscordConfig(sectionMap)...)
 		case "calibration":
