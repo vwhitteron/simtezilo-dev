@@ -22,15 +22,32 @@ type AdaptiveBuffer struct {
 	readDelay  int       // delay between buffer write and read
 }
 
-// NewAdaptiveBuffer creates a new adaptive buffer
+// defaultBufferCushionMs is the read-delay cushion used by NewAdaptiveBuffer
+// when no explicit cushion is supplied.
+const defaultBufferCushionMs = 24
+
+// NewAdaptiveBuffer creates a new adaptive buffer with the default 24 ms cushion.
 // bufferDuration: duration of audio the buffer should hold
 // sampleRateHz: sample rate in Hz to calculate buffer size in samples.
 func NewAdaptiveBuffer(length time.Duration, sampleRateHz int) *AdaptiveBuffer {
+	return NewAdaptiveBufferCushion(length, sampleRateHz, defaultBufferCushionMs)
+}
+
+// NewAdaptiveBufferCushion creates a new adaptive buffer with an explicit
+// read-delay cushion. The cushion is the amount of audio the buffer holds in
+// reserve; it must comfortably exceed the consumer's per-read pull size so a
+// briefly late writer does not force a short read (which a consumer zero-pads
+// into an audible click). A non-positive cushion falls back to the default.
+func NewAdaptiveBufferCushion(length time.Duration, sampleRateHz, cushionMs int) *AdaptiveBuffer {
+	if cushionMs <= 0 {
+		cushionMs = defaultBufferCushionMs
+	}
+
 	capacity := int(length.Seconds() * float64(sampleRateHz))
 
-	// Calculate read delay as 24ms worth of samples, but cap to 25% of capacity
-	// to ensure there's always room for actual content
-	readDelay := (sampleRateHz / 1000) * 24
+	// Calculate read delay from the cushion, but cap to 25% of capacity to
+	// ensure there's always room for actual content.
+	readDelay := (sampleRateHz / 1000) * cushionMs
 
 	maxReadDelay := capacity / 4
 	if readDelay > maxReadDelay {

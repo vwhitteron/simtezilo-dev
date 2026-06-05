@@ -31,6 +31,7 @@ func (t *testToneSource) ReadInterleaved(out []float32, channels int) (int, bool
 		var sample float32
 		if t.remaining > 0 {
 			sample = float32(math.Sin(t.phase) * t.gain)
+
 			t.phase += inc
 			if t.phase > 2*math.Pi {
 				t.phase -= 2 * math.Pi

@@ -102,6 +102,7 @@ type SynthOpts struct {
 // New creates a new Synthesizer instance with the provided options.
 func New(opts *SynthOpts) (*Synthesizer, error) {
 	numOutputChannels := DefaultOutputChannels
+
 	if opts.BaseConfig != nil {
 		if n := opts.BaseConfig.GetAudioHapticsChannels(); n > 0 {
 			numOutputChannels = n

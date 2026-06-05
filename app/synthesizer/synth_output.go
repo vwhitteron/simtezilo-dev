@@ -29,8 +29,14 @@ func NewOutputDevice(opts SynthOutDeviceOpts) (*OutputDevice, error) {
 // for N-channel output, and additionally implements beep's stereo Streamer
 // interface (Stream) for compatibility. Resampling to the output device rate is
 // handled by the audio package, not here.
+//
+// A Streamer is pulled by a single producer goroutine, so its scratch buffers
+// (bufs, settings) are reused across calls to avoid per-call heap allocation and
+// the GC pressure that previously fed back into audio glitches.
 type Streamer struct {
-	synth *Synthesizer
+	synth    *Synthesizer
+	bufs     [][]float64             // reused per-channel output buffers
+	settings []OutputChannelSettings // reused per-channel gain/mute scratch
 }
 
 // OutputChannelSettings holds the settings for an output channel.
@@ -61,27 +67,47 @@ func (s *Streamer) readOutputBuffers(length int) [][]float64 {
 	channels := s.synth.numOutputChannels
 	outputChannels := s.getOutputChannels()
 
-	buffers := make([][]float64, channels)
+	buffers := s.ensureBufs(channels, length)
 
 	for ch := range channels {
 		raw := s.synth.mixer.ReadChannel(OutputChannelName(ch), length)
-		buf := make([]float64, length)
+		buf := buffers[ch]
 
 		gain := outputChannels[ch].Gain
 		mute := outputChannels[ch].Mute
 
-		if !mute {
-			for i := range length {
-				if raw != nil && i < len(raw) {
-					buf[i] = raw[i] * gain
-				}
+		for i := range length {
+			switch {
+			case mute || raw == nil || i >= len(raw):
+				buf[i] = 0
+			default:
+				buf[i] = raw[i] * gain
 			}
 		}
-
-		buffers[ch] = buf
 	}
 
 	return buffers
+}
+
+// ensureBufs returns the reusable per-channel buffer set sized to channels x
+// length, growing the backing slices only when the requested size exceeds their
+// current capacity.
+func (s *Streamer) ensureBufs(channels, length int) [][]float64 {
+	if cap(s.bufs) < channels {
+		s.bufs = make([][]float64, channels)
+	}
+
+	s.bufs = s.bufs[:channels]
+
+	for ch := range channels {
+		if cap(s.bufs[ch]) < length {
+			s.bufs[ch] = make([]float64, length)
+		}
+
+		s.bufs[ch] = s.bufs[ch][:length]
+	}
+
+	return s.bufs
 }
 
 // ReadInterleaved fills buf with interleaved float32 frames at the internal
@@ -152,7 +178,12 @@ func (s *Streamer) Err() error {
 func (s *Streamer) getOutputChannels() []OutputChannelSettings {
 	masterGainDB, _ := s.synth.mixer.GetChannelGain(ChannelMaster)
 
-	channelGains := make([]OutputChannelSettings, s.synth.numOutputChannels)
+	n := s.synth.numOutputChannels
+	if cap(s.settings) < n {
+		s.settings = make([]OutputChannelSettings, n)
+	}
+
+	channelGains := s.settings[:n]
 
 	for ch := range s.synth.numOutputChannels {
 		channelName := OutputChannelName(ch)
