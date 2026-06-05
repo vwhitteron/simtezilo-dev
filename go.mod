@@ -34,8 +34,10 @@ require (
 	github.com/ebitengine/oto/v3 v3.3.3 // indirect
 	github.com/ebitengine/purego v0.8.4 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
+	github.com/gen2brain/malgo v0.11.25 // indirect
 	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
+	github.com/gordonklaus/portaudio v0.0.0-20260203164431-765aa7dfa631 // indirect
 	github.com/grafana/pyroscope-go/godeltaprof v0.1.11 // indirect
 	github.com/hajimehoshi/go-mp3 v0.3.4 // indirect
 	github.com/kaitai-io/kaitai_struct_go_runtime v0.11.0 // indirect
