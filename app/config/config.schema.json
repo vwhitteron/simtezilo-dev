@@ -75,6 +75,12 @@
             "type": "object",
             "description": "Hardware configuration",
             "properties": {
+                "audioBackend": {
+                    "type": "string",
+                    "description": "Audio output backend",
+                    "enum": ["beep", "malgo", "portaudio"],
+                    "default": "beep"
+                },
                 "model": {
                     "type": "string",
                     "enum": [
@@ -116,73 +122,6 @@
                     "type": "string",
                     "description": "URL for telemetry updates",
                     "default": ""
-                }
-            },
-            "additionalProperties": true
-        },
-        "audio": {
-            "type": "object",
-            "description": "Audio output backend and device routing configuration",
-            "properties": {
-                "backend": {
-                    "type": "string",
-                    "description": "Audio output backend",
-                    "enum": ["beep", "malgo", "portaudio"],
-                    "default": "beep"
-                },
-                "haptics": {
-                    "type": "object",
-                    "description": "Haptic feedback output stream",
-                    "properties": {
-                        "device": {
-                            "type": "string",
-                            "description": "Backend device ID (empty selects the default device)",
-                            "default": ""
-                        },
-                        "channels": {
-                            "type": "integer",
-                            "description": "Number of haptic output channels",
-                            "minimum": 1,
-                            "maximum": 32,
-                            "default": 2
-                        },
-                        "sampleRate": {
-                            "type": "integer",
-                            "description": "Output sample rate in Hz",
-                            "minimum": 8000,
-                            "default": 32000
-                        },
-                        "latencyMs": {
-                            "type": "integer",
-                            "description": "Requested buffer latency in milliseconds (0 uses the backend default)",
-                            "minimum": 0,
-                            "default": 66
-                        }
-                    },
-                    "additionalProperties": true
-                },
-                "pitRadio": {
-                    "type": "object",
-                    "description": "Optional local pit-radio output, independent of the Discord voice path",
-                    "properties": {
-                        "enabled": {
-                            "type": "boolean",
-                            "description": "Play pit-radio audio on a local device",
-                            "default": false
-                        },
-                        "device": {
-                            "type": "string",
-                            "description": "Backend device ID (empty selects the default device)",
-                            "default": ""
-                        },
-                        "sampleRate": {
-                            "type": "integer",
-                            "description": "Output sample rate in Hz",
-                            "minimum": 8000,
-                            "default": 48000
-                        }
-                    },
-                    "additionalProperties": true
                 }
             },
             "additionalProperties": true
@@ -342,6 +281,48 @@
             "type": "object",
             "description": "Haptic feedback settings",
             "properties": {
+                "output": {
+                    "type": "object",
+                    "description": "Haptic feedback output stream",
+                    "properties": {
+                        "device": {
+                            "type": "string",
+                            "description": "Backend device ID (empty selects the default device)",
+                            "default": ""
+                        },
+                        "deviceName": {
+                            "type": "string",
+                            "description": "Human-readable device name; the stable, backend-agnostic selection key (device is a tiebreaker)",
+                            "default": ""
+                        },
+                        "channels": {
+                            "type": "integer",
+                            "description": "Number of haptic output channels",
+                            "minimum": 1,
+                            "maximum": 32,
+                            "default": 2
+                        },
+                        "sampleRate": {
+                            "type": "integer",
+                            "description": "Output sample rate in Hz",
+                            "minimum": 8000,
+                            "default": 32000
+                        },
+                        "latencyMs": {
+                            "type": "integer",
+                            "description": "Requested buffer latency in milliseconds (0 uses the backend default)",
+                            "minimum": 0,
+                            "default": 66
+                        },
+                        "cushionMs": {
+                            "type": "integer",
+                            "description": "Mixer buffer pre-fill cushion in milliseconds; raise above the default if real hardware still produces occasional pops (0 uses the default of 24)",
+                            "minimum": 0,
+                            "default": 24
+                        }
+                    },
+                    "additionalProperties": true
+                },
                 "enableReplay": {
                     "type": "boolean",
                     "description": "Enable haptic replay",
@@ -439,9 +420,33 @@
                     "description": "Output destination for pit radio messages",
                     "enum": [
                         "log",
-                        "discord"
+                        "discord",
+                        "audio"
                     ],
                     "default": "log"
+                },
+                "audio": {
+                    "type": "object",
+                    "description": "Local audio device used when output is set to \"audio\"",
+                    "properties": {
+                        "device": {
+                            "type": "string",
+                            "description": "Backend device ID (empty selects the default device)",
+                            "default": ""
+                        },
+                        "deviceName": {
+                            "type": "string",
+                            "description": "Human-readable device name; the stable, backend-agnostic selection key (device is a tiebreaker)",
+                            "default": ""
+                        },
+                        "sampleRate": {
+                            "type": "integer",
+                            "description": "Output sample rate in Hz",
+                            "minimum": 8000,
+                            "default": 48000
+                        }
+                    },
+                    "additionalProperties": true
                 },
                 "messageSendIntervalMs": {
                     "type": "integer",

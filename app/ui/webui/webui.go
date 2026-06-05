@@ -232,6 +232,9 @@ type WebUI struct {
 	unifiedSessions    map[string]*wsClient // Track sessions to prevent duplicates
 	unifiedSessionsMux sync.Mutex
 	updater            *updater.Updater // Self-update manager (may be nil)
+	// Live audio reconfiguration hooks
+	onHapticsOutputChanged func()
+	onAudioBackendChanged  func()
 	// Shutdown support
 	done      chan struct{}
 	closeOnce sync.Once
@@ -256,6 +259,18 @@ type Config struct {
 	BuildTime          string
 	BuildPlatform      string
 	Updater            *updater.Updater // Self-update manager (may be nil)
+
+	// OnHapticsOutputChanged is invoked (if non-nil) after the haptics output
+	// device/channels/sampleRate/latency are changed via a config update, so the
+	// app can restart the haptic audio stream live rather than requiring a
+	// restart. It is only called when one of those values actually changed.
+	OnHapticsOutputChanged func()
+
+	// OnAudioBackendChanged is invoked (if non-nil) after the audio backend is
+	// changed via a config update, so the app can rebuild every audio consumer
+	// (haptics and local pit radio) onto the new backend live. It is only called
+	// when the backend actually changed.
+	OnAudioBackendChanged func()
 }
 
 // New creates a new instance of the WebUI.
@@ -278,21 +293,23 @@ func New(config Config) *WebUI {
 		upgrader: websocket.Upgrader{
 			CheckOrigin: func(_ *http.Request) bool { return true },
 		},
-		shutdownChan:       config.ShutdownChan,
-		setupMode:          config.SetupMode,
-		logStore:           config.LogStore,
-		logStatsFeed:       config.LogStatsFeed,
-		currentLogStats:    make(map[string]any),
-		buildVersion:       config.BuildVersion,
-		buildCommitHash:    config.BuildCommitHash,
-		buildTime:          config.BuildTime,
-		buildPlatform:      config.BuildPlatform,
-		unifiedClients:     make([]*wsClient, 0),
-		unifiedClientsChan: make(chan *wsClient, 10),
-		unifiedUnsubChan:   make(chan *wsClient, 10),
-		unifiedSessions:    make(map[string]*wsClient),
-		updater:            config.Updater,
-		done:               make(chan struct{}),
+		shutdownChan:           config.ShutdownChan,
+		setupMode:              config.SetupMode,
+		logStore:               config.LogStore,
+		logStatsFeed:           config.LogStatsFeed,
+		currentLogStats:        make(map[string]any),
+		buildVersion:           config.BuildVersion,
+		buildCommitHash:        config.BuildCommitHash,
+		buildTime:              config.BuildTime,
+		buildPlatform:          config.BuildPlatform,
+		unifiedClients:         make([]*wsClient, 0),
+		unifiedClientsChan:     make(chan *wsClient, 10),
+		unifiedUnsubChan:       make(chan *wsClient, 10),
+		unifiedSessions:        make(map[string]*wsClient),
+		updater:                config.Updater,
+		onHapticsOutputChanged: config.OnHapticsOutputChanged,
+		onAudioBackendChanged:  config.OnAudioBackendChanged,
+		done:                   make(chan struct{}),
 	}
 
 	// Start unified websocket broadcaster
@@ -1019,10 +1036,18 @@ func (w *WebUI) handleGetConfig(response http.ResponseWriter, _ *http.Request) {
 		"hardware": map[string]any{
 			"model":              w.config.GetHardwareModel(),
 			"displayOrientation": w.config.GetDisplayOrientation(),
+			"audioBackend":       w.config.GetAudioBackend(),
+			"availableBackends":  audio.AvailableBackends(),
 		},
 		"haptics": map[string]any{
-			"enableReplay":                 w.config.GetHapticsReplayEnabled(),
-			"pitRadioOutput":               w.config.GetPitRadioOutput(),
+			"enableReplay": w.config.GetHapticsReplayEnabled(),
+			"output": map[string]any{
+				"device":     w.config.GetAudioHapticsDevice(),
+				"deviceName": w.config.GetAudioHapticsDeviceName(),
+				"channels":   w.config.GetAudioHapticsChannels(),
+				"sampleRate": w.config.GetAudioHapticsSampleRate(),
+				"latencyMs":  w.config.GetAudioHapticsLatencyMs(),
+			},
 			"dynamicTransmissionFeedback":  w.config.GethapticsDynamicTransFeedbackEnabled(),
 			"dynamicTransmissionCurve":     w.config.GetHapticsTransmissionCurve(),
 			"dynamicTransmissionGforceMax": w.config.GetHapticsTransmissionGforceMax(),
@@ -1036,7 +1061,13 @@ func (w *WebUI) handleGetConfig(response http.ResponseWriter, _ *http.Request) {
 		},
 		"pitRadio": map[string]any{
 			"enabled":               w.config.PitRadioEnabled(),
+			"output":                w.config.GetPitRadioOutput(),
 			"messageSendIntervalMs": w.config.GetPitRadioMessageSendIntervalMs(),
+			"audio": map[string]any{
+				"device":     w.config.GetAudioPitRadioDevice(),
+				"deviceName": w.config.GetAudioPitRadioDeviceName(),
+				"sampleRate": w.config.GetAudioPitRadioSampleRate(),
+			},
 			"notifications": map[string]any{
 				"enableRaceProgress":      w.config.GetPitRadioNotifyRaceProgressEnabled(),
 				"raceProgressMinLaps":     w.config.GetPitRadioNotifyRaceProgressMinLaps(),
@@ -1108,21 +1139,6 @@ func (w *WebUI) handleGetConfig(response http.ResponseWriter, _ *http.Request) {
 		"telemetry": map[string]any{
 			"source":    w.config.GetTelemetrySource(),
 			"updateURL": w.config.GetTelemetryUpdateURL(),
-		},
-		"audio": map[string]any{
-			"backend":           w.config.GetAudioBackend(),
-			"availableBackends": audio.AvailableBackends(),
-			"haptics": map[string]any{
-				"device":     w.config.GetAudioHapticsDevice(),
-				"channels":   w.config.GetAudioHapticsChannels(),
-				"sampleRate": w.config.GetAudioHapticsSampleRate(),
-				"latencyMs":  w.config.GetAudioHapticsLatencyMs(),
-			},
-			"pitRadio": map[string]any{
-				"enabled":    w.config.GetAudioPitRadioEnabled(),
-				"device":     w.config.GetAudioPitRadioDevice(),
-				"sampleRate": w.config.GetAudioPitRadioSampleRate(),
-			},
 		},
 		"calibration": map[string]any{
 			"enabled":       w.calibrator.IsEnabled(),
@@ -1248,8 +1264,6 @@ func (w *WebUI) applyConfigChanges(configData map[string]any) []string {
 			errors = append(errors, w.applyHardwareConfig(sectionMap)...)
 		case "telemetry":
 			errors = append(errors, w.applyTelemetryConfig(sectionMap)...)
-		case "audio":
-			errors = append(errors, w.applyAudioConfig(sectionMap)...)
 		case "discord":
 			errors = append(errors, w.applyDiscordConfig(sectionMap)...)
 		case "calibration":
@@ -1730,11 +1744,11 @@ func (w *WebUI) applyHapticsConfig(config map[string]any) []string {
 		}
 	}
 
-	if pitRadioOutput, ok := config["pitRadioOutput"]; ok {
-		if outputStr, ok := pitRadioOutput.(string); ok {
-			w.config.SetPitRadioOutput(outputStr)
+	if output, ok := config["output"]; ok {
+		if outputMap, ok := output.(map[string]any); ok {
+			errors = append(errors, w.applyHapticsOutputConfig(outputMap)...)
 		} else {
-			errors = append(errors, "invalid pit radio output value")
+			errors = append(errors, "invalid haptics output configuration structure")
 		}
 	}
 
@@ -1888,6 +1902,21 @@ func (w *WebUI) applyFuelConfig(config map[string]any) []string {
 // applyHardwareConfig applies hardware configuration changes.
 func (w *WebUI) applyHardwareConfig(config map[string]any) []string {
 	var errors []string
+
+	if backend, ok := config["audioBackend"]; ok {
+		if backendStr, ok := backend.(string); ok {
+			changed := backendStr != w.config.GetAudioBackend()
+			w.config.SetAudioBackend(backendStr)
+
+			// Switching backend rebuilds every audio consumer (haptics + local pit
+			// radio) onto the new backend; do it live.
+			if changed && w.onAudioBackendChanged != nil {
+				w.onAudioBackendChanged()
+			}
+		} else {
+			errors = append(errors, "invalid audio backend value")
+		}
+	}
 
 	if model, ok := config["model"]; ok {
 		if modelStr, ok := model.(string); ok {
@@ -2075,11 +2104,28 @@ func (w *WebUI) applyPitRadioConfig(config map[string]any) []string {
 		}
 	}
 
+	if output, ok := config["output"]; ok {
+		if outputStr, ok := output.(string); ok {
+			w.config.SetPitRadioOutput(outputStr)
+		} else {
+			errors = append(errors, "invalid pit radio output value")
+		}
+	}
+
 	if intervalMs, ok := config["messageSendIntervalMs"]; ok {
 		if intervalFloat, ok := intervalMs.(float64); ok {
 			w.config.SetPitRadioMessageSendIntervalMs(int(intervalFloat))
 		} else {
 			errors = append(errors, "invalid message send interval value")
+		}
+	}
+
+	// Handle nested local audio output configuration
+	if audioConfig, ok := config["audio"]; ok {
+		if audioMap, ok := audioConfig.(map[string]any); ok {
+			errors = append(errors, w.applyPitRadioAudioConfig(audioMap)...)
+		} else {
+			errors = append(errors, "invalid pit radio audio configuration structure")
 		}
 	}
 

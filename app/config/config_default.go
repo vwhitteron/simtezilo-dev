@@ -25,10 +25,18 @@ func defaultConfig() *viperConfig {
 			EnableDevTools: false,
 		},
 		Hardware: &hardware{
+			AudioBackend:       "beep",
 			Model:              "none",
 			DisplayOrientation: 0,
 		},
 		Haptics: &haptics{
+			Output: HapticsOutput{
+				Device:     "",
+				Channels:   2,
+				SampleRate: 32000,
+				LatencyMs:  66,
+				CushionMs:  24,
+			},
 			EnableReplay:                 false,
 			DynamicTransmissionFeedback:  true,
 			DynamicTransmissionCurve:     150,
@@ -83,8 +91,12 @@ func defaultConfig() *viperConfig {
 			},
 		},
 		PitRadio: &pitRadio{
-			Enabled:               false,
-			Output:                "log",
+			Enabled: false,
+			Output:  "log",
+			Audio: PitRadioAudio{
+				Device:     "",
+				SampleRate: 48000,
+			},
 			MessageSendIntervalMs: 2000,
 			Notifications: &notifications{
 				EnableRaceProgress:      true,
@@ -162,20 +174,6 @@ func defaultConfig() *viperConfig {
 		Telemetry: &Telemetry{
 			Source:    "udp://255.255.255.255:33739",
 			UpdateURL: "https://static.zetetos.com/data/gt7",
-		},
-		Audio: &Audio{
-			Backend: "beep",
-			Haptics: AudioHapticsDevice{
-				Device:     "",
-				Channels:   2,
-				SampleRate: 32000,
-				LatencyMs:  66,
-			},
-			PitRadio: AudioPitRadioDevice{
-				Enabled:    false,
-				Device:     "",
-				SampleRate: 48000,
-			},
 		},
 	}
 }

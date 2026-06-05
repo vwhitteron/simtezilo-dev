@@ -1,4 +1,6 @@
-// audio-settings.js — dynamic behaviour for the Audio Devices settings panel.
+// audio-settings.js — dynamic behaviour for the audio device controls, which
+// live across the System (backend), Haptics (haptics output) and Pit Radio
+// (local audio output) settings panels.
 //
 // Static fields bind to config via their data-config attributes (handled by
 // settings.js). This module adds the dynamic parts: populating device
@@ -12,8 +14,8 @@
     let audioConfig = {
         backend: 'beep',
         availableBackends: ['beep'],
-        haptics: { device: '' },
-        pitRadio: { device: '' },
+        haptics: { device: '', deviceName: '' },
+        pitRadio: { device: '', deviceName: '' },
     };
 
     function el(id) {
@@ -28,8 +30,22 @@
             }
 
             const config = await response.json();
-            if (config && config.audio) {
-                audioConfig = Object.assign(audioConfig, config.audio);
+            if (config) {
+                const hardware = config.hardware || {};
+                const hapticsOutput = (config.haptics && config.haptics.output) || {};
+                const pitRadioAudio = (config.pitRadio && config.pitRadio.audio) || {};
+
+                audioConfig.backend = hardware.audioBackend || audioConfig.backend;
+                audioConfig.availableBackends =
+                    hardware.availableBackends || audioConfig.availableBackends;
+                audioConfig.haptics = {
+                    device: hapticsOutput.device || '',
+                    deviceName: hapticsOutput.deviceName || '',
+                };
+                audioConfig.pitRadio = {
+                    device: pitRadioAudio.device || '',
+                    deviceName: pitRadioAudio.deviceName || '',
+                };
             }
         } catch (err) {
             console.error('audio-settings: failed to load config', err);
@@ -73,41 +89,87 @@
         });
     }
 
-    // Rebuild a device <select>, preserving (or re-adding) the saved selection.
-    function populateDeviceSelect(select, devices, savedValue) {
+    // Mirror the selected option's device name into the companion hidden field
+    // (data-config="…deviceName") so it is persisted alongside the device ID. The
+    // name is the stable, backend-agnostic selection key; the ID is a tiebreaker.
+    function syncNameField(select, hiddenId, dispatch) {
+        const hidden = el(hiddenId);
+        if (!hidden) {
+            return;
+        }
+
+        const opt = select.options[select.selectedIndex];
+        const name = (opt && opt.dataset && opt.dataset.name) || '';
+
+        if (hidden.value === name) {
+            return;
+        }
+
+        hidden.value = name;
+
+        // settings.js auto-saves [data-config] fields on their `change` event, but
+        // a programmatic value assignment fires no such event. On a user-initiated
+        // device change, dispatch one so the name is persisted alongside the ID.
+        // Skipped during population (dispatch=false) to avoid a save on load.
+        if (dispatch) {
+            hidden.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+    }
+
+    // Rebuild a device <select>, restoring the saved selection by name first
+    // (stable across backend switches and portaudio index reshuffles) and the
+    // saved ID as a tiebreaker. Keeps the companion hidden name field in sync.
+    function populateDeviceSelect(select, hiddenId, devices, saved) {
         if (!select) {
             return;
         }
+
+        const savedId = (saved && saved.device) || '';
+        const savedName = (saved && saved.deviceName) || '';
 
         select.innerHTML = '';
 
         const defaultOption = document.createElement('option');
         defaultOption.value = '';
         defaultOption.textContent = 'System default';
+        defaultOption.dataset.name = '';
         select.appendChild(defaultOption);
-
-        let savedPresent = savedValue === '' || savedValue === undefined;
 
         (devices || []).forEach(device => {
             const option = document.createElement('option');
             option.value = device.ID;
             option.textContent = device.Name + ' (' + device.MaxChannels + 'ch)';
+            option.dataset.name = device.Name;
             select.appendChild(option);
-
-            if (device.ID === savedValue) {
-                savedPresent = true;
-            }
         });
 
-        // Keep an unavailable saved device visible so the selection isn't lost.
-        if (!savedPresent) {
-            const option = document.createElement('option');
-            option.value = savedValue;
-            option.textContent = savedValue + ' (unavailable)';
-            select.appendChild(option);
+        const options = Array.from(select.options);
+        let chosen = '';
+
+        // Prefer a name match (the option whose ID also matches wins ties).
+        if (savedName) {
+            const byName = options.filter(o => o.dataset.name === savedName);
+            if (byName.length) {
+                chosen = (byName.find(o => o.value === savedId) || byName[0]).value;
+            }
         }
 
-        select.value = savedValue || '';
+        // Fall back to an ID match, then to keeping the selection visible.
+        if (!chosen && savedId && options.some(o => o.value === savedId)) {
+            chosen = savedId;
+        }
+
+        if (!chosen && (savedId || savedName)) {
+            const option = document.createElement('option');
+            option.value = savedId;
+            option.dataset.name = savedName;
+            option.textContent = (savedName || savedId) + ' (unavailable)';
+            select.appendChild(option);
+            chosen = savedId;
+        }
+
+        select.value = chosen || '';
+        syncNameField(select, hiddenId, false);
     }
 
     async function refreshDevices() {
@@ -127,10 +189,10 @@
 
             const devices = (data && data.status === 'success') ? data.devices : [];
 
-            populateDeviceSelect(el('audio-haptics-device'), devices,
-                (audioConfig.haptics && audioConfig.haptics.device) || '');
-            populateDeviceSelect(el('audio-pitradio-device'), devices,
-                (audioConfig.pitRadio && audioConfig.pitRadio.device) || '');
+            populateDeviceSelect(el('audio-haptics-device'), 'audio-haptics-devicename',
+                devices, audioConfig.haptics);
+            populateDeviceSelect(el('audio-pitradio-device'), 'audio-pitradio-devicename',
+                devices, audioConfig.pitRadio);
         } catch (err) {
             console.error('audio-settings: failed to list devices', err);
         }
@@ -201,6 +263,17 @@
         if (backendSelect) {
             backendSelect.addEventListener('change', refreshDevices);
         }
+
+        // Keep each hidden device-name field in sync when the user picks a device.
+        [
+            ['audio-haptics-device', 'audio-haptics-devicename'],
+            ['audio-pitradio-device', 'audio-pitradio-devicename'],
+        ].forEach(([selectId, hiddenId]) => {
+            const select = el(selectId);
+            if (select) {
+                select.addEventListener('change', () => syncNameField(select, hiddenId, true));
+            }
+        });
 
         const hapticsTest = el('audio-haptics-test');
         if (hapticsTest) {

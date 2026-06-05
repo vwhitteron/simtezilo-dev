@@ -21,6 +21,7 @@ type StereoMixer struct {
 	channels          map[string]*MixerChannel
 	bufferLength      time.Duration
 	sampleRateHz      int
+	cushionMs         int
 	numOutputChannels int
 	log               zerolog.Logger
 	faderGain         float64
@@ -76,6 +77,7 @@ func NewStereoMixer(mixerConfig StereoMixerConfig) (*StereoMixer, error) {
 
 		bufferLength:      mixerConfig.BufferLength,
 		sampleRateHz:      mixerConfig.SampleRateHz,
+		cushionMs:         mixerConfig.Config.GetAudioHapticsCushionMs(),
 		numOutputChannels: numOutputChannels,
 		channels:          map[string]*MixerChannel{},
 		log:               mixerConfig.Log,
@@ -144,7 +146,7 @@ func (m *StereoMixer) AddChannel(name string, initialGain float64) error {
 
 	m.channels[name] = &MixerChannel{
 		activeGain: initialGain,
-		buffer:     NewAdaptiveBuffer(m.bufferLength, m.sampleRateHz),
+		buffer:     NewAdaptiveBufferCushion(m.bufferLength, m.sampleRateHz, m.cushionMs),
 	}
 
 	return nil

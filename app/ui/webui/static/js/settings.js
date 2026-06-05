@@ -494,19 +494,24 @@ class ConfigManager {
         // Note: Mute button icons are initialized by updateAllMuteIcons() in populateForm()
         // which runs before setupEventListeners(), so no need to call initializeMuteButtonIcons() here
 
-        // Pit Radio output change handler to show/hide Discord settings
+        // Pit Radio output change handler to show/hide the output-specific
+        // subsections (Discord vs. Local Audio Output).
         const pitRadioOutput = document.getElementById('pitradio-output');
         if (pitRadioOutput) {
-            const updateDiscordVisibility = () => {
+            const updateOutputVisibility = () => {
                 const discordSection = document.getElementById('discord-settings-section');
                 if (discordSection) {
                     discordSection.style.display = pitRadioOutput.value === 'discord' ? 'block' : 'none';
                 }
+                const localAudioSection = document.getElementById('local-audio-settings-section');
+                if (localAudioSection) {
+                    localAudioSection.style.display = pitRadioOutput.value === 'audio' ? 'block' : 'none';
+                }
             };
             // Update on change
-            pitRadioOutput.addEventListener('change', updateDiscordVisibility);
+            pitRadioOutput.addEventListener('change', updateOutputVisibility);
             // Update on initial load
-            updateDiscordVisibility();
+            updateOutputVisibility();
         }
 
         // Auto-save on blur or Enter key for inputs

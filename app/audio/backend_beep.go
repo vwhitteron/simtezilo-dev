@@ -1,6 +1,7 @@
 package audio
 
 import (
+	"sync"
 	"time"
 
 	"github.com/gopxl/beep"
@@ -10,6 +11,19 @@ import (
 
 // beepChannels is fixed: beep's speaker outputs interleaved stereo only.
 const beepChannels = 2
+
+// beep's speaker wraps a global oto context that can only be created once per
+// process and is never released (oto cannot recreate it). speaker.Init therefore
+// errors on a second call ("speaker cannot be initialized more than once"), which
+// would break a live backend switch away from beep and back. We init it at most
+// once and reuse it thereafter; Stop uses speaker.Clear (not Close) so the player
+// keeps running and a later Play resumes output. The sample rate and buffer size
+// are fixed at first init for the process lifetime.
+var (
+	speakerMu       sync.Mutex
+	speakerInited   bool
+	speakerInitRate beep.SampleRate
+)
 
 func init() {
 	registerBackend(BackendBeep, func(log zerolog.Logger) (Backend, error) {
@@ -61,8 +75,23 @@ type beepSink struct {
 }
 
 func (s *beepSink) Start(src SampleSource) error {
-	if err := speaker.Init(s.rate, s.bufSize); err != nil {
-		return err
+	speakerMu.Lock()
+	defer speakerMu.Unlock()
+
+	if !speakerInited {
+		if err := speaker.Init(s.rate, s.bufSize); err != nil {
+			return err
+		}
+
+		speakerInited = true
+		speakerInitRate = s.rate
+	} else if s.rate != speakerInitRate {
+		// The oto context's rate is fixed at first init and cannot change; output
+		// would play at the original rate (wrong pitch) if we proceeded silently.
+		s.log.Warn().
+			Int("requested", int(s.rate)).
+			Int("active", int(speakerInitRate)).
+			Msg("beep speaker sample rate is fixed for the process lifetime; ignoring change (restart to apply)")
 	}
 
 	speaker.Play(&beepStreamerAdapter{src: src})

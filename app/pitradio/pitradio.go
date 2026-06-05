@@ -108,7 +108,8 @@ func (m *MultiOutput) Send(message Message) error {
 	var firstErr error
 
 	for _, output := range m.outputs {
-		if err := output.Send(message); err != nil {
+		err := output.Send(message)
+		if err != nil {
 			m.log.Warn().Err(err).Msg("deliver pit-radio message")
 
 			if firstErr == nil {
@@ -125,7 +126,8 @@ func (m *MultiOutput) Close() error {
 	var firstErr error
 
 	for _, output := range m.outputs {
-		if err := output.Close(); err != nil {
+		err := output.Close()
+		if err != nil {
 			if firstErr == nil {
 				firstErr = err
 			}

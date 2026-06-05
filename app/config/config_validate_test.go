@@ -604,6 +604,7 @@ func TestConfig_Validate_Integration(t *testing.T) {
 				WebUIPort: 8080,
 			},
 			Hardware: &hardware{
+				AudioBackend:       "beep",
 				Model:              "console",
 				DisplayOrientation: 90,
 			},
@@ -612,6 +613,11 @@ func TestConfig_Validate_Integration(t *testing.T) {
 				UpdateURL: "https://example.com/data/gt7",
 			},
 			Haptics: &haptics{
+				Output: HapticsOutput{
+					Channels:   2,
+					SampleRate: 32000,
+					LatencyMs:  66,
+				},
 				JerkCurve:                    190,
 				JerkMax:                      37,
 				SnapCurve:                    310,

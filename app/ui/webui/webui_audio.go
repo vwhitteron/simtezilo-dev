@@ -11,44 +11,36 @@ import (
 // testToneDuration is how long a device/channel test tone plays.
 const testToneDuration = 1500 * time.Millisecond
 
-// applyAudioConfig applies updates to the audio backend and device routing
-// configuration. The incoming map mirrors the "audio" section of the config
-// JSON, with nested "haptics" and "pitRadio" objects.
-func (w *WebUI) applyAudioConfig(config map[string]any) []string {
+// applyHapticsOutputConfig applies updates to the haptic output stream
+// configuration. The incoming map mirrors the "output" object of the haptics
+// section of the config JSON.
+func (w *WebUI) applyHapticsOutputConfig(config map[string]any) []string {
 	var errors []string
 
-	if backend, ok := config["backend"]; ok {
-		if value, ok := backend.(string); ok {
-			w.config.SetAudioBackend(value)
-		} else {
-			errors = append(errors, "invalid audio backend value")
-		}
-	}
-
-	if haptics, ok := config["haptics"].(map[string]any); ok {
-		errors = append(errors, w.applyAudioHapticsConfig(haptics)...)
-	}
-
-	if pitRadio, ok := config["pitRadio"].(map[string]any); ok {
-		errors = append(errors, w.applyAudioPitRadioConfig(pitRadio)...)
-	}
-
-	return errors
-}
-
-func (w *WebUI) applyAudioHapticsConfig(config map[string]any) []string {
-	var errors []string
+	changed := false
 
 	if device, ok := config["device"]; ok {
 		if value, ok := device.(string); ok {
+			changed = changed || value != w.config.GetAudioHapticsDevice()
 			w.config.SetAudioHapticsDevice(value)
 		} else {
 			errors = append(errors, "invalid haptics device value")
 		}
 	}
 
+	if deviceName, ok := config["deviceName"]; ok {
+		if value, ok := deviceName.(string); ok {
+			// The name is metadata for device resolution; a device change is saved
+			// alongside it and already triggers the restart, so don't restart again.
+			w.config.SetAudioHapticsDeviceName(value)
+		} else {
+			errors = append(errors, "invalid haptics device name value")
+		}
+	}
+
 	if channels, ok := config["channels"]; ok {
 		if value, ok := channels.(float64); ok {
+			changed = changed || int(value) != w.config.GetAudioHapticsChannels()
 			w.config.SetAudioHapticsChannels(int(value))
 		} else {
 			errors = append(errors, "invalid haptics channels value")
@@ -57,6 +49,7 @@ func (w *WebUI) applyAudioHapticsConfig(config map[string]any) []string {
 
 	if sampleRate, ok := config["sampleRate"]; ok {
 		if value, ok := sampleRate.(float64); ok {
+			changed = changed || int(value) != w.config.GetAudioHapticsSampleRate()
 			w.config.SetAudioHapticsSampleRate(int(value))
 		} else {
 			errors = append(errors, "invalid haptics sample rate value")
@@ -65,31 +58,41 @@ func (w *WebUI) applyAudioHapticsConfig(config map[string]any) []string {
 
 	if latencyMs, ok := config["latencyMs"]; ok {
 		if value, ok := latencyMs.(float64); ok {
+			changed = changed || int(value) != w.config.GetAudioHapticsLatencyMs()
 			w.config.SetAudioHapticsLatencyMs(int(value))
 		} else {
 			errors = append(errors, "invalid haptics latency value")
 		}
 	}
 
+	// Restart the live haptic stream only when an output value actually changed,
+	// so unrelated settings saves don't glitch playback.
+	if changed && w.onHapticsOutputChanged != nil {
+		w.onHapticsOutputChanged()
+	}
+
 	return errors
 }
 
-func (w *WebUI) applyAudioPitRadioConfig(config map[string]any) []string {
+// applyPitRadioAudioConfig applies updates to the local pit-radio audio device
+// configuration. The incoming map mirrors the "audio" object of the pitRadio
+// section of the config JSON.
+func (w *WebUI) applyPitRadioAudioConfig(config map[string]any) []string {
 	var errors []string
-
-	if enabled, ok := config["enabled"]; ok {
-		if value, ok := enabled.(bool); ok {
-			w.config.SetAudioPitRadioEnabled(value)
-		} else {
-			errors = append(errors, "invalid pit-radio enabled value")
-		}
-	}
 
 	if device, ok := config["device"]; ok {
 		if value, ok := device.(string); ok {
 			w.config.SetAudioPitRadioDevice(value)
 		} else {
 			errors = append(errors, "invalid pit-radio device value")
+		}
+	}
+
+	if deviceName, ok := config["deviceName"]; ok {
+		if value, ok := deviceName.(string); ok {
+			w.config.SetAudioPitRadioDeviceName(value)
+		} else {
+			errors = append(errors, "invalid pit-radio device name value")
 		}
 	}
 
