@@ -20,13 +20,20 @@ const (
 	ChannelTransmission = "transmission"
 	ChannelCalibrator   = "calibration"
 
-	// NumOutputChannels defines the number of output channels (stereo = 2).
-	NumOutputChannels = 2
+	// DefaultOutputChannels is the fallback output channel count (stereo) used
+	// when no explicit channel count is configured.
+	DefaultOutputChannels = 2
 
 	// Channel name prefixes for pattern matching.
 	chassisChannelPrefix = "chassis_"
 	outputChannelPrefix  = "_output_"
 )
+
+// NumOutputChannels returns the number of output channels this synthesizer was
+// configured with.
+func (s *Synthesizer) NumOutputChannels() int {
+	return s.numOutputChannels
+}
 
 // OutputChannelName returns the channel name for output channel n (e.g., "_output_0").
 func OutputChannelName(n int) string {
@@ -67,13 +74,14 @@ func ParseOutputChannelIndex(name string) int {
 
 // Synthesizer is the main synthesizer structure that holds the mixer, effects, and output device.
 type Synthesizer struct {
-	effects      *EffectsSampleBank
-	log          zerolog.Logger
-	mixer        Mixer
-	outputDevice *OutputDevice
-	kinematics   *kinematics.State
-	sampleRate   int
-	outFile      *os.File
+	effects           *EffectsSampleBank
+	log               zerolog.Logger
+	mixer             Mixer
+	outputDevice      *OutputDevice
+	kinematics        *kinematics.State
+	sampleRate        int
+	numOutputChannels int
+	outFile           *os.File
 
 	// Calibration mode state
 	calibrator         calibrator.Calibrator
@@ -93,10 +101,18 @@ type SynthOpts struct {
 
 // New creates a new Synthesizer instance with the provided options.
 func New(opts *SynthOpts) (*Synthesizer, error) {
+	numOutputChannels := DefaultOutputChannels
+	if opts.BaseConfig != nil {
+		if n := opts.BaseConfig.GetAudioHapticsChannels(); n > 0 {
+			numOutputChannels = n
+		}
+	}
+
 	synthesizer := &Synthesizer{
 		effects:            NewEffectsSampleBank(),
 		kinematics:         opts.Kinematics,
 		sampleRate:         opts.Config.InternalSampleRateHz,
+		numOutputChannels:  numOutputChannels,
 		log:                opts.Logger.With().Str("package", "synth").Logger(),
 		calibrator:         opts.Calibrator,
 		mixer:              opts.Mixer,
@@ -127,7 +143,7 @@ func New(opts *SynthOpts) (*Synthesizer, error) {
 		_ = synthesizer.mixer.AddChannel(ChannelCalibrator, 0)
 
 		// Add per-channel chassis buffers for per-channel EQ support
-		for ch := range NumOutputChannels {
+		for ch := range numOutputChannels {
 			_ = synthesizer.mixer.AddChannel(ChassisChannelName(ch), opts.Config.ChassisGain)
 		}
 	}
@@ -291,7 +307,7 @@ func (s *Synthesizer) startCalibrator() {
 	s.wasCalibrating = true
 
 	// Clear all haptic channel buffers first to prevent volume spike
-	for ch := range NumOutputChannels {
+	for ch := range s.numOutputChannels {
 		s.mixer.ClearChannelBuffer(ChassisChannelName(ch))
 	}
 
@@ -333,7 +349,7 @@ func (s *Synthesizer) stopCalibrator() {
 	s.log.Debug().Msg("Cleared master buffer")
 
 	// Clear all haptic channel buffers to ensure clean start
-	for ch := range NumOutputChannels {
+	for ch := range s.numOutputChannels {
 		s.mixer.ClearChannelBuffer(ChassisChannelName(ch))
 	}
 

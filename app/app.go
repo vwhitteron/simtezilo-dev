@@ -11,10 +11,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gopxl/beep"
-	"github.com/gopxl/beep/speaker"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+	"github.com/vwhitteron/simtezilo-dev/app/audio"
 	"github.com/vwhitteron/simtezilo-dev/app/cache"
 	"github.com/vwhitteron/simtezilo-dev/app/calibrator"
 	"github.com/vwhitteron/simtezilo-dev/app/circuit"
@@ -82,6 +81,10 @@ type App struct {
 	kinematics kinematics.State          // Vehicle kinematics tracker
 	synth      *synthesizer.Synthesizer  // Audio synthesizer for haptic feedback
 	calibrator *calibrator.ToneGenerator // Calibration mode manager
+
+	audioBackend audio.Backend // Audio output backend (beep/malgo/portaudio)
+	hapticSink   audio.Sink    // Active haptic output stream
+	audioMu      sync.Mutex    // Guards audioBackend/hapticSink during start/restart
 
 	odometer  *odometer.Odometer  // Odometer for distance tracking
 	fuelRange fuelrange.Estimator // Fuel range estimator
@@ -271,6 +274,8 @@ func (a *App) Close() {
 	if a.updater != nil {
 		a.updater.Stop()
 	}
+
+	a.stopAudioOutput()
 
 	err := a.synth.Close()
 	if err != nil {
@@ -1063,26 +1068,105 @@ func (a *App) getDisplayLCD() *display.ST7789LCD {
 }
 
 func (a *App) startAudioOutput() {
-	outputSampleRate := beep.SampleRate(a.config.GetSynthOutputSampleRateHz())
+	a.audioMu.Lock()
+	defer a.audioMu.Unlock()
 
-	hapticStreamer := synthesizer.NewHapticStream(a.synth, outputSampleRate)
+	backendName := a.config.GetAudioBackend()
 
-	err := speaker.Init(
-		outputSampleRate,
-		outputSampleRate.N(time.Second/15),
-	)
+	backend, err := audio.New(backendName, a.log)
+	if err != nil {
+		// Fall back to the beep backend when the configured backend is not
+		// available in this build (e.g. malgo/portaudio not compiled in).
+		a.log.Warn().
+			Err(err).
+			Str("backend", backendName).
+			Msg("audio backend unavailable, falling back to beep")
+
+		backend, err = audio.New(audio.BackendBeep, a.log)
+		if err != nil {
+			a.log.Error().
+				Err(err).
+				Str("component", "audio output device").
+				Str("result", "failure").
+				Msg("init")
+			_ = a.ui.Screen.RenderErrorScreen("Audio output init")
+
+			return
+		}
+	}
+
+	a.audioBackend = backend
+
+	outputRate := a.config.GetAudioHapticsSampleRate()
+	internalRate := a.synth.GetSampleRate()
+
+	cfg := audio.SinkConfig{
+		DeviceID:   a.config.GetAudioHapticsDevice(),
+		Channels:   a.config.GetAudioHapticsChannels(),
+		SampleRate: outputRate,
+		LatencyMs:  a.config.GetAudioHapticsLatencyMs(),
+	}
+
+	sink, err := backend.OpenSink(cfg)
+	if err != nil && cfg.DeviceID != "" {
+		// The configured device may be unplugged; retry on the default device.
+		a.log.Warn().
+			Err(err).
+			Str("device", cfg.DeviceID).
+			Msg("audio device unavailable, falling back to default device")
+
+		cfg.DeviceID = ""
+		sink, err = backend.OpenSink(cfg)
+	}
+
 	if err != nil {
 		a.log.Error().
 			Err(err).
 			Str("component", "audio output device").
 			Str("result", "failure").
-			Msg("init")
+			Msg("open sink")
 		_ = a.ui.Screen.RenderErrorScreen("Audio output init")
 
 		return
 	}
 
-	go speaker.Play(hapticStreamer)
+	streamer := synthesizer.NewStreamer(a.synth)
+	source := audio.NewResamplingSource(streamer, internalRate, outputRate, sink.Channels())
+
+	if err := sink.Start(source); err != nil {
+		a.log.Error().
+			Err(err).
+			Str("component", "audio output device").
+			Str("result", "failure").
+			Msg("start sink")
+		_ = a.ui.Screen.RenderErrorScreen("Audio output init")
+
+		return
+	}
+
+	a.hapticSink = sink
+
+	a.log.Info().
+		Str("backend", backend.Name()).
+		Int("channels", sink.Channels()).
+		Int("sampleRate", outputRate).
+		Msg("audio output started")
+}
+
+// stopAudioOutput stops the active haptic sink and releases the backend.
+func (a *App) stopAudioOutput() {
+	a.audioMu.Lock()
+	defer a.audioMu.Unlock()
+
+	if a.hapticSink != nil {
+		_ = a.hapticSink.Stop()
+		a.hapticSink = nil
+	}
+
+	if a.audioBackend != nil {
+		_ = a.audioBackend.Close()
+		a.audioBackend = nil
+	}
 }
 
 // switchToSetupMode creates the setup mode flag file and signals the app to exit for restart in setup mode.

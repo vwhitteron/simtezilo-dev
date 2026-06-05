@@ -18,13 +18,14 @@ import (
 type StereoMixer struct {
 	config *config.Config
 
-	channels     map[string]*MixerChannel
-	bufferLength time.Duration
-	sampleRateHz int
-	log          zerolog.Logger
-	faderGain    float64
-	fadeInActive bool
-	silenced     bool
+	channels          map[string]*MixerChannel
+	bufferLength      time.Duration
+	sampleRateHz      int
+	numOutputChannels int
+	log               zerolog.Logger
+	faderGain         float64
+	fadeInActive      bool
+	silenced          bool
 
 	// Calibration mode state
 	calibrator     calibrator.Calibrator
@@ -65,19 +66,25 @@ func NewStereoMixer(mixerConfig StereoMixerConfig) (*StereoMixer, error) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
+	numOutputChannels := DefaultOutputChannels
+	if n := mixerConfig.Config.GetAudioHapticsChannels(); n > 0 {
+		numOutputChannels = n
+	}
+
 	mixer := &StereoMixer{
 		config: mixerConfig.Config,
 
-		bufferLength:   mixerConfig.BufferLength,
-		sampleRateHz:   mixerConfig.SampleRateHz,
-		channels:       map[string]*MixerChannel{},
-		log:            mixerConfig.Log,
-		faderGain:      config.MinimumGain,
-		fadeInActive:   false,
-		silenced:       true,
-		calibrator:     mixerConfig.Calibrator,
-		sineWavePhaseL: 0,
-		sineWavePhaseR: 0,
+		bufferLength:      mixerConfig.BufferLength,
+		sampleRateHz:      mixerConfig.SampleRateHz,
+		numOutputChannels: numOutputChannels,
+		channels:          map[string]*MixerChannel{},
+		log:               mixerConfig.Log,
+		faderGain:         config.MinimumGain,
+		fadeInActive:      false,
+		silenced:          true,
+		calibrator:        mixerConfig.Calibrator,
+		sineWavePhaseL:    0,
+		sineWavePhaseR:    0,
 
 		// Initialize buffer monitoring
 		lastHealthCheck:     time.Now(),
@@ -97,7 +104,7 @@ func NewStereoMixer(mixerConfig StereoMixerConfig) (*StereoMixer, error) {
 	}
 
 	// Initialize per-channel output channels
-	for ch := range NumOutputChannels {
+	for ch := range numOutputChannels {
 		channelGain := mixer.config.GetSynthChannelGain(ch)
 
 		err = mixer.AddChannel(OutputChannelName(ch), channelGain)
@@ -389,8 +396,8 @@ func (m *StereoMixer) MixToMaster(length int) {
 		isStopping := m.calibrator.IsStopping()
 
 		// Get per-channel EQ amplitude multipliers
-		eqAmplitudes := make([]float64, NumOutputChannels)
-		for channelIndex := range NumOutputChannels {
+		eqAmplitudes := make([]float64, m.numOutputChannels)
+		for channelIndex := range m.numOutputChannels {
 			eqAmplitudes[channelIndex] = 1.0
 
 			if m.config.GetSynthChannelEqEnabled(channelIndex) {
@@ -407,8 +414,8 @@ func (m *StereoMixer) MixToMaster(length int) {
 		}
 
 		// Create per-channel output buffers
-		channelSamples := make([][]float64, NumOutputChannels)
-		for ch := range NumOutputChannels {
+		channelSamples := make([][]float64, m.numOutputChannels)
+		for ch := range m.numOutputChannels {
 			channelSamples[ch] = make([]float64, length)
 		}
 
@@ -423,7 +430,7 @@ func (m *StereoMixer) MixToMaster(length int) {
 			outSamples[offset] = baseSample // Master gets unmodified
 
 			// Apply per-channel EQ
-			for ch := range NumOutputChannels {
+			for ch := range m.numOutputChannels {
 				channelSamples[ch][offset] = baseSample * eqAmplitudes[ch]
 			}
 
@@ -445,7 +452,7 @@ func (m *StereoMixer) MixToMaster(length int) {
 				if prevSin <= 0 && currSin >= 0 {
 					// Zero crossing detected - stop here
 					outSamples[offset] = 0 // End on zero to ensure clean stop
-					for ch := range NumOutputChannels {
+					for ch := range m.numOutputChannels {
 						channelSamples[ch][offset] = 0
 					}
 
@@ -454,7 +461,7 @@ func (m *StereoMixer) MixToMaster(length int) {
 					// Pad remaining samples with zeros
 					for j := offset + 1; j < len(outSamples); j++ {
 						outSamples[j] = 0
-						for ch := range NumOutputChannels {
+						for ch := range m.numOutputChannels {
 							channelSamples[ch][j] = 0
 						}
 					}
@@ -462,7 +469,7 @@ func (m *StereoMixer) MixToMaster(length int) {
 					// Write calibration output to all channels
 					m.channels[ChannelMaster].Write(outSamples, 1.0, 0, true)
 
-					for ch := range NumOutputChannels {
+					for ch := range m.numOutputChannels {
 						m.channels[OutputChannelName(ch)].Write(channelSamples[ch], 1.0, 0, true)
 					}
 
@@ -476,7 +483,7 @@ func (m *StereoMixer) MixToMaster(length int) {
 		// Write calibration output to all channels
 		m.channels[ChannelMaster].Write(outSamples, 1.0, 0, true)
 
-		for ch := range NumOutputChannels {
+		for ch := range m.numOutputChannels {
 			m.channels[OutputChannelName(ch)].Write(channelSamples[ch], 1.0, 0, true)
 		}
 
@@ -485,17 +492,17 @@ func (m *StereoMixer) MixToMaster(length int) {
 
 	// Normal haptic mode - mix per-channel chassis with transmission and engine
 	// Create separate output buffers for each channel to support per-channel EQ
-	channelSamples := make([][]float64, NumOutputChannels)
-	peaks := make([]float64, NumOutputChannels)
+	channelSamples := make([][]float64, m.numOutputChannels)
+	peaks := make([]float64, m.numOutputChannels)
 
-	for ch := range NumOutputChannels {
+	for ch := range m.numOutputChannels {
 		channelSamples[ch] = make([]float64, length)
 	}
 
 	// Mix per-channel chassis with appropriate EQ
 	chassisMuted := m.config.GetSynthChassisMute()
 	if !chassisMuted {
-		for ch := range NumOutputChannels {
+		for ch := range m.numOutputChannels {
 			if chassisCh, ok := m.channels[ChassisChannelName(ch)]; ok {
 				samples := chassisCh.Read(length)
 				for i, sample := range samples {
@@ -511,7 +518,7 @@ func (m *StereoMixer) MixToMaster(length int) {
 		if !transmissionMuted {
 			samples := transmissionChannel.Read(length)
 			for i, sample := range samples {
-				for ch := range NumOutputChannels {
+				for ch := range m.numOutputChannels {
 					channelSamples[ch][i] = mixSampleSum(channelSamples[ch][i], sample, &peaks[ch])
 				}
 			}
@@ -519,7 +526,7 @@ func (m *StereoMixer) MixToMaster(length int) {
 	}
 
 	// Scale peaks for each channel
-	for ch := range NumOutputChannels {
+	for ch := range m.numOutputChannels {
 		if peaks[ch] > 1.0 {
 			scaleSamplesPeak(&channelSamples[ch], peaks[ch])
 		}
@@ -536,17 +543,17 @@ func (m *StereoMixer) MixToMaster(length int) {
 	masterSamples := make([]float64, length)
 	for sampleIdx := range length {
 		sum := 0.0
-		for channel := range NumOutputChannels {
+		for channel := range m.numOutputChannels {
 			sum += channelSamples[channel][sampleIdx]
 		}
 
-		masterSamples[sampleIdx] = sum / float64(NumOutputChannels)
+		masterSamples[sampleIdx] = sum / float64(m.numOutputChannels)
 	}
 
 	// Write to master and per-channel outputs
 	m.channels[ChannelMaster].Write(masterSamples, magnitude, 0, true)
 
-	for channel := range NumOutputChannels {
+	for channel := range m.numOutputChannels {
 		m.channels[OutputChannelName(channel)].Write(channelSamples[channel], magnitude, 0, true)
 	}
 }

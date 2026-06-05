@@ -23,7 +23,7 @@ func (a *App) generateChassisHaptic() {
 	minSamplesPerFrame := int(sampleRate / hapticFrameRate)
 
 	// Generate pulse buffers for each channel
-	for channel := range synthesizer.NumOutputChannels {
+	for channel := range a.synth.NumOutputChannels() {
 		channelFreqHz, channelAmplitude, drxActive := a.applyDRX(
 			pulseFrequencyHz, pulseAmplitude, unclampedAmplitude, channel,
 		)
