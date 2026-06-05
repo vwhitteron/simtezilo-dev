@@ -163,5 +163,19 @@ func defaultConfig() *viperConfig {
 			Source:    "udp://255.255.255.255:33739",
 			UpdateURL: "https://static.zetetos.com/data/gt7",
 		},
+		Audio: &Audio{
+			Backend: "beep",
+			Haptics: AudioHapticsDevice{
+				Device:     "",
+				Channels:   2,
+				SampleRate: 32000,
+				LatencyMs:  66,
+			},
+			PitRadio: AudioPitRadioDevice{
+				Enabled:    false,
+				Device:     "",
+				SampleRate: 48000,
+			},
+		},
 	}
 }

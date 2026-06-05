@@ -138,6 +138,30 @@ type Telemetry struct {
 	UpdateURL string `json:"updateURL"` //nolint:tagliatelle // schema uses Go-style acronym
 }
 
+// Audio represents the audio output backend and device routing configuration.
+type Audio struct {
+	Backend  string              `json:"backend"`  // beep | malgo | portaudio
+	Haptics  AudioHapticsDevice  `json:"haptics"`  // haptic feedback output
+	PitRadio AudioPitRadioDevice `json:"pitRadio"` // optional local pit-radio output
+}
+
+// AudioHapticsDevice configures the haptic output stream.
+type AudioHapticsDevice struct {
+	Device     string `json:"device"`     // backend device ID ("" selects the default)
+	Channels   int    `json:"channels"`   // number of haptic output channels
+	SampleRate int    `json:"sampleRate"` // output sample rate in Hz
+	LatencyMs  int    `json:"latencyMs"`  // requested buffer latency in milliseconds
+}
+
+// AudioPitRadioDevice configures optional local playback of pit-radio audio,
+// independent of the Discord voice path. When Enabled is false, pit-radio audio
+// is only sent to Discord (the original behaviour).
+type AudioPitRadioDevice struct {
+	Enabled    bool   `json:"enabled"`    // play pit-radio audio on a local device
+	Device     string `json:"device"`     // backend device ID ("" selects the default)
+	SampleRate int    `json:"sampleRate"` // output sample rate in Hz
+}
+
 // Status represents the status of the configuration.
 type Status struct {
 	LastUpdate      int64
@@ -168,6 +192,7 @@ type viperConfig struct {
 	PitRadio      *pitRadio    `json:"pitRadio,omitempty"`
 	Synthesizer   *Synthesizer `json:"synthesizer,omitempty"`
 	Telemetry     *Telemetry   `json:"telemetry,omitempty"`
+	Audio         *Audio       `json:"audio,omitempty"`
 }
 
 // Snapshot holds frequently-accessed configuration values for lock-free reads.
@@ -2913,6 +2938,206 @@ func (c *Config) SetTelemetryUpdateURL(value string) {
 	defer c.mu.Unlock()
 
 	c.viper.Telemetry.UpdateURL = value
+
+	c.registerUpdate(true)
+}
+
+// ****************************************************************************
+// Audio backend and device routing accessors.
+//
+// Audio settings select the output backend (beep/malgo/portaudio) and route the
+// haptic and pit-radio streams to specific devices. Changing any of these
+// requires the audio output to be restarted, so the setters mark the config as
+// restart-required.
+// ****************************************************************************
+
+// ensureAudio guarantees a non-nil Audio section. Caller must hold the lock.
+func (c *Config) ensureAudio() {
+	if c.viper.Audio == nil {
+		c.viper.Audio = defaultConfig().Audio
+	}
+}
+
+// GetAudioBackend returns the configured audio backend (beep, malgo, portaudio).
+func (c *Config) GetAudioBackend() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if c.viper.Audio == nil {
+		return "beep"
+	}
+
+	return c.viper.Audio.Backend
+}
+
+// SetAudioBackend sets the audio backend.
+func (c *Config) SetAudioBackend(value string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.ensureAudio()
+	c.viper.Audio.Backend = value
+
+	c.registerUpdate(true)
+}
+
+// GetAudioHapticsDevice returns the haptics output device ID ("" = default).
+func (c *Config) GetAudioHapticsDevice() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if c.viper.Audio == nil {
+		return ""
+	}
+
+	return c.viper.Audio.Haptics.Device
+}
+
+// SetAudioHapticsDevice sets the haptics output device ID.
+func (c *Config) SetAudioHapticsDevice(value string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.ensureAudio()
+	c.viper.Audio.Haptics.Device = value
+
+	c.registerUpdate(true)
+}
+
+// GetAudioHapticsChannels returns the number of haptic output channels.
+func (c *Config) GetAudioHapticsChannels() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if c.viper.Audio == nil || c.viper.Audio.Haptics.Channels < 1 {
+		return 2
+	}
+
+	return c.viper.Audio.Haptics.Channels
+}
+
+// SetAudioHapticsChannels sets the number of haptic output channels.
+func (c *Config) SetAudioHapticsChannels(value int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.ensureAudio()
+	c.viper.Audio.Haptics.Channels = value
+
+	c.registerUpdate(true)
+}
+
+// GetAudioHapticsSampleRate returns the haptics output sample rate in Hz.
+func (c *Config) GetAudioHapticsSampleRate() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if c.viper.Audio == nil || c.viper.Audio.Haptics.SampleRate < 1 {
+		return c.viper.Synthesizer.OutputSampleRateHz
+	}
+
+	return c.viper.Audio.Haptics.SampleRate
+}
+
+// SetAudioHapticsSampleRate sets the haptics output sample rate in Hz.
+func (c *Config) SetAudioHapticsSampleRate(value int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.ensureAudio()
+	c.viper.Audio.Haptics.SampleRate = value
+
+	c.registerUpdate(true)
+}
+
+// GetAudioHapticsLatencyMs returns the requested haptics buffer latency in ms.
+func (c *Config) GetAudioHapticsLatencyMs() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if c.viper.Audio == nil {
+		return 0
+	}
+
+	return c.viper.Audio.Haptics.LatencyMs
+}
+
+// SetAudioHapticsLatencyMs sets the requested haptics buffer latency in ms.
+func (c *Config) SetAudioHapticsLatencyMs(value int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.ensureAudio()
+	c.viper.Audio.Haptics.LatencyMs = value
+
+	c.registerUpdate(true)
+}
+
+// GetAudioPitRadioEnabled reports whether local pit-radio output is enabled.
+func (c *Config) GetAudioPitRadioEnabled() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if c.viper.Audio == nil {
+		return false
+	}
+
+	return c.viper.Audio.PitRadio.Enabled
+}
+
+// SetAudioPitRadioEnabled enables or disables local pit-radio output.
+func (c *Config) SetAudioPitRadioEnabled(value bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.ensureAudio()
+	c.viper.Audio.PitRadio.Enabled = value
+
+	c.registerUpdate(true)
+}
+
+// GetAudioPitRadioDevice returns the pit-radio output device ID ("" = default).
+func (c *Config) GetAudioPitRadioDevice() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if c.viper.Audio == nil {
+		return ""
+	}
+
+	return c.viper.Audio.PitRadio.Device
+}
+
+// SetAudioPitRadioDevice sets the pit-radio output device ID.
+func (c *Config) SetAudioPitRadioDevice(value string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.ensureAudio()
+	c.viper.Audio.PitRadio.Device = value
+
+	c.registerUpdate(true)
+}
+
+// GetAudioPitRadioSampleRate returns the pit-radio output sample rate in Hz.
+func (c *Config) GetAudioPitRadioSampleRate() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if c.viper.Audio == nil || c.viper.Audio.PitRadio.SampleRate < 1 {
+		return 48000
+	}
+
+	return c.viper.Audio.PitRadio.SampleRate
+}
+
+// SetAudioPitRadioSampleRate sets the pit-radio output sample rate in Hz.
+func (c *Config) SetAudioPitRadioSampleRate(value int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.ensureAudio()
+	c.viper.Audio.PitRadio.SampleRate = value
 
 	c.registerUpdate(true)
 }
