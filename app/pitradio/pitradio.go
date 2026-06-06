@@ -88,19 +88,19 @@ func NewMultiOutput(logger zerolog.Logger, outputs ...PitRadio) *MultiOutput {
 // BackgroundTask runs every output's background task concurrently and blocks
 // until they all return.
 func (m *MultiOutput) BackgroundTask() {
-	var wg sync.WaitGroup
+	var waitGroup sync.WaitGroup
 
 	for _, output := range m.outputs {
-		wg.Add(1)
+		waitGroup.Add(1)
 
 		go func(o PitRadio) {
-			defer wg.Done()
+			defer waitGroup.Done()
 
 			o.BackgroundTask()
 		}(output)
 	}
 
-	wg.Wait()
+	waitGroup.Wait()
 }
 
 // Send delivers the message to every output, returning the first error.

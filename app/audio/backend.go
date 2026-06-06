@@ -12,7 +12,7 @@ import (
 // portaudio) only register when compiled in.
 type backendFactory func(zerolog.Logger) (Backend, error)
 
-var backendRegistry = map[string]backendFactory{}
+var backendRegistry = map[string]backendFactory{} //nolint:gochecknoglobals // registry pattern; populated by init() in backend files
 
 func registerBackend(name string, f backendFactory) {
 	backendRegistry[name] = f
@@ -21,7 +21,7 @@ func registerBackend(name string, f backendFactory) {
 // New constructs the named backend. An empty name selects the beep backend.
 // If a known backend name (malgo, portaudio) is requested but was not compiled
 // into the binary, ErrBackendUnavailable is returned so callers can fall back.
-func New(name string, log zerolog.Logger) (Backend, error) {
+func New(name string, log zerolog.Logger) (Backend, error) { //nolint:ireturn // constructor returns the Backend interface by design
 	if name == "" {
 		name = BackendBeep
 	}

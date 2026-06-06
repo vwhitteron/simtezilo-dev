@@ -1,9 +1,11 @@
-package audio
+package audio_test
 
 import (
 	"fmt"
 	"math"
 	"testing"
+
+	"github.com/vwhitteron/simtezilo-dev/app/audio"
 )
 
 // constantSource is a helper SampleSource that emits a constant value per channel indefinitely.
@@ -27,25 +29,31 @@ func (c *constantSource) ReadInterleaved(buf []float32, channels int) (frames in
 }
 
 func TestNewResamplingSource_NilSource(t *testing.T) {
-	result := NewResamplingSource(nil, 8000, 16000, 1)
+	t.Parallel()
+
+	result := audio.NewResamplingSource(nil, 8000, 16000, 1)
 	if result != nil {
 		t.Errorf("expected nil result for nil source, got %v", result)
 	}
 }
 
 func TestNewResamplingSource_SameRate(t *testing.T) {
+	t.Parallel()
+
 	src := &constantSource{values: []float32{0.5}}
 
-	result := NewResamplingSource(src, 8000, 8000, 1)
+	result := audio.NewResamplingSource(src, 8000, 8000, 1)
 	if result != src {
 		t.Errorf("expected same pointer for same rate, got %p vs %p", result, src)
 	}
 }
 
 func TestResampling_UpsamplingConstantSignal(t *testing.T) {
+	t.Parallel()
+
 	src := &constantSource{values: []float32{0.5}}
 
-	resampler := NewResamplingSource(src, 8000, 32000, 1)
+	resampler := audio.NewResamplingSource(src, 8000, 32000, 1)
 	if resampler == nil {
 		t.Fatal("resampler should not be nil")
 	}
@@ -69,9 +77,11 @@ func TestResampling_UpsamplingConstantSignal(t *testing.T) {
 }
 
 func TestResampling_UpsamplingFrameCount(t *testing.T) {
+	t.Parallel()
+
 	src := &constantSource{values: []float32{0.5}}
 
-	resampler := NewResamplingSource(src, 8000, 32000, 1)
+	resampler := audio.NewResamplingSource(src, 8000, 32000, 1)
 	if resampler == nil {
 		t.Fatal("resampler should not be nil")
 	}
@@ -90,9 +100,11 @@ func TestResampling_UpsamplingFrameCount(t *testing.T) {
 }
 
 func TestResampling_MultiChannelSeparation(t *testing.T) {
+	t.Parallel()
+
 	src := &constantSource{values: []float32{1.0, -1.0}}
 
-	resampler := NewResamplingSource(src, 8000, 16000, 2)
+	resampler := audio.NewResamplingSource(src, 8000, 16000, 2)
 	if resampler == nil {
 		t.Fatal("resampler should not be nil")
 	}
@@ -108,24 +120,26 @@ func TestResampling_MultiChannelSeparation(t *testing.T) {
 		t.Fatal("expected some frames")
 	}
 
-	for i := range frames {
-		ch0 := buf[i*2+0]
-		ch1 := buf[i*2+1]
+	for frameIdx := range frames {
+		ch0 := buf[frameIdx*2+0]
+		ch1 := buf[frameIdx*2+1]
 
 		if math.Abs(float64(ch0-1.0)) > 1e-6 {
-			t.Errorf("frame %d ch0: expected ~1.0, got %f", i, ch0)
+			t.Errorf("frame %d ch0: expected ~1.0, got %f", frameIdx, ch0)
 		}
 
 		if math.Abs(float64(ch1-(-1.0))) > 1e-6 {
-			t.Errorf("frame %d ch1: expected ~-1.0, got %f", i, ch1)
+			t.Errorf("frame %d ch1: expected ~-1.0, got %f", frameIdx, ch1)
 		}
 	}
 }
 
 func TestResampling_DownsamplingConstantSignal(t *testing.T) {
+	t.Parallel()
+
 	src := &constantSource{values: []float32{0.5}}
 
-	resampler := NewResamplingSource(src, 48000, 16000, 1)
+	resampler := audio.NewResamplingSource(src, 48000, 16000, 1)
 	if resampler == nil {
 		t.Fatal("resampler should not be nil")
 	}
@@ -149,33 +163,37 @@ func TestResampling_DownsamplingConstantSignal(t *testing.T) {
 }
 
 func TestNewResamplingSource_InvalidRates(t *testing.T) {
+	t.Parallel()
+
 	src := &constantSource{values: []float32{0.5}}
 
-	result := NewResamplingSource(src, 0, 16000, 1)
+	result := audio.NewResamplingSource(src, 0, 16000, 1)
 	if result != src {
 		t.Errorf("expected original source for zero inRate, got %p vs %p", result, src)
 	}
 
-	result = NewResamplingSource(src, 8000, 0, 1)
+	result = audio.NewResamplingSource(src, 8000, 0, 1)
 	if result != src {
 		t.Errorf("expected original source for zero outRate, got %p vs %p", result, src)
 	}
 
-	result = NewResamplingSource(src, -8000, 16000, 1)
+	result = audio.NewResamplingSource(src, -8000, 16000, 1)
 	if result != src {
 		t.Errorf("expected original source for negative inRate, got %p vs %p", result, src)
 	}
 
-	result = NewResamplingSource(src, 8000, -16000, 1)
+	result = audio.NewResamplingSource(src, 8000, -16000, 1)
 	if result != src {
 		t.Errorf("expected original source for negative outRate, got %p vs %p", result, src)
 	}
 }
 
 func TestResampling_PointerIdentity(t *testing.T) {
+	t.Parallel()
+
 	src := &constantSource{values: []float32{0.5}}
 
-	result := NewResamplingSource(src, 8000, 8000, 1)
+	result := audio.NewResamplingSource(src, 8000, 8000, 1)
 
 	srcPtr := fmt.Sprintf("%p", src)
 	resultPtr := fmt.Sprintf("%p", result)

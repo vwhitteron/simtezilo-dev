@@ -1,9 +1,11 @@
-package audio
+package audio_test
 
 import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/vwhitteron/simtezilo-dev/app/audio"
 )
 
 // rampSource emits a strictly increasing per-channel ramp so the consumer can
@@ -34,11 +36,14 @@ func (r *rampSource) ReadInterleaved(buf []float32, channels int) (int, bool) {
 // non-silence samples it yields form the original contiguous ramp: the ring
 // neither drops nor duplicates buffered samples across wraparound.
 func TestAsyncSource_OrderedDelivery(t *testing.T) {
+	t.Parallel()
+
 	const channels = 2
 
 	src := &rampSource{channels: channels}
-	a := NewAsyncSource(src, channels, 200, 64)
-	defer a.Close()
+
+	source := audio.NewAsyncSource(src, channels, 200, 64)
+	defer source.Close()
 
 	out := make([]float32, 128) // 64 frames per read
 
@@ -57,29 +62,30 @@ func TestAsyncSource_OrderedDelivery(t *testing.T) {
 		default:
 		}
 
-		a.ReadInterleaved(out, channels)
+		source.ReadInterleaved(out, channels)
+
 		reads++
 
-		for f := 0; f < len(out)/channels; f++ {
-			v := out[f*channels]
+		for frame := range len(out) / channels {
+			got := out[frame*channels]
 
 			// Skip leading/underrun silence frames (value 0 before the ramp has
 			// started flowing). Once the ramp begins it must stay contiguous.
 			if !started {
-				if v == 0 {
+				if got == 0 {
 					continue
 				}
 
 				started = true
-				want = v
+				want = got
 			}
 
-			if v != want {
-				t.Fatalf("read %d frame %d: expected %v, got %v", reads, f, want, v)
+			if got != want {
+				t.Fatalf("read %d frame %d: expected %v, got %v", reads, frame, want, got)
 			}
 
-			if out[f*channels+1] != want {
-				t.Fatalf("read %d frame %d: channel mismatch %v vs %v", reads, f, out[f*channels+1], want)
+			if out[frame*channels+1] != want {
+				t.Fatalf("read %d frame %d: channel mismatch %v vs %v", reads, frame, out[frame*channels+1], want)
 			}
 
 			want++

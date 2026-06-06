@@ -37,11 +37,11 @@ func detectSequenceBreaks(read []float64) []seqBreak {
 	prev := -1.0 // last accepted ramp value; < 0 means "not started"
 	inZeroRun := false
 
-	for i, got := range read {
+	for idx, got := range read {
 		if got == 0 {
 			if prev >= 0 && !inZeroRun {
 				// One break per contiguous run of inserted zeros.
-				breaks = append(breaks, seqBreak{Index: i, Kind: "zero", Want: prev + 1, Got: 0})
+				breaks = append(breaks, seqBreak{Index: idx, Kind: "zero", Want: prev + 1, Got: 0})
 				inZeroRun = true
 			}
 
@@ -60,9 +60,9 @@ func detectSequenceBreaks(read []float64) []seqBreak {
 		switch want := prev + 1; {
 		case got == want:
 		case got > want:
-			breaks = append(breaks, seqBreak{Index: i, Kind: "gap", Want: want, Got: got})
+			breaks = append(breaks, seqBreak{Index: idx, Kind: "gap", Want: want, Got: got})
 		default:
-			breaks = append(breaks, seqBreak{Index: i, Kind: "repeat", Want: want, Got: got})
+			breaks = append(breaks, seqBreak{Index: idx, Kind: "repeat", Want: want, Got: got})
 		}
 
 		prev = got
@@ -101,35 +101,35 @@ func TestAdaptiveBuffer_RampPassThrough(t *testing.T) {
 	var (
 		readStream []float64
 		ramp       = 1.0
-		ri         int
+		offset     int
 	)
 
-	for step := 0; step < 4000; step++ {
-		ws := writeSizes[step%len(writeSizes)]
-		writeRamp(buf, &ramp, ws)
+	for step := range 4000 {
+		writeSize := writeSizes[step%len(writeSizes)]
+		writeRamp(buf, &ramp, writeSize)
 
-		// Read back exactly ws samples (in differently sized sub-reads) so the
+		// Read back exactly writeSize samples (in differently sized sub-reads) so the
 		// buffer fill returns to baseline each step and never drifts into
 		// overflow or underrun.
-		toRead := ws
+		toRead := writeSize
 		for toRead > 0 {
-			rs := readSizes[ri%len(readSizes)]
-			ri++
+			readSize := readSizes[offset%len(readSizes)]
+			offset++
 
-			if rs > toRead {
-				rs = toRead
+			if readSize > toRead {
+				readSize = toRead
 			}
 
-			if avail := buf.Used(); rs > avail {
-				rs = avail
+			if avail := buf.Used(); readSize > avail {
+				readSize = avail
 			}
 
-			if rs == 0 {
+			if readSize == 0 {
 				break
 			}
 
-			readStream = append(readStream, buf.Read(rs)...)
-			toRead -= rs
+			readStream = append(readStream, buf.Read(readSize)...)
+			toRead -= readSize
 		}
 	}
 
@@ -276,13 +276,13 @@ func simulateUpstream(s cadenceScenario) cadenceResult {
 
 	simReadStream = simReadStream[:0]
 
-	for ms := 0; ms < durationMs; ms++ {
+	for tick := range durationMs {
 		writeAccum += float64(internalRate) / 1000.0
 
 		// 5% of telemetry frames arrive late: nothing is written this tick, but
 		// the owed samples stay in writeAccum and are flushed on the next frame
 		// (a deferral, not a loss — the long-run write rate stays at 8 kHz).
-		if ms%telemetryMs == 0 && rng.Float64() >= 0.05 {
+		if tick%telemetryMs == 0 && rng.Float64() >= 0.05 {
 			n := int(writeAccum)
 			writeAccum -= float64(n)
 
@@ -295,7 +295,7 @@ func simulateUpstream(s cadenceScenario) cadenceResult {
 		// drain smoothly), so the producer must then refill a period-sized hole.
 		// Model that bursty read rather than a smooth per-ms drain, because the
 		// burst is what stresses the upstream buffer.
-		if ms > 0 && ms%periodMs == 0 {
+		if tick > 0 && tick%periodMs == 0 {
 			ringFill -= float64(periodFrames)
 			if ringFill < 0 {
 				ringFill = 0
@@ -312,7 +312,7 @@ func simulateUpstream(s cadenceScenario) cadenceResult {
 			}
 		}
 
-		if ms == warmupMs {
+		if tick == warmupMs {
 			_, warmupUnderrun, _ = buf.Health()
 		}
 	}
@@ -328,7 +328,7 @@ func simulateUpstream(s cadenceScenario) cadenceResult {
 
 // simReadStream is reused across scenarios to avoid reallocating a large slice
 // per run; simulateUpstream truncates it at the start of each call.
-var simReadStream []float64
+var simReadStream []float64 //nolint:gochecknoglobals // test-only; shared across scenario runs to avoid large allocs
 
 // TestAdaptiveBuffer_UpstreamStarvation_Scenarios measures the working
 // hypothesis and every candidate fix against the same workload, printing a
@@ -336,7 +336,8 @@ var simReadStream []float64
 // recommended fix (a deeper cushion plus a silence-prefilled, paced ring) must
 // drive both startup and steady-state underruns to zero.
 func TestAdaptiveBuffer_UpstreamStarvation_Scenarios(t *testing.T) {
-	// Not parallel: shares simReadStream and is a sequential diagnostic table.
+	t.Parallel()
+
 	const shipped = "shipped: prefill + pull128"
 
 	scenarios := []cadenceScenario{

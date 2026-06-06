@@ -52,6 +52,93 @@ func NewStreamer(synth *Synthesizer) *Streamer {
 	}
 }
 
+// ReadInterleaved fills buf with interleaved float32 frames at the internal
+// sample rate. It implements audio.SampleSource.
+func (s *Streamer) ReadInterleaved(buf []float32, channels int) (int, bool) {
+	frames := len(buf) / channels
+
+	outputs := s.readOutputBuffers(frames)
+	if outputs == nil {
+		for i := range buf {
+			buf[i] = 0
+		}
+
+		return frames, true
+	}
+
+	for frameIdx := range frames {
+		for channelIdx := range channels {
+			var sample float64
+			if channelIdx < len(outputs) && frameIdx < len(outputs[channelIdx]) {
+				sample = outputs[channelIdx][frameIdx]
+			}
+
+			buf[frameIdx*channels+channelIdx] = float32(sample)
+		}
+	}
+
+	return frames, true
+}
+
+// Stream implements beep's stereo Streamer interface, used by tests and the beep
+// backend's stereo path. Channels beyond the first two are dropped; if only one
+// output channel exists it is duplicated to both stereo channels.
+func (s *Streamer) Stream(samples [][2]float64) (n int, ok bool) {
+	outputs := s.readOutputBuffers(len(samples))
+	if outputs == nil {
+		return zeroFill(samples), true
+	}
+
+	for sampleIdx := range samples {
+		var left, right float64
+
+		if len(outputs) > 0 && sampleIdx < len(outputs[0]) {
+			left = outputs[0][sampleIdx]
+		}
+
+		if len(outputs) > 1 {
+			if sampleIdx < len(outputs[1]) {
+				right = outputs[1][sampleIdx]
+			}
+		} else {
+			right = left
+		}
+
+		samples[sampleIdx][0] = left
+		samples[sampleIdx][1] = right
+	}
+
+	return len(samples), true
+}
+
+func (s *Streamer) Err() error {
+	return nil
+}
+
+// getOutputChannels retrieves the combined gains and mute states for all channels.
+// Note: Master mute is handled earlier for efficiency.
+func (s *Streamer) getOutputChannels() []OutputChannelSettings {
+	masterGainDB, _ := s.synth.mixer.GetChannelGain(ChannelMaster)
+
+	n := s.synth.numOutputChannels
+	if cap(s.settings) < n {
+		s.settings = make([]OutputChannelSettings, n)
+	}
+
+	channelGains := s.settings[:n]
+
+	for ch := range s.synth.numOutputChannels {
+		channelName := OutputChannelName(ch)
+		channelGainDB, _ := s.synth.mixer.GetChannelGain(channelName)
+		channelGains[ch] = OutputChannelSettings{
+			Gain: GainToPowerRatio(channelGainDB + masterGainDB),
+			Mute: s.synth.GetChannelMute(ch),
+		}
+	}
+
+	return channelGains
+}
+
 // readOutputBuffers triggers mixing and returns per-channel float64 buffers of
 // the requested length, with per-channel gain and mute already applied. Returns
 // nil when the master channel is muted (caller should emit silence).
@@ -108,93 +195,6 @@ func (s *Streamer) ensureBufs(channels, length int) [][]float64 {
 	}
 
 	return s.bufs
-}
-
-// ReadInterleaved fills buf with interleaved float32 frames at the internal
-// sample rate. It implements audio.SampleSource.
-func (s *Streamer) ReadInterleaved(buf []float32, channels int) (int, bool) {
-	frames := len(buf) / channels
-
-	outputs := s.readOutputBuffers(frames)
-	if outputs == nil {
-		for i := range buf {
-			buf[i] = 0
-		}
-
-		return frames, true
-	}
-
-	for f := range frames {
-		for c := range channels {
-			var v float64
-			if c < len(outputs) && f < len(outputs[c]) {
-				v = outputs[c][f]
-			}
-
-			buf[f*channels+c] = float32(v)
-		}
-	}
-
-	return frames, true
-}
-
-// Stream implements beep's stereo Streamer interface, used by tests and the beep
-// backend's stereo path. Channels beyond the first two are dropped; if only one
-// output channel exists it is duplicated to both stereo channels.
-func (s *Streamer) Stream(samples [][2]float64) (n int, ok bool) {
-	outputs := s.readOutputBuffers(len(samples))
-	if outputs == nil {
-		return zeroFill(samples), true
-	}
-
-	for i := range samples {
-		var left, right float64
-
-		if len(outputs) > 0 && i < len(outputs[0]) {
-			left = outputs[0][i]
-		}
-
-		if len(outputs) > 1 {
-			if i < len(outputs[1]) {
-				right = outputs[1][i]
-			}
-		} else {
-			right = left
-		}
-
-		samples[i][0] = left
-		samples[i][1] = right
-	}
-
-	return len(samples), true
-}
-
-func (s *Streamer) Err() error {
-	return nil
-}
-
-// getOutputChannels retrieves the combined gains and mute states for all channels.
-// Note: Master mute is handled earlier for efficiency.
-func (s *Streamer) getOutputChannels() []OutputChannelSettings {
-	masterGainDB, _ := s.synth.mixer.GetChannelGain(ChannelMaster)
-
-	n := s.synth.numOutputChannels
-	if cap(s.settings) < n {
-		s.settings = make([]OutputChannelSettings, n)
-	}
-
-	channelGains := s.settings[:n]
-
-	for ch := range s.synth.numOutputChannels {
-		channelName := OutputChannelName(ch)
-		channelGainDB, _ := s.synth.mixer.GetChannelGain(channelName)
-		channelGains[ch] = OutputChannelSettings{
-			Gain: GainToPowerRatio(channelGainDB + masterGainDB),
-			Mute: s.synth.GetChannelMute(ch),
-		}
-	}
-
-	return channelGains
 }
 
 // zeroFill fills all samples with zeros and returns the sample count.

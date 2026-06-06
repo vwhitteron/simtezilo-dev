@@ -8,8 +8,10 @@ require (
 	atomicgo.dev/keyboard v0.2.10
 	github.com/Wifx/gonetworkmanager/v2 v2.2.0
 	github.com/bwmarrin/discordgo v0.29.0
+	github.com/gen2brain/malgo v0.11.25
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0
 	github.com/gopxl/beep v1.4.1
+	github.com/gordonklaus/portaudio v0.0.0-20260203164431-765aa7dfa631
 	github.com/gorilla/websocket v1.5.3
 	github.com/grafana/pyroscope-go v1.3.1
 	github.com/kennygrant/sanitize v1.2.4
@@ -34,10 +36,8 @@ require (
 	github.com/ebitengine/oto/v3 v3.3.3 // indirect
 	github.com/ebitengine/purego v0.8.4 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
-	github.com/gen2brain/malgo v0.11.25 // indirect
 	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
-	github.com/gordonklaus/portaudio v0.0.0-20260203164431-765aa7dfa631 // indirect
 	github.com/grafana/pyroscope-go/godeltaprof v0.1.11 // indirect
 	github.com/hajimehoshi/go-mp3 v0.3.4 // indirect
 	github.com/kaitai-io/kaitai_struct_go_runtime v0.11.0 // indirect

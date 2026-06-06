@@ -125,8 +125,8 @@ type App struct {
 	crashLogger *crashlog.CrashLogger // Crash log manager for panic capture
 
 	// Chassis haptics state
-	jerkPeakHold         float64       // Peak hold value for jerk to prevent cancellation
-	jerkPeakHoldTime     time.Time     // Time when peak hold was last updated
+	jerkPeakHold         float64       //nolint:unused // peak-hold for planned inverse-jerk detection; deliberately kept
+	jerkPeakHoldTime     time.Time     //nolint:unused // peak-hold for planned inverse-jerk detection; deliberately kept
 	jerkPeakHoldDuration time.Duration // Duration to hold peak based on pulse length
 
 	// Telemetry source management
@@ -835,7 +835,7 @@ func (a *App) initializeComponents(opts Options) error {
 		gtmodels.CornerSet{},
 	)
 
-	a.circuit, err = circuit.New(*a.gtClient.CircuitDB, *opts.Logger)
+	a.circuit, err = circuit.New(a.gtClient.CircuitDB, *opts.Logger)
 	if err != nil {
 		// TODO: fatal error?
 		a.log.Error().
@@ -1110,7 +1110,7 @@ func (a *App) reinitializeGTClient() error {
 	}
 
 	// Reinitialize circuit with new GT client
-	a.circuit, err = circuit.New(*a.gtClient.CircuitDB, a.log)
+	a.circuit, err = circuit.New(a.gtClient.CircuitDB, a.log)
 	if err != nil {
 		a.log.Error().
 			Err(err).
@@ -1262,7 +1262,8 @@ func (a *App) startAudioOutput() {
 	capacityFrames, blockFrames := hapticBufferFrames(outputRate, cfg.LatencyMs)
 	async := audio.NewAsyncSource(source, sink.Channels(), capacityFrames, blockFrames)
 
-	if err := sink.Start(async); err != nil {
+	err = sink.Start(async)
+	if err != nil {
 		async.Close()
 
 		a.log.Error().

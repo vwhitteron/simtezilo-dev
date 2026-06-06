@@ -1,8 +1,10 @@
-package audio
+package audio_test
 
 import (
 	"math"
 	"testing"
+
+	"github.com/vwhitteron/simtezilo-dev/app/audio"
 )
 
 // sineSource emits a continuous, phase-continuous sine on every channel, so it
@@ -76,7 +78,7 @@ func TestResampler_SineNoTransientClicks(t *testing.T) {
 	)
 
 	src := &sineSource{rate: inRate, freq: freq, amp: amp, channels: 1}
-	res := NewResamplingSource(src, inRate, outRate, 1)
+	res := audio.NewResamplingSource(src, inRate, outRate, 1)
 
 	out := make([]float32, outRate) // 1 s of output
 	res.ReadInterleaved(out, 1)

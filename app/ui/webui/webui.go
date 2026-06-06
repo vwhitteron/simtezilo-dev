@@ -1178,7 +1178,7 @@ func (w *WebUI) handleSetConfig(response http.ResponseWriter, request *http.Requ
 	restartRequired := w.checkRestartRequired(configData)
 
 	// Apply configuration changes using setter methods
-	errors := w.applyConfigChanges(configData)
+	errors := w.applyConfigChanges(configData) //nolint:contextcheck // CheckExistingDownloads/CheckNow manage their own timeout context; threading request.Context here adds no value
 
 	if len(errors) > 0 {
 		w.log.Error().Strs("errors", errors).Msg("failed to apply some configuration changes")

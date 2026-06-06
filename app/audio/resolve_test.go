@@ -1,26 +1,30 @@
-package audio
+package audio_test
 
 import (
 	"errors"
 	"testing"
+
+	"github.com/vwhitteron/simtezilo-dev/app/audio"
 )
 
 // fakeBackend is a Backend whose only meaningful behaviour is ListDevices,
 // which ResolveOutputDevice depends on.
 type fakeBackend struct {
-	devices []Device
+	devices []audio.Device
 	err     error
 }
 
-func (f *fakeBackend) Name() string                   { return "fake" }
-func (f *fakeBackend) ListDevices() ([]Device, error) { return f.devices, f.err }
-func (f *fakeBackend) OpenSink(SinkConfig) (Sink, error) {
+func (f *fakeBackend) Name() string                         { return "fake" }
+func (f *fakeBackend) ListDevices() ([]audio.Device, error) { return f.devices, f.err }
+func (f *fakeBackend) OpenSink(audio.SinkConfig) (audio.Sink, error) { //nolint:ireturn // satisfies audio.Backend interface
 	return nil, errors.New("not implemented")
 }
 func (f *fakeBackend) Close() error { return nil }
 
 func TestResolveOutputDevice(t *testing.T) {
-	devices := []Device{
+	t.Parallel()
+
+	devices := []audio.Device{
 		{ID: "id-speakers", Name: "Speakers"},
 		{ID: "id-bt", Name: "WH-1000XM5"},
 		{ID: "id-dup-a", Name: "USB Audio"},
@@ -33,7 +37,7 @@ func TestResolveOutputDevice(t *testing.T) {
 		savedID string
 		want    string
 		listErr error
-		devices []Device
+		devices []audio.Device
 	}{
 		{name: "nothing saved -> default", want: ""},
 		{name: "unique name match", savedNm: "WH-1000XM5", savedID: "stale", want: "id-bt"},
@@ -47,18 +51,20 @@ func TestResolveOutputDevice(t *testing.T) {
 		{name: "list error falls back to saved id", savedNm: "WH-1000XM5", savedID: "saved", want: "saved", listErr: errors.New("boom")},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
 			devs := devices
-			if tc.devices != nil {
-				devs = tc.devices
+			if testCase.devices != nil {
+				devs = testCase.devices
 			}
 
-			b := &fakeBackend{devices: devs, err: tc.listErr}
+			b := &fakeBackend{devices: devs, err: testCase.listErr}
 
-			got := ResolveOutputDevice(b, tc.savedNm, tc.savedID)
-			if got != tc.want {
-				t.Fatalf("ResolveOutputDevice(%q, %q) = %q, want %q", tc.savedNm, tc.savedID, got, tc.want)
+			got := audio.ResolveOutputDevice(b, testCase.savedNm, testCase.savedID)
+			if got != testCase.want {
+				t.Fatalf("ResolveOutputDevice(%q, %q) = %q, want %q", testCase.savedNm, testCase.savedID, got, testCase.want)
 			}
 		})
 	}

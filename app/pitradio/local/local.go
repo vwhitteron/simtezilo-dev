@@ -150,39 +150,6 @@ func (o *Output) SetBackend(backend audio.Backend) {
 	o.hasPending = true
 }
 
-// applyPendingBackend installs any queued backend, closing the one it replaces.
-// It runs only on the task goroutine.
-func (o *Output) applyPendingBackend() {
-	o.mu.Lock()
-
-	if !o.hasPending {
-		o.mu.Unlock()
-
-		return
-	}
-
-	old := o.backend
-	o.backend = o.pendingBackend
-	o.pendingBackend = nil
-	o.hasPending = false
-
-	o.mu.Unlock()
-
-	if old != nil {
-		_ = old.Close()
-	}
-
-	o.log.Info().Str("backend", o.backend.Name()).Msg("pit-radio audio backend switched")
-}
-
-// currentBackend returns the active backend under the lock.
-func (o *Output) currentBackend() audio.Backend {
-	o.mu.Lock()
-	defer o.mu.Unlock()
-
-	return o.backend
-}
-
 // Send enqueues a message for local playback.
 func (o *Output) Send(message pitradio.Message) error {
 	select {
@@ -218,6 +185,39 @@ func (o *Output) Close() error {
 	return nil
 }
 
+// applyPendingBackend installs any queued backend, closing the one it replaces.
+// It runs only on the task goroutine.
+func (o *Output) applyPendingBackend() {
+	o.mu.Lock()
+
+	if !o.hasPending {
+		o.mu.Unlock()
+
+		return
+	}
+
+	old := o.backend
+	o.backend = o.pendingBackend
+	o.pendingBackend = nil
+	o.hasPending = false
+
+	o.mu.Unlock()
+
+	if old != nil {
+		_ = old.Close()
+	}
+
+	o.log.Info().Str("backend", o.backend.Name()).Msg("pit-radio audio backend switched")
+}
+
+// currentBackend returns the active backend under the lock.
+func (o *Output) currentBackend() audio.Backend { //nolint:ireturn // returns Backend interface by design; concrete type is private
+	o.mu.Lock()
+	defer o.mu.Unlock()
+
+	return o.backend
+}
+
 // process decodes a message to PCM and plays it on the configured device.
 func (o *Output) process(message pitradio.Message) {
 	mp3, err := o.decode(message)
@@ -234,7 +234,8 @@ func (o *Output) process(message pitradio.Message) {
 		return
 	}
 
-	if err := o.play(pcm); err != nil {
+	err = o.play(pcm)
+	if err != nil {
 		o.log.Error().Err(err).Msg("play pit-radio audio")
 	}
 }
@@ -269,9 +270,9 @@ func (o *Output) play(pcm codec.PCMFloat64) error {
 	// Resolve the device and sample rate at play time so a runtime change (e.g.
 	// the user picking a different output device in the web UI) takes effect on
 	// the next message without recreating the Output.
-	id := o.device
+	deviceID := o.device
 	if o.deviceFn != nil {
-		id = o.deviceFn()
+		deviceID = o.deviceFn()
 	}
 
 	name := o.deviceName
@@ -293,7 +294,7 @@ func (o *Output) play(pcm codec.PCMFloat64) error {
 
 	// Resolve by name (stable across backends and portaudio index reshuffles),
 	// with the stored ID as a tiebreaker.
-	device := audio.ResolveOutputDevice(backend, name, id)
+	device := audio.ResolveOutputDevice(backend, name, deviceID)
 
 	sink, err := backend.OpenSink(audio.SinkConfig{
 		DeviceID:   device,
@@ -308,7 +309,8 @@ func (o *Output) play(pcm codec.PCMFloat64) error {
 
 	rendered := o.render(pcm, sink.Channels(), rate)
 
-	if err := sink.Start(&bufferSource{buf: rendered, channels: sink.Channels()}); err != nil {
+	err = sink.Start(&bufferSource{buf: rendered, channels: sink.Channels()})
+	if err != nil {
 		return err
 	}
 
@@ -403,20 +405,20 @@ func (p *pcmSource) ReadInterleaved(buf []float32, channels int) (int, bool) {
 	frames := len(buf) / channels
 	srcFrames := len(p.samples) / p.srcChannels
 
-	for f := range frames {
-		for c := range channels {
-			var v float64
+	for frameIdx := range frames {
+		for channelIdx := range channels {
+			var sample float64
 
 			if p.pos < srcFrames {
-				sc := c
+				sc := channelIdx
 				if sc >= p.srcChannels {
 					sc = p.srcChannels - 1
 				}
 
-				v = p.samples[p.pos*p.srcChannels+sc]
+				sample = p.samples[p.pos*p.srcChannels+sc]
 			}
 
-			buf[f*channels+c] = float32(v)
+			buf[frameIdx*channels+channelIdx] = float32(sample)
 		}
 
 		p.pos++

@@ -39,7 +39,7 @@ type Manager interface {
 // Circuit provides circuit identification and lap tracking facilities.
 // Conforms with the circuit.Manager interface.
 type Circuit struct {
-	database                circuits.CircuitDB   // Circuit database for track identification
+	database                *circuits.CircuitDB  // Circuit database for track identification
 	log                     zerolog.Logger       // Logger instance
 	info                    circuits.CircuitInfo // Current circuit information
 	lap                     int16                // Current lap number being tracked
@@ -53,7 +53,7 @@ type Circuit struct {
 }
 
 // New creates a new Circuit instance with the provided logger and initializes the circuit database.
-func New(db circuits.CircuitDB, logger zerolog.Logger) (*Circuit, error) {
+func New(db *circuits.CircuitDB, logger zerolog.Logger) (*Circuit, error) {
 	return &Circuit{
 		database:                db,
 		log:                     logger.With().Str("package", "circuit").Logger(),

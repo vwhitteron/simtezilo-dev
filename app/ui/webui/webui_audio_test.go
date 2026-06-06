@@ -5,7 +5,6 @@ import (
 
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
-
 	appconfig "github.com/vwhitteron/simtezilo-dev/app/config"
 )
 
@@ -37,19 +36,19 @@ func TestApplyHapticsOutputConfig_RestartTriggers(t *testing.T) {
 		{"deviceName only", map[string]any{"deviceName": "Speakers"}, false},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			w := newAudioTestWebUI()
+			webUI := newAudioTestWebUI()
 
 			called := false
-			w.onHapticsOutputChanged = func() { called = true }
+			webUI.onHapticsOutputChanged = func() { called = true }
 
-			errs := w.applyHapticsOutputConfig(tc.patch)
+			errs := webUI.applyHapticsOutputConfig(testCase.patch)
 
 			assert.Empty(t, errs)
-			assert.Equal(t, tc.wantRestart, called)
+			assert.Equal(t, testCase.wantRestart, called)
 		})
 	}
 }
@@ -59,16 +58,16 @@ func TestApplyHapticsOutputConfig_RestartTriggers(t *testing.T) {
 func TestApplyHapticsOutputConfig_NoChangeNoRestart(t *testing.T) {
 	t.Parallel()
 
-	w := newAudioTestWebUI()
+	webUI := newAudioTestWebUI()
 
 	called := false
-	w.onHapticsOutputChanged = func() { called = true }
+	webUI.onHapticsOutputChanged = func() { called = true }
 
-	errs := w.applyHapticsOutputConfig(map[string]any{
-		"device":     w.config.GetAudioHapticsDevice(),
-		"channels":   float64(w.config.GetAudioHapticsChannels()),
-		"sampleRate": float64(w.config.GetAudioHapticsSampleRate()),
-		"latencyMs":  float64(w.config.GetAudioHapticsLatencyMs()),
+	errs := webUI.applyHapticsOutputConfig(map[string]any{
+		"device":     webUI.config.GetAudioHapticsDevice(),
+		"channels":   float64(webUI.config.GetAudioHapticsChannels()),
+		"sampleRate": float64(webUI.config.GetAudioHapticsSampleRate()),
+		"latencyMs":  float64(webUI.config.GetAudioHapticsLatencyMs()),
 	})
 
 	assert.Empty(t, errs)
@@ -112,17 +111,17 @@ func TestApplyHardwareConfig_BackendChangeTrigger(t *testing.T) {
 func TestApplyAudioConfig_PersistsDeviceName(t *testing.T) {
 	t.Parallel()
 
-	w := newAudioTestWebUI()
+	webUI := newAudioTestWebUI()
 
-	assert.Empty(t, w.applyHapticsOutputConfig(map[string]any{
+	assert.Empty(t, webUI.applyHapticsOutputConfig(map[string]any{
 		"device": "5", "deviceName": "Speakers",
 	}))
-	assert.Equal(t, "5", w.config.GetAudioHapticsDevice())
+	assert.Equal(t, "5", webUI.config.GetAudioHapticsDevice())
 	assert.Equal(t, "Speakers", webUI.config.GetAudioHapticsDeviceName())
 
-	assert.Empty(t, w.applyPitRadioAudioConfig(map[string]any{
+	assert.Empty(t, webUI.applyPitRadioAudioConfig(map[string]any{
 		"device": "2", "deviceName": "Headphones",
 	}))
-	assert.Equal(t, "2", w.config.GetAudioPitRadioDevice())
+	assert.Equal(t, "2", webUI.config.GetAudioPitRadioDevice())
 	assert.Equal(t, "Headphones", webUI.config.GetAudioPitRadioDeviceName())
 }

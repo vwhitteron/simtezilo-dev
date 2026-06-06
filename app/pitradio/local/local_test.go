@@ -1,4 +1,4 @@
-package local
+package local //nolint:testpackage // white-box: exercises unexported methods currentBackend and applyPendingBackend
 
 import (
 	"errors"
@@ -7,7 +7,6 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
 	"github.com/vwhitteron/simtezilo-dev/app/audio"
 )
 
@@ -21,10 +20,15 @@ type fakeBackend struct {
 
 func (f *fakeBackend) Name() string                         { return f.name }
 func (f *fakeBackend) ListDevices() ([]audio.Device, error) { return nil, nil }
-func (f *fakeBackend) OpenSink(audio.SinkConfig) (audio.Sink, error) {
+func (f *fakeBackend) OpenSink(audio.SinkConfig) (audio.Sink, error) { //nolint:ireturn // satisfies audio.Backend interface
 	return nil, errors.New("not used")
 }
-func (f *fakeBackend) Close() error { f.closed++; return nil }
+
+func (f *fakeBackend) Close() error {
+	f.closed++
+
+	return nil
+}
 
 // TestOutput_BackendSwap verifies a queued backend swap only takes effect when
 // applied (as the task goroutine does before each message), and that the

@@ -1,4 +1,4 @@
-package config
+package config //nolint:testpackage // white-box: uses newTestConfig from config_test.go
 
 import (
 	"testing"
@@ -30,14 +30,14 @@ func TestAudioSettersDoNotRequireRestart(t *testing.T) {
 		{"pit radio sample rate", func(c *Config) { c.SetAudioPitRadioSampleRate(44100) }},
 	}
 
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			cfg := newTestConfig()
 			require.False(t, cfg.IsRestartRequired(), "fresh config should not require a restart")
 
-			tc.apply(cfg)
+			testCase.apply(cfg)
 
 			assert.False(t, cfg.IsRestartRequired(),
 				"live-applied audio setting must not require a restart")

@@ -180,7 +180,8 @@ func (w *WebUI) handleAudioTest(response http.ResponseWriter, request *http.Requ
 
 	reqData.Channel = -1
 
-	if err := json.NewDecoder(request.Body).Decode(&reqData); err != nil {
+	err := json.NewDecoder(request.Body).Decode(&reqData)
+	if err != nil {
 		response.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(response).Encode(map[string]string{ //nolint:errchkjson // simple encoding
 			"status":  "error",
@@ -232,7 +233,8 @@ func (w *WebUI) handleAudioTest(response http.ResponseWriter, request *http.Requ
 		SampleRate: reqData.SampleRate,
 	}
 
-	if err := audio.PlayTestTone(backend, cfg, reqData.Channel, reqData.Frequency, testToneDuration); err != nil {
+	err = audio.PlayTestTone(backend, cfg, reqData.Channel, reqData.Frequency, testToneDuration)
+	if err != nil {
 		response.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(response).Encode(map[string]string{ //nolint:errchkjson // simple encoding
 			"status":  "error",

@@ -392,103 +392,7 @@ func (m *StereoMixer) MixToMaster(length int) {
 
 	m.mu.RLock()
 
-	// Check if calibration mode is enabled or stopping (waiting for zero crossing)
-	if m.calibrator != nil && (m.calibrator.IsEnabled() || m.calibrator.IsStopping()) {
-		frequency := m.calibrator.GetSweepFrequency() // Use sweep frequency if sweeping, otherwise static frequency
-		isStopping := m.calibrator.IsStopping()
-
-		// Get per-channel EQ amplitude multipliers
-		eqAmplitudes := make([]float64, m.numOutputChannels)
-		for channelIndex := range m.numOutputChannels {
-			eqAmplitudes[channelIndex] = 1.0
-
-			if m.config.GetSynthChannelEqEnabled(channelIndex) {
-				curve, minFreq, resolution := m.config.GetSynthChannelEqCurve(channelIndex)
-				if len(curve) > 0 {
-					// Calculate bucket index for this frequency
-					index := int((frequency - minFreq) / resolution)
-					// Apply EQ if frequency is within range
-					if index >= 0 && index < len(curve) {
-						eqAmplitudes[channelIndex] = curve[index]
-					}
-				}
-			}
-		}
-
-		// Create per-channel output buffers
-		channelSamples := make([][]float64, m.numOutputChannels)
-		for ch := range m.numOutputChannels {
-			channelSamples[ch] = make([]float64, length)
-		}
-
-		var prevPhase float64
-
-		// Generate sine wave samples
-		for offset := range outSamples {
-			prevPhase = m.sineWavePhaseL
-
-			// Generate base sine wave (mono source)
-			baseSample := math.Sin(m.sineWavePhaseL)
-			outSamples[offset] = baseSample // Master gets unmodified
-
-			// Apply per-channel EQ
-			for ch := range m.numOutputChannels {
-				channelSamples[ch][offset] = baseSample * eqAmplitudes[ch]
-			}
-
-			// Increment phase
-			m.sineWavePhaseL += 2 * math.Pi * frequency / float64(m.sampleRateHz)
-
-			// Keep phase in reasonable range
-			if m.sineWavePhaseL > 2*math.Pi {
-				m.sineWavePhaseL -= 2 * math.Pi
-			}
-
-			// If stopping, check for zero crossing
-			if isStopping {
-				// Detect zero crossing: previous phase was negative, current is positive
-				// or we wrapped around through zero
-				prevSin := math.Sin(prevPhase)
-				currSin := math.Sin(m.sineWavePhaseL)
-
-				if prevSin <= 0 && currSin >= 0 {
-					// Zero crossing detected - stop here
-					outSamples[offset] = 0 // End on zero to ensure clean stop
-					for ch := range m.numOutputChannels {
-						channelSamples[ch][offset] = 0
-					}
-
-					m.mu.RUnlock()
-					m.calibrator.ConfirmStopped()
-					// Pad remaining samples with zeros
-					for j := offset + 1; j < len(outSamples); j++ {
-						outSamples[j] = 0
-						for ch := range m.numOutputChannels {
-							channelSamples[ch][j] = 0
-						}
-					}
-
-					// Write calibration output to all channels
-					m.channels[ChannelMaster].Write(outSamples, 1.0, 0, true)
-
-					for ch := range m.numOutputChannels {
-						m.channels[OutputChannelName(ch)].Write(channelSamples[ch], 1.0, 0, true)
-					}
-
-					return
-				}
-			}
-		}
-
-		m.mu.RUnlock()
-
-		// Write calibration output to all channels
-		m.channels[ChannelMaster].Write(outSamples, 1.0, 0, true)
-
-		for ch := range m.numOutputChannels {
-			m.channels[OutputChannelName(ch)].Write(channelSamples[ch], 1.0, 0, true)
-		}
-
+	if m.mixCalibratorOutput(outSamples) {
 		return
 	}
 
@@ -749,6 +653,94 @@ func (m *StereoMixer) SetSilenced(silenced bool) {
 	defer m.mu.Unlock()
 
 	m.silenced = silenced
+}
+
+// mixCalibratorOutput handles output generation when the calibrator is active or stopping.
+// It must be called with m.mu.RLock held; it releases the lock before returning.
+// Returns true if calibration output was generated (caller must return immediately).
+func (m *StereoMixer) mixCalibratorOutput(outSamples []float64) bool { //nolint:gocognit,cyclop // calibration algorithm; complexity is inherent, not incidental
+	if m.calibrator == nil || (!m.calibrator.IsEnabled() && !m.calibrator.IsStopping()) {
+		return false
+	}
+
+	frequency := m.calibrator.GetSweepFrequency()
+	isStopping := m.calibrator.IsStopping()
+	length := len(outSamples)
+
+	// Compute per-channel EQ amplitude multipliers.
+	eqAmplitudes := make([]float64, m.numOutputChannels)
+	for channelIndex := range m.numOutputChannels {
+		eqAmplitudes[channelIndex] = 1.0
+
+		if m.config.GetSynthChannelEqEnabled(channelIndex) {
+			curve, minFreq, resolution := m.config.GetSynthChannelEqCurve(channelIndex)
+			if len(curve) > 0 {
+				index := int((frequency - minFreq) / resolution)
+				if index >= 0 && index < len(curve) {
+					eqAmplitudes[channelIndex] = curve[index]
+				}
+			}
+		}
+	}
+
+	channelSamples := make([][]float64, m.numOutputChannels)
+	for ch := range m.numOutputChannels {
+		channelSamples[ch] = make([]float64, length)
+	}
+
+	var prevPhase float64
+
+	for offset := range outSamples {
+		prevPhase = m.sineWavePhaseL
+
+		baseSample := math.Sin(m.sineWavePhaseL)
+		outSamples[offset] = baseSample
+
+		for ch := range m.numOutputChannels {
+			channelSamples[ch][offset] = baseSample * eqAmplitudes[ch]
+		}
+
+		m.sineWavePhaseL += 2 * math.Pi * frequency / float64(m.sampleRateHz)
+		if m.sineWavePhaseL > 2*math.Pi {
+			m.sineWavePhaseL -= 2 * math.Pi
+		}
+
+		// Detect zero crossing when stopping: end on zero for a clean stop.
+		if isStopping && math.Sin(prevPhase) <= 0 && math.Sin(m.sineWavePhaseL) >= 0 {
+			outSamples[offset] = 0
+			for ch := range m.numOutputChannels {
+				channelSamples[ch][offset] = 0
+			}
+
+			m.mu.RUnlock()
+			m.calibrator.ConfirmStopped()
+
+			for j := offset + 1; j < length; j++ {
+				outSamples[j] = 0
+				for ch := range m.numOutputChannels {
+					channelSamples[ch][j] = 0
+				}
+			}
+
+			m.channels[ChannelMaster].Write(outSamples, 1.0, 0, true)
+
+			for ch := range m.numOutputChannels {
+				m.channels[OutputChannelName(ch)].Write(channelSamples[ch], 1.0, 0, true)
+			}
+
+			return true
+		}
+	}
+
+	m.mu.RUnlock()
+
+	m.channels[ChannelMaster].Write(outSamples, 1.0, 0, true)
+
+	for ch := range m.numOutputChannels {
+		m.channels[OutputChannelName(ch)].Write(channelSamples[ch], 1.0, 0, true)
+	}
+
+	return true
 }
 
 // mixEngineChannelMulti mixes the engine channel into all output samples with lower priority.

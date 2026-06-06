@@ -20,12 +20,12 @@ const beepChannels = 2
 // keeps running and a later Play resumes output. The sample rate and buffer size
 // are fixed at first init for the process lifetime.
 var (
-	speakerMu       sync.Mutex
-	speakerInited   bool
-	speakerInitRate beep.SampleRate
+	speakerMu       sync.Mutex      //nolint:gochecknoglobals // process-global; oto context cannot be recreated
+	speakerInited   bool            //nolint:gochecknoglobals // process-global; oto context cannot be recreated
+	speakerInitRate beep.SampleRate //nolint:gochecknoglobals // process-global; oto context cannot be recreated
 )
 
-func init() {
+func init() { //nolint:gochecknoinits // registers the beep backend factory; init is the correct pattern for optional backend registration
 	registerBackend(BackendBeep, func(log zerolog.Logger) (Backend, error) {
 		return &beepBackend{log: log.With().Str("backend", BackendBeep).Logger()}, nil
 	})
@@ -51,7 +51,7 @@ func (b *beepBackend) ListDevices() ([]Device, error) {
 	}}, nil
 }
 
-func (b *beepBackend) OpenSink(cfg SinkConfig) (Sink, error) {
+func (b *beepBackend) OpenSink(cfg SinkConfig) (Sink, error) { //nolint:ireturn // implements Backend interface; returning Sink interface is required by the contract
 	rate := beep.SampleRate(cfg.SampleRate)
 
 	bufSize := rate.N(time.Duration(cfg.LatencyMs) * time.Millisecond)
@@ -79,7 +79,8 @@ func (s *beepSink) Start(src SampleSource) error {
 	defer speakerMu.Unlock()
 
 	if !speakerInited {
-		if err := speaker.Init(s.rate, s.bufSize); err != nil {
+		err := speaker.Init(s.rate, s.bufSize)
+		if err != nil {
 			return err
 		}
 
@@ -115,27 +116,27 @@ type beepStreamerAdapter struct {
 }
 
 func (a *beepStreamerAdapter) Stream(samples [][2]float64) (int, bool) {
-	n := len(samples)
+	sampleCount := len(samples)
 
-	if cap(a.buf) < n*beepChannels {
-		a.buf = make([]float32, n*beepChannels)
+	if cap(a.buf) < sampleCount*beepChannels {
+		a.buf = make([]float32, sampleCount*beepChannels)
 	}
 
-	buf := a.buf[:n*beepChannels]
+	buf := a.buf[:sampleCount*beepChannels]
 
-	frames, ok := a.src.ReadInterleaved(buf, beepChannels)
+	frames, readOk := a.src.ReadInterleaved(buf, beepChannels)
 
-	for i := range frames {
-		samples[i][0] = float64(buf[i*beepChannels])
-		samples[i][1] = float64(buf[i*beepChannels+1])
+	for frameIdx := range frames {
+		samples[frameIdx][0] = float64(buf[frameIdx*beepChannels])
+		samples[frameIdx][1] = float64(buf[frameIdx*beepChannels+1])
 	}
 
-	for i := frames; i < n; i++ {
-		samples[i][0] = 0
-		samples[i][1] = 0
+	for frameIdx := frames; frameIdx < sampleCount; frameIdx++ {
+		samples[frameIdx][0] = 0
+		samples[frameIdx][1] = 0
 	}
 
-	return n, ok
+	return sampleCount, readOk
 }
 
 func (a *beepStreamerAdapter) Err() error { return nil }

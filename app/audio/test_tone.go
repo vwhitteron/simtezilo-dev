@@ -27,7 +27,7 @@ func (t *testToneSource) ReadInterleaved(out []float32, channels int) (int, bool
 	frames := len(out) / channels
 	inc := 2 * math.Pi * t.freq / float64(t.sampleRate)
 
-	for f := range frames {
+	for frameIdx := range frames {
 		var sample float32
 		if t.remaining > 0 {
 			sample = float32(math.Sin(t.phase) * t.gain)
@@ -42,9 +42,9 @@ func (t *testToneSource) ReadInterleaved(out []float32, channels int) (int, bool
 
 		for c := range channels {
 			if t.channel < 0 || c == t.channel {
-				out[f*channels+c] = sample
+				out[frameIdx*channels+c] = sample
 			} else {
-				out[f*channels+c] = 0
+				out[frameIdx*channels+c] = 0
 			}
 		}
 	}
@@ -80,7 +80,8 @@ func PlayTestTone(backend Backend, cfg SinkConfig, channel int, freq float64, du
 		remaining:  int(float64(cfg.SampleRate) * dur.Seconds()),
 	}
 
-	if err := sink.Start(src); err != nil {
+	err = sink.Start(src)
+	if err != nil {
 		return err
 	}
 

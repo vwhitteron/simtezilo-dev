@@ -42,7 +42,7 @@ func NewAsyncSource(inner SampleSource, channels, capacityFrames, blockFrames in
 		capacityFrames = blockFrames * 2
 	}
 
-	a := &AsyncSource{
+	source := &AsyncSource{
 		inner:       inner,
 		channels:    channels,
 		blockFrames: blockFrames,
@@ -50,18 +50,55 @@ func NewAsyncSource(inner SampleSource, channels, capacityFrames, blockFrames in
 		scratch:     make([]float32, blockFrames*channels),
 		done:        make(chan struct{}),
 	}
-	a.notFull = sync.NewCond(&a.mu)
+	source.notFull = sync.NewCond(&source.mu)
 
 	// Pre-fill the ring with silence so the device callback has something to
 	// play immediately and, crucially, the producer is not pulled until the ring
 	// drains. Pulling the synth to fill the ring at startup would drain the
 	// upstream mixer buffers before any haptic data exists — a burst of underruns
 	// heard as clicks on the first audio. The ring is already zeroed by make.
-	a.count = len(a.ring)
+	source.count = len(source.ring)
 
-	go a.produce()
+	go source.produce()
 
-	return a
+	return source
+}
+
+// Close stops the producer goroutine and waits for it to exit. It must be called
+// after the consuming Sink has stopped pulling.
+func (a *AsyncSource) Close() {
+	a.mu.Lock()
+	a.closed = true
+	a.mu.Unlock()
+	a.notFull.Broadcast()
+
+	<-a.done
+}
+
+// ReadInterleaved copies buffered samples to out, padding with silence on
+// underrun. It performs no synthesis or allocation and never blocks, so it is
+// safe on a realtime audio callback.
+func (a *AsyncSource) ReadInterleaved(out []float32, channels int) (int, bool) {
+	a.mu.Lock()
+
+	sampleCount := min(len(out), a.count)
+
+	for i := 0; i < sampleCount; {
+		c := copy(out[i:sampleCount], a.ring[a.rpos:])
+		a.rpos = (a.rpos + c) % len(a.ring)
+		i += c
+	}
+
+	a.count -= sampleCount
+	a.mu.Unlock()
+
+	a.notFull.Signal()
+
+	for i := sampleCount; i < len(out); i++ {
+		out[i] = 0
+	}
+
+	return len(out) / channels, true
 }
 
 // freeFrames reports how many input frames can still be written. Caller holds mu.
@@ -77,6 +114,7 @@ func (a *AsyncSource) produce() {
 	for {
 		// Wait until there is room for a full block, then synthesise off-lock.
 		a.mu.Lock()
+
 		for a.freeFrames() < a.blockFrames && !a.closed {
 			a.notFull.Wait()
 		}
@@ -86,19 +124,20 @@ func (a *AsyncSource) produce() {
 
 			return
 		}
+
 		a.mu.Unlock()
 
-		n, ok := a.inner.ReadInterleaved(a.scratch, a.channels)
+		frames, readOk := a.inner.ReadInterleaved(a.scratch, a.channels)
 
 		// The consumer only removes samples between the unlock above and the
 		// lock below, so the free space measured above is a safe lower bound and
 		// the synthesised block always fits.
 		a.mu.Lock()
-		a.writeRing(a.scratch[:n*a.channels])
+		a.writeRing(a.scratch[:frames*a.channels])
 		closed := a.closed
 		a.mu.Unlock()
 
-		if !ok || closed {
+		if !readOk || closed {
 			return
 		}
 	}
@@ -114,44 +153,4 @@ func (a *AsyncSource) writeRing(samples []float32) {
 		a.count += n
 		wpos = (wpos + n) % len(a.ring)
 	}
-}
-
-// ReadInterleaved copies buffered samples to out, padding with silence on
-// underrun. It performs no synthesis or allocation and never blocks, so it is
-// safe on a realtime audio callback.
-func (a *AsyncSource) ReadInterleaved(out []float32, channels int) (int, bool) {
-	a.mu.Lock()
-
-	n := len(out)
-	if n > a.count {
-		n = a.count
-	}
-
-	for i := 0; i < n; {
-		c := copy(out[i:n], a.ring[a.rpos:])
-		a.rpos = (a.rpos + c) % len(a.ring)
-		i += c
-	}
-
-	a.count -= n
-	a.mu.Unlock()
-
-	a.notFull.Signal()
-
-	for i := n; i < len(out); i++ {
-		out[i] = 0
-	}
-
-	return len(out) / channels, true
-}
-
-// Close stops the producer goroutine and waits for it to exit. It must be called
-// after the consuming Sink has stopped pulling.
-func (a *AsyncSource) Close() {
-	a.mu.Lock()
-	a.closed = true
-	a.mu.Unlock()
-	a.notFull.Broadcast()
-
-	<-a.done
 }
