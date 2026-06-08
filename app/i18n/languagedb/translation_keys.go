@@ -49,6 +49,10 @@ const (
 	UIMenuSystemSetupmode          Key = "ui.menu.system.setupmode"
 	UIMenuSystemDisplayOrientation Key = "ui.menu.system.displayorientation"
 
+	UIMenuBluetooth       Key = "ui.menu.bluetooth"
+	UIMenuBluetoothDevice Key = "ui.menu.bluetooth.device"
+	UIMenuBluetoothToggle Key = "ui.menu.bluetooth.toggle"
+
 	UIMenuSynth                          Key = "ui.menu.synth"
 	UIMenuSynthSampleRates               Key = "ui.menu.synth.samplerates"
 	UIMenuSynthInternalSampleRate        Key = "ui.menu.synth.internalsamplerate"

@@ -12,11 +12,22 @@ import (
 	"github.com/rs/zerolog"
 )
 
+// ErrHelperUnavailable is returned when a platform helper command is requested
+// but no helper binary path is configured (e.g. on non-simtezilo builds).
+var ErrHelperUnavailable = errors.New("platform helper not available")
+
 // Command represents a platform management command.
 type Command string
 
 // Platform management commands.
 const (
+	BTConnect      Command = "bt-connect"
+	BTDisconnect   Command = "bt-disconnect"
+	BTList         Command = "bt-list"
+	BTPair         Command = "bt-pair"
+	BTRemove       Command = "bt-remove"
+	BTScan         Command = "bt-scan"
+	BTStatus       Command = "bt-status"
 	Init           Command = "init"
 	ModeRun        Command = "mode-run"
 	ModeSetup      Command = "mode-setup"
@@ -71,15 +82,40 @@ type CmdNetworkInfo struct {
 	Security string `json:"security"`
 }
 
+// CmdBTAdapter represents the state of the Bluetooth adapter returned by the
+// bt-status/bt-list/bt-scan commands.
+type CmdBTAdapter struct {
+	Present     bool   `json:"present"`
+	Powered     bool   `json:"powered"`
+	Discovering bool   `json:"discovering"`
+	Address     string `json:"address,omitempty"`
+}
+
+// CmdBTDevice represents a single Bluetooth device as reported by the helper.
+// Type is a backend-agnostic, semantic device classification (e.g. speaker,
+// headphones, headset, audio) that the UI maps to an icon; it deliberately does
+// not expose any backend-specific presentation hint.
+type CmdBTDevice struct {
+	Address   string `json:"address"`
+	Name      string `json:"name"`
+	Type      string `json:"type,omitempty"`
+	Paired    bool   `json:"paired"`
+	Trusted   bool   `json:"trusted"`
+	Connected bool   `json:"connected"`
+	RSSI      int16  `json:"rssi,omitempty"`
+}
+
 // CmdResponse represents a response from the setup CLI tool.
 // Different commands populate different optional fields.
 type CmdResponse struct {
-	Result   Result           `json:"result"`
-	Error    string           `json:"error,omitempty"`
-	Action   Command          `json:"action,omitempty"`
-	Networks []CmdNetworkInfo `json:"networks,omitempty"`
-	Status   *CmdStatus       `json:"status,omitempty"`
-	WiFi     *CmdNetworkInfo  `json:"wifi,omitempty"`
+	Result    Result           `json:"result"`
+	Error     string           `json:"error,omitempty"`
+	Action    Command          `json:"action,omitempty"`
+	Networks  []CmdNetworkInfo `json:"networks,omitempty"`
+	Status    *CmdStatus       `json:"status,omitempty"`
+	WiFi      *CmdNetworkInfo  `json:"wifi,omitempty"`
+	Adapter   *CmdBTAdapter    `json:"adapter,omitempty"`
+	BTDevices []CmdBTDevice    `json:"btDevices,omitempty"`
 }
 
 // RunCommand executes a platform management command with optional input and unmarshals the response.

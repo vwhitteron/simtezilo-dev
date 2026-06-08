@@ -786,6 +786,7 @@
     <script src="/js/navigation.js"></script>
     <script src="/js/settings.js"></script>
     <script src="/js/audio-settings.js"></script>
+    <script src="/js/bluetooth-settings.js"></script>
     <title>Settings - Simtezilo</title>
 </head>
 
@@ -820,6 +821,12 @@
                                 <a class="settings-nav-link" data-section="system">
                                     <span class="icon" data-icon="layer-group"></span>
                                     <span data-i18n="runmode.settings.system.title">System</span>
+                                </a>
+                            </li>
+                            <li class="settings-nav-item" id="bluetooth-nav-item" style="display: none;">
+                                <a class="settings-nav-link" data-section="bluetooth">
+                                    <span class="icon" data-icon="bluetooth"></span>
+                                    <span data-i18n="runmode.settings.bluetooth.title">Bluetooth</span>
                                 </a>
                             </li>
                             <li class="settings-nav-item">
@@ -1346,6 +1353,55 @@
                                         </button>
                                     </div>
                                 </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Bluetooth Section -->
+                <div class="settings-section-card" data-section-content="bluetooth">
+                    <div class="card">
+                        <div class="card-body">
+
+                            <h5 class="mb-3"><span class="icon" data-icon="bluetooth"></span><span
+                                    data-i18n="runmode.settings.bluetooth.title">Bluetooth</span></h5>
+
+                            <div class="row g-3 mb-3 align-items-center">
+                                <div class="col-auto">
+                                    <span id="bluetooth-adapter-status" class="text-muted small">Adapter: unknown</span>
+                                </div>
+                                <div class="col-auto ms-auto">
+                                    <button type="button" id="bluetooth-scan" class="btn btn-outline-primary">
+                                        <span data-i18n="runmode.settings.bluetooth.scan">Scan</span>
+                                    </button>
+                                    <span id="bluetooth-scan-status" class="ms-2 small text-muted"></span>
+                                </div>
+                            </div>
+
+                            <div class="table-responsive">
+                                <table class="table table-sm align-middle">
+                                    <thead>
+                                        <tr>
+                                            <th data-i18n="runmode.settings.bluetooth.device">Device</th>
+                                            <th data-i18n="runmode.settings.bluetooth.address">Address</th>
+                                            <th data-i18n="runmode.settings.bluetooth.status">Status</th>
+                                            <th class="text-end" data-i18n="runmode.settings.bluetooth.actions">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="bluetooth-device-list">
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div id="bluetooth-empty" class="text-muted small" style="display: none;"
+                                data-i18n="runmode.settings.bluetooth.empty">
+                                No devices found. Press Scan to discover nearby devices.
+                            </div>
+
+                            <div class="mb-3 mt-3">
+                                <small class="text-muted">
+                                    <span class="icon icon-sm me-1" data-icon="circle-question"></span>
+                                    <span data-i18n="runmode.settings.bluetooth.hint">Pair a Bluetooth audio device to use it as a haptics or pit radio output. Connected devices appear in the audio device lists.</span>
+                                </small>
                             </div>
                         </div>
                     </div>

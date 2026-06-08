@@ -91,9 +91,11 @@ func main() { //nolint:cyclop // easy enough to understand
 		platformManager.log = platformManager.log.Level(level).With().Logger()
 	}
 
-	if len(flag.Args()) == 1 {
+	switch len(flag.Args()) {
+	case 1, 2:
+		// One arg is a plain command; two args is "help <command>".
 		action = flag.Arg(0)
-	} else {
+	default:
 		platformManager.log.Debug().Int("count", len(flag.Args())).Msg("Invalid arg count")
 	}
 
@@ -132,10 +134,28 @@ func main() { //nolint:cyclop // easy enough to understand
 		exitCode = platformManager.updateRollback()
 	case platform.SignalStart.String():
 		exitCode = platformManager.signalStartupSuccess()
+	case platform.BTStatus.String():
+		exitCode = platformManager.btStatus()
+	case platform.BTList.String():
+		exitCode = platformManager.btList()
+	case platform.BTScan.String():
+		exitCode = platformManager.btScan()
+	case platform.BTConnect.String():
+		exitCode = platformManager.btConnect()
+	case platform.BTDisconnect.String():
+		exitCode = platformManager.btDisconnect()
+	case platform.BTPair.String():
+		exitCode = platformManager.btPair()
+	case platform.BTRemove.String():
+		exitCode = platformManager.btRemove()
 	case "version":
 		exitCode = printVersion()
 	case "help":
-		fallthrough
+		if len(flag.Args()) > 1 {
+			exitCode = printCommandHelp(flag.Arg(1))
+		} else {
+			exitCode = printUsage()
+		}
 	default:
 		exitCode = printUsage()
 	}
@@ -161,28 +181,65 @@ func printUsage() exitcode.Code {
 	fmt.Fprintf(os.Stderr, "  setup-enable      Enable setup mode flag\n")
 	fmt.Fprintf(os.Stderr, "  ssh-enable        Enable SSH service\n")
 	fmt.Fprintf(os.Stderr, "  ssh-disable       Disable SSH service\n")
-	fmt.Fprintf(os.Stderr, "  ssh-provision     Provision SSH access\n")
+	fmt.Fprintf(os.Stderr, "  ssh-provision     Provision SSH access [stdin]\n")
 	fmt.Fprintf(os.Stderr, "  status            Check current environment status\n")
 	fmt.Fprintf(os.Stderr, "  update-apply      Apply a pending update (extracts, installs, swaps binaries)\n")
 	fmt.Fprintf(os.Stderr, "  update-rollback   Rollback to the previous version\n")
 	fmt.Fprintf(os.Stderr, "  version           Print version information\n")
 	fmt.Fprintf(os.Stderr, "  wifi-access       Provide the network access details for the setup mode network\n")
-	fmt.Fprintf(os.Stderr, "  wifi-provision    Provision network connection\n")
+	fmt.Fprintf(os.Stderr, "  wifi-provision    Provision network connection [stdin]\n")
 	fmt.Fprintf(os.Stderr, "  wifi-scan         Scan for available WiFi networks\n")
 	fmt.Fprintf(os.Stderr, "  signal-start      Signal successful startup\n")
-	fmt.Fprintf(os.Stderr, "\n  provision takes JSON on stdin with the following format:\n")
-	fmt.Fprintf(os.Stderr, "  [{\n")
-	fmt.Fprintf(os.Stderr, `    "ssid":"<string>",`+"\n")
-	fmt.Fprintf(os.Stderr, `    "psk":"<string>",`+"\n")
-	fmt.Fprintf(os.Stderr, `    "security":"<wpa2|wpa3>",`+"\n")
-	fmt.Fprintf(os.Stderr, `    "method":"<dhcp|static>",`+"\n")
-	fmt.Fprintf(os.Stderr, `    "ip":"<address>",`+"\n")
-	fmt.Fprintf(os.Stderr, `    "prefix":"<bits>",`+"\n")
-	fmt.Fprintf(os.Stderr, `    "gateway":"<address>",`+"\n")
-	fmt.Fprintf(os.Stderr, `    "dns":"<address>"`+"\n")
-	fmt.Fprintf(os.Stderr, "  }]\n")
+	fmt.Fprintf(os.Stderr, "  bt-status         Report Bluetooth adapter presence and power state\n")
+	fmt.Fprintf(os.Stderr, "  bt-list           List paired and connected Bluetooth devices\n")
+	fmt.Fprintf(os.Stderr, "  bt-scan           Scan for nearby Bluetooth devices\n")
+	fmt.Fprintf(os.Stderr, "  bt-connect        Connect a paired Bluetooth device [stdin]\n")
+	fmt.Fprintf(os.Stderr, "  bt-disconnect     Disconnect a Bluetooth device [stdin]\n")
+	fmt.Fprintf(os.Stderr, "  bt-pair           Pair, trust and connect a Bluetooth device [stdin]\n")
+	fmt.Fprintf(os.Stderr, "  bt-remove         Forget a Bluetooth device [stdin]\n")
+	fmt.Fprintf(os.Stderr, "\n  [stdin] reads a payload on stdin. Run '%s help <command>' for the format.\n", os.Args[0])
 
 	return exitcode.CommandUsageErr
+}
+
+// printCommandHelp prints detailed usage for a single command, including the
+// payload format for commands that read from stdin. Commands without a stdin
+// payload fall back to the general usage output.
+func printCommandHelp(command string) exitcode.Code {
+	switch command {
+	case platform.SSHProvision.String():
+		fmt.Fprintf(os.Stderr, "Usage: %s ssh-provision\n\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "Provision SSH access for the '%s' user.\n", sshUser)
+		fmt.Fprintf(os.Stderr, "Reads a single SSH public key (OpenSSH authorized_keys format) on stdin:\n\n")
+		fmt.Fprintf(os.Stderr, "  ssh-ed25519 AAAAC3Nz...key... user@host\n")
+	case platform.WifiProvision.String():
+		fmt.Fprintf(os.Stderr, "Usage: %s wifi-provision\n\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "Provision the run mode WiFi connection.\n")
+		fmt.Fprintf(os.Stderr, "Reads JSON on stdin with the following format:\n\n")
+		fmt.Fprintf(os.Stderr, "  [{\n")
+		fmt.Fprintf(os.Stderr, `    "ssid":"<string>",`+"\n")
+		fmt.Fprintf(os.Stderr, `    "psk":"<string>",`+"\n")
+		fmt.Fprintf(os.Stderr, `    "security":"<wpa2|wpa3>",`+"\n")
+		fmt.Fprintf(os.Stderr, `    "method":"<dhcp|static>",`+"\n")
+		fmt.Fprintf(os.Stderr, `    "ip":"<address>",`+"\n")
+		fmt.Fprintf(os.Stderr, `    "prefix":"<bits>",`+"\n")
+		fmt.Fprintf(os.Stderr, `    "gateway":"<address>",`+"\n")
+		fmt.Fprintf(os.Stderr, `    "dns":"<address>"`+"\n")
+		fmt.Fprintf(os.Stderr, "  }]\n")
+	case platform.BTConnect.String(), platform.BTDisconnect.String(),
+		platform.BTPair.String(), platform.BTRemove.String():
+		fmt.Fprintf(os.Stderr, "Usage: %s %s\n\n", os.Args[0], command)
+		fmt.Fprintf(os.Stderr, "Reads JSON on stdin identifying the target device by address:\n\n")
+		fmt.Fprintf(os.Stderr, "  {\n")
+		fmt.Fprintf(os.Stderr, `    "address":"<AA:BB:CC:DD:EE:FF>"`+"\n")
+		fmt.Fprintf(os.Stderr, "  }\n")
+	default:
+		fmt.Fprintf(os.Stderr, "No additional help available for '%s'.\n\n", command)
+
+		return printUsage()
+	}
+
+	return exitcode.Success
 }
 
 // printVersion outputs version information including version number, commit hash,

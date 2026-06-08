@@ -323,6 +323,8 @@ func (w *WebUI) GetHTTPHandler() http.Handler {
 	mux.HandleFunc("/api/calibration/sweep", w.handleCalibrationSweep)
 	mux.HandleFunc("/api/audio/devices", w.handleAudioDevices)
 	mux.HandleFunc("/api/audio/test", w.handleAudioTest)
+	mux.HandleFunc("/api/bluetooth/devices", w.handleBluetoothDevices)
+	mux.HandleFunc("/api/bluetooth/action", w.handleBluetoothAction)
 	mux.HandleFunc("/api/config", w.handleConfigAPI)
 	mux.HandleFunc("/api/config/export", w.handleConfigExport)
 	mux.HandleFunc("/api/config/import", w.handleConfigImport)
@@ -1031,6 +1033,9 @@ func (w *WebUI) handleGetConfig(response http.ResponseWriter, _ *http.Request) {
 			"displayOrientation": w.config.GetDisplayOrientation(),
 			"audioBackend":       w.config.GetAudioBackend(),
 			"availableBackends":  audio.AvailableBackends(),
+		},
+		"bluetooth": map[string]any{
+			"available": w.bluetoothAvailable(),
 		},
 		"haptics": map[string]any{
 			"enableReplay": w.config.GetHapticsReplayEnabled(),

@@ -11,8 +11,9 @@ const (
 type PageContext string
 
 const (
-	PageContextAlways   PageContext = "always"
-	PageContextDevTools PageContext = "devtools"
+	PageContextAlways    PageContext = "always"
+	PageContextDevTools  PageContext = "devtools"
+	PageContextBluetooth PageContext = "bluetooth"
 )
 
 // NodeType defines whether a menu node is a branch or leaf.
@@ -37,6 +38,7 @@ type MenuSystem struct {
 	currentNode        *MenuNode
 	setupModeCountdown int
 	devToolsEnabled    func() bool
+	bluetoothAvailable func() bool
 }
 
 func NewMenuSystem() *MenuSystem {
@@ -125,6 +127,23 @@ func NewMenuSystem() *MenuSystem {
 		&MenuNode{name: languagedb.UIMenuReturn, nodeType: NodeTypeBranch, context: PageContextAlways, parent: systemNode},
 		&MenuNode{name: languagedb.UIMenuSystemDisplayOrientation, nodeType: NodeTypeLeaf, context: PageContextAlways, parent: systemNode},
 		&MenuNode{name: languagedb.UIMenuSystemSetupmode, nodeType: NodeTypeLeaf, context: PageContextAlways, parent: systemNode},
+	)
+
+	// Settings -> Bluetooth submenu (only visible when an adapter is present).
+	// Two leaves keep within the existing leaf value-cycling model: one selects
+	// the paired device, the other connects/disconnects it.
+	bluetoothNode := &MenuNode{
+		name:     languagedb.UIMenuBluetooth,
+		nodeType: NodeTypeBranch,
+		context:  PageContextBluetooth,
+		parent:   settingsNode,
+		children: make([]*MenuNode, 0),
+	}
+
+	bluetoothNode.children = append(bluetoothNode.children,
+		&MenuNode{name: languagedb.UIMenuReturn, nodeType: NodeTypeBranch, context: PageContextBluetooth, parent: bluetoothNode},
+		&MenuNode{name: languagedb.UIMenuBluetoothDevice, nodeType: NodeTypeLeaf, context: PageContextBluetooth, parent: bluetoothNode},
+		&MenuNode{name: languagedb.UIMenuBluetoothToggle, nodeType: NodeTypeLeaf, context: PageContextBluetooth, parent: bluetoothNode},
 	)
 
 	// Settings -> Synthesizer submenu
@@ -402,7 +421,7 @@ func NewMenuSystem() *MenuSystem {
 
 	settingsNode.children = append(settingsNode.children,
 		&MenuNode{name: languagedb.UIMenuReturn, nodeType: NodeTypeBranch, context: PageContextAlways, parent: settingsNode},
-		appNode, systemNode, synthNode, hapticsNode, pitRadioNode,
+		appNode, systemNode, bluetoothNode, synthNode, hapticsNode, pitRadioNode,
 	)
 
 	// Dev submenu
@@ -597,6 +616,12 @@ func (m *MenuSystem) SetDevToolsEnabledCallback(callback func() bool) {
 	m.devToolsEnabled = callback
 }
 
+// SetBluetoothAvailableCallback sets the callback used to decide whether the
+// Bluetooth menu branch should be shown.
+func (m *MenuSystem) SetBluetoothAvailableCallback(callback func() bool) {
+	m.bluetoothAvailable = callback
+}
+
 // previousSibling navigates to the previous visible sibling with wrapping.
 func (m *MenuSystem) previousSibling() *MenuNode {
 	if m.currentNode.parent == nil {
@@ -694,6 +719,8 @@ func (m *MenuSystem) isNodeVisible(node *MenuNode) bool {
 		return true
 	case PageContextDevTools:
 		return m.isDevToolsEnabled()
+	case PageContextBluetooth:
+		return m.isBluetoothAvailable()
 	default:
 		return true
 	}
@@ -706,4 +733,13 @@ func (m *MenuSystem) isDevToolsEnabled() bool {
 	}
 
 	return m.devToolsEnabled()
+}
+
+// isBluetoothAvailable returns true if a Bluetooth adapter is present.
+func (m *MenuSystem) isBluetoothAvailable() bool {
+	if m.bluetoothAvailable == nil {
+		return false
+	}
+
+	return m.bluetoothAvailable()
 }

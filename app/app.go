@@ -131,6 +131,10 @@ type App struct {
 	// Telemetry source management
 	customTelemetrySource string // Stores custom telemetry source when user switches to auto/demo
 
+	// Bluetooth (LCD menu) state
+	btDevices       []platform.CmdBTDevice // Cached paired-device list for the LCD selector
+	btSelectedIndex int                    // Index of the currently selected paired device
+
 	// TODO: fix menu nav and remove this
 	activeBuildInfoItem int // Active build info item index
 }
@@ -657,14 +661,15 @@ func (a *App) initializeConsole() {
 // initializeUI sets up the user interface.
 func (a *App) initializeUI(opts Options, hidEvents chan ui.HIDInputEvent) error {
 	a.ui = ui.NewUserInterface(&ui.Config{
-		I18n:             a.i18n,
-		HIDEvents:        hidEvents,
-		Display:          a.display,
-		LiveData:         &ui.LiveData{Gear: kinematics.NullGear},
-		Log:              *opts.Logger,
-		SettingsCallback: a.settingAction,
-		DevToolsEnabled:  a.config.GetDevToolsEnabled,
-		ExitCodeChan:     a.exitCodeChan,
+		I18n:               a.i18n,
+		HIDEvents:          hidEvents,
+		Display:            a.display,
+		LiveData:           &ui.LiveData{Gear: kinematics.NullGear},
+		Log:                *opts.Logger,
+		SettingsCallback:   a.settingAction,
+		DevToolsEnabled:    a.config.GetDevToolsEnabled,
+		BluetoothAvailable: a.bluetoothAvailable,
+		ExitCodeChan:       a.exitCodeChan,
 	})
 
 	startingMessage := a.i18n.GetString(languagedb.UIStarting)

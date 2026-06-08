@@ -15,14 +15,15 @@ import (
 
 // Config holds the configuration for initializing the UserInterface.
 type Config struct {
-	I18n             *i18n.I18n
-	HIDEvents        chan HIDInputEvent
-	Display          hardware.Display
-	LiveData         *LiveData
-	SettingsCallback func(languagedb.Key, string) string
-	DevToolsEnabled  func() bool
-	ExitCodeChan     chan exitcode.Code
-	Log              zerolog.Logger
+	I18n               *i18n.I18n
+	HIDEvents          chan HIDInputEvent
+	Display            hardware.Display
+	LiveData           *LiveData
+	SettingsCallback   func(languagedb.Key, string) string
+	DevToolsEnabled    func() bool
+	BluetoothAvailable func() bool
+	ExitCodeChan       chan exitcode.Code
+	Log                zerolog.Logger
 }
 
 // LiveData holds the dynamic data that can currently be displayed on the UI.
@@ -72,6 +73,11 @@ func NewUserInterface(config *Config) *UserInterface {
 	// Set devToolsEnabled callback if provided
 	if config.DevToolsEnabled != nil {
 		userInterface.menuSystem.SetDevToolsEnabledCallback(config.DevToolsEnabled)
+	}
+
+	// Set bluetoothAvailable callback if provided
+	if config.BluetoothAvailable != nil {
+		userInterface.menuSystem.SetBluetoothAvailableCallback(config.BluetoothAvailable)
 	}
 
 	var err error

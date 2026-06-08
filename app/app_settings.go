@@ -29,6 +29,10 @@ func (a *App) settingAction(setting languagedb.Key, action string) string {
 		languagedb.UIMenuSystemSetupmode:          a.handleSetupModeCountdown,
 		languagedb.UIMenuSystemDisplayOrientation: a.handleDisplayOrientationSetting,
 
+		// Bluetooth handlers
+		languagedb.UIMenuBluetoothDevice: a.handleBluetoothDeviceSetting,
+		languagedb.UIMenuBluetoothToggle: a.handleBluetoothToggleSetting,
+
 		// Synthesizer handlers
 		languagedb.UIMenuSynthInternalSampleRate:        a.handleInternalSampleRateSetting,
 		languagedb.UIMenuSynthOutputSampleRate:          a.handleOutputSampleRateSetting,
@@ -128,9 +132,9 @@ func (a *App) handleChassisGainSetting(action string) string {
 	var value float64
 
 	switch action {
-	case "increase": //nolint:goconst // no value as a const
+	case "increase":
 		value = a.config.IncreaseSynthChassisGain()
-	case "decrease": //nolint:goconst // no value as a const
+	case "decrease":
 		value = a.config.DecreaseSynthChassisGain()
 	default:
 		value = a.config.GetSynthChassisGain()
