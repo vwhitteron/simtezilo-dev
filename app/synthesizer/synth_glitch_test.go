@@ -235,7 +235,7 @@ func simulateUpstream(s cadenceScenario) cadenceResult {
 		durationMs   = 10000
 		warmupMs     = 200
 		telemetryMs  = 16 // haptic generators write at ~60 Hz
-		periodMs     = 66 // device callback period (one malgo/portaudio period)
+		periodMs     = 66 // device callback period (one portaudio period)
 	)
 
 	periodFrames := periodMs * internalRate / 1000

@@ -159,7 +159,7 @@ func (w *WebUI) handleAudioDevices(response http.ResponseWriter, request *http.R
 
 // handleAudioTest plays a short test tone on a device/channel so the user can
 // verify wiring. The beep backend drives a single global device shared with the
-// haptic output, so test tones require the malgo or portaudio backend.
+// haptic output, so test tones require the portaudio backend.
 func (w *WebUI) handleAudioTest(response http.ResponseWriter, request *http.Request) {
 	if request.Method != http.MethodPost {
 		response.WriteHeader(http.StatusMethodNotAllowed)
@@ -200,7 +200,7 @@ func (w *WebUI) handleAudioTest(response http.ResponseWriter, request *http.Requ
 		response.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(response).Encode(map[string]string{ //nolint:errchkjson // simple encoding
 			"status":  "error",
-			"message": "Test tones require the malgo or portaudio backend (beep shares one device with haptics)",
+			"message": "Test tones require the portaudio backend (beep shares one device with haptics)",
 		})
 
 		return

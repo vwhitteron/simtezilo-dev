@@ -77,7 +77,7 @@
     function applyTestButtonState() {
         const disabled = selectedBackend() === 'beep';
         const title = disabled
-            ? 'Test tones require the malgo or portaudio backend'
+            ? 'Test tones require the portaudio backend'
             : '';
 
         ['audio-haptics-test', 'audio-pitradio-test'].forEach(id => {

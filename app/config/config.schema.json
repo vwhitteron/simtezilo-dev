@@ -78,7 +78,7 @@
                 "audioBackend": {
                     "type": "string",
                     "description": "Audio output backend",
-                    "enum": ["beep", "malgo", "portaudio"],
+                    "enum": ["beep", "portaudio"],
                     "default": "beep"
                 },
                 "model": {

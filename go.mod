@@ -8,7 +8,6 @@ require (
 	atomicgo.dev/keyboard v0.2.10
 	github.com/Wifx/gonetworkmanager/v2 v2.2.0
 	github.com/bwmarrin/discordgo v0.29.0
-	github.com/gen2brain/malgo v0.11.25
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0
 	github.com/gopxl/beep v1.4.1
 	github.com/gordonklaus/portaudio v0.0.0-20260203164431-765aa7dfa631

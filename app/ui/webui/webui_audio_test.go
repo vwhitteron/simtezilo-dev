@@ -74,36 +74,21 @@ func TestApplyHapticsOutputConfig_NoChangeNoRestart(t *testing.T) {
 	assert.False(t, called, "saving unchanged output values must not trigger a restart")
 }
 
-// TestApplyHardwareConfig_BackendChangeTrigger verifies the backend hook fires
-// only when the backend actually changes.
-func TestApplyHardwareConfig_BackendChangeTrigger(t *testing.T) {
+// TestApplyHardwareConfig_BackendChangeRequiresRestart verifies that changing the
+// audio backend persists the new value and marks the config restart-required
+// (backend changes are applied on restart, not live).
+func TestApplyHardwareConfig_BackendChangeRequiresRestart(t *testing.T) {
 	t.Parallel()
 
-	t.Run("changed", func(t *testing.T) {
-		t.Parallel()
+	webUI := newAudioTestWebUI()
+	assert.False(t, webUI.config.IsRestartRequired(), "fresh config should not require a restart")
 
-		w := newAudioTestWebUI()
+	errs := webUI.applyHardwareConfig(map[string]any{"audioBackend": "portaudio"})
 
-		called := false
-		w.onAudioBackendChanged = func() { called = true }
-
-		w.applyHardwareConfig(map[string]any{"audioBackend": "portaudio"})
-
-		assert.True(t, called)
-	})
-
-	t.Run("unchanged", func(t *testing.T) {
-		t.Parallel()
-
-		w := newAudioTestWebUI()
-
-		called := false
-		w.onAudioBackendChanged = func() { called = true }
-
-		w.applyHardwareConfig(map[string]any{"audioBackend": w.config.GetAudioBackend()})
-
-		assert.False(t, called)
-	})
+	assert.Empty(t, errs)
+	assert.Equal(t, "portaudio", webUI.config.GetAudioBackend())
+	assert.True(t, webUI.config.IsRestartRequired(),
+		"changing the audio backend should require a restart")
 }
 
 // TestApplyAudioConfig_PersistsDeviceName guards the device + deviceName wiring

@@ -34,7 +34,7 @@ func init() { //nolint:gochecknoinits // registers the beep backend factory; ini
 // beepBackend wraps the legacy beep/oto speaker path. beep exposes a single
 // global stereo output device, so it supports one default device at one sample
 // rate. It exists to preserve the original behaviour as the zero-extra-dependency
-// default; use malgo or portaudio for multichannel or multi-device output.
+// default; use portaudio for multichannel or multi-device output.
 type beepBackend struct {
 	log zerolog.Logger
 }

@@ -72,7 +72,7 @@ type haptics struct {
 }
 
 type hardware struct {
-	AudioBackend       string `json:"audioBackend"` // beep | malgo | portaudio
+	AudioBackend       string `json:"audioBackend"` // beep | portaudio
 	Model              string `json:"model"`
 	DisplayOrientation int    `json:"displayOrientation"`
 }
@@ -2942,13 +2942,15 @@ func (c *Config) SetTelemetryUpdateURL(value string) {
 // ****************************************************************************
 // Audio backend and device routing accessors.
 //
-// Audio settings select the output backend (beep/malgo/portaudio) and route the
-// haptic and pit-radio streams to specific devices. Changing any of these
-// requires the audio output to be restarted, so the setters mark the config as
-// restart-required.
+// Audio settings select the output backend (beep/portaudio) and route the
+// haptic and pit-radio streams to specific devices. The backend selection
+// changes the entire audio stack, so it is applied on restart (the setter marks
+// the config restart-required). Device/channel/sample-rate/latency changes are
+// applied live (the haptic stream is rebuilt and pit-radio resolves per message)
+// and do not require a restart. The cushion is the other restart-required value.
 // ****************************************************************************
 
-// GetAudioBackend returns the configured audio backend (beep, malgo, portaudio).
+// GetAudioBackend returns the configured audio backend (beep, portaudio).
 func (c *Config) GetAudioBackend() string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -2967,8 +2969,9 @@ func (c *Config) SetAudioBackend(value string) {
 
 	c.viper.Hardware.AudioBackend = value
 
-	// Applied live (haptics rebuilt and pit-radio backend swapped on change).
-	c.registerUpdate(false)
+	// Switching backend rebuilds the entire audio stack; apply it on restart
+	// rather than swapping live (which was fragile).
+	c.registerUpdate(true)
 }
 
 // GetAudioHapticsDevice returns the haptics output device ID ("" = default).

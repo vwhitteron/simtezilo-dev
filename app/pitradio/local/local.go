@@ -7,7 +7,6 @@ import (
 	"context"
 	"errors"
 	"math"
-	"sync"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -66,14 +65,10 @@ type Output struct {
 	queue        chan pitradio.Message
 	log          zerolog.Logger
 
-	// mu guards backend and the pending-backend swap state. backend is the sink
-	// factory in use; a swap requested via SetBackend is parked in pendingBackend
-	// and applied by the task goroutine (applyPendingBackend) so the backend is
-	// never closed while a play() call is mid-clip on it.
-	mu             sync.Mutex
-	backend        audio.Backend
-	pendingBackend audio.Backend
-	hasPending     bool
+	// backend is the sink factory used to open a fresh sink per message. It is set
+	// once at construction; the backend selection is restart-required, so it never
+	// changes over the lifetime of an Output.
+	backend audio.Backend
 
 	ctx    context.Context //nolint:containedctx // Context for managing lifecycle
 	cancel context.CancelFunc
@@ -114,11 +109,6 @@ func (o *Output) BackgroundTask() {
 		case <-o.ctx.Done():
 			return
 		case msg := <-o.queue:
-			// Apply any queued backend swap before playing, on this goroutine, so
-			// the backend is only ever mutated between messages and never while a
-			// sink is open on it.
-			o.applyPendingBackend()
-
 			o.process(msg)
 
 			// Pace consecutive messages.
@@ -133,23 +123,6 @@ func (o *Output) BackgroundTask() {
 	}
 }
 
-// SetBackend queues a swap to the given audio backend. The swap takes effect
-// before the next message is played (see applyPendingBackend); the previously
-// active backend is closed at that point. It is safe to call concurrently with
-// playback. A superseded pending backend (SetBackend called twice before a
-// message plays) is closed immediately.
-func (o *Output) SetBackend(backend audio.Backend) {
-	o.mu.Lock()
-	defer o.mu.Unlock()
-
-	if o.hasPending && o.pendingBackend != nil {
-		_ = o.pendingBackend.Close()
-	}
-
-	o.pendingBackend = backend
-	o.hasPending = true
-}
-
 // Send enqueues a message for local playback.
 func (o *Output) Send(message pitradio.Message) error {
 	select {
@@ -160,23 +133,14 @@ func (o *Output) Send(message pitradio.Message) error {
 	}
 }
 
-// Close stops the background task and releases the backend (and any pending one).
+// Close stops the background task and releases the backend.
 func (o *Output) Close() error {
 	if o.cancel != nil {
 		o.cancel()
 	}
 
-	o.mu.Lock()
 	backend := o.backend
 	o.backend = nil
-	pending := o.pendingBackend
-	o.pendingBackend = nil
-	o.hasPending = false
-	o.mu.Unlock()
-
-	if pending != nil {
-		_ = pending.Close()
-	}
 
 	if backend != nil {
 		return backend.Close()
@@ -185,36 +149,9 @@ func (o *Output) Close() error {
 	return nil
 }
 
-// applyPendingBackend installs any queued backend, closing the one it replaces.
-// It runs only on the task goroutine.
-func (o *Output) applyPendingBackend() {
-	o.mu.Lock()
-
-	if !o.hasPending {
-		o.mu.Unlock()
-
-		return
-	}
-
-	old := o.backend
-	o.backend = o.pendingBackend
-	o.pendingBackend = nil
-	o.hasPending = false
-
-	o.mu.Unlock()
-
-	if old != nil {
-		_ = old.Close()
-	}
-
-	o.log.Info().Str("backend", o.backend.Name()).Msg("pit-radio audio backend switched")
-}
-
-// currentBackend returns the active backend under the lock.
+// currentBackend returns the active backend. It is set once at construction and
+// never swapped, so no synchronisation is needed.
 func (o *Output) currentBackend() audio.Backend { //nolint:ireturn // returns Backend interface by design; concrete type is private
-	o.mu.Lock()
-	defer o.mu.Unlock()
-
 	return o.backend
 }
 

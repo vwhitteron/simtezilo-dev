@@ -77,14 +77,13 @@ type App struct {
 	i18n    *i18n.I18n       // Language translations
 	display hardware.Display // Hardware display interface
 
-	gtClient      *gttelemetry.Client       // GT telemetry client
-	pitRadio      pitradio.PitRadio         // Pit radio notification service
-	localPitRadio *local.Output             // Concrete local pit-radio output (nil unless output=="audio"), for live backend swaps
-	kinematics    kinematics.State          // Vehicle kinematics tracker
-	synth         *synthesizer.Synthesizer  // Audio synthesizer for haptic feedback
-	calibrator    *calibrator.ToneGenerator // Calibration mode manager
+	gtClient   *gttelemetry.Client       // GT telemetry client
+	pitRadio   pitradio.PitRadio         // Pit radio notification service
+	kinematics kinematics.State          // Vehicle kinematics tracker
+	synth      *synthesizer.Synthesizer  // Audio synthesizer for haptic feedback
+	calibrator *calibrator.ToneGenerator // Calibration mode manager
 
-	audioBackend   audio.Backend      // Audio output backend (beep/malgo/portaudio)
+	audioBackend   audio.Backend      // Audio output backend (beep/portaudio)
 	hapticSink     audio.Sink         // Active haptic output stream
 	hapticSource   *audio.AsyncSource // Background producer feeding the haptic sink
 	audioMu        sync.Mutex         // Guards audio output state during start/restart
@@ -398,15 +397,9 @@ func (a *App) runAppMode() RunResult {
 			Updater:            a.updater,
 			// Restart the live haptic stream off the HTTP handler goroutine so the
 			// settings save returns immediately while the device is reopened.
+			// (A backend change is restart-required, not live, so there is no
+			// backend callback.)
 			OnHapticsOutputChanged: func() { go a.restartAudioOutput() },
-			// A backend change affects every audio consumer: rebuild haptics and
-			// swap the local pit-radio output onto the new backend.
-			OnAudioBackendChanged: func() {
-				go func() {
-					a.restartAudioOutput()
-					a.restartLocalPitRadioBackend()
-				}()
-			},
 		})
 	}
 
@@ -932,7 +925,7 @@ func (a *App) initializePitRadio(opts Options) {
 // initialiseLocalPitRadioOutput sets the primary pit-radio output to a local
 // audio device, used when the pit-radio output mode is "audio". The beep backend
 // drives a single global stereo device shared with haptics, so local pit-radio
-// output requires the malgo or portaudio backend. It returns false (leaving
+// output requires the portaudio backend. It returns false (leaving
 // a.pitRadio unset) when the device cannot be opened.
 func (a *App) initialiseLocalPitRadioOutput() bool {
 	backendName := a.config.GetAudioBackend()
@@ -940,7 +933,7 @@ func (a *App) initialiseLocalPitRadioOutput() bool {
 		a.log.Warn().
 			Str("component", "pit radio local").
 			Str("backend", backendName).
-			Msg("local pit-radio output requires the malgo or portaudio backend; disabling")
+			Msg("local pit-radio output requires the portaudio backend; disabling")
 
 		return false
 	}
@@ -981,7 +974,6 @@ func (a *App) initialiseLocalPitRadioOutput() bool {
 	}
 
 	a.pitRadio = localOutput
-	a.localPitRadio = localOutput
 
 	a.log.Info().
 		Str("component", "pit radio local").
@@ -989,42 +981,6 @@ func (a *App) initialiseLocalPitRadioOutput() bool {
 		Msg("local pit-radio output enabled")
 
 	return true
-}
-
-// restartLocalPitRadioBackend swaps the local pit-radio output onto the currently
-// configured audio backend, used when the backend is changed at runtime. It is a
-// no-op when pit radio is not using the local audio output. The local output
-// opens a fresh sink per message, so the swap simply takes effect on the next
-// message; the previous backend is released then. A beep backend (which cannot
-// drive a dedicated local device) is rejected, leaving the existing backend in
-// place.
-func (a *App) restartLocalPitRadioBackend() {
-	if a.localPitRadio == nil {
-		return
-	}
-
-	backendName := a.config.GetAudioBackend()
-	if backendName == audio.BackendBeep {
-		a.log.Warn().
-			Str("component", "pit radio local").
-			Str("backend", backendName).
-			Msg("local pit-radio output cannot use the beep backend; keeping previous backend")
-
-		return
-	}
-
-	backend, err := audio.New(backendName, a.log)
-	if err != nil {
-		a.log.Warn().
-			Err(err).
-			Str("component", "pit radio local").
-			Str("backend", backendName).
-			Msg("audio backend unavailable; keeping previous pit-radio backend")
-
-		return
-	}
-
-	a.localPitRadio.SetBackend(backend)
 }
 
 // initialiseDiscord sets up Discord pit radio bot.
@@ -1195,7 +1151,7 @@ func (a *App) startAudioOutput() {
 	backend, err := audio.New(backendName, a.log)
 	if err != nil {
 		// Fall back to the beep backend when the configured backend is not
-		// available in this build (e.g. malgo/portaudio not compiled in).
+		// available in this build (e.g. portaudio not compiled in).
 		a.log.Warn().
 			Err(err).
 			Str("backend", backendName).
@@ -1311,7 +1267,7 @@ func hapticBufferFrames(outputRate, latencyMs int) (capacity, block int) {
 // and async producer are rebuilt — so all engine/mixer state survives the switch
 // and playback resumes from where it was. The cutover is a brief silence while
 // the device is reopened; because the synth is pull-based there is nothing to
-// "catch up" on, so a fast backend (malgo/portaudio) makes it near-seamless.
+// "catch up" on, so a fast backend (portaudio) makes it near-seamless.
 //
 // audioRestartMu serializes whole restarts so overlapping config saves cannot
 // interleave a stop and start; stopAudioOutput/startAudioOutput still take

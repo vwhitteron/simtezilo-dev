@@ -998,7 +998,6 @@
                                     <label for="audio-backend" class="form-label">Backend</label>
                                     <select id="audio-backend" class="form-select" data-config="hardware.audioBackend">
                                         <option value="beep">beep</option>
-                                        <option value="malgo">malgo</option>
                                         <option value="portaudio">portaudio</option>
                                     </select>
                                 </div>
@@ -1877,7 +1876,7 @@
                             <div class="mb-4">
                                 <small class="text-muted">
                                     <i class="fa-solid fa-info-circle me-1"></i>
-                                    Test tones require the <strong>malgo</strong> or <strong>portaudio</strong> backend. The <strong>beep</strong> backend uses a single shared stereo device and does not support per-channel test tones.
+                                    Test tones require the <strong>portaudio</strong> backend. The <strong>beep</strong> backend uses a single shared stereo device and does not support per-channel test tones.
                                 </small>
                             </div>
 
@@ -2232,7 +2231,7 @@
                                 <div class="mb-3">
                                     <small class="text-muted">
                                         <i class="fa-solid fa-info-circle me-1"></i>
-                                        Local audio output requires the <strong>malgo</strong> or <strong>portaudio</strong> backend. The <strong>beep</strong> backend uses a single shared stereo device and cannot be used for pit radio output.
+                                        Local audio output requires the <strong>portaudio</strong> backend. The <strong>beep</strong> backend uses a single shared stereo device and cannot be used for pit radio output.
                                     </small>
                                 </div>
                             </div>

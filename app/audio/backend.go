@@ -8,8 +8,8 @@ import (
 )
 
 // backendFactory constructs a Backend. Backends register a factory under their
-// name via registerBackend in an init function; tag-gated backends (malgo,
-// portaudio) only register when compiled in.
+// name via registerBackend in an init function; the tag-gated portaudio backend
+// only registers when compiled in.
 type backendFactory func(zerolog.Logger) (Backend, error)
 
 var backendRegistry = map[string]backendFactory{} //nolint:gochecknoglobals // registry pattern; populated by init() in backend files
@@ -19,8 +19,8 @@ func registerBackend(name string, f backendFactory) {
 }
 
 // New constructs the named backend. An empty name selects the beep backend.
-// If a known backend name (malgo, portaudio) is requested but was not compiled
-// into the binary, ErrBackendUnavailable is returned so callers can fall back.
+// If the portaudio backend is requested but was not compiled into the binary,
+// ErrBackendUnavailable is returned so callers can fall back.
 func New(name string, log zerolog.Logger) (Backend, error) { //nolint:ireturn // constructor returns the Backend interface by design
 	if name == "" {
 		name = BackendBeep
@@ -28,7 +28,7 @@ func New(name string, log zerolog.Logger) (Backend, error) { //nolint:ireturn //
 
 	factory, ok := backendRegistry[name]
 	if !ok {
-		if name == BackendMalgo || name == BackendPortAudio {
+		if name == BackendPortAudio {
 			return nil, fmt.Errorf("%q: %w", name, ErrBackendUnavailable)
 		}
 

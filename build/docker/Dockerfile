@@ -2,8 +2,7 @@
 #
 # Audio backend selection (multichannel / device selection):
 #   The default build uses the pure beep backend (single stereo device).
-#   To enable additional audio backends, pass the GOTAGS build arg, e.g.:
-#     --build-arg GOTAGS=malgo       (miniaudio; C source bundled, no extra lib)
+#   To enable the portaudio backend, pass the GOTAGS build arg, e.g.:
 #     --build-arg GOTAGS=portaudio   (requires libportaudio-dev for the target
 #                                     arch; add it to the matching base-* stage)
 #   GOTAGS is empty by default, producing the original beep-only binary.

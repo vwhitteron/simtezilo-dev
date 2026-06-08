@@ -16,7 +16,7 @@ type fakeBackend struct {
 
 func (f *fakeBackend) Name() string                         { return "fake" }
 func (f *fakeBackend) ListDevices() ([]audio.Device, error) { return f.devices, f.err }
-func (f *fakeBackend) OpenSink(audio.SinkConfig) (audio.Sink, error) { //nolint:ireturn // satisfies audio.Backend interface
+func (f *fakeBackend) OpenSink(audio.SinkConfig) (audio.Sink, error) {
 	return nil, errors.New("not implemented")
 }
 func (f *fakeBackend) Close() error { return nil }

@@ -9,9 +9,10 @@ import (
 
 // TestAudioSettersDoNotRequireRestart guards the registerUpdate(false) change:
 // every audio setting that is applied live (device, name, channels, rate,
-// latency, backend, and the pit-radio equivalents) must NOT raise the
-// restart-required flag, otherwise the UI would nag for a restart after a change
-// that already took effect.
+// latency, and the pit-radio equivalents) must NOT raise the restart-required
+// flag, otherwise the UI would nag for a restart after a change that already
+// took effect. The backend selection is the exception (see
+// TestRestartRequiredAudioSettings).
 func TestAudioSettersDoNotRequireRestart(t *testing.T) {
 	t.Parallel()
 
@@ -24,7 +25,6 @@ func TestAudioSettersDoNotRequireRestart(t *testing.T) {
 		{"haptics channels", func(c *Config) { c.SetAudioHapticsChannels(4) }},
 		{"haptics sample rate", func(c *Config) { c.SetAudioHapticsSampleRate(48000) }},
 		{"haptics latency", func(c *Config) { c.SetAudioHapticsLatencyMs(40) }},
-		{"audio backend", func(c *Config) { c.SetAudioBackend("portaudio") }},
 		{"pit radio device", func(c *Config) { c.SetAudioPitRadioDevice("2") }},
 		{"pit radio device name", func(c *Config) { c.SetAudioPitRadioDeviceName("Headphones") }},
 		{"pit radio sample rate", func(c *Config) { c.SetAudioPitRadioSampleRate(44100) }},
@@ -45,17 +45,34 @@ func TestAudioSettersDoNotRequireRestart(t *testing.T) {
 	}
 }
 
-// TestNonLiveAudioSettingStillRequiresRestart is the contrast case: cushionMs is
-// not applied live, so it should still raise the restart-required flag. It also
-// ensures the flag mechanism itself works (so the test above is meaningful).
-func TestNonLiveAudioSettingStillRequiresRestart(t *testing.T) {
+// TestRestartRequiredAudioSettings is the contrast case: the backend selection
+// changes the whole audio stack and cushionMs is not applied live, so both must
+// raise the restart-required flag. It also ensures the flag mechanism itself
+// works (so the live-setter test above is meaningful).
+func TestRestartRequiredAudioSettings(t *testing.T) {
 	t.Parallel()
 
-	cfg := newTestConfig()
-	cfg.SetAudioHapticsCushionMs(40)
+	cases := []struct {
+		name  string
+		apply func(*Config)
+	}{
+		{"audio backend", func(c *Config) { c.SetAudioBackend("portaudio") }},
+		{"haptics cushion", func(c *Config) { c.SetAudioHapticsCushionMs(40) }},
+	}
 
-	assert.True(t, cfg.IsRestartRequired(),
-		"cushionMs is not applied live and should require a restart")
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			cfg := newTestConfig()
+			require.False(t, cfg.IsRestartRequired(), "fresh config should not require a restart")
+
+			testCase.apply(cfg)
+
+			assert.True(t, cfg.IsRestartRequired(),
+				"setting is not applied live and should require a restart")
+		})
+	}
 }
 
 // TestAudioDeviceNameRoundTrip covers the new deviceName fields.

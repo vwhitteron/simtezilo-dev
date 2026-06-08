@@ -1,12 +1,12 @@
 // Package audio provides a backend-agnostic abstraction over audio output
-// devices. Concrete backends (beep, malgo, portaudio) implement the Backend
+// devices. Concrete backends (beep, portaudio) implement the Backend
 // interface, decoupling the synthesizer and pit-radio consumers from any
 // particular audio library or platform.
 //
 // All sample data crossing the abstraction boundary is interleaved float32
-// (the native format of malgo and portaudio): for an N-channel frame the
-// layout is [c0, c1, ... cN-1, c0, c1, ...]. The beep backend adapts this to
-// beep's [][2]float64 representation internally.
+// (portaudio's native format): for an N-channel frame the layout is
+// [c0, c1, ... cN-1, c0, c1, ...]. The beep backend adapts this to beep's
+// [][2]float64 representation internally.
 package audio
 
 import "errors"
@@ -14,7 +14,6 @@ import "errors"
 // Backend names recognised by New.
 const (
 	BackendBeep      = "beep"
-	BackendMalgo     = "malgo"
 	BackendPortAudio = "portaudio"
 )
 
@@ -60,7 +59,7 @@ type Sink interface {
 	Channels() int
 }
 
-// Backend is a concrete audio implementation (beep, malgo, portaudio).
+// Backend is a concrete audio implementation (beep, portaudio).
 type Backend interface {
 	// Name returns the backend identifier (one of the Backend* constants).
 	Name() string

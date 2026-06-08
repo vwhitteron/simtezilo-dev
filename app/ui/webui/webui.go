@@ -232,9 +232,9 @@ type WebUI struct {
 	unifiedSessions    map[string]*wsClient // Track sessions to prevent duplicates
 	unifiedSessionsMux sync.Mutex
 	updater            *updater.Updater // Self-update manager (may be nil)
-	// Live audio reconfiguration hooks
+	// Live haptic-output reconfiguration hook (device/channels/rate/latency).
+	// Backend changes are restart-required, not live.
 	onHapticsOutputChanged func()
-	onAudioBackendChanged  func()
 	// Shutdown support
 	done      chan struct{}
 	closeOnce sync.Once
@@ -265,12 +265,6 @@ type Config struct {
 	// app can restart the haptic audio stream live rather than requiring a
 	// restart. It is only called when one of those values actually changed.
 	OnHapticsOutputChanged func()
-
-	// OnAudioBackendChanged is invoked (if non-nil) after the audio backend is
-	// changed via a config update, so the app can rebuild every audio consumer
-	// (haptics and local pit radio) onto the new backend live. It is only called
-	// when the backend actually changed.
-	OnAudioBackendChanged func()
 }
 
 // New creates a new instance of the WebUI.
@@ -308,7 +302,6 @@ func New(config Config) *WebUI {
 		unifiedSessions:        make(map[string]*wsClient),
 		updater:                config.Updater,
 		onHapticsOutputChanged: config.OnHapticsOutputChanged,
-		onAudioBackendChanged:  config.OnAudioBackendChanged,
 		done:                   make(chan struct{}),
 	}
 
@@ -1905,14 +1898,10 @@ func (w *WebUI) applyHardwareConfig(config map[string]any) []string {
 
 	if backend, ok := config["audioBackend"]; ok {
 		if backendStr, ok := backend.(string); ok {
-			changed := backendStr != w.config.GetAudioBackend()
+			// Switching backend rebuilds the entire audio stack; the setter marks
+			// the config restart-required so the user applies it via a restart
+			// rather than swapping live (which was fragile).
 			w.config.SetAudioBackend(backendStr)
-
-			// Switching backend rebuilds every audio consumer (haptics + local pit
-			// radio) onto the new backend; do it live.
-			if changed && w.onAudioBackendChanged != nil {
-				w.onAudioBackendChanged()
-			}
 		} else {
 			errors = append(errors, "invalid audio backend value")
 		}

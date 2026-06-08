@@ -1,4 +1,4 @@
-package local //nolint:testpackage // white-box: exercises unexported methods currentBackend and applyPendingBackend
+package local //nolint:testpackage // white-box: exercises the unexported currentBackend method
 
 import (
 	"errors"
@@ -10,9 +10,9 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/audio"
 )
 
-// fakeBackend records how many times it is closed so the swap lifecycle can be
-// asserted. OpenSink is unused by these tests (they exercise the backend-swap
-// bookkeeping directly, not playback).
+// fakeBackend records how many times it is closed so the backend lifecycle can
+// be asserted. OpenSink is unused by these tests (they do not exercise
+// playback).
 type fakeBackend struct {
 	name   string
 	closed int
@@ -30,10 +30,10 @@ func (f *fakeBackend) Close() error {
 	return nil
 }
 
-// TestOutput_BackendSwap verifies a queued backend swap only takes effect when
-// applied (as the task goroutine does before each message), and that the
-// replaced backend is closed exactly once.
-func TestOutput_BackendSwap(t *testing.T) {
+// TestOutput_UsesConstructionBackend verifies the backend supplied at
+// construction is the one used, and that it is not swapped over the Output's
+// lifetime (backend changes are restart-required).
+func TestOutput_UsesConstructionBackend(t *testing.T) {
 	t.Parallel()
 
 	orig := &fakeBackend{name: "orig"}
@@ -42,65 +42,19 @@ func TestOutput_BackendSwap(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, "orig", out.currentBackend().Name())
-
-	next := &fakeBackend{name: "next"}
-	out.SetBackend(next)
-
-	// Not applied until applyPendingBackend runs.
-	assert.Equal(t, "orig", out.currentBackend().Name())
-	assert.Equal(t, 0, orig.closed)
-
-	out.applyPendingBackend()
-
-	assert.Equal(t, "next", out.currentBackend().Name())
-	assert.Equal(t, 1, orig.closed, "previous backend closed exactly once on swap")
-
-	// Applying with nothing pending is a no-op.
-	out.applyPendingBackend()
-	assert.Equal(t, "next", out.currentBackend().Name())
-	assert.Equal(t, 1, orig.closed)
 }
 
-// TestOutput_SetBackendSupersedesPending verifies that queuing a second swap
-// before the first is applied closes the superseded backend immediately.
-func TestOutput_SetBackendSupersedesPending(t *testing.T) {
+// TestOutput_CloseReleasesBackend verifies Close releases the active backend
+// exactly once.
+func TestOutput_CloseReleasesBackend(t *testing.T) {
 	t.Parallel()
 
 	orig := &fakeBackend{name: "orig"}
 
 	out, err := New(Config{Backend: orig, Logger: zerolog.Nop()})
 	require.NoError(t, err)
-
-	first := &fakeBackend{name: "first"}
-	second := &fakeBackend{name: "second"}
-
-	out.SetBackend(first)
-	out.SetBackend(second)
-
-	assert.Equal(t, 1, first.closed, "superseded pending backend closed immediately")
-	assert.Equal(t, 0, second.closed)
-	assert.Equal(t, "orig", out.currentBackend().Name())
-
-	out.applyPendingBackend()
-	assert.Equal(t, "second", out.currentBackend().Name())
-	assert.Equal(t, 1, orig.closed)
-}
-
-// TestOutput_CloseReleasesActiveAndPending verifies Close releases both the
-// active backend and any pending (not-yet-applied) one.
-func TestOutput_CloseReleasesActiveAndPending(t *testing.T) {
-	t.Parallel()
-
-	orig := &fakeBackend{name: "orig"}
-
-	out, err := New(Config{Backend: orig, Logger: zerolog.Nop()})
-	require.NoError(t, err)
-
-	pending := &fakeBackend{name: "pending"}
-	out.SetBackend(pending)
 
 	require.NoError(t, out.Close())
 
 	assert.Equal(t, 1, orig.closed, "active backend closed on Close")
-	assert.Equal(t, 1, pending.closed, "pending backend closed on Close")
 }
