@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <!-- Required meta tags -->
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- Halfmoon CSS -->
+    <link rel="stylesheet" href="/css/halfmoon.min.css">
+    <!-- Icons CSS -->
+    <link rel="stylesheet" href="/css/icons.css?v=4">
+    <script>
+        const currentPageId = 'hardware';
+    </script>
+    <script src="/js/icons.js"></script>
+    <script src="/js/i18n.js"></script>
+    <script src="/js/navigation.js"></script>
+    <script src="/js/shared-websocket.js"></script>
+    <title>Simtezilo</title>
+
+    <style>
+        .hw-screen {
+            width: 240px;
+            height: 240px;
+            max-width: 90vw;
+            max-height: 90vw;
+            aspect-ratio: 1 / 1;
+            background: #000;
+            border-radius: 12px;
+            border: 4px solid var(--bs-content-border-color);
+            /* Crisp nearest-neighbour scaling of the small hardware panel. */
+            image-rendering: pixelated;
+            object-fit: contain;
+        }
+
+        .hw-screen-placeholder {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--bs-secondary-color);
+            font-size: 0.9rem;
+        }
+
+        .hw-pad {
+            display: grid;
+            grid-template-columns: repeat(3, 48px);
+            grid-template-rows: repeat(3, 48px);
+            gap: 6px;
+        }
+
+        .hw-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 0.9rem;
+            padding: 0;
+            border-radius: 8px;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        /* Brighter than the default btn-secondary grey. */
+        .hw-btn.btn-secondary {
+            --bs-btn-bg: #5d666e;
+            --bs-btn-border-color: #5d666e;
+            --bs-btn-hover-bg: #6e777f;
+            --bs-btn-hover-border-color: #6e777f;
+            --bs-btn-active-bg: #6e777f;
+            --bs-btn-active-border-color: #6e777f;
+        }
+
+        .hw-btn:active,
+        .hw-btn.hw-active {
+            transform: translateY(1px);
+            filter: brightness(1.4);
+        }
+
+        .hw-aux {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .hw-aux .hw-btn {
+            width: 48px;
+            height: 48px;
+        }
+
+        /* Equal-width side columns so the display stays centred on the page
+           regardless of how much space the left/right controls use. The inner
+           padding sets the gap between the controls and the display, kept equal
+           on both sides so each control sits the same distance from the panel. */
+        .hw-side {
+            display: flex;
+            width: 200px;
+        }
+
+        .hw-side-left {
+            justify-content: flex-end;
+            padding-right: 24px;
+        }
+
+        .hw-side-right {
+            justify-content: flex-start;
+            padding-left: 24px;
+        }
+
+        .hw-kbd {
+            font-size: 0.75rem;
+            opacity: 0.65;
+        }
+    </style>
+</head>
+
+<body data-bs-theme="dark">
+    <div id="navigation"></div>
+
+    <div class="content-container">
+        <div class="container-fluid">
+            <div class="row g-4 mt-1 justify-content-center align-items-center">
+
+                <!-- D-pad + center (enter) on the left of the display -->
+                <div class="col-auto hw-side hw-side-left">
+                    <div class="hw-pad">
+                        <div></div>
+                        <button class="btn btn-secondary hw-btn" data-key="up" title="Up (↑)">↑</button>
+                        <div></div>
+
+                        <button class="btn btn-secondary hw-btn" data-key="left" title="Left (←)">←</button>
+                        <button class="btn btn-secondary hw-btn" data-key="enter" title="Enter (Enter)">●</button>
+                        <button class="btn btn-secondary hw-btn" data-key="right" title="Right (→)">→</button>
+
+                        <div></div>
+                        <button class="btn btn-secondary hw-btn" data-key="down" title="Down (↓)">↓</button>
+                        <div></div>
+                    </div>
+                </div>
+
+                <!-- Live hardware screen mirror in the centre -->
+                <div class="col-auto text-center">
+                    <h5 class="mb-3" data-i18n="runmode.hardware.screen">Display</h5>
+                    <img id="hw-screen" class="hw-screen" alt="Hardware screen" style="display: none;">
+                    <div id="hw-screen-placeholder" class="hw-screen hw-screen-placeholder">
+                        <span data-i18n="runmode.hardware.waiting">Waiting for screen…</span>
+                    </div>
+                    <div class="mt-2">
+                        <span id="hw-status" class="badge bg-secondary"
+                            data-i18n="runmode.hardware.disconnected">Disconnected</span>
+                    </div>
+                </div>
+
+                <!-- Auxiliary buttons 1, 2, 3 stacked vertically on the right -->
+                <div class="col-auto hw-side hw-side-right">
+                    <div class="hw-aux">
+                        <button class="btn btn-secondary hw-btn" data-key="1" title="Button 1 (1)">1</button>
+                        <button class="btn btn-secondary hw-btn" data-key="2" title="Button 2 (2)">2</button>
+                        <button class="btn btn-secondary hw-btn" data-key="3" title="Button 3 (3)">3</button>
+                    </div>
+                </div>
+
+            </div>
+
+            <div class="row mt-3">
+                <div class="col text-center hw-kbd" data-i18n="runmode.hardware.keyboardhint">
+                    Keyboard: arrows, Enter, 1 / 2 / 3
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        (function () {
+            'use strict';
+
+            const img = document.getElementById('hw-screen');
+            const placeholder = document.getElementById('hw-screen-placeholder');
+            const status = document.getElementById('hw-status');
+
+            // Map keyboard keys to hardware button keys.
+            const keyMap = {
+                'ArrowUp': 'up',
+                'ArrowDown': 'down',
+                'ArrowLeft': 'left',
+                'ArrowRight': 'right',
+                'Enter': 'enter',
+                '1': '1',
+                '2': '2',
+                '3': '3'
+            };
+
+            // Send a button press to the backend.
+            function sendKey(key) {
+                fetch('/api/hardware/input', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ key })
+                }).catch(error => console.error('Failed to send hardware input:', error));
+            }
+
+            // Briefly highlight the on-screen button for the given key.
+            function flash(key) {
+                const btn = document.querySelector(`.hw-btn[data-key="${key}"]`);
+                if (!btn) return;
+                btn.classList.add('hw-active');
+                setTimeout(() => btn.classList.remove('hw-active'), 120);
+            }
+
+            // Wire on-screen buttons.
+            document.querySelectorAll('.hw-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const key = btn.getAttribute('data-key');
+                    sendKey(key);
+                    flash(key);
+                });
+            });
+
+            // Wire keyboard shortcuts.
+            document.addEventListener('keydown', (e) => {
+                // Ignore when typing into an input field.
+                const tag = (e.target && e.target.tagName) || '';
+                if (tag === 'INPUT' || tag === 'TEXTAREA' || e.target.isContentEditable) return;
+
+                const key = keyMap[e.key];
+                if (!key) return;
+
+                e.preventDefault();
+                sendKey(key);
+                flash(key);
+            });
+
+            // Receive mirrored screen frames over the shared WebSocket. Frames only
+            // arrive when the hardware screen changes, so a static screen costs nothing.
+            function handleScreen(data) {
+                if (!data || !data.image) return;
+                img.src = data.image;
+                if (img.style.display === 'none') {
+                    img.style.display = '';
+                    placeholder.style.display = 'none';
+                }
+            }
+
+            function updateStatus(connected) {
+                if (!status) return;
+                if (connected) {
+                    status.className = 'badge bg-success';
+                    status.textContent = 'Connected';
+                    status.setAttribute('data-i18n', 'runmode.hardware.connected');
+                } else {
+                    status.className = 'badge bg-secondary';
+                    status.textContent = 'Disconnected';
+                    status.setAttribute('data-i18n', 'runmode.hardware.disconnected');
+                }
+                if (typeof applyTranslations === 'function') applyTranslations();
+            }
+
+            function initScreenFeed() {
+                if (typeof SharedWebSocket === 'undefined') {
+                    setTimeout(initScreenFeed, 200);
+                    return;
+                }
+                SharedWebSocket.subscribe('screen', handleScreen);
+                SharedWebSocket.addConnectionListener(updateStatus);
+            }
+
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', initScreenFeed);
+            } else {
+                initScreenFeed();
+            }
+        })();
+    </script>
+
+    <!-- Bootstrap Bundle JS -->
+    <script src="/js/bootstrap.bundle.min.js"></script>
+</body>
+
+</html>

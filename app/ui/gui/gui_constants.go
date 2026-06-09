@@ -4,9 +4,14 @@ import "image/color"
 
 const (
 	fontXLarge = 48.0
+	fontStatus = 14.0
 	fontLarge  = 14.0
 	fontMedium = 11.0
 	fontSmall  = 9.0
+
+	// liveValueWidthPercent is the percentage of the panel width the live-view
+	// value is allowed to occupy before its font is shrunk to fit.
+	liveValueWidthPercent = 90
 )
 
 func valueColor() color.RGBA {

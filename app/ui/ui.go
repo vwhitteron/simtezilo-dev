@@ -30,7 +30,19 @@ type LiveData struct {
 	Gear            int
 	TelemetryActive bool
 	Calibrating     bool
-	forceRefresh    bool
+
+	// Dashboard live-view telemetry. Throttle/brake are percentages (0..100).
+	SpeedKPH    int
+	RPM         int
+	RevLimit    int
+	RevLightMin int
+	RevLightMax int
+	ThrottleIn  float64
+	ThrottleOut float64
+	BrakeIn     float64
+	BrakeOut    float64
+
+	forceRefresh bool
 }
 
 // UserInterface manages the user interface components and state.
@@ -51,6 +63,13 @@ type UserInterface struct {
 	startTime        time.Time
 	lastMenuActivity time.Time
 	lastActivity     time.Time
+
+	// activeLiveView is the live-view leaf currently selected (gear view or
+	// dashboard). It determines which screen the live display renders.
+	activeLiveView languagedb.Key
+	// dashFlashOn toggles each dashboard frame while at/over the rev limit so the
+	// background blinks.
+	dashFlashOn bool
 }
 
 // NewUserInterface initializes and returns a new UserInterface instance.
@@ -67,6 +86,7 @@ func NewUserInterface(config *Config) *UserInterface {
 		lastActivity:     time.Now(),
 		settingsCallback: config.SettingsCallback,
 		done:             config.ExitCodeChan,
+		activeLiveView:   languagedb.UIMenuLiveView,
 	}
 
 	// Set devToolsEnabled callback if provided
@@ -152,6 +172,17 @@ func (u *UserInterface) DrawReadyDisplay() {
 		return
 	}
 
+	if u.activeLiveView == languagedb.UIMenuLiveDashboard {
+		_ = u.Screen.RenderDashboardScreen(gui.DashboardData{
+			Gear:  u.i18n.GetString(languagedb.UIReady),
+			Ready: true,
+		})
+		u.mode = ScreenModeWait
+		u.log.Debug().Str("state", "wait").Msg("display update")
+
+		return
+	}
+
 	_ = u.Screen.RenderSplashScreen(u.i18n.GetString(languagedb.UIReady))
 
 	u.mode = ScreenModeWait
@@ -159,8 +190,20 @@ func (u *UserInterface) DrawReadyDisplay() {
 	u.log.Debug().Str("state", "wait").Msg("display update")
 }
 
-// DrawLiveDisplay renders the live data screen on the display.
+// DrawLiveDisplay renders the active live-view screen on the display.
 func (u *UserInterface) DrawLiveDisplay(data LiveData) {
+	// The dashboard view is driven by continuously-changing telemetry, so it
+	// redraws every frame rather than only on a gear change.
+	if u.activeLiveView == languagedb.UIMenuLiveDashboard {
+		_ = u.Screen.RenderDashboardScreen(u.dashboardData(data))
+
+		u.displayData = data
+		u.mode = ScreenModeLive
+		u.RegisterActivity()
+
+		return
+	}
+
 	if !u.displayData.forceRefresh {
 		if data.Calibrating == u.displayData.Calibrating &&
 			(data.Gear == u.displayData.Gear || data.Gear == kinematics.NullGear) {
@@ -180,6 +223,68 @@ func (u *UserInterface) DrawLiveDisplay(data LiveData) {
 	u.RegisterActivity()
 
 	u.log.Debug().Str("state", "live").Msg("display update")
+}
+
+// isLiveLeaf reports whether the menu page is one of the live-view leaves.
+func isLiveLeaf(name languagedb.Key) bool {
+	return name == languagedb.UIMenuLiveView || name == languagedb.UIMenuLiveDashboard
+}
+
+// renderActiveLiveView renders the currently selected live view using the last
+// known telemetry. Used when entering or paging between live views.
+func (u *UserInterface) renderActiveLiveView() {
+	if u.activeLiveView == languagedb.UIMenuLiveDashboard {
+		if u.displayData.Gear == kinematics.NullGear {
+			_ = u.Screen.RenderDashboardScreen(gui.DashboardData{
+				Gear:  u.i18n.GetString(languagedb.UIReady),
+				Ready: true,
+			})
+		} else {
+			_ = u.Screen.RenderDashboardScreen(u.dashboardData(u.displayData))
+		}
+
+		return
+	}
+
+	// Gear view: without telemetry show "Ready" rather than the "NULL" placeholder.
+	gearValue := kinematics.GearName(u.displayData.Gear)
+	if u.displayData.Gear == kinematics.NullGear {
+		gearValue = u.i18n.GetString(languagedb.UIReady)
+	}
+
+	_ = u.Screen.RenderLiveScreen(gearValue)
+}
+
+// dashboardData maps the live telemetry into the gui dashboard model and advances
+// the rev-limit flash toggle.
+func (u *UserInterface) dashboardData(data LiveData) gui.DashboardData {
+	flash := false
+
+	if data.RevLightMax > 0 && data.RPM >= data.RevLightMax {
+		u.dashFlashOn = !u.dashFlashOn
+		flash = u.dashFlashOn
+	} else {
+		u.dashFlashOn = false
+	}
+
+	gear := kinematics.GearName(data.Gear)
+	if data.Gear == kinematics.NullGear {
+		gear = ""
+	}
+
+	return gui.DashboardData{
+		Gear:        gear,
+		SpeedKPH:    data.SpeedKPH,
+		RPM:         data.RPM,
+		RevLimit:    data.RevLimit,
+		RevLightMin: data.RevLightMin,
+		RevLightMax: data.RevLightMax,
+		ThrottleIn:  data.ThrottleIn,
+		ThrottleOut: data.ThrottleOut,
+		BrakeIn:     data.BrakeIn,
+		BrakeOut:    data.BrakeOut,
+		Flash:       flash,
+	}
 }
 
 // ForceRedraw marks the display data as requiring a refresh on the next update.

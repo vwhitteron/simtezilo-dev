@@ -38,6 +38,7 @@
 
         "ui.menu.live": "Live",
         "ui.menu.live.view": "Live View",
+        "ui.menu.live.dashboard": "Dashboard",
 
         "ui.menu.info": "Info",
         "ui.menu.info.version": "Version",
@@ -225,6 +226,13 @@
         "runmode.nav.developer": "Developer",
         "runmode.nav.settings": "Settings",
         "runmode.nav.logs": "Logs",
+        "runmode.nav.dev": "Dev",
+        "runmode.nav.hardware": "Hardware",
+        "runmode.hardware.screen": "Display",
+        "runmode.hardware.waiting": "Waiting for screen…",
+        "runmode.hardware.connected": "Connected",
+        "runmode.hardware.disconnected": "Disconnected",
+        "runmode.hardware.keyboardhint": "Keyboard: arrows, Enter, 1 / 2 / 3",
         "runmode.nav.info": "Info",
 
         "runmode.info.version": "Version:",

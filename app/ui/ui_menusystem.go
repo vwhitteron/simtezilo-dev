@@ -57,8 +57,16 @@ func NewMenuSystem() *MenuSystem {
 		children: make([]*MenuNode, 0),
 	}
 
+	// liveView is an ordinary leaf page like any other menu item; the Return
+	// sibling lets Left/Right page back out to the top level instead of trapping
+	// the user on a childless leaf. Keeping it a standard child (rather than a
+	// magical top-level screen) matches the rest of the UI and leaves room for
+	// additional live views as siblings later.
+	liveViewNode := &MenuNode{name: languagedb.UIMenuLiveView, nodeType: NodeTypeLeaf, context: PageContextAlways, parent: liveNode}
 	liveNode.children = append(liveNode.children,
-		&MenuNode{name: languagedb.UIMenuLiveView, nodeType: NodeTypeLeaf, context: PageContextAlways, parent: liveNode},
+		&MenuNode{name: languagedb.UIMenuReturn, nodeType: NodeTypeBranch, context: PageContextAlways, parent: liveNode},
+		liveViewNode,
+		&MenuNode{name: languagedb.UIMenuLiveDashboard, nodeType: NodeTypeLeaf, context: PageContextAlways, parent: liveNode},
 	)
 
 	settingsNode := &MenuNode{
@@ -413,7 +421,7 @@ func NewMenuSystem() *MenuSystem {
 
 	menuSystem := &MenuSystem{
 		root:               root,
-		currentNode:        liveNode, // Start at Live (first top-level item)
+		currentNode:        liveViewNode, // Start on the live view leaf
 		setupModeCountdown: setupModeCountdownStart,
 	}
 

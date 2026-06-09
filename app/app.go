@@ -4,6 +4,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"image"
 	"net"
 	"net/http"
 	"path/filepath"
@@ -27,6 +28,7 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/display"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/pirateaudio"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/spotpear"
+	"github.com/vwhitteron/simtezilo-dev/app/hardware/virtual"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/waveshare"
 	"github.com/vwhitteron/simtezilo-dev/app/i18n"
 	"github.com/vwhitteron/simtezilo-dev/app/i18n/languagedb"
@@ -100,6 +102,8 @@ type App struct {
 	raceInfoFeed       chan map[string]any     // Channel for sending race info to web UI
 	gameStateFeed      chan string             // Channel for sending game state to web UI
 	logStatsFeed       chan map[string]any     // Channel for sending log stats to web UI
+	screenFrameFeed    chan *image.RGBA        // Channel for sending rendered display frames to web UI
+	hidEvents          chan ui.HIDInputEvent   // HID input events (hardware buttons / web UI hardware view)
 	webUI              *webui.WebUI            // Web UI server and handler
 	webSequenceID      uint32                  // Last sequence ID sent to the web UI
 	ipAddress          string                  // Local IP address for web UI access
@@ -157,6 +161,7 @@ func New(opts Options) (*App, error) {
 		raceInfoFeed:       make(chan map[string]any, 10),
 		gameStateFeed:      make(chan string, 10),
 		logStatsFeed:       make(chan map[string]any, 10),
+		screenFrameFeed:    make(chan *image.RGBA, 4),
 		lapStartEvents:     make(chan uint32),
 		crashLogger:        opts.CrashLogger,
 	}
@@ -177,6 +182,7 @@ func New(opts Options) (*App, error) {
 	}
 
 	hidEvents := make(chan ui.HIDInputEvent, 10)
+	newApp.hidEvents = hidEvents
 
 	err = newApp.initializeHardware(hidEvents)
 	if err != nil {
@@ -377,6 +383,8 @@ func (a *App) runAppMode() RunResult {
 			RaceInfoFeed:       a.raceInfoFeed,
 			GameStateFeed:      a.gameStateFeed,
 			LogStatsFeed:       a.logStatsFeed,
+			ScreenFrameFeed:    a.screenFrameFeed,
+			SendHIDInput:       a.sendHIDInput,
 			Config:             a.config,
 			Calibrator:         a.calibrator,
 			ShutdownChan:       a.exitCodeChan,
@@ -507,8 +515,17 @@ func (a *App) initializeHardware(hidEvents chan ui.HIDInputEvent) error {
 		err = a.initializeSpotpear(hidEvents)
 	case "waveshare":
 		err = a.initializeWaveshare(hidEvents)
+	case "virtual":
+		a.initializeVirtual()
 	default:
-		a.initializeConsole()
+		// With developer tools enabled, fall back to an in-memory 240x240 virtual
+		// panel (mirrored to the web UI hardware view) rather than the text console,
+		// so the dashboard and menu screens are visible without real hardware.
+		if a.config.GetDevToolsEnabled() {
+			a.initializeVirtual()
+		} else {
+			a.initializeConsole()
+		}
 	}
 
 	// fallback to console display on error
@@ -641,12 +658,23 @@ func (a *App) initializeConsole() {
 		Msg("init")
 }
 
+// initializeVirtual sets up an in-memory 240x240 virtual display. Input is driven
+// from the web UI hardware view; there are no physical buttons to wire up.
+func (a *App) initializeVirtual() {
+	a.display = virtual.NewDisplay(virtualDisplayWidth, virtualDisplayHeight, virtualDisplayDPI)
+	a.log.Debug().
+		Str("component", "virtual").
+		Str("sub", "display").
+		Str("result", "success").
+		Msg("init")
+}
+
 // initializeUI sets up the user interface.
 func (a *App) initializeUI(opts Options, hidEvents chan ui.HIDInputEvent) error {
 	a.ui = ui.NewUserInterface(&ui.Config{
 		I18n:             a.i18n,
 		HIDEvents:        hidEvents,
-		Display:          a.display,
+		Display:          a.wrapDisplayFrameTap(a.display),
 		LiveData:         &ui.LiveData{Gear: kinematics.NullGear},
 		Log:              *opts.Logger,
 		SettingsCallback: a.settingAction,
@@ -1233,10 +1261,22 @@ func (a *App) handleEngineHapticsTick() {
 
 // handleDisplayTick processes display updates.
 func (a *App) handleDisplayTick() {
+	telemetry := a.gtClient.Telemetry
+	revLight := telemetry.EngineRPMLight()
+
 	a.ui.UpdateDisplay(ui.LiveData{
 		Gear:            a.kinematics.Current.TransmissionGear,
 		TelemetryActive: a.state.telemetryActive,
 		Calibrating:     a.calibrator.IsEnabled(),
+		SpeedKPH:        int(telemetry.GroundSpeedKPH()),
+		RPM:             int(telemetry.EngineRPM()),
+		RevLimit:        int(a.vehicle.RevLimit),
+		RevLightMin:     int(revLight.Min),
+		RevLightMax:     int(revLight.Max),
+		ThrottleIn:      float64(telemetry.ThrottleInputPercent()),
+		ThrottleOut:     float64(telemetry.ThrottleOutputPercent()),
+		BrakeIn:         float64(telemetry.BrakeInputPercent()),
+		BrakeOut:        float64(telemetry.BrakeOutputPercent()),
 	})
 }
 

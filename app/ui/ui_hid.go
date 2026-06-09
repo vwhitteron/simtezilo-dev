@@ -7,7 +7,6 @@ import (
 
 	"github.com/vwhitteron/simtezilo-dev/app/exitcode"
 	"github.com/vwhitteron/simtezilo-dev/app/i18n/languagedb"
-	"github.com/vwhitteron/simtezilo-dev/app/kinematics"
 	"github.com/vwhitteron/simtezilo-dev/app/ui/gui"
 )
 
@@ -67,11 +66,24 @@ func (u *UserInterface) HIDEventHandler(ctx context.Context) {
 
 			title, value := u.handleMenuNavigation(key)
 
-			// Special case: entering live view should render the live screen
-			if title == string(languagedb.UIMenuLiveView) {
-				u.mode = ScreenModeLive
+			// Special case: entering or paging between live views should render the
+			// selected live screen.
+			if isLiveLeaf(languagedb.Key(title)) {
+				// Set activeLiveView before mode so the display loop never sees
+				// ScreenModeLive with a stale activeLiveView and renders the wrong
+				// ready screen. Transition straight to ScreenModeWait: the live-data
+				// update loop re-enters naturally via handleWaitMode when telemetry
+				// is active.
+				u.activeLiveView = languagedb.Key(title)
 				u.lastMenuActivity = time.Now()
-				_ = u.Screen.RenderLiveScreen(kinematics.GearName(u.displayData.Gear))
+				// Reset the power-off timeout so paging/navigating onto a live
+				// view keeps the screen awake until the timeout is reached again,
+				// rather than flashing the screen and immediately re-sleeping.
+				u.RegisterActivity()
+
+				u.renderActiveLiveView()
+
+				u.mode = ScreenModeWait
 
 				continue
 			}

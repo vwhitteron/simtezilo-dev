@@ -23,6 +23,8 @@ type ST7789LCD struct {
 	port   spi.PortCloser
 	device *st7789.Device
 
+	mu sync.Mutex
+
 	dpi      float64
 	rotation st7789.Rotation
 	sleeping bool
@@ -139,6 +141,9 @@ func NewST7789LCD(config *Config) (*ST7789LCD, error) {
 
 // Clear fills the display with black.
 func (l *ST7789LCD) Clear() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
 	l.device.FillScreen(color.RGBA{R: 0, G: 0, B: 0, A: 0})
 }
 
@@ -153,12 +158,18 @@ func (l *ST7789LCD) Close() {
 
 // Wakeup powers on the display if it is currently sleeping.
 func (l *ST7789LCD) Wakeup() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
 	_ = l.device.PowerOn()
 	l.sleeping = false
 }
 
 // Sleep powers off the display if it is currently awake.
 func (l *ST7789LCD) Sleep() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
 	if l.sleeping {
 		return
 	}
@@ -206,6 +217,9 @@ func (l *ST7789LCD) Write(content *Content) error {
 		return errors.New("canvas is nil")
 	}
 
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
 	l.device.DrawRAW(content.Canvas)
 	l.canvas = content.Canvas
 
@@ -242,6 +256,9 @@ func (l *ST7789LCD) SetOrientation(degrees int) {
 	default:
 		rotation = st7789.RotationNone
 	}
+
+	l.mu.Lock()
+	defer l.mu.Unlock()
 
 	l.device.SetRotation(rotation)
 	l.rotation = rotation

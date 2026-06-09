@@ -12,6 +12,14 @@ const (
 	telemetryFrameRate    = 60  // 60 Hz
 )
 
+// Virtual display geometry, matching the real ST7789 panels so rendered screens
+// look identical when mirrored to the web UI hardware view.
+const (
+	virtualDisplayWidth  uint16  = 240
+	virtualDisplayHeight uint16  = 240
+	virtualDisplayDPI    float64 = 265
+)
+
 // TODO: should these be user configurable?
 const (
 	tyreConditionStablisationTime = 5 * time.Second

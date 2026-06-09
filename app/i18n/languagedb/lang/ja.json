@@ -38,6 +38,7 @@
 
         "ui.menu.live": "ライブ",
         "ui.menu.live.view": "ライブビュー",
+        "ui.menu.live.dashboard": "ダッシュボード",
 
         "ui.menu.info": "情報",
         "ui.menu.info.version": "バージョン",
@@ -225,6 +226,13 @@
         "runmode.nav.developer": "開発者",
         "runmode.nav.settings": "設定",
         "runmode.nav.logs": "ログ",
+        "runmode.nav.dev": "開発",
+        "runmode.nav.hardware": "ハードウェア",
+        "runmode.hardware.screen": "ディスプレイ",
+        "runmode.hardware.waiting": "画面を待機中…",
+        "runmode.hardware.connected": "接続済み",
+        "runmode.hardware.disconnected": "切断",
+        "runmode.hardware.keyboardhint": "キーボード: 矢印キー, Enter, 1 / 2 / 3",
         "runmode.nav.info": "情報",
 
         "runmode.info.version": "バージョン：",

@@ -24,10 +24,11 @@ const (
 	UICalibrating Key = "ui.calibrating"
 	UISettings    Key = "ui.settings"
 
-	UIMenuLive     Key = "ui.menu.live"
-	UIMenuLiveView Key = "ui.menu.live.view"
-	UIMenuSettings Key = "ui.menu.settings"
-	UIMenuReturn   Key = "ui.menu.return"
+	UIMenuLive          Key = "ui.menu.live"
+	UIMenuLiveView      Key = "ui.menu.live.view"
+	UIMenuLiveDashboard Key = "ui.menu.live.dashboard"
+	UIMenuSettings      Key = "ui.menu.settings"
+	UIMenuReturn        Key = "ui.menu.return"
 
 	UIMenuInfo           Key = "ui.menu.info"
 	UIMenuInfoVersion    Key = "ui.menu.info.version"

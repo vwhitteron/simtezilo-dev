@@ -5,6 +5,7 @@ import (
 	"image"
 	"image/draw"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/golang/freetype/truetype"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware"
@@ -84,26 +85,47 @@ func (r *Screen) RenderBlankScreen() error {
 	return nil
 }
 
-// RenderLiveScreen renders the live screen with the provided value.
+// RenderLiveScreen renders the live screen with the provided gear or status value.
 func (r *Screen) RenderLiveScreen(value string) error {
-	// value
+	canvas := r.newBlankCanvas()
+
+	// Gears are single characters and use the large font; multi-character status
+	// values such as "Ready" or "Calibrating" render in a smaller font.
+	fontSize := r.i18n.RegularFont().Scale * fontXLarge
+	if utf8.RuneCountInString(value) > 1 {
+		fontSize = r.i18n.RegularFont().Scale * fontStatus
+	}
+
 	fontFace := truetype.NewFace(r.i18n.RegularFont().Font, &truetype.Options{
-		Size:    r.i18n.RegularFont().Scale * fontXLarge,
+		Size:    fontSize,
 		DPI:     r.dpi,
 		Hinting: font.HintingFull,
 	})
 
-	canvas := r.newBlankCanvas()
 	fontDrawer := &font.Drawer{
 		Dst:  canvas,
 		Src:  image.NewUniform(valueColor()),
 		Face: fontFace,
 	}
 
+	// Safety net: shrink further if the value still overflows the panel width.
+	maxWidth := fixed.I(canvas.Rect.Max.X) * liveValueWidthPercent / 100
+	if width := fontDrawer.MeasureString(value); width > maxWidth {
+		fontSize = fontSize * float64(maxWidth) / float64(width)
+		fontDrawer.Face = truetype.NewFace(r.i18n.RegularFont().Font, &truetype.Options{
+			Size:    fontSize,
+			DPI:     r.dpi,
+			Hinting: font.HintingFull,
+		})
+	}
+
+	// Center the glyph bounding box vertically. Using the box midpoint
+	// (Min.Y is above the baseline and negative, Max.Y below and positive)
+	// keeps values with descenders such as "Ready" centered rather than
+	// pushed down by the descender height.
 	textBounds, _ := fontDrawer.BoundString(value)
 	xPosition := (fixed.I(canvas.Rect.Max.X) - fontDrawer.MeasureString(value)) / 2
-	textHeight := textBounds.Max.Y - textBounds.Min.Y
-	yPosition := fixed.I((canvas.Rect.Max.Y)-textHeight.Ceil())/2 + fixed.I(textHeight.Ceil())
+	yPosition := (fixed.I(canvas.Rect.Max.Y) - (textBounds.Max.Y + textBounds.Min.Y)) / 2
 	fontDrawer.Dot = fixed.Point26_6{
 		X: xPosition,
 		Y: yPosition,

@@ -4,12 +4,17 @@ package webui
 import (
 	"archive/tar"
 	"archive/zip"
+	"bytes"
 	"compress/gzip"
 	"context"
 	"embed"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash/crc32"
+	"image"
+	"image/png"
 	"io"
 	"maps"
 	"mime"
@@ -75,6 +80,7 @@ func newWSClient(conn *websocket.Conn, log zerolog.Logger) *wsClient {
 			"logStats":    true,
 			"calibration": true,
 			"telemetry":   false, // Telemetry off by default
+			"screen":      false, // Hardware screen mirror off by default
 		},
 		done: make(chan struct{}),
 		log:  log,
@@ -204,6 +210,8 @@ type WebUI struct {
 	gameStateFeed      chan string
 	currentGameState   string
 	gameStateMutex     sync.RWMutex
+	screenFrameFeed    chan *image.RGBA
+	sendHIDInput       func(key string) bool
 	circuitInfoFeed    chan map[string]string
 	currentCircuitInfo map[string]string
 	circuitInfoMutex   sync.RWMutex
@@ -245,6 +253,8 @@ type Config struct {
 	RaceInfoFeed       chan map[string]any
 	GameStateFeed      chan string
 	LogStatsFeed       chan map[string]any
+	ScreenFrameFeed    chan *image.RGBA
+	SendHIDInput       func(key string) bool // Inject a HID button press from the hardware dev view
 	Config             *appconfig.Config
 	Calibrator         *calibrator.ToneGenerator
 	ShutdownChan       chan exitcode.Code
@@ -268,6 +278,8 @@ func New(config Config) *WebUI {
 		currentVehicleInfo: make(map[string]any),
 		gameStateFeed:      config.GameStateFeed,
 		currentGameState:   "unknown",
+		screenFrameFeed:    config.ScreenFrameFeed,
+		sendHIDInput:       config.SendHIDInput,
 		circuitInfoFeed:    config.CircuitInfoFeed,
 		currentCircuitInfo: make(map[string]string),
 		raceInfoFeed:       config.RaceInfoFeed,
@@ -315,6 +327,7 @@ func (w *WebUI) GetHTTPHandler() http.Handler {
 	mux.HandleFunc("/api/config/import", w.handleConfigImport)
 	mux.HandleFunc("/api/config/reset", w.handleConfigReset)
 	mux.HandleFunc("/api/config/status", w.handleConfigStatus)
+	mux.HandleFunc("/api/hardware/input", w.handleHardwareInput)
 	mux.HandleFunc("/api/i18n", w.handleI18nAPI)
 	mux.HandleFunc("/api/languages", w.handleLanguagesAPI)
 	mux.HandleFunc("/api/logs", w.handleLogsAPI)
@@ -400,8 +413,8 @@ func (w *WebUI) htmlRouterHandlerFunc() func(w http.ResponseWriter, r *http.Requ
 			filename = path[1:] + ".html"
 		}
 
-		// Restrict access to dev.html if developer tools are not enabled
-		if filename == "dev.html" && !w.config.GetDevToolsEnabled() {
+		// Restrict access to developer pages if developer tools are not enabled
+		if (filename == "dev.html" || filename == "hardware.html") && !w.config.GetDevToolsEnabled() {
 			response.WriteHeader(http.StatusForbidden)
 			w.log.Debug().Str("path", path).Msg("access to developer page denied - dev tools not enabled")
 
@@ -702,6 +715,9 @@ func (w *WebUI) unifiedWebSocketBroadcaster() {
 	// Track sequence ID for telemetry deduplication
 	sid := 0
 
+	// Hash of the last broadcast hardware screen frame, to skip unchanged frames.
+	var lastScreenHash uint32
+
 	// Ticker for batched telemetry sends
 	ticker := time.NewTicker(batchInterval)
 	defer ticker.Stop()
@@ -775,6 +791,47 @@ func (w *WebUI) unifiedWebSocketBroadcaster() {
 
 			// Clear buffer
 			batchBuffer = batchBuffer[:0]
+
+		case canvas := <-w.screenFrameFeed:
+			// De-duplicate identical frames so a static screen produces no traffic.
+			// Done here, in the single broadcaster goroutine, to avoid racing with
+			// the multiple goroutines that render to the display.
+			sum := crc32.ChecksumIEEE(canvas.Pix)
+			if sum == lastScreenHash {
+				continue
+			}
+
+			lastScreenHash = sum
+
+			// Encode the rendered hardware screen as a PNG data URL and broadcast it.
+			var buf bytes.Buffer
+
+			if err := png.Encode(&buf, canvas); err != nil {
+				w.log.Error().Err(err).Msg("failed to encode screen frame PNG")
+
+				continue
+			}
+
+			bounds := canvas.Bounds()
+
+			msg := WSMessage{
+				Type:      "screen",
+				Timestamp: time.Now().UnixMilli(),
+				Data: map[string]any{
+					"image":  "data:image/png;base64," + base64.StdEncoding.EncodeToString(buf.Bytes()),
+					"width":  bounds.Dx(),
+					"height": bounds.Dy(),
+				},
+			}
+
+			encodedData, err := json.Marshal(msg)
+			if err != nil {
+				w.log.Error().Err(err).Msg("failed to encode screen frame JSON")
+
+				continue
+			}
+
+			w.broadcastToUnifiedClients(encodedData, "screen")
 
 		case vehicleInfo := <-w.vehicleInfoFeed:
 			// Store current state with mutex protection
@@ -1886,6 +1943,54 @@ func (w *WebUI) applyHardwareConfig(config map[string]any) []string {
 	}
 
 	return errors
+}
+
+// handleHardwareInput injects a HID button press from the hardware dev view.
+// It is gated behind developer tools, mirroring the /hardware page restriction.
+func (w *WebUI) handleHardwareInput(response http.ResponseWriter, request *http.Request) {
+	response.Header().Set("Content-Type", "application/json")
+
+	if !w.config.GetDevToolsEnabled() {
+		response.WriteHeader(http.StatusForbidden)
+		_ = json.NewEncoder(response).Encode(map[string]string{"error": "developer tools not enabled"}) //nolint:errchkjson // simple encoding
+
+		return
+	}
+
+	if request.Method != http.MethodPost {
+		response.WriteHeader(http.StatusMethodNotAllowed)
+		_ = json.NewEncoder(response).Encode(map[string]string{"error": "Method not allowed"}) //nolint:errchkjson // simple encoding
+
+		return
+	}
+
+	var body struct {
+		Key string `json:"key"`
+	}
+
+	err := json.NewDecoder(request.Body).Decode(&body)
+	if err != nil {
+		response.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(response).Encode(map[string]string{"error": "Invalid JSON data"}) //nolint:errchkjson // simple encoding
+
+		return
+	}
+
+	if w.sendHIDInput == nil {
+		response.WriteHeader(http.StatusServiceUnavailable)
+		_ = json.NewEncoder(response).Encode(map[string]string{"error": "HID input unavailable"}) //nolint:errchkjson // simple encoding
+
+		return
+	}
+
+	if !w.sendHIDInput(body.Key) {
+		response.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(response).Encode(map[string]string{"error": "unknown or dropped key: " + body.Key}) //nolint:errchkjson // simple encoding
+
+		return
+	}
+
+	_ = json.NewEncoder(response).Encode(map[string]any{"status": "ok", "key": body.Key}) //nolint:errchkjson // simple encoding
 }
 
 // applyTelemetryConfig applies telemetry configuration changes.
