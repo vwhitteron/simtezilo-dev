@@ -6,8 +6,9 @@ import "github.com/vwhitteron/simtezilo-dev/app/i18n/languagedb"
 type PageContext string
 
 const (
-	PageContextAlways   PageContext = "always"
-	PageContextDevTools PageContext = "devtools"
+	PageContextAlways       PageContext = "always"
+	PageContextDevTools     PageContext = "devtools"
+	PageContextExperimental PageContext = "experimental"
 )
 
 // NodeType defines whether a menu node is a branch or leaf.

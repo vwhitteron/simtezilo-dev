@@ -190,6 +190,24 @@ func (suite *WebUITestSuite) TestHTMLRouter_RejectsAPIPath() {
 	suite.Equal(http.StatusNotFound, recorder.Code)
 }
 
+// TestImagesHandler_ServesIconFromIconsPackage guards against a regression where
+// icon requests were served from the webui's embedded static files (under
+// static/images/icons/) after the SVGs had moved to the shared icons package.
+// Icons must be routed to the icons package, which is their single source.
+func (suite *WebUITestSuite) TestImagesHandler_ServesIconFromIconsPackage() {
+	// Arrange
+	handler := suite.webUI.imagesHandlerFunc()
+	req := httptest.NewRequest(http.MethodGet, "/images/icons/fan.svg", nil)
+	recorder := httptest.NewRecorder()
+
+	// Act
+	handler(recorder, req)
+
+	// Assert
+	suite.Equal(http.StatusOK, recorder.Code)
+	suite.Contains(recorder.Body.String(), "<svg")
+}
+
 // =============================================================================
 // Stage 2: wsClient Unit Tests
 // =============================================================================

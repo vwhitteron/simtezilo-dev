@@ -44,6 +44,7 @@ const (
 	UIMenuAppLanguage        Key = "ui.menu.app.language"
 	UIMenuAppLoglevel        Key = "ui.menu.app.loglevel"
 	UIMenuAppDevtools        Key = "ui.menu.app.devtools"
+	UIMenuAppExperimental    Key = "ui.menu.app.experimental"
 	UIMenuAppTelemetrySource Key = "ui.menu.app.telemetrysource"
 
 	UIMenuSystem                   Key = "ui.menu.system"
@@ -304,6 +305,9 @@ const (
 	RunmodeSettingsAppAdvancedTitle                 Key = "runmode.settings.app.advanced.title"
 	RunmodeSettingsAppAdvancedEnabledevtools        Key = "runmode.settings.app.advanced.enabledevtools"
 	RunmodeSettingsAppAdvancedEnabledevtoolsTooltip Key = "runmode.settings.app.advanced.enabledevtools.tooltip"
+
+	RunmodeSettingsAppAdvancedEnableexperimental        Key = "runmode.settings.app.advanced.enableexperimental"
+	RunmodeSettingsAppAdvancedEnableexperimentalTooltip Key = "runmode.settings.app.advanced.enableexperimental.tooltip"
 
 	RunmodeSettingsHapticsTitle          Key = "runmode.settings.haptics.title"
 	RunmodeSettingsHapticsGeneralTitle   Key = "runmode.settings.haptics.general.title"

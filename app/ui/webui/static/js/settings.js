@@ -268,6 +268,17 @@ class ConfigManager {
             });
         }
 
+        // Experimental Features toggle - update visibility when changed
+        const enableExperimentalToggle = document.getElementById('app-enableexperimental');
+        if (enableExperimentalToggle) {
+            enableExperimentalToggle.addEventListener('change', () => {
+                // Update the visibility after the value changes
+                setTimeout(() => {
+                    this.updateExperimentalVisibility();
+                }, 100);
+            });
+        }
+
         // SSH enable/disable toggle
         const sshEnabledToggle = document.getElementById('ssh-enabled');
         if (sshEnabledToggle) {
@@ -913,6 +924,9 @@ class ConfigManager {
         // Update visibility of dev-only elements
         this.updateDevToolsVisibility();
 
+        // Update visibility of experimental-only elements (e.g. the Fan section)
+        this.updateExperimentalVisibility();
+
         // Update step attribute on all gain inputs based on gainIncrement config
         this.updateGainInputSteps();
 
@@ -1010,6 +1024,51 @@ class ConfigManager {
 
         // Store the dev tools state globally so navigation can access it
         window.devToolsEnabled = devToolsEnabled;
+    }
+
+    // Update visibility of experimental-only UI elements based on the
+    // enableExperimentalFeatures setting. The Fan / wind simulator section is
+    // gated behind this flag.
+    updateExperimentalVisibility() {
+        const experimentalEnabled = this.getNestedValue(this.config, 'app.enableExperimentalFeatures') === true;
+
+        // Sidebar nav link for the Fan section
+        const fanNavLink = document.querySelector('.settings-nav-link[data-section="fan"]');
+        if (fanNavLink) {
+            const navItem = fanNavLink.closest('.settings-nav-item') || fanNavLink;
+            navItem.style.display = experimentalEnabled ? '' : 'none';
+        }
+
+        // Mobile dropdown option for the Fan section
+        const sectionSelect = document.getElementById('sectionSelect');
+        if (sectionSelect) {
+            const fanOption = sectionSelect.querySelector('option[value="fan"]');
+            if (fanOption) {
+                fanOption.style.display = experimentalEnabled ? '' : 'none';
+                fanOption.disabled = !experimentalEnabled;
+            }
+            // If the Fan section is currently selected but no longer available,
+            // fall back to the Application section.
+            if (!experimentalEnabled && sectionSelect.value === 'fan') {
+                sectionSelect.value = 'application';
+                sectionSelect.dispatchEvent(new Event('change'));
+            }
+        }
+
+        // The Fan section content card itself
+        const fanSection = document.querySelector('[data-section-content="fan"]');
+        if (fanSection && !experimentalEnabled) {
+            // If the fan section is the active one, switch away from it first.
+            if (fanSection.classList.contains('active')) {
+                const appNavLink = document.querySelector('.settings-nav-link[data-section="application"]');
+                if (appNavLink) {
+                    appNavLink.click();
+                }
+            }
+        }
+
+        // Store the experimental state globally for any other consumers
+        window.experimentalEnabled = experimentalEnabled;
     }
 
     // Update transmission curve and g-force inputs disabled state based on mode

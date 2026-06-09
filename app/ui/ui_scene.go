@@ -22,6 +22,7 @@ const (
 type scene struct {
 	kind    sceneKind
 	text    string             // sceneLive
+	fan     string             // sceneLive: fan-speed footer text
 	dash    gui.DashboardData  // sceneDashboard
 	layout  gui.Layout         // sceneSetting
 	content gui.SettingContent // sceneSetting
@@ -46,11 +47,16 @@ func (u *UserInterface) view() scene {
 
 // liveScene describes the active live view populated with the latest telemetry.
 func (u *UserInterface) liveScene() scene {
+	fan := u.fanFooter()
+
 	if u.state.activeLiveView == languagedb.UIMenuLiveDashboard {
-		return scene{kind: sceneDashboard, dash: dashboardFrame(u.state.lastData, u.state.flashOn)}
+		dash := dashboardFrame(u.state.lastData, u.state.flashOn)
+		dash.Fan = fan
+
+		return scene{kind: sceneDashboard, dash: dash}
 	}
 
-	return scene{kind: sceneLive, text: u.state.gearText}
+	return scene{kind: sceneLive, text: u.state.gearText, fan: fan}
 }
 
 // readyScene describes the "waiting for telemetry" view for the active live view.
@@ -59,12 +65,13 @@ func (u *UserInterface) liveScene() scene {
 // its dimmed skeleton.
 func (u *UserInterface) readyScene() scene {
 	ready := u.i18n.GetString(languagedb.UIReady)
+	fan := u.fanFooter()
 
 	if u.state.activeLiveView == languagedb.UIMenuLiveDashboard {
-		return scene{kind: sceneDashboard, dash: gui.DashboardData{Gear: ready, Ready: true}}
+		return scene{kind: sceneDashboard, dash: gui.DashboardData{Gear: ready, Ready: true, Fan: fan}}
 	}
 
-	return scene{kind: sceneLive, text: ready}
+	return scene{kind: sceneLive, text: ready, fan: fan}
 }
 
 // dashboardFrame maps telemetry into the gui dashboard model. Flash is supplied by
@@ -119,7 +126,7 @@ func (u *UserInterface) draw(currentScene scene) {
 	case sceneNone:
 		// Nothing to draw; the display keeps its current content.
 	case sceneLive:
-		_ = u.Screen.RenderLiveScreen(currentScene.text)
+		_ = u.Screen.RenderLiveScreen(currentScene.text, currentScene.fan)
 	case sceneDashboard:
 		_ = u.Screen.RenderDashboardScreen(currentScene.dash)
 	case sceneSetting:

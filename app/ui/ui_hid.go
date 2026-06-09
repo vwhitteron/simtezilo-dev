@@ -134,8 +134,8 @@ func (u *UserInterface) handleUpKey() (title string, value string) {
 	// Reset inactivity timer on any menu interaction
 	u.state.lastMenuActivity = u.now()
 
-	// On the live view leaf, +/- controls fan speed (or the last active setting).
-	if u.menuSystem.GetCurrentMenuPage() == languagedb.UIMenuLiveView {
+	// On a live view leaf, +/- controls fan speed (or the last active setting).
+	if isLiveLeaf(u.menuSystem.GetCurrentMenuPage()) {
 		return u.handleLiveViewAdjust(actionIncrease)
 	}
 
@@ -193,7 +193,8 @@ func (u *UserInterface) handleLiveViewAdjust(action string) (title string, value
 		Str("value", value).
 		Msg("HID event")
 
-	return string(languagedb.UIMenuLiveView), value
+	// Return the active live view so the caller re-renders the screen the user is on.
+	return string(u.menuSystem.GetCurrentMenuPage()), value
 }
 
 // handleDownKey handles the down key for entering branches or navigating.
@@ -201,8 +202,8 @@ func (u *UserInterface) handleDownKey() (title string, value string) {
 	// Reset inactivity timer on any menu interaction
 	u.state.lastMenuActivity = u.now()
 
-	// On the live view leaf, +/- controls fan speed (or the last active setting).
-	if u.menuSystem.GetCurrentMenuPage() == languagedb.UIMenuLiveView {
+	// On a live view leaf, +/- controls fan speed (or the last active setting).
+	if isLiveLeaf(u.menuSystem.GetCurrentMenuPage()) {
 		return u.handleLiveViewAdjust(actionDecrease)
 	}
 
@@ -293,7 +294,7 @@ func (u *UserInterface) handleLeftKey() (title string, value string) {
 			_ = u.menuSystem.ResetSetupModeCountdown()
 		}
 
-		if u.display.IsAwake() && u.menuSystem.IsCurrentNodeLeaf() {
+		if u.display.IsAwake() && u.menuSystem.IsCurrentNodeLeaf() && !isLiveLeaf(menuPage) {
 			value = u.settingAction(menuPage, actionGet)
 		} else {
 			value = ""
@@ -334,7 +335,7 @@ func (u *UserInterface) handleRightKey() (title string, value string) {
 			_ = u.menuSystem.ResetSetupModeCountdown()
 		}
 
-		if u.display.IsAwake() && u.menuSystem.IsCurrentNodeLeaf() {
+		if u.display.IsAwake() && u.menuSystem.IsCurrentNodeLeaf() && !isLiveLeaf(menuPage) {
 			value = u.settingAction(menuPage, actionGet)
 		} else {
 			value = ""

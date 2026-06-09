@@ -683,13 +683,14 @@ func (a *App) initializeVirtual() {
 // initializeUI sets up the user interface.
 func (a *App) initializeUI(opts Options, hidEvents chan ui.HIDInputEvent) error {
 	a.ui = ui.NewUserInterface(&ui.Config{
-		I18n:             a.i18n,
-		HIDEvents:        hidEvents,
-		Display:          a.wrapDisplayFrameTap(a.display),
-		Log:              *opts.Logger,
-		SettingsCallback: a.settingAction,
-		DevToolsEnabled:  a.config.GetDevToolsEnabled,
-		ExitCodeChan:     a.exitCodeChan,
+		I18n:                a.i18n,
+		HIDEvents:           hidEvents,
+		Display:             a.wrapDisplayFrameTap(a.display),
+		Log:                 *opts.Logger,
+		SettingsCallback:    a.settingAction,
+		DevToolsEnabled:     a.config.GetDevToolsEnabled,
+		ExperimentalEnabled: a.config.GetExperimentalFeaturesEnabled,
+		ExitCodeChan:        a.exitCodeChan,
 	})
 
 	startingMessage := a.i18n.GetString(languagedb.UIStarting)

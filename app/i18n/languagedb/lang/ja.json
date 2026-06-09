@@ -38,7 +38,6 @@
 
         "ui.menu.live": "ライブ",
         "ui.menu.live.view": "ライブビュー",
-        "ui.menu.live.dashboard": "ダッシュボード",
 
         "ui.menu.info": "情報",
         "ui.menu.info.version": "バージョン",
@@ -56,6 +55,7 @@
         "ui.menu.app.language": "言語",
         "ui.menu.app.loglevel": "ログレベル",
         "ui.menu.app.devtools": "開発者ツール",
+        "ui.menu.app.experimental": "実験的機能",
         "ui.menu.app.telemetrysource": "テレメトリーソース",
 
         "ui.menu.system": "システム",
@@ -237,13 +237,6 @@
         "runmode.nav.developer": "開発者",
         "runmode.nav.settings": "設定",
         "runmode.nav.logs": "ログ",
-        "runmode.nav.dev": "開発",
-        "runmode.nav.hardware": "ハードウェア",
-        "runmode.hardware.screen": "ディスプレイ",
-        "runmode.hardware.waiting": "画面を待機中…",
-        "runmode.hardware.connected": "接続済み",
-        "runmode.hardware.disconnected": "切断",
-        "runmode.hardware.keyboardhint": "キーボード: 矢印キー, Enter, 1 / 2 / 3",
         "runmode.nav.info": "情報",
 
         "runmode.info.version": "バージョン：",
@@ -309,6 +302,8 @@
         "runmode.settings.app.advanced.title": "詳細設定",
         "runmode.settings.app.advanced.enabledevtools": "開発者ツールを有効にする",
         "runmode.settings.app.advanced.enabledevtools.tooltip": "上級ユーザーと開発者向けの開発者ツールとデバッグ機能を有効にします。",
+        "runmode.settings.app.advanced.enableexperimental": "実験的機能を有効にする",
+        "runmode.settings.app.advanced.enableexperimental.tooltip": "ファン風シミュレーターなどの開発中の実験的機能を有効にします。不安定な場合や予告なく変更される場合があります。",
         
         "runmode.settings.haptics.title": "ハプティクス",
         "runmode.settings.haptics.general.title": "全般",

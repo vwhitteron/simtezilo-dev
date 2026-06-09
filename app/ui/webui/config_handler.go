@@ -53,14 +53,15 @@ func (h *configHandler) handleConfigAPI(response http.ResponseWriter, request *h
 func (h *configHandler) handleGetConfig(response http.ResponseWriter, _ *http.Request) {
 	configData := map[string]any{
 		"app": map[string]any{
-			"language":       *h.config.GetAppLanguage(),
-			"accent":         h.config.GetAppAccent(),
-			"logLevel":       h.config.GetAppLogLevel(),
-			"baseDir":        h.config.GetAppBaseDir(),
-			"vehicleDBFile":  h.config.GetAppVehicleDBFile(),
-			"enabledWebUI":   h.config.GetAppWebUIEnabled(),
-			"webUIPort":      h.config.GetAppWebUIPort(),
-			"enableDevTools": h.config.GetDevToolsEnabled(),
+			"language":                   *h.config.GetAppLanguage(),
+			"accent":                     h.config.GetAppAccent(),
+			"logLevel":                   h.config.GetAppLogLevel(),
+			"baseDir":                    h.config.GetAppBaseDir(),
+			"vehicleDBFile":              h.config.GetAppVehicleDBFile(),
+			"enabledWebUI":               h.config.GetAppWebUIEnabled(),
+			"webUIPort":                  h.config.GetAppWebUIPort(),
+			"enableDevTools":             h.config.GetDevToolsEnabled(),
+			"enableExperimentalFeatures": h.config.GetExperimentalFeaturesEnabled(),
 			"updates": map[string]any{
 				"channel": h.config.GetAppUpdateChannel(),
 			},
@@ -312,6 +313,7 @@ func (h *configHandler) applyAppConfig(config map[string]any) []string {
 	errors = appendErr(errors, applyField(config, "logLevel", "invalid log level value", h.config.SetAppLogLevel))
 	errors = appendErr(errors, applyField(config, "baseDir", "invalid base directory value", h.config.SetAppBaseDir))
 	errors = appendErr(errors, applyField(config, "enableDevTools", "invalid enableDevTools value", h.config.SetDevToolsEnabled))
+	errors = appendErr(errors, applyField(config, "enableExperimentalFeatures", "invalid enableExperimentalFeatures value", h.config.SetExperimentalFeaturesEnabled))
 
 	errors = append(errors, applySubMap(config, "updates", "invalid updates configuration", h.applyUpdatesConfig)...)
 

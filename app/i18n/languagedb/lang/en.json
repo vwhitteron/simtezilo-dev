@@ -38,7 +38,6 @@
 
         "ui.menu.live": "Live",
         "ui.menu.live.view": "Live View",
-        "ui.menu.live.dashboard": "Dashboard",
 
         "ui.menu.info": "Info",
         "ui.menu.info.version": "Version",
@@ -56,6 +55,7 @@
         "ui.menu.app.language": "Language",
         "ui.menu.app.loglevel": "Log Level",
         "ui.menu.app.devtools": "Developer Tools",
+        "ui.menu.app.experimental": "Experimental Features",
         "ui.menu.app.telemetrysource": "Telemetry Source",
 
         "ui.menu.system": "System",
@@ -237,13 +237,6 @@
         "runmode.nav.developer": "Developer",
         "runmode.nav.settings": "Settings",
         "runmode.nav.logs": "Logs",
-        "runmode.nav.dev": "Dev",
-        "runmode.nav.hardware": "Hardware",
-        "runmode.hardware.screen": "Display",
-        "runmode.hardware.waiting": "Waiting for screen…",
-        "runmode.hardware.connected": "Connected",
-        "runmode.hardware.disconnected": "Disconnected",
-        "runmode.hardware.keyboardhint": "Keyboard: arrows, Enter, 1 / 2 / 3",
         "runmode.nav.info": "Info",
 
         "runmode.info.version": "Version:",
@@ -309,6 +302,8 @@
         "runmode.settings.app.advanced.title": "Advanced",
         "runmode.settings.app.advanced.enabledevtools": "Enable Developer Tools",
         "runmode.settings.app.advanced.enabledevtools.tooltip": "Enable developer tools and debugging features for advanced users and developers.",
+        "runmode.settings.app.advanced.enableexperimental": "Enable Experimental Features",
+        "runmode.settings.app.advanced.enableexperimental.tooltip": "Enable experimental, in-development features such as the fan wind simulator. These may be unstable or change without notice.",
         
         "runmode.settings.haptics.title": "Haptics",
         "runmode.settings.haptics.general.title": "General",

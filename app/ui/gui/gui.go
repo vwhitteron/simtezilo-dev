@@ -3,6 +3,7 @@ package gui
 import (
 	"fmt"
 	"image"
+	"image/color"
 	"image/draw"
 	"strings"
 	"sync"
@@ -12,6 +13,7 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/hardware"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/display"
 	"github.com/vwhitteron/simtezilo-dev/app/i18n"
+	"github.com/vwhitteron/simtezilo-dev/app/ui/icons"
 	"github.com/vwhitteron/simtezilo-dev/app/ui/sprites"
 	"golang.org/x/image/font"
 	"golang.org/x/image/math/fixed"
@@ -50,6 +52,7 @@ type Screen struct {
 	dpi           float64
 	sprites       *sprites.SpriteSet
 	i18n          *i18n.I18n
+	fanIcon       *image.Alpha // rasterised once; tinted per draw for the fan footer
 }
 
 type Layout int
@@ -73,6 +76,10 @@ func NewScreen(config *Config) (*Screen, error) {
 		return nil, fmt.Errorf("loading sprites: %w", err)
 	}
 
+	// Rasterise the fan footer icon once. A failure is non-fatal: the footer
+	// simply falls back to showing the percentage without an icon.
+	fanIcon, _ := icons.Render("fan", fanIconSize)
+
 	return &Screen{
 		canvases: [2]*image.RGBA{
 			image.NewRGBA(image.Rect(0, 0, int(pixelColumns), int(pixelRows))),
@@ -86,6 +93,7 @@ func NewScreen(config *Config) (*Screen, error) {
 		dpi:           dpi,
 		sprites:       sprites,
 		i18n:          config.I18n,
+		fanIcon:       fanIcon,
 	}, nil
 }
 
@@ -120,8 +128,9 @@ func (r *Screen) RenderBlankScreen() error {
 	return nil
 }
 
-// RenderLiveScreen renders the live screen with the provided gear or status value.
-func (r *Screen) RenderLiveScreen(value string) error {
+// RenderLiveScreen renders the live screen with the provided gear or status value
+// and a fan-speed footer (e.g. "Fan 42%") centered along the bottom edge.
+func (r *Screen) RenderLiveScreen(value string, fan string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -146,6 +155,8 @@ func (r *Screen) RenderLiveScreen(value string) error {
 	}
 
 	drawText(canvas, fontFace, valueColor(), value, anchorGlyphMiddle)
+
+	r.drawFanFooter(canvas, fan)
 
 	content := &display.Content{
 		Text:   "Live: " + value,
@@ -383,6 +394,69 @@ func (r *Screen) renderBackgroundScreen(sprite sprites.SpriteName, value string)
 	r.displayDevice.Wakeup()
 
 	return nil
+}
+
+// fanFooterBottomPadding is the gap in pixels between the fan footer baseline and
+// the bottom edge of the canvas.
+const fanFooterBottomPadding = 6
+
+// drawFanFooter draws the fan icon followed by the fan percentage (e.g. "42%")
+// horizontally centered along the bottom edge of the canvas. An empty string
+// draws nothing.
+func (r *Screen) drawFanFooter(canvas *image.RGBA, fan string) {
+	if fan == "" {
+		return
+	}
+
+	r.drawIconLabel(canvas, r.fanIcon, fan, fanFooterColor(), canvas.Rect.Max.Y-fanFooterBottomPadding)
+}
+
+// drawIconLabel draws an icon mask immediately to the left of a small label, the
+// pair centered horizontally, with the label baseline at baselineY. icon may be
+// nil, in which case only the label is drawn. The icon is tinted with col.
+func (r *Screen) drawIconLabel(canvas *image.RGBA, icon *image.Alpha, label string, col color.RGBA, baselineY int) {
+	fontFace := truetype.NewFace(r.i18n.RegularFont().Font, &truetype.Options{
+		Size:    r.i18n.RegularFont().Scale * fontSmall,
+		DPI:     r.dpi,
+		Hinting: font.HintingFull,
+	})
+
+	fontDrawer := &font.Drawer{
+		Dst:  canvas,
+		Src:  image.NewUniform(col),
+		Face: fontFace,
+	}
+
+	labelWidth := fontDrawer.MeasureString(label)
+
+	iconWidth, gap := 0, 0
+	if icon != nil {
+		iconWidth = icon.Bounds().Dx()
+		gap = fanIconGap
+	}
+
+	startX := (fixed.I(canvas.Rect.Max.X) - (fixed.I(iconWidth+gap) + labelWidth)) / 2
+
+	if icon != nil {
+		bounds, _ := fontDrawer.BoundString(label)
+		labelTop := baselineY + bounds.Min.Y.Floor()
+		labelBottom := baselineY + bounds.Max.Y.Ceil()
+
+		iconHeight := icon.Bounds().Dy()
+		iconX := startX.Round()
+		iconY := (labelTop+labelBottom)/2 - iconHeight/2
+
+		draw.DrawMask(
+			canvas,
+			image.Rect(iconX, iconY, iconX+iconWidth, iconY+iconHeight),
+			image.NewUniform(col), image.Point{},
+			icon, icon.Bounds().Min,
+			draw.Over,
+		)
+	}
+
+	fontDrawer.Dot = fixed.Point26_6{X: startX + fixed.I(iconWidth+gap), Y: fixed.I(baselineY)}
+	fontDrawer.DrawString(label)
 }
 
 // ImageToRGBA converts an image.Image to *image.RGBA.

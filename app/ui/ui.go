@@ -8,6 +8,7 @@
 package ui
 
 import (
+	"strings"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -21,13 +22,14 @@ import (
 
 // Config holds the configuration for initializing the UserInterface.
 type Config struct {
-	I18n             *i18n.I18n
-	HIDEvents        chan HIDInputEvent
-	Display          hardware.Display
-	SettingsCallback func(languagedb.Key, string) string
-	DevToolsEnabled  func() bool
-	ExitCodeChan     chan exitcode.Code
-	Log              zerolog.Logger
+	I18n                *i18n.I18n
+	HIDEvents           chan HIDInputEvent
+	Display             hardware.Display
+	SettingsCallback    func(languagedb.Key, string) string
+	DevToolsEnabled     func() bool
+	ExperimentalEnabled func() bool
+	ExitCodeChan        chan exitcode.Code
+	Log                 zerolog.Logger
 }
 
 // LiveData holds the dynamic telemetry that can be displayed on the UI.
@@ -72,13 +74,14 @@ type uiState struct {
 // UserInterface manages the user interface components and state.
 type UserInterface struct {
 	// Dependencies.
-	i18n             *i18n.I18n
-	display          hardware.Display
-	Screen           *gui.Screen
-	menuSystem       *MenuSystem
-	settingsCallback func(setting languagedb.Key, action string) string
-	log              zerolog.Logger
-	now              func() time.Time // overridable in tests for deterministic timeouts
+	i18n                *i18n.I18n
+	display             hardware.Display
+	Screen              *gui.Screen
+	menuSystem          *MenuSystem
+	settingsCallback    func(setting languagedb.Key, action string) string
+	experimentalEnabled func() bool
+	log                 zerolog.Logger
+	now                 func() time.Time // overridable in tests for deterministic timeouts
 
 	// Event-loop channels: the only cross-goroutine surface.
 	hidEvents chan HIDInputEvent
@@ -96,16 +99,17 @@ func NewUserInterface(config *Config) *UserInterface {
 	now := time.Now
 
 	userInterface := &UserInterface{
-		i18n:             config.I18n,
-		display:          config.Display,
-		hidEvents:        config.HIDEvents,
-		menuSystem:       NewMenuSystem(),
-		log:              config.Log.With().Str("package", "ui").Logger(),
-		settingsCallback: config.SettingsCallback,
-		done:             config.ExitCodeChan,
-		now:              now,
-		ticks:            make(chan LiveData, 1),
-		commands:         make(chan command, 4),
+		i18n:                config.I18n,
+		display:             config.Display,
+		hidEvents:           config.HIDEvents,
+		menuSystem:          NewMenuSystem(),
+		log:                 config.Log.With().Str("package", "ui").Logger(),
+		settingsCallback:    config.SettingsCallback,
+		experimentalEnabled: config.ExperimentalEnabled,
+		done:                config.ExitCodeChan,
+		now:                 now,
+		ticks:               make(chan LiveData, 1),
+		commands:            make(chan command, 4),
 		state: uiState{
 			mode:           ScreenModeStartup,
 			lastData:       LiveData{Gear: kinematics.NullGear},
@@ -118,6 +122,11 @@ func NewUserInterface(config *Config) *UserInterface {
 
 	if config.DevToolsEnabled != nil {
 		userInterface.menuSystem.SetDevToolsEnabledCallback(config.DevToolsEnabled)
+	}
+
+	// Set experimentalEnabled callback if provided
+	if config.ExperimentalEnabled != nil {
+		userInterface.menuSystem.SetExperimentalEnabledCallback(config.ExperimentalEnabled)
 	}
 
 	var err error
@@ -202,6 +211,28 @@ func (u *UserInterface) settingAction(setting languagedb.Key, action string) str
 	u.setMode(ScreenModeSettings)
 
 	return u.settingsCallback(setting, action)
+}
+
+// isLiveLeaf reports whether the menu page is one of the live-view leaves.
+func isLiveLeaf(name languagedb.Key) bool {
+	return name == languagedb.UIMenuLiveView || name == languagedb.UIMenuLiveDashboard
+}
+
+// fanFooter returns the current manual fan speed formatted for the live-view
+// footer (e.g. "Fan 42%"). It reads the value through the settings callback
+// without switching the UI into settings mode. The fan/wind simulator is an
+// experimental feature, so the footer (and the Up/Down speed control it
+// represents) stays hidden unless experimental features are enabled.
+func (u *UserInterface) fanFooter() string {
+	if u.settingsCallback == nil {
+		return ""
+	}
+
+	if u.experimentalEnabled == nil || !u.experimentalEnabled() {
+		return ""
+	}
+
+	return strings.TrimSpace(u.settingsCallback(languagedb.UIMenuFanManualSpeed, actionGet))
 }
 
 // handleTick advances the UI state for one telemetry tick based on the current mode.

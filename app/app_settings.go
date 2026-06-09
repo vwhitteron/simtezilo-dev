@@ -23,6 +23,7 @@ func (a *App) settingAction(setting languagedb.Key, action string) string {
 		languagedb.UIMenuAppLanguage:        a.handleLanguageSetting,
 		languagedb.UIMenuAppLoglevel:        a.handleLogLevelSetting,
 		languagedb.UIMenuAppDevtools:        a.handleDevToolsSetting,
+		languagedb.UIMenuAppExperimental:    a.handleExperimentalSetting,
 		languagedb.UIMenuAppTelemetrySource: a.handleTelemetrySourceSetting,
 
 		// System handlers
@@ -616,6 +617,21 @@ func (a *App) handleDevToolsSetting(action string) string {
 	}
 
 	if a.config.GetDevToolsEnabled() {
+		return settingStateOn
+	}
+
+	return settingStateOff
+}
+
+func (a *App) handleExperimentalSetting(action string) string {
+	switch action {
+	case "increase", "decrease":
+		// Toggle experimental features
+		current := a.config.GetExperimentalFeaturesEnabled()
+		a.config.SetExperimentalFeaturesEnabled(!current)
+	}
+
+	if a.config.GetExperimentalFeaturesEnabled() {
 		return settingStateOn
 	}
 

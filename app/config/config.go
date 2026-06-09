@@ -38,6 +38,8 @@ type app struct {
 	EnabledWebUI   bool    `json:"enabledWebUI"`  //nolint:tagliatelle // schema uses Go-style acronym
 	WebUIPort      int     `json:"webUIPort"`     //nolint:tagliatelle // schema uses Go-style acronym
 	EnableDevTools bool    `json:"enableDevTools"`
+
+	EnableExperimentalFeatures bool `json:"enableExperimentalFeatures"`
 }
 
 type discord struct {
@@ -750,6 +752,24 @@ func (c *Config) SetDevToolsEnabled(enabled bool) {
 	defer c.mu.Unlock()
 
 	c.viper.App.EnableDevTools = enabled
+
+	c.registerUpdate(false)
+}
+
+// GetExperimentalFeaturesEnabled returns true if experimental features are enabled.
+func (c *Config) GetExperimentalFeaturesEnabled() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.App.EnableExperimentalFeatures
+}
+
+// SetExperimentalFeaturesEnabled sets whether experimental features are enabled.
+func (c *Config) SetExperimentalFeaturesEnabled(enabled bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.App.EnableExperimentalFeatures = enabled
 
 	c.registerUpdate(false)
 }

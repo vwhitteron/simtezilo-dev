@@ -24,8 +24,10 @@ type DashboardData struct {
 	ThrottleOut float64
 	BrakeIn     float64
 	BrakeOut    float64
-	Flash       bool // rev limit background flash
-	Ready       bool // waiting foractive telemetry
+	// Fan is the fan-speed footer text (e.g. "Fan 42%"), matching the other live view.
+	Fan   string
+	Flash bool // rev-limit background flash
+	Ready bool // waiting for active telemetry
 }
 
 // Dashboard geometry (240x240 panel).
@@ -46,7 +48,7 @@ const (
 	dashBarHeight = dashBarBottom - dashBarTop
 	dashPanelEdge = 240
 	dashCenterX   = 120.0
-	dashCenterY   = 108.0 // arc centre shifted up a little
+	dashCenterY   = 108.0 // arc centre shifted up a little, fan footer stays at the bottom
 	degreesToRad  = math.Pi / 180.0
 	arcAngleStep  = 0.5 // degrees between arc samples
 	arcRadiusStep = 0.5 // radial sampling for arc thickness
@@ -56,6 +58,9 @@ const (
 
 	dashGearCenterY   = 98  // hero gear, centred a touch above mid to clear the speed
 	dashSpeedBaseline = 192 // below the gear, clear of its descenders
+	// Fan footer baseline, matching the gear live view exactly, which draws at
+	// canvas.Rect.Max.Y - fanFooterBottomPadding.
+	dashFanBaseline = dashPanelEdge - fanFooterBottomPadding
 )
 
 func dashColorBlue() color.RGBA   { return color.RGBA{R: 50, G: 120, B: 235, A: 255} }
@@ -75,8 +80,9 @@ func dashColorBackgroundFlash() color.RGBA { return color.RGBA{R: 130, G: 0, B: 
 // Text colours are fully opaque so they composite correctly over the coloured
 // flash background (the shared whiteColor/mediumGrayColor use near-zero alpha,
 // which only renders correctly over black).
-func dashColorText() color.RGBA  { return color.RGBA{R: 235, G: 235, B: 235, A: 255} }
-func dashColorReady() color.RGBA { return color.RGBA{R: 70, G: 70, B: 70, A: 255} }
+func dashColorText() color.RGBA    { return color.RGBA{R: 235, G: 235, B: 235, A: 255} }
+func dashColorReady() color.RGBA   { return color.RGBA{R: 70, G: 70, B: 70, A: 255} }
+func dashColorTextDim() color.RGBA { return color.RGBA{R: 150, G: 150, B: 150, A: 255} }
 
 // RenderDashboardScreen renders the dashboard live view: brake/throttle bars on
 // the sides, an RPM arc across the top, and the speed in the centre.
@@ -213,7 +219,8 @@ func (r *Screen) drawArc(canvas *image.RGBA, from, target float64, col color.RGB
 	}
 }
 
-// drawDashboardText draws the gear (small, above centre) and speed (large, centre).
+// drawDashboardText draws the gear (small, above centre), the speed (large,
+// centre), and the fan-speed footer along the bottom edge.
 func (r *Screen) drawDashboardText(canvas *image.RGBA, dash DashboardData) {
 	// Gear centred both ways within the arc. Ready state uses a smaller font
 	// since it's a word rather than a single gear character.
@@ -226,9 +233,15 @@ func (r *Screen) drawDashboardText(canvas *image.RGBA, dash DashboardData) {
 		r.drawCenteredText(canvas, dash.Gear, gearFont, dashColorText(), dashGearCenterY, true)
 	}
 
-	// Speed along the bottom of the arc; suppressed in ready state.
+	// Speed along the bottom of the arc; suppressed in ready state and leaving
+	// the very bottom for the fan footer.
 	if !dash.Ready {
 		r.drawCenteredText(canvas, strconv.Itoa(dash.SpeedKPH), dashFontSpeed, dashColorText(), dashSpeedBaseline, false)
+	}
+
+	// Fan setting at the very bottom, matching the other live view.
+	if dash.Fan != "" {
+		r.drawIconLabel(canvas, r.fanIcon, dash.Fan, dashColorTextDim(), dashFanBaseline)
 	}
 }
 

@@ -67,6 +67,11 @@
                     "type": "boolean",
                     "description": "Enable developer tools",
                     "default": false
+                },
+                "enableExperimentalFeatures": {
+                    "type": "boolean",
+                    "description": "Enable experimental features",
+                    "default": false
                 }
             },
             "additionalProperties": true

@@ -8,10 +8,11 @@ const (
 )
 
 type MenuSystem struct {
-	root               *MenuNode
-	currentNode        *MenuNode
-	setupModeCountdown int
-	devToolsEnabled    func() bool
+	root                *MenuNode
+	currentNode         *MenuNode
+	setupModeCountdown  int
+	devToolsEnabled     func() bool
+	experimentalEnabled func() bool
 }
 
 // NewMenuSystem builds the menu tree (declared in newMenuTree) and starts the
@@ -211,6 +212,11 @@ func (m *MenuSystem) SetDevToolsEnabledCallback(callback func() bool) {
 	m.devToolsEnabled = callback
 }
 
+// SetExperimentalEnabledCallback sets the callback function to check if experimental features are enabled.
+func (m *MenuSystem) SetExperimentalEnabledCallback(callback func() bool) {
+	m.experimentalEnabled = callback
+}
+
 // previousSibling navigates to the previous visible sibling with wrapping.
 func (m *MenuSystem) previousSibling() *MenuNode {
 	if m.currentNode.parent == nil {
@@ -308,6 +314,8 @@ func (m *MenuSystem) isNodeVisible(node *MenuNode) bool {
 		return true
 	case PageContextDevTools:
 		return m.isDevToolsEnabled()
+	case PageContextExperimental:
+		return m.isExperimentalEnabled()
 	default:
 		return true
 	}
@@ -320,4 +328,13 @@ func (m *MenuSystem) isDevToolsEnabled() bool {
 	}
 
 	return m.devToolsEnabled()
+}
+
+// isExperimentalEnabled returns true if experimental features are enabled.
+func (m *MenuSystem) isExperimentalEnabled() bool {
+	if m.experimentalEnabled == nil {
+		return false
+	}
+
+	return m.experimentalEnabled()
 }

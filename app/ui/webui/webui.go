@@ -16,6 +16,7 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/exitcode"
 	"github.com/vwhitteron/simtezilo-dev/app/logstore"
 	"github.com/vwhitteron/simtezilo-dev/app/setupmode"
+	"github.com/vwhitteron/simtezilo-dev/app/ui/icons"
 	"github.com/vwhitteron/simtezilo-dev/app/ui/webui/webcommon"
 	"github.com/vwhitteron/simtezilo-dev/app/updater"
 )
@@ -248,20 +249,31 @@ func (w *WebUI) corsMiddleware(next http.Handler) http.Handler {
 var staticFiles embed.FS
 
 // staticFileHandlerFunc serves static files with automatic content type detection.
-// It first tries to load from webui-specific static files, then falls back to shared files.
+// Icons come from the shared icons package (the single source of the SVGs); all
+// other files try the webui-specific static files first, then the shared files.
 func (w *WebUI) staticFileHandlerFunc(fileType string) func(http.ResponseWriter, *http.Request) {
 	return func(response http.ResponseWriter, request *http.Request) {
 		filename := "static" + request.URL.Path
 
-		content, err := staticFiles.ReadFile(filename)
-		if err != nil {
-			content, err = webcommon.StaticFiles.ReadFile(filename)
-			if err != nil {
-				response.WriteHeader(http.StatusNotFound)
-				w.log.Error().Err(err).Str("type", fileType).Msg("Invalid file")
+		var (
+			content []byte
+			err     error
+		)
 
-				return
+		if name, ok := strings.CutPrefix(request.URL.Path, "/images/icons/"); ok {
+			content, err = icons.ReadFile(name)
+		} else {
+			content, err = staticFiles.ReadFile(filename)
+			if err != nil {
+				content, err = webcommon.StaticFiles.ReadFile(filename)
 			}
+		}
+
+		if err != nil {
+			response.WriteHeader(http.StatusNotFound)
+			w.log.Error().Err(err).Str("type", fileType).Msg("Invalid file")
+
+			return
 		}
 
 		contentType := getContentType(filename)

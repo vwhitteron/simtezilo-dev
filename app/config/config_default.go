@@ -22,7 +22,8 @@ func defaultConfig() *viperConfig {
 				AutoInstall:          false,
 				CheckIntervalMinutes: 60,
 			},
-			EnableDevTools: false,
+			EnableDevTools:             false,
+			EnableExperimentalFeatures: false,
 		},
 		Fan: &fan{
 			Enabled:          false,

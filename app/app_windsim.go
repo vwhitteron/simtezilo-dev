@@ -79,7 +79,8 @@ func (a *App) runFanControlTask() {
 		default:
 		}
 
-		if !a.config.FanEnabled() || (a.config.GetFanMode() == "manual" && a.getManualFanDuty() == 0) {
+		if !a.config.GetExperimentalFeaturesEnabled() || !a.config.FanEnabled() ||
+			(a.config.GetFanMode() == "manual" && a.getManualFanDuty() == 0) {
 			select {
 			case <-time.After(fanModeCheckDelay):
 			case <-a.ctx.Done():
@@ -201,6 +202,11 @@ func (a *App) runFanControlDutyCycle() bool {
 // directly. Otherwise, the manual fan duty applies as a constant baseline.
 func (a *App) handleFanControlTick() {
 	if a.fanControlChan == nil {
+		return
+	}
+
+	// The fan/wind simulator is gated behind experimental features.
+	if !a.config.GetExperimentalFeaturesEnabled() {
 		return
 	}
 

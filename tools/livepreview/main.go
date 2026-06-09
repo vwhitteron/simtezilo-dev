@@ -78,7 +78,7 @@ func main() {
 // renderLiveViews renders the live-view (gear/ready) screens.
 func renderLiveViews(screen *gui.Screen, disp *virtual.Display) {
 	// Live view with an active gear.
-	err := screen.RenderLiveScreen("3")
+	err := screen.RenderLiveScreen("3", "42%")
 	if err != nil {
 		panic(err)
 	}
@@ -86,7 +86,7 @@ func renderLiveViews(screen *gui.Screen, disp *virtual.Display) {
 	savePNG("live_gear.png", disp.GetCanvas())
 
 	// Live view while waiting for telemetry / in the game menus.
-	err = screen.RenderLiveScreen("Ready")
+	err = screen.RenderLiveScreen("Ready", "42%")
 	if err != nil {
 		panic(err)
 	}
@@ -98,42 +98,42 @@ func renderLiveViews(screen *gui.Screen, disp *virtual.Display) {
 func renderDashboardViews(screen *gui.Screen, disp *virtual.Display) {
 	renderDash(screen, disp, gui.DashboardData{
 		Gear: "4", SpeedKPH: 187, RPM: 6200, RevLimit: 8000, RevLightMin: 6500, RevLightMax: 7800,
-		ThrottleIn: 100, ThrottleOut: 84,
+		ThrottleIn: 100, ThrottleOut: 84, Fan: "42%",
 	}, "dash_throttle.png")
 
 	renderDash(screen, disp, gui.DashboardData{
 		Gear: "2", SpeedKPH: 64, RPM: 3100, RevLimit: 8000, RevLightMin: 6500, RevLightMax: 7800,
-		BrakeIn: 95, BrakeOut: 70,
+		BrakeIn: 95, BrakeOut: 70, Fan: "42%",
 	}, "dash_brake.png")
 
 	// Both pedals applied: input matches output (solid bars, no delta).
 	renderDash(screen, disp, gui.DashboardData{
 		Gear: "3", SpeedKPH: 120, RPM: 5200, RevLimit: 8000, RevLightMin: 6500, RevLightMax: 7800,
-		ThrottleIn: 65, ThrottleOut: 65, BrakeIn: 45, BrakeOut: 45,
+		ThrottleIn: 65, ThrottleOut: 65, BrakeIn: 45, BrakeOut: 45, Fan: "42%",
 	}, "dash_pedals_match.png")
 
 	// Both pedals: input above output (visible delta in darker shade).
 	renderDash(screen, disp, gui.DashboardData{
 		Gear: "3", SpeedKPH: 120, RPM: 5200, RevLimit: 8000, RevLightMin: 6500, RevLightMax: 7800,
-		ThrottleIn: 100, ThrottleOut: 78, BrakeIn: 90, BrakeOut: 62,
+		ThrottleIn: 100, ThrottleOut: 78, BrakeIn: 90, BrakeOut: 62, Fan: "42%",
 	}, "dash_pedals_delta.png")
 
 	// Mid rev-light band (6500..7800) → yellow arc.
 	renderDash(screen, disp, gui.DashboardData{
 		Gear: "4", SpeedKPH: 210, RPM: 7150, RevLimit: 8000, RevLightMin: 6500, RevLightMax: 7800,
-		ThrottleIn: 100, ThrottleOut: 100,
+		ThrottleIn: 100, ThrottleOut: 100, Fan: "42%",
 	}, "dash_yellow.png")
 
 	// At/above rev-light max → red arc, not yet at rev limit (no flash).
 	renderDash(screen, disp, gui.DashboardData{
 		Gear: "5", SpeedKPH: 235, RPM: 7850, RevLimit: 8000, RevLightMin: 6500, RevLightMax: 7800,
-		ThrottleIn: 100, ThrottleOut: 100,
+		ThrottleIn: 100, ThrottleOut: 100, Fan: "42%",
 	}, "dash_red.png")
 
 	// At the rev limit: background flashing.
 	renderDash(screen, disp, gui.DashboardData{
 		Gear: "5", SpeedKPH: 244, RPM: 7900, RevLimit: 8000, RevLightMin: 6500, RevLightMax: 7800,
-		ThrottleIn: 100, ThrottleOut: 100, Flash: true,
+		ThrottleIn: 100, ThrottleOut: 100, Fan: "42%", Flash: true,
 	}, "dash_redline.png")
 }
 
