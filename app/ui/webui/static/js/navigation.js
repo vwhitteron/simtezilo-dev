@@ -93,9 +93,9 @@ function createNavigation(currentPage) {
 
     // Add restart required indicator
     navHTML += `
-                        <div id="restart-required-indicator" style="color: #ff4d4d; font-weight: 600; font-size: 0.875rem; white-space: nowrap; display: none; margin-right: 1rem;">
+                        <button type="button" id="restart-required-indicator" class="btn btn-outline-danger btn-sm" style="font-weight: 600; white-space: nowrap; display: none; margin-right: 1rem;">
                             <span data-i18n="runmode.settings.restart.required">Restart Required</span>
-                        </div>`;
+                        </button>`;
 
     // Add unified status indicator (used for both telemetry connection and settings save status)
     navHTML += `
@@ -167,6 +167,129 @@ window.hideNavbarStatus = function () {
     if (errorIcon) errorIcon.style.display = 'none';
 };
 
+// Shared application-restart flow, usable from any page. Both the settings-page
+// "Restart" button and the top-right "Restart Required" callout delegate here so
+// there is a single implementation of the confirm -> POST -> overlay -> poll
+// sequence.
+window.triggerRestart = async function () {
+    if (!confirm(t('runmode.settings.confirm.restart'))) {
+        return;
+    }
+
+    try {
+        if (typeof window.showNavbarStatus === 'function') {
+            window.showNavbarStatus('saving');
+        }
+
+        const response = await fetch('/api/system/restart', { method: 'POST' });
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        if (typeof window.showNavbarStatus === 'function') {
+            window.showNavbarStatus('success');
+        }
+
+        // Hide the restart-required callout since we are restarting now.
+        const indicator = document.getElementById('restart-required-indicator');
+        if (indicator) {
+            indicator.style.display = 'none';
+        }
+
+        window.showRestartOverlay();
+        window.pollForReconnection();
+    } catch (error) {
+        console.error('Failed to restart application:', error);
+        if (typeof window.showNavbarStatus === 'function') {
+            window.showNavbarStatus('error');
+        }
+        alert(t('runmode.settings.error.restartfailed') + error.message);
+    }
+};
+
+window.showRestartOverlay = function () {
+    let overlay = document.getElementById('restart-overlay');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'restart-overlay';
+        overlay.innerHTML = `
+            <div class="restart-message">
+                <div style="display: flex; justify-content: center; margin-bottom: 1rem;">
+                    <div class="spinner-border text-light" role="status">
+                        <span class="visually-hidden">${t('runmode.settings.restart.overlay.restarting')}</span>
+                    </div>
+                </div>
+                <h3 style="text-align: center;">${t('runmode.settings.restart.overlay.title')}</h3>
+                <p style="text-align: center;">${t('runmode.settings.restart.overlay.pleasewait')}</p>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+    }
+
+    overlay.style.cssText = `
+        display: flex !important;
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        bottom: 0 !important;
+        width: 100vw !important;
+        height: 100vh !important;
+        background-color: rgba(0, 0, 0, 0.9) !important;
+        z-index: 999999 !important;
+        justify-content: center !important;
+        align-items: center !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    `;
+
+    document.body.classList.add('restart-blur');
+};
+
+window.hideRestartOverlay = function () {
+    const overlay = document.getElementById('restart-overlay');
+    if (overlay) {
+        overlay.style.display = 'none';
+    }
+
+    document.body.classList.remove('restart-blur');
+};
+
+window.pollForReconnection = function () {
+    const maxAttempts = 60; // Try for 60 seconds
+    let attempts = 0;
+
+    const poll = async () => {
+        attempts++;
+
+        try {
+            const response = await fetch('/api/config/status', {
+                method: 'GET',
+                cache: 'no-cache'
+            });
+
+            if (response.ok) {
+                // Successfully reconnected - reload for fresh state.
+                window.hideRestartOverlay();
+                window.location.reload();
+                return;
+            }
+        } catch (error) {
+            // Expected during restart - server is down.
+        }
+
+        if (attempts < maxAttempts) {
+            setTimeout(poll, 1000);
+        } else {
+            window.hideRestartOverlay();
+            alert(t('runmode.settings.error.reconnectfailed'));
+        }
+    };
+
+    // Wait before the first poll to give the app time to start shutting down.
+    setTimeout(poll, 2000);
+};
+
 // Initialize navigation when DOM is loaded
 document.addEventListener('DOMContentLoaded', function () {
     // Fetch devToolsEnabled setting before initializing navigation
@@ -190,6 +313,19 @@ function initializeNavigation() {
     if (navContainer && typeof currentPageId !== 'undefined') {
         // Create navigation immediately with fallback text
         navContainer.innerHTML = createNavigation(currentPageId);
+
+        // Make the "Restart Required" callout trigger a restart from any page,
+        // so the user does not have to navigate to the settings page first.
+        const restartIndicator = document.getElementById('restart-required-indicator');
+        if (restartIndicator) {
+            restartIndicator.addEventListener('click', () => window.triggerRestart());
+            restartIndicator.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    window.triggerRestart();
+                }
+            });
+        }
 
         // Add popover element to body if not exists
         if (!document.getElementById('info-popover')) {
