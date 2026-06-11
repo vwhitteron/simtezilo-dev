@@ -14,18 +14,11 @@ const (
 	liveValueWidthPercent = 90
 )
 
-func valueColor() color.RGBA {
-	return color.RGBA{R: 223, G: 223, B: 223, A: 1}
-}
+// valueColor is the standard light-grey used for values and primary text. Alpha
+// is fully opaque: the ST7789 panel ignores alpha and reads RGB directly, and a
+// near-zero alpha composites incorrectly when drawn over a non-black background.
+func valueColor() color.RGBA { return color.RGBA{R: 223, G: 223, B: 223, A: 255} }
 
-func mediumGrayColor() color.RGBA {
-	return color.RGBA{R: 128, G: 128, B: 128, A: 1}
-}
+func mediumGrayColor() color.RGBA { return color.RGBA{R: 128, G: 128, B: 128, A: 255} }
 
-func lightGrayColor() color.RGBA {
-	return color.RGBA{R: 192, G: 192, B: 192, A: 1}
-}
-
-func whiteColor() color.RGBA {
-	return color.RGBA{R: 223, G: 223, B: 223, A: 1}
-}
+func lightGrayColor() color.RGBA { return color.RGBA{R: 192, G: 192, B: 192, A: 255} }

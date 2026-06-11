@@ -23,10 +23,22 @@ const (
 	NodeTypeLeaf
 )
 
+// NodeKind categorises a leaf for layout and navigation. It is independent of
+// nodeType: an info page and a setting are both leaves but render differently
+// and navigate differently. Branches ignore it.
+type NodeKind int
+
+const (
+	KindSetting NodeKind = iota // editable leaf -> LayoutSetting (zero value)
+	KindInfo                    // read-only info leaf -> LayoutInfo
+	KindLive                    // live-view leaf
+)
+
 // MenuNode represents a node in the hierarchical menu tree.
 type MenuNode struct {
 	name     languagedb.Key
 	nodeType NodeType
+	kind     NodeKind
 	context  PageContext
 	children []*MenuNode
 	parent   *MenuNode
@@ -62,11 +74,11 @@ func NewMenuSystem() *MenuSystem {
 	// the user on a childless leaf. Keeping it a standard child (rather than a
 	// magical top-level screen) matches the rest of the UI and leaves room for
 	// additional live views as siblings later.
-	liveViewNode := &MenuNode{name: languagedb.UIMenuLiveView, nodeType: NodeTypeLeaf, context: PageContextAlways, parent: liveNode}
+	liveViewNode := &MenuNode{name: languagedb.UIMenuLiveView, nodeType: NodeTypeLeaf, kind: KindLive, context: PageContextAlways, parent: liveNode}
 	liveNode.children = append(liveNode.children,
 		&MenuNode{name: languagedb.UIMenuReturn, nodeType: NodeTypeBranch, context: PageContextAlways, parent: liveNode},
 		liveViewNode,
-		&MenuNode{name: languagedb.UIMenuLiveDashboard, nodeType: NodeTypeLeaf, context: PageContextAlways, parent: liveNode},
+		&MenuNode{name: languagedb.UIMenuLiveDashboard, nodeType: NodeTypeLeaf, kind: KindLive, context: PageContextAlways, parent: liveNode},
 	)
 
 	settingsNode := &MenuNode{
@@ -86,11 +98,11 @@ func NewMenuSystem() *MenuSystem {
 	}
 
 	infoNode.children = append(infoNode.children,
-		&MenuNode{name: languagedb.UIMenuInfoVersion, nodeType: NodeTypeLeaf, context: PageContextAlways, parent: infoNode},
-		&MenuNode{name: languagedb.UIMenuInfoCommitHash, nodeType: NodeTypeLeaf, context: PageContextAlways, parent: infoNode},
-		&MenuNode{name: languagedb.UIMenuInfoBuildTime, nodeType: NodeTypeLeaf, context: PageContextAlways, parent: infoNode},
-		&MenuNode{name: languagedb.UIMenuInfoPlatform, nodeType: NodeTypeLeaf, context: PageContextAlways, parent: infoNode},
-		&MenuNode{name: languagedb.UIMenuInfoIPAddress, nodeType: NodeTypeLeaf, context: PageContextAlways, parent: infoNode},
+		&MenuNode{name: languagedb.UIMenuInfoVersion, nodeType: NodeTypeLeaf, kind: KindInfo, context: PageContextAlways, parent: infoNode},
+		&MenuNode{name: languagedb.UIMenuInfoCommitHash, nodeType: NodeTypeLeaf, kind: KindInfo, context: PageContextAlways, parent: infoNode},
+		&MenuNode{name: languagedb.UIMenuInfoBuildTime, nodeType: NodeTypeLeaf, kind: KindInfo, context: PageContextAlways, parent: infoNode},
+		&MenuNode{name: languagedb.UIMenuInfoPlatform, nodeType: NodeTypeLeaf, kind: KindInfo, context: PageContextAlways, parent: infoNode},
+		&MenuNode{name: languagedb.UIMenuInfoIPAddress, nodeType: NodeTypeLeaf, kind: KindInfo, context: PageContextAlways, parent: infoNode},
 	)
 
 	devNode := &MenuNode{
@@ -465,13 +477,7 @@ func (m *MenuSystem) NavigateDown() (*MenuNode, string) {
 
 	// For leaves, decrease value (except info and live nodes which return to parent)
 	if m.currentNode.nodeType == NodeTypeLeaf {
-		if m.currentNode.parent != nil && m.currentNode.parent.name == languagedb.UIMenuInfo {
-			m.currentNode = m.currentNode.parent
-
-			return m.currentNode, actionExit
-		}
-
-		if m.currentNode.parent != nil && m.currentNode.parent.name == languagedb.UIMenuLive {
+		if m.currentNode.parent != nil && (m.currentNode.kind == KindInfo || m.currentNode.kind == KindLive) {
 			m.currentNode = m.currentNode.parent
 
 			return m.currentNode, actionExit
@@ -508,13 +514,7 @@ func (m *MenuSystem) NavigateUp() (*MenuNode, string) {
 
 	// For leaves, increase value (except info and live nodes which return to parent)
 	if m.currentNode.nodeType == NodeTypeLeaf {
-		if m.currentNode.parent != nil && m.currentNode.parent.name == languagedb.UIMenuInfo {
-			m.currentNode = m.currentNode.parent
-
-			return m.currentNode, actionExit
-		}
-
-		if m.currentNode.parent != nil && m.currentNode.parent.name == languagedb.UIMenuLive {
+		if m.currentNode.parent != nil && (m.currentNode.kind == KindInfo || m.currentNode.kind == KindLive) {
 			m.currentNode = m.currentNode.parent
 
 			return m.currentNode, actionExit
@@ -558,6 +558,16 @@ func (m *MenuSystem) IsCurrentNodeLeaf() bool {
 // IsCurrentNodeBranch returns true if the current node is a branch.
 func (m *MenuSystem) IsCurrentNodeBranch() bool {
 	return m.currentNode.nodeType == NodeTypeBranch
+}
+
+// IsCurrentNodeInfo reports whether the current node is a read-only info leaf.
+func (m *MenuSystem) IsCurrentNodeInfo() bool {
+	return m.currentNode.nodeType == NodeTypeLeaf && m.currentNode.kind == KindInfo
+}
+
+// IsCurrentNodeLive reports whether the current node is a live-view leaf.
+func (m *MenuSystem) IsCurrentNodeLive() bool {
+	return m.currentNode.nodeType == NodeTypeLeaf && m.currentNode.kind == KindLive
 }
 
 // NextMenuPage navigates right (for compatibility with existing code).

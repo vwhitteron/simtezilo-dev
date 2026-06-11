@@ -9,8 +9,6 @@ import (
 	"strconv"
 
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/display"
-	"golang.org/x/image/font"
-	"golang.org/x/image/math/fixed"
 )
 
 // DashboardData holds the live telemetry values rendered on the dashboard live view.
@@ -232,30 +230,6 @@ func (r *Screen) drawDashboardText(canvas *image.RGBA, d DashboardData) {
 	if !d.Ready {
 		r.drawCenteredText(canvas, strconv.Itoa(d.SpeedKPH), dashFontSpeed, dashColorText(), dashSpeedBaseline, false)
 	}
-}
-
-// drawCenteredText draws text horizontally centred. When vMiddle is true, y is
-// treated as the vertical centre of the glyph box; otherwise y is the baseline.
-func (r *Screen) drawCenteredText(canvas *image.RGBA, text string, scale float64, col color.RGBA, y int, vMiddle bool) {
-	fontFace := r.face(r.i18n.RegularFont().Font, r.i18n.RegularFont().Scale*scale)
-
-	fontDrawer := &font.Drawer{
-		Dst:  canvas,
-		Src:  image.NewUniform(col),
-		Face: fontFace,
-	}
-
-	x := (fixed.I(canvas.Rect.Max.X) - fontDrawer.MeasureString(text)) / 2
-
-	baseline := fixed.I(y)
-
-	if vMiddle {
-		bounds, _ := fontDrawer.BoundString(text)
-		baseline = fixed.I(y) - (bounds.Max.Y+bounds.Min.Y)/2
-	}
-
-	fontDrawer.Dot = fixed.Point26_6{X: x, Y: baseline}
-	fontDrawer.DrawString(text)
 }
 
 // revColor returns the arc colour for a given RPM: blue below the rev-light

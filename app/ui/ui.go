@@ -18,7 +18,6 @@ type Config struct {
 	I18n             *i18n.I18n
 	HIDEvents        chan HIDInputEvent
 	Display          hardware.Display
-	LiveData         *LiveData
 	SettingsCallback func(languagedb.Key, string) string
 	DevToolsEnabled  func() bool
 	ExitCodeChan     chan exitcode.Code
@@ -223,11 +222,6 @@ func (u *UserInterface) DrawLiveDisplay(data LiveData) {
 	u.RegisterActivity()
 
 	u.log.Debug().Str("state", "live").Msg("display update")
-}
-
-// isLiveLeaf reports whether the menu page is one of the live-view leaves.
-func isLiveLeaf(name languagedb.Key) bool {
-	return name == languagedb.UIMenuLiveView || name == languagedb.UIMenuLiveDashboard
 }
 
 // renderActiveLiveView renders the currently selected live view using the last

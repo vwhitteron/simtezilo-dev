@@ -675,7 +675,6 @@ func (a *App) initializeUI(opts Options, hidEvents chan ui.HIDInputEvent) error 
 		I18n:             a.i18n,
 		HIDEvents:        hidEvents,
 		Display:          a.wrapDisplayFrameTap(a.display),
-		LiveData:         &ui.LiveData{Gear: kinematics.NullGear},
 		Log:              *opts.Logger,
 		SettingsCallback: a.settingAction,
 		DevToolsEnabled:  a.config.GetDevToolsEnabled,

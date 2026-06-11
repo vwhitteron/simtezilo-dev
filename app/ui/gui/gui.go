@@ -23,6 +23,13 @@ type Config struct {
 	I18n          *i18n.I18n
 }
 
+// SettingContent holds the text fields for a setting, info, or sub-menu screen.
+type SettingContent struct {
+	Title string // parent menu name or page title, drawn at the top
+	Name  string // setting name, drawn at the bottom; empty for info/sub-menu
+	Value string // setting value, menu item, or multi-line info body, drawn centre
+}
+
 // faceKey is the cache key for a truetype face.
 type faceKey struct {
 	font *truetype.Font
@@ -129,32 +136,15 @@ func (r *Screen) RenderLiveScreen(value string) error {
 
 	fontFace := r.face(r.i18n.RegularFont().Font, fontSize)
 
-	fontDrawer := &font.Drawer{
-		Dst:  canvas,
-		Src:  image.NewUniform(valueColor()),
-		Face: fontFace,
-	}
-
 	// Safety net: shrink further if the value still overflows the panel width.
 	maxWidth := fixed.I(canvas.Rect.Max.X) * liveValueWidthPercent / 100
-	if width := fontDrawer.MeasureString(value); width > maxWidth {
+	measurer := &font.Drawer{Face: fontFace}
+	if width := measurer.MeasureString(value); width > maxWidth {
 		fontSize = fontSize * float64(maxWidth) / float64(width)
-		fontDrawer.Face = r.face(r.i18n.RegularFont().Font, fontSize)
+		fontFace = r.face(r.i18n.RegularFont().Font, fontSize)
 	}
 
-	// Center the glyph bounding box vertically. Using the box midpoint
-	// (Min.Y is above the baseline and negative, Max.Y below and positive)
-	// keeps values with descenders such as "Ready" centered rather than
-	// pushed down by the descender height.
-	textBounds, _ := fontDrawer.BoundString(value)
-	xPosition := (fixed.I(canvas.Rect.Max.X) - fontDrawer.MeasureString(value)) / 2
-	yPosition := (fixed.I(canvas.Rect.Max.Y) - (textBounds.Max.Y + textBounds.Min.Y)) / 2
-	fontDrawer.Dot = fixed.Point26_6{
-		X: xPosition,
-		Y: yPosition,
-	}
-
-	fontDrawer.DrawString(value)
+	drawText(canvas, fontFace, valueColor(), value, anchorGlyphMiddle)
 
 	content := &display.Content{
 		Text:   "Live: " + value,
@@ -171,112 +161,53 @@ func (r *Screen) RenderLiveScreen(value string) error {
 	return nil
 }
 
-// RenderSettingScreen renders the setting screen with the provided header and value.
-func (r *Screen) RenderSettingScreen(layout Layout, title string, value string) error {
+// RenderSettingScreen renders a setting, info, or sub-menu screen.
+func (r *Screen) RenderSettingScreen(layout Layout, content SettingContent) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	switch layout { //nolint:exhaustive // only interested in setting screen layouts
 	case LayoutSetting:
-		return r.renderLeafNode(title, value)
+		return r.renderLeafNode(content)
 	case LayoutInfo:
-		return r.renderLayoutInfo(title, value)
+		return r.renderLayoutInfo(content)
 	case LayoutMenuSub:
-		return r.renderLayoutMenuSub(title, value)
+		return r.renderLayoutMenuSub(content)
 	default:
 		return fmt.Errorf("unknown layout type: %d", layout)
 	}
 }
 
-// renderLeafNode renders a leaf node: parent menu at top, value in center (larger font), setting name at bottom.
-// header = parent menu name, value = "settingName|settingValue" (split on |).
-func (r *Screen) renderLeafNode(header string, value string) error {
-	// Parse value to extract setting name and setting value
-	settingName := ""
-	settingValue := value
-	// Check if value contains a pipe separator
-	for i, char := range value {
-		if char == '|' {
-			settingName = value[:i]
-			settingValue = value[i+1:]
-
-			break
-		}
-	}
-
+// renderLeafNode renders a leaf node: parent menu at top, value in centre
+// (larger font), setting name at bottom.
+func (r *Screen) renderLeafNode(content SettingContent) error {
 	canvas := r.newBlankCanvas()
 
-	// Parent menu at top
-	fontFace := r.face(r.i18n.RegularFont().Font, r.i18n.RegularFont().Scale*fontSmall)
+	// Parent menu at top.
+	headerFace := r.face(r.i18n.RegularFont().Font, r.i18n.RegularFont().Scale*fontSmall)
+	drawText(canvas, headerFace, mediumGrayColor(), content.Title, anchorTop)
 
-	fontDrawer := &font.Drawer{
-		Dst:  canvas,
-		Src:  image.NewUniform(mediumGrayColor()),
-		Face: fontFace,
-	}
-
-	xPosition := (fixed.I(canvas.Rect.Max.X) - fontDrawer.MeasureString(header)) / 2
-	titleBounds, _ := fontDrawer.BoundString(header)
-	textHeight := titleBounds.Max.Y - titleBounds.Min.Y
-	yPosition := fixed.I((canvas.Rect.Min.Y) + textHeight.Ceil())
-	fontDrawer.Dot = fixed.Point26_6{
-		X: xPosition,
-		Y: yPosition,
-	}
-	fontDrawer.DrawString(header)
-
-	// Setting value in center (larger font)
+	// Setting value in centre (larger font; the Info page uses a smaller font).
 	fontScale := fontLarge
-	if strings.ToLower(header) == "info" {
+	if strings.ToLower(content.Title) == "info" {
 		fontScale = fontSmall
 	}
 
-	fontFace = r.face(r.i18n.ValueFont().Font, r.i18n.ValueFont().Scale*fontScale)
+	valueFace := r.face(r.i18n.ValueFont().Font, r.i18n.ValueFont().Scale*fontScale)
+	drawText(canvas, valueFace, valueColor(), content.Value, anchorMiddle)
 
-	fontDrawer = &font.Drawer{
-		Dst:  canvas,
-		Src:  image.NewUniform(whiteColor()),
-		Face: fontFace,
+	// Setting name at bottom (if provided).
+	if content.Name != "" {
+		nameFace := r.face(r.i18n.RegularFont().Font, r.i18n.RegularFont().Scale*fontMedium)
+		drawText(canvas, nameFace, lightGrayColor(), content.Name, anchorBottom)
 	}
 
-	valueBounds, _ := fontDrawer.BoundString(settingValue)
-	xPosition = (fixed.I(canvas.Rect.Max.X) - fontDrawer.MeasureString(settingValue)) / 2
-	textHeight = valueBounds.Max.Y - valueBounds.Min.Y
-	yPosition = fixed.I((canvas.Rect.Max.Y)-textHeight.Ceil())/2 + fixed.I(textHeight.Ceil())
-	fontDrawer.Dot = fixed.Point26_6{
-		X: xPosition,
-		Y: yPosition,
-	}
-	fontDrawer.DrawString(settingValue)
-
-	// Setting name at bottom (if provided)
-	if settingName != "" {
-		fontFace = r.face(r.i18n.RegularFont().Font, r.i18n.RegularFont().Scale*fontMedium)
-
-		fontDrawer = &font.Drawer{
-			Dst:  canvas,
-			Src:  image.NewUniform(lightGrayColor()),
-			Face: fontFace,
-		}
-
-		xPosition = (fixed.I(canvas.Rect.Max.X) - fontDrawer.MeasureString(settingName)) / 2
-		nameBounds, _ := fontDrawer.BoundString(settingName)
-		textHeight = nameBounds.Max.Y - nameBounds.Min.Y
-		yPosition = fixed.I((canvas.Rect.Max.Y) - (textHeight.Ceil() / 2))
-		fontDrawer.Dot = fixed.Point26_6{
-			X: xPosition,
-			Y: yPosition,
-		}
-		fontDrawer.DrawString(settingName)
-	}
-
-	content := &display.Content{
-		Text:   "Setting " + header + ": " + settingName + "=" + settingValue,
+	dspContent := &display.Content{
+		Text:   "Setting " + content.Title + ": " + content.Name + "=" + content.Value,
 		Canvas: canvas,
 	}
 
-	err := r.displayDevice.Write(content)
-	if err != nil {
+	if err := r.displayDevice.Write(dspContent); err != nil {
 		return fmt.Errorf("write settings canvas to display: %w", err)
 	}
 
@@ -285,57 +216,27 @@ func (r *Screen) renderLeafNode(header string, value string) error {
 	return nil
 }
 
-// renderLayoutMenuSub renders a branch menu with optional parent name at top and current item in center.
-func (r *Screen) renderLayoutMenuSub(parentName string, currentItem string) error {
+// renderLayoutMenuSub renders a branch menu with optional parent name at top and
+// current item in centre.
+func (r *Screen) renderLayoutMenuSub(content SettingContent) error {
 	canvas := r.newBlankCanvas()
 
-	// Parent name at top (if provided)
-	if parentName != "" {
-		fontFace := r.face(r.i18n.RegularFont().Font, r.i18n.RegularFont().Scale*fontMedium)
-
-		fontDrawer := &font.Drawer{
-			Dst:  canvas,
-			Src:  image.NewUniform(whiteColor()),
-			Face: fontFace,
-		}
-
-		xPosition := (fixed.I(canvas.Rect.Max.X) - fontDrawer.MeasureString(parentName)) / 2
-		titleBounds, _ := fontDrawer.BoundString(parentName)
-		textHeight := titleBounds.Max.Y - titleBounds.Min.Y
-		yPosition := fixed.I((canvas.Rect.Min.Y) + textHeight.Ceil())
-		fontDrawer.Dot = fixed.Point26_6{
-			X: xPosition,
-			Y: yPosition,
-		}
-		fontDrawer.DrawString(parentName)
+	// Parent name at top (if provided).
+	if content.Title != "" {
+		titleFace := r.face(r.i18n.RegularFont().Font, r.i18n.RegularFont().Scale*fontMedium)
+		drawText(canvas, titleFace, valueColor(), content.Title, anchorTop)
 	}
 
-	// Current item in center
-	fontFace := r.face(r.i18n.RegularFont().Font, r.i18n.RegularFont().Scale*fontLarge)
+	// Current item in centre.
+	itemFace := r.face(r.i18n.RegularFont().Font, r.i18n.RegularFont().Scale*fontLarge)
+	drawText(canvas, itemFace, valueColor(), content.Value, anchorMiddle)
 
-	fontDrawer := &font.Drawer{
-		Dst:  canvas,
-		Src:  image.NewUniform(valueColor()),
-		Face: fontFace,
-	}
-
-	itemBounds, _ := fontDrawer.BoundString(currentItem)
-	xPosition := (fixed.I(canvas.Rect.Max.X) - fontDrawer.MeasureString(currentItem)) / 2
-	textHeight := itemBounds.Max.Y - itemBounds.Min.Y
-	yPosition := fixed.I((canvas.Rect.Max.Y)-textHeight.Ceil())/2 + fixed.I(textHeight.Ceil())
-	fontDrawer.Dot = fixed.Point26_6{
-		X: xPosition,
-		Y: yPosition,
-	}
-	fontDrawer.DrawString(currentItem)
-
-	content := &display.Content{
-		Text:   "Menu " + parentName + ": " + currentItem,
+	dspContent := &display.Content{
+		Text:   "Menu " + content.Title + ": " + content.Value,
 		Canvas: canvas,
 	}
 
-	err := r.displayDevice.Write(content)
-	if err != nil {
+	if err := r.displayDevice.Write(dspContent); err != nil {
 		return fmt.Errorf("write submenu canvas to display: %w", err)
 	}
 
@@ -344,32 +245,19 @@ func (r *Screen) renderLayoutMenuSub(parentName string, currentItem string) erro
 	return nil
 }
 
-// RenderSettingScreen renders the setting screen with the provided header and value.
-func (r *Screen) renderLayoutInfo(header string, value string) error {
-	// Title
-	fontFace := r.face(r.i18n.RegularFont().Font, r.i18n.RegularFont().Scale*fontMedium)
-
+// renderLayoutInfo renders an info page: title at top, multi-line value centred
+// as a group.
+func (r *Screen) renderLayoutInfo(content SettingContent) error {
 	canvas := r.newBlankCanvas()
+
+	// Title.
+	titleFace := r.face(r.i18n.RegularFont().Font, r.i18n.RegularFont().Scale*fontMedium)
+	drawText(canvas, titleFace, valueColor(), content.Title, anchorTop)
+
+	// Value - split into multiple lines.
+	fontFace := r.face(r.i18n.ValueFont().Font, r.i18n.RegularFont().Scale*fontSmall)
+
 	fontDrawer := &font.Drawer{
-		Dst:  canvas,
-		Src:  image.NewUniform(whiteColor()),
-		Face: fontFace,
-	}
-
-	xPosition := (fixed.I(canvas.Rect.Max.X) - fontDrawer.MeasureString(header)) / 2
-	titleBounds, _ := fontDrawer.BoundString(header)
-	textHeight := titleBounds.Max.Y - titleBounds.Min.Y
-	yPosition := fixed.I((canvas.Rect.Min.Y) + textHeight.Ceil())
-	fontDrawer.Dot = fixed.Point26_6{
-		X: xPosition,
-		Y: yPosition,
-	}
-	fontDrawer.DrawString(header)
-
-	// Value - split into multiple lines
-	fontFace = r.face(r.i18n.ValueFont().Font, r.i18n.RegularFont().Scale*fontSmall)
-
-	fontDrawer = &font.Drawer{
 		Dst:  canvas,
 		Src:  image.NewUniform(valueColor()),
 		Face: fontFace,
@@ -379,7 +267,7 @@ func (r *Screen) renderLayoutInfo(header string, value string) error {
 	lines := []string{}
 	currentLine := ""
 
-	for _, char := range value {
+	for _, char := range content.Value {
 		if char == '\n' {
 			lines = append(lines, currentLine)
 			currentLine = ""
@@ -409,8 +297,8 @@ func (r *Screen) renderLayoutInfo(header string, value string) error {
 
 	// Draw each line
 	for i, line := range lines {
-		xPosition = (fixed.I(canvas.Rect.Max.X) - fontDrawer.MeasureString(line)) / 2
-		yPosition = startY + lineHeight*fixed.Int26_6(i+1) + lineSpacing*fixed.Int26_6(i) //nolint:gosec // pixel res too small for overflow
+		xPosition := (fixed.I(canvas.Rect.Max.X) - fontDrawer.MeasureString(line)) / 2
+		yPosition := startY + lineHeight*fixed.Int26_6(i+1) + lineSpacing*fixed.Int26_6(i) //nolint:gosec // pixel res too small for overflow
 		fontDrawer.Dot = fixed.Point26_6{
 			X: xPosition,
 			Y: yPosition,
@@ -418,13 +306,12 @@ func (r *Screen) renderLayoutInfo(header string, value string) error {
 		fontDrawer.DrawString(line)
 	}
 
-	content := &display.Content{
-		Text:   "Setting " + header + ": " + value,
+	dspContent := &display.Content{
+		Text:   "Setting " + content.Title + ": " + content.Value,
 		Canvas: canvas,
 	}
 
-	err := r.displayDevice.Write(content)
-	if err != nil {
+	if err := r.displayDevice.Write(dspContent); err != nil {
 		return fmt.Errorf("write settings canvas to display: %w", err)
 	}
 
@@ -475,22 +362,7 @@ func (r *Screen) renderBackgroundScreen(sprite sprites.SpriteName, value string)
 	canvas := image.NewRGBA(img.Bounds())
 	draw.Draw(canvas, canvas.Bounds(), img, image.Point{0, 0}, draw.Src)
 
-	fontDrawer := &font.Drawer{
-		Dst:  canvas,
-		Src:  image.NewUniform(mediumGrayColor()),
-		Face: fontFace,
-	}
-
-	xPosition := (fixed.I(canvas.Rect.Max.X) - fontDrawer.MeasureString(value)) / 2
-	textBounds, _ := fontDrawer.BoundString(value)
-	textHeight := textBounds.Max.Y - textBounds.Min.Y
-	yPosition := fixed.I((canvas.Rect.Max.Y) - (textHeight.Ceil() / 2))
-	fontDrawer.Dot = fixed.Point26_6{
-		X: xPosition,
-		Y: yPosition,
-	}
-
-	fontDrawer.DrawString(value)
+	drawText(canvas, fontFace, mediumGrayColor(), value, anchorBottom)
 
 	content := &display.Content{
 		Text:   "Splash: " + value,

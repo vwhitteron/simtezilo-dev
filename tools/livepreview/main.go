@@ -165,4 +165,39 @@ func main() {
 	}
 
 	savePNG(outputDir+"/dash_redline.png", disp.GetCanvas())
+
+	// Splash screen with footer text over the splash sprite.
+	if err = screen.RenderSplashScreen("Starting"); err != nil {
+		panic(err)
+	}
+
+	savePNG(outputDir+"/splash.png", disp.GetCanvas())
+
+	// Error screen with footer text over the error sprite.
+	if err = screen.RenderErrorScreen("GT client init"); err != nil {
+		panic(err)
+	}
+
+	savePNG(outputDir+"/error.png", disp.GetCanvas())
+
+	// Setting leaf: parent at top, value in centre, setting name at bottom.
+	if err = screen.RenderSettingScreen(gui.LayoutSetting, gui.SettingContent{Title: "Settings", Name: "Brightness", Value: "75%"}); err != nil {
+		panic(err)
+	}
+
+	savePNG(outputDir+"/setting_leaf.png", disp.GetCanvas())
+
+	// Branch menu: parent at top, current item in centre.
+	if err = screen.RenderSettingScreen(gui.LayoutMenuSub, gui.SettingContent{Title: "Settings", Value: "Display"}); err != nil {
+		panic(err)
+	}
+
+	savePNG(outputDir+"/setting_menusub.png", disp.GetCanvas())
+
+	// Info page: title at top, multi-line value centred as a group.
+	if err = screen.RenderSettingScreen(gui.LayoutInfo, gui.SettingContent{Title: "Version", Value: "1.2.3\nbuild 456\nlinux/arm64"}); err != nil {
+		panic(err)
+	}
+
+	savePNG(outputDir+"/setting_info.png", disp.GetCanvas())
 }

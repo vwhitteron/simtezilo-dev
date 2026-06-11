@@ -68,7 +68,7 @@ func (u *UserInterface) HIDEventHandler(ctx context.Context) {
 
 			// Special case: entering or paging between live views should render the
 			// selected live screen.
-			if isLiveLeaf(languagedb.Key(title)) {
+			if u.menuSystem.IsCurrentNodeLive() {
 				// Set activeLiveView before mode so the display loop never sees
 				// ScreenModeLive with a stale activeLiveView and renders the wrong
 				// ready screen. Transition straight to ScreenModeWait: the live-data
@@ -88,7 +88,7 @@ func (u *UserInterface) HIDEventHandler(ctx context.Context) {
 				continue
 			}
 
-			layout := u.determineLayout(title)
+			layout := u.determineLayout()
 
 			u.renderSettingScreen(layout, title, value)
 		}
@@ -363,19 +363,16 @@ func (u *UserInterface) handleRightKey() (title string, value string) {
 	return string(menuPage), value
 }
 
-// determineLayout determines the appropriate layout based on the current node type.
-func (u *UserInterface) determineLayout(menuPage string) gui.Layout {
-	// Special info pages
-	if menuPage == "version" || menuPage == "commitHash" || menuPage == "buildTime" || menuPage == "platform" || menuPage == "ipAddress" {
+// determineLayout determines the appropriate layout based on the current node.
+func (u *UserInterface) determineLayout() gui.Layout {
+	if u.menuSystem.IsCurrentNodeInfo() {
 		return gui.LayoutInfo
 	}
 
-	// Branch nodes (including return nodes)
 	if u.menuSystem.IsCurrentNodeBranch() {
 		return gui.LayoutMenuSub
 	}
 
-	// Leaf nodes (settings)
 	return gui.LayoutSetting
 }
 
@@ -403,14 +400,14 @@ func (u *UserInterface) renderSettingScreen(layout gui.Layout, menuPage string, 
 		}
 
 		displayValue = u.getBranchTitle(menuPage)
-		_ = u.Screen.RenderSettingScreen(layout, title, displayValue)
+		_ = u.Screen.RenderSettingScreen(layout, gui.SettingContent{Title: title, Value: displayValue})
 
 		return
 
 	case gui.LayoutInfo:
 		// Info pages: title at top, multi-line value in center
 		title = u.getLeafTitle(menuPage)
-		_ = u.Screen.RenderSettingScreen(layout, title, value)
+		_ = u.Screen.RenderSettingScreen(layout, gui.SettingContent{Title: title, Value: value})
 
 		return
 
@@ -423,16 +420,14 @@ func (u *UserInterface) renderSettingScreen(layout gui.Layout, menuPage string, 
 			title = u.i18n.GetString(languagedb.UIMenuSettings)
 		}
 
-		// For "return" leaf, show parent name as title and "return" as value
+		content := gui.SettingContent{Title: title}
 		if menuPage == "return" {
-			displayValue = u.i18n.GetString(languagedb.UIMenuReturn)
+			content.Value = u.i18n.GetString(languagedb.UIMenuReturn)
 		} else {
-			// Format as "settingName|settingValue"
-			settingName := u.getSettingName(menuPage)
-			displayValue = settingName + "|" + value
+			content.Name = u.getSettingName(menuPage)
+			content.Value = value
 		}
-
-		_ = u.Screen.RenderSettingScreen(layout, title, displayValue)
+		_ = u.Screen.RenderSettingScreen(layout, content)
 
 		return
 	}
