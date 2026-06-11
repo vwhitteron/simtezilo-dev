@@ -69,6 +69,16 @@ type UserInterface struct {
 	// dashFlashOn toggles each dashboard frame while at/over the rev limit so the
 	// background blinks.
 	dashFlashOn bool
+
+	// Event-loop channels. These are the only cross-goroutine surface; all
+	// other fields are owned exclusively by the Run loop.
+	ticks    chan LiveData
+	commands chan command
+
+	// hidReady gates HID events for the first 2 seconds after startup.
+	hidReady bool
+	// now returns the current time; overridable in tests for deterministic timeouts.
+	now func() time.Time
 }
 
 // NewUserInterface initializes and returns a new UserInterface instance.
@@ -86,6 +96,9 @@ func NewUserInterface(config *Config) *UserInterface {
 		settingsCallback: config.SettingsCallback,
 		done:             config.ExitCodeChan,
 		activeLiveView:   languagedb.UIMenuLiveView,
+		ticks:            make(chan LiveData, 1),
+		commands:         make(chan command, 4),
+		now:              time.Now,
 	}
 
 	// Set devToolsEnabled callback if provided
@@ -110,41 +123,51 @@ func NewUserInterface(config *Config) *UserInterface {
 	return userInterface
 }
 
-// RegisterActivity updates the last activity timestamp to the current time.
-func (u *UserInterface) RegisterActivity() {
-	u.lastActivity = time.Now()
+// setMode is the single point where the screen mode changes. Centralising it
+// keeps transitions greppable and logs every change.
+func (u *UserInterface) setMode(m ScreenMode) {
+	if u.mode != m {
+		u.log.Debug().Str("from", u.mode.String()).Str("to", m.String()).Msg("mode transition")
+	}
+
+	u.mode = m
 }
 
-// DisplaySleep puts the display into sleep mode.
-func (u *UserInterface) DisplaySleep() {
+// registerActivity updates the last activity timestamp to the current time.
+func (u *UserInterface) registerActivity() {
+	u.lastActivity = u.now()
+}
+
+// displaySleep puts the display into sleep mode.
+func (u *UserInterface) displaySleep() {
 	if int(u.mode) == int(ScreenModeSleep) {
 		return
 	}
 
 	u.display.Sleep()
 
-	u.mode = ScreenModeSleep
+	u.setMode(ScreenModeSleep)
 
 	u.log.Debug().Str("state", "sleep").Msg("display update")
 }
 
-// DisplayOff turns the display off.
-func (u *UserInterface) DisplayOff() {
+// displayOff turns the display off.
+func (u *UserInterface) displayOff() {
 	if int(u.mode) == int(ScreenModeOff) {
 		return
 	}
 
 	u.display.Sleep()
 
-	u.mode = ScreenModeOff
+	u.setMode(ScreenModeOff)
 
 	u.log.Debug().Str("state", "off").Msg("display update")
 }
 
-// DisplayToggleOff toggles the display between off and wait modes.
-func (u *UserInterface) DisplayToggleOff() bool {
+// displayToggleOff toggles the display between off and wait modes.
+func (u *UserInterface) displayToggleOff() bool {
 	if int(u.mode) == int(ScreenModeOff) {
-		u.mode = ScreenModeWait
+		u.setMode(ScreenModeWait)
 		u.displayData.forceRefresh = true
 
 		u.log.Debug().Str("state", "live").Msg("display update")
@@ -152,16 +175,16 @@ func (u *UserInterface) DisplayToggleOff() bool {
 		return true
 	}
 
-	u.mode = ScreenModeOff
+	u.setMode(ScreenModeOff)
 
 	u.log.Debug().Str("state", "off").Msg("display update")
 
 	return false
 }
 
-// DrawReadyDisplay renders the ready screen on the display.
+// drawReadyDisplay renders the ready screen on the display.
 // TODO: move it elsewhere or get rid of it entirely.
-func (u *UserInterface) DrawReadyDisplay() {
+func (u *UserInterface) drawReadyDisplay() {
 	// Don't override settings mode
 	if int(u.mode) == int(ScreenModeSettings) {
 		return
@@ -176,7 +199,7 @@ func (u *UserInterface) DrawReadyDisplay() {
 			Gear:  u.i18n.GetString(languagedb.UIReady),
 			Ready: true,
 		})
-		u.mode = ScreenModeWait
+		u.setMode(ScreenModeWait)
 		u.log.Debug().Str("state", "wait").Msg("display update")
 
 		return
@@ -184,21 +207,21 @@ func (u *UserInterface) DrawReadyDisplay() {
 
 	_ = u.Screen.RenderSplashScreen(u.i18n.GetString(languagedb.UIReady))
 
-	u.mode = ScreenModeWait
+	u.setMode(ScreenModeWait)
 
 	u.log.Debug().Str("state", "wait").Msg("display update")
 }
 
-// DrawLiveDisplay renders the active live-view screen on the display.
-func (u *UserInterface) DrawLiveDisplay(data LiveData) {
+// drawLiveDisplay renders the active live-view screen on the display.
+func (u *UserInterface) drawLiveDisplay(data LiveData) {
 	// The dashboard view is driven by continuously-changing telemetry, so it
 	// redraws every frame rather than only on a gear change.
 	if u.activeLiveView == languagedb.UIMenuLiveDashboard {
 		_ = u.Screen.RenderDashboardScreen(u.dashboardData(data))
 
 		u.displayData = data
-		u.mode = ScreenModeLive
-		u.RegisterActivity()
+		u.setMode(ScreenModeLive)
+		u.registerActivity()
 
 		return
 	}
@@ -218,8 +241,8 @@ func (u *UserInterface) DrawLiveDisplay(data LiveData) {
 	_ = u.Screen.RenderLiveScreen(displayValue)
 
 	u.displayData = data
-	u.mode = ScreenModeLive
-	u.RegisterActivity()
+	u.setMode(ScreenModeLive)
+	u.registerActivity()
 
 	u.log.Debug().Str("state", "live").Msg("display update")
 }
@@ -281,22 +304,16 @@ func (u *UserInterface) dashboardData(data LiveData) gui.DashboardData {
 	}
 }
 
-// ForceRedraw marks the display data as requiring a refresh on the next update.
-// This is useful when display orientation changes or other display properties are updated.
-func (u *UserInterface) ForceRedraw() {
-	u.displayData.forceRefresh = true
-}
-
-// SettingAction performs a settings action and returns the resulting setting value.
-func (u *UserInterface) SettingAction(setting languagedb.Key, action string) string {
-	u.RegisterActivity()
-	u.mode = ScreenModeSettings
+// settingAction performs a settings action and returns the resulting setting value.
+func (u *UserInterface) settingAction(setting languagedb.Key, action string) string {
+	u.registerActivity()
+	u.setMode(ScreenModeSettings)
 
 	return u.settingsCallback(setting, action)
 }
 
-// UpdateDisplay updates the display based on the current mode and live data.
-func (u *UserInterface) UpdateDisplay(data LiveData) {
+// handleTick renders the display for one telemetry tick based on the current mode.
+func (u *UserInterface) handleTick(data LiveData) {
 	switch u.mode {
 	case ScreenModeSettings:
 		u.handleSettingsMode(data)
@@ -342,7 +359,7 @@ func (u *UserInterface) IsSetupModeCountdownZero() bool {
 // interrupting menu navigation immediately after button presses.
 func (u *UserInterface) handleSettingsMode(data LiveData) {
 	// Check for 10-second inactivity timeout in menu
-	if !u.lastMenuActivity.IsZero() && time.Since(u.lastMenuActivity) > 10*time.Second {
+	if !u.lastMenuActivity.IsZero() && u.now().Sub(u.lastMenuActivity) > 10*time.Second {
 		u.log.Debug().Msg("Menu inactivity timeout - exiting settings")
 		u.lastMenuActivity = time.Time{} // Reset timer
 
@@ -350,9 +367,9 @@ func (u *UserInterface) handleSettingsMode(data LiveData) {
 		if data.TelemetryActive {
 			// Force refresh to ensure we transition even if gear hasn't changed
 			u.displayData.forceRefresh = true
-			u.DrawLiveDisplay(data)
+			u.drawLiveDisplay(data)
 		} else {
-			u.DisplaySleep()
+			u.displaySleep()
 		}
 	}
 }
@@ -368,7 +385,7 @@ func (u *UserInterface) handleStartupMode(data LiveData) {
 		u.showActiveOrReadyDisplay(data)
 
 		if !data.TelemetryActive {
-			u.RegisterActivity()
+			u.registerActivity()
 		}
 	}
 }
@@ -376,9 +393,9 @@ func (u *UserInterface) handleStartupMode(data LiveData) {
 // handleWaitMode handles display updates in wait mode.
 func (u *UserInterface) handleWaitMode(data LiveData) {
 	if data.TelemetryActive {
-		u.DrawLiveDisplay(data)
+		u.drawLiveDisplay(data)
 	} else if u.displayPowerOffTimeoutReached() {
-		u.mode = ScreenModeSleep
+		u.setMode(ScreenModeSleep)
 		u.display.Sleep()
 	}
 }
@@ -386,7 +403,7 @@ func (u *UserInterface) handleWaitMode(data LiveData) {
 // handleSleepMode handles display updates in sleep mode.
 func (u *UserInterface) handleSleepMode(data LiveData) {
 	if data.TelemetryActive {
-		u.DrawLiveDisplay(data)
+		u.drawLiveDisplay(data)
 	}
 }
 
@@ -399,18 +416,18 @@ func (u *UserInterface) handleOffMode() {
 // showActiveOrReadyDisplay shows live display if telemetry is active, otherwise ready display.
 func (u *UserInterface) showActiveOrReadyDisplay(data LiveData) {
 	if data.TelemetryActive {
-		u.DrawLiveDisplay(data)
+		u.drawLiveDisplay(data)
 	} else {
-		u.DrawReadyDisplay()
+		u.drawReadyDisplay()
 	}
 }
 
 // displayPowerOffTimeoutReached checks if the power-off timeout has been reached.
 func (u *UserInterface) displayPowerOffTimeoutReached() bool {
-	return time.Since(u.lastActivity) > 30*time.Second
+	return u.now().Sub(u.lastActivity) > 30*time.Second
 }
 
 // displaySplashTimeoutReached checks if the splash screen timeout has been reached.
 func (u *UserInterface) displaySplashTimeoutReached() bool {
-	return time.Since(u.lastActivity) > 2*time.Second
+	return u.now().Sub(u.lastActivity) > 2*time.Second
 }

@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"context"
 	"strconv"
 	"time"
 
@@ -43,66 +42,15 @@ const (
 	menuPageRoot      = "root"
 )
 
-// HIDEventHandler processes HID input events and updates the UI based on the event type.
-func (u *UserInterface) HIDEventHandler(ctx context.Context) {
-	u.log.Debug().
-		Str("component", "HID event handler").
-		Msg("Start")
-
-	ready := false
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case key := <-u.hidEvents:
-			if !u.shouldProcessHIDEvent(&ready) {
-				continue
-			}
-
-			if u.handleSpecialKeys(key) {
-				continue
-			}
-
-			title, value := u.handleMenuNavigation(key)
-
-			// Special case: entering or paging between live views should render the
-			// selected live screen.
-			if u.menuSystem.IsCurrentNodeLive() {
-				// Set activeLiveView before mode so the display loop never sees
-				// ScreenModeLive with a stale activeLiveView and renders the wrong
-				// ready screen. Transition straight to ScreenModeWait: the live-data
-				// update loop re-enters naturally via handleWaitMode when telemetry
-				// is active.
-				u.activeLiveView = languagedb.Key(title)
-				u.lastMenuActivity = time.Now()
-				// Reset the power-off timeout so paging/navigating onto a live
-				// view keeps the screen awake until the timeout is reached again,
-				// rather than flashing the screen and immediately re-sleeping.
-				u.RegisterActivity()
-
-				u.renderActiveLiveView()
-
-				u.mode = ScreenModeWait
-
-				continue
-			}
-
-			layout := u.determineLayout()
-
-			u.renderSettingScreen(layout, title, value)
-		}
-	}
-}
-
-// shouldProcessHIDEvent checks if HID events should be processed, handling startup delay.
-func (u *UserInterface) shouldProcessHIDEvent(ready *bool) bool {
-	if !*ready {
-		if time.Since(u.startTime) < 2*time.Second {
+// shouldProcessHIDEvent reports whether HID events should be processed yet,
+// discarding the first 2 seconds after startup.
+func (u *UserInterface) shouldProcessHIDEvent() bool {
+	if !u.hidReady {
+		if u.now().Sub(u.startTime) < 2*time.Second {
 			return false // discard hid events in the first 2 seconds after app start
 		}
 
-		*ready = true
+		u.hidReady = true
 	}
 
 	return true
@@ -152,7 +100,7 @@ func (u *UserInterface) handleEscapeKey() {
 
 // handlePowerKey handles the power key for toggling display off.
 func (u *UserInterface) handlePowerKey() {
-	state := u.DisplayToggleOff()
+	state := u.displayToggleOff()
 	u.log.Debug().
 		Str("key", "power").
 		Str("action", "toggle off").
@@ -184,7 +132,7 @@ func (u *UserInterface) handleMenuNavigation(key HIDInputEvent) (title string, v
 // handleUpKey handles the up key for navigating to parent node.
 func (u *UserInterface) handleUpKey() (title string, value string) {
 	// Reset inactivity timer on any menu interaction
-	u.lastMenuActivity = time.Now()
+	u.lastMenuActivity = u.now()
 
 	node, action := u.menuSystem.NavigateUp()
 	menuPage := node.name
@@ -205,7 +153,7 @@ func (u *UserInterface) handleUpKey() (title string, value string) {
 		}
 	case actionIncrease:
 		// On a leaf node - increase value
-		value = u.SettingAction(menuPage, actionIncrease)
+		value = u.settingAction(menuPage, actionIncrease)
 		u.log.Debug().
 			Str("key", "up").
 			Str("action", actionIncrease).
@@ -218,7 +166,7 @@ func (u *UserInterface) handleUpKey() (title string, value string) {
 
 	// Get current value if we're on a leaf
 	if u.menuSystem.IsCurrentNodeLeaf() {
-		value = u.SettingAction(menuPage, actionGet)
+		value = u.settingAction(menuPage, actionGet)
 	}
 
 	return string(menuPage), value
@@ -227,7 +175,7 @@ func (u *UserInterface) handleUpKey() (title string, value string) {
 // handleDownKey handles the down key for entering branches or navigating.
 func (u *UserInterface) handleDownKey() (title string, value string) {
 	// Reset inactivity timer on any menu interaction
-	u.lastMenuActivity = time.Now()
+	u.lastMenuActivity = u.now()
 
 	node, action := u.menuSystem.NavigateDown()
 	menuPage := node.name
@@ -255,7 +203,7 @@ func (u *UserInterface) handleDownKey() (title string, value string) {
 		}
 	case actionDecrease:
 		// On a leaf node - decrease value
-		value = u.SettingAction(menuPage, actionDecrease)
+		value = u.settingAction(menuPage, actionDecrease)
 		u.log.Debug().
 			Str("key", "down").
 			Str("action", actionDecrease).
@@ -273,7 +221,7 @@ func (u *UserInterface) handleDownKey() (title string, value string) {
 
 	// Get current value if we're on a leaf
 	if u.menuSystem.IsCurrentNodeLeaf() {
-		value = u.SettingAction(menuPage, actionGet)
+		value = u.settingAction(menuPage, actionGet)
 	} else {
 		value = ""
 	}
@@ -284,14 +232,14 @@ func (u *UserInterface) handleDownKey() (title string, value string) {
 // handleLeftKey handles the left key for previous sibling or decreasing values.
 func (u *UserInterface) handleLeftKey() (title string, value string) {
 	// Reset inactivity timer on any menu interaction
-	u.lastMenuActivity = time.Now()
+	u.lastMenuActivity = u.now()
 
 	node, action := u.menuSystem.NavigateLeft()
 	menuPage := node.name
 
 	if action == actionDecrease {
 		// On a leaf node - decrease value
-		value = u.SettingAction(menuPage, actionDecrease)
+		value = u.settingAction(menuPage, actionDecrease)
 		u.log.Debug().
 			Str("key", "left").
 			Str("action", actionDecrease).
@@ -313,7 +261,7 @@ func (u *UserInterface) handleLeftKey() (title string, value string) {
 		}
 
 		if u.display.IsAwake() && u.menuSystem.IsCurrentNodeLeaf() {
-			value = u.SettingAction(menuPage, actionGet)
+			value = u.settingAction(menuPage, actionGet)
 		} else {
 			value = ""
 		}
@@ -325,14 +273,14 @@ func (u *UserInterface) handleLeftKey() (title string, value string) {
 // handleRightKey handles the right key for next sibling or increasing values.
 func (u *UserInterface) handleRightKey() (title string, value string) {
 	// Reset inactivity timer on any menu interaction
-	u.lastMenuActivity = time.Now()
+	u.lastMenuActivity = u.now()
 
 	node, action := u.menuSystem.NavigateRight()
 	menuPage := node.name
 
 	if action == actionIncrease {
 		// On a leaf node - increase value
-		value = u.SettingAction(menuPage, actionIncrease)
+		value = u.settingAction(menuPage, actionIncrease)
 		u.log.Debug().
 			Str("key", "right").
 			Str("action", actionIncrease).
@@ -354,7 +302,7 @@ func (u *UserInterface) handleRightKey() (title string, value string) {
 		}
 
 		if u.display.IsAwake() && u.menuSystem.IsCurrentNodeLeaf() {
-			value = u.SettingAction(menuPage, actionGet)
+			value = u.settingAction(menuPage, actionGet)
 		} else {
 			value = ""
 		}
@@ -382,7 +330,7 @@ func (u *UserInterface) renderSettingScreen(layout gui.Layout, menuPage string, 
 	u.mode = ScreenModeSettings
 
 	// Reset inactivity timer on any menu display
-	u.lastMenuActivity = time.Now()
+	u.lastMenuActivity = u.now()
 
 	var (
 		title        string

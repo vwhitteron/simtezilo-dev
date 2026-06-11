@@ -18,17 +18,17 @@ func (a *App) startBackgroundTasks() {
 	a.startCrashLogManager()
 }
 
-// startHIDEventHandler starts the HID event handler goroutine.
+// startHIDEventHandler starts the UI event loop goroutine.
 func (a *App) startHIDEventHandler() {
 	a.wg.Add(1)
 
 	go func() {
 		defer func() {
-			a.log.Debug().Msg("HIDEventHandler goroutine exiting")
+			a.log.Debug().Msg("UI event loop goroutine exiting")
 			a.wg.Done()
 		}()
 
-		a.ui.HIDEventHandler(a.ctx)
+		a.ui.Run(a.ctx)
 	}()
 }
 
