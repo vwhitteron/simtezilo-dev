@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/vwhitteron/simtezilo-dev/app/i18n/languagedb"
+	"github.com/vwhitteron/simtezilo-dev/app/kinematics"
 )
 
 // command is an out-of-band instruction to the UI event loop, used by callers on
@@ -16,8 +17,8 @@ const (
 
 // Run is the UI event loop and the sole owner of the UserInterface's mutable
 // state. HID events, display ticks, and commands are all delivered here and
-// handled on this one goroutine, so no locking is required. It returns when ctx
-// is cancelled.
+// handled on this one goroutine, so no locking is required. Each event updates the
+// state and then renders the resulting scene. It returns when ctx is cancelled.
 func (u *UserInterface) Run(ctx context.Context) {
 	u.log.Debug().Str("component", "UI event loop").Msg("Start")
 
@@ -27,10 +28,13 @@ func (u *UserInterface) Run(ctx context.Context) {
 			return
 		case key := <-u.hidEvents:
 			u.handleHIDEvent(key)
+			u.render()
 		case data := <-u.ticks:
 			u.handleTick(data)
+			u.render()
 		case cmd := <-u.commands:
 			u.handleCommand(cmd)
+			u.render()
 		}
 	}
 }
@@ -68,7 +72,7 @@ func (u *UserInterface) ForceRedraw() {
 func (u *UserInterface) handleCommand(cmd command) {
 	switch cmd {
 	case cmdForceRedraw:
-		u.displayData.forceRefresh = true
+		u.state.forceRedraw = true
 	}
 }
 
@@ -84,19 +88,30 @@ func (u *UserInterface) handleHIDEvent(key HIDInputEvent) {
 
 	title, value := u.handleMenuNavigation(key)
 
-	// Entering or paging between live views renders the selected live screen.
-	// activeLiveView is set before the mode so the loop never renders a stale
-	// view. The live-data tick re-enters naturally via handleWaitMode.
+	// Entering or paging between live views selects the live screen.
 	if u.menuSystem.IsCurrentNodeLive() {
-		u.activeLiveView = languagedb.Key(title)
-		u.lastMenuActivity = u.now()
-		u.registerActivity()
-		u.renderActiveLiveView()
-		u.setMode(ScreenModeWait)
+		u.enterLiveView(languagedb.Key(title))
 
 		return
 	}
 
-	layout := u.determineLayout()
-	u.renderSettingScreen(layout, title, value)
+	u.showMenuPage(u.determineLayout(), title, value)
+}
+
+// enterLiveView selects a live view and shows it immediately: the live data if we
+// have a recent gear, otherwise the ready view. The live-data tick then keeps it
+// updated via handleTick.
+func (u *UserInterface) enterLiveView(view languagedb.Key) {
+	u.state.activeLiveView = view
+	u.state.lastMenuActivity = u.now()
+	u.registerActivity()
+
+	if u.state.lastData.Gear == kinematics.NullGear {
+		u.setMode(ScreenModeWait)
+	} else {
+		u.state.gearText = kinematics.GearName(u.state.lastData.Gear)
+		u.setMode(ScreenModeLive)
+	}
+
+	u.state.forceRedraw = true
 }

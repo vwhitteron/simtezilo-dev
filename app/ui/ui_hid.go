@@ -45,12 +45,12 @@ const (
 // shouldProcessHIDEvent reports whether HID events should be processed yet,
 // discarding the first 2 seconds after startup.
 func (u *UserInterface) shouldProcessHIDEvent() bool {
-	if !u.hidReady {
-		if u.now().Sub(u.startTime) < 2*time.Second {
+	if !u.state.hidReady {
+		if u.now().Sub(u.state.startTime) < 2*time.Second {
 			return false // discard hid events in the first 2 seconds after app start
 		}
 
-		u.hidReady = true
+		u.state.hidReady = true
 	}
 
 	return true
@@ -132,7 +132,7 @@ func (u *UserInterface) handleMenuNavigation(key HIDInputEvent) (title string, v
 // handleUpKey handles the up key for navigating to parent node.
 func (u *UserInterface) handleUpKey() (title string, value string) {
 	// Reset inactivity timer on any menu interaction
-	u.lastMenuActivity = u.now()
+	u.state.lastMenuActivity = u.now()
 
 	node, action := u.menuSystem.NavigateUp()
 	menuPage := node.name
@@ -175,7 +175,7 @@ func (u *UserInterface) handleUpKey() (title string, value string) {
 // handleDownKey handles the down key for entering branches or navigating.
 func (u *UserInterface) handleDownKey() (title string, value string) {
 	// Reset inactivity timer on any menu interaction
-	u.lastMenuActivity = u.now()
+	u.state.lastMenuActivity = u.now()
 
 	node, action := u.menuSystem.NavigateDown()
 	menuPage := node.name
@@ -232,7 +232,7 @@ func (u *UserInterface) handleDownKey() (title string, value string) {
 // handleLeftKey handles the left key for previous sibling or decreasing values.
 func (u *UserInterface) handleLeftKey() (title string, value string) {
 	// Reset inactivity timer on any menu interaction
-	u.lastMenuActivity = u.now()
+	u.state.lastMenuActivity = u.now()
 
 	node, action := u.menuSystem.NavigateLeft()
 	menuPage := node.name
@@ -273,7 +273,7 @@ func (u *UserInterface) handleLeftKey() (title string, value string) {
 // handleRightKey handles the right key for next sibling or increasing values.
 func (u *UserInterface) handleRightKey() (title string, value string) {
 	// Reset inactivity timer on any menu interaction
-	u.lastMenuActivity = u.now()
+	u.state.lastMenuActivity = u.now()
 
 	node, action := u.menuSystem.NavigateRight()
 	menuPage := node.name
@@ -324,48 +324,40 @@ func (u *UserInterface) determineLayout() gui.Layout {
 	return gui.LayoutSetting
 }
 
-// renderSettingScreen renders the setting screen with the given title and value.
-func (u *UserInterface) renderSettingScreen(layout gui.Layout, menuPage string, value string) {
-	// Switch to settings mode to display the menu
-	u.mode = ScreenModeSettings
+// showMenuPage stores the scene for the current menu page and switches to settings
+// mode. The scene is drawn by render() after the event is handled.
+func (u *UserInterface) showMenuPage(layout gui.Layout, menuPage string, value string) {
+	u.setMode(ScreenModeSettings)
+	u.state.lastMenuActivity = u.now()
+	u.state.forceRedraw = true
 
-	// Reset inactivity timer on any menu display
-	u.lastMenuActivity = u.now()
+	u.state.menuScene = scene{
+		kind:    sceneSetting,
+		layout:  layout,
+		content: u.menuContent(layout, menuPage, value),
+	}
+}
 
-	var (
-		title        string
-		displayValue string
-	)
-
+// menuContent builds the text fields shown for a menu page.
+func (u *UserInterface) menuContent(layout gui.Layout, menuPage string, value string) gui.SettingContent {
 	switch layout { //nolint:exhaustive // only relevant layout types are handled
 	case gui.LayoutMenuSub:
-		// Branch nodes: show parent at top (empty for top-level), current item in center
-		parent := u.menuSystem.GetCurrentNode().parent
-		if parent != nil && parent.name != menuPageRoot {
+		// Branch nodes: parent at top (empty for top-level), current item in centre.
+		title := ""
+		if parent := u.menuSystem.GetCurrentNode().parent; parent != nil && parent.name != menuPageRoot {
 			title = u.getBranchTitle(string(parent.name))
-		} else {
-			title = "" // Empty for top-level branches
 		}
 
-		displayValue = u.getBranchTitle(menuPage)
-		_ = u.Screen.RenderSettingScreen(layout, gui.SettingContent{Title: title, Value: displayValue})
-
-		return
+		return gui.SettingContent{Title: title, Value: u.getBranchTitle(menuPage)}
 
 	case gui.LayoutInfo:
-		// Info pages: title at top, multi-line value in center
-		title = u.getLeafTitle(menuPage)
-		_ = u.Screen.RenderSettingScreen(layout, gui.SettingContent{Title: title, Value: value})
+		// Info pages: title at top, multi-line value in centre.
+		return gui.SettingContent{Title: u.getLeafTitle(menuPage), Value: value}
 
-		return
-
-	case gui.LayoutSetting:
-		// Leaf nodes: parent at top, value in center, setting name at bottom
-		parent := u.menuSystem.GetCurrentNode().parent
-		if parent != nil && parent.name != menuPageRoot {
+	default: // gui.LayoutSetting: parent at top, value in centre, setting name at bottom.
+		title := u.i18n.GetString(languagedb.UIMenuSettings)
+		if parent := u.menuSystem.GetCurrentNode().parent; parent != nil && parent.name != menuPageRoot {
 			title = u.getBranchTitle(string(parent.name))
-		} else {
-			title = u.i18n.GetString(languagedb.UIMenuSettings)
 		}
 
 		content := gui.SettingContent{Title: title}
@@ -375,9 +367,8 @@ func (u *UserInterface) renderSettingScreen(layout gui.Layout, menuPage string, 
 			content.Name = u.getSettingName(menuPage)
 			content.Value = value
 		}
-		_ = u.Screen.RenderSettingScreen(layout, content)
 
-		return
+		return content
 	}
 }
 

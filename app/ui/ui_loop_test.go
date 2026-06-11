@@ -74,14 +74,14 @@ func TestHandleTickStartupToWaitWhenIdle(t *testing.T) {
 	clock := base
 	ui.now = func() time.Time { return clock }
 
-	ui.mode = ScreenModeStartup
-	ui.lastActivity = base
+	ui.state.mode = ScreenModeStartup
+	ui.state.lastActivity = base
 	clock = base.Add(3 * time.Second) // past the 2s splash timeout
 
 	ui.handleTick(LiveData{TelemetryActive: false, Gear: kinematics.NullGear})
 
-	if ui.mode != ScreenModeWait {
-		t.Fatalf("expected mode Wait after idle startup timeout, got %v", ui.mode)
+	if ui.state.mode != ScreenModeWait {
+		t.Fatalf("expected mode Wait after idle startup timeout, got %v", ui.state.mode)
 	}
 }
 
@@ -94,14 +94,14 @@ func TestHandleTickWaitPowerOffSleeps(t *testing.T) {
 	clock := base
 	ui.now = func() time.Time { return clock }
 
-	ui.mode = ScreenModeWait
-	ui.lastActivity = base
+	ui.state.mode = ScreenModeWait
+	ui.state.lastActivity = base
 	clock = base.Add(31 * time.Second) // past the 30s power-off timeout
 
 	ui.handleTick(LiveData{TelemetryActive: false})
 
-	if ui.mode != ScreenModeSleep {
-		t.Fatalf("expected mode Sleep after power-off timeout, got %v", ui.mode)
+	if ui.state.mode != ScreenModeSleep {
+		t.Fatalf("expected mode Sleep after power-off timeout, got %v", ui.state.mode)
 	}
 
 	disp, ok := ui.display.(*virtual.Display)
@@ -119,14 +119,14 @@ func TestHandleTickSettingsMenuTimeoutSleeps(t *testing.T) {
 	clock := base
 	ui.now = func() time.Time { return clock }
 
-	ui.mode = ScreenModeSettings
-	ui.lastMenuActivity = base
+	ui.state.mode = ScreenModeSettings
+	ui.state.lastMenuActivity = base
 	clock = base.Add(11 * time.Second) // past the 10s menu timeout
 
 	ui.handleTick(LiveData{TelemetryActive: false})
 
-	if ui.mode != ScreenModeSleep {
-		t.Fatalf("expected mode Sleep after menu timeout, got %v", ui.mode)
+	if ui.state.mode != ScreenModeSleep {
+		t.Fatalf("expected mode Sleep after menu timeout, got %v", ui.state.mode)
 	}
 }
 
@@ -135,16 +135,16 @@ func TestHandleTickSettingsMenuTimeoutSleeps(t *testing.T) {
 // UIMenuLiveView leaf; Right pages to its UIMenuLiveDashboard sibling.
 func TestHIDLiveLeafSetsActiveViewAndWait(t *testing.T) {
 	ui := newTestUI(t)
-	ui.hidReady = true
+	ui.state.hidReady = true
 
 	ui.handleHIDEvent(HIDInputRight)
 
-	if ui.activeLiveView != languagedb.UIMenuLiveDashboard {
-		t.Fatalf("expected activeLiveView=LiveDashboard, got %v", ui.activeLiveView)
+	if ui.state.activeLiveView != languagedb.UIMenuLiveDashboard {
+		t.Fatalf("expected activeLiveView=LiveDashboard, got %v", ui.state.activeLiveView)
 	}
 
-	if ui.mode != ScreenModeWait {
-		t.Fatalf("expected mode Wait on live leaf, got %v", ui.mode)
+	if ui.state.mode != ScreenModeWait {
+		t.Fatalf("expected mode Wait on live leaf, got %v", ui.state.mode)
 	}
 }
 
@@ -155,8 +155,8 @@ func TestForceRedrawSetsFlagOnCommand(t *testing.T) {
 
 	ui.handleCommand(cmdForceRedraw)
 
-	if !ui.displayData.forceRefresh {
-		t.Fatal("expected forceRefresh to be set after cmdForceRedraw")
+	if !ui.state.forceRedraw {
+		t.Fatal("expected forceRedraw to be set after cmdForceRedraw")
 	}
 }
 
@@ -167,7 +167,7 @@ func TestForceRedrawSetsFlagOnCommand(t *testing.T) {
 // test asserts nothing beyond completing without a race report or deadlock.
 func TestRunConcurrentProducersNoRace(t *testing.T) {
 	ui := newTestUI(t)
-	ui.hidReady = true // exercise the navigation path, not the startup discard
+	ui.state.hidReady = true // exercise the navigation path, not the startup discard
 
 	ctx, cancel := context.WithCancel(context.Background())
 
