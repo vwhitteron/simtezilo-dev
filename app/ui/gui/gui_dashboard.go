@@ -8,7 +8,6 @@ import (
 	"math"
 	"strconv"
 
-	"github.com/golang/freetype/truetype"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/display"
 	"golang.org/x/image/font"
 	"golang.org/x/image/math/fixed"
@@ -84,6 +83,9 @@ func dashColorReady() color.RGBA { return color.RGBA{R: 70, G: 70, B: 70, A: 255
 // RenderDashboardScreen renders the dashboard live view: brake/throttle bars on
 // the sides, an RPM arc across the top, and the speed in the centre.
 func (r *Screen) RenderDashboardScreen(d DashboardData) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	canvas := r.newBlankCanvas()
 
 	background := dashColorBackground()
@@ -150,23 +152,65 @@ func (r *Screen) drawRPMArc(canvas *image.RGBA, d DashboardData) {
 	r.drawArc(canvas, 0, rpmFraction, revColor(d.RPM, d.RevLightMin, d.RevLightMax))
 }
 
-// drawArc fills the arc band between fractions [from, to] of the sweep in a single
-// colour.
+// arcSampleCount is the number of angle steps in the precomputed arc table (N).
+// Fractions [0,1] map to table indices [0, arcSampleCount].
+const arcSampleCount = int(dashArcSweepDeg / arcAngleStep) // 540
+
+// buildArcSamples precomputes the radial pixel coordinates for each angle step
+// in the full arc sweep. The outer slice has arcSampleCount+1 entries; each inner
+// slice holds the canvas points at that angle that fall within the panel bounds.
+// cols/rows are used as the bounds filter; they must match the canvas size used
+// at render time.
+func buildArcSamples(cols, rows int) [][]image.Point {
+	n := arcSampleCount
+	samples := make([][]image.Point, n+1)
+
+	for i := 0; i <= n; i++ {
+		fraction := float64(i) / float64(n)
+		angle := (dashArcStartDeg - dashArcSweepDeg*fraction) * degreesToRad
+
+		var pts []image.Point
+
+		for radius := dashArcInner; radius <= dashArcOuter; radius += arcRadiusStep {
+			x := int(dashCenterX + radius*math.Cos(angle))
+			y := int(dashCenterY - radius*math.Sin(angle))
+
+			if x >= 0 && y >= 0 && x < cols && y < rows {
+				pts = append(pts, image.Point{X: x, Y: y})
+			}
+		}
+
+		samples[i] = pts
+	}
+
+	return samples
+}
+
+// drawArc fills the arc band between fractions [from, to] of the sweep in a
+// single colour. It uses the precomputed r.arcSamples table to avoid per-pixel
+// trig and bounds checks; the outer loop matches the original step count and
+// fraction formula exactly, so the set of lit pixels is identical to the old
+// code.
 func (r *Screen) drawArc(canvas *image.RGBA, from, to float64, col color.RGBA) {
 	if to <= from {
 		return
 	}
 
+	n := arcSampleCount
 	steps := max(int(dashArcSweepDeg*(to-from)/arcAngleStep), 1)
 
 	for i := 0; i <= steps; i++ {
 		fraction := from + (to-from)*float64(i)/float64(steps)
-		angle := (dashArcStartDeg - dashArcSweepDeg*fraction) * degreesToRad
+		// Map fraction to the nearest precomputed sample index.
+		sIdx := int(math.Round(fraction * float64(n)))
+		if sIdx < 0 {
+			sIdx = 0
+		} else if sIdx > n {
+			sIdx = n
+		}
 
-		for radius := dashArcInner; radius <= dashArcOuter; radius += arcRadiusStep {
-			x := int(dashCenterX + radius*math.Cos(angle))
-			y := int(dashCenterY - radius*math.Sin(angle))
-			setPixel(canvas, x, y, col)
+		for _, p := range r.arcSamples[sIdx] {
+			canvas.SetRGBA(p.X, p.Y, col)
 		}
 	}
 }
@@ -180,6 +224,7 @@ func (r *Screen) drawDashboardText(canvas *image.RGBA, d DashboardData) {
 		if d.Ready {
 			gearFont = fontStatus
 		}
+
 		r.drawCenteredText(canvas, d.Gear, gearFont, dashColorText(), dashGearCenterY, true)
 	}
 
@@ -192,11 +237,7 @@ func (r *Screen) drawDashboardText(canvas *image.RGBA, d DashboardData) {
 // drawCenteredText draws text horizontally centred. When vMiddle is true, y is
 // treated as the vertical centre of the glyph box; otherwise y is the baseline.
 func (r *Screen) drawCenteredText(canvas *image.RGBA, text string, scale float64, col color.RGBA, y int, vMiddle bool) {
-	fontFace := truetype.NewFace(r.i18n.RegularFont().Font, &truetype.Options{
-		Size:    r.i18n.RegularFont().Scale * scale,
-		DPI:     r.dpi,
-		Hinting: font.HintingFull,
-	})
+	fontFace := r.face(r.i18n.RegularFont().Font, r.i18n.RegularFont().Scale*scale)
 
 	fontDrawer := &font.Drawer{
 		Dst:  canvas,
@@ -259,14 +300,6 @@ func fillRect(canvas *image.RGBA, x0, y0, x1, y1 int, col color.RGBA) {
 	}
 
 	draw.Draw(canvas, image.Rect(x0, y0, x1, y1), image.NewUniform(col), image.Point{}, draw.Src)
-}
-
-func setPixel(canvas *image.RGBA, x, y int, col color.RGBA) {
-	if x < 0 || y < 0 || x >= canvas.Rect.Max.X || y >= canvas.Rect.Max.Y {
-		return
-	}
-
-	canvas.SetRGBA(x, y, col)
 }
 
 func clampPercent(v float64) float64 { return clamp(v, 0, 100) }

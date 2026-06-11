@@ -55,6 +55,7 @@ type Device struct {
 	columnOffset, columnOffsetCfg int16    // Column offset for the display, used for rotation adjustments.
 	isBGR                         bool     // Indicates if the display uses BGR color format.
 	batchLength                   int32    // Length of the batch for pixel data transfers.
+	frameBuf                      []byte   // Reusable scratch buffer for RGB565 frame data.
 
 	log zerolog.Logger // Logger for logging messages and errors.
 }

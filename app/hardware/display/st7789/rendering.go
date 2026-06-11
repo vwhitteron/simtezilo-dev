@@ -7,6 +7,49 @@ import (
 	"image/draw"
 )
 
+// packRGB565 packs src into buf as a stream of RGB565 pixels (low byte first,
+// then high byte) using the same coordinate mapping as DrawRAW: for output
+// column c and row r, the source pixel is at x = src.Rect.Min.X + cols - c,
+// y = src.Rect.Min.Y + r. When the mapped (x, y) falls outside src.Bounds()
+// (which is always the case for column c == 0), the pixel is emitted as black
+// (0x0000). The buffer is grown only when its capacity is insufficient; the
+// returned slice has length cols*rows*2.
+func packRGB565(src *image.RGBA, cols, rows int, buf []byte) []byte {
+	size := cols * rows * 2
+	if cap(buf) < size {
+		buf = make([]byte, size)
+	}
+
+	buf = buf[:size]
+	bounds := src.Bounds()
+	idx := 0
+
+	for c := range cols {
+		x := src.Rect.Min.X + cols - c
+		for r := range rows {
+			y := src.Rect.Min.Y + r
+
+			if x < bounds.Min.X || x >= bounds.Max.X || y < bounds.Min.Y || y >= bounds.Max.Y {
+				// Out of bounds — emit black (0x0000), matching the old .At() behaviour.
+				buf[idx] = 0
+				buf[idx+1] = 0
+			} else {
+				off := (y-src.Rect.Min.Y)*src.Stride + (x-src.Rect.Min.X)*4
+				rv := uint16(src.Pix[off]) >> 3
+				gv := uint16(src.Pix[off+1]) >> 2
+				bv := uint16(src.Pix[off+2]) >> 3
+				c565 := (rv << 11) | (gv << 5) | bv
+				buf[idx] = byte(c565)
+				buf[idx+1] = byte(c565 >> 8)
+			}
+
+			idx += 2
+		}
+	}
+
+	return buf
+}
+
 // FillRectangle fills a rectangle at a given coordinates with a color.
 func (d *Device) FillRectangle(x, y, width, height uint16, colorRGBA color.RGBA) error {
 	k, i := d.Size()
@@ -72,33 +115,22 @@ func (d *Device) FillScreen(c color.RGBA) {
 func (d *Device) DrawRAW(img image.Image) {
 	d.SetWindow()
 
-	rect := img.Bounds()
-	rgbaimg := image.NewRGBA(rect)
-	draw.Draw(rgbaimg, rect, img, rect.Min, draw.Src)
-
-	data := make([]uint8, 0, int(d.pixelColumns)*int(d.pixelRows)*2)
-
-	for column := range d.pixelColumns {
-		for row := range d.pixelRows {
-			x := rect.Min.X + int(d.pixelColumns) - int(column)
-			y := rect.Min.Y + int(row)
-
-			rgba, ok := rgbaimg.At(x, y).(color.RGBA)
-			if !ok {
-				rgba = color.RGBA{R: 252, G: 15, B: 192, A: 0} // strong pink to highlight bad pixel color
-			}
-
-			c565 := RGBAToRGB565(rgba)
-			// Safe conversion from uint16 to uint8 - RGB565 values fit in uint8 when split
-			data = append(data, byte(c565), byte(c565>>8))
-		}
+	// Fast path: if the caller already passes an *image.RGBA, use it directly
+	// without an extra allocation or draw.Draw copy.
+	src, ok := img.(*image.RGBA)
+	if !ok {
+		rect := img.Bounds()
+		src = image.NewRGBA(rect)
+		draw.Draw(src, rect, img, rect.Min, draw.Src)
 	}
 
-	chunkSize := 4096
-	for offset := 0; offset < len(data); offset += chunkSize {
-		end := min(offset+chunkSize, len(data))
+	d.frameBuf = packRGB565(src, int(d.pixelColumns), int(d.pixelRows), d.frameBuf)
 
-		err := d.SendData(data[offset:end])
+	chunkSize := 4096
+	for offset := 0; offset < len(d.frameBuf); offset += chunkSize {
+		end := min(offset+chunkSize, len(d.frameBuf))
+
+		err := d.SendData(d.frameBuf[offset:end])
 		if err != nil {
 			d.log.Error().
 				Err(err).

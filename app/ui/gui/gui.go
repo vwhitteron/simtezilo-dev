@@ -5,6 +5,7 @@ import (
 	"image"
 	"image/draw"
 	"strings"
+	"sync"
 	"unicode/utf8"
 
 	"github.com/golang/freetype/truetype"
@@ -22,8 +23,20 @@ type Config struct {
 	I18n          *i18n.I18n
 }
 
+// faceKey is the cache key for a truetype face.
+type faceKey struct {
+	font *truetype.Font
+	size float64
+	dpi  float64
+}
+
 // Screen holds the state for rendering to a connected display.
 type Screen struct {
+	mu            sync.Mutex
+	canvases      [2]*image.RGBA // double-buffered: the display retains the previous frame for rotation re-blit while the next is drawn
+	canvasIdx     int
+	faceCache     map[faceKey]font.Face
+	arcSamples    [][]image.Point // precomputed radial pixels per angle step
 	displayDevice hardware.Display
 	pixelColumns  uint16
 	pixelRows     uint16
@@ -54,6 +67,12 @@ func NewScreen(config *Config) (*Screen, error) {
 	}
 
 	return &Screen{
+		canvases: [2]*image.RGBA{
+			image.NewRGBA(image.Rect(0, 0, int(pixelColumns), int(pixelRows))),
+			image.NewRGBA(image.Rect(0, 0, int(pixelColumns), int(pixelRows))),
+		},
+		faceCache:     make(map[faceKey]font.Face),
+		arcSamples:    buildArcSamples(int(pixelColumns), int(pixelRows)),
 		displayDevice: config.DisplayDevice,
 		pixelColumns:  pixelColumns,
 		pixelRows:     pixelRows,
@@ -65,16 +84,25 @@ func NewScreen(config *Config) (*Screen, error) {
 
 // RenderSplashScreen renders the splash screen with the provided value.
 func (r *Screen) RenderSplashScreen(value string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	return r.renderBackgroundScreen(sprites.SplashSprite, value)
 }
 
 // RenderErrorScreen renders the error screen with the provided value.
 func (r *Screen) RenderErrorScreen(value string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	return r.renderBackgroundScreen(sprites.ErrorSprite, value)
 }
 
 // RenderBlankScreen renders a blank screen.
 func (r *Screen) RenderBlankScreen() error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	canvas := r.newBlankCanvas()
 
 	err := r.displayDevice.Write(&display.Content{Canvas: canvas})
@@ -87,6 +115,9 @@ func (r *Screen) RenderBlankScreen() error {
 
 // RenderLiveScreen renders the live screen with the provided gear or status value.
 func (r *Screen) RenderLiveScreen(value string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	canvas := r.newBlankCanvas()
 
 	// Gears are single characters and use the large font; multi-character status
@@ -96,11 +127,7 @@ func (r *Screen) RenderLiveScreen(value string) error {
 		fontSize = r.i18n.RegularFont().Scale * fontStatus
 	}
 
-	fontFace := truetype.NewFace(r.i18n.RegularFont().Font, &truetype.Options{
-		Size:    fontSize,
-		DPI:     r.dpi,
-		Hinting: font.HintingFull,
-	})
+	fontFace := r.face(r.i18n.RegularFont().Font, fontSize)
 
 	fontDrawer := &font.Drawer{
 		Dst:  canvas,
@@ -112,11 +139,7 @@ func (r *Screen) RenderLiveScreen(value string) error {
 	maxWidth := fixed.I(canvas.Rect.Max.X) * liveValueWidthPercent / 100
 	if width := fontDrawer.MeasureString(value); width > maxWidth {
 		fontSize = fontSize * float64(maxWidth) / float64(width)
-		fontDrawer.Face = truetype.NewFace(r.i18n.RegularFont().Font, &truetype.Options{
-			Size:    fontSize,
-			DPI:     r.dpi,
-			Hinting: font.HintingFull,
-		})
+		fontDrawer.Face = r.face(r.i18n.RegularFont().Font, fontSize)
 	}
 
 	// Center the glyph bounding box vertically. Using the box midpoint
@@ -150,6 +173,9 @@ func (r *Screen) RenderLiveScreen(value string) error {
 
 // RenderSettingScreen renders the setting screen with the provided header and value.
 func (r *Screen) RenderSettingScreen(layout Layout, title string, value string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	switch layout { //nolint:exhaustive // only interested in setting screen layouts
 	case LayoutSetting:
 		return r.renderLeafNode(title, value)
@@ -181,11 +207,7 @@ func (r *Screen) renderLeafNode(header string, value string) error {
 	canvas := r.newBlankCanvas()
 
 	// Parent menu at top
-	fontFace := truetype.NewFace(r.i18n.RegularFont().Font, &truetype.Options{
-		Size:    r.i18n.RegularFont().Scale * fontSmall,
-		DPI:     r.dpi,
-		Hinting: font.HintingFull,
-	})
+	fontFace := r.face(r.i18n.RegularFont().Font, r.i18n.RegularFont().Scale*fontSmall)
 
 	fontDrawer := &font.Drawer{
 		Dst:  canvas,
@@ -209,11 +231,7 @@ func (r *Screen) renderLeafNode(header string, value string) error {
 		fontScale = fontSmall
 	}
 
-	fontFace = truetype.NewFace(r.i18n.ValueFont().Font, &truetype.Options{
-		Size:    r.i18n.ValueFont().Scale * fontScale,
-		DPI:     r.dpi,
-		Hinting: font.HintingFull,
-	})
+	fontFace = r.face(r.i18n.ValueFont().Font, r.i18n.ValueFont().Scale*fontScale)
 
 	fontDrawer = &font.Drawer{
 		Dst:  canvas,
@@ -233,11 +251,7 @@ func (r *Screen) renderLeafNode(header string, value string) error {
 
 	// Setting name at bottom (if provided)
 	if settingName != "" {
-		fontFace = truetype.NewFace(r.i18n.RegularFont().Font, &truetype.Options{
-			Size:    r.i18n.RegularFont().Scale * fontMedium,
-			DPI:     r.dpi,
-			Hinting: font.HintingFull,
-		})
+		fontFace = r.face(r.i18n.RegularFont().Font, r.i18n.RegularFont().Scale*fontMedium)
 
 		fontDrawer = &font.Drawer{
 			Dst:  canvas,
@@ -277,11 +291,7 @@ func (r *Screen) renderLayoutMenuSub(parentName string, currentItem string) erro
 
 	// Parent name at top (if provided)
 	if parentName != "" {
-		fontFace := truetype.NewFace(r.i18n.RegularFont().Font, &truetype.Options{
-			Size:    r.i18n.RegularFont().Scale * fontMedium,
-			DPI:     r.dpi,
-			Hinting: font.HintingFull,
-		})
+		fontFace := r.face(r.i18n.RegularFont().Font, r.i18n.RegularFont().Scale*fontMedium)
 
 		fontDrawer := &font.Drawer{
 			Dst:  canvas,
@@ -301,11 +311,7 @@ func (r *Screen) renderLayoutMenuSub(parentName string, currentItem string) erro
 	}
 
 	// Current item in center
-	fontFace := truetype.NewFace(r.i18n.RegularFont().Font, &truetype.Options{
-		Size:    r.i18n.RegularFont().Scale * fontLarge,
-		DPI:     r.dpi,
-		Hinting: font.HintingFull,
-	})
+	fontFace := r.face(r.i18n.RegularFont().Font, r.i18n.RegularFont().Scale*fontLarge)
 
 	fontDrawer := &font.Drawer{
 		Dst:  canvas,
@@ -341,11 +347,7 @@ func (r *Screen) renderLayoutMenuSub(parentName string, currentItem string) erro
 // RenderSettingScreen renders the setting screen with the provided header and value.
 func (r *Screen) renderLayoutInfo(header string, value string) error {
 	// Title
-	fontFace := truetype.NewFace(r.i18n.RegularFont().Font, &truetype.Options{
-		Size:    r.i18n.RegularFont().Scale * fontMedium,
-		DPI:     r.dpi,
-		Hinting: font.HintingFull,
-	})
+	fontFace := r.face(r.i18n.RegularFont().Font, r.i18n.RegularFont().Scale*fontMedium)
 
 	canvas := r.newBlankCanvas()
 	fontDrawer := &font.Drawer{
@@ -365,11 +367,7 @@ func (r *Screen) renderLayoutInfo(header string, value string) error {
 	fontDrawer.DrawString(header)
 
 	// Value - split into multiple lines
-	fontFace = truetype.NewFace(r.i18n.ValueFont().Font, &truetype.Options{
-		Size:    r.i18n.RegularFont().Scale * fontSmall,
-		DPI:     r.dpi,
-		Hinting: font.HintingFull,
-	})
+	fontFace = r.face(r.i18n.ValueFont().Font, r.i18n.RegularFont().Scale*fontSmall)
 
 	fontDrawer = &font.Drawer{
 		Dst:  canvas,
@@ -435,19 +433,43 @@ func (r *Screen) renderLayoutInfo(header string, value string) error {
 	return nil
 }
 
-// newBlankCanvas creates a new blank RGBA canvas with the screen's resolution.
+// face returns a cached truetype.Face for the given font and size, building one
+// on the first miss. Callers must hold r.mu.
+func (r *Screen) face(f *truetype.Font, size float64) font.Face {
+	k := faceKey{font: f, size: size, dpi: r.dpi}
+	if fc, ok := r.faceCache[k]; ok {
+		return fc
+	}
+
+	fc := truetype.NewFace(f, &truetype.Options{
+		Size:    size,
+		DPI:     r.dpi,
+		Hinting: font.HintingFull,
+	})
+	r.faceCache[k] = fc
+
+	return fc
+}
+
+// newBlankCanvas advances to the next of the two shared canvas buffers, zeroes
+// it, and returns it. Double-buffering ensures the buffer the display still holds
+// for a rotation re-blit (the previous frame) is never the one being drawn into.
+// Callers must hold r.mu.
 func (r *Screen) newBlankCanvas() *image.RGBA {
-	return image.NewRGBA(image.Rect(0, 0, int(r.pixelColumns), int(r.pixelRows)))
+	r.canvasIdx ^= 1
+	canvas := r.canvases[r.canvasIdx]
+
+	for i := range canvas.Pix {
+		canvas.Pix[i] = 0
+	}
+
+	return canvas
 }
 
 // renderBackgroundScreen renders a background screen with a centered value.
 func (r *Screen) renderBackgroundScreen(sprite sprites.SpriteName, value string) error {
 	// footer
-	fontFace := truetype.NewFace(r.i18n.RegularFont().Font, &truetype.Options{
-		Size:    r.i18n.RegularFont().Scale * fontSmall,
-		DPI:     r.dpi,
-		Hinting: font.HintingFull,
-	})
+	fontFace := r.face(r.i18n.RegularFont().Font, r.i18n.RegularFont().Scale*fontSmall)
 
 	img := r.sprites.GetSprite(sprite)
 	canvas := image.NewRGBA(img.Bounds())
