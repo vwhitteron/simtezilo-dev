@@ -211,6 +211,8 @@ type WebUI struct {
 	currentGameState   string
 	gameStateMutex     sync.RWMutex
 	screenFrameFeed    chan *image.RGBA
+	currentScreenFrame []byte // most recent broadcast screen frame, replayed to new subscribers
+	screenFrameMutex   sync.RWMutex
 	sendHIDInput       func(key string) bool
 	circuitInfoFeed    chan map[string]string
 	currentCircuitInfo map[string]string
@@ -617,7 +619,28 @@ func (w *WebUI) handleWebSocketConnection(response http.ResponseWriter, request 
 			w.log.Debug().
 				Interface("subscriptions", subMsg.Subscriptions).
 				Msg("client updated subscriptions")
+
+			// Replay the most recent hardware screen frame so a client that
+			// subscribes to the mirror after the screen has gone static (the render
+			// loop only writes on change) still sees the current screen.
+			if subMsg.Subscriptions["screen"] {
+				w.sendCurrentScreenFrame(client)
+			}
 		}
+	}
+}
+
+// sendCurrentScreenFrame sends the most recent hardware screen frame to a client,
+// if one has been rendered. The render loop only writes to the display on change,
+// so without this a client subscribing while the screen is static would never
+// receive a frame and would sit on the "waiting for screen" placeholder.
+func (w *WebUI) sendCurrentScreenFrame(client *wsClient) {
+	w.screenFrameMutex.RLock()
+	data := w.currentScreenFrame
+	w.screenFrameMutex.RUnlock()
+
+	if data != nil {
+		client.Send("screen", data, true)
 	}
 }
 
@@ -830,6 +853,12 @@ func (w *WebUI) unifiedWebSocketBroadcaster() {
 
 				continue
 			}
+
+			// Cache the latest frame so it can be replayed to clients that
+			// subscribe after the screen has gone static.
+			w.screenFrameMutex.Lock()
+			w.currentScreenFrame = encodedData
+			w.screenFrameMutex.Unlock()
 
 			w.broadcastToUnifiedClients(encodedData, "screen")
 
