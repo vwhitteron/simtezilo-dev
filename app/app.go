@@ -842,7 +842,7 @@ func (a *App) initializeComponents(opts Options) error {
 		gtmodels.CornerSet{},
 	)
 
-	a.circuit, err = circuit.New(*a.gtClient.CircuitDB, *opts.Logger)
+	a.circuit, err = circuit.New(a.gtClient.CircuitDB, *opts.Logger)
 	if err != nil {
 		// TODO: fatal error?
 		a.log.Error().
@@ -1013,7 +1013,7 @@ func (a *App) reinitializeGTClient() error {
 	}
 
 	// Reinitialize circuit with new GT client
-	a.circuit, err = circuit.New(*a.gtClient.CircuitDB, a.log)
+	a.circuit, err = circuit.New(a.gtClient.CircuitDB, a.log)
 	if err != nil {
 		a.log.Error().
 			Err(err).
