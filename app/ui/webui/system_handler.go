@@ -557,59 +557,14 @@ func (h *systemHandler) handleLogsAPI(response http.ResponseWriter, request *htt
 	}
 
 	queryParams := request.URL.Query()
-	page := 1
-	pageSize := 100
-
-	if pageStr := queryParams.Get("page"); pageStr != "" {
-		p, err := fmt.Sscanf(pageStr, "%d", &page)
-		if err == nil && p == 1 {
-			if page < 1 {
-				page = 1
-			}
-		}
-	}
-
-	if pageSizeStr := queryParams.Get("pageSize"); pageSizeStr != "" {
-		ps, err := fmt.Sscanf(pageSizeStr, "%d", &pageSize)
-		if err == nil && ps == 1 {
-			if pageSize < 1 {
-				pageSize = 100
-			} else if pageSize > 1000 {
-				pageSize = 1000
-			}
-		}
-	}
-
-	var levelFilters map[string]bool
-
-	if levelsParam := queryParams.Get("levels"); levelsParam != "" {
-		levels := strings.Split(levelsParam, ",")
-		levelFilters = make(map[string]bool)
-
-		for _, level := range levels {
-			trimmedLevel := strings.TrimSpace(level)
-			if trimmedLevel != "" {
-				levelFilters[trimmedLevel] = true
-			}
-		}
-	}
+	page := parsePageParam(queryParams.Get("page"))
+	pageSize := parsePageSizeParam(queryParams.Get("pageSize"))
+	levelFilters := parseLevelFilters(queryParams.Get("levels"))
 
 	allLogs := h.logStore.GetAll()
-
-	var filteredLogs []logstore.LogEntry
-
-	if len(levelFilters) > 0 {
-		for _, log := range allLogs {
-			if level, ok := log["level"].(string); ok && levelFilters[level] {
-				filteredLogs = append(filteredLogs, log)
-			}
-		}
-	} else {
-		filteredLogs = allLogs
-	}
+	filteredLogs := filterLogsByLevel(allLogs, levelFilters)
 
 	totalCount := len(filteredLogs)
-
 	totalPages := max((totalCount+pageSize-1)/pageSize, 1)
 
 	if page > totalPages {
@@ -617,7 +572,6 @@ func (h *systemHandler) handleLogsAPI(response http.ResponseWriter, request *htt
 	}
 
 	offset := (page - 1) * pageSize
-
 	endIdx := min(offset+pageSize, totalCount)
 
 	var logs []logstore.LogEntry
@@ -651,6 +605,79 @@ func (h *systemHandler) handleLogsAPI(response http.ResponseWriter, request *htt
 	}
 
 	h.log.Debug().Int("log_count", len(logs)).Int("page", page).Msg("served logs")
+}
+
+// parsePageParam parses the "page" query parameter, defaulting to 1.
+func parsePageParam(raw string) int {
+	if raw == "" {
+		return 1
+	}
+
+	var page int
+
+	n, err := fmt.Sscanf(raw, "%d", &page)
+	if err != nil || n != 1 || page < 1 {
+		return 1
+	}
+
+	return page
+}
+
+// parsePageSizeParam parses the "pageSize" query parameter, clamped to [1, 1000], defaulting to 100.
+func parsePageSizeParam(raw string) int {
+	if raw == "" {
+		return 100
+	}
+
+	var pageSize int
+
+	n, err := fmt.Sscanf(raw, "%d", &pageSize)
+	if err != nil || n != 1 || pageSize < 1 {
+		return 100
+	}
+
+	if pageSize > 1000 {
+		return 1000
+	}
+
+	return pageSize
+}
+
+// parseLevelFilters parses a comma-separated "levels" query parameter into a set.
+// Returns nil if the parameter is empty (meaning no filter).
+func parseLevelFilters(raw string) map[string]bool {
+	if raw == "" {
+		return nil
+	}
+
+	filters := make(map[string]bool)
+
+	for level := range strings.SplitSeq(raw, ",") {
+		trimmed := strings.TrimSpace(level)
+		if trimmed != "" {
+			filters[trimmed] = true
+		}
+	}
+
+	return filters
+}
+
+// filterLogsByLevel returns only the log entries that match the level filter set.
+// If levelFilters is nil or empty, all entries are returned.
+func filterLogsByLevel(allLogs []logstore.LogEntry, levelFilters map[string]bool) []logstore.LogEntry {
+	if len(levelFilters) == 0 {
+		return allLogs
+	}
+
+	filtered := make([]logstore.LogEntry, 0, len(allLogs))
+
+	for _, entry := range allLogs {
+		if level, ok := entry["level"].(string); ok && levelFilters[level] {
+			filtered = append(filtered, entry)
+		}
+	}
+
+	return filtered
 }
 
 // handleHardwareInput injects a HID button press from the hardware dev view.

@@ -138,6 +138,7 @@ func (r *Screen) RenderLiveScreen(value string) error {
 
 	// Safety net: shrink further if the value still overflows the panel width.
 	maxWidth := fixed.I(canvas.Rect.Max.X) * liveValueWidthPercent / 100
+
 	measurer := &font.Drawer{Face: fontFace}
 	if width := measurer.MeasureString(value); width > maxWidth {
 		fontSize = fontSize * float64(maxWidth) / float64(width)
@@ -207,7 +208,8 @@ func (r *Screen) renderLeafNode(content SettingContent) error {
 		Canvas: canvas,
 	}
 
-	if err := r.displayDevice.Write(dspContent); err != nil {
+	err := r.displayDevice.Write(dspContent)
+	if err != nil {
 		return fmt.Errorf("write settings canvas to display: %w", err)
 	}
 
@@ -236,7 +238,8 @@ func (r *Screen) renderLayoutMenuSub(content SettingContent) error {
 		Canvas: canvas,
 	}
 
-	if err := r.displayDevice.Write(dspContent); err != nil {
+	err := r.displayDevice.Write(dspContent)
+	if err != nil {
 		return fmt.Errorf("write submenu canvas to display: %w", err)
 	}
 
@@ -311,7 +314,8 @@ func (r *Screen) renderLayoutInfo(content SettingContent) error {
 		Canvas: canvas,
 	}
 
-	if err := r.displayDevice.Write(dspContent); err != nil {
+	err := r.displayDevice.Write(dspContent)
+	if err != nil {
 		return fmt.Errorf("write settings canvas to display: %w", err)
 	}
 
@@ -322,20 +326,22 @@ func (r *Screen) renderLayoutInfo(content SettingContent) error {
 
 // face returns a cached truetype.Face for the given font and size, building one
 // on the first miss. Callers must hold r.mu.
-func (r *Screen) face(f *truetype.Font, size float64) font.Face {
-	k := faceKey{font: f, size: size, dpi: r.dpi}
-	if fc, ok := r.faceCache[k]; ok {
-		return fc
+//
+//nolint:ireturn // font.Face is a library interface
+func (r *Screen) face(fontDef *truetype.Font, size float64) font.Face {
+	key := faceKey{font: fontDef, size: size, dpi: r.dpi}
+	if faceCache, ok := r.faceCache[key]; ok {
+		return faceCache
 	}
 
-	fc := truetype.NewFace(f, &truetype.Options{
+	faceCache := truetype.NewFace(fontDef, &truetype.Options{
 		Size:    size,
 		DPI:     r.dpi,
 		Hinting: font.HintingFull,
 	})
-	r.faceCache[k] = fc
+	r.faceCache[key] = faceCache
 
-	return fc
+	return faceCache
 }
 
 // newBlankCanvas advances to the next of the two shared canvas buffers, zeroes

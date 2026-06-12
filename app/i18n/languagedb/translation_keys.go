@@ -166,7 +166,7 @@ const (
 	SetupmodeNetworkEnterssid            Key = "setupmode.network.enterssid"
 	SetupmodeNetworkSecuritytype         Key = "setupmode.network.securitytype"
 	SetupmodeNetworkPassword             Key = "setupmode.network.password"      //nolint:gosec // not credentials
-	SetupmodeNetworkEnterpassword        Key = "setupmode.network.enterpassword" //nolint:goses
+	SetupmodeNetworkEnterpassword        Key = "setupmode.network.enterpassword" //nolint:gosec
 	SetupmodeNetworkShowpassword         Key = "setupmode.network.showpassword"  //nolint:gosec
 	SetupmodeNetworkHidepassword         Key = "setupmode.network.hidepassword"  //nolint:gosec
 	SetupmodeNetworkIpconfiguration      Key = "setupmode.network.ipconfiguration"

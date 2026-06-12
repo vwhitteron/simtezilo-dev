@@ -132,6 +132,26 @@ func NewUserInterface(config *Config) *UserInterface {
 	return userInterface
 }
 
+// GetSetupModeCountdown returns the current setup mode countdown value.
+func (u *UserInterface) GetSetupModeCountdown() int {
+	return u.menuSystem.GetSetupModeCountdown()
+}
+
+// ResetSetupModeCountdown resets the setup mode countdown to 5.
+func (u *UserInterface) ResetSetupModeCountdown() int {
+	return u.menuSystem.ResetSetupModeCountdown()
+}
+
+// DecrementSetupModeCountdown decrements the setup countdown by 1.
+func (u *UserInterface) DecrementSetupModeCountdown() int {
+	return u.menuSystem.DecrementSetupModeCountdown()
+}
+
+// IsSetupModeCountdownZero returns true if setup countdown has reached zero.
+func (u *UserInterface) IsSetupModeCountdownZero() bool {
+	return u.menuSystem.IsSetupModeCountdownZero()
+}
+
 // setMode is the single point where the screen mode changes. Centralising it
 // keeps transitions greppable and logs every change.
 func (u *UserInterface) setMode(m ScreenMode) {
@@ -299,26 +319,6 @@ func (u *UserInterface) updateLiveModel(data LiveData) {
 	case data.Gear != kinematics.NullGear:
 		u.state.gearText = kinematics.GearName(data.Gear)
 	}
-}
-
-// GetSetupModeCountdown returns the current setup mode countdown value.
-func (u *UserInterface) GetSetupModeCountdown() int {
-	return u.menuSystem.GetSetupModeCountdown()
-}
-
-// ResetSetupModeCountdown resets the setup mode countdown to 5.
-func (u *UserInterface) ResetSetupModeCountdown() int {
-	return u.menuSystem.ResetSetupModeCountdown()
-}
-
-// DecrementSetupModeCountdown decrements the setup countdown by 1.
-func (u *UserInterface) DecrementSetupModeCountdown() int {
-	return u.menuSystem.DecrementSetupModeCountdown()
-}
-
-// IsSetupModeCountdownZero returns true if setup countdown has reached zero.
-func (u *UserInterface) IsSetupModeCountdownZero() bool {
-	return u.menuSystem.IsSetupModeCountdownZero()
 }
 
 // displayPowerOffTimeoutReached checks if the power-off timeout has been reached.

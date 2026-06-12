@@ -94,19 +94,19 @@ func dashboardFrame(data LiveData, flash bool) gui.DashboardData {
 // the display (or when a redraw was forced). A live frame refreshes the activity
 // timer, keeping the screen awake while telemetry is shown.
 func (u *UserInterface) render() {
-	sc := u.view()
+	currentScene := u.view()
 
 	if u.state.forceRedraw {
 		u.lastScene = scene{}
 		u.state.forceRedraw = false
 	}
 
-	if sc == u.lastScene {
+	if currentScene == u.lastScene {
 		return
 	}
 
-	u.draw(sc)
-	u.lastScene = sc
+	u.draw(currentScene)
+	u.lastScene = currentScene
 
 	if u.state.mode == ScreenModeLive {
 		u.registerActivity()
@@ -114,15 +114,15 @@ func (u *UserInterface) render() {
 }
 
 // draw issues the gui render call for a scene.
-func (u *UserInterface) draw(sc scene) {
-	switch sc.kind {
+func (u *UserInterface) draw(currentScene scene) {
+	switch currentScene.kind {
 	case sceneNone:
 		// Nothing to draw; the display keeps its current content.
 	case sceneLive:
-		_ = u.Screen.RenderLiveScreen(sc.text)
+		_ = u.Screen.RenderLiveScreen(currentScene.text)
 	case sceneDashboard:
-		_ = u.Screen.RenderDashboardScreen(sc.dash)
+		_ = u.Screen.RenderDashboardScreen(currentScene.dash)
 	case sceneSetting:
-		_ = u.Screen.RenderSettingScreen(sc.layout, sc.content)
+		_ = u.Screen.RenderSettingScreen(currentScene.layout, currentScene.content)
 	}
 }

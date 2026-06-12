@@ -60,7 +60,7 @@ type WebUI struct {
 func New(opts Options) *WebUI {
 	log := opts.Log.With().Str("component", "web ui").Logger()
 
-	b := newBroadcaster(broadcasterOptions{
+	broadcaster := newBroadcaster(broadcasterOptions{
 		log:             log,
 		telemetryFeed:   opts.TelemetryChartFeed,
 		vehicleInfoFeed: opts.VehicleInfoFeed,
@@ -71,12 +71,12 @@ func New(opts Options) *WebUI {
 		screenFrameFeed: opts.ScreenFrameFeed,
 	})
 
-	w := &WebUI{
-		log:        log,
-		port:       opts.Port,
-		config:     opts.Config,
-		broadcaster: b,
-		cfgHandler: newConfigHandler(log, opts.Config, opts.Calibrator, opts.Updater, b),
+	webUI := &WebUI{
+		log:         log,
+		port:        opts.Port,
+		config:      opts.Config,
+		broadcaster: broadcaster,
+		cfgHandler:  newConfigHandler(log, opts.Config, opts.Calibrator, opts.Updater, broadcaster),
 		sysHandler: newSystemHandler(systemHandlerOptions{
 			log:             log,
 			config:          opts.Config,
@@ -98,9 +98,9 @@ func New(opts Options) *WebUI {
 		}),
 	}
 
-	go b.run()
+	go broadcaster.run()
 
-	return w
+	return webUI
 }
 
 // GetHTTPHandler returns the HTTP handler for the web UI.

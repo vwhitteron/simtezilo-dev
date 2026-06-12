@@ -70,8 +70,7 @@ func (u *UserInterface) ForceRedraw() {
 
 // handleCommand applies an out-of-band command on the loop goroutine.
 func (u *UserInterface) handleCommand(cmd command) {
-	switch cmd {
-	case cmdForceRedraw:
+	if cmd == cmdForceRedraw {
 		u.state.forceRedraw = true
 	}
 }

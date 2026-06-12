@@ -70,8 +70,15 @@ func main() {
 		panic(err)
 	}
 
+	renderLiveViews(screen, disp)
+	renderDashboardViews(screen, disp)
+	renderMiscViews(screen, disp)
+}
+
+// renderLiveViews renders the live-view (gear/ready) screens.
+func renderLiveViews(screen *gui.Screen, disp *virtual.Display) {
 	// Live view with an active gear.
-	err = screen.RenderLiveScreen("3")
+	err := screen.RenderLiveScreen("3")
 	if err != nil {
 		panic(err)
 	}
@@ -85,117 +92,98 @@ func main() {
 	}
 
 	savePNG(outputDir+"/live_ready.png", disp.GetCanvas())
+}
 
-	// Dashboard live view: on throttle, mid revs.
-	err = screen.RenderDashboardScreen(gui.DashboardData{
+// renderDashboardViews renders all dashboard screen variations.
+func renderDashboardViews(screen *gui.Screen, disp *virtual.Display) {
+	renderDash(screen, disp, gui.DashboardData{
 		Gear: "4", SpeedKPH: 187, RPM: 6200, RevLimit: 8000, RevLightMin: 6500, RevLightMax: 7800,
-		ThrottleIn: 100, ThrottleOut: 84, BrakeIn: 0, BrakeOut: 0,
-	})
-	if err != nil {
-		panic(err)
-	}
+		ThrottleIn: 100, ThrottleOut: 84,
+	}, "dash_throttle.png")
 
-	savePNG(outputDir+"/dash_throttle.png", disp.GetCanvas())
-
-	// Dashboard live view: braking with ABS (output below input), low revs.
-	err = screen.RenderDashboardScreen(gui.DashboardData{
+	renderDash(screen, disp, gui.DashboardData{
 		Gear: "2", SpeedKPH: 64, RPM: 3100, RevLimit: 8000, RevLightMin: 6500, RevLightMax: 7800,
-		ThrottleIn: 0, ThrottleOut: 0, BrakeIn: 95, BrakeOut: 70,
-	})
-	if err != nil {
-		panic(err)
-	}
+		BrakeIn: 95, BrakeOut: 70,
+	}, "dash_brake.png")
 
-	savePNG(outputDir+"/dash_brake.png", disp.GetCanvas())
-
-	// Dashboard live view: both pedals applied with input matching output (no delta,
-	// solid bars).
-	err = screen.RenderDashboardScreen(gui.DashboardData{
+	// Both pedals applied: input matches output (solid bars, no delta).
+	renderDash(screen, disp, gui.DashboardData{
 		Gear: "3", SpeedKPH: 120, RPM: 5200, RevLimit: 8000, RevLightMin: 6500, RevLightMax: 7800,
 		ThrottleIn: 65, ThrottleOut: 65, BrakeIn: 45, BrakeOut: 45,
-	})
-	if err != nil {
-		panic(err)
-	}
+	}, "dash_pedals_match.png")
 
-	savePNG(outputDir+"/dash_pedals_match.png", disp.GetCanvas())
-
-	// Dashboard live view: both pedals with input above output (visible delta in the
-	// darker shade above the solid output).
-	err = screen.RenderDashboardScreen(gui.DashboardData{
+	// Both pedals: input above output (visible delta in darker shade).
+	renderDash(screen, disp, gui.DashboardData{
 		Gear: "3", SpeedKPH: 120, RPM: 5200, RevLimit: 8000, RevLightMin: 6500, RevLightMax: 7800,
 		ThrottleIn: 100, ThrottleOut: 78, BrakeIn: 90, BrakeOut: 62,
-	})
-	if err != nil {
-		panic(err)
-	}
+	}, "dash_pedals_delta.png")
 
-	savePNG(outputDir+"/dash_pedals_delta.png", disp.GetCanvas())
-
-	// Dashboard live view: mid rev-light band (6500..7800) -> yellow arc.
-	err = screen.RenderDashboardScreen(gui.DashboardData{
+	// Mid rev-light band (6500..7800) → yellow arc.
+	renderDash(screen, disp, gui.DashboardData{
 		Gear: "4", SpeedKPH: 210, RPM: 7150, RevLimit: 8000, RevLightMin: 6500, RevLightMax: 7800,
 		ThrottleIn: 100, ThrottleOut: 100,
-	})
-	if err != nil {
-		panic(err)
-	}
+	}, "dash_yellow.png")
 
-	savePNG(outputDir+"/dash_yellow.png", disp.GetCanvas())
-
-	// Dashboard live view: at/above the rev-light max -> red arc, but not yet at the
-	// rev limit so the background is not flashing.
-	err = screen.RenderDashboardScreen(gui.DashboardData{
+	// At/above rev-light max → red arc, not yet at rev limit (no flash).
+	renderDash(screen, disp, gui.DashboardData{
 		Gear: "5", SpeedKPH: 235, RPM: 7850, RevLimit: 8000, RevLightMin: 6500, RevLightMax: 7800,
 		ThrottleIn: 100, ThrottleOut: 100,
-	})
-	if err != nil {
-		panic(err)
-	}
+	}, "dash_red.png")
 
-	savePNG(outputDir+"/dash_red.png", disp.GetCanvas())
-
-	// Dashboard live view: at the rev limit, background flashing.
-	err = screen.RenderDashboardScreen(gui.DashboardData{
+	// At the rev limit: background flashing.
+	renderDash(screen, disp, gui.DashboardData{
 		Gear: "5", SpeedKPH: 244, RPM: 7900, RevLimit: 8000, RevLightMin: 6500, RevLightMax: 7800,
-		ThrottleIn: 100, ThrottleOut: 100, BrakeIn: 0, BrakeOut: 0, Flash: true,
-	})
+		ThrottleIn: 100, ThrottleOut: 100, Flash: true,
+	}, "dash_redline.png")
+}
+
+// renderDash renders one dashboard frame and saves it.
+func renderDash(screen *gui.Screen, disp *virtual.Display, data gui.DashboardData, filename string) {
+	err := screen.RenderDashboardScreen(data)
 	if err != nil {
 		panic(err)
 	}
 
-	savePNG(outputDir+"/dash_redline.png", disp.GetCanvas())
+	savePNG(outputDir+"/"+filename, disp.GetCanvas())
+}
 
+// renderMiscViews renders splash, error, and settings screens.
+func renderMiscViews(screen *gui.Screen, disp *virtual.Display) {
 	// Splash screen with footer text over the splash sprite.
-	if err = screen.RenderSplashScreen("Starting"); err != nil {
+	err := screen.RenderSplashScreen("Starting")
+	if err != nil {
 		panic(err)
 	}
 
 	savePNG(outputDir+"/splash.png", disp.GetCanvas())
 
 	// Error screen with footer text over the error sprite.
-	if err = screen.RenderErrorScreen("GT client init"); err != nil {
+	err = screen.RenderErrorScreen("GT client init")
+	if err != nil {
 		panic(err)
 	}
 
 	savePNG(outputDir+"/error.png", disp.GetCanvas())
 
 	// Setting leaf: parent at top, value in centre, setting name at bottom.
-	if err = screen.RenderSettingScreen(gui.LayoutSetting, gui.SettingContent{Title: "Settings", Name: "Brightness", Value: "75%"}); err != nil {
+	err = screen.RenderSettingScreen(gui.LayoutSetting, gui.SettingContent{Title: "Settings", Name: "Brightness", Value: "75%"})
+	if err != nil {
 		panic(err)
 	}
 
 	savePNG(outputDir+"/setting_leaf.png", disp.GetCanvas())
 
 	// Branch menu: parent at top, current item in centre.
-	if err = screen.RenderSettingScreen(gui.LayoutMenuSub, gui.SettingContent{Title: "Settings", Value: "Display"}); err != nil {
+	err = screen.RenderSettingScreen(gui.LayoutMenuSub, gui.SettingContent{Title: "Settings", Value: "Display"})
+	if err != nil {
 		panic(err)
 	}
 
 	savePNG(outputDir+"/setting_menusub.png", disp.GetCanvas())
 
 	// Info page: title at top, multi-line value centred as a group.
-	if err = screen.RenderSettingScreen(gui.LayoutInfo, gui.SettingContent{Title: "Version", Value: "1.2.3\nbuild 456\nlinux/arm64"}); err != nil {
+	err = screen.RenderSettingScreen(gui.LayoutInfo, gui.SettingContent{Title: "Version", Value: "1.2.3\nbuild 456\nlinux/arm64"})
+	if err != nil {
 		panic(err)
 	}
 

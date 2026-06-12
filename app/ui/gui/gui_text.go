@@ -35,28 +35,28 @@ func drawText(canvas *image.RGBA, face font.Face, col color.RGBA, text string, a
 	bounds, _ := drawer.BoundString(text)
 	textHeight := bounds.Max.Y - bounds.Min.Y
 
-	x := (fixed.I(canvas.Rect.Max.X) - drawer.MeasureString(text)) / 2
+	xPos := (fixed.I(canvas.Rect.Max.X) - drawer.MeasureString(text)) / 2
 
-	var y fixed.Int26_6
+	var yPos fixed.Int26_6
 
 	switch anchor {
 	case anchorTop:
-		y = fixed.I(canvas.Rect.Min.Y + textHeight.Ceil())
+		yPos = fixed.I(canvas.Rect.Min.Y + textHeight.Ceil())
 	case anchorMiddle:
-		y = fixed.I(canvas.Rect.Max.Y-textHeight.Ceil())/2 + fixed.I(textHeight.Ceil())
+		yPos = fixed.I(canvas.Rect.Max.Y-textHeight.Ceil())/2 + fixed.I(textHeight.Ceil())
 	case anchorBottom:
-		y = fixed.I(canvas.Rect.Max.Y - textHeight.Ceil()/2)
+		yPos = fixed.I(canvas.Rect.Max.Y - textHeight.Ceil()/2)
 	case anchorGlyphMiddle:
-		y = (fixed.I(canvas.Rect.Max.Y) - (bounds.Max.Y + bounds.Min.Y)) / 2
+		yPos = (fixed.I(canvas.Rect.Max.Y) - (bounds.Max.Y + bounds.Min.Y)) / 2
 	}
 
-	drawer.Dot = fixed.Point26_6{X: x, Y: y}
+	drawer.Dot = fixed.Point26_6{X: xPos, Y: yPos}
 	drawer.DrawString(text)
 }
 
 // drawCenteredText draws text horizontally centred. When vMiddle is true, y is
 // treated as the vertical centre of the glyph box; otherwise y is the baseline.
-func (r *Screen) drawCenteredText(canvas *image.RGBA, text string, scale float64, col color.RGBA, y int, vMiddle bool) {
+func (r *Screen) drawCenteredText(canvas *image.RGBA, text string, scale float64, col color.RGBA, yPos int, vMiddle bool) {
 	fontFace := r.face(r.i18n.RegularFont().Font, r.i18n.RegularFont().Scale*scale)
 
 	fontDrawer := &font.Drawer{
@@ -65,15 +65,15 @@ func (r *Screen) drawCenteredText(canvas *image.RGBA, text string, scale float64
 		Face: fontFace,
 	}
 
-	x := (fixed.I(canvas.Rect.Max.X) - fontDrawer.MeasureString(text)) / 2
+	xPos := (fixed.I(canvas.Rect.Max.X) - fontDrawer.MeasureString(text)) / 2
 
-	baseline := fixed.I(y)
+	baseline := fixed.I(yPos)
 
 	if vMiddle {
 		bounds, _ := fontDrawer.BoundString(text)
-		baseline = fixed.I(y) - (bounds.Max.Y+bounds.Min.Y)/2
+		baseline = fixed.I(yPos) - (bounds.Max.Y+bounds.Min.Y)/2
 	}
 
-	fontDrawer.Dot = fixed.Point26_6{X: x, Y: baseline}
+	fontDrawer.Dot = fixed.Point26_6{X: xPos, Y: baseline}
 	fontDrawer.DrawString(text)
 }

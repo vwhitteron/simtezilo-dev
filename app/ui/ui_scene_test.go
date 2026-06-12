@@ -1,4 +1,4 @@
-package ui
+package ui //nolint:testpackage // white-box: asserts the unexported scene view-model
 
 import (
 	"testing"
@@ -17,6 +17,7 @@ import (
 // assert the render-on-change behaviour.
 type countingDisplay struct {
 	*virtual.Display
+
 	writes int
 }
 
@@ -38,7 +39,7 @@ func newCountingUI(t *testing.T) (*UserInterface, *countingDisplay) {
 
 	disp := &countingDisplay{Display: virtual.NewDisplay(240, 240, 265)}
 
-	ui := NewUserInterface(&Config{
+	iface := NewUserInterface(&Config{
 		I18n:             i18nInstance,
 		HIDEvents:        make(chan HIDInputEvent, 8),
 		Display:          disp,
@@ -47,13 +48,14 @@ func newCountingUI(t *testing.T) (*UserInterface, *countingDisplay) {
 		Log:              zerolog.Nop(),
 	})
 
-	return ui, disp
+	return iface, disp
 }
 
 // TestViewSceneByMode checks that view() maps each mode to the expected scene.
 func TestViewSceneByMode(t *testing.T) {
-	ui := newTestUI(t)
-	ready := ui.i18n.GetString(languagedb.UIReady)
+	t.Parallel()
+
+	ready := newTestUI(t).i18n.GetString(languagedb.UIReady)
 
 	tests := []struct {
 		name       string
@@ -69,14 +71,19 @@ func TestViewSceneByMode(t *testing.T) {
 		{"wait gear", ScreenModeWait, languagedb.UIMenuLiveView, "3", scene{kind: sceneLive, text: ready}},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			ui.state.mode = tc.mode
-			ui.state.activeLiveView = tc.activeView
-			ui.state.gearText = tc.gearText
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
 
-			if got := ui.view(); got != tc.want {
-				t.Errorf("view() = %+v, want %+v", got, tc.want)
+			// Each subtest gets its own UI so the parallel runs do not share
+			// mutable state (state.mode/activeLiveView/gearText).
+			iface := newTestUI(t)
+			iface.state.mode = testCase.mode
+			iface.state.activeLiveView = testCase.activeView
+			iface.state.gearText = testCase.gearText
+
+			if got := iface.view(); got != testCase.want {
+				t.Errorf("view() = %+v, want %+v", got, testCase.want)
 			}
 		})
 	}
@@ -84,11 +91,13 @@ func TestViewSceneByMode(t *testing.T) {
 
 // TestViewWaitDashboardIsReadySkeleton checks the dashboard ready view.
 func TestViewWaitDashboardIsReadySkeleton(t *testing.T) {
-	ui := newTestUI(t)
-	ui.state.mode = ScreenModeWait
-	ui.state.activeLiveView = languagedb.UIMenuLiveDashboard
+	t.Parallel()
 
-	got := ui.view()
+	iface := newTestUI(t)
+	iface.state.mode = ScreenModeWait
+	iface.state.activeLiveView = languagedb.UIMenuLiveDashboard
+
+	got := iface.view()
 	if got.kind != sceneDashboard || !got.dash.Ready {
 		t.Fatalf("dashboard wait view = %+v, want a ready dashboard", got)
 	}
@@ -96,16 +105,18 @@ func TestViewWaitDashboardIsReadySkeleton(t *testing.T) {
 
 // TestViewSettingsReturnsMenuScene checks settings mode renders the stored menu scene.
 func TestViewSettingsReturnsMenuScene(t *testing.T) {
-	ui := newTestUI(t)
+	t.Parallel()
+
+	iface := newTestUI(t)
 	want := scene{
 		kind:    sceneSetting,
 		layout:  gui.LayoutSetting,
 		content: gui.SettingContent{Title: "Display", Name: "Brightness", Value: "75%"},
 	}
-	ui.state.menuScene = want
-	ui.state.mode = ScreenModeSettings
+	iface.state.menuScene = want
+	iface.state.mode = ScreenModeSettings
 
-	if got := ui.view(); got != want {
+	if got := iface.view(); got != want {
 		t.Errorf("view() = %+v, want stored menu scene %+v", got, want)
 	}
 }
@@ -113,32 +124,34 @@ func TestViewSettingsReturnsMenuScene(t *testing.T) {
 // TestRenderOnChangeSuppressesUnchangedScene verifies an unchanged scene is not
 // redrawn, a changed scene is, and forceRedraw forces a redraw.
 func TestRenderOnChangeSuppressesUnchangedScene(t *testing.T) {
-	ui, disp := newCountingUI(t)
-	ui.state.mode = ScreenModeLive
-	ui.state.activeLiveView = languagedb.UIMenuLiveView
-	ui.state.gearText = "3"
+	t.Parallel()
 
-	ui.render()
+	iface, disp := newCountingUI(t)
+	iface.state.mode = ScreenModeLive
+	iface.state.activeLiveView = languagedb.UIMenuLiveView
+	iface.state.gearText = "3"
+
+	iface.render()
 
 	if disp.writes != 1 {
 		t.Fatalf("first render writes = %d, want 1", disp.writes)
 	}
 
-	ui.render() // unchanged scene
+	iface.render() // unchanged scene
 
 	if disp.writes != 1 {
 		t.Fatalf("unchanged render writes = %d, want 1 (suppressed)", disp.writes)
 	}
 
-	ui.state.gearText = "4" // scene changes
-	ui.render()
+	iface.state.gearText = "4" // scene changes
+	iface.render()
 
 	if disp.writes != 2 {
 		t.Fatalf("changed render writes = %d, want 2", disp.writes)
 	}
 
-	ui.state.forceRedraw = true // force redraw of identical scene
-	ui.render()
+	iface.state.forceRedraw = true // force redraw of identical scene
+	iface.render()
 
 	if disp.writes != 3 {
 		t.Fatalf("forced render writes = %d, want 3", disp.writes)
@@ -148,42 +161,47 @@ func TestRenderOnChangeSuppressesUnchangedScene(t *testing.T) {
 // TestUpdateLiveModelKeepsGearOnNull checks that a NULL gear leaves the last gear
 // text in place rather than blanking it on a transient reading.
 func TestUpdateLiveModelKeepsGearOnNull(t *testing.T) {
-	ui := newTestUI(t)
-	ui.state.activeLiveView = languagedb.UIMenuLiveView
+	t.Parallel()
 
-	ui.updateLiveModel(LiveData{Gear: 3})
+	iface := newTestUI(t)
+	iface.state.activeLiveView = languagedb.UIMenuLiveView
+
+	iface.updateLiveModel(LiveData{Gear: 3})
+
 	want := kinematics.GearName(3)
 
-	if ui.state.gearText != want {
-		t.Fatalf("gearText = %q, want %q", ui.state.gearText, want)
+	if iface.state.gearText != want {
+		t.Fatalf("gearText = %q, want %q", iface.state.gearText, want)
 	}
 
-	ui.updateLiveModel(LiveData{Gear: kinematics.NullGear})
+	iface.updateLiveModel(LiveData{Gear: kinematics.NullGear})
 
-	if ui.state.gearText != want {
-		t.Fatalf("gearText after NULL = %q, want unchanged %q", ui.state.gearText, want)
+	if iface.state.gearText != want {
+		t.Fatalf("gearText after NULL = %q, want unchanged %q", iface.state.gearText, want)
 	}
 }
 
 // TestUpdateLiveModelFlashAdvances checks the rev-limit flash toggles each tick at
 // or above the rev light max, and clears below it.
 func TestUpdateLiveModelFlashAdvances(t *testing.T) {
-	ui := newTestUI(t)
-	ui.state.activeLiveView = languagedb.UIMenuLiveDashboard
+	t.Parallel()
+
+	iface := newTestUI(t)
+	iface.state.activeLiveView = languagedb.UIMenuLiveDashboard
 
 	over := LiveData{RPM: 8000, RevLightMax: 7800}
 
-	ui.updateLiveModel(over)
-	first := ui.state.flashOn
-	ui.updateLiveModel(over)
+	iface.updateLiveModel(over)
+	first := iface.state.flashOn
+	iface.updateLiveModel(over)
 
-	if ui.state.flashOn == first {
+	if iface.state.flashOn == first {
 		t.Fatal("flashOn should toggle each tick at the rev limit")
 	}
 
-	ui.updateLiveModel(LiveData{RPM: 3000, RevLightMax: 7800})
+	iface.updateLiveModel(LiveData{RPM: 3000, RevLightMax: 7800})
 
-	if ui.state.flashOn {
+	if iface.state.flashOn {
 		t.Fatal("flashOn should clear below the rev light max")
 	}
 }

@@ -1,9 +1,11 @@
-package st7789
+package st7789_test
 
 import (
 	"image"
 	"image/color"
 	"testing"
+
+	"github.com/vwhitteron/simtezilo-dev/app/hardware/display/st7789"
 )
 
 // referencePackRGB565 is the original DrawRAW byte-packing logic reproduced
@@ -14,24 +16,24 @@ func referencePackRGB565(src image.Image, cols, rows int) []byte {
 	out := make([]byte, cols*rows*2)
 	idx := 0
 
-	for c := 0; c < cols; c++ {
-		x := src.Bounds().Min.X + cols - c
-		for r := 0; r < rows; r++ {
-			y := src.Bounds().Min.Y + r
+	for c := range cols {
+		srcX := src.Bounds().Min.X + cols - c
+		for r := range rows {
+			srcY := src.Bounds().Min.Y + r
 
-			var rv, gv, bv uint16
+			var red, green, blue uint16
 
-			if x >= src.Bounds().Min.X && x < src.Bounds().Max.X &&
-				y >= src.Bounds().Min.Y && y < src.Bounds().Max.Y {
-				col := src.At(x, y)
+			if srcX >= src.Bounds().Min.X && srcX < src.Bounds().Max.X &&
+				srcY >= src.Bounds().Min.Y && srcY < src.Bounds().Max.Y {
+				col := src.At(srcX, srcY)
 				r8, g8, b8, _ := col.RGBA()
-				rv = uint16(r8>>8) >> 3
-				gv = uint16(g8>>8) >> 2
-				bv = uint16(b8>>8) >> 3
+				red = uint16(r8>>8) >> 3   //nolint:gosec // r8>>8 is an 8-bit sample, always ≤255
+				green = uint16(g8>>8) >> 2 //nolint:gosec // g8>>8 is an 8-bit sample, always ≤255
+				blue = uint16(b8>>8) >> 3  //nolint:gosec // b8>>8 is an 8-bit sample, always ≤255
 			}
-			// Out of bounds → rv/gv/bv remain 0 (black, 0x0000).
+			// Out of bounds → red/green/blue remain 0 (black, 0x0000).
 
-			c565 := (rv << 11) | (gv << 5) | bv
+			c565 := (red << 11) | (green << 5) | blue
 			out[idx] = byte(c565)
 			out[idx+1] = byte(c565 >> 8)
 			idx += 2
@@ -46,8 +48,8 @@ func referencePackRGB565(src image.Image, cols, rows int) []byte {
 func makeGradientRGBA(cols, rows int) *image.RGBA {
 	img := image.NewRGBA(image.Rect(0, 0, cols, rows))
 
-	for y := 0; y < rows; y++ {
-		for x := 0; x < cols; x++ {
+	for y := range rows {
+		for x := range cols {
 			img.SetRGBA(x, y, color.RGBA{
 				R: uint8(x * 255 / (cols - 1)),              //nolint:gosec // small pixel coord
 				G: uint8(y * 255 / (rows - 1)),              //nolint:gosec // small pixel coord
@@ -63,6 +65,8 @@ func makeGradientRGBA(cols, rows int) *image.RGBA {
 // TestPackRGB565Golden asserts that packRGB565 produces byte-for-byte identical
 // output to the original .At()-based reference for two image sizes.
 func TestPackRGB565Golden(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		name string
 		cols int
@@ -72,12 +76,14 @@ func TestPackRGB565Golden(t *testing.T) {
 		{"240x240", 240, 240},
 	}
 
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			src := makeGradientRGBA(tc.cols, tc.rows)
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
 
-			want := referencePackRGB565(src, tc.cols, tc.rows)
-			got := packRGB565(src, tc.cols, tc.rows, nil)
+			src := makeGradientRGBA(testCase.cols, testCase.rows)
+
+			want := referencePackRGB565(src, testCase.cols, testCase.rows)
+			got := st7789.PackRGB565(src, testCase.cols, testCase.rows, nil)
 
 			if len(got) != len(want) {
 				t.Fatalf("length mismatch: got %d, want %d", len(got), len(want))
@@ -86,6 +92,7 @@ func TestPackRGB565Golden(t *testing.T) {
 			for i := range want {
 				if got[i] != want[i] {
 					t.Errorf("byte[%d] mismatch: got 0x%02x, want 0x%02x", i, got[i], want[i])
+
 					if i > 20 {
 						t.FailNow()
 					}
@@ -98,11 +105,13 @@ func TestPackRGB565Golden(t *testing.T) {
 // TestPackRGB565BufferReuse verifies that passing a sufficiently large existing
 // buffer avoids reallocation and still returns correct data.
 func TestPackRGB565BufferReuse(t *testing.T) {
+	t.Parallel()
+
 	src := makeGradientRGBA(8, 8)
 	buf := make([]byte, 8*8*2+64) // larger than needed
 	orig := buf                   // same backing array
 
-	got := packRGB565(src, 8, 8, buf)
+	got := st7789.PackRGB565(src, 8, 8, buf)
 	want := referencePackRGB565(src, 8, 8)
 
 	if len(got) != len(want) {
@@ -127,9 +136,7 @@ func Benchmark_packRGB565(b *testing.B) {
 	src := makeGradientRGBA(240, 240)
 	buf := make([]byte, 240*240*2)
 
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
-		buf = packRGB565(src, 240, 240, buf)
+	for b.Loop() {
+		buf = st7789.PackRGB565(src, 240, 240, buf)
 	}
 }

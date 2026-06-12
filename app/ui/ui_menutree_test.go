@@ -1,4 +1,4 @@
-package ui
+package ui //nolint:testpackage // white-box: asserts unexported MenuNode tree internals
 
 import (
 	"fmt"
@@ -22,22 +22,26 @@ func dumpMenuNode(n *MenuNode, depth int, b *strings.Builder) {
 // identical to the recorded structure (names, types, kinds, contexts, order).
 // The golden was captured from the previous imperative construction.
 func TestMenuTreeMatchesGolden(t *testing.T) {
-	var b strings.Builder
+	t.Parallel()
 
-	dumpMenuNode(NewMenuSystem().root, 0, &b)
+	var builder strings.Builder
+
+	dumpMenuNode(NewMenuSystem().root, 0, &builder)
 
 	want, err := os.ReadFile("testdata/menu_tree.golden")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if b.String() != string(want) {
-		t.Errorf("menu tree differs from golden.\n--- got ---\n%s", b.String())
+	if builder.String() != string(want) {
+		t.Errorf("menu tree differs from golden.\n--- got ---\n%s", builder.String())
 	}
 }
 
 // TestMenuParentLinks asserts every child points back to its parent.
 func TestMenuParentLinks(t *testing.T) {
+	t.Parallel()
+
 	var check func(n *MenuNode)
 
 	check = func(n *MenuNode) {
@@ -55,6 +59,8 @@ func TestMenuParentLinks(t *testing.T) {
 
 // TestMenuStartsOnLiveView asserts the initial cursor is the live view leaf.
 func TestMenuStartsOnLiveView(t *testing.T) {
+	t.Parallel()
+
 	if got := NewMenuSystem().currentNode.name; got != languagedb.UIMenuLiveView {
 		t.Fatalf("currentNode = %q, want %q", got, languagedb.UIMenuLiveView)
 	}

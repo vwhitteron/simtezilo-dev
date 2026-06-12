@@ -120,57 +120,67 @@ func (c *wsClient) writePump() {
 			return
 
 		case msg, ok := <-c.send:
-			if !ok {
-				_ = c.conn.SetWriteDeadline(time.Now().Add(3 * time.Second))
-				_ = c.conn.WriteMessage(websocket.CloseMessage, []byte{})
-
-				return
-			}
-
-			if msg.isPing {
-				_ = c.conn.SetWriteDeadline(time.Now().Add(3 * time.Second))
-
-				err := c.conn.WriteMessage(websocket.PingMessage, nil)
-				if err != nil {
-					c.log.Debug().Err(err).Msg("failed to send ping")
-
-					return
-				}
-
-				continue
-			}
-
-			// Check subscription (unless it's initial state)
-			if !msg.isInitState {
-				c.subMu.RLock()
-				subscribed := c.subscriptions[msg.msgType]
-				c.subMu.RUnlock()
-
-				if !subscribed {
-					continue
-				}
-			}
-
-			_ = c.conn.SetWriteDeadline(time.Now().Add(3 * time.Second))
-
-			err := c.conn.WriteMessage(websocket.TextMessage, msg.data)
-			if err != nil {
-				c.log.Debug().Err(err).Msg("failed to send message")
-
+			if !c.writePumpHandleMsg(msg, ok) {
 				return
 			}
 
 		case <-pingTicker.C:
-			_ = c.conn.SetWriteDeadline(time.Now().Add(3 * time.Second))
-
-			err := c.conn.WriteMessage(websocket.PingMessage, nil)
-			if err != nil {
-				c.log.Debug().Err(err).Msg("failed to send ping")
-
+			if !c.sendPing() {
 				return
 			}
 		}
 	}
+}
+
+// writePumpHandleMsg processes one inbound send-channel message.
+// Returns false if the write pump should exit.
+func (c *wsClient) writePumpHandleMsg(msg wsMessage, ok bool) bool {
+	if !ok {
+		_ = c.conn.SetWriteDeadline(time.Now().Add(3 * time.Second))
+		_ = c.conn.WriteMessage(websocket.CloseMessage, []byte{})
+
+		return false
+	}
+
+	if msg.isPing {
+		return c.sendPing()
+	}
+
+	// Check subscription (unless it's initial state)
+	if !msg.isInitState {
+		c.subMu.RLock()
+		subscribed := c.subscriptions[msg.msgType]
+		c.subMu.RUnlock()
+
+		if !subscribed {
+			return true
+		}
+	}
+
+	_ = c.conn.SetWriteDeadline(time.Now().Add(3 * time.Second))
+
+	err := c.conn.WriteMessage(websocket.TextMessage, msg.data)
+	if err != nil {
+		c.log.Debug().Err(err).Msg("failed to send message")
+
+		return false
+	}
+
+	return true
+}
+
+// sendPing writes a WebSocket ping frame. Returns false if the write fails.
+func (c *wsClient) sendPing() bool {
+	_ = c.conn.SetWriteDeadline(time.Now().Add(3 * time.Second))
+
+	err := c.conn.WriteMessage(websocket.PingMessage, nil)
+	if err != nil {
+		c.log.Debug().Err(err).Msg("failed to send ping")
+
+		return false
+	}
+
+	return true
 }
 
 // broadcasterOptions are the constructor parameters for Broadcaster.
@@ -318,98 +328,98 @@ func (b *Broadcaster) sendCurrentScreenFrame(client *wsClient) {
 
 // sendInitialState sends all cached state to a newly connected client.
 func (b *Broadcaster) sendInitialState(client *wsClient) {
-	b.vehicleInfoMutex.RLock()
+	b.sendInitialVehicle(client)
+	b.sendInitialGameState(client)
+	b.sendInitialCircuit(client)
+	b.sendInitialRace(client)
+	b.sendInitialLogStats(client)
+}
 
-	if len(b.currentVehicleInfo) > 0 {
-		data, err := json.Marshal(WSMessage{
-			Type:      "vehicle",
-			Timestamp: time.Now().UnixMilli(),
-			Data:      b.currentVehicleInfo,
-		})
-		if err == nil {
-			client.Send("vehicle", data, true)
-		}
+// sendInitialVehicle sends the cached vehicle info to a newly connected client.
+func (b *Broadcaster) sendInitialVehicle(client *wsClient) {
+	b.vehicleInfoMutex.RLock()
+	defer b.vehicleInfoMutex.RUnlock()
+
+	if len(b.currentVehicleInfo) == 0 {
+		return
 	}
 
-	b.vehicleInfoMutex.RUnlock()
+	data, err := json.Marshal(WSMessage{Type: "vehicle", Timestamp: time.Now().UnixMilli(), Data: b.currentVehicleInfo})
+	if err == nil {
+		client.Send("vehicle", data, true)
+	}
+}
 
+// sendInitialGameState sends the cached game state to a newly connected client.
+func (b *Broadcaster) sendInitialGameState(client *wsClient) {
 	b.gameStateMutex.RLock()
 	gameState := b.currentGameState
 	b.gameStateMutex.RUnlock()
 
-	if gameState != "" {
-		data, err := json.Marshal(WSMessage{
-			Type:      "gameState",
-			Timestamp: time.Now().UnixMilli(),
-			Data:      map[string]any{"gamestate": gameState},
-		})
-		if err == nil {
-			client.Send("gameState", data, true)
-		}
+	if gameState == "" {
+		return
 	}
 
+	data, err := json.Marshal(WSMessage{
+		Type:      "gameState",
+		Timestamp: time.Now().UnixMilli(),
+		Data:      map[string]any{"gamestate": gameState},
+	})
+	if err == nil {
+		client.Send("gameState", data, true)
+	}
+}
+
+// sendInitialCircuit sends the cached circuit info to a newly connected client.
+func (b *Broadcaster) sendInitialCircuit(client *wsClient) {
 	b.circuitInfoMutex.RLock()
+	defer b.circuitInfoMutex.RUnlock()
 
-	if len(b.currentCircuitInfo) > 0 {
-		data, err := json.Marshal(WSMessage{
-			Type:      "circuit",
-			Timestamp: time.Now().UnixMilli(),
-			Data:      b.currentCircuitInfo,
-		})
-		if err == nil {
-			client.Send("circuit", data, true)
-		}
+	if len(b.currentCircuitInfo) == 0 {
+		return
 	}
 
-	b.circuitInfoMutex.RUnlock()
+	data, err := json.Marshal(WSMessage{Type: "circuit", Timestamp: time.Now().UnixMilli(), Data: b.currentCircuitInfo})
+	if err == nil {
+		client.Send("circuit", data, true)
+	}
+}
 
+// sendInitialRace sends the cached race info to a newly connected client.
+func (b *Broadcaster) sendInitialRace(client *wsClient) {
 	b.raceInfoMutex.RLock()
+	defer b.raceInfoMutex.RUnlock()
 
-	if len(b.currentRaceInfo) > 0 {
-		data, err := json.Marshal(WSMessage{
-			Type:      "race",
-			Timestamp: time.Now().UnixMilli(),
-			Data:      b.currentRaceInfo,
-		})
-		if err == nil {
-			client.Send("race", data, true)
-		}
+	if len(b.currentRaceInfo) == 0 {
+		return
 	}
 
-	b.raceInfoMutex.RUnlock()
+	data, err := json.Marshal(WSMessage{Type: "race", Timestamp: time.Now().UnixMilli(), Data: b.currentRaceInfo})
+	if err == nil {
+		client.Send("race", data, true)
+	}
+}
 
+// sendInitialLogStats sends the cached log stats to a newly connected client.
+func (b *Broadcaster) sendInitialLogStats(client *wsClient) {
 	b.logStatsMutex.RLock()
+	defer b.logStatsMutex.RUnlock()
 
-	if len(b.currentLogStats) > 0 {
-		data, err := json.Marshal(WSMessage{
-			Type:      "logStats",
-			Timestamp: time.Now().UnixMilli(),
-			Data:      b.currentLogStats,
-		})
-		if err == nil {
-			client.Send("logStats", data, true)
-		}
+	if len(b.currentLogStats) == 0 {
+		return
 	}
 
-	b.logStatsMutex.RUnlock()
+	data, err := json.Marshal(WSMessage{Type: "logStats", Timestamp: time.Now().UnixMilli(), Data: b.currentLogStats})
+	if err == nil {
+		client.Send("logStats", data, true)
+	}
 }
 
 // handleWebSocketConnection is the HTTP handler that upgrades connections and runs the read loop.
 func (b *Broadcaster) handleWebSocketConnection(response http.ResponseWriter, request *http.Request) {
 	sessionID := request.URL.Query().Get("session")
 
-	if sessionID != "" {
-		b.unifiedSessionsMux.Lock()
-
-		if oldClient, exists := b.unifiedSessions[sessionID]; exists {
-			b.log.Debug().Str("session", sessionID).Msg("closing old unified connection for session")
-
-			oldClient.Close()
-			b.unifiedUnsubChan <- oldClient
-		}
-
-		b.unifiedSessionsMux.Unlock()
-	}
+	b.closeExistingSession(sessionID)
 
 	conn, err := b.upgrader.Upgrade(response, request, nil)
 	if err != nil {
@@ -422,28 +432,62 @@ func (b *Broadcaster) handleWebSocketConnection(response http.ResponseWriter, re
 
 	b.log.Debug().Str("session", sessionID).Msg("unified websocket connection established")
 
-	if sessionID != "" {
-		b.unifiedSessionsMux.Lock()
-		b.unifiedSessions[sessionID] = client
-		b.unifiedSessionsMux.Unlock()
-	}
+	b.registerSession(sessionID, client)
 
 	go client.writePump()
 
 	b.unifiedClientsChan <- client
+
 	b.sendInitialState(client)
 
-	defer func() {
-		if sessionID != "" {
-			b.unifiedSessionsMux.Lock()
-			delete(b.unifiedSessions, sessionID)
-			b.unifiedSessionsMux.Unlock()
-		}
+	defer b.cleanupSession(sessionID, client)
 
-		b.unifiedUnsubChan <- client
-		client.Close()
-	}()
+	b.runReadLoop(conn, client)
+}
 
+// closeExistingSession closes any existing client for the given session ID (no-op for empty ID).
+func (b *Broadcaster) closeExistingSession(sessionID string) {
+	if sessionID == "" {
+		return
+	}
+
+	b.unifiedSessionsMux.Lock()
+	defer b.unifiedSessionsMux.Unlock()
+
+	if oldClient, exists := b.unifiedSessions[sessionID]; exists {
+		b.log.Debug().Str("session", sessionID).Msg("closing old unified connection for session")
+		oldClient.Close()
+
+		b.unifiedUnsubChan <- oldClient
+	}
+}
+
+// registerSession stores the client in the session map (no-op for empty session ID).
+func (b *Broadcaster) registerSession(sessionID string, client *wsClient) {
+	if sessionID == "" {
+		return
+	}
+
+	b.unifiedSessionsMux.Lock()
+	b.unifiedSessions[sessionID] = client
+	b.unifiedSessionsMux.Unlock()
+}
+
+// cleanupSession removes a client from the session map and signals the broadcaster.
+func (b *Broadcaster) cleanupSession(sessionID string, client *wsClient) {
+	if sessionID != "" {
+		b.unifiedSessionsMux.Lock()
+		delete(b.unifiedSessions, sessionID)
+		b.unifiedSessionsMux.Unlock()
+	}
+
+	b.unifiedUnsubChan <- client
+
+	client.Close()
+}
+
+// runReadLoop runs the websocket read loop, processing subscribe messages until the connection closes.
+func (b *Broadcaster) runReadLoop(conn *websocket.Conn, client *wsClient) {
 	_ = conn.SetReadDeadline(time.Now().Add(10 * time.Second))
 
 	conn.SetPongHandler(func(string) error {
@@ -468,27 +512,35 @@ func (b *Broadcaster) handleWebSocketConnection(response http.ResponseWriter, re
 
 		_ = conn.SetReadDeadline(time.Now().Add(10 * time.Second))
 
-		var subMsg struct {
-			Type          string          `json:"type"`
-			Subscriptions map[string]bool `json:"subscriptions"`
-		}
+		b.handleSubscribeMessage(message, client)
+	}
+}
 
-		if err := json.Unmarshal(message, &subMsg); err == nil && subMsg.Type == "subscribe" {
-			client.UpdateSubscriptions(subMsg.Subscriptions)
+// handleSubscribeMessage parses and applies a subscribe control message from the client.
+func (b *Broadcaster) handleSubscribeMessage(message []byte, client *wsClient) {
+	var subMsg struct {
+		Type          string          `json:"type"`
+		Subscriptions map[string]bool `json:"subscriptions"`
+	}
 
-			b.log.Debug().
-				Interface("subscriptions", subMsg.Subscriptions).
-				Msg("client updated subscriptions")
+	err := json.Unmarshal(message, &subMsg)
+	if err != nil || subMsg.Type != "subscribe" {
+		return
+	}
 
-			if subMsg.Subscriptions["screen"] {
-				b.sendCurrentScreenFrame(client)
-			}
-		}
+	client.UpdateSubscriptions(subMsg.Subscriptions)
+
+	b.log.Debug().
+		Interface("subscriptions", subMsg.Subscriptions).
+		Msg("client updated subscriptions")
+
+	if subMsg.Subscriptions["screen"] {
+		b.sendCurrentScreenFrame(client)
 	}
 }
 
 // run is the main broadcaster goroutine — drives all message fan-out.
-func (b *Broadcaster) run() {
+func (b *Broadcaster) run() { //nolint:cyclop // simple enough to be clear
 	batchFrameRate := 30
 	bufferSize := batchFrameRate / 60
 	batchInterval := time.Duration(1000/batchFrameRate) * time.Millisecond
@@ -509,250 +561,273 @@ func (b *Broadcaster) run() {
 			return
 
 		case client := <-b.unifiedClientsChan:
-			b.unifiedClientsMux.Lock()
-			b.unifiedClients = append(b.unifiedClients, client)
-			b.unifiedClientsMux.Unlock()
-
-			b.log.Debug().Int("unified_clients", len(b.unifiedClients)).Msg("unified client subscribed")
+			b.runAddClient(client)
 
 		case client := <-b.unifiedUnsubChan:
-			b.unifiedClientsMux.Lock()
-
-			for i, c := range b.unifiedClients {
-				if c == client {
-					b.unifiedClients = append(b.unifiedClients[:i], b.unifiedClients[i+1:]...)
-
-					break
-				}
-			}
-
-			b.unifiedClientsMux.Unlock()
-
-			b.log.Debug().Int("unified_clients", len(b.unifiedClients)).Msg("unified client unsubscribed")
+			b.runRemoveClient(client)
 
 		case data := <-b.telemetryChartFeed:
-			if sid != 0 {
-				diff := int(data["seq"]) - sid
-				if diff == 0 {
-					continue
-				}
-			}
-
-			sid = int(data["seq"])
-			batchBuffer = append(batchBuffer, data)
+			sid, batchBuffer = b.runAccumulateTelemetry(data, sid, batchBuffer)
 
 		case <-ticker.C:
-			if len(batchBuffer) == 0 {
-				continue
-			}
-
-			msg := WSMessage{
-				Type:      "telemetry",
-				Timestamp: time.Now().UnixMilli(),
-				Data:      batchBuffer,
-			}
-
-			encodedData, err := json.Marshal(msg)
-			if err != nil {
-				b.log.Error().Err(err).Msg("failed to encode batched telemetry JSON")
-
-				batchBuffer = batchBuffer[:0]
-
-				continue
-			}
-
-			b.broadcast(encodedData, "telemetry")
-
-			batchBuffer = batchBuffer[:0]
+			batchBuffer = b.runFlushTelemetry(batchBuffer)
 
 		case canvas := <-b.screenFrameFeed:
-			sum := crc32.ChecksumIEEE(canvas.Pix)
-			if sum == lastScreenHash {
-				continue
-			}
-
-			lastScreenHash = sum
-
-			var buf bytes.Buffer
-
-			if err := png.Encode(&buf, canvas); err != nil {
-				b.log.Error().Err(err).Msg("failed to encode screen frame PNG")
-
-				continue
-			}
-
-			bounds := canvas.Bounds()
-
-			msg := WSMessage{
-				Type:      "screen",
-				Timestamp: time.Now().UnixMilli(),
-				Data: map[string]any{
-					"image":  "data:image/png;base64," + base64.StdEncoding.EncodeToString(buf.Bytes()),
-					"width":  bounds.Dx(),
-					"height": bounds.Dy(),
-				},
-			}
-
-			encodedData, err := json.Marshal(msg)
-			if err != nil {
-				b.log.Error().Err(err).Msg("failed to encode screen frame JSON")
-
-				continue
-			}
-
-			b.screenFrameMutex.Lock()
-			b.currentScreenFrame = encodedData
-			b.screenFrameMutex.Unlock()
-
-			b.broadcast(encodedData, "screen")
+			lastScreenHash = b.runBroadcastScreen(canvas, lastScreenHash)
 
 		case vehicleInfo := <-b.vehicleInfoFeed:
-			b.vehicleInfoMutex.Lock()
-			b.currentVehicleInfo = vehicleInfo
-			b.vehicleInfoMutex.Unlock()
-
-			msg := WSMessage{
-				Type:      "vehicle",
-				Timestamp: time.Now().UnixMilli(),
-				Data:      vehicleInfo,
-			}
-
-			encodedData, err := json.Marshal(msg)
-			if err != nil {
-				b.log.Error().Err(err).Msg("failed to encode vehicle info JSON")
-
-				continue
-			}
-
-			b.broadcast(encodedData, "vehicle")
-
-			if len(vehicleInfo) > 0 {
-				manufacturer, _ := vehicleInfo["manufacturer"].(string)
-				model, _ := vehicleInfo["model"].(string)
-				carID, _ := vehicleInfo["carID"].(uint32)
-
-				b.log.Debug().
-					Str("manufacturer", manufacturer).
-					Str("model", model).
-					Uint32("carID", carID).
-					Int("clients", len(b.unifiedClients)).
-					Msg("broadcast vehicle info to unified clients")
-			}
+			b.runBroadcastVehicle(vehicleInfo)
 
 		case gameState := <-b.gameStateFeed:
-			b.gameStateMutex.Lock()
-			b.currentGameState = gameState
-			b.gameStateMutex.Unlock()
-
-			msg := WSMessage{
-				Type:      "gameState",
-				Timestamp: time.Now().UnixMilli(),
-				Data:      map[string]any{"gamestate": gameState},
-			}
-
-			encodedData, err := json.Marshal(msg)
-			if err != nil {
-				b.log.Error().Err(err).Msg("failed to encode game state JSON")
-
-				continue
-			}
-
-			b.broadcast(encodedData, "gameState")
-
-			b.log.Debug().
-				Str("gameState", gameState).
-				Int("clients", len(b.unifiedClients)).
-				Msg("broadcast game state to unified clients")
+			b.runBroadcastGameState(gameState)
 
 		case circuitInfo := <-b.circuitInfoFeed:
-			b.log.Debug().Interface("circuitInfo", circuitInfo).Msg("received circuit info from channel")
-
-			b.circuitInfoMutex.Lock()
-			b.currentCircuitInfo = circuitInfo
-			b.circuitInfoMutex.Unlock()
-
-			msg := WSMessage{
-				Type:      "circuit",
-				Timestamp: time.Now().UnixMilli(),
-				Data:      circuitInfo,
-			}
-
-			encodedData, err := json.Marshal(msg)
-			if err != nil {
-				b.log.Error().Err(err).Msg("failed to encode circuit info JSON")
-
-				continue
-			}
-
-			b.broadcast(encodedData, "circuit")
-
-			if len(circuitInfo) > 0 {
-				name := circuitInfo["name"]
-				length := circuitInfo["length"]
-
-				b.log.Debug().
-					Str("circuit", name).
-					Str("length", length).
-					Int("clients", len(b.unifiedClients)).
-					Msg("broadcast circuit info to unified clients")
-			}
+			b.runBroadcastCircuit(circuitInfo)
 
 		case raceInfo := <-b.raceInfoFeed:
-			b.raceInfoMutex.Lock()
-			b.currentRaceInfo = raceInfo
-			b.raceInfoMutex.Unlock()
-
-			msg := WSMessage{
-				Type:      "race",
-				Timestamp: time.Now().UnixMilli(),
-				Data:      raceInfo,
-			}
-
-			encodedData, err := json.Marshal(msg)
-			if err != nil {
-				b.log.Error().Err(err).Msg("failed to encode race info JSON")
-
-				continue
-			}
-
-			b.broadcast(encodedData, "race")
-
-			if len(raceInfo) > 0 {
-				lap, _ := raceInfo["lap"].(int)
-				totalLaps, _ := raceInfo["totalLaps"].(int)
-
-				b.log.Debug().
-					Int("lap", lap).
-					Int("totalLaps", totalLaps).
-					Int("clients", len(b.unifiedClients)).
-					Msg("broadcast race info to unified clients")
-			}
+			b.runBroadcastRace(raceInfo)
 
 		case logStats := <-b.logStatsFeed:
-			b.logStatsMutex.Lock()
-			b.currentLogStats = logStats
-			b.logStatsMutex.Unlock()
-
-			msg := WSMessage{
-				Type:      "logStats",
-				Timestamp: time.Now().UnixMilli(),
-				Data:      logStats,
-			}
-
-			encodedData, err := json.Marshal(msg)
-			if err != nil {
-				b.log.Error().Err(err).Msg("failed to encode log stats JSON")
-
-				continue
-			}
-
-			b.broadcast(encodedData, "logStats")
-
-			totalCount, _ := logStats["totalCount"].(int)
-			b.log.Debug().
-				Int("totalCount", totalCount).
-				Int("clients", len(b.unifiedClients)).
-				Msg("broadcast log stats to unified clients")
+			b.runBroadcastLogStats(logStats)
 		}
 	}
+}
+
+// runAddClient registers a new client in the unified client list.
+func (b *Broadcaster) runAddClient(client *wsClient) {
+	b.unifiedClientsMux.Lock()
+	b.unifiedClients = append(b.unifiedClients, client)
+	b.unifiedClientsMux.Unlock()
+
+	b.log.Debug().Int("unified_clients", len(b.unifiedClients)).Msg("unified client subscribed")
+}
+
+// runRemoveClient removes a client from the unified client list.
+func (b *Broadcaster) runRemoveClient(client *wsClient) {
+	b.unifiedClientsMux.Lock()
+
+	for idx, existing := range b.unifiedClients {
+		if existing == client {
+			b.unifiedClients = append(b.unifiedClients[:idx], b.unifiedClients[idx+1:]...)
+
+			break
+		}
+	}
+
+	b.unifiedClientsMux.Unlock()
+
+	b.log.Debug().Int("unified_clients", len(b.unifiedClients)).Msg("unified client unsubscribed")
+}
+
+// runAccumulateTelemetry deduplicates and accumulates a telemetry frame into the batch buffer.
+func (b *Broadcaster) runAccumulateTelemetry(data map[string]float32, sid int, buf []map[string]float32) (int, []map[string]float32) {
+	if sid != 0 && int(data["seq"])-sid == 0 {
+		return sid, buf
+	}
+
+	return int(data["seq"]), append(buf, data)
+}
+
+// runFlushTelemetry broadcasts the accumulated batch and resets the buffer.
+func (b *Broadcaster) runFlushTelemetry(buf []map[string]float32) []map[string]float32 {
+	if len(buf) == 0 {
+		return buf
+	}
+
+	msg := WSMessage{Type: "telemetry", Timestamp: time.Now().UnixMilli(), Data: buf}
+
+	encodedData, err := json.Marshal(msg)
+	if err != nil {
+		b.log.Error().Err(err).Msg("failed to encode batched telemetry JSON")
+
+		return buf[:0]
+	}
+
+	b.broadcast(encodedData, "telemetry")
+
+	return buf[:0]
+}
+
+// runBroadcastScreen encodes and broadcasts a screen frame when its hash has changed.
+// Returns the new hash value (unchanged if the frame was skipped or encoding failed).
+func (b *Broadcaster) runBroadcastScreen(canvas *image.RGBA, lastHash uint32) uint32 {
+	sum := crc32.ChecksumIEEE(canvas.Pix)
+	if sum == lastHash {
+		return lastHash
+	}
+
+	var buf bytes.Buffer
+
+	err := png.Encode(&buf, canvas)
+	if err != nil {
+		b.log.Error().Err(err).Msg("failed to encode screen frame PNG")
+
+		return lastHash
+	}
+
+	bounds := canvas.Bounds()
+
+	msg := WSMessage{
+		Type:      "screen",
+		Timestamp: time.Now().UnixMilli(),
+		Data: map[string]any{
+			"image":  "data:image/png;base64," + base64.StdEncoding.EncodeToString(buf.Bytes()),
+			"width":  bounds.Dx(),
+			"height": bounds.Dy(),
+		},
+	}
+
+	encodedData, err := json.Marshal(msg)
+	if err != nil {
+		b.log.Error().Err(err).Msg("failed to encode screen frame JSON")
+
+		return lastHash
+	}
+
+	b.screenFrameMutex.Lock()
+	b.currentScreenFrame = encodedData
+	b.screenFrameMutex.Unlock()
+
+	b.broadcast(encodedData, "screen")
+
+	return sum
+}
+
+// runBroadcastVehicle caches and broadcasts a vehicle info update.
+func (b *Broadcaster) runBroadcastVehicle(vehicleInfo map[string]any) {
+	b.vehicleInfoMutex.Lock()
+	b.currentVehicleInfo = vehicleInfo
+	b.vehicleInfoMutex.Unlock()
+
+	msg := WSMessage{Type: "vehicle", Timestamp: time.Now().UnixMilli(), Data: vehicleInfo}
+
+	encodedData, err := json.Marshal(msg)
+	if err != nil {
+		b.log.Error().Err(err).Msg("failed to encode vehicle info JSON")
+
+		return
+	}
+
+	b.broadcast(encodedData, "vehicle")
+
+	if len(vehicleInfo) > 0 {
+		manufacturer, _ := vehicleInfo["manufacturer"].(string)
+		model, _ := vehicleInfo["model"].(string)
+		carID, _ := vehicleInfo["carID"].(uint32)
+
+		b.log.Debug().
+			Str("manufacturer", manufacturer).
+			Str("model", model).
+			Uint32("carID", carID).
+			Int("clients", len(b.unifiedClients)).
+			Msg("broadcast vehicle info to unified clients")
+	}
+}
+
+// runBroadcastGameState caches and broadcasts a game state change.
+func (b *Broadcaster) runBroadcastGameState(gameState string) {
+	b.gameStateMutex.Lock()
+	b.currentGameState = gameState
+	b.gameStateMutex.Unlock()
+
+	msg := WSMessage{
+		Type:      "gameState",
+		Timestamp: time.Now().UnixMilli(),
+		Data:      map[string]any{"gamestate": gameState},
+	}
+
+	encodedData, err := json.Marshal(msg)
+	if err != nil {
+		b.log.Error().Err(err).Msg("failed to encode game state JSON")
+
+		return
+	}
+
+	b.broadcast(encodedData, "gameState")
+
+	b.log.Debug().
+		Str("gameState", gameState).
+		Int("clients", len(b.unifiedClients)).
+		Msg("broadcast game state to unified clients")
+}
+
+// runBroadcastCircuit caches and broadcasts a circuit info update.
+func (b *Broadcaster) runBroadcastCircuit(circuitInfo map[string]string) {
+	b.log.Debug().Interface("circuitInfo", circuitInfo).Msg("received circuit info from channel")
+
+	b.circuitInfoMutex.Lock()
+	b.currentCircuitInfo = circuitInfo
+	b.circuitInfoMutex.Unlock()
+
+	msg := WSMessage{Type: "circuit", Timestamp: time.Now().UnixMilli(), Data: circuitInfo}
+
+	encodedData, err := json.Marshal(msg)
+	if err != nil {
+		b.log.Error().Err(err).Msg("failed to encode circuit info JSON")
+
+		return
+	}
+
+	b.broadcast(encodedData, "circuit")
+
+	if len(circuitInfo) > 0 {
+		b.log.Debug().
+			Str("circuit", circuitInfo["name"]).
+			Str("length", circuitInfo["length"]).
+			Int("clients", len(b.unifiedClients)).
+			Msg("broadcast circuit info to unified clients")
+	}
+}
+
+// runBroadcastRace caches and broadcasts a race info update.
+func (b *Broadcaster) runBroadcastRace(raceInfo map[string]any) {
+	b.raceInfoMutex.Lock()
+	b.currentRaceInfo = raceInfo
+	b.raceInfoMutex.Unlock()
+
+	msg := WSMessage{Type: "race", Timestamp: time.Now().UnixMilli(), Data: raceInfo}
+
+	encodedData, err := json.Marshal(msg)
+	if err != nil {
+		b.log.Error().Err(err).Msg("failed to encode race info JSON")
+
+		return
+	}
+
+	b.broadcast(encodedData, "race")
+
+	if len(raceInfo) > 0 {
+		lap, _ := raceInfo["lap"].(int)
+		totalLaps, _ := raceInfo["totalLaps"].(int)
+
+		b.log.Debug().
+			Int("lap", lap).
+			Int("totalLaps", totalLaps).
+			Int("clients", len(b.unifiedClients)).
+			Msg("broadcast race info to unified clients")
+	}
+}
+
+// runBroadcastLogStats caches and broadcasts a log stats update.
+func (b *Broadcaster) runBroadcastLogStats(logStats map[string]any) {
+	b.logStatsMutex.Lock()
+	b.currentLogStats = logStats
+	b.logStatsMutex.Unlock()
+
+	msg := WSMessage{Type: "logStats", Timestamp: time.Now().UnixMilli(), Data: logStats}
+
+	encodedData, err := json.Marshal(msg)
+	if err != nil {
+		b.log.Error().Err(err).Msg("failed to encode log stats JSON")
+
+		return
+	}
+
+	b.broadcast(encodedData, "logStats")
+
+	totalCount, _ := logStats["totalCount"].(int)
+	b.log.Debug().
+		Int("totalCount", totalCount).
+		Int("clients", len(b.unifiedClients)).
+		Msg("broadcast log stats to unified clients")
 }

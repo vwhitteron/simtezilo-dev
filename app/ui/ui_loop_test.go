@@ -1,4 +1,4 @@
-package ui
+package ui //nolint:testpackage // white-box: drives unexported handlers and state directly
 
 import (
 	"context"
@@ -27,7 +27,7 @@ func newTestUI(t *testing.T) *UserInterface {
 		t.Fatalf("i18n.New: %v", err)
 	}
 
-	ui := NewUserInterface(&Config{
+	iface := NewUserInterface(&Config{
 		I18n:             i18nInstance,
 		HIDEvents:        make(chan HIDInputEvent, 8),
 		Display:          virtual.NewDisplay(240, 240, 265),
@@ -36,21 +36,23 @@ func newTestUI(t *testing.T) *UserInterface {
 		Log:              zerolog.Nop(),
 	})
 
-	return ui
+	return iface
 }
 
 // TestUpdateDisplayConflatesAndNeverBlocks verifies the public UpdateDisplay
 // never blocks (cap-1 conflated channel) and keeps only the most recent frame.
 func TestUpdateDisplayConflatesAndNeverBlocks(t *testing.T) {
-	ui := newTestUI(t)
+	t.Parallel()
+
+	iface := newTestUI(t)
 
 	// No Run goroutine is consuming; if UpdateDisplay blocked, the test would hang.
 	for i := range 100 {
-		ui.UpdateDisplay(LiveData{SpeedKPH: i})
+		iface.UpdateDisplay(LiveData{SpeedKPH: i})
 	}
 
 	select {
-	case data := <-ui.ticks:
+	case data := <-iface.ticks:
 		if data.SpeedKPH != 99 {
 			t.Fatalf("expected latest frame SpeedKPH=99, got %d", data.SpeedKPH)
 		}
@@ -59,7 +61,7 @@ func TestUpdateDisplayConflatesAndNeverBlocks(t *testing.T) {
 	}
 
 	select {
-	case <-ui.ticks:
+	case <-iface.ticks:
 		t.Fatal("ticks should hold at most one frame")
 	default:
 	}
@@ -68,43 +70,47 @@ func TestUpdateDisplayConflatesAndNeverBlocks(t *testing.T) {
 // TestHandleTickStartupToWaitWhenIdle verifies that, once the splash timeout has
 // elapsed with no telemetry, a tick moves the mode from Startup to Wait.
 func TestHandleTickStartupToWaitWhenIdle(t *testing.T) {
-	ui := newTestUI(t)
+	t.Parallel()
+
+	iface := newTestUI(t)
 
 	base := time.Now()
 	clock := base
-	ui.now = func() time.Time { return clock }
+	iface.now = func() time.Time { return clock }
 
-	ui.state.mode = ScreenModeStartup
-	ui.state.lastActivity = base
+	iface.state.mode = ScreenModeStartup
+	iface.state.lastActivity = base
 	clock = base.Add(3 * time.Second) // past the 2s splash timeout
 
-	ui.handleTick(LiveData{TelemetryActive: false, Gear: kinematics.NullGear})
+	iface.handleTick(LiveData{TelemetryActive: false, Gear: kinematics.NullGear})
 
-	if ui.state.mode != ScreenModeWait {
-		t.Fatalf("expected mode Wait after idle startup timeout, got %v", ui.state.mode)
+	if iface.state.mode != ScreenModeWait {
+		t.Fatalf("expected mode Wait after idle startup timeout, got %v", iface.state.mode)
 	}
 }
 
 // TestHandleTickWaitPowerOffSleeps verifies the 30s power-off timeout in Wait
 // mode transitions to Sleep and sleeps the display.
 func TestHandleTickWaitPowerOffSleeps(t *testing.T) {
-	ui := newTestUI(t)
+	t.Parallel()
+
+	iface := newTestUI(t)
 
 	base := time.Now()
 	clock := base
-	ui.now = func() time.Time { return clock }
+	iface.now = func() time.Time { return clock }
 
-	ui.state.mode = ScreenModeWait
-	ui.state.lastActivity = base
+	iface.state.mode = ScreenModeWait
+	iface.state.lastActivity = base
 	clock = base.Add(31 * time.Second) // past the 30s power-off timeout
 
-	ui.handleTick(LiveData{TelemetryActive: false})
+	iface.handleTick(LiveData{TelemetryActive: false})
 
-	if ui.state.mode != ScreenModeSleep {
-		t.Fatalf("expected mode Sleep after power-off timeout, got %v", ui.state.mode)
+	if iface.state.mode != ScreenModeSleep {
+		t.Fatalf("expected mode Sleep after power-off timeout, got %v", iface.state.mode)
 	}
 
-	disp, ok := ui.display.(*virtual.Display)
+	disp, ok := iface.display.(*virtual.Display)
 	if ok && !disp.IsSleeping() {
 		t.Fatal("expected display to be sleeping after power-off timeout")
 	}
@@ -113,20 +119,22 @@ func TestHandleTickWaitPowerOffSleeps(t *testing.T) {
 // TestHandleTickSettingsMenuTimeoutSleeps verifies the 10s menu-inactivity
 // timeout in Settings mode sleeps the display when telemetry is inactive.
 func TestHandleTickSettingsMenuTimeoutSleeps(t *testing.T) {
-	ui := newTestUI(t)
+	t.Parallel()
+
+	iface := newTestUI(t)
 
 	base := time.Now()
 	clock := base
-	ui.now = func() time.Time { return clock }
+	iface.now = func() time.Time { return clock }
 
-	ui.state.mode = ScreenModeSettings
-	ui.state.lastMenuActivity = base
+	iface.state.mode = ScreenModeSettings
+	iface.state.lastMenuActivity = base
 	clock = base.Add(11 * time.Second) // past the 10s menu timeout
 
-	ui.handleTick(LiveData{TelemetryActive: false})
+	iface.handleTick(LiveData{TelemetryActive: false})
 
-	if ui.state.mode != ScreenModeSleep {
-		t.Fatalf("expected mode Sleep after menu timeout, got %v", ui.state.mode)
+	if iface.state.mode != ScreenModeSleep {
+		t.Fatalf("expected mode Sleep after menu timeout, got %v", iface.state.mode)
 	}
 }
 
@@ -134,28 +142,32 @@ func TestHandleTickSettingsMenuTimeoutSleeps(t *testing.T) {
 // leaf sets activeLiveView and transitions to Wait. The menu starts on the
 // UIMenuLiveView leaf; Right pages to its UIMenuLiveDashboard sibling.
 func TestHIDLiveLeafSetsActiveViewAndWait(t *testing.T) {
-	ui := newTestUI(t)
-	ui.state.hidReady = true
+	t.Parallel()
 
-	ui.handleHIDEvent(HIDInputRight)
+	iface := newTestUI(t)
+	iface.state.hidReady = true
 
-	if ui.state.activeLiveView != languagedb.UIMenuLiveDashboard {
-		t.Fatalf("expected activeLiveView=LiveDashboard, got %v", ui.state.activeLiveView)
+	iface.handleHIDEvent(HIDInputRight)
+
+	if iface.state.activeLiveView != languagedb.UIMenuLiveDashboard {
+		t.Fatalf("expected activeLiveView=LiveDashboard, got %v", iface.state.activeLiveView)
 	}
 
-	if ui.state.mode != ScreenModeWait {
-		t.Fatalf("expected mode Wait on live leaf, got %v", ui.state.mode)
+	if iface.state.mode != ScreenModeWait {
+		t.Fatalf("expected mode Wait on live leaf, got %v", iface.state.mode)
 	}
 }
 
 // TestForceRedrawSetsFlagOnCommand verifies the forceRedraw command sets the
 // refresh flag when handled on the loop goroutine.
 func TestForceRedrawSetsFlagOnCommand(t *testing.T) {
-	ui := newTestUI(t)
+	t.Parallel()
 
-	ui.handleCommand(cmdForceRedraw)
+	iface := newTestUI(t)
 
-	if !ui.state.forceRedraw {
+	iface.handleCommand(cmdForceRedraw)
+
+	if !iface.state.forceRedraw {
 		t.Fatal("expected forceRedraw to be set after cmdForceRedraw")
 	}
 }
@@ -166,19 +178,18 @@ func TestForceRedrawSetsFlagOnCommand(t *testing.T) {
 // producer). Under -race this proves the single-owner design is race-free. The
 // test asserts nothing beyond completing without a race report or deadlock.
 func TestRunConcurrentProducersNoRace(t *testing.T) {
-	ui := newTestUI(t)
-	ui.state.hidReady = true // exercise the navigation path, not the startup discard
+	t.Parallel()
+
+	iface := newTestUI(t)
+	iface.state.hidReady = true // exercise the navigation path, not the startup discard
 
 	ctx, cancel := context.WithCancel(context.Background())
 
 	var loop sync.WaitGroup
 
-	loop.Add(1)
-
-	go func() {
-		defer loop.Done()
-		ui.Run(ctx)
-	}()
+	loop.Go(func() {
+		iface.Run(ctx)
+	})
 
 	// stop is closed once to signal all producers to finish; a closed channel is
 	// observable by every goroutine (unlike a one-shot timer channel).
@@ -187,28 +198,22 @@ func TestRunConcurrentProducersNoRace(t *testing.T) {
 	var producers sync.WaitGroup
 
 	// Telemetry tick producer (the app's main loop).
-	producers.Add(1)
 
-	go func() {
-		defer producers.Done()
-
-		for i := 0; ; i++ {
+	producers.Go(func() {
+		for idx := 0; ; idx++ {
 			select {
 			case <-stop:
 				return
 			default:
 			}
 
-			ui.UpdateDisplay(LiveData{TelemetryActive: true, Gear: i % 8, SpeedKPH: i})
+			iface.UpdateDisplay(LiveData{TelemetryActive: true, Gear: idx % 8, SpeedKPH: idx})
 		}
-	}()
+	})
 
 	// Orientation-change producer.
-	producers.Add(1)
 
-	go func() {
-		defer producers.Done()
-
+	producers.Go(func() {
 		for {
 			select {
 			case <-stop:
@@ -216,25 +221,23 @@ func TestRunConcurrentProducersNoRace(t *testing.T) {
 			default:
 			}
 
-			ui.ForceRedraw()
+			iface.ForceRedraw()
 		}
-	}()
+	})
 
 	// HID producer cycling through navigation keys.
-	producers.Add(1)
 
-	go func() {
-		defer producers.Done()
-
+	producers.Go(func() {
 		keys := []HIDInputEvent{HIDInputRight, HIDInputLeft, HIDInputDown, HIDInputUp}
-		for i := 0; ; i++ {
+
+		for idx := 0; ; idx++ {
 			select {
 			case <-stop:
 				return
-			case ui.hidEvents <- keys[i%len(keys)]:
+			case iface.hidEvents <- keys[idx%len(keys)]:
 			}
 		}
-	}()
+	})
 
 	time.Sleep(200 * time.Millisecond)
 	close(stop)

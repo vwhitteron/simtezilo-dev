@@ -25,16 +25,16 @@ func packRGB565(src *image.RGBA, cols, rows int, buf []byte) []byte {
 	idx := 0
 
 	for c := range cols {
-		x := src.Rect.Min.X + cols - c
+		xPos := src.Rect.Min.X + cols - c
 		for r := range rows {
-			y := src.Rect.Min.Y + r
+			yPos := src.Rect.Min.Y + r
 
-			if x < bounds.Min.X || x >= bounds.Max.X || y < bounds.Min.Y || y >= bounds.Max.Y {
+			if xPos < bounds.Min.X || xPos >= bounds.Max.X || yPos < bounds.Min.Y || yPos >= bounds.Max.Y {
 				// Out of bounds — emit black (0x0000), matching the old .At() behaviour.
 				buf[idx] = 0
 				buf[idx+1] = 0
 			} else {
-				off := (y-src.Rect.Min.Y)*src.Stride + (x-src.Rect.Min.X)*4
+				off := (yPos-src.Rect.Min.Y)*src.Stride + (xPos-src.Rect.Min.X)*4
 				rv := uint16(src.Pix[off]) >> 3
 				gv := uint16(src.Pix[off+1]) >> 2
 				bv := uint16(src.Pix[off+2]) >> 3

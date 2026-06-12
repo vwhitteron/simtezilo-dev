@@ -80,33 +80,33 @@ func dashColorReady() color.RGBA { return color.RGBA{R: 70, G: 70, B: 70, A: 255
 
 // RenderDashboardScreen renders the dashboard live view: brake/throttle bars on
 // the sides, an RPM arc across the top, and the speed in the centre.
-func (r *Screen) RenderDashboardScreen(d DashboardData) error {
+func (r *Screen) RenderDashboardScreen(dash DashboardData) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	canvas := r.newBlankCanvas()
 
 	background := dashColorBackground()
-	if d.Flash {
+	if dash.Flash {
 		background = dashColorBackgroundFlash()
 	}
 
 	draw.Draw(canvas, canvas.Bounds(), image.NewUniform(background), image.Point{}, draw.Src)
 
-	if d.Ready {
+	if dash.Ready {
 		r.drawArc(canvas, 0, 1, dashColorReady())
 		fillRect(canvas, dashBarInset, dashBarTop, dashBarInset+dashBarWidth, dashBarBottom, dashColorReady())
 		fillRect(canvas, dashPanelEdge-dashBarInset-dashBarWidth, dashBarTop, dashPanelEdge-dashBarInset, dashBarBottom, dashColorReady())
 	} else {
-		r.drawPedalBar(canvas, dashBarInset, d.BrakeOut, d.BrakeIn, dashColorBrake(), dashColorBrakeDelta())
-		r.drawPedalBar(canvas, dashPanelEdge-dashBarInset-dashBarWidth, d.ThrottleOut, d.ThrottleIn, dashColorThrottle(), dashColorThrottleDelta())
-		r.drawRPMArc(canvas, d)
+		r.drawPedalBar(canvas, dashBarInset, dash.BrakeOut, dash.BrakeIn, dashColorBrake(), dashColorBrakeDelta())
+		r.drawPedalBar(canvas, dashPanelEdge-dashBarInset-dashBarWidth, dash.ThrottleOut, dash.ThrottleIn, dashColorThrottle(), dashColorThrottleDelta())
+		r.drawRPMArc(canvas, dash)
 	}
 
-	r.drawDashboardText(canvas, d)
+	r.drawDashboardText(canvas, dash)
 
 	content := &display.Content{
-		Text:   fmt.Sprintf("Dash: %dkm/h %drpm", d.SpeedKPH, d.RPM),
+		Text:   fmt.Sprintf("Dash: %dkm/h %drpm", dash.SpeedKPH, dash.RPM),
 		Canvas: canvas,
 	}
 
@@ -122,7 +122,7 @@ func (r *Screen) RenderDashboardScreen(d DashboardData) error {
 
 // drawPedalBar draws a vertical bar growing from the bottom: the output portion in
 // bright red and the input-beyond-output delta in a darker shade above it.
-func (r *Screen) drawPedalBar(canvas *image.RGBA, x int, output, input float64, mainColor, deltaColor color.RGBA) {
+func (r *Screen) drawPedalBar(canvas *image.RGBA, xPos int, output, input float64, mainColor, deltaColor color.RGBA) {
 	output = clampPercent(output)
 	input = clampPercent(input)
 
@@ -131,23 +131,23 @@ func (r *Screen) drawPedalBar(canvas *image.RGBA, x int, output, input float64, 
 
 	// Input delta extends beyond the output (input is usually >= output).
 	if inputY < outputY {
-		fillRect(canvas, x, inputY, x+dashBarWidth, outputY, deltaColor)
+		fillRect(canvas, xPos, inputY, xPos+dashBarWidth, outputY, deltaColor)
 	}
 
-	fillRect(canvas, x, outputY, x+dashBarWidth, dashBarBottom, mainColor)
+	fillRect(canvas, xPos, outputY, xPos+dashBarWidth, dashBarBottom, mainColor)
 }
 
 // drawRPMArc draws the tachometer arc: a dim track for the full sweep and a filled
 // arc up to the current RPM. The whole fill is a single colour that shifts
 // green->yellow->red as the rev limit approaches.
-func (r *Screen) drawRPMArc(canvas *image.RGBA, d DashboardData) {
-	if d.RevLimit <= 0 {
+func (r *Screen) drawRPMArc(canvas *image.RGBA, dash DashboardData) {
+	if dash.RevLimit <= 0 {
 		return
 	}
 
-	rpmFraction := clamp01(float64(d.RPM) / float64(d.RevLimit))
+	rpmFraction := clamp01(float64(dash.RPM) / float64(dash.RevLimit))
 
-	r.drawArc(canvas, 0, rpmFraction, revColor(d.RPM, d.RevLightMin, d.RevLightMax))
+	r.drawArc(canvas, 0, rpmFraction, revColor(dash.RPM, dash.RevLightMin, dash.RevLightMax))
 }
 
 // arcSampleCount is the number of angle steps in the precomputed arc table (N).
@@ -163,8 +163,8 @@ func buildArcSamples(cols, rows int) [][]image.Point {
 	n := arcSampleCount
 	samples := make([][]image.Point, n+1)
 
-	for i := 0; i <= n; i++ {
-		fraction := float64(i) / float64(n)
+	for idx := 0; idx <= n; idx++ {
+		fraction := float64(idx) / float64(n)
 		angle := (dashArcStartDeg - dashArcSweepDeg*fraction) * degreesToRad
 
 		var pts []image.Point
@@ -178,7 +178,7 @@ func buildArcSamples(cols, rows int) [][]image.Point {
 			}
 		}
 
-		samples[i] = pts
+		samples[idx] = pts
 	}
 
 	return samples
@@ -189,22 +189,22 @@ func buildArcSamples(cols, rows int) [][]image.Point {
 // trig and bounds checks; the outer loop matches the original step count and
 // fraction formula exactly, so the set of lit pixels is identical to the old
 // code.
-func (r *Screen) drawArc(canvas *image.RGBA, from, to float64, col color.RGBA) {
-	if to <= from {
+func (r *Screen) drawArc(canvas *image.RGBA, from, target float64, col color.RGBA) {
+	if target <= from {
 		return
 	}
 
-	n := arcSampleCount
-	steps := max(int(dashArcSweepDeg*(to-from)/arcAngleStep), 1)
+	count := arcSampleCount
+	steps := max(int(dashArcSweepDeg*(target-from)/arcAngleStep), 1)
 
 	for i := 0; i <= steps; i++ {
-		fraction := from + (to-from)*float64(i)/float64(steps)
+		fraction := from + (target-from)*float64(i)/float64(steps)
 		// Map fraction to the nearest precomputed sample index.
-		sIdx := int(math.Round(fraction * float64(n)))
+		sIdx := int(math.Round(fraction * float64(count)))
 		if sIdx < 0 {
 			sIdx = 0
-		} else if sIdx > n {
-			sIdx = n
+		} else if sIdx > count {
+			sIdx = count
 		}
 
 		for _, p := range r.arcSamples[sIdx] {
@@ -214,21 +214,21 @@ func (r *Screen) drawArc(canvas *image.RGBA, from, to float64, col color.RGBA) {
 }
 
 // drawDashboardText draws the gear (small, above centre) and speed (large, centre).
-func (r *Screen) drawDashboardText(canvas *image.RGBA, d DashboardData) {
+func (r *Screen) drawDashboardText(canvas *image.RGBA, dash DashboardData) {
 	// Gear centred both ways within the arc. Ready state uses a smaller font
 	// since it's a word rather than a single gear character.
-	if d.Gear != "" {
+	if dash.Gear != "" {
 		gearFont := dashFontGear
-		if d.Ready {
+		if dash.Ready {
 			gearFont = fontStatus
 		}
 
-		r.drawCenteredText(canvas, d.Gear, gearFont, dashColorText(), dashGearCenterY, true)
+		r.drawCenteredText(canvas, dash.Gear, gearFont, dashColorText(), dashGearCenterY, true)
 	}
 
 	// Speed along the bottom of the arc; suppressed in ready state.
-	if !d.Ready {
-		r.drawCenteredText(canvas, strconv.Itoa(d.SpeedKPH), dashFontSpeed, dashColorText(), dashSpeedBaseline, false)
+	if !dash.Ready {
+		r.drawCenteredText(canvas, strconv.Itoa(dash.SpeedKPH), dashFontSpeed, dashColorText(), dashSpeedBaseline, false)
 	}
 }
 
@@ -276,17 +276,17 @@ func fillRect(canvas *image.RGBA, x0, y0, x1, y1 int, col color.RGBA) {
 	draw.Draw(canvas, image.Rect(x0, y0, x1, y1), image.NewUniform(col), image.Point{}, draw.Src)
 }
 
-func clampPercent(v float64) float64 { return clamp(v, 0, 100) }
-func clamp01(v float64) float64      { return clamp(v, 0, 1) }
+func clampPercent(value float64) float64 { return clamp(value, 0, 100) }
+func clamp01(value float64) float64      { return clamp(value, 0, 1) }
 
-func clamp(v, lo, hi float64) float64 {
-	if v < lo {
+func clamp(value, lo, high float64) float64 {
+	if value < lo {
 		return lo
 	}
 
-	if v > hi {
-		return hi
+	if value > high {
+		return high
 	}
 
-	return v
+	return value
 }

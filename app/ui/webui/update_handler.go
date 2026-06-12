@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -165,45 +166,7 @@ func (h *updateHandler) handleUpdatesStatus(response http.ResponseWriter, reques
 	}
 
 	if h.updater != nil {
-		status := h.updater.Status()
-		availableUpdate := h.updater.AvailableUpdate()
-		lastCheck := h.updater.Checker().LastCheck()
-		lastError := h.updater.Checker().LastError()
-		currentChannel := h.config.GetAppUpdateChannel()
-
-		responseData["status"] = status.String()
-		responseData["rollbackAvailable"] = h.updater.RollbackAvailable()
-		responseData["rollbackVersion"] = h.updater.RollbackVersion()
-
-		downloadReady := status == updater.UpdateStatusReadyToInstall
-		if downloadReady && availableUpdate != nil {
-			downloadReady = availableUpdate.Channel == currentChannel
-		}
-
-		responseData["downloadReady"] = downloadReady
-
-		if status == updater.UpdateStatusDownloading {
-			responseData["download_progress"] = h.updater.Checker().DownloadProgress()
-		}
-
-		if !lastCheck.IsZero() {
-			responseData["lastChecked"] = lastCheck.Format(time.RFC3339)
-		}
-
-		if lastError != nil {
-			responseData["error"] = lastError.Error()
-		}
-
-		if availableUpdate != nil {
-			responseData["availableUpdate"] = map[string]any{
-				"version":     availableUpdate.AvailableVersion,
-				"releaseDate": availableUpdate.ReleaseDate,
-				"changelog":   availableUpdate.Changelog,
-				"downloadURL": availableUpdate.DownloadURL,
-				"size":        availableUpdate.DownloadSize,
-				"channel":     availableUpdate.Channel,
-			}
-		}
+		h.populateUpdaterStatus(responseData)
 	}
 
 	response.Header().Set("Content-Type", "application/json")
@@ -223,6 +186,49 @@ func (h *updateHandler) handleUpdatesStatus(response http.ResponseWriter, reques
 	}
 
 	h.log.Debug().Str("status", statusStr).Msg("served updates status")
+}
+
+// populateUpdaterStatus fills in the live updater fields of the status response map.
+func (h *updateHandler) populateUpdaterStatus(responseData map[string]any) {
+	status := h.updater.Status()
+	availableUpdate := h.updater.AvailableUpdate()
+	lastCheck := h.updater.Checker().LastCheck()
+	lastError := h.updater.Checker().LastError()
+	currentChannel := h.config.GetAppUpdateChannel()
+
+	responseData["status"] = status.String()
+	responseData["rollbackAvailable"] = h.updater.RollbackAvailable()
+	responseData["rollbackVersion"] = h.updater.RollbackVersion()
+
+	downloadReady := status == updater.UpdateStatusReadyToInstall
+	if downloadReady && availableUpdate != nil {
+		downloadReady = availableUpdate.Channel == currentChannel
+	}
+
+	responseData["downloadReady"] = downloadReady
+
+	if status == updater.UpdateStatusDownloading {
+		responseData["download_progress"] = h.updater.Checker().DownloadProgress()
+	}
+
+	if !lastCheck.IsZero() {
+		responseData["lastChecked"] = lastCheck.Format(time.RFC3339)
+	}
+
+	if lastError != nil {
+		responseData["error"] = lastError.Error()
+	}
+
+	if availableUpdate != nil {
+		responseData["availableUpdate"] = map[string]any{
+			"version":     availableUpdate.AvailableVersion,
+			"releaseDate": availableUpdate.ReleaseDate,
+			"changelog":   availableUpdate.Changelog,
+			"downloadURL": availableUpdate.DownloadURL,
+			"size":        availableUpdate.DownloadSize,
+			"channel":     availableUpdate.Channel,
+		}
+	}
 }
 
 // handleUpdatesCheck triggers an immediate update check.
@@ -367,106 +373,25 @@ func (h *updateHandler) handleUpdatesUpload(response http.ResponseWriter, reques
 		return
 	}
 
-	err := request.ParseMultipartForm(500 << 20)
+	file, header, err := h.parseUploadForm(request, response)
 	if err != nil {
-		h.log.Error().Err(err).Msg("failed to parse multipart form")
-		response.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(response).Encode(map[string]string{"error": "Failed to parse upload"}) //nolint:errchkjson // simple encoding
-
 		return
 	}
 
-	file, header, err := request.FormFile("file")
-	if err != nil {
-		h.log.Error().Err(err).Msg("failed to get uploaded file")
-		response.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(response).Encode(map[string]string{"error": "No file uploaded"}) //nolint:errchkjson // simple encoding
-
-		return
-	}
 	defer file.Close()
 
-	h.log.Info().
-		Str("filename", header.Filename).
-		Int64("size", header.Size).
-		Msg("Receiving custom update upload")
+	h.log.Info().Str("filename", header.Filename).Int64("size", header.Size).Msg("Receiving custom update upload")
 
-	var metadata *UploadMetadata
+	metadata := h.tryExtractMetadata(file, header.Filename)
 
-	if seeker, ok := file.(io.ReadSeeker); ok {
-		var metaErr error
-
-		metadata, metaErr = h.extractMetadataFromArchive(seeker, header.Filename)
-		if metaErr != nil {
-			h.log.Warn().Err(metaErr).Msg("failed to extract metadata from archive, using defaults")
-		} else {
-			h.log.Info().
-				Str("version", metadata.Version).
-				Str("platform", metadata.Platform).
-				Msg("Extracted metadata from archive")
-		}
-		_, _ = seeker.Seek(0, io.SeekStart)
-	}
-
-	downloadDir := filepath.Join(h.config.GetAppBaseDir(), "data", "update", "downloads")
-
-	err = os.MkdirAll(downloadDir, 0o755)
+	destPath, prefixedFilename, err := h.saveUploadedFile(file, header.Filename, response)
 	if err != nil {
-		h.log.Error().Err(err).Msg("failed to create download directory")
-		response.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(response).Encode(map[string]string{"error": "Failed to create download directory"}) //nolint:errchkjson // simple encoding
-
 		return
 	}
 
-	h.log.Debug().Msg("Cleaning up old uploads before saving new custom upload")
-	_ = h.updater.Downloader().CleanupDownloads()
-
-	prefixedFilename := "custom-" + header.Filename
-	destPath := filepath.Join(downloadDir, prefixedFilename)
-
-	destFile, err := os.Create(destPath)
-	if err != nil {
-		h.log.Error().Err(err).Msg("failed to create destination file")
-		response.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(response).Encode(map[string]string{"error": "Failed to save upload"}) //nolint:errchkjson // simple encoding
-
-		return
-	}
-	defer destFile.Close()
-
-	_, err = io.Copy(destFile, file)
-	if err != nil {
-		h.log.Error().Err(err).Msg("failed to write uploaded file")
-		response.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(response).Encode(map[string]string{"error": "Failed to write file"}) //nolint:errchkjson // simple encoding
-
-		return
-	}
-
-	err = os.Chmod(destPath, 0o755)
-	if err != nil {
-		h.log.Warn().Err(err).Msg("failed to set executable permissions")
-	}
+	version, changelog, releaseDate := resolveUploadMetadata(metadata, header.Filename)
 
 	h.updater.Checker().SetStatus(updater.UpdateStatusReadyToInstall)
-
-	var (
-		version     string
-		changelog   []string
-		releaseDate time.Time
-	)
-
-	if metadata != nil {
-		version = metadata.Version
-		changelog = metadata.Changelog
-		releaseDate = metadata.ReleaseDate
-	} else {
-		version = "custom-" + filepath.Base(header.Filename)
-		changelog = []string{"Custom uploaded file: " + header.Filename}
-		releaseDate = time.Now()
-	}
-
 	h.updater.Checker().SetAvailableUpdate(&updater.UpdateInfo{
 		CurrentVersion:   h.buildVersion,
 		AvailableVersion: version,
@@ -487,11 +412,7 @@ func (h *updateHandler) handleUpdatesUpload(response http.ResponseWriter, reques
 		return
 	}
 
-	h.log.Info().
-		Str("filename", prefixedFilename).
-		Str("version", version).
-		Str("path", destPath).
-		Msg("Custom update uploaded and ready to install")
+	h.log.Info().Str("filename", prefixedFilename).Str("version", version).Str("path", destPath).Msg("Custom update uploaded and ready to install")
 
 	response.Header().Set("Content-Type", "application/json")
 
@@ -508,6 +429,111 @@ func (h *updateHandler) handleUpdatesUpload(response http.ResponseWriter, reques
 
 		return
 	}
+}
+
+// parseUploadForm parses the multipart upload and returns the file and its header.
+// On error it writes the appropriate HTTP error and returns a non-nil error.
+func (h *updateHandler) parseUploadForm(request *http.Request, response http.ResponseWriter) (multipart.File, *multipart.FileHeader, error) {
+	err := request.ParseMultipartForm(500 << 20)
+	if err != nil {
+		h.log.Error().Err(err).Msg("failed to parse multipart form")
+		response.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(response).Encode(map[string]string{"error": "Failed to parse upload"}) //nolint:errchkjson // simple encoding
+
+		return nil, nil, err
+	}
+
+	file, header, err := request.FormFile("file")
+	if err != nil {
+		h.log.Error().Err(err).Msg("failed to get uploaded file")
+		response.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(response).Encode(map[string]string{"error": "No file uploaded"}) //nolint:errchkjson // simple encoding
+
+		return nil, nil, err
+	}
+
+	return file, header, nil
+}
+
+// tryExtractMetadata attempts to extract metadata from the uploaded archive.
+// It logs a warning and returns nil if extraction fails.
+func (h *updateHandler) tryExtractMetadata(file multipart.File, filename string) *UploadMetadata {
+	seeker, ok := file.(io.ReadSeeker)
+	if !ok {
+		return nil
+	}
+
+	metadata, err := h.extractMetadataFromArchive(seeker, filename)
+	if err != nil {
+		h.log.Warn().Err(err).Msg("failed to extract metadata from archive, using defaults")
+
+		return nil
+	}
+
+	h.log.Info().Str("version", metadata.Version).Str("platform", metadata.Platform).Msg("Extracted metadata from archive")
+
+	_, _ = seeker.Seek(0, io.SeekStart)
+
+	return metadata
+}
+
+// saveUploadedFile writes the uploaded file to the download directory and sets its permissions.
+// Returns the destination path, the prefixed filename, and any error (HTTP error written on failure).
+func (h *updateHandler) saveUploadedFile(file multipart.File, filename string, response http.ResponseWriter) (string, string, error) {
+	downloadDir := filepath.Join(h.config.GetAppBaseDir(), "data", "update", "downloads")
+
+	err := os.MkdirAll(downloadDir, 0o755)
+	if err != nil {
+		h.log.Error().Err(err).Msg("failed to create download directory")
+		response.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(response).Encode(map[string]string{"error": "Failed to create download directory"}) //nolint:errchkjson // simple encoding
+
+		return "", "", err
+	}
+
+	h.log.Debug().Msg("Cleaning up old uploads before saving new custom upload")
+	_ = h.updater.Downloader().CleanupDownloads()
+
+	prefixedFilename := "custom-" + filename
+	destPath := filepath.Join(downloadDir, prefixedFilename)
+
+	destFile, err := os.Create(destPath)
+	if err != nil {
+		h.log.Error().Err(err).Msg("failed to create destination file")
+		response.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(response).Encode(map[string]string{"error": "Failed to save upload"}) //nolint:errchkjson // simple encoding
+
+		return "", "", err
+	}
+
+	defer destFile.Close()
+
+	_, err = io.Copy(destFile, file)
+	if err != nil {
+		h.log.Error().Err(err).Msg("failed to write uploaded file")
+		response.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(response).Encode(map[string]string{"error": "Failed to write file"}) //nolint:errchkjson // simple encoding
+
+		return "", "", err
+	}
+
+	err = os.Chmod(destPath, 0o755)
+	if err != nil {
+		h.log.Warn().Err(err).Msg("failed to set executable permissions")
+	}
+
+	return destPath, prefixedFilename, nil
+}
+
+// resolveUploadMetadata returns version, changelog, and release date from metadata or defaults.
+func resolveUploadMetadata(metadata *UploadMetadata, filename string) (string, []string, time.Time) {
+	if metadata != nil {
+		return metadata.Version, metadata.Changelog, metadata.ReleaseDate
+	}
+
+	return "custom-" + filepath.Base(filename),
+		[]string{"Custom uploaded file: " + filename},
+		time.Now()
 }
 
 // handleUpdatesInstall triggers installation of a downloaded update (restarts the service).

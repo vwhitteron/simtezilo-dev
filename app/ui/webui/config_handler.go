@@ -24,13 +24,13 @@ type configHandler struct {
 	broadcaster *Broadcaster
 }
 
-func newConfigHandler(log zerolog.Logger, config *appconfig.Config, cal *calibrator.ToneGenerator, upd *updater.Updater, b *Broadcaster) *configHandler {
+func newConfigHandler(log zerolog.Logger, config *appconfig.Config, cal *calibrator.ToneGenerator, upd *updater.Updater, broadcaster *Broadcaster) *configHandler {
 	return &configHandler{
 		log:         log,
 		config:      config,
 		calibrator:  cal,
 		updater:     upd,
-		broadcaster: b,
+		broadcaster: broadcaster,
 	}
 }
 
@@ -261,6 +261,17 @@ func (h *configHandler) handleSetConfig(response http.ResponseWriter, request *h
 
 // applyConfigChanges applies the configuration changes using appropriate setter methods.
 func (h *configHandler) applyConfigChanges(configData map[string]any) []string {
+	dispatch := map[string]func(map[string]any) []string{
+		"app":         h.applyAppConfig,
+		"synthesizer": h.applySynthesizerConfig,
+		"haptics":     h.applyHapticsConfig,
+		"hardware":    h.applyHardwareConfig,
+		"telemetry":   h.applyTelemetryConfig,
+		"discord":     h.applyDiscordConfig,
+		"calibration": h.applyCalibrationConfig,
+		"pitRadio":    h.applyPitRadioConfig,
+	}
+
 	var errors []string
 
 	for section, sectionData := range configData {
@@ -271,26 +282,14 @@ func (h *configHandler) applyConfigChanges(configData map[string]any) []string {
 			continue
 		}
 
-		switch section {
-		case "app":
-			errors = append(errors, h.applyAppConfig(sectionMap)...)
-		case "synthesizer":
-			errors = append(errors, h.applySynthesizerConfig(sectionMap)...)
-		case "haptics":
-			errors = append(errors, h.applyHapticsConfig(sectionMap)...)
-		case "hardware":
-			errors = append(errors, h.applyHardwareConfig(sectionMap)...)
-		case "telemetry":
-			errors = append(errors, h.applyTelemetryConfig(sectionMap)...)
-		case "discord":
-			errors = append(errors, h.applyDiscordConfig(sectionMap)...)
-		case "calibration":
-			errors = append(errors, h.applyCalibrationConfig(sectionMap)...)
-		case "pitRadio":
-			errors = append(errors, h.applyPitRadioConfig(sectionMap)...)
-		default:
+		applyFn, known := dispatch[section]
+		if !known {
 			h.log.Debug().Str("section", section).Msg("configuration section not implemented for updates")
+
+			continue
 		}
+
+		errors = append(errors, applyFn(sectionMap)...)
 	}
 
 	return errors
@@ -300,363 +299,259 @@ func (h *configHandler) applyConfigChanges(configData map[string]any) []string {
 func (h *configHandler) applyAppConfig(config map[string]any) []string {
 	var errors []string
 
-	if language, ok := config["language"]; ok {
-		if langStr, ok := language.(string); ok {
-			h.config.SetAppLanguage(langStr)
-		} else {
-			errors = append(errors, "invalid language value")
+	errors = appendErr(errors, applyField(config, "language", "invalid language value", h.config.SetAppLanguage))
+	errors = appendErr(errors, applyField(config, "accent", "invalid accent value", h.config.SetAppAccent))
+	errors = appendErr(errors, applyField(config, "logLevel", "invalid log level value", h.config.SetAppLogLevel))
+	errors = appendErr(errors, applyField(config, "baseDir", "invalid base directory value", h.config.SetAppBaseDir))
+	errors = appendErr(errors, applyField(config, "enableDevTools", "invalid enableDevTools value", h.config.SetDevToolsEnabled))
+
+	errors = append(errors, applySubMap(config, "updates", "invalid updates configuration", h.applyUpdatesConfig)...)
+
+	return append(errors, h.applyVehicleDBFile(config)...)
+}
+
+// applyUpdatesConfig applies the nested updates sub-map.
+func (h *configHandler) applyUpdatesConfig(cfg map[string]any) []string {
+	var errors []string
+
+	errors = appendErr(errors, applyField(cfg, "autoCheck", "invalid autoCheck value", h.config.SetAppUpdateAutoCheck))
+	errors = appendErr(errors, applyField(cfg, "autoInstall", "invalid autoInstall value", h.config.SetAppUpdateAutoInstall))
+	errors = appendErr(errors, applyField[float64](cfg, "checkIntervalMinutes", "invalid checkIntervalMinutes value", func(f float64) {
+		h.config.SetAppUpdateCheckIntervalMinutes(int(f))
+	}))
+
+	errors = appendErr(errors, applyField(cfg, "channel", "invalid channel value", func(channelStr string) {
+		h.config.SetAppUpdateChannel(channelStr)
+		// TODO: this should probably be done outside of the config update function
+		if h.updater != nil {
+			h.updater.SetChannel(channelStr)
+			h.updater.CheckExistingDownloads()
 		}
-	}
+	}))
 
-	if accent, ok := config["accent"]; ok {
-		if accentStr, ok := accent.(string); ok {
-			h.config.SetAppAccent(accentStr)
-		} else {
-			errors = append(errors, "invalid accent value")
-		}
-	}
+	return errors
+}
 
-	if logLevel, ok := config["logLevel"]; ok {
-		if levelStr, ok := logLevel.(string); ok {
-			h.config.SetAppLogLevel(levelStr)
-		} else {
-			errors = append(errors, "invalid log level value")
-		}
-	}
-
-	if baseDir, ok := config["baseDir"]; ok {
-		if baseDirStr, ok := baseDir.(string); ok {
-			h.config.SetAppBaseDir(baseDirStr)
-		} else {
-			errors = append(errors, "invalid base directory value")
-		}
-	}
-
-	if enableDevTools, ok := config["enableDevTools"]; ok {
-		if enableDevToolsBool, ok := enableDevTools.(bool); ok {
-			h.config.SetDevToolsEnabled(enableDevToolsBool)
-		} else {
-			errors = append(errors, "invalid enableDevTools value")
-		}
-	}
-
-	if updates, ok := config["updates"]; ok {
-		if updatesMap, ok := updates.(map[string]any); ok {
-			if autoCheck, ok := updatesMap["autoCheck"]; ok {
-				if autoCheckBool, ok := autoCheck.(bool); ok {
-					h.config.SetAppUpdateAutoCheck(autoCheckBool)
-				} else {
-					errors = append(errors, "invalid autoCheck value")
-				}
-			}
-
-			if autoInstall, ok := updatesMap["autoInstall"]; ok {
-				if autoInstallBool, ok := autoInstall.(bool); ok {
-					h.config.SetAppUpdateAutoInstall(autoInstallBool)
-				} else {
-					errors = append(errors, "invalid autoInstall value")
-				}
-			}
-
-			if checkIntervalMinutes, ok := updatesMap["checkIntervalMinutes"]; ok {
-				if intervalFloat, ok := checkIntervalMinutes.(float64); ok {
-					h.config.SetAppUpdateCheckIntervalMinutes(int(intervalFloat))
-				} else {
-					errors = append(errors, "invalid checkIntervalMinutes value")
-				}
-			}
-
-			if channel, ok := updatesMap["channel"]; ok {
-				if channelStr, ok := channel.(string); ok {
-					h.config.SetAppUpdateChannel(channelStr)
-					// TODO: this should probably be done outside of the config update function
-					if h.updater != nil {
-						h.updater.SetChannel(channelStr)
-						h.updater.CheckExistingDownloads()
-					}
-				} else {
-					errors = append(errors, "invalid channel value")
-				}
-			}
-		} else {
-			errors = append(errors, "invalid updates configuration")
-		}
-	}
-
+// applyVehicleDBFile validates and applies the vehicleDBFile config key.
+func (h *configHandler) applyVehicleDBFile(config map[string]any) []string {
 	vehicleDBFile, fileOK := config["vehicleDBFile"]
 	if !fileOK {
-		return errors
+		return nil
 	}
 
 	vehicleDBFileStr, strOK := vehicleDBFile.(string)
 	if !strOK {
-		errors = append(errors, "invalid vehicle database file value")
-
-		return errors
+		return []string{"invalid vehicle database file value"}
 	}
 
 	if vehicleDBFileStr != "" {
 		_, err := os.Stat(vehicleDBFileStr)
 		if err != nil {
 			if os.IsNotExist(err) {
-				errors = append(errors, "vehicle database file not found: "+vehicleDBFileStr)
-			} else {
-				errors = append(errors, "cannot access vehicle database file: "+err.Error())
+				return []string{"vehicle database file not found: " + vehicleDBFileStr}
 			}
 
-			return errors
+			return []string{"cannot access vehicle database file: " + err.Error()}
 		}
 	}
 
 	h.config.SetAppVehicleDBFile(vehicleDBFileStr)
 
-	return errors
+	return nil
 }
 
 // applySynthesizerConfig applies synthesizer configuration changes.
 func (h *configHandler) applySynthesizerConfig(config map[string]any) []string {
-	var errors []string
-
 	h.log.Debug().Interface("synthConfig", config).Msg("applying synthesizer configuration")
 
-	if internalSampleRate, ok := config["internalSampleRateHz"]; ok {
-		h.log.Debug().Interface("value", internalSampleRate).Type("type", internalSampleRate).Msg("processing internalSampleRateHz")
+	var errors []string
 
-		if rateFloat, ok := internalSampleRate.(float64); ok {
+	errors = append(errors, h.applySynthSampleRates(config)...)
+	errors = append(errors, h.applySynthGainMuteFields(config)...)
+	errors = append(errors, applySubMap(config, "engineProfiles", "invalid engine profiles format", h.applyEngineProfiles)...)
+	errors = append(errors, h.applyEQEnabled(config)...)
+	errors = appendErr(errors, applyField(config, "enableDrx", "invalid DRX enabled value (expected bool)", h.config.SetSynthDRXEnabled))
+	errors = append(errors, h.applyEQBands(config)...)
+
+	return errors
+}
+
+// applySynthSampleRates applies the internalSampleRateHz and outputSampleRateHz fields with debug logging.
+func (h *configHandler) applySynthSampleRates(config map[string]any) []string {
+	var errors []string
+
+	if val, ok := config["internalSampleRateHz"]; ok {
+		h.log.Debug().Interface("value", val).Type("type", val).Msg("processing internalSampleRateHz")
+
+		if rateFloat, ok := val.(float64); ok {
 			h.config.SetSynthInternalSampleRateHz(int(rateFloat))
 			h.log.Debug().Int("rate", int(rateFloat)).Msg("set internal sample rate")
 		} else {
 			errors = append(errors, "invalid internal sample rate value")
 
-			h.log.Error().Interface("value", internalSampleRate).Msg("invalid internal sample rate value type")
+			h.log.Error().Interface("value", val).Msg("invalid internal sample rate value type")
 		}
 	}
 
-	if outputSampleRate, ok := config["outputSampleRateHz"]; ok {
-		h.log.Debug().Interface("value", outputSampleRate).Type("type", outputSampleRate).Msg("processing outputSampleRateHz")
+	if val, ok := config["outputSampleRateHz"]; ok {
+		h.log.Debug().Interface("value", val).Type("type", val).Msg("processing outputSampleRateHz")
 
-		if rateFloat, ok := outputSampleRate.(float64); ok {
+		if rateFloat, ok := val.(float64); ok {
 			h.config.SetSynthOutputSampleRateHz(int(rateFloat))
 			h.log.Debug().Int("rate", int(rateFloat)).Msg("set output sample rate")
 		} else {
 			errors = append(errors, "invalid output sample rate value")
 
-			h.log.Error().Interface("value", outputSampleRate).Msg("invalid output sample rate value type")
+			h.log.Error().Interface("value", val).Msg("invalid output sample rate value type")
 		}
 	}
 
-	if masterGain, ok := config["masterGain"]; ok {
-		if gainFloat, ok := masterGain.(float64); ok {
-			h.config.SetSynthMasterGain(gainFloat)
-		} else {
-			errors = append(errors, "invalid master gain value")
-		}
-	}
+	return errors
+}
 
-	if masterMute, ok := config["masterMute"]; ok {
-		if mute, ok := masterMute.(bool); ok {
-			h.config.SetSynthMasterMute(mute)
-		} else {
-			errors = append(errors, "invalid master gain mute value")
-		}
-	}
+// applySynthGainMuteFields applies all the scalar gain/mute/increment fields.
+func (h *configHandler) applySynthGainMuteFields(config map[string]any) []string {
+	var errors []string
 
-	if channel0Gain, ok := config["channel0Gain"]; ok {
-		if gainFloat, ok := channel0Gain.(float64); ok {
-			h.config.SetSynthChannelGain(0, gainFloat)
-		} else {
-			errors = append(errors, "invalid left channel gain value")
-		}
-	}
+	errors = appendErr(errors, applyField(config, "masterGain", "invalid master gain value", h.config.SetSynthMasterGain))
+	errors = appendErr(errors, applyField(config, "masterMute", "invalid master gain mute value", h.config.SetSynthMasterMute))
+	errors = appendErr(errors, applyField[float64](config, "channel0Gain", "invalid left channel gain value", func(f float64) {
+		h.config.SetSynthChannelGain(0, f)
+	}))
+	errors = appendErr(errors, applyField[bool](config, "channel0Mute", "invalid left channel mute value", func(b bool) {
+		h.config.SetSynthChannelMute(0, b)
+	}))
+	errors = appendErr(errors, applyField[float64](config, "channel1Gain", "invalid right channel gain value", func(f float64) {
+		h.config.SetSynthChannelGain(1, f)
+	}))
+	errors = appendErr(errors, applyField[bool](config, "channel1Mute", "invalid right channel mute value", func(b bool) {
+		h.config.SetSynthChannelMute(1, b)
+	}))
+	errors = appendErr(errors, applyField(config, "chassisGain", "invalid chassis gain value", h.config.SetSynthChassisGain))
+	errors = appendErr(errors, applyField(config, "chassisMute", "invalid chassis gain mute value", h.config.SetSynthChassisMute))
+	errors = appendErr(errors, applyField(config, "transmissionGain", "invalid transmission gain value", h.config.SetSynthTransmissionGain))
+	errors = appendErr(errors, applyField(config, "transmissionMute", "invalid transmission gain mute value", h.config.SetSynthTransmissionMute))
+	errors = appendErr(errors, applyField(config, "transmissionGainMinRace", "invalid transmission gain min race value", h.config.SetSynthTransmissionGainMinRace))
+	errors = appendErr(errors, applyField(config, "transmissionGainMinStreet", "invalid transmission gain min street value", h.config.SetSynthTransmissionGainMinStreet))
+	errors = appendErr(errors, applyField(config, "engineGain", "invalid engine gain value", h.config.SetSynthEngineGain))
+	errors = appendErr(errors, applyField(config, "engineMute", "invalid engine gain mute value", h.config.SetSynthEngineMute))
+	errors = appendErr(errors, applyField(config, "gainIncrement", "invalid gain increment value", h.config.SetSynthGainIncrement))
 
-	if channel0Mute, ok := config["channel0Mute"]; ok {
-		if mute, ok := channel0Mute.(bool); ok {
-			h.config.SetSynthChannelMute(0, mute)
-		} else {
-			errors = append(errors, "invalid left channel mute value")
-		}
-	}
+	return errors
+}
 
-	if channel1Gain, ok := config["channel1Gain"]; ok {
-		if gainFloat, ok := channel1Gain.(float64); ok {
-			h.config.SetSynthChannelGain(1, gainFloat)
-		} else {
-			errors = append(errors, "invalid right channel gain value")
-		}
-	}
+// applyEngineProfiles applies the engineProfiles sub-map.
+func (h *configHandler) applyEngineProfiles(profilesMap map[string]any) []string {
+	for name, profileData := range profilesMap {
+		if profileMap, ok := profileData.(map[string]any); ok {
+			profile := haptics.EngineProfile{}
 
-	if channel1Mute, ok := config["channel1Mute"]; ok {
-		if mute, ok := channel1Mute.(bool); ok {
-			h.config.SetSynthChannelMute(1, mute)
-		} else {
-			errors = append(errors, "invalid right channel mute value")
-		}
-	}
-
-	if chassisGain, ok := config["chassisGain"]; ok {
-		if gainFloat, ok := chassisGain.(float64); ok {
-			h.config.SetSynthChassisGain(gainFloat)
-		} else {
-			errors = append(errors, "invalid chassis gain value")
-		}
-	}
-
-	if chassisMute, ok := config["chassisMute"]; ok {
-		if mute, ok := chassisMute.(bool); ok {
-			h.config.SetSynthChassisMute(mute)
-		} else {
-			errors = append(errors, "invalid chassis gain mute value")
-		}
-	}
-
-	if transmissionGain, ok := config["transmissionGain"]; ok {
-		if gainFloat, ok := transmissionGain.(float64); ok {
-			h.config.SetSynthTransmissionGain(gainFloat)
-		} else {
-			errors = append(errors, "invalid transmission gain value")
-		}
-	}
-
-	if transmissionMute, ok := config["transmissionMute"]; ok {
-		if mute, ok := transmissionMute.(bool); ok {
-			h.config.SetSynthTransmissionMute(mute)
-		} else {
-			errors = append(errors, "invalid transmission gain mute value")
-		}
-	}
-
-	if transmissionGainMinRace, ok := config["transmissionGainMinRace"]; ok {
-		if gainFloat, ok := transmissionGainMinRace.(float64); ok {
-			h.config.SetSynthTransmissionGainMinRace(gainFloat)
-		} else {
-			errors = append(errors, "invalid transmission gain min race value")
-		}
-	}
-
-	if transmissionGainMinStreet, ok := config["transmissionGainMinStreet"]; ok {
-		if gainFloat, ok := transmissionGainMinStreet.(float64); ok {
-			h.config.SetSynthTransmissionGainMinStreet(gainFloat)
-		} else {
-			errors = append(errors, "invalid transmission gain min street value")
-		}
-	}
-
-	if engineGain, ok := config["engineGain"]; ok {
-		if gainFloat, ok := engineGain.(float64); ok {
-			h.config.SetSynthEngineGain(gainFloat)
-		} else {
-			errors = append(errors, "invalid engine gain value")
-		}
-	}
-
-	if engineMute, ok := config["engineMute"]; ok {
-		if mute, ok := engineMute.(bool); ok {
-			h.config.SetSynthEngineMute(mute)
-		} else {
-			errors = append(errors, "invalid engine gain mute value")
-		}
-	}
-
-	if gainIncrement, ok := config["gainIncrement"]; ok {
-		if incrementFloat, ok := gainIncrement.(float64); ok {
-			h.config.SetSynthGainIncrement(incrementFloat)
-		} else {
-			errors = append(errors, "invalid gain increment value")
-		}
-	}
-
-	if engineProfiles, ok := config["engineProfiles"]; ok {
-		if profilesMap, ok := engineProfiles.(map[string]any); ok {
-			for name, profileData := range profilesMap {
-				if profileMap, ok := profileData.(map[string]any); ok {
-					profile := haptics.EngineProfile{}
-
-					if pb, ok := profileMap["primaryBalance"].(float64); ok {
-						profile.PrimaryBalance = pb
-					}
-
-					if sb, ok := profileMap["secondaryBalance"].(float64); ok {
-						profile.SecondaryBalance = sb
-					}
-
-					if g, ok := profileMap["gain"].(float64); ok {
-						profile.Gain = g
-					}
-
-					if ps, ok := profileMap["pulseScale"].(float64); ok {
-						profile.PulseScale = ps
-					}
-
-					h.config.SetSynthEngineProfile(name, profile)
-				}
+			if pb, ok := profileMap["primaryBalance"].(float64); ok {
+				profile.PrimaryBalance = pb
 			}
-		} else {
-			errors = append(errors, "invalid engine profiles format")
-		}
-	}
 
-	if eqEnabled, ok := config["enableEQ"]; ok {
-		if enabledArray, ok := eqEnabled.([]any); ok {
-			for channel, val := range enabledArray {
-				if enabled, ok := val.(bool); ok {
-					h.config.SetSynthChannelEqEnabled(channel, enabled)
-				} else {
-					errors = append(errors, fmt.Sprintf("invalid EQ enabled value for channel %d", channel))
-				}
+			if sb, ok := profileMap["secondaryBalance"].(float64); ok {
+				profile.SecondaryBalance = sb
 			}
-		} else {
-			errors = append(errors, "invalid EQ enabled value (expected array)")
-		}
-	}
 
-	if drxEnabled, ok := config["enableDrx"]; ok {
-		if enabled, ok := drxEnabled.(bool); ok {
-			h.config.SetSynthDRXEnabled(enabled)
-		} else {
-			errors = append(errors, "invalid DRX enabled value (expected bool)")
-		}
-	}
-
-	if eq, ok := config["eq"]; ok {
-		if channelArray, ok := eq.([]any); ok {
-			for channel, channelVal := range channelArray {
-				if eqArray, ok := channelVal.([]any); ok {
-					eqBands := make([]appconfig.EQBand, 0, len(eqArray))
-					for idx, val := range eqArray {
-						if bandMap, ok := val.(map[string]any); ok {
-							freq, freqOk := bandMap["frequency"].(float64)
-							gain, gainOk := bandMap["gain"].(float64)
-							qVal, qOk := bandMap["q"].(float64)
-
-							if !freqOk || !gainOk || !qOk {
-								errors = append(errors, fmt.Sprintf("invalid EQ band %d for channel %d: missing or invalid fields", idx+1, channel))
-
-								continue
-							}
-
-							eqBands = append(eqBands, appconfig.EQBand{
-								Frequency: freq,
-								Gain:      gain,
-								Q:         qVal,
-							})
-						} else {
-							errors = append(errors, fmt.Sprintf("invalid EQ band %d format for channel %d", idx+1, channel))
-
-							continue
-						}
-					}
-
-					if len(eqBands) == 8 {
-						h.config.SetSynthChannelEq(channel, eqBands)
-					} else {
-						errors = append(errors, fmt.Sprintf("EQ for channel %d must have exactly 8 bands, got %d", channel, len(eqBands)))
-					}
-				} else {
-					errors = append(errors, fmt.Sprintf("invalid EQ format for channel %d", channel))
-				}
+			if g, ok := profileMap["gain"].(float64); ok {
+				profile.Gain = g
 			}
+
+			if ps, ok := profileMap["pulseScale"].(float64); ok {
+				profile.PulseScale = ps
+			}
+
+			h.config.SetSynthEngineProfile(name, profile)
+		}
+	}
+
+	return nil
+}
+
+// applyEQEnabled applies the enableEQ array field.
+func (h *configHandler) applyEQEnabled(config map[string]any) []string {
+	eqEnabled, found := config["enableEQ"]
+	if !found {
+		return nil
+	}
+
+	enabledArray, valid := eqEnabled.([]any)
+	if !valid {
+		return []string{"invalid EQ enabled value (expected array)"}
+	}
+
+	var errors []string
+
+	for channel, val := range enabledArray {
+		if enabled, ok := val.(bool); ok {
+			h.config.SetSynthChannelEqEnabled(channel, enabled)
 		} else {
-			errors = append(errors, "invalid EQ format (expected array of channel arrays)")
+			errors = append(errors, fmt.Sprintf("invalid EQ enabled value for channel %d", channel))
+		}
+	}
+
+	return errors
+}
+
+// applyEQBands applies the eq channel-band array field.
+func (h *configHandler) applyEQBands(config map[string]any) []string {
+	eq, found := config["eq"]
+	if !found {
+		return nil
+	}
+
+	channelArray, valid := eq.([]any)
+	if !valid {
+		return []string{"invalid EQ format (expected array of channel arrays)"}
+	}
+
+	var errors []string
+
+	for channel, channelVal := range channelArray {
+		errors = append(errors, h.applyEQChannel(channel, channelVal)...)
+	}
+
+	return errors
+}
+
+// applyEQChannel applies one channel's EQ band array.
+func (h *configHandler) applyEQChannel(channel int, channelVal any) []string {
+	eqArray, ok := channelVal.([]any)
+	if !ok {
+		return []string{fmt.Sprintf("invalid EQ format for channel %d", channel)}
+	}
+
+	var errors []string
+
+	eqBands := make([]appconfig.EQBand, 0, len(eqArray))
+
+	for idx, val := range eqArray {
+		bandMap, ok := val.(map[string]any)
+		if !ok {
+			errors = append(errors, fmt.Sprintf("invalid EQ band %d format for channel %d", idx+1, channel))
+
+			continue
+		}
+
+		freq, freqOk := bandMap["frequency"].(float64)
+		gain, gainOk := bandMap["gain"].(float64)
+		qVal, qOk := bandMap["q"].(float64)
+
+		if !freqOk || !gainOk || !qOk {
+			errors = append(errors, fmt.Sprintf("invalid EQ band %d for channel %d: missing or invalid fields", idx+1, channel))
+
+			continue
+		}
+
+		eqBands = append(eqBands, appconfig.EQBand{Frequency: freq, Gain: gain, Q: qVal})
+	}
+
+	if len(errors) == 0 {
+		if len(eqBands) == 8 {
+			h.config.SetSynthChannelEq(channel, eqBands)
+		} else {
+			errors = append(errors, fmt.Sprintf("EQ for channel %d must have exactly 8 bands, got %d", channel, len(eqBands)))
 		}
 	}
 
@@ -664,102 +559,31 @@ func (h *configHandler) applySynthesizerConfig(config map[string]any) []string {
 }
 
 // applyHapticsConfig applies haptics configuration changes.
-//
-//nolint:cyclop // function is easy to understand
 func (h *configHandler) applyHapticsConfig(config map[string]any) []string {
 	var errors []string
 
-	parseFloat := func(val any, key string) (float64, bool) {
-		f, ok := val.(float64)
-		if !ok {
-			errors = append(errors, "invalid "+key+" value")
-		}
-
-		return f, ok
-	}
-
-	parseBool := func(val any, key string) (bool, bool) {
-		b, ok := val.(bool)
-		if !ok {
-			errors = append(errors, "invalid "+key+" value")
-		}
-
-		return b, ok
-	}
-
-	if dynamicTransmission, ok := config["dynamicTransmissionFeedback"]; ok {
-		if dynamicBool, ok := parseBool(dynamicTransmission, "dynamic transmission feedback"); ok {
-			h.config.SetHapticsDynamicTransFeedbackEnabled(dynamicBool)
-		}
-	}
-
-	if jerkCurve, ok := config["jerkCurve"]; ok {
-		if curveFloat, ok := parseFloat(jerkCurve, "jerk curve"); ok {
-			h.config.SetHapticsJerkCurve(int(curveFloat * 1000.0))
-		}
-	}
-
-	if jerkMax, ok := config["jerkMax"]; ok {
-		if maxFloat, ok := parseFloat(jerkMax, "jerk max"); ok {
-			h.config.SetHapticsJerkMax(int(maxFloat))
-		}
-	}
-
-	if snapCurve, ok := config["snapCurve"]; ok {
-		if curveFloat, ok := parseFloat(snapCurve, "snap curve"); ok {
-			h.config.SetHapticsSnapCurve(int(curveFloat * 1000.0))
-		}
-	}
-
-	if snapMax, ok := config["snapMax"]; ok {
-		if maxFloat, ok := parseFloat(snapMax, "snap max"); ok {
-			h.config.SetHapticsSnapMax(int(maxFloat))
-		}
-	}
-
-	if transmissionCurve, ok := config["dynamicTransmissionCurve"]; ok {
-		if curveFloat, ok := parseFloat(transmissionCurve, "transmission curve"); ok {
-			h.config.SetHapticsTransmissionCurve(int(curveFloat * 1000.0))
-		}
-	}
-
-	if transmissionGforceMax, ok := config["dynamicTransmissionGforceMax"]; ok {
-		if gforceFloat, ok := parseFloat(transmissionGforceMax, "transmission G-force max"); ok {
-			h.config.SetHapticsTransmissionGforceMax(gforceFloat)
-		}
-	}
-
-	if pulseMaxAmplitude, ok := config["pulseMaxAmplitude"]; ok {
-		if amplitudeFloat, ok := parseFloat(pulseMaxAmplitude, "pulse max amplitude"); ok {
-			h.config.SetHapticsPulseMaxAmplitude(amplitudeFloat)
-		}
-	}
-
-	if pulseMaxFreq, ok := config["pulseMaxFrequencyHz"]; ok {
-		if freqFloat, ok := parseFloat(pulseMaxFreq, "pulse max frequency"); ok {
-			h.config.SetHapticsPulseMaxFrequencyHz(freqFloat)
-		}
-	}
-
-	if pulseMinFreq, ok := config["pulseMinFrequencyHz"]; ok {
-		if freqFloat, ok := parseFloat(pulseMinFreq, "pulse min frequency"); ok {
-			h.config.SetHapticsPulseMinFrequencyHz(freqFloat)
-		}
-	}
-
-	if enableReplay, ok := config["enableReplay"]; ok {
-		if replayBool, ok := parseBool(enableReplay, "enable replay"); ok {
-			h.config.SetHapticsEnableReplay(replayBool)
-		}
-	}
-
-	if pitRadioOutput, ok := config["pitRadioOutput"]; ok {
-		if outputStr, ok := pitRadioOutput.(string); ok {
-			h.config.SetPitRadioOutput(outputStr)
-		} else {
-			errors = append(errors, "invalid pit radio output value")
-		}
-	}
+	errors = appendErr(errors, applyField(config, "dynamicTransmissionFeedback", "invalid dynamic transmission feedback value", h.config.SetHapticsDynamicTransFeedbackEnabled))
+	errors = appendErr(errors, applyField[float64](config, "jerkCurve", "invalid jerk curve value", func(f float64) {
+		h.config.SetHapticsJerkCurve(int(f * 1000.0))
+	}))
+	errors = appendErr(errors, applyField[float64](config, "jerkMax", "invalid jerk max value", func(f float64) {
+		h.config.SetHapticsJerkMax(int(f))
+	}))
+	errors = appendErr(errors, applyField[float64](config, "snapCurve", "invalid snap curve value", func(f float64) {
+		h.config.SetHapticsSnapCurve(int(f * 1000.0))
+	}))
+	errors = appendErr(errors, applyField[float64](config, "snapMax", "invalid snap max value", func(f float64) {
+		h.config.SetHapticsSnapMax(int(f))
+	}))
+	errors = appendErr(errors, applyField[float64](config, "dynamicTransmissionCurve", "invalid transmission curve value", func(f float64) {
+		h.config.SetHapticsTransmissionCurve(int(f * 1000.0))
+	}))
+	errors = appendErr(errors, applyField(config, "dynamicTransmissionGforceMax", "invalid transmission G-force max value", h.config.SetHapticsTransmissionGforceMax))
+	errors = appendErr(errors, applyField(config, "pulseMaxAmplitude", "invalid pulse max amplitude value", h.config.SetHapticsPulseMaxAmplitude))
+	errors = appendErr(errors, applyField(config, "pulseMaxFrequencyHz", "invalid pulse max frequency value", h.config.SetHapticsPulseMaxFrequencyHz))
+	errors = appendErr(errors, applyField(config, "pulseMinFrequencyHz", "invalid pulse min frequency value", h.config.SetHapticsPulseMinFrequencyHz))
+	errors = appendErr(errors, applyField(config, "enableReplay", "invalid enable replay value", h.config.SetHapticsEnableReplay))
+	errors = appendErr(errors, applyField(config, "pitRadioOutput", "invalid pit radio output value", h.config.SetPitRadioOutput))
 
 	return errors
 }
@@ -768,69 +592,52 @@ func (h *configHandler) applyHapticsConfig(config map[string]any) []string {
 func (h *configHandler) applyCalibrationConfig(config map[string]any) []string {
 	var errors []string
 
-	if enabled, ok := config["enabled"]; ok {
-		if enabledBool, ok := enabled.(bool); ok {
-			h.calibrator.SetEnabled(enabledBool)
-
-			calibrationState := map[string]any{
-				"enabled":       h.calibrator.IsEnabled(),
-				"frequency":     h.calibrator.GetSweepFrequency(),
-				"volume":        h.calibrator.GetGain(),
-				"channel":       string(h.calibrator.GetChannel()),
-				"sweeping":      h.calibrator.IsSweeping(),
-				"sweepMin":      h.calibrator.GetSweepMin(),
-				"sweepMax":      h.calibrator.GetSweepMax(),
-				"sweepDuration": h.calibrator.GetSweepDuration(),
-			}
-
-			msg := WSMessage{
-				Type:      "calibration",
-				Timestamp: time.Now().UnixMilli(),
-				Data:      calibrationState,
-			}
-
-			encodedData, err := json.Marshal(msg)
-			if err == nil {
-				h.broadcaster.broadcast(encodedData, "calibration")
-			}
-		} else {
-			errors = append(errors, "invalid calibration enabled value")
-		}
-	}
-
-	if frequency, ok := config["frequency"]; ok {
-		if freqFloat, ok := frequency.(float64); ok {
-			h.calibrator.SetFrequency(freqFloat)
-		} else {
-			errors = append(errors, "invalid calibration frequency value")
-		}
-	}
-
-	if sweepMin, ok := config["sweepMin"]; ok {
-		if minFloat, ok := sweepMin.(float64); ok {
-			h.calibrator.SetSweepMin(minFloat)
-		} else {
-			errors = append(errors, "invalid calibration sweepMin value")
-		}
-	}
-
-	if sweepMax, ok := config["sweepMax"]; ok {
-		if maxFloat, ok := sweepMax.(float64); ok {
-			h.calibrator.SetSweepMax(maxFloat)
-		} else {
-			errors = append(errors, "invalid calibration sweepMax value")
-		}
-	}
-
-	if sweepDuration, ok := config["sweepDuration"]; ok {
-		if durationFloat, ok := sweepDuration.(float64); ok {
-			h.calibrator.SetSweepDuration(durationFloat)
-		} else {
-			errors = append(errors, "invalid calibration sweepDuration value")
-		}
-	}
+	errors = append(errors, h.applyCalibrationEnabled(config)...)
+	errors = appendErr(errors, applyField(config, "frequency", "invalid calibration frequency value", h.calibrator.SetFrequency))
+	errors = appendErr(errors, applyField(config, "sweepMin", "invalid calibration sweepMin value", h.calibrator.SetSweepMin))
+	errors = appendErr(errors, applyField(config, "sweepMax", "invalid calibration sweepMax value", h.calibrator.SetSweepMax))
+	errors = appendErr(errors, applyField(config, "sweepDuration", "invalid calibration sweepDuration value", h.calibrator.SetSweepDuration))
 
 	return errors
+}
+
+// applyCalibrationEnabled sets the calibration enabled flag and broadcasts the new state.
+func (h *configHandler) applyCalibrationEnabled(config map[string]any) []string {
+	enabled, found := config["enabled"]
+	if !found {
+		return nil
+	}
+
+	enabledBool, valid := enabled.(bool)
+	if !valid {
+		return []string{"invalid calibration enabled value"}
+	}
+
+	h.calibrator.SetEnabled(enabledBool)
+
+	calibrationState := map[string]any{
+		"enabled":       h.calibrator.IsEnabled(),
+		"frequency":     h.calibrator.GetSweepFrequency(),
+		"volume":        h.calibrator.GetGain(),
+		"channel":       string(h.calibrator.GetChannel()),
+		"sweeping":      h.calibrator.IsSweeping(),
+		"sweepMin":      h.calibrator.GetSweepMin(),
+		"sweepMax":      h.calibrator.GetSweepMax(),
+		"sweepDuration": h.calibrator.GetSweepDuration(),
+	}
+
+	msg := WSMessage{
+		Type:      "calibration",
+		Timestamp: time.Now().UnixMilli(),
+		Data:      calibrationState,
+	}
+
+	encodedData, err := json.Marshal(msg)
+	if err == nil {
+		h.broadcaster.broadcast(encodedData, "calibration")
+	}
+
+	return nil
 }
 
 // checkRestartRequired checks if any configuration changes require a restart.
@@ -862,45 +669,11 @@ func (h *configHandler) checkRestartRequired(configData map[string]any) bool {
 func (h *configHandler) applyFuelConfig(config map[string]any) []string {
 	var errors []string
 
-	if monitoringEnabled, ok := config["enabled"]; ok {
-		if enabledBool, ok := monitoringEnabled.(bool); ok {
-			h.config.SetPitRadioFuelMonitoringEnabled(enabledBool)
-		} else {
-			errors = append(errors, "invalid fuel monitoring enabled value")
-		}
-	}
-
-	if preWarnLaps, ok := config["preWarnNotifyLaps"]; ok {
-		if lapsFloat, ok := preWarnLaps.(float64); ok {
-			h.config.SetPitRadioFuelPreWarnNotifyLaps(lapsFloat)
-		} else {
-			errors = append(errors, "invalid pre-warn notify laps value")
-		}
-	}
-
-	if strategyLaps, ok := config["strategyNotifyLaps"]; ok {
-		if lapsFloat, ok := strategyLaps.(float64); ok {
-			h.config.SetPitRadioFuelStrategyNotifyLaps(lapsFloat)
-		} else {
-			errors = append(errors, "invalid strategy notify laps value")
-		}
-	}
-
-	if safetyMarginLaps, ok := config["rangeSafetyMarginLaps"]; ok {
-		if marginFloat, ok := safetyMarginLaps.(float64); ok {
-			h.config.SetPitRadioFuelRangeSafetyMarginLaps(marginFloat)
-		} else {
-			errors = append(errors, "invalid range safety margin laps value")
-		}
-	}
-
-	if safetyMarginMetres, ok := config["rangeSafetyMarginMetres"]; ok {
-		if marginFloat, ok := safetyMarginMetres.(float64); ok {
-			h.config.SetPitRadioFuelRangeSafetyMarginMetres(marginFloat)
-		} else {
-			errors = append(errors, "invalid range safety margin metres value")
-		}
-	}
+	errors = appendErr(errors, applyField(config, "enabled", "invalid fuel monitoring enabled value", h.config.SetPitRadioFuelMonitoringEnabled))
+	errors = appendErr(errors, applyField(config, "preWarnNotifyLaps", "invalid pre-warn notify laps value", h.config.SetPitRadioFuelPreWarnNotifyLaps))
+	errors = appendErr(errors, applyField(config, "strategyNotifyLaps", "invalid strategy notify laps value", h.config.SetPitRadioFuelStrategyNotifyLaps))
+	errors = appendErr(errors, applyField(config, "rangeSafetyMarginLaps", "invalid range safety margin laps value", h.config.SetPitRadioFuelRangeSafetyMarginLaps))
+	errors = appendErr(errors, applyField(config, "rangeSafetyMarginMetres", "invalid range safety margin metres value", h.config.SetPitRadioFuelRangeSafetyMarginMetres))
 
 	return errors
 }
@@ -1007,77 +780,23 @@ func (h *configHandler) applyDiscordConfig(config map[string]any) []string {
 func (h *configHandler) applyNotificationsConfig(config map[string]any) []string {
 	var errors []string
 
-	if raceProgressEnabled, ok := config["enableRaceProgress"]; ok {
-		if enabledBool, ok := raceProgressEnabled.(bool); ok {
-			h.config.SetPitRadioNotifyRaceProgressEnabled(enabledBool)
-		} else {
-			errors = append(errors, "invalid race progress enabled value")
-		}
-	}
-
-	if raceProgressMinLaps, ok := config["raceProgressMinLaps"]; ok {
-		if lapsFloat, ok := raceProgressMinLaps.(float64); ok {
-			h.config.SetPitRadioNotifyRaceProgressMinLaps(int(lapsFloat))
-		} else {
-			errors = append(errors, "invalid race progress min laps value")
-		}
-	}
-
-	if raceProgressIntervalPc, ok := config["raceProgressIntervalPc"]; ok {
-		if intervalFloat, ok := raceProgressIntervalPc.(float64); ok {
-			h.config.SetPitRadioNotifyRaceProgressIntervalPc(int(intervalFloat))
-		} else {
-			errors = append(errors, "invalid race progress interval percentage value")
-		}
-	}
-
-	if raceLapsEnabled, ok := config["enableRaceLaps"]; ok {
-		if enabledBool, ok := raceLapsEnabled.(bool); ok {
-			h.config.SetPitRadioNotifyRaceLapsEnabled(enabledBool)
-		} else {
-			errors = append(errors, "invalid race laps enabled value")
-		}
-	}
-
-	if raceLapsIntervalLaps, ok := config["raceLapsIntervalLaps"]; ok {
-		if intervalFloat, ok := raceLapsIntervalLaps.(float64); ok {
-			h.config.SetPitRadioNotifyRaceLapsIntervalLaps(int(intervalFloat))
-		} else {
-			errors = append(errors, "invalid race laps interval laps value")
-		}
-	}
-
-	if raceLapsCountdownLaps, ok := config["raceLapsCountdownLaps"]; ok {
-		if countdownFloat, ok := raceLapsCountdownLaps.(float64); ok {
-			h.config.SetPitRadioNotifyRaceLapsCountdownLaps(int(countdownFloat))
-		} else {
-			errors = append(errors, "invalid race laps countdown laps value")
-		}
-	}
-
-	if lapTimesEnabled, ok := config["enableLapTimes"]; ok {
-		if enabledBool, ok := lapTimesEnabled.(bool); ok {
-			h.config.SetPitRadioNotifyLapTimesEnabled(enabledBool)
-		} else {
-			errors = append(errors, "invalid lap times enabled value")
-		}
-	}
-
-	if lapTimesMaxDelta, ok := config["lapTimesMaxDeltaSeconds"]; ok {
-		if deltaFloat, ok := lapTimesMaxDelta.(float64); ok {
-			h.config.SetPitRadioNotifyLapTimesMaxDeltaSeconds(deltaFloat)
-		} else {
-			errors = append(errors, "invalid lap times max delta seconds value")
-		}
-	}
-
-	if circuitMatchingEnabled, ok := config["enableCircuitMatching"]; ok {
-		if enabledBool, ok := circuitMatchingEnabled.(bool); ok {
-			h.config.SetPitRadioNotifyCircuitMatchingEnabled(enabledBool)
-		} else {
-			errors = append(errors, "invalid circuit matching enabled value")
-		}
-	}
+	errors = appendErr(errors, applyField(config, "enableRaceProgress", "invalid race progress enabled value", h.config.SetPitRadioNotifyRaceProgressEnabled))
+	errors = appendErr(errors, applyField[float64](config, "raceProgressMinLaps", "invalid race progress min laps value", func(f float64) {
+		h.config.SetPitRadioNotifyRaceProgressMinLaps(int(f))
+	}))
+	errors = appendErr(errors, applyField[float64](config, "raceProgressIntervalPc", "invalid race progress interval percentage value", func(f float64) {
+		h.config.SetPitRadioNotifyRaceProgressIntervalPc(int(f))
+	}))
+	errors = appendErr(errors, applyField(config, "enableRaceLaps", "invalid race laps enabled value", h.config.SetPitRadioNotifyRaceLapsEnabled))
+	errors = appendErr(errors, applyField[float64](config, "raceLapsIntervalLaps", "invalid race laps interval laps value", func(f float64) {
+		h.config.SetPitRadioNotifyRaceLapsIntervalLaps(int(f))
+	}))
+	errors = appendErr(errors, applyField[float64](config, "raceLapsCountdownLaps", "invalid race laps countdown laps value", func(f float64) {
+		h.config.SetPitRadioNotifyRaceLapsCountdownLaps(int(f))
+	}))
+	errors = appendErr(errors, applyField(config, "enableLapTimes", "invalid lap times enabled value", h.config.SetPitRadioNotifyLapTimesEnabled))
+	errors = appendErr(errors, applyField(config, "lapTimesMaxDeltaSeconds", "invalid lap times max delta seconds value", h.config.SetPitRadioNotifyLapTimesMaxDeltaSeconds))
+	errors = appendErr(errors, applyField(config, "enableCircuitMatching", "invalid circuit matching enabled value", h.config.SetPitRadioNotifyCircuitMatchingEnabled))
 
 	return errors
 }
@@ -1086,57 +805,14 @@ func (h *configHandler) applyNotificationsConfig(config map[string]any) []string
 func (h *configHandler) applyPitRadioConfig(config map[string]any) []string {
 	var errors []string
 
-	if enabled, ok := config["enabled"]; ok {
-		if enabledBool, ok := enabled.(bool); ok {
-			h.config.SetPitRadioEnabled(enabledBool)
-		} else {
-			errors = append(errors, "invalid pit radio enabled value")
-		}
-	}
-
-	if intervalMs, ok := config["messageSendIntervalMs"]; ok {
-		if intervalFloat, ok := intervalMs.(float64); ok {
-			h.config.SetPitRadioMessageSendIntervalMs(int(intervalFloat))
-		} else {
-			errors = append(errors, "invalid message send interval value")
-		}
-	}
-
-	if notificationsConfig, ok := config["notifications"]; ok {
-		if notificationsMap, ok := notificationsConfig.(map[string]any); ok {
-			notificationsErrors := h.applyNotificationsConfig(notificationsMap)
-			errors = append(errors, notificationsErrors...)
-		} else {
-			errors = append(errors, "invalid notifications configuration structure")
-		}
-	}
-
-	if discordConfig, ok := config["discord"]; ok {
-		if discordMap, ok := discordConfig.(map[string]any); ok {
-			discordErrors := h.applyDiscordConfig(discordMap)
-			errors = append(errors, discordErrors...)
-		} else {
-			errors = append(errors, "invalid discord configuration structure")
-		}
-	}
-
-	if fuelMonitoringConfig, ok := config["fuelMonitoring"]; ok {
-		if fuelMap, ok := fuelMonitoringConfig.(map[string]any); ok {
-			fuelErrors := h.applyFuelConfig(fuelMap)
-			errors = append(errors, fuelErrors...)
-		} else {
-			errors = append(errors, "invalid fuel monitoring configuration structure")
-		}
-	}
-
-	if tyreMonitoringConfig, ok := config["tyreMonitoring"]; ok {
-		if tyreMap, ok := tyreMonitoringConfig.(map[string]any); ok {
-			tyreErrors := h.applyTyresConfig(tyreMap)
-			errors = append(errors, tyreErrors...)
-		} else {
-			errors = append(errors, "invalid tyre monitoring configuration structure")
-		}
-	}
+	errors = appendErr(errors, applyField(config, "enabled", "invalid pit radio enabled value", h.config.SetPitRadioEnabled))
+	errors = appendErr(errors, applyField[float64](config, "messageSendIntervalMs", "invalid message send interval value", func(f float64) {
+		h.config.SetPitRadioMessageSendIntervalMs(int(f))
+	}))
+	errors = append(errors, applySubMap(config, "notifications", "invalid notifications configuration structure", h.applyNotificationsConfig)...)
+	errors = append(errors, applySubMap(config, "discord", "invalid discord configuration structure", h.applyDiscordConfig)...)
+	errors = append(errors, applySubMap(config, "fuelMonitoring", "invalid fuel monitoring configuration structure", h.applyFuelConfig)...)
+	errors = append(errors, applySubMap(config, "tyreMonitoring", "invalid tyre monitoring configuration structure", h.applyTyresConfig)...)
 
 	return errors
 }

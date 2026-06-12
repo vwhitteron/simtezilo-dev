@@ -35,7 +35,7 @@ func createTestWebUI() *WebUI {
 	logger := zerolog.Nop()
 	log := logger.With().Str("component", "web ui").Logger()
 
-	b := &Broadcaster{
+	broadcaster := &Broadcaster{
 		log:                log,
 		telemetryChartFeed: make(chan map[string]float32, 10),
 		vehicleInfoFeed:    make(chan map[string]any, 10),
@@ -67,13 +67,13 @@ func createTestWebUI() *WebUI {
 	}
 
 	webUI := &WebUI{
-		log:        log,
-		port:       8080,
-		broadcaster: b,
-		sysHandler: sys,
+		log:         log,
+		port:        8080,
+		broadcaster: broadcaster,
+		sysHandler:  sys,
 	}
 
-	go b.run()
+	go broadcaster.run()
 
 	return webUI
 }

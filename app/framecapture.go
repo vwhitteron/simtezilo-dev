@@ -29,6 +29,8 @@ func (t *frameTapDisplay) Write(content *display.Content) error {
 
 // wrapDisplayFrameTap returns the display wrapped so that every rendered frame is
 // mirrored to the web UI screen feed.
+//
+//nolint:ireturn // wrapping a hardware.Display must return the same interface
 func (a *App) wrapDisplayFrameTap(d hardware.Display) hardware.Display {
 	return &frameTapDisplay{Display: d, sink: a.captureScreenFrame}
 }
@@ -86,26 +88,8 @@ func (a *App) captureScreenFrame(canvas *image.RGBA) {
 // auxiliary buttons 1, 2 and 3. It returns false for an unknown key or when the
 // event queue is full.
 func (a *App) sendHIDInput(key string) bool {
-	var event ui.HIDInputEvent
-
-	switch key {
-	case "up":
-		event = ui.HIDInputUp
-	case "down":
-		event = ui.HIDInputDown
-	case "left":
-		event = ui.HIDInputLeft
-	case "right":
-		event = ui.HIDInputRight
-	case "enter":
-		event = ui.HIDInputEnter
-	case "1": // Button 1
-		event = ui.HIDInputEscape
-	case "2": // Button 2
-		event = ui.HIDInputNone
-	case "3": // Button 3
-		event = ui.HIDInputPower
-	default:
+	event, known := hidKeyAction(key)
+	if !known {
 		return false
 	}
 
@@ -119,4 +103,24 @@ func (a *App) sendHIDInput(key string) bool {
 	default:
 		return false
 	}
+}
+
+// hidKeyAction maps a web UI key name to its HID input event.
+// Button 1 → Escape, Button 2 → None, Button 3 → Power.
+// Returns (event, true) on a known key, or (0, false) otherwise.
+func hidKeyAction(key string) (ui.HIDInputEvent, bool) {
+	keyMap := map[string]ui.HIDInputEvent{
+		"up":    ui.HIDInputUp,
+		"down":  ui.HIDInputDown,
+		"left":  ui.HIDInputLeft,
+		"right": ui.HIDInputRight,
+		"enter": ui.HIDInputEnter,
+		"1":     ui.HIDInputEscape,
+		"2":     ui.HIDInputNone,
+		"3":     ui.HIDInputPower,
+	}
+
+	event, known := keyMap[key]
+
+	return event, known
 }
