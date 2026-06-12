@@ -512,7 +512,7 @@ async function initSciChart() {
     };
 
     const createStandardChart = async (containerId) => {
-        const { sciChartSurface, wasmContext } = await SciChart.SciChartSurface.create(containerId);
+        const { sciChartSurface, wasmContext } = await SciChart.SciChartSurface.createSingle(containerId);
 
         const xAxis = createAxisWithOptions(wasmContext, { autoRange: SciChart.EAutoRange.Never });
         const yAxis = createAxisWithOptions(wasmContext, { autoRange: SciChart.EAutoRange.Always });
@@ -529,7 +529,7 @@ async function initSciChart() {
             title: 'RPM / Speed',
             titleKey: 'runmode.telemetry.chart.rpmspeed',
             create: async (containerId) => {
-                const { sciChartSurface, wasmContext } = await SciChart.SciChartSurface.create(containerId);
+                const { sciChartSurface, wasmContext } = await SciChart.SciChartSurface.createSingle(containerId);
 
                 addZoomModifiers(sciChartSurface);
 
@@ -588,7 +588,7 @@ async function initSciChart() {
             title: 'Throttle / Brake',
             titleKey: 'runmode.telemetry.chart.throttlebrake',
             create: async (containerId) => {
-                const { sciChartSurface, wasmContext } = await SciChart.SciChartSurface.create(containerId);
+                const { sciChartSurface, wasmContext } = await SciChart.SciChartSurface.createSingle(containerId);
 
                 addZoomModifiers(sciChartSurface);
 
@@ -634,7 +634,7 @@ async function initSciChart() {
             title: 'Tyre Temperature',
             titleKey: 'runmode.telemetry.chart.tyretemperature',
             create: async (containerId) => {
-                const { sciChartSurface, wasmContext } = await SciChart.SciChartSurface.create(containerId);
+                const { sciChartSurface, wasmContext } = await SciChart.SciChartSurface.createSingle(containerId);
 
                 addZoomModifiers(sciChartSurface);
 
@@ -685,7 +685,7 @@ async function initSciChart() {
             title: 'Fuel Range/Rate',
             titleKey: 'runmode.telemetry.chart.fuelrange',
             create: async (containerId) => {
-                const { sciChartSurface, wasmContext } = await SciChart.SciChartSurface.create(containerId);
+                const { sciChartSurface, wasmContext } = await SciChart.SciChartSurface.createSingle(containerId);
 
                 addZoomModifiers(sciChartSurface);
 
@@ -954,7 +954,7 @@ async function initSciChart() {
             title: 'Left Channel Output',
             titleKey: 'runmode.telemetry.chart.channeloutputleft',
             create: async (containerId) => {
-                const { sciChartSurface, wasmContext } = await SciChart.SciChartSurface.create(containerId);
+                const { sciChartSurface, wasmContext } = await SciChart.SciChartSurface.createSingle(containerId);
 
                 addHorizontalZoomModifiers(sciChartSurface);
 
@@ -1017,7 +1017,7 @@ async function initSciChart() {
             title: 'Right Channel Output',
             titleKey: 'runmode.telemetry.chart.channeloutputright',
             create: async (containerId) => {
-                const { sciChartSurface, wasmContext } = await SciChart.SciChartSurface.create(containerId);
+                const { sciChartSurface, wasmContext } = await SciChart.SciChartSurface.createSingle(containerId);
 
                 addHorizontalZoomModifiers(sciChartSurface);
 
