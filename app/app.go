@@ -374,7 +374,7 @@ func (a *App) runAppMode() RunResult {
 
 	// Ensure webUI is initialized before setting handler
 	if a.config.GetAppWebUIEnabled() && a.webUI == nil {
-		a.webUI = webui.New(webui.Config{
+		a.webUI = webui.New(webui.Options{
 			Log:                a.log,
 			Port:               a.config.GetAppWebUIPort(),
 			TelemetryChartFeed: a.telemetryChartFeed,

@@ -33,11 +33,10 @@ func TestWebUITestSuite(t *testing.T) {
 // createTestWebUI creates a minimal WebUI instance for testing.
 func createTestWebUI() *WebUI {
 	logger := zerolog.Nop()
+	log := logger.With().Str("component", "web ui").Logger()
 
-	webUI := &WebUI{
-		log:                logger.With().Str("component", "web ui").Logger(),
-		port:               8080,
-		webSocketClients:   0,
+	b := &Broadcaster{
+		log:                log,
 		telemetryChartFeed: make(chan map[string]float32, 10),
 		vehicleInfoFeed:    make(chan map[string]any, 10),
 		currentVehicleInfo: make(map[string]any),
@@ -56,14 +55,25 @@ func createTestWebUI() *WebUI {
 		unifiedClientsChan: make(chan *wsClient, 10),
 		unifiedUnsubChan:   make(chan *wsClient, 10),
 		unifiedSessions:    make(map[string]*wsClient),
-		buildVersion:       "1.0.0-test",
-		buildCommitHash:    "abc123",
-		buildTime:          "2026-01-16T00:00:00Z",
-		buildPlatform:      "test",
+		done:               make(chan struct{}),
 	}
 
-	// Start the broadcaster goroutine
-	go webUI.unifiedWebSocketBroadcaster()
+	sys := &systemHandler{
+		log:             log,
+		buildVersion:    "1.0.0-test",
+		buildCommitHash: "abc123",
+		buildTime:       "2026-01-16T00:00:00Z",
+		buildPlatform:   "test",
+	}
+
+	webUI := &WebUI{
+		log:        log,
+		port:       8080,
+		broadcaster: b,
+		sysHandler: sys,
+	}
+
+	go b.run()
 
 	return webUI
 }
@@ -88,7 +98,7 @@ func (suite *WebUITestSuite) TestHandleSystemInfo_ReturnsVersionInfo() {
 	recorder := httptest.NewRecorder()
 
 	// Act
-	suite.webUI.handleSystemInfo(recorder, req)
+	suite.webUI.sysHandler.handleSystemInfo(recorder, req)
 
 	// Assert
 	suite.Equal(http.StatusOK, recorder.Code)
@@ -111,7 +121,7 @@ func (suite *WebUITestSuite) TestHandleSystemInfo_RejectsNonGetMethods() {
 		req := httptest.NewRequest(method, "/api/system/info", nil)
 		recorder := httptest.NewRecorder()
 
-		suite.webUI.handleSystemInfo(recorder, req)
+		suite.webUI.sysHandler.handleSystemInfo(recorder, req)
 
 		suite.Equal(http.StatusMethodNotAllowed, recorder.Code, "Method %s should not be allowed", method)
 	}
@@ -383,7 +393,7 @@ func (suite *IntegrationTestSuite) TestBroadcaster_HandlesNewClient() {
 	client := newWSClient(nil, logger)
 
 	// Act - send client to broadcaster
-	webUI.unifiedClientsChan <- client
+	webUI.broadcaster.unifiedClientsChan <- client
 
 	time.Sleep(50 * time.Millisecond) // Wait for broadcaster to process
 
@@ -401,14 +411,14 @@ func (suite *IntegrationTestSuite) TestBroadcaster_HandlesClientUnsubscribe() {
 	logger := zerolog.Nop()
 
 	client := newWSClient(nil, logger)
-	webUI.unifiedClientsChan <- client
+	webUI.broadcaster.unifiedClientsChan <- client
 
 	time.Sleep(50 * time.Millisecond)
 
 	suite.True(webUI.HasActiveClients(), "client should be added")
 
 	// Act - unsubscribe
-	webUI.unifiedUnsubChan <- client
+	webUI.broadcaster.unifiedUnsubChan <- client
 
 	time.Sleep(50 * time.Millisecond)
 
@@ -434,7 +444,7 @@ func (suite *IntegrationTestSuite) TestBroadcaster_BroadcastsVehicleInfo() {
 		done: make(chan struct{}),
 		log:  logger,
 	}
-	webUI.unifiedClientsChan <- client
+	webUI.broadcaster.unifiedClientsChan <- client
 
 	time.Sleep(50 * time.Millisecond)
 
@@ -443,7 +453,7 @@ func (suite *IntegrationTestSuite) TestBroadcaster_BroadcastsVehicleInfo() {
 		"manufacturer": "Toyota",
 		"model":        "Supra",
 	}
-	webUI.vehicleInfoFeed <- vehicleInfo
+	webUI.broadcaster.vehicleInfoFeed <- vehicleInfo
 
 	time.Sleep(100 * time.Millisecond) // Wait for broadcast
 
@@ -478,12 +488,12 @@ func (suite *IntegrationTestSuite) TestBroadcaster_BroadcastsGameState() {
 		done: make(chan struct{}),
 		log:  logger,
 	}
-	webUI.unifiedClientsChan <- client
+	webUI.broadcaster.unifiedClientsChan <- client
 
 	time.Sleep(50 * time.Millisecond)
 
 	// Act
-	webUI.gameStateFeed <- "race"
+	webUI.broadcaster.gameStateFeed <- "race"
 
 	time.Sleep(100 * time.Millisecond)
 
@@ -511,7 +521,7 @@ func (suite *IntegrationTestSuite) TestBroadcaster_BroadcastsCircuitInfo() {
 		done: make(chan struct{}),
 		log:  logger,
 	}
-	webUI.unifiedClientsChan <- client
+	webUI.broadcaster.unifiedClientsChan <- client
 
 	time.Sleep(50 * time.Millisecond)
 
@@ -520,7 +530,7 @@ func (suite *IntegrationTestSuite) TestBroadcaster_BroadcastsCircuitInfo() {
 		"name":    "Suzuka Circuit",
 		"country": "jp",
 	}
-	webUI.circuitInfoFeed <- circuitInfo
+	webUI.broadcaster.circuitInfoFeed <- circuitInfo
 
 	time.Sleep(100 * time.Millisecond)
 
@@ -531,9 +541,9 @@ func (suite *IntegrationTestSuite) TestBroadcaster_BroadcastsCircuitInfo() {
 	suite.Equal("circuit", msg.msgType)
 
 	// Verify cached state is updated
-	webUI.circuitInfoMutex.RLock()
-	suite.Equal("Suzuka Circuit", webUI.currentCircuitInfo["name"])
-	webUI.circuitInfoMutex.RUnlock()
+	webUI.broadcaster.circuitInfoMutex.RLock()
+	suite.Equal("Suzuka Circuit", webUI.broadcaster.currentCircuitInfo["name"])
+	webUI.broadcaster.circuitInfoMutex.RUnlock()
 }
 
 func (suite *IntegrationTestSuite) TestBroadcaster_BroadcastsRaceInfo() {
@@ -553,7 +563,7 @@ func (suite *IntegrationTestSuite) TestBroadcaster_BroadcastsRaceInfo() {
 		done: make(chan struct{}),
 		log:  logger,
 	}
-	webUI.unifiedClientsChan <- client
+	webUI.broadcaster.unifiedClientsChan <- client
 
 	time.Sleep(50 * time.Millisecond)
 
@@ -562,7 +572,7 @@ func (suite *IntegrationTestSuite) TestBroadcaster_BroadcastsRaceInfo() {
 		"lap":       5,
 		"totalLaps": 10,
 	}
-	webUI.raceInfoFeed <- raceInfo
+	webUI.broadcaster.raceInfoFeed <- raceInfo
 
 	time.Sleep(100 * time.Millisecond)
 
@@ -591,7 +601,7 @@ func (suite *IntegrationTestSuite) TestBroadcaster_RespectsSubscriptions() {
 		done: make(chan struct{}),
 		log:  logger,
 	}
-	webUI.unifiedClientsChan <- client
+	webUI.broadcaster.unifiedClientsChan <- client
 
 	time.Sleep(50 * time.Millisecond)
 
@@ -599,7 +609,7 @@ func (suite *IntegrationTestSuite) TestBroadcaster_RespectsSubscriptions() {
 	circuitInfo := map[string]string{
 		"name": "Test Circuit",
 	}
-	webUI.circuitInfoFeed <- circuitInfo
+	webUI.broadcaster.circuitInfoFeed <- circuitInfo
 
 	time.Sleep(100 * time.Millisecond)
 
@@ -622,30 +632,30 @@ func (suite *IntegrationTestSuite) TestSendInitialState_SendsAllCachedData() {
 	webUI := createTestWebUI()
 
 	// Pre-populate cached state
-	webUI.vehicleInfoMutex.Lock()
-	webUI.currentVehicleInfo = map[string]any{
+	webUI.broadcaster.vehicleInfoMutex.Lock()
+	webUI.broadcaster.currentVehicleInfo = map[string]any{
 		"manufacturer": "Honda",
 		"model":        "NSX",
 	}
-	webUI.vehicleInfoMutex.Unlock()
+	webUI.broadcaster.vehicleInfoMutex.Unlock()
 
-	webUI.gameStateMutex.Lock()
-	webUI.currentGameState = "race"
-	webUI.gameStateMutex.Unlock()
+	webUI.broadcaster.gameStateMutex.Lock()
+	webUI.broadcaster.currentGameState = "race"
+	webUI.broadcaster.gameStateMutex.Unlock()
 
-	webUI.circuitInfoMutex.Lock()
-	webUI.currentCircuitInfo = map[string]string{
+	webUI.broadcaster.circuitInfoMutex.Lock()
+	webUI.broadcaster.currentCircuitInfo = map[string]string{
 		"name":    "Spa-Francorchamps",
 		"country": "be",
 	}
-	webUI.circuitInfoMutex.Unlock()
+	webUI.broadcaster.circuitInfoMutex.Unlock()
 
-	webUI.raceInfoMutex.Lock()
-	webUI.currentRaceInfo = map[string]any{
+	webUI.broadcaster.raceInfoMutex.Lock()
+	webUI.broadcaster.currentRaceInfo = map[string]any{
 		"lap":       3,
 		"totalLaps": 20,
 	}
-	webUI.raceInfoMutex.Unlock()
+	webUI.broadcaster.raceInfoMutex.Unlock()
 
 	logger := zerolog.Nop()
 	client := &wsClient{
@@ -663,7 +673,7 @@ func (suite *IntegrationTestSuite) TestSendInitialState_SendsAllCachedData() {
 	}
 
 	// Act
-	webUI.sendInitialState(client)
+	webUI.broadcaster.sendInitialState(client)
 	time.Sleep(50 * time.Millisecond) // Give time for async sends
 
 	// Assert - should have received 4 messages (vehicle, gameState, circuit, race)
@@ -707,7 +717,7 @@ func (suite *IntegrationTestSuite) TestSendInitialState_SkipsEmptyData() {
 	}
 
 	// Act
-	webUI.sendInitialState(client)
+	webUI.broadcaster.sendInitialState(client)
 	time.Sleep(50 * time.Millisecond)
 
 	// Assert - should only receive gameState (which sends even when "unknown")
@@ -744,7 +754,7 @@ func (suite *IntegrationTestSuite) TestHasActiveClients_ReturnsTrueWithUnifiedCl
 	logger := zerolog.Nop()
 
 	client := newWSClient(nil, logger)
-	webUI.unifiedClientsChan <- client
+	webUI.broadcaster.unifiedClientsChan <- client
 
 	time.Sleep(50 * time.Millisecond)
 
@@ -769,7 +779,7 @@ func (suite *WebSocketTestSuite) TestWebSocketConnection_AcceptsConnection() {
 	// Arrange
 	webUI := createTestWebUI()
 
-	server := httptest.NewServer(http.HandlerFunc(webUI.handleWebSocketConnection))
+	server := httptest.NewServer(http.HandlerFunc(webUI.broadcaster.handleWebSocketConnection))
 	defer server.Close()
 
 	// Convert http:// to ws://
@@ -792,14 +802,14 @@ func (suite *WebSocketTestSuite) TestWebSocketConnection_ReceivesInitialState() 
 	webUI := createTestWebUI()
 
 	// Pre-populate some state
-	webUI.vehicleInfoMutex.Lock()
-	webUI.currentVehicleInfo = map[string]any{
+	webUI.broadcaster.vehicleInfoMutex.Lock()
+	webUI.broadcaster.currentVehicleInfo = map[string]any{
 		"manufacturer": "Porsche",
 		"model":        "911 GT3",
 	}
-	webUI.vehicleInfoMutex.Unlock()
+	webUI.broadcaster.vehicleInfoMutex.Unlock()
 
-	server := httptest.NewServer(http.HandlerFunc(webUI.handleWebSocketConnection))
+	server := httptest.NewServer(http.HandlerFunc(webUI.broadcaster.handleWebSocketConnection))
 	defer server.Close()
 
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/ws"
@@ -839,7 +849,7 @@ func (suite *WebSocketTestSuite) TestWebSocketConnection_AcceptsSubscriptionUpda
 	// Arrange
 	webUI := createTestWebUI()
 
-	server := httptest.NewServer(http.HandlerFunc(webUI.handleWebSocketConnection))
+	server := httptest.NewServer(http.HandlerFunc(webUI.broadcaster.handleWebSocketConnection))
 	defer server.Close()
 
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/ws"
@@ -871,7 +881,7 @@ func (suite *WebSocketTestSuite) TestWebSocketConnection_HandlesConcurrentClient
 	// Arrange
 	webUI := createTestWebUI()
 
-	server := httptest.NewServer(http.HandlerFunc(webUI.handleWebSocketConnection))
+	server := httptest.NewServer(http.HandlerFunc(webUI.broadcaster.handleWebSocketConnection))
 	defer server.Close()
 
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/ws"
