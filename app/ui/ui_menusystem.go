@@ -7,48 +7,6 @@ const (
 	menuNodeRoot            = languagedb.Key("root")
 )
 
-// PageContext defines when a menu page should be visible.
-type PageContext string
-
-const (
-	PageContextAlways   PageContext = "always"
-	PageContextDevTools PageContext = "devtools"
-)
-
-// NodeType defines whether a menu node is a branch or leaf.
-type NodeType int
-
-const (
-	NodeTypeBranch NodeType = iota
-	NodeTypeLeaf
-)
-
-// NodeKind categorises a leaf for layout and navigation. It is independent of
-// nodeType: an info page and a setting are both leaves but render differently
-// and navigate differently. Branches ignore it.
-type NodeKind int
-
-const (
-	KindSetting NodeKind = iota // editable leaf -> LayoutSetting (zero value)
-	KindInfo                    // read-only info leaf -> LayoutInfo
-	KindLive                    // live-view leaf
-)
-
-// MenuNode represents a node in the hierarchical menu tree.
-type MenuNode struct {
-	name     languagedb.Key
-	nodeType NodeType
-	kind     NodeKind
-	context  PageContext
-	children []*MenuNode
-	parent   *MenuNode
-
-	// noReturn, set on a branch during declaration, tells buildMenu not to inject
-	// a Return child. Info pages use it because their leaves exit to the parent on
-	// up/down rather than via a Return item.
-	noReturn bool
-}
-
 type MenuSystem struct {
 	root               *MenuNode
 	currentNode        *MenuNode
@@ -63,7 +21,7 @@ func NewMenuSystem() *MenuSystem {
 
 	return &MenuSystem{
 		root:               root,
-		currentNode:        find(root, languagedb.UIMenuLiveView), // Start on the live view leaf
+		currentNode:        root.find(languagedb.UIMenuLiveView), // Start on the live view leaf
 		setupModeCountdown: setupModeCountdownStart,
 	}
 }
@@ -103,12 +61,17 @@ func (m *MenuSystem) NavigateDown() (*MenuNode, string) {
 		}
 	}
 
-	// For leaves, decrease value (except info and live nodes which return to parent)
+	// For leaves, decrease value. Live leaves return to their parent; info leaves
+	// are read-only and exit via the Return item, so up/down does nothing.
 	if m.currentNode.nodeType == NodeTypeLeaf {
-		if m.currentNode.parent != nil && (m.currentNode.kind == KindInfo || m.currentNode.kind == KindLive) {
+		if m.currentNode.parent != nil && m.currentNode.kind == KindLive {
 			m.currentNode = m.currentNode.parent
 
 			return m.currentNode, actionExit
+		}
+
+		if m.currentNode.kind == KindInfo {
+			return m.currentNode, actionNone
 		}
 
 		return m.currentNode, actionDecrease
@@ -140,12 +103,17 @@ func (m *MenuSystem) NavigateUp() (*MenuNode, string) {
 		}
 	}
 
-	// For leaves, increase value (except info and live nodes which return to parent)
+	// For leaves, increase value. Live leaves return to their parent; info leaves
+	// are read-only and exit via the Return item, so up/down does nothing.
 	if m.currentNode.nodeType == NodeTypeLeaf {
-		if m.currentNode.parent != nil && (m.currentNode.kind == KindInfo || m.currentNode.kind == KindLive) {
+		if m.currentNode.parent != nil && m.currentNode.kind == KindLive {
 			m.currentNode = m.currentNode.parent
 
 			return m.currentNode, actionExit
+		}
+
+		if m.currentNode.kind == KindInfo {
+			return m.currentNode, actionNone
 		}
 
 		return m.currentNode, actionIncrease
@@ -257,9 +225,9 @@ func (m *MenuSystem) previousSibling() *MenuNode {
 	// Find current index
 	currentIndex := -1
 
-	for i, sibling := range siblings {
+	for idx, sibling := range siblings {
 		if sibling == m.currentNode {
-			currentIndex = i
+			currentIndex = idx
 
 			break
 		}
@@ -290,9 +258,9 @@ func (m *MenuSystem) nextSibling() *MenuNode {
 	// Find current index
 	currentIndex := -1
 
-	for i, sibling := range siblings {
+	for idx, sibling := range siblings {
 		if sibling == m.currentNode {
-			currentIndex = i
+			currentIndex = idx
 
 			break
 		}

@@ -3,14 +3,14 @@ package ui
 import "github.com/vwhitteron/simtezilo-dev/app/i18n/languagedb"
 
 // The menu is declared as a nested literal of the constructors below and
-// finalised by buildMenu, which derives parent pointers, injects Return items,
+// finalised by MenuNode.build, which derives parent pointers, injects Return items,
 // and inherits visibility context. Editing the menu means editing the literal in
 // newMenuTree: move a line to move a node, add or remove a line to add or remove
 // one — the wiring is derived, not maintained by hand.
 
 // newMenuTree declares the full menu hierarchy and returns its finalised root.
 func newMenuTree() *MenuNode {
-	root := branch(menuNodeRoot,
+	menu := branch(menuNodeRoot,
 		branch(languagedb.UIMenuLive,
 			liveLeaf(languagedb.UIMenuLiveView),
 			liveLeaf(languagedb.UIMenuLiveDashboard),
@@ -115,24 +115,24 @@ func newMenuTree() *MenuNode {
 				),
 			),
 		),
-		infoBranch(languagedb.UIMenuInfo,
-			leaf(languagedb.UIMenuInfoVersion),
-			leaf(languagedb.UIMenuInfoCommitHash),
-			leaf(languagedb.UIMenuInfoBuildTime),
-			leaf(languagedb.UIMenuInfoPlatform),
-			leaf(languagedb.UIMenuInfoIPAddress),
+		branch(languagedb.UIMenuInfo,
+			infoLeaf(languagedb.UIMenuInfoVersion),
+			infoLeaf(languagedb.UIMenuInfoCommitHash),
+			infoLeaf(languagedb.UIMenuInfoBuildTime),
+			infoLeaf(languagedb.UIMenuInfoPlatform),
+			infoLeaf(languagedb.UIMenuInfoIPAddress),
 		),
-		devtools(branch(languagedb.UIMenuDevtools,
+		branch(languagedb.UIMenuDevtools,
 			leaf(languagedb.UIMenuDevtoolsRecord),
-		)),
+		).setVisibility(PageContextDevTools),
 	)
 
-	buildMenu(root)
+	menu.build()
 
-	return root
+	return menu
 }
 
-// branch builds a submenu. buildMenu injects a Return child unless noReturn is set.
+// branch builds a submenu. build injects a Return child unless noReturn is set.
 func branch(name languagedb.Key, children ...*MenuNode) *MenuNode {
 	return &MenuNode{name: name, nodeType: NodeTypeBranch, kind: KindSetting, children: children}
 }
@@ -147,70 +147,41 @@ func liveLeaf(name languagedb.Key) *MenuNode {
 	return &MenuNode{name: name, nodeType: NodeTypeLeaf, kind: KindLive}
 }
 
-// infoBranch builds a branch of read-only info pages. Its leaf children are
-// tagged KindInfo and it has no Return item (info leaves exit on up/down).
-func infoBranch(name languagedb.Key, children ...*MenuNode) *MenuNode {
-	n := branch(name, children...)
-	n.noReturn = true
-
-	for _, c := range n.children {
-		if c.nodeType == NodeTypeLeaf {
-			c.kind = KindInfo
-		}
-	}
-
-	return n
+// infoLeaf builds a read-only info leaf. It renders with LayoutInfo and, being
+// read-only, ignores up/down value adjustment; exit is via the branch's Return.
+func infoLeaf(name languagedb.Key) *MenuNode {
+	return &MenuNode{name: name, nodeType: NodeTypeLeaf, kind: KindInfo}
 }
 
-// devtools marks a node visible only when dev tools are enabled. buildMenu
-// inherits the context to its descendants (including the injected Return).
-func devtools(n *MenuNode) *MenuNode {
-	n.context = PageContextDevTools
-
-	return n
-}
-
-// buildMenu finalises a declared tree: it injects a Return child into every
-// non-root branch (except those marked noReturn), sets parent pointers, and
-// inherits the visibility context from each node to its children.
-func buildMenu(root *MenuNode) {
-	if root.context == "" {
-		root.context = PageContextAlways
-	}
-
-	resolveMenu(root, true)
-}
-
-func resolveMenu(n *MenuNode, isRoot bool) {
-	if n.nodeType == NodeTypeBranch && !isRoot && !n.noReturn {
+// buildSubtree recursively finalises a subtree: it prepends a Return child to each
+// non-root branch, then links every child to its parent and inherits its context.
+// isRoot suppresses the Return injection at the top of the tree.
+func buildSubtree(node *MenuNode, isRoot bool) {
+	if node.nodeType == NodeTypeBranch && !isRoot && !node.noReturn {
 		// The Return item is itself a branch but is terminal: noReturn stops it
 		// from recursively gaining its own Return child.
-		ret := &MenuNode{name: languagedb.UIMenuReturn, nodeType: NodeTypeBranch, context: n.context, noReturn: true}
-		n.children = append([]*MenuNode{ret}, n.children...)
+		ret := &MenuNode{name: languagedb.UIMenuReturn, nodeType: NodeTypeBranch, context: node.context, noReturn: true}
+		node.children = append([]*MenuNode{ret}, node.children...)
 	}
 
-	for _, c := range n.children {
-		if c.context == "" {
-			c.context = n.context
+	for _, child := range node.children {
+		if child.context == "" {
+			child.context = node.context
 		}
 
-		c.parent = n
+		child.parent = node
 
-		resolveMenu(c, false)
+		buildSubtree(child, false)
 	}
 }
 
-// find returns the first node with the given name in depth-first order, or nil.
-func find(n *MenuNode, name languagedb.Key) *MenuNode {
-	if n.name == name {
-		return n
+// build finalises a declared tree: it injects a Return child into every
+// non-root branch (except those marked noReturn), sets parent pointers, and
+// inherits the visibility context from each node to its children.
+func (node *MenuNode) build() {
+	if node.context == "" {
+		node.context = PageContextAlways
 	}
 
-	for _, c := range n.children {
-		if got := find(c, name); got != nil {
-			return got
-		}
-	}
-
-	return nil
+	buildSubtree(node, true)
 }
