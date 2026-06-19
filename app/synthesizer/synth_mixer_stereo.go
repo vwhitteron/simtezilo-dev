@@ -14,17 +14,35 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/signal"
 )
 
+// ChannelDiagnostic holds per-channel buffer health metrics.
+type ChannelDiagnostic struct {
+	Name   string
+	Muted  bool
+	Health BufferHealth
+}
+
+// MixerDiagnostics aggregates diagnostic information from all mixer channels.
+type MixerDiagnostics struct {
+	Timestamp    time.Time
+	Channels     []ChannelDiagnostic
+	FaderGain    float64
+	Silenced     bool
+	FadeInActive bool
+}
+
 // StereoMixer handles two audio channels, mixing them into a master output channel.
 type StereoMixer struct {
 	config *config.Config
 
-	channels     map[string]*MixerChannel
-	bufferLength time.Duration
-	sampleRateHz int
-	log          zerolog.Logger
-	faderGain    float64
-	fadeInActive bool
-	silenced     bool
+	channels          map[string]*MixerChannel
+	bufferLength      time.Duration
+	sampleRateHz      int
+	cushionMs         int
+	numOutputChannels int
+	log               zerolog.Logger
+	faderGain         float64
+	fadeInActive      bool
+	silenced          bool
 
 	// Calibration mode state
 	calibrator     calibrator.Calibrator
@@ -65,19 +83,26 @@ func NewStereoMixer(mixerConfig StereoMixerConfig) (*StereoMixer, error) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
+	numOutputChannels := DefaultOutputChannels
+	if n := mixerConfig.Config.GetAudioHapticsChannels(); n > 0 {
+		numOutputChannels = n
+	}
+
 	mixer := &StereoMixer{
 		config: mixerConfig.Config,
 
-		bufferLength:   mixerConfig.BufferLength,
-		sampleRateHz:   mixerConfig.SampleRateHz,
-		channels:       map[string]*MixerChannel{},
-		log:            mixerConfig.Log,
-		faderGain:      config.MinimumGain,
-		fadeInActive:   false,
-		silenced:       true,
-		calibrator:     mixerConfig.Calibrator,
-		sineWavePhaseL: 0,
-		sineWavePhaseR: 0,
+		bufferLength:      mixerConfig.BufferLength,
+		sampleRateHz:      mixerConfig.SampleRateHz,
+		cushionMs:         mixerConfig.Config.GetAudioHapticsCushionMs(),
+		numOutputChannels: numOutputChannels,
+		channels:          map[string]*MixerChannel{},
+		log:               mixerConfig.Log,
+		faderGain:         config.MinimumGain,
+		fadeInActive:      false,
+		silenced:          true,
+		calibrator:        mixerConfig.Calibrator,
+		sineWavePhaseL:    0,
+		sineWavePhaseR:    0,
 
 		// Initialize buffer monitoring
 		lastHealthCheck:     time.Now(),
@@ -97,7 +122,7 @@ func NewStereoMixer(mixerConfig StereoMixerConfig) (*StereoMixer, error) {
 	}
 
 	// Initialize per-channel output channels
-	for ch := range NumOutputChannels {
+	for ch := range numOutputChannels {
 		channelGain := mixer.config.GetSynthChannelGain(ch)
 
 		err = mixer.AddChannel(OutputChannelName(ch), channelGain)
@@ -137,7 +162,7 @@ func (m *StereoMixer) AddChannel(name string, initialGain float64) error {
 
 	m.channels[name] = &MixerChannel{
 		activeGain: initialGain,
-		buffer:     NewAdaptiveBuffer(m.bufferLength, m.sampleRateHz),
+		buffer:     NewAdaptiveBufferCushion(m.bufferLength, m.sampleRateHz, m.cushionMs),
 	}
 
 	return nil
@@ -383,119 +408,23 @@ func (m *StereoMixer) MixToMaster(length int) {
 
 	m.mu.RLock()
 
-	// Check if calibration mode is enabled or stopping (waiting for zero crossing)
-	if m.calibrator != nil && (m.calibrator.IsEnabled() || m.calibrator.IsStopping()) {
-		frequency := m.calibrator.GetSweepFrequency() // Use sweep frequency if sweeping, otherwise static frequency
-		isStopping := m.calibrator.IsStopping()
-
-		// Get per-channel EQ amplitude multipliers
-		eqAmplitudes := make([]float64, NumOutputChannels)
-		for channelIndex := range NumOutputChannels {
-			eqAmplitudes[channelIndex] = 1.0
-
-			if m.config.GetSynthChannelEqEnabled(channelIndex) {
-				curve, minFreq, resolution := m.config.GetSynthChannelEqCurve(channelIndex)
-				if len(curve) > 0 {
-					// Calculate bucket index for this frequency
-					index := int((frequency - minFreq) / resolution)
-					// Apply EQ if frequency is within range
-					if index >= 0 && index < len(curve) {
-						eqAmplitudes[channelIndex] = curve[index]
-					}
-				}
-			}
-		}
-
-		// Create per-channel output buffers
-		channelSamples := make([][]float64, NumOutputChannels)
-		for ch := range NumOutputChannels {
-			channelSamples[ch] = make([]float64, length)
-		}
-
-		var prevPhase float64
-
-		// Generate sine wave samples
-		for offset := range outSamples {
-			prevPhase = m.sineWavePhaseL
-
-			// Generate base sine wave (mono source)
-			baseSample := math.Sin(m.sineWavePhaseL)
-			outSamples[offset] = baseSample // Master gets unmodified
-
-			// Apply per-channel EQ
-			for ch := range NumOutputChannels {
-				channelSamples[ch][offset] = baseSample * eqAmplitudes[ch]
-			}
-
-			// Increment phase
-			m.sineWavePhaseL += 2 * math.Pi * frequency / float64(m.sampleRateHz)
-
-			// Keep phase in reasonable range
-			if m.sineWavePhaseL > 2*math.Pi {
-				m.sineWavePhaseL -= 2 * math.Pi
-			}
-
-			// If stopping, check for zero crossing
-			if isStopping {
-				// Detect zero crossing: previous phase was negative, current is positive
-				// or we wrapped around through zero
-				prevSin := math.Sin(prevPhase)
-				currSin := math.Sin(m.sineWavePhaseL)
-
-				if prevSin <= 0 && currSin >= 0 {
-					// Zero crossing detected - stop here
-					outSamples[offset] = 0 // End on zero to ensure clean stop
-					for ch := range NumOutputChannels {
-						channelSamples[ch][offset] = 0
-					}
-
-					m.mu.RUnlock()
-					m.calibrator.ConfirmStopped()
-					// Pad remaining samples with zeros
-					for j := offset + 1; j < len(outSamples); j++ {
-						outSamples[j] = 0
-						for ch := range NumOutputChannels {
-							channelSamples[ch][j] = 0
-						}
-					}
-
-					// Write calibration output to all channels
-					m.channels[ChannelMaster].Write(outSamples, 1.0, 0, true)
-
-					for ch := range NumOutputChannels {
-						m.channels[OutputChannelName(ch)].Write(channelSamples[ch], 1.0, 0, true)
-					}
-
-					return
-				}
-			}
-		}
-
-		m.mu.RUnlock()
-
-		// Write calibration output to all channels
-		m.channels[ChannelMaster].Write(outSamples, 1.0, 0, true)
-
-		for ch := range NumOutputChannels {
-			m.channels[OutputChannelName(ch)].Write(channelSamples[ch], 1.0, 0, true)
-		}
-
+	if m.mixCalibratorOutput(outSamples) {
 		return
 	}
 
 	// Normal haptic mode - mix per-channel chassis with transmission and engine
 	// Create separate output buffers for each channel to support per-channel EQ
-	channelSamples := make([][]float64, NumOutputChannels)
-	peaks := make([]float64, NumOutputChannels)
+	channelSamples := make([][]float64, m.numOutputChannels)
+	peaks := make([]float64, m.numOutputChannels)
 
-	for ch := range NumOutputChannels {
+	for ch := range m.numOutputChannels {
 		channelSamples[ch] = make([]float64, length)
 	}
 
 	// Mix per-channel chassis with appropriate EQ
 	chassisMuted := m.config.GetSynthChassisMute()
 	if !chassisMuted {
-		for ch := range NumOutputChannels {
+		for ch := range m.numOutputChannels {
 			if chassisCh, ok := m.channels[ChassisChannelName(ch)]; ok {
 				samples := chassisCh.Read(length)
 				for i, sample := range samples {
@@ -511,7 +440,7 @@ func (m *StereoMixer) MixToMaster(length int) {
 		if !transmissionMuted {
 			samples := transmissionChannel.Read(length)
 			for i, sample := range samples {
-				for ch := range NumOutputChannels {
+				for ch := range m.numOutputChannels {
 					channelSamples[ch][i] = mixSampleSum(channelSamples[ch][i], sample, &peaks[ch])
 				}
 			}
@@ -519,7 +448,7 @@ func (m *StereoMixer) MixToMaster(length int) {
 	}
 
 	// Scale peaks for each channel
-	for ch := range NumOutputChannels {
+	for ch := range m.numOutputChannels {
 		if peaks[ch] > 1.0 {
 			scaleSamplesPeak(&channelSamples[ch], peaks[ch])
 		}
@@ -536,17 +465,17 @@ func (m *StereoMixer) MixToMaster(length int) {
 	masterSamples := make([]float64, length)
 	for sampleIdx := range length {
 		sum := 0.0
-		for channel := range NumOutputChannels {
+		for channel := range m.numOutputChannels {
 			sum += channelSamples[channel][sampleIdx]
 		}
 
-		masterSamples[sampleIdx] = sum / float64(NumOutputChannels)
+		masterSamples[sampleIdx] = sum / float64(m.numOutputChannels)
 	}
 
 	// Write to master and per-channel outputs
 	m.channels[ChannelMaster].Write(masterSamples, magnitude, 0, true)
 
-	for channel := range NumOutputChannels {
+	for channel := range m.numOutputChannels {
 		m.channels[OutputChannelName(channel)].Write(channelSamples[channel], magnitude, 0, true)
 	}
 }
@@ -580,7 +509,7 @@ func (m *StereoMixer) ResetSineWavePhase() {
 	m.sineWavePhaseR = 0
 }
 
-// checkBufferHealth monitors buffer health and logs issues.
+// checkBufferHealth monitors buffer health and logs issues at appropriate levels.
 func (m *StereoMixer) checkBufferHealth() {
 	now := time.Now()
 	if now.Sub(m.lastHealthCheck) < m.healthCheckInterval {
@@ -594,37 +523,114 @@ func (m *StereoMixer) checkBufferHealth() {
 			continue
 		}
 
-		// Check if channel is muted using lock-free config reads
-		var muted bool
+		m.logChannelHealth(name, channel)
+	}
+}
+
+// logChannelHealth inspects a single channel buffer and logs any health issues.
+func (m *StereoMixer) logChannelHealth(name string, channel *MixerChannel) {
+	adaptiveBuffer, ok := channel.buffer.(*AdaptiveBuffer)
+	if !ok {
+		return
+	}
+
+	detail := adaptiveBuffer.HealthDetailed()
+
+	if detail.Overflows > 0 || detail.Underruns > 0 {
+		m.logBufferIssue(name, detail)
+
+		return
+	}
+
+	if detail.FillRatio > 0.9 || detail.FillRatio < 0.1 {
+		m.logFillRatioWarning(name, detail)
+	}
+}
+
+// logBufferIssue logs a warning when overflows or underruns are detected.
+func (m *StereoMixer) logBufferIssue(name string, detail BufferHealth) {
+	logEntry := m.log.Debug().
+		Str("channel", name).
+		Int("overflows", detail.Overflows).
+		Int("underruns", detail.Underruns).
+		Float64("fillRatio", detail.FillRatio)
+
+	if !detail.LastOverflow.IsZero() {
+		logEntry.Dur("lastOverflowAgo", time.Since(detail.LastOverflow))
+	}
+
+	if !detail.LastUnderrun.IsZero() {
+		logEntry.Dur("lastUnderrunAgo", time.Since(detail.LastUnderrun))
+	}
+
+	logEntry.Msg("buffer health issue detected")
+}
+
+// logFillRatioWarning logs an info message when fill ratio is outside normal range.
+func (m *StereoMixer) logFillRatioWarning(name string, detail BufferHealth) {
+	m.log.Debug().
+		Str("channel", name).
+		Float64("fillRatio", detail.FillRatio).
+		Int("used", detail.Used).
+		Int("capacity", detail.Capacity).
+		Msg("buffer fill ratio outside normal range")
+}
+
+// Diagnostics returns a snapshot of mixer channel buffer health for all channels.
+func (m *StereoMixer) Diagnostics() MixerDiagnostics {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	var gain float64
+	if mc, ok := m.channels[ChannelMaster]; ok {
+		gain = mc.activeGain
+	}
+
+	diag := MixerDiagnostics{
+		Timestamp:    time.Now(),
+		FaderGain:    gain,
+		Silenced:     m.silenced,
+		FadeInActive: m.fadeInActive,
+		Channels:     make([]ChannelDiagnostic, 0, len(m.channels)),
+	}
+
+	for name, channel := range m.channels {
+		var isMuted bool
 
 		switch {
+		case name == ChannelMaster:
+			isMuted = m.config.GetSynthMasterMute()
 		case IsChassisChannel(name):
-			muted = m.config.GetSynthChassisMute()
+			isMuted = m.config.GetSynthChassisMute()
 		case name == ChannelTransmission:
-			muted = m.config.GetSynthTransmissionMute()
+			isMuted = m.config.GetSynthTransmissionMute()
 		case name == ChannelEngine:
-			muted = m.config.GetSynthEngineMute()
-		}
-
-		if muted {
-			continue
-		}
-
-		// Check if the buffer supports health monitoring
-		if adaptiveBuffer, ok := channel.buffer.(*AdaptiveBuffer); ok {
-			overflows, underruns, fillRatio := adaptiveBuffer.Health()
-
-			if overflows > 0 || underruns > 0 || fillRatio > 0.9 || fillRatio < 0.1 {
-				m.log.Debug().
-					Bool("healthy", false).
-					Str("channel", name).
-					Int("overflows", overflows).
-					Int("underruns", underruns).
-					Float64("fillRatio", fillRatio).
-					Msg("buffer")
+			isMuted = m.config.GetSynthEngineMute()
+		case IsOutputChannel(name):
+			chIndex := ParseOutputChannelIndex(name)
+			if chIndex >= 0 {
+				isMuted = m.config.GetSynthChannelMute(chIndex)
 			}
 		}
+
+		var health BufferHealth
+
+		if adaptiveBuffer, ok := channel.buffer.(*AdaptiveBuffer); ok {
+			m.mu.RUnlock()
+
+			health = adaptiveBuffer.HealthDetailed()
+
+			m.mu.RLock()
+		}
+
+		diag.Channels = append(diag.Channels, ChannelDiagnostic{
+			Name:   name,
+			Muted:  isMuted,
+			Health: health,
+		})
 	}
+
+	return diag
 }
 
 // watchForConfigChanges monitors configuration changes and applies them to the mixer channels.
@@ -740,6 +746,102 @@ func (m *StereoMixer) SetSilenced(silenced bool) {
 	defer m.mu.Unlock()
 
 	m.silenced = silenced
+}
+
+// IsSilenced reports whether the mixer is currently silenced (telemetry inactive).
+func (m *StereoMixer) IsSilenced() bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	return m.silenced
+}
+
+// mixCalibratorOutput handles output generation when the calibrator is active or stopping.
+// It must be called with m.mu.RLock held; it releases the lock before returning.
+// Returns true if calibration output was generated (caller must return immediately).
+func (m *StereoMixer) mixCalibratorOutput(outSamples []float64) bool { //nolint:gocognit,cyclop // calibration algorithm; complexity is inherent, not incidental
+	if m.calibrator == nil || (!m.calibrator.IsEnabled() && !m.calibrator.IsStopping()) {
+		return false
+	}
+
+	frequency := m.calibrator.GetSweepFrequency()
+	isStopping := m.calibrator.IsStopping()
+	length := len(outSamples)
+
+	// Compute per-channel EQ amplitude multipliers.
+	eqAmplitudes := make([]float64, m.numOutputChannels)
+	for channelIndex := range m.numOutputChannels {
+		eqAmplitudes[channelIndex] = 1.0
+
+		if m.config.GetSynthChannelEqEnabled(channelIndex) {
+			curve, minFreq, resolution := m.config.GetSynthChannelEqCurve(channelIndex)
+			if len(curve) > 0 {
+				index := int((frequency - minFreq) / resolution)
+				if index >= 0 && index < len(curve) {
+					eqAmplitudes[channelIndex] = curve[index]
+				}
+			}
+		}
+	}
+
+	channelSamples := make([][]float64, m.numOutputChannels)
+	for ch := range m.numOutputChannels {
+		channelSamples[ch] = make([]float64, length)
+	}
+
+	var prevPhase float64
+
+	for offset := range outSamples {
+		prevPhase = m.sineWavePhaseL
+
+		baseSample := math.Sin(m.sineWavePhaseL)
+		outSamples[offset] = baseSample
+
+		for ch := range m.numOutputChannels {
+			channelSamples[ch][offset] = baseSample * eqAmplitudes[ch]
+		}
+
+		m.sineWavePhaseL += 2 * math.Pi * frequency / float64(m.sampleRateHz)
+		if m.sineWavePhaseL > 2*math.Pi {
+			m.sineWavePhaseL -= 2 * math.Pi
+		}
+
+		// Detect zero crossing when stopping: end on zero for a clean stop.
+		if isStopping && math.Sin(prevPhase) <= 0 && math.Sin(m.sineWavePhaseL) >= 0 {
+			outSamples[offset] = 0
+			for ch := range m.numOutputChannels {
+				channelSamples[ch][offset] = 0
+			}
+
+			m.mu.RUnlock()
+			m.calibrator.ConfirmStopped()
+
+			for j := offset + 1; j < length; j++ {
+				outSamples[j] = 0
+				for ch := range m.numOutputChannels {
+					channelSamples[ch][j] = 0
+				}
+			}
+
+			m.channels[ChannelMaster].Write(outSamples, 1.0, 0, true)
+
+			for ch := range m.numOutputChannels {
+				m.channels[OutputChannelName(ch)].Write(channelSamples[ch], 1.0, 0, true)
+			}
+
+			return true
+		}
+	}
+
+	m.mu.RUnlock()
+
+	m.channels[ChannelMaster].Write(outSamples, 1.0, 0, true)
+
+	for ch := range m.numOutputChannels {
+		m.channels[OutputChannelName(ch)].Write(channelSamples[ch], 1.0, 0, true)
+	}
+
+	return true
 }
 
 // mixEngineChannelMulti mixes the engine channel into all output samples with lower priority.

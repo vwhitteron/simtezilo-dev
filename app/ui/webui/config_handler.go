@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
+	"github.com/vwhitteron/simtezilo-dev/app/audio"
 	"github.com/vwhitteron/simtezilo-dev/app/calibrator"
 	appconfig "github.com/vwhitteron/simtezilo-dev/app/config"
 	"github.com/vwhitteron/simtezilo-dev/app/haptics"
@@ -104,12 +105,21 @@ func (h *configHandler) handleGetConfig(response http.ResponseWriter, _ *http.Re
 		"hardware": map[string]any{
 			"model":              h.config.GetHardwareModel(),
 			"displayOrientation": h.config.GetDisplayOrientation(),
+			"audioBackend":       h.config.GetAudioBackend(),
+			"availableBackends":  audio.AvailableBackends(),
 		},
 		"bluetooth": map[string]any{
 			"available": h.bluetoothAvailable != nil && h.bluetoothAvailable(),
 		},
 		"haptics": map[string]any{
-			"enableReplay":                 h.config.GetHapticsReplayEnabled(),
+			"enableReplay": h.config.GetHapticsReplayEnabled(),
+			"output": map[string]any{
+				"device":     h.config.GetAudioHapticsDevice(),
+				"deviceName": h.config.GetAudioHapticsDeviceName(),
+				"channels":   h.config.GetAudioHapticsChannels(),
+				"sampleRate": h.config.GetAudioHapticsSampleRate(),
+				"latencyMs":  h.config.GetAudioHapticsLatencyMs(),
+			},
 			"dynamicTransmissionFeedback":  h.config.GethapticsDynamicTransFeedbackEnabled(),
 			"dynamicTransmissionCurve":     h.config.GetHapticsTransmissionCurve(),
 			"dynamicTransmissionGforceMax": h.config.GetHapticsTransmissionGforceMax(),
@@ -125,6 +135,11 @@ func (h *configHandler) handleGetConfig(response http.ResponseWriter, _ *http.Re
 			"enabled":               h.config.PitRadioEnabled(),
 			"output":                h.config.GetPitRadioOutput(),
 			"messageSendIntervalMs": h.config.GetPitRadioMessageSendIntervalMs(),
+			"audio": map[string]any{
+				"device":     h.config.GetAudioPitRadioDevice(),
+				"deviceName": h.config.GetAudioPitRadioDeviceName(),
+				"sampleRate": h.config.GetAudioPitRadioSampleRate(),
+			},
 			"notifications": map[string]any{
 				"enableRaceProgress":      h.config.GetPitRadioNotifyRaceProgressEnabled(),
 				"raceProgressMinLaps":     h.config.GetPitRadioNotifyRaceProgressMinLaps(),
@@ -626,6 +641,7 @@ func (h *configHandler) applyHapticsConfig(config map[string]any) []string {
 	errors = appendErr(errors, applyField(config, "pulseMaxFrequencyHz", "invalid pulse max frequency value", h.config.SetHapticsPulseMaxFrequencyHz))
 	errors = appendErr(errors, applyField(config, "pulseMinFrequencyHz", "invalid pulse min frequency value", h.config.SetHapticsPulseMinFrequencyHz))
 	errors = appendErr(errors, applyField(config, "enableReplay", "invalid enable replay value", h.config.SetHapticsEnableReplay))
+	errors = append(errors, applySubMap(config, "output", "invalid haptics output configuration structure", h.applyHapticsOutputConfig)...)
 
 	return errors
 }
@@ -723,6 +739,17 @@ func (h *configHandler) applyFuelConfig(config map[string]any) []string {
 // applyHardwareConfig applies hardware configuration changes.
 func (h *configHandler) applyHardwareConfig(config map[string]any) []string {
 	var errors []string
+
+	if backend, ok := config["audioBackend"]; ok {
+		if backendStr, ok := backend.(string); ok {
+			// Switching backend rebuilds the entire audio stack; the setter marks
+			// the config restart-required so the user applies it via a restart
+			// rather than swapping live (which was fragile).
+			h.config.SetAudioBackend(backendStr)
+		} else {
+			errors = append(errors, "invalid audio backend value")
+		}
+	}
 
 	if model, ok := config["model"]; ok {
 		if modelStr, ok := model.(string); ok {
@@ -852,6 +879,7 @@ func (h *configHandler) applyPitRadioConfig(config map[string]any) []string {
 	errors = appendErr(errors, applyField[float64](config, "messageSendIntervalMs", "invalid message send interval value", func(f float64) {
 		h.config.SetPitRadioMessageSendIntervalMs(int(f))
 	}))
+	errors = append(errors, applySubMap(config, "audio", "invalid pit radio audio configuration structure", h.applyPitRadioAudioConfig)...)
 	errors = append(errors, applySubMap(config, "notifications", "invalid notifications configuration structure", h.applyNotificationsConfig)...)
 	errors = append(errors, applySubMap(config, "discord", "invalid discord configuration structure", h.applyDiscordConfig)...)
 	errors = append(errors, applySubMap(config, "fuelMonitoring", "invalid fuel monitoring configuration structure", h.applyFuelConfig)...)

@@ -785,6 +785,7 @@
     <script src="/js/i18n.js"></script>
     <script src="/js/navigation.js"></script>
     <script src="/js/settings.js"></script>
+    <script src="/js/audio-settings.js"></script>
     <script src="/js/bluetooth-settings.js"></script>
     <script src="/js/fan-settings.js"></script>
     <title>Settings - Simtezilo</title>
@@ -1016,6 +1017,18 @@
                 <div class="settings-section-card" data-section-content="system">
                     <div class="card">
                         <div class="card-body">
+
+                            <!-- Audio Backend -->
+                            <h5 class="mb-3"><span class="icon" data-icon="volume-high"></span><span>Audio Backend</span></h5>
+                            <div class="row g-3 mb-4">
+                                <div class="col-md-6 col-lg-4">
+                                    <label for="audio-backend" class="form-label">Backend</label>
+                                    <select id="audio-backend" class="form-select" data-config="hardware.audioBackend">
+                                        <option value="beep">beep</option>
+                                        <option value="portaudio">portaudio</option>
+                                    </select>
+                                </div>
+                            </div>
 
                             <!-- Hardware Settings -->
                             <div id="hardware-settings">
@@ -1895,6 +1908,56 @@
                     <div class="card">
                         <div class="card-body">
 
+                            <!-- Haptics Output -->
+                            <h5 class="mb-3"><span class="icon" data-icon="wave-square"></span><span>Haptics Output</span></h5>
+                            <div class="row g-3 mb-3">
+                                <div class="col-md-8 col-lg-6">
+                                    <label for="audio-haptics-device" class="form-label">Device</label>
+                                    <select id="audio-haptics-device" class="form-select" data-config="haptics.output.device">
+                                        <option value="">System default</option>
+                                    </select>
+                                    <input type="hidden" id="audio-haptics-devicename" data-config="haptics.output.deviceName">
+                                </div>
+                                <div class="col-md-4 col-lg-3">
+                                    <label for="audio-haptics-channels" class="form-label">Channels</label>
+                                    <input type="number" id="audio-haptics-channels" class="form-control text-center"
+                                        data-config="haptics.output.channels" min="1" max="32">
+                                </div>
+                                <div class="col-md-4 col-lg-3">
+                                    <label for="audio-haptics-samplerate" class="form-label">Sample Rate</label>
+                                    <div class="input-with-suffix">
+                                        <input type="number" id="audio-haptics-samplerate" class="form-control text-center"
+                                            data-config="haptics.output.sampleRate" min="8000" step="4000">
+                                        <span class="input-suffix">Hz</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-4 col-lg-3">
+                                    <label for="audio-haptics-latency" class="form-label">Latency</label>
+                                    <div class="input-with-suffix">
+                                        <input type="number" id="audio-haptics-latency" class="form-control text-center"
+                                            data-config="haptics.output.latencyMs" min="0">
+                                        <span class="input-suffix">ms</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="row g-3 mb-3 align-items-end">
+                                <div class="col-auto">
+                                    <label for="audio-haptics-test-channel" class="form-label">Test Channel</label>
+                                    <input type="number" id="audio-haptics-test-channel" class="form-control text-center"
+                                        style="width: 80px;" value="0" min="0">
+                                </div>
+                                <div class="col-auto">
+                                    <button type="button" id="audio-haptics-test" class="btn btn-outline-secondary">Test</button>
+                                    <span id="audio-haptics-test-status" class="ms-2 small text-muted"></span>
+                                </div>
+                            </div>
+                            <div class="mb-4">
+                                <small class="text-muted">
+                                    <i class="fa-solid fa-info-circle me-1"></i>
+                                    Test tones require the <strong>portaudio</strong> backend. The <strong>beep</strong> backend uses a single shared stereo device and does not support per-channel test tones.
+                                </small>
+                            </div>
+
                             <h5 class="mb-3"><span class="icon" data-icon="gear"></span><span
                                     data-i18n="runmode.settings.haptics.general.title">General</span></h5>
                             <div class="d-flex align-items-center gap-3 mb-4">
@@ -2285,6 +2348,7 @@
                                         data-config="pitRadio.output">
                                         <option value="log">Log</option>
                                         <option value="discord">Discord</option>
+                                        <option value="audio">Audio</option>
                                     </select>
                                 </div>
                                 <div class="col-md-6 col-lg-3">
@@ -2297,6 +2361,40 @@
                                             step="100">
                                         <span class="input-suffix">ms</span>
                                     </div>
+                                </div>
+                            </div>
+
+                            <!-- Local Audio Output -->
+                            <div id="local-audio-settings-section" style="display: none;">
+                                <h5 class="mt-5 mb-3"><span class="icon" data-icon="volume-high"></span><span>Local Audio Output</span></h5>
+                                <div class="row g-3 mb-3">
+                                    <div class="col-md-8 col-lg-6">
+                                        <label for="audio-pitradio-device" class="form-label">Device</label>
+                                        <select id="audio-pitradio-device" class="form-select" data-config="pitRadio.audio.device">
+                                            <option value="">System default</option>
+                                        </select>
+                                        <input type="hidden" id="audio-pitradio-devicename" data-config="pitRadio.audio.deviceName">
+                                    </div>
+                                    <div class="col-md-4 col-lg-3">
+                                        <label for="audio-pitradio-samplerate" class="form-label">Sample Rate</label>
+                                        <div class="input-with-suffix">
+                                            <input type="number" id="audio-pitradio-samplerate" class="form-control text-center"
+                                                data-config="pitRadio.audio.sampleRate" min="8000" step="4000">
+                                            <span class="input-suffix">Hz</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="row g-3 mb-3 align-items-center">
+                                    <div class="col-auto">
+                                        <button type="button" id="audio-pitradio-test" class="btn btn-outline-secondary">Test</button>
+                                        <span id="audio-pitradio-test-status" class="ms-2 small text-muted"></span>
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <small class="text-muted">
+                                        <i class="fa-solid fa-info-circle me-1"></i>
+                                        Local audio output requires the <strong>portaudio</strong> backend. The <strong>beep</strong> backend uses a single shared stereo device and cannot be used for pit radio output.
+                                    </small>
                                 </div>
                             </div>
 

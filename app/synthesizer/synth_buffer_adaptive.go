@@ -16,21 +16,41 @@ type AdaptiveBuffer struct {
 	used     int // number of samples currently in buffer
 
 	// Adaptive features
-	overflows  int       // count of buffer overflows
-	underruns  int       // count of buffer underruns
-	lastAccess time.Time // last time buffer was accessed
-	readDelay  int       // delay between buffer write and read
+	overflows       int       // count of buffer overflows
+	underruns       int       // count of buffer underruns
+	lastAccess      time.Time // last time buffer was accessed
+	readDelay       int       // delay between buffer write and read
+	lastOverflow    time.Time // timestamp of the most recent overflow event (zero if never)
+	lastUnderrun    time.Time // timestamp of the most recent underrun event (zero if never)
+	overflowSamples int       // cumulative samples dropped due to overflow
 }
 
-// NewAdaptiveBuffer creates a new adaptive buffer
+// defaultBufferCushionMs is the read-delay cushion used by NewAdaptiveBuffer
+// when no explicit cushion is supplied.
+const defaultBufferCushionMs = 24
+
+// NewAdaptiveBuffer creates a new adaptive buffer with the default 24 ms cushion.
 // bufferDuration: duration of audio the buffer should hold
 // sampleRateHz: sample rate in Hz to calculate buffer size in samples.
 func NewAdaptiveBuffer(length time.Duration, sampleRateHz int) *AdaptiveBuffer {
+	return NewAdaptiveBufferCushion(length, sampleRateHz, defaultBufferCushionMs)
+}
+
+// NewAdaptiveBufferCushion creates a new adaptive buffer with an explicit
+// read-delay cushion. The cushion is the amount of audio the buffer holds in
+// reserve; it must comfortably exceed the consumer's per-read pull size so a
+// briefly late writer does not force a short read (which a consumer zero-pads
+// into an audible click). A non-positive cushion falls back to the default.
+func NewAdaptiveBufferCushion(length time.Duration, sampleRateHz, cushionMs int) *AdaptiveBuffer {
+	if cushionMs <= 0 {
+		cushionMs = defaultBufferCushionMs
+	}
+
 	capacity := int(length.Seconds() * float64(sampleRateHz))
 
-	// Calculate read delay as 24ms worth of samples, but cap to 25% of capacity
-	// to ensure there's always room for actual content
-	readDelay := (sampleRateHz / 1000) * 24
+	// Calculate read delay from the cushion, but cap to 25% of capacity to
+	// ensure there's always room for actual content.
+	readDelay := (sampleRateHz / 1000) * cushionMs
 
 	maxReadDelay := capacity / 4
 	if readDelay > maxReadDelay {
@@ -93,7 +113,21 @@ func (b *AdaptiveBuffer) Available() int {
 	return b.capacity - b.used
 }
 
-// Health returns buffer health metrics.
+// BufferHealth holds a snapshot of adaptive buffer diagnostic metrics.
+type BufferHealth struct {
+	Overflows       int
+	Underruns       int
+	FillRatio       float64 // 0..1
+	Capacity        int
+	Used            int
+	Available       int
+	ReadDelay       int
+	LastOverflow    time.Time // zero if never overflowed
+	LastUnderrun    time.Time // zero if never underran
+	OverflowSamples int       // cumulative samples dropped due to overflow
+}
+
+// Health returns buffer health metrics. Deprecated: use HealthDetailed instead.
 func (b *AdaptiveBuffer) Health() (overflows, underruns int, fillRatio float64) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
@@ -101,6 +135,26 @@ func (b *AdaptiveBuffer) Health() (overflows, underruns int, fillRatio float64) 
 	fillRatio = float64(b.used) / float64(b.capacity)
 
 	return b.overflows, b.underruns, fillRatio
+}
+
+// HealthDetailed returns a detailed snapshot of buffer diagnostics including
+// recency timestamps and capacity information.
+func (b *AdaptiveBuffer) HealthDetailed() BufferHealth {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+
+	return BufferHealth{
+		Overflows:       b.overflows,
+		Underruns:       b.underruns,
+		FillRatio:       float64(b.used) / float64(b.capacity),
+		Capacity:        b.capacity,
+		Used:            b.used,
+		Available:       b.capacity - b.used,
+		ReadDelay:       b.readDelay,
+		LastOverflow:    b.lastOverflow,
+		LastUnderrun:    b.lastUnderrun,
+		OverflowSamples: b.overflowSamples,
+	}
 }
 
 // Inspect returns a copy of samples from the buffer without consuming them.
@@ -290,9 +344,12 @@ func (b *AdaptiveBuffer) applyPeakLimiting(samples []float64, peak float64) {
 func (b *AdaptiveBuffer) handleOverflow(samples []float64, overwrite bool) {
 	if len(samples) > (b.capacity-b.used) && overwrite {
 		b.overflows++
+		b.lastOverflow = time.Now()
+
+		samplesToDrop := len(samples) - (b.capacity - b.used)
+		b.overflowSamples += samplesToDrop
 
 		if !overwrite {
-			samplesToDrop := len(samples) - (b.capacity - b.used)
 			b.dropOldestSamples(samplesToDrop)
 		}
 	}
@@ -309,6 +366,7 @@ func (b *AdaptiveBuffer) readFromBuffer(length int, consume bool) []float64 {
 	if length > b.used {
 		if consume {
 			b.underruns++
+			b.lastUnderrun = time.Now()
 		}
 
 		length = b.used

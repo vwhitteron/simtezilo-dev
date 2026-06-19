@@ -28,6 +28,19 @@ func (a *App) sendTelemetryChartData() {
 	a.webSequenceID = a.kinematics.Current.SequenceID
 
 	go func() {
+		// Snapshot the audio health/diagnostics once; both are derived per call.
+		health := a.hapticSource.Health()
+		diag := a.synth.Diagnostics()
+		channelFill := func(name string) float32 {
+			for _, ch := range diag.Channels {
+				if ch.Name == name {
+					return float32(ch.Health.FillRatio)
+				}
+			}
+
+			return 0
+		}
+
 		a.telemetryChartFeed <- map[string]float32{
 			"computeTime":                 float32(a.kinematics.Last.ComputeTime.Microseconds()),
 			"seq":                         float32(a.state.current.sequenceNumber),
@@ -71,6 +84,12 @@ func (a *App) sendTelemetryChartData() {
 
 				return 0
 			}(),
+			// Audio pipeline health metrics
+			"asyncBufferFill":   float32(health.FillRatio),
+			"asyncSilentGaps":   float32(health.GapFills),
+			"asyncProducerLag":  float32(health.ProducerWaits),
+			"mixerEngineFill":   channelFill("engine"),
+			"mixerChassis0Fill": channelFill("chassis_0"),
 		}
 	}()
 }

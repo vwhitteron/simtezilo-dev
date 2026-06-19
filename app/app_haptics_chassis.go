@@ -23,7 +23,7 @@ func (a *App) generateChassisHaptic() {
 	minSamplesPerFrame := int(sampleRate / hapticFrameRate)
 
 	// Generate pulse buffers for each channel
-	for channel := range synthesizer.NumOutputChannels {
+	for channel := range a.synth.NumOutputChannels() {
 		channelFreqHz, channelAmplitude, drxActive := a.applyDRX(
 			pulseFrequencyHz, pulseAmplitude, unclampedAmplitude, channel,
 		)
@@ -99,7 +99,7 @@ func (a *App) applyDRX(
 	eqAttenDB := signal.AmplitudeToDecibels(drxBucketRatio)
 	desiredBoostDB := signal.AmplitudeToDecibels(unclampedAmplitude / a.config.GetHapticsPulseMaxAmplitude())
 
-	a.log.Info().
+	a.log.Debug().
 		Float64("original_freq", pulseFrequencyHz).
 		Float64("drx_freq", drxFreq).
 		Float64("eq_atten_db", eqAttenDB).
@@ -136,7 +136,7 @@ func (a *App) calculateChassisHapticPulseAmplitude() (pulseAmplitude float64, un
 // When a large jerk occurs (e.g., >2000), it's often followed by an inverse jerk that would
 // cancel out the haptic feedback. This function detects inverse jerk patterns and holds the
 // amplitude to maintain the impact sensation.
-func (a *App) applyJerkPeakHold(rawJerk, processedAmplitude float64) float64 {
+func (a *App) applyJerkPeakHold(rawJerk, processedAmplitude float64) float64 { //nolint:unused // peak-hold for planned inverse-jerk detection; deliberately kept
 	const jerkThreshold = 2000.0
 
 	const minAmplitudeThreshold = 0.3
@@ -203,7 +203,7 @@ func (a *App) applyJerkPeakHold(rawJerk, processedAmplitude float64) float64 {
 }
 
 // detectInverseJerk checks if the jerk sign has changed from last frame.
-func (a *App) detectInverseJerk(currentJerk float64) bool {
+func (a *App) detectInverseJerk(currentJerk float64) bool { //nolint:unused // peak-hold for planned inverse-jerk detection; deliberately kept
 	lastJerk := a.kinematics.Last.SixDOFTranslationCalc.Jerk
 
 	return (lastJerk > 0 && currentJerk < 0) || (lastJerk < 0 && currentJerk > 0)

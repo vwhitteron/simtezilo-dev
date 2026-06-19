@@ -35,4 +35,8 @@ type Mixer interface { //nolint:interfacebloat // Large interface for core mixer
 	GetChannelMute(channel int) bool
 	GetMasterMute() bool
 	SetSilenced(silenced bool)
+	IsSilenced() bool
+
+	// Diagnostics returns buffer health diagnostics for all channels
+	Diagnostics() MixerDiagnostics
 }

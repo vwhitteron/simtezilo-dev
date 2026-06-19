@@ -1,4 +1,15 @@
 # syntax=docker/dockerfile:1
+#
+# Audio backend selection (multichannel / device selection):
+#   The default build uses the pure beep backend (single stereo device).
+#   To enable the portaudio backend, pass the GOTAGS build arg, e.g.:
+#     --build-arg GOTAGS=portaudio
+#   The per-arch portaudio19-dev package is already installed in each base-*
+#   stage, so the cgo build links cleanly. GOTAGS is empty by default, producing
+#   the original beep-only binary. The Makefile sets it for any PORTAUDIO state
+#   except off (i.e. on/auto -> portaudio; PORTAUDIO=off make <target> -> beep).
+#   NB: a portaudio-enabled binary dynamically links libportaudio2 — the target
+#   device must have libportaudio2 (+ libasound2) installed at runtime.
 ARG GOVERSION=1.25.0
 
 FROM golang:${GOVERSION}-trixie AS base
@@ -12,19 +23,19 @@ RUN --mount=type=cache,target=/go/pkg/mod/ \
 
 FROM base AS base-armhf
 RUN dpkg --add-architecture armhf
-RUN apt-get update && apt-get install -y libasound2-dev:armhf gcc-arm-linux-gnueabihf libopus-dev
+RUN apt-get update && apt-get install -y libasound2-dev:armhf gcc-arm-linux-gnueabihf libopus-dev portaudio19-dev:armhf
 
 FROM base AS base-armel
 RUN dpkg --add-architecture armel
-RUN apt-get update && apt-get install -y libasound2-dev:armel gcc-arm-linux-gnueabi libopus-dev:armel
+RUN apt-get update && apt-get install -y libasound2-dev:armel gcc-arm-linux-gnueabi libopus-dev:armel portaudio19-dev:armel
 
 FROM base AS base-arm64
 RUN dpkg --add-architecture arm64
-RUN apt-get update && apt-get install -y libasound2-dev:arm64 gcc:arm64 libopus-dev:arm64
+RUN apt-get update && apt-get install -y libasound2-dev:arm64 gcc:arm64 libopus-dev:arm64 portaudio19-dev:arm64
 
 FROM base AS base-amd64
 RUN dpkg --add-architecture amd64
-RUN apt-get update && apt-get install -y libasound2-dev:amd64 gcc:amd64 libopus-dev:amd64
+RUN apt-get update && apt-get install -y libasound2-dev:amd64 gcc:amd64 libopus-dev:amd64 portaudio19-dev:amd64
 
 
 FROM base-armhf AS build-app-armhf
@@ -38,15 +49,16 @@ ARG BUILDVERSION
 ARG BUILDCOMMIT
 ARG BUILDTIME
 ARG PLATFORM
+ARG GOTAGS
 RUN --mount=type=bind,target=. find /src -type f
 RUN --mount=type=cache,target=/go/pkg/mod/ \
     --mount=type=bind,target=. \
     GOOS=${GOOS} GOARCH=arm \
-    go build -ldflags "-X '${BUILDMODULE}/app.Version=${BUILDVERSION}' -X '${BUILDMODULE}/app.CommitHash=${BUILDCOMMIT}' -X '${BUILDMODULE}/app.BuildTime=${BUILDTIME}' -X '${BUILDMODULE}/app.Platform=${PLATFORM}'" -o /out/simtezilo-${GOOS}-armhf ./cmd/simtezilo/main.go
+    go build -tags "${GOTAGS}" -ldflags "-X '${BUILDMODULE}/app.Version=${BUILDVERSION}' -X '${BUILDMODULE}/app.CommitHash=${BUILDCOMMIT}' -X '${BUILDMODULE}/app.BuildTime=${BUILDTIME}' -X '${BUILDMODULE}/app.Platform=${PLATFORM}'" -o /out/simtezilo-${GOOS}-armhf ./cmd/simtezilo/main.go
 RUN --mount=type=cache,target=/go/pkg/mod/ \
     --mount=type=bind,target=. \
     GOOS=${GOOS} GOARCH=arm \
-    go build -ldflags "-X '${BUILDMODULE}/app.Version=${BUILDVERSION}' -X '${BUILDMODULE}/app.CommitHash=${BUILDCOMMIT}' -X '${BUILDMODULE}/app.BuildTime=${BUILDTIME}' -X '${BUILDMODULE}/app.Platform=${PLATFORM}'" -o /out/platform-m1-${GOOS}-armhf ./cmd/platform-m1/*.go
+    go build -tags "${GOTAGS}" -ldflags "-X '${BUILDMODULE}/app.Version=${BUILDVERSION}' -X '${BUILDMODULE}/app.CommitHash=${BUILDCOMMIT}' -X '${BUILDMODULE}/app.BuildTime=${BUILDTIME}' -X '${BUILDMODULE}/app.Platform=${PLATFORM}'" -o /out/platform-m1-${GOOS}-armhf ./cmd/platform-m1/*.go
 
 FROM base-armel AS build-app-armel
 WORKDIR /src
@@ -60,15 +72,16 @@ ARG BUILDVERSION
 ARG BUILDCOMMIT
 ARG BUILDTIME
 ARG PLATFORM
+ARG GOTAGS
 RUN --mount=type=bind,target=. find /src -type f
 RUN --mount=type=cache,target=/go/pkg/mod/ \
     --mount=type=bind,target=. \
     GOOS=${GOOS} GOARCH=arm GOARM=${GOARM} \
-    go build -ldflags "-X '${BUILDMODULE}/app.Version=${BUILDVERSION}' -X '${BUILDMODULE}/app.CommitHash=${BUILDCOMMIT}' -X '${BUILDMODULE}/app.BuildTime=${BUILDTIME}' -X '${BUILDMODULE}/app.Platform=${PLATFORM}'" -o /out/simtezilo-${GOOS}-armel-${GOARM} ./cmd/simtezilo/main.go
+    go build -tags "${GOTAGS}" -ldflags "-X '${BUILDMODULE}/app.Version=${BUILDVERSION}' -X '${BUILDMODULE}/app.CommitHash=${BUILDCOMMIT}' -X '${BUILDMODULE}/app.BuildTime=${BUILDTIME}' -X '${BUILDMODULE}/app.Platform=${PLATFORM}'" -o /out/simtezilo-${GOOS}-armel-${GOARM} ./cmd/simtezilo/main.go
 RUN --mount=type=cache,target=/go/pkg/mod/ \
     --mount=type=bind,target=. \
     GOOS=${GOOS} GOARCH=arm GOARM=${GOARM} \
-    go build -ldflags "-X '${BUILDMODULE}/app.Version=${BUILDVERSION}' -X '${BUILDMODULE}/app.CommitHash=${BUILDCOMMIT}' -X '${BUILDMODULE}/app.BuildTime=${BUILDTIME}' -X '${BUILDMODULE}/app.Platform=${PLATFORM}'" -o /out/platform-m1-${GOOS}-armel-${GOARM} ./cmd/platform-m1/*.go
+    go build -tags "${GOTAGS}" -ldflags "-X '${BUILDMODULE}/app.Version=${BUILDVERSION}' -X '${BUILDMODULE}/app.CommitHash=${BUILDCOMMIT}' -X '${BUILDMODULE}/app.BuildTime=${BUILDTIME}' -X '${BUILDMODULE}/app.Platform=${PLATFORM}'" -o /out/platform-m1-${GOOS}-armel-${GOARM} ./cmd/platform-m1/*.go
 
 FROM base-armel AS build-app-armel-8
 WORKDIR /src
@@ -81,15 +94,16 @@ ARG BUILDVERSION
 ARG BUILDCOMMIT
 ARG BUILDTIME
 ARG PLATFORM
+ARG GOTAGS
 RUN --mount=type=bind,target=. find /src -type f
 RUN --mount=type=cache,target=/go/pkg/mod/ \
     --mount=type=bind,target=. \
     GOOS=${GOOS} GOARCH=arm \
-    go build -ldflags "-X '${BUILDMODULE}/app.Version=${BUILDVERSION}' -X '${BUILDMODULE}/app.CommitHash=${BUILDCOMMIT}' -X '${BUILDMODULE}/app.BuildTime=${BUILDTIME}' -X '${BUILDMODULE}/app.Platform=${PLATFORM}'" -o /out/simtezilo-${GOOS}-armel-8 ./cmd/simtezilo/main.go
+    go build -tags "${GOTAGS}" -ldflags "-X '${BUILDMODULE}/app.Version=${BUILDVERSION}' -X '${BUILDMODULE}/app.CommitHash=${BUILDCOMMIT}' -X '${BUILDMODULE}/app.BuildTime=${BUILDTIME}' -X '${BUILDMODULE}/app.Platform=${PLATFORM}'" -o /out/simtezilo-${GOOS}-armel-8 ./cmd/simtezilo/main.go
 RUN --mount=type=cache,target=/go/pkg/mod/ \
     --mount=type=bind,target=. \
     GOOS=${GOOS} GOARCH=arm \
-    go build -ldflags "-X '${BUILDMODULE}/app.Version=${BUILDVERSION}' -X '${BUILDMODULE}/app.CommitHash=${BUILDCOMMIT}' -X '${BUILDMODULE}/app.BuildTime=${BUILDTIME}' -X '${BUILDMODULE}/app.Platform=${PLATFORM}'" -o /out/platform-m1-${GOOS}-armel-8 ./cmd/platform-m1/*.go
+    go build -tags "${GOTAGS}" -ldflags "-X '${BUILDMODULE}/app.Version=${BUILDVERSION}' -X '${BUILDMODULE}/app.CommitHash=${BUILDCOMMIT}' -X '${BUILDMODULE}/app.BuildTime=${BUILDTIME}' -X '${BUILDMODULE}/app.Platform=${PLATFORM}'" -o /out/platform-m1-${GOOS}-armel-8 ./cmd/platform-m1/*.go
 
 FROM base-arm64 AS build-app-arm64-8
 WORKDIR /src
@@ -100,15 +114,16 @@ ARG BUILDVERSION
 ARG BUILDCOMMIT
 ARG BUILDTIME
 ARG PLATFORM
+ARG GOTAGS
 RUN --mount=type=bind,target=. find /src -type f
 RUN --mount=type=cache,target=/go/pkg/mod/ \
     --mount=type=bind,target=. \
     GOOS=${GOOS} GOARCH=arm64 \
-    go build -ldflags "-X '${BUILDMODULE}/app.Version=${BUILDVERSION}' -X '${BUILDMODULE}/app.CommitHash=${BUILDCOMMIT}' -X '${BUILDMODULE}/app.BuildTime=${BUILDTIME}' -X '${BUILDMODULE}/app.Platform=${PLATFORM}'" -o /out/simtezilo-${GOOS}-arm64-8 ./cmd/simtezilo/main.go
+    go build -tags "${GOTAGS}" -ldflags "-X '${BUILDMODULE}/app.Version=${BUILDVERSION}' -X '${BUILDMODULE}/app.CommitHash=${BUILDCOMMIT}' -X '${BUILDMODULE}/app.BuildTime=${BUILDTIME}' -X '${BUILDMODULE}/app.Platform=${PLATFORM}'" -o /out/simtezilo-${GOOS}-arm64-8 ./cmd/simtezilo/main.go
 RUN --mount=type=cache,target=/go/pkg/mod/ \
     --mount=type=bind,target=. \
     GOOS=${GOOS} GOARCH=arm64 \
-    go build -ldflags "-X '${BUILDMODULE}/app.Version=${BUILDVERSION}' -X '${BUILDMODULE}/app.CommitHash=${BUILDCOMMIT}' -X '${BUILDMODULE}/app.BuildTime=${BUILDTIME}' -X '${BUILDMODULE}/app.Platform=${PLATFORM}'" -o /out/platform-m1-${GOOS}-arm64-8 ./cmd/platform-m1/*.go
+    go build -tags "${GOTAGS}" -ldflags "-X '${BUILDMODULE}/app.Version=${BUILDVERSION}' -X '${BUILDMODULE}/app.CommitHash=${BUILDCOMMIT}' -X '${BUILDMODULE}/app.BuildTime=${BUILDTIME}' -X '${BUILDMODULE}/app.Platform=${PLATFORM}'" -o /out/platform-m1-${GOOS}-arm64-8 ./cmd/platform-m1/*.go
 
 FROM base-amd64 AS build-app-amd64
 WORKDIR /src
@@ -120,11 +135,12 @@ ARG BUILDVERSION
 ARG BUILDCOMMIT
 ARG BUILDTIME
 ARG PLATFORM
+ARG GOTAGS
 RUN --mount=type=bind,target=. find /src -type f
 RUN --mount=type=cache,target=/go/pkg/mod/ \
     --mount=type=bind,target=. \
     GOOS=${GOOS} GOARCH=amd64 \
-    go build -ldflags "-X '${BUILDMODULE}/app.Version=${BUILDVERSION}' -X '${BUILDMODULE}/app.CommitHash=${BUILDCOMMIT}' -X '${BUILDMODULE}/app.BuildTime=${BUILDTIME}' -X '${BUILDMODULE}/app.Platform=${PLATFORM}'" -o /out/simtezilo-${GOOS}-amd64 ./cmd/simtezilo/main.go
+    go build -tags "${GOTAGS}" -ldflags "-X '${BUILDMODULE}/app.Version=${BUILDVERSION}' -X '${BUILDMODULE}/app.CommitHash=${BUILDCOMMIT}' -X '${BUILDMODULE}/app.BuildTime=${BUILDTIME}' -X '${BUILDMODULE}/app.Platform=${PLATFORM}'" -o /out/simtezilo-${GOOS}-amd64 ./cmd/simtezilo/main.go
 
 
 FROM scratch AS binaries-armhf

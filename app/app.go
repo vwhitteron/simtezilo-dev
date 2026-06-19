@@ -13,10 +13,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/gopxl/beep"
-	"github.com/gopxl/beep/speaker"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+	"github.com/vwhitteron/simtezilo-dev/app/audio"
 	"github.com/vwhitteron/simtezilo-dev/app/cache"
 	"github.com/vwhitteron/simtezilo-dev/app/calibrator"
 	"github.com/vwhitteron/simtezilo-dev/app/circuit"
@@ -39,6 +38,7 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/odometer"
 	"github.com/vwhitteron/simtezilo-dev/app/pitradio"
 	"github.com/vwhitteron/simtezilo-dev/app/pitradio/discord"
+	"github.com/vwhitteron/simtezilo-dev/app/pitradio/local"
 	"github.com/vwhitteron/simtezilo-dev/app/platform"
 	"github.com/vwhitteron/simtezilo-dev/app/predictivelap"
 	"github.com/vwhitteron/simtezilo-dev/app/setupmode"
@@ -100,6 +100,12 @@ type App struct {
 	kinematics kinematics.State          // Vehicle kinematics tracker
 	synth      *synthesizer.Synthesizer  // Audio synthesizer for haptic feedback
 	calibrator *calibrator.ToneGenerator // Calibration mode manager
+
+	audioBackend   audio.Backend      // Audio output backend (beep/portaudio)
+	hapticSink     audio.Sink         // Active haptic output stream
+	hapticSource   *audio.AsyncSource // Background producer feeding the haptic sink
+	audioMu        sync.Mutex         // Guards audio output state during start/restart
+	audioRestartMu sync.Mutex         // Serializes full stop+start restarts (e.g. device change)
 
 	odometer      *odometer.Odometer           // Odometer for distance tracking
 	fuelRange     fuelrange.Estimator          // Fuel range estimator
@@ -308,6 +314,8 @@ func (a *App) Close() {
 		a.updater.Stop()
 	}
 
+	a.stopAudioOutput()
+
 	err := a.synth.Close()
 	if err != nil {
 		a.log.Error().
@@ -425,6 +433,11 @@ func (a *App) runAppMode() RunResult {
 			BuildTime:          BuildTime,
 			BuildPlatform:      Platform,
 			Updater:            a.updater,
+			// Restart the live haptic stream off the HTTP handler goroutine so the
+			// settings save returns immediately while the device is reopened.
+			// (A backend change is restart-required, not live, so there is no
+			// backend callback.)
+			OnHapticsOutputChanged: func() { go a.restartAudioOutput() },
 		})
 	}
 
@@ -956,6 +969,12 @@ func (a *App) initializePitRadio(opts Options) {
 				Str("result", "failure").
 				Msg("init")
 		}
+	case "audio":
+		if !a.initialiseLocalPitRadioOutput() {
+			a.config.SetPitRadioEnabled(false)
+
+			return
+		}
 	default:
 		a.config.SetPitRadioEnabled(false)
 
@@ -969,6 +988,70 @@ func (a *App) initializePitRadio(opts Options) {
 	}
 
 	a.resetPitRadioState()
+}
+
+// initialiseLocalPitRadioOutput sets the primary pit-radio output to a local
+// audio device, used when the pit-radio output mode is "audio". The beep backend
+// drives a single global stereo device shared with haptics, so local pit-radio
+// output requires the portaudio backend. It returns false (leaving
+// a.pitRadio unset) when the device cannot be opened.
+func (a *App) initialiseLocalPitRadioOutput() bool {
+	backendName := a.config.GetAudioBackend()
+	if backendName == audio.BackendBeep {
+		a.log.Warn().
+			Str("component", "pit radio local").
+			Str("backend", backendName).
+			Msg("local pit-radio output requires the portaudio backend; disabling")
+
+		return false
+	}
+
+	backend, err := audio.New(backendName, a.log)
+	if err != nil {
+		a.log.Warn().
+			Err(err).
+			Str("component", "pit radio local").
+			Str("backend", backendName).
+			Msg("audio backend unavailable; disabling local pit-radio output")
+
+		return false
+	}
+
+	localOutput, err := local.New(local.Config{
+		Backend:    backend,
+		Device:     a.config.GetAudioPitRadioDevice(),
+		DeviceName: a.config.GetAudioPitRadioDeviceName(),
+		SampleRate: a.config.GetAudioPitRadioSampleRate(),
+		// Resolve device (by name, ID tiebreaker) and sample rate per message so a
+		// web-UI change takes effect on the next pit-radio message without a restart.
+		DeviceFn:     a.config.GetAudioPitRadioDevice,
+		DeviceNameFn: a.config.GetAudioPitRadioDeviceName,
+		SampleRateFn: a.config.GetAudioPitRadioSampleRate,
+		MessageGap:   time.Duration(a.config.GetPitRadioMessageSendIntervalMs()) * time.Millisecond,
+		Logger:       a.log,
+		// Drive the Bluetooth audio bridge from the sink lifecycle: the bridge can
+		// only run while this sink (its loopback master) is open.
+		OnSinkActive: a.onPitRadioSinkActive,
+	})
+	if err != nil {
+		_ = backend.Close()
+
+		a.log.Warn().
+			Err(err).
+			Str("component", "pit radio local").
+			Msg("create local pit-radio output; disabling")
+
+		return false
+	}
+
+	a.pitRadio = localOutput
+
+	a.log.Info().
+		Str("component", "pit radio local").
+		Str("device", a.config.GetAudioPitRadioDevice()).
+		Msg("local pit-radio output enabled")
+
+	return true
 }
 
 // initialiseDiscord sets up Discord pit radio bot.
@@ -1131,26 +1214,196 @@ func (a *App) getDisplayLCD() *display.ST7789LCD {
 }
 
 func (a *App) startAudioOutput() {
-	outputSampleRate := beep.SampleRate(a.config.GetSynthOutputSampleRateHz())
+	a.audioMu.Lock()
+	defer a.audioMu.Unlock()
 
-	hapticStreamer := synthesizer.NewHapticStream(a.synth, outputSampleRate)
+	backendName := a.config.GetAudioBackend()
 
-	err := speaker.Init(
-		outputSampleRate,
-		outputSampleRate.N(time.Second/15),
-	)
+	backend, err := audio.New(backendName, a.log)
+	if err != nil {
+		// Fall back to the beep backend when the configured backend is not
+		// available in this build (e.g. portaudio not compiled in).
+		a.log.Warn().
+			Err(err).
+			Str("backend", backendName).
+			Msg("audio backend unavailable, falling back to beep")
+
+		backend, err = audio.New(audio.BackendBeep, a.log)
+		if err != nil {
+			a.log.Error().
+				Err(err).
+				Str("component", "audio output device").
+				Str("result", "failure").
+				Msg("init")
+			_ = a.ui.Screen.RenderErrorScreen("Audio output init")
+
+			return
+		}
+	}
+
+	a.audioBackend = backend
+
+	internalRate := a.synth.GetSampleRate()
+
+	// Prefer the device's own native sample rate for the output stream. If the
+	// configured rate differs from the device's default (common with Bluetooth
+	// devices that run at 44100/48000 Hz while the config says 32000 Hz), the OS
+	// inserts its own SRC layer, which on ALSA/BlueALSA uses variable-size
+	// callbacks that underrun the ring and cause dropouts. Opening at the device's
+	// native rate removes the OS SRC; the polyphase resampler handles the full
+	// internalRate → deviceRate conversion directly.
+	outputRate := a.config.GetAudioHapticsSampleRate()
+
+	dev, devFound := audio.FindOutputDevice(backend, a.config.GetAudioHapticsDeviceName(), a.config.GetAudioHapticsDevice())
+
+	// Fall back to the raw saved ID when the device list is unavailable or the
+	// name cannot be matched — same behaviour as the previous ResolveOutputDevice call.
+	deviceID := a.config.GetAudioHapticsDevice()
+	if devFound {
+		deviceID = dev.ID
+
+		if dev.DefaultSampleRate > 0 && dev.DefaultSampleRate != outputRate {
+			a.log.Info().
+				Int("configured", outputRate).
+				Int("device", dev.DefaultSampleRate).
+				Str("deviceName", dev.Name).
+				Msg("using device native sample rate to avoid OS resampling")
+
+			outputRate = dev.DefaultSampleRate
+		}
+	}
+
+	cfg := audio.SinkConfig{
+		DeviceID:   deviceID,
+		Channels:   a.config.GetAudioHapticsChannels(),
+		SampleRate: outputRate,
+		LatencyMs:  a.config.GetAudioHapticsLatencyMs(),
+	}
+
+	sink, err := backend.OpenSink(cfg)
+	if err != nil && cfg.DeviceID != "" {
+		// The configured device may be unplugged; retry on the default device.
+		a.log.Warn().
+			Err(err).
+			Str("device", cfg.DeviceID).
+			Msg("audio device unavailable, falling back to default device")
+
+		cfg.DeviceID = ""
+		sink, err = backend.OpenSink(cfg)
+	}
+
 	if err != nil {
 		a.log.Error().
 			Err(err).
 			Str("component", "audio output device").
 			Str("result", "failure").
-			Msg("init")
+			Msg("open sink")
 		_ = a.ui.Screen.RenderErrorScreen("Audio output init")
 
 		return
 	}
 
-	go speaker.Play(hapticStreamer)
+	streamer := synthesizer.NewStreamer(a.synth)
+	source := audio.NewResamplingSource(streamer, internalRate, outputRate, sink.Channels())
+
+	// Decouple synthesis from the device callback: a background producer runs
+	// the (heavy, allocating) mix + resample and the realtime callback only
+	// copies finished samples out of the ring. The ring is sized to a couple of
+	// device periods so it absorbs scheduler/GC jitter without adding more than
+	// ~2x the configured latency.
+	capacityFrames, blockFrames := hapticBufferFrames(outputRate, cfg.LatencyMs)
+	async := audio.NewAsyncSource(source, sink.Channels(), capacityFrames, blockFrames)
+
+	// Skip the mix+resample work while the synth is silenced (telemetry
+	// inactive): the producer emits silence into the ring instead, so an idle
+	// device costs a memset rather than a full synthesis pass.
+	async.SetIdleCheck(a.synth.IsSilenced)
+
+	err = sink.Start(async)
+	if err != nil {
+		async.Close()
+
+		a.log.Error().
+			Err(err).
+			Str("component", "audio output device").
+			Str("result", "failure").
+			Msg("start sink")
+		_ = a.ui.Screen.RenderErrorScreen("Audio output init")
+
+		return
+	}
+
+	a.hapticSink = sink
+	a.hapticSource = async
+
+	a.log.Info().
+		Str("backend", backend.Name()).
+		Int("channels", sink.Channels()).
+		Int("sampleRate", outputRate).
+		Msg("Audio output started")
+}
+
+// hapticBufferFrames derives the async ring capacity and producer block size
+// from the output rate and requested device latency. The ring holds two device
+// periods so the producer can fall a whole period behind (a GC pause, a
+// scheduler hiccup) without the realtime callback underrunning; the block is a
+// shorter ~10 ms slice so production stays responsive.
+func hapticBufferFrames(outputRate, latencyMs int) (capacity, block int) {
+	if latencyMs <= 0 {
+		latencyMs = 50
+	}
+
+	periodFrames := outputRate * latencyMs / 1000
+
+	block = max(outputRate/100, 256) // ~10 ms, floored
+
+	capacity = max(periodFrames*2, block*4)
+
+	return capacity, block
+}
+
+// restartAudioOutput tears down the active haptic output and brings it back up,
+// picking up the current haptics output configuration (device, channels, sample
+// rate, latency). The synthesizer itself is preserved — only the sink, resampler
+// and async producer are rebuilt — so all engine/mixer state survives the switch
+// and playback resumes from where it was. The cutover is a brief silence while
+// the device is reopened; because the synth is pull-based there is nothing to
+// "catch up" on, so a fast backend (portaudio) makes it near-seamless.
+//
+// audioRestartMu serializes whole restarts so overlapping config saves cannot
+// interleave a stop and start; stopAudioOutput/startAudioOutput still take
+// audioMu internally.
+func (a *App) restartAudioOutput() {
+	a.audioRestartMu.Lock()
+	defer a.audioRestartMu.Unlock()
+
+	a.log.Info().Msg("restarting haptic audio output for configuration change")
+
+	a.stopAudioOutput()
+	a.startAudioOutput()
+}
+
+// stopAudioOutput stops the active haptic sink and releases the backend.
+func (a *App) stopAudioOutput() {
+	a.audioMu.Lock()
+	defer a.audioMu.Unlock()
+
+	if a.hapticSink != nil {
+		_ = a.hapticSink.Stop()
+		a.hapticSink = nil
+	}
+
+	// Stop the producer only after the sink, so the device callback has stopped
+	// pulling from the ring before the producer goroutine is torn down.
+	if a.hapticSource != nil {
+		a.hapticSource.Close()
+		a.hapticSource = nil
+	}
+
+	if a.audioBackend != nil {
+		_ = a.audioBackend.Close()
+		a.audioBackend = nil
+	}
 }
 
 // switchToSetupMode creates the setup mode flag file and signals the app to exit for restart in setup mode.

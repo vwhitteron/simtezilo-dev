@@ -129,6 +129,8 @@ func (w *WebUI) GetHTTPHandler() http.Handler {
 
 	// Config API
 	mux.HandleFunc("/api/calibration/sweep", w.cfgHandler.handleCalibrationSweep)
+	mux.HandleFunc("/api/audio/devices", w.cfgHandler.handleAudioDevices)
+	mux.HandleFunc("/api/audio/test", w.cfgHandler.handleAudioTest)
 	mux.HandleFunc("/api/bluetooth/devices", w.sysHandler.handleBluetoothDevices)
 	mux.HandleFunc("/api/bluetooth/action", w.sysHandler.handleBluetoothAction)
 	mux.HandleFunc("/api/config", w.cfgHandler.handleConfigAPI)
