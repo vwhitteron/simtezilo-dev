@@ -102,6 +102,13 @@ func (i *I18n) ValueFont() font.Font {
 	return i.languages.ValueFont(i.languageCode)
 }
 
+// VariableFont returns the variable font for the language, used across the live
+// view. Only the font's default instance is rendered (the freetype renderer has
+// no variable-axis support).
+func (i *I18n) VariableFont() font.Font {
+	return i.languages.VariableFont(i.languageCode)
+}
+
 // TODO: is there a better way to integrate config changes?
 // watchForConfigChanges monitors for changes in the configuration language code.
 func (i *I18n) watchForConfigChanges() {

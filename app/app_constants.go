@@ -6,6 +6,7 @@ const frameRate = 60 // 60 Hz
 
 const (
 	pitRadioFrameRate     = 1   // 1 Hz
+	FanControlFrameRate   = 3   // 3 Hz
 	displayFrameRate      = 15  // 15 Hz
 	engineHapticFrameRate = 30  // 30 Hz
 	hapticFrameRate       = 120 // 120 Hz

@@ -21,13 +21,15 @@ import (
 
 // Config holds the configuration for initializing the UserInterface.
 type Config struct {
-	I18n             *i18n.I18n
-	HIDEvents        chan HIDInputEvent
-	Display          hardware.Display
-	SettingsCallback func(languagedb.Key, string) string
-	DevToolsEnabled  func() bool
-	ExitCodeChan     chan exitcode.Code
-	Log              zerolog.Logger
+	I18n                *i18n.I18n
+	HIDEvents           chan HIDInputEvent
+	Display             hardware.Display
+	SettingsCallback    func(languagedb.Key, string) string
+	DevToolsEnabled     func() bool
+	ExperimentalEnabled func() bool
+	BluetoothAvailable  func() bool
+	ExitCodeChan        chan exitcode.Code
+	Log                 zerolog.Logger
 }
 
 // LiveData holds the dynamic telemetry that can be displayed on the UI.
@@ -46,6 +48,34 @@ type LiveData struct {
 	ThrottleOut float64
 	BrakeIn     float64
 	BrakeOut    float64
+
+	// Predictive live view: signed delta in seconds against the fastest lap
+	// (positive = current lap ahead/faster). Valid is false until a reference lap
+	// and a current delta exist.
+	PredDelta float64
+	PredValid bool
+	PredSynth bool // true when PredDelta is derived from the synthesized lap clock (fallback), not the real telemetry field
+
+	// Tyres live view: temperatures FL, FR, RL, RR (°C) and the colour-ramp
+	// thresholds derived from the pit-radio tyre config.
+	TyreTempC    [4]float64
+	TyreColdC    float64
+	TyreOptLowC  float64
+	TyreOptHighC float64
+	TyreHotC     float64
+	TyreValid    bool
+
+	// Lap live view.
+	LapNumber   int
+	LastLapText string
+	BestLapText string
+
+	// Fuel live view.
+	FuelPercent      float64
+	FuelRangeLaps    float64
+	FuelReady        bool
+	FuelPitThisLap   bool
+	FuelInsufficient bool
 }
 
 // uiState is the complete mutable UI state. The Run event loop is its sole owner,
@@ -68,13 +98,14 @@ type uiState struct {
 // UserInterface manages the user interface components and state.
 type UserInterface struct {
 	// Dependencies.
-	i18n             *i18n.I18n
-	display          hardware.Display
-	Screen           *gui.Screen
-	menuSystem       *MenuSystem
-	settingsCallback func(setting languagedb.Key, action string) string
-	log              zerolog.Logger
-	now              func() time.Time // overridable in tests for deterministic timeouts
+	i18n                *i18n.I18n
+	display             hardware.Display
+	Screen              *gui.Screen
+	menuSystem          *MenuSystem
+	settingsCallback    func(setting languagedb.Key, action string) string
+	experimentalEnabled func() bool
+	log                 zerolog.Logger
+	now                 func() time.Time // overridable in tests for deterministic timeouts
 
 	// Event-loop channels: the only cross-goroutine surface.
 	hidEvents chan HIDInputEvent
@@ -92,20 +123,21 @@ func NewUserInterface(config *Config) *UserInterface {
 	now := time.Now
 
 	userInterface := &UserInterface{
-		i18n:             config.I18n,
-		display:          config.Display,
-		hidEvents:        config.HIDEvents,
-		menuSystem:       NewMenuSystem(),
-		log:              config.Log.With().Str("package", "ui").Logger(),
-		settingsCallback: config.SettingsCallback,
-		done:             config.ExitCodeChan,
-		now:              now,
-		ticks:            make(chan LiveData, 1),
-		commands:         make(chan command, 4),
+		i18n:                config.I18n,
+		display:             config.Display,
+		hidEvents:           config.HIDEvents,
+		menuSystem:          NewMenuSystem(),
+		log:                 config.Log.With().Str("package", "ui").Logger(),
+		settingsCallback:    config.SettingsCallback,
+		experimentalEnabled: config.ExperimentalEnabled,
+		done:                config.ExitCodeChan,
+		now:                 now,
+		ticks:               make(chan LiveData, 1),
+		commands:            make(chan command, 4),
 		state: uiState{
 			mode:           ScreenModeStartup,
 			lastData:       LiveData{Gear: kinematics.NullGear},
-			activeLiveView: languagedb.UIMenuLiveView,
+			activeLiveView: languagedb.UIMenuLivePred,
 			startTime:      now(),
 			lastActivity:   now(),
 		},
@@ -113,6 +145,16 @@ func NewUserInterface(config *Config) *UserInterface {
 
 	if config.DevToolsEnabled != nil {
 		userInterface.menuSystem.SetDevToolsEnabledCallback(config.DevToolsEnabled)
+	}
+
+	// Set experimentalEnabled callback if provided
+	if config.ExperimentalEnabled != nil {
+		userInterface.menuSystem.SetExperimentalEnabledCallback(config.ExperimentalEnabled)
+	}
+
+	// Set bluetoothAvailable callback if provided
+	if config.BluetoothAvailable != nil {
+		userInterface.menuSystem.SetBluetoothAvailableCallback(config.BluetoothAvailable)
 	}
 
 	var err error
@@ -197,6 +239,20 @@ func (u *UserInterface) settingAction(setting languagedb.Key, action string) str
 	u.setMode(ScreenModeSettings)
 
 	return u.settingsCallback(setting, action)
+}
+
+// isLiveLeaf reports whether the menu page is one of the live-view leaves.
+func isLiveLeaf(name languagedb.Key) bool {
+	switch name {
+	case languagedb.UIMenuLivePred,
+		languagedb.UIMenuLiveTyres,
+		languagedb.UIMenuLiveLap,
+		languagedb.UIMenuLiveFuel,
+		languagedb.UIMenuLiveDashboard:
+		return true
+	default:
+		return false
+	}
 }
 
 // handleTick advances the UI state for one telemetry tick based on the current mode.

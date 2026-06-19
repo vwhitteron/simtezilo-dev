@@ -3,6 +3,7 @@ package gui
 import (
 	"fmt"
 	"image"
+	"image/color"
 	"image/draw"
 	"strings"
 	"sync"
@@ -12,6 +13,7 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/hardware"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/display"
 	"github.com/vwhitteron/simtezilo-dev/app/i18n"
+	"github.com/vwhitteron/simtezilo-dev/app/ui/icons"
 	"github.com/vwhitteron/simtezilo-dev/app/ui/sprites"
 	"golang.org/x/image/font"
 	"golang.org/x/image/math/fixed"
@@ -25,10 +27,24 @@ type Config struct {
 
 // SettingContent holds the text fields for a setting, info, or sub-menu screen.
 type SettingContent struct {
-	Title string // parent menu name or page title, drawn at the top
-	Name  string // setting name, drawn at the bottom; empty for info/sub-menu
-	Value string // setting value, menu item, or multi-line info body, drawn centre
+	Title string   // parent menu name or page title, drawn at the top
+	Name  string   // setting name, drawn at the bottom; empty for info/sub-menu
+	Value string   // setting value, menu item, or multi-line info body, drawn centre
+	Icon  MenuIcon // optional navigation glyph for a sub-menu screen
 }
+
+// MenuIcon selects an optional navigation glyph drawn on a sub-menu screen.
+type MenuIcon int
+
+const (
+	// MenuIconNone draws no navigation glyph.
+	MenuIconNone MenuIcon = iota
+	// MenuIconEnter is the right-to-bracket hint, signalling a branch can be entered.
+	MenuIconEnter
+	// MenuIconExit is the right-from-bracket glyph shown on a Return item, signalling
+	// it exits to the parent menu.
+	MenuIconExit
+)
 
 // faceKey is the cache key for a truetype face.
 type faceKey struct {
@@ -39,17 +55,20 @@ type faceKey struct {
 
 // Screen holds the state for rendering to a connected display.
 type Screen struct {
-	mu            sync.Mutex
-	canvases      [2]*image.RGBA // double-buffered: the display retains the previous frame for rotation re-blit while the next is drawn
-	canvasIdx     int
-	faceCache     map[faceKey]font.Face
-	arcSamples    [][]image.Point // precomputed radial pixels per angle step
-	displayDevice hardware.Display
-	pixelColumns  uint16
-	pixelRows     uint16
-	dpi           float64
-	sprites       *sprites.SpriteSet
-	i18n          *i18n.I18n
+	mu             sync.Mutex
+	canvases       [2]*image.RGBA // double-buffered: the display retains the previous frame for rotation re-blit while the next is drawn
+	canvasIdx      int
+	faceCache      map[faceKey]font.Face
+	arcSamples     [][]image.Point // precomputed radial pixels per angle step
+	displayDevice  hardware.Display
+	pixelColumns   uint16
+	pixelRows      uint16
+	dpi            float64
+	sprites        *sprites.SpriteSet
+	i18n           *i18n.I18n
+	enterIcon      *image.Alpha // right-to-bracket: small bottom hint on a sub-menu item
+	enterIconLarge *image.Alpha // right-to-bracket: centred glyph on a top-level menu
+	exitIcon       *image.Alpha // right-from-bracket: Return item exits to parent
 }
 
 type Layout int
@@ -73,19 +92,28 @@ func NewScreen(config *Config) (*Screen, error) {
 		return nil, fmt.Errorf("loading sprites: %w", err)
 	}
 
+	// Rasterise the sub-menu navigation glyphs once. A failure is non-fatal: the
+	// Return screen simply falls back to showing nothing in its centre.
+	enterIcon, _ := icons.Render("right-to-bracket", menuEnterIconSize)
+	enterIconLarge, _ := icons.Render("right-to-bracket", menuExitIconSize)
+	exitIcon, _ := icons.Render("right-from-bracket", menuExitIconSize)
+
 	return &Screen{
 		canvases: [2]*image.RGBA{
 			image.NewRGBA(image.Rect(0, 0, int(pixelColumns), int(pixelRows))),
 			image.NewRGBA(image.Rect(0, 0, int(pixelColumns), int(pixelRows))),
 		},
-		faceCache:     make(map[faceKey]font.Face),
-		arcSamples:    buildArcSamples(int(pixelColumns), int(pixelRows)),
-		displayDevice: config.DisplayDevice,
-		pixelColumns:  pixelColumns,
-		pixelRows:     pixelRows,
-		dpi:           dpi,
-		sprites:       sprites,
-		i18n:          config.I18n,
+		faceCache:      make(map[faceKey]font.Face),
+		arcSamples:     buildArcSamples(int(pixelColumns), int(pixelRows)),
+		displayDevice:  config.DisplayDevice,
+		pixelColumns:   pixelColumns,
+		pixelRows:      pixelRows,
+		dpi:            dpi,
+		sprites:        sprites,
+		i18n:           config.I18n,
+		enterIcon:      enterIcon,
+		enterIconLarge: enterIconLarge,
+		exitIcon:       exitIcon,
 	}, nil
 }
 
@@ -127,14 +155,15 @@ func (r *Screen) RenderLiveScreen(value string) error {
 
 	canvas := r.newBlankCanvas()
 
+	// The live view renders in the variable font.
 	// Gears are single characters and use the large font; multi-character status
 	// values such as "Ready" or "Calibrating" render in a smaller font.
-	fontSize := r.i18n.RegularFont().Scale * fontXLarge
+	fontSize := r.i18n.VariableFont().Scale * fontXLarge
 	if utf8.RuneCountInString(value) > 1 {
-		fontSize = r.i18n.RegularFont().Scale * fontStatus
+		fontSize = r.i18n.VariableFont().Scale * fontStatus
 	}
 
-	fontFace := r.face(r.i18n.RegularFont().Font, fontSize)
+	fontFace := r.face(r.i18n.VariableFont().Font, fontSize)
 
 	// Safety net: shrink further if the value still overflows the panel width.
 	maxWidth := fixed.I(canvas.Rect.Max.X) * liveValueWidthPercent / 100
@@ -142,10 +171,10 @@ func (r *Screen) RenderLiveScreen(value string) error {
 	measurer := &font.Drawer{Face: fontFace}
 	if width := measurer.MeasureString(value); width > maxWidth {
 		fontSize = fontSize * float64(maxWidth) / float64(width)
-		fontFace = r.face(r.i18n.RegularFont().Font, fontSize)
+		fontFace = r.face(r.i18n.VariableFont().Font, fontSize)
 	}
 
-	drawText(canvas, fontFace, valueColor(), value, anchorGlyphMiddle)
+	drawText(canvas, fontFace, MaterialGrey300(), value, anchorGlyphMiddle)
 
 	content := &display.Content{
 		Text:   "Live: " + value,
@@ -185,22 +214,28 @@ func (r *Screen) renderLeafNode(content SettingContent) error {
 	canvas := r.newBlankCanvas()
 
 	// Parent menu at top.
-	headerFace := r.face(r.i18n.RegularFont().Font, r.i18n.RegularFont().Scale*fontSmall)
-	drawText(canvas, headerFace, mediumGrayColor(), content.Title, anchorTop)
+	headerFace := r.face(r.i18n.VariableFont().Font, r.i18n.VariableFont().Scale*fontSmall)
+	drawText(canvas, headerFace, MaterialGrey600(), content.Title, anchorTop)
 
 	// Setting value in centre (larger font; the Info page uses a smaller font).
+	// Action leaves such as "Return" carry no setting name and render less
+	// prominently than a real setting value.
 	fontScale := fontLarge
-	if strings.ToLower(content.Title) == "info" {
+
+	switch {
+	case strings.ToLower(content.Title) == "info":
 		fontScale = fontSmall
+	case content.Name == "":
+		fontScale = fontMedium
 	}
 
 	valueFace := r.face(r.i18n.ValueFont().Font, r.i18n.ValueFont().Scale*fontScale)
-	drawText(canvas, valueFace, valueColor(), content.Value, anchorMiddle)
+	drawText(canvas, valueFace, MaterialGrey300(), content.Value, anchorMiddle)
 
 	// Setting name at bottom (if provided).
 	if content.Name != "" {
-		nameFace := r.face(r.i18n.RegularFont().Font, r.i18n.RegularFont().Scale*fontMedium)
-		drawText(canvas, nameFace, lightGrayColor(), content.Name, anchorBottom)
+		nameFace := r.face(r.i18n.VariableFont().Font, r.i18n.VariableFont().Scale*fontMedium)
+		drawText(canvas, nameFace, MaterialGrey400(), content.Name, anchorBottom)
 	}
 
 	dspContent := &display.Content{
@@ -225,13 +260,29 @@ func (r *Screen) renderLayoutMenuSub(content SettingContent) error {
 
 	// Parent name at top (if provided).
 	if content.Title != "" {
-		titleFace := r.face(r.i18n.RegularFont().Font, r.i18n.RegularFont().Scale*fontMedium)
-		drawText(canvas, titleFace, valueColor(), content.Title, anchorTop)
+		titleFace := r.face(r.i18n.VariableFont().Font, r.i18n.VariableFont().Scale*fontMedium)
+		drawText(canvas, titleFace, MaterialGrey300(), content.Title, anchorTop)
 	}
 
-	// Current item in centre.
-	itemFace := r.face(r.i18n.RegularFont().Font, r.i18n.RegularFont().Scale*fontLarge)
-	drawText(canvas, itemFace, valueColor(), content.Value, anchorMiddle)
+	switch {
+	case content.Icon == MenuIconExit:
+		// Return item: the right-from-bracket glyph stands in for the item label,
+		// drawn red to signal exiting to the parent.
+		r.drawCenteredIcon(canvas, r.exitIcon, MaterialRed200(), canvas.Rect.Max.Y/2)
+	case content.Value == "":
+		// Top-level menu: name at the top, the enter glyph centred in place of a
+		// label, drawn green to signal entering.
+		r.drawCenteredIcon(canvas, r.enterIconLarge, MaterialGreen200(), canvas.Rect.Max.Y/2)
+	default:
+		// Sub-menu branch item name in the centre.
+		itemFace := r.face(r.i18n.VariableFont().Font, r.i18n.VariableFont().Scale*fontLarge)
+		drawText(canvas, itemFace, MaterialGrey300(), content.Value, anchorMiddle)
+
+		// Enter hint near the bottom, drawn green to signal the branch can be entered.
+		if content.Icon == MenuIconEnter {
+			r.drawCenteredIcon(canvas, r.enterIcon, MaterialGreen200(), canvas.Rect.Max.Y-menuEnterHintBottomPadding)
+		}
+	}
 
 	dspContent := &display.Content{
 		Text:   "Menu " + content.Title + ": " + content.Value,
@@ -254,15 +305,15 @@ func (r *Screen) renderLayoutInfo(content SettingContent) error {
 	canvas := r.newBlankCanvas()
 
 	// Title.
-	titleFace := r.face(r.i18n.RegularFont().Font, r.i18n.RegularFont().Scale*fontMedium)
-	drawText(canvas, titleFace, valueColor(), content.Title, anchorTop)
+	titleFace := r.face(r.i18n.VariableFont().Font, r.i18n.VariableFont().Scale*fontMedium)
+	drawText(canvas, titleFace, MaterialGrey300(), content.Title, anchorTop)
 
 	// Value - split into multiple lines.
 	fontFace := r.face(r.i18n.ValueFont().Font, r.i18n.RegularFont().Scale*fontSmall)
 
 	fontDrawer := &font.Drawer{
 		Dst:  canvas,
-		Src:  image.NewUniform(valueColor()),
+		Src:  image.NewUniform(MaterialGrey300()),
 		Face: fontFace,
 	}
 
@@ -362,13 +413,13 @@ func (r *Screen) newBlankCanvas() *image.RGBA {
 // renderBackgroundScreen renders a background screen with a centered value.
 func (r *Screen) renderBackgroundScreen(sprite sprites.SpriteName, value string) error {
 	// footer
-	fontFace := r.face(r.i18n.RegularFont().Font, r.i18n.RegularFont().Scale*fontSmall)
+	fontFace := r.face(r.i18n.VariableFont().Font, r.i18n.VariableFont().Scale*fontSmall)
 
 	img := r.sprites.GetSprite(sprite)
 	canvas := image.NewRGBA(img.Bounds())
 	draw.Draw(canvas, canvas.Bounds(), img, image.Point{0, 0}, draw.Src)
 
-	drawText(canvas, fontFace, mediumGrayColor(), value, anchorBottom)
+	drawText(canvas, fontFace, MaterialGrey600(), value, anchorBottom)
 
 	content := &display.Content{
 		Text:   "Splash: " + value,
@@ -383,6 +434,27 @@ func (r *Screen) renderBackgroundScreen(sprite sprites.SpriteName, value string)
 	r.displayDevice.Wakeup()
 
 	return nil
+}
+
+// drawCenteredIcon draws an icon mask centred horizontally on the canvas, with its
+// vertical centre at centreY, tinted with col. icon may be nil (draws nothing).
+func (r *Screen) drawCenteredIcon(canvas *image.RGBA, icon *image.Alpha, col color.RGBA, centreY int) {
+	if icon == nil {
+		return
+	}
+
+	w := icon.Bounds().Dx()
+	h := icon.Bounds().Dy()
+	x := (canvas.Rect.Max.X - w) / 2
+	y := centreY - h/2
+
+	draw.DrawMask(
+		canvas,
+		image.Rect(x, y, x+w, y+h),
+		image.NewUniform(col), image.Point{},
+		icon, icon.Bounds().Min,
+		draw.Over,
+	)
 }
 
 // ImageToRGBA converts an image.Image to *image.RGBA.

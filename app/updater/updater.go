@@ -219,6 +219,26 @@ func (u *Updater) SetChannel(channel string) {
 	}
 }
 
+// resolvePendingChannel returns the update channel for a pending install state. It uses
+// the explicit channel when set, otherwise infers it from the download path (custom uploads)
+// or the version string.
+func resolvePendingChannel(state *InstallState) string {
+	if state.Channel != "" {
+		return state.Channel
+	}
+
+	if strings.Contains(state.DownloadPath, "/custom-") {
+		return "custom"
+	}
+
+	pendingVer, err := ParseVersion(state.PendingVersion)
+	if err == nil {
+		return pendingVer.InferredChannel()
+	}
+
+	return ""
+}
+
 // CheckExistingDownloads checks if there are any valid downloaded updates in the download directory.
 // If a valid newer version is found, it sets the status to ReadyToInstall.
 func (u *Updater) CheckExistingDownloads() {
@@ -232,20 +252,7 @@ func (u *Updater) CheckExistingDownloads() {
 	currentChannel := u.checker.Channel()
 
 	if state != nil && state.Status == InstallStatusPending {
-		// Determine the channel of the pending update
-		// Use explicit channel if available, otherwise infer from version or filename
-		pendingChannel := state.Channel
-		if pendingChannel == "" {
-			// Check if this is a custom upload (filename starts with "custom-")
-			if strings.Contains(state.DownloadPath, "/custom-") {
-				pendingChannel = "custom"
-			} else {
-				pendingVer, parseErr := ParseVersion(state.PendingVersion)
-				if parseErr == nil {
-					pendingChannel = pendingVer.InferredChannel()
-				}
-			}
-		}
+		pendingChannel := resolvePendingChannel(state)
 
 		// Only restore if the channel matches
 		if pendingChannel != currentChannel {
@@ -264,7 +271,6 @@ func (u *Updater) CheckExistingDownloads() {
 			Str("path", state.DownloadPath).
 			Msg("Found pending update from previous session")
 
-		// Set the available update info from the state
 		u.checker.SetAvailableUpdate(&UpdateInfo{
 			CurrentVersion:   state.CurrentVersion,
 			AvailableVersion: state.PendingVersion,

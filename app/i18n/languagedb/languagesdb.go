@@ -170,6 +170,13 @@ func (l *LanguageDB) ValueFont(code string) font.Font {
 	return l.getFont("value", code)
 }
 
+// VariableFont returns the variable font for the language. The freetype-based
+// renderer reads only the default instance (it has no fvar/axis support), so the
+// weight and width axes are not applied at render time.
+func (l *LanguageDB) VariableFont(code string) font.Font {
+	return l.getFont("variable", code)
+}
+
 // getFont returns the font for the given language code.
 func (l *LanguageDB) getFont(variation string, code string) font.Font {
 	var truetypeFont *truetype.Font
@@ -180,26 +187,22 @@ func (l *LanguageDB) getFont(variation string, code string) font.Font {
 	if language, ok := l.db[code]; ok {
 		var err error
 
-		var fontName string
+		// Font variations are keyed directly by name in the language definition
+		// (regular, italic, value, variable). An unknown variation falls back to
+		// regular.
+		key := strings.ToLower(variation)
 
-		switch strings.ToLower(variation) {
-		case "regular":
-			fontName = language.Fonts["regular"].File
-			fontSize = language.Fonts["regular"].Size
-		case "italic":
-			fontName = language.Fonts["italic"].File
-			fontSize = language.Fonts["italic"].Size
-		case "value":
-			fontName = language.Fonts["value"].File
-			fontSize = language.Fonts["value"].Size
-		default:
-			fontName = language.Fonts["regular"].File
-			fontSize = language.Fonts["regular"].Size
+		fontDef, ok := language.Fonts[key]
+		if !ok {
+			fontDef = language.Fonts["regular"]
 
 			l.log.Warn().
 				Str("variation", variation).
 				Msg("unknown font variation, defaulting to regular")
 		}
+
+		fontName := fontDef.File
+		fontSize = fontDef.Size
 
 		truetypeFont, err = font.GetFont(fontName)
 		if err != nil {

@@ -785,6 +785,8 @@
     <script src="/js/i18n.js"></script>
     <script src="/js/navigation.js"></script>
     <script src="/js/settings.js"></script>
+    <script src="/js/bluetooth-settings.js"></script>
+    <script src="/js/fan-settings.js"></script>
     <title>Settings - Simtezilo</title>
 </head>
 
@@ -800,6 +802,7 @@
                     <option value="system">System</option>
                     <option value="synthesizer">Synthesizer</option>
                     <option value="haptics">Haptics</option>
+                    <option value="fan">Fan</option>
                     <option value="pitradio">Pit Radio</option>
                 </select>
             </div>
@@ -821,6 +824,12 @@
                                     <span data-i18n="runmode.settings.system.title">System</span>
                                 </a>
                             </li>
+                            <li class="settings-nav-item" id="bluetooth-nav-item" style="display: none;">
+                                <a class="settings-nav-link" data-section="bluetooth">
+                                    <span class="icon" data-icon="bluetooth"></span>
+                                    <span data-i18n="runmode.settings.bluetooth.title">Bluetooth</span>
+                                </a>
+                            </li>
                             <li class="settings-nav-item">
                                 <a class="settings-nav-link" data-section="synthesizer">
                                     <span class="icon" data-icon="sliders"></span>
@@ -831,6 +840,12 @@
                                 <a class="settings-nav-link" data-section="haptics">
                                     <span class="icon" data-icon="wave-square"></span>
                                     <span data-i18n="runmode.settings.haptics.title">Haptics</span>
+                                </a>
+                            </li>
+                            <li class="settings-nav-item">
+                                <a class="settings-nav-link" data-section="fan">
+                                    <span class="icon" data-icon="fan"></span>
+                                    <span data-i18n="runmode.settings.fan.title">Fan</span>
                                 </a>
                             </li>
                             <li class="settings-nav-item">
@@ -978,6 +993,18 @@
                                         <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
                                             role="button"
                                             data-i18n-tooltip="runmode.settings.app.advanced.enabledevtools.tooltip"></i>
+                                    </label>
+                                </div>
+                                <!-- Experimental Features -->
+                                <div class="form-check form-switch mb-4">
+                                    <input type="checkbox" class="form-check-input" id="app-enableexperimental"
+                                        data-config="app.enableExperimentalFeatures" role="switch">
+                                    <label class="form-check-label" for="app-enableexperimental">
+                                        <span data-i18n="runmode.settings.app.advanced.enableexperimental">Enable
+                                            Experimental Features</span>
+                                        <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
+                                            role="button"
+                                            data-i18n-tooltip="runmode.settings.app.advanced.enableexperimental.tooltip"></i>
                                     </label>
                                 </div>
                             </div>
@@ -1333,6 +1360,57 @@
                                         </button>
                                     </div>
                                 </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Bluetooth Section -->
+                <div class="settings-section-card" data-section-content="bluetooth">
+                    <div class="card">
+                        <div class="card-body">
+
+                            <h5 class="mb-3"><span class="icon" data-icon="bluetooth"></span><span
+                                    data-i18n="runmode.settings.bluetooth.title">Bluetooth</span></h5>
+
+                            <div class="row g-3 mb-3 align-items-center">
+                                <div class="col-auto">
+                                    <span id="bluetooth-adapter-status" class="text-muted small">Adapter: unknown</span>
+                                </div>
+                                <div class="col-auto ms-auto">
+                                    <button type="button" id="bluetooth-scan" class="btn btn-outline-primary">
+                                        <span data-i18n="runmode.settings.bluetooth.scan">Scan</span>
+                                    </button>
+                                    <span id="bluetooth-scan-status" class="ms-2 small text-muted"></span>
+                                </div>
+                            </div>
+
+                            <div id="bluetooth-action-status" class="alert py-2 px-3 small" style="display: none;" role="alert"></div>
+
+                            <div class="table-responsive">
+                                <table class="table table-sm align-middle">
+                                    <thead>
+                                        <tr>
+                                            <th data-i18n="runmode.settings.bluetooth.device">Device</th>
+                                            <th data-i18n="runmode.settings.bluetooth.address">Address</th>
+                                            <th data-i18n="runmode.settings.bluetooth.status">Status</th>
+                                            <th class="text-end" data-i18n="runmode.settings.bluetooth.actions">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="bluetooth-device-list">
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div id="bluetooth-empty" class="text-muted small" style="display: none;"
+                                data-i18n="runmode.settings.bluetooth.empty">
+                                No devices found. Press Scan to discover nearby devices.
+                            </div>
+
+                            <div class="mb-3 mt-3">
+                                <small class="text-muted">
+                                    <span class="icon icon-sm me-1" data-icon="circle-question"></span>
+                                    <span data-i18n="runmode.settings.bluetooth.hint">Pair a Bluetooth audio device to use it as a haptics or pit radio output. Connected devices appear in the audio device lists.</span>
+                                </small>
                             </div>
                         </div>
                     </div>
@@ -1816,6 +1894,7 @@
                 <div class="settings-section-card" data-section-content="haptics">
                     <div class="card">
                         <div class="card-body">
+
                             <h5 class="mb-3"><span class="icon" data-icon="gear"></span><span
                                     data-i18n="runmode.settings.haptics.general.title">General</span></h5>
                             <div class="d-flex align-items-center gap-3 mb-4">
@@ -2098,6 +2177,90 @@
                     </div>
                 </div>
 
+                <!-- Fan Section -->
+                <div class="settings-section-card" data-section-content="fan">
+                    <div class="card">
+                        <div class="card-body">
+                            <h5 class="mb-3"><span class="icon" data-icon="gear"></span><span
+                                    data-i18n="runmode.settings.fan.general.title">General</span></h5>
+
+                            <div class="row g-3 mb-4">
+                                <div class="col-md-6 col-lg-3">
+                                    <div class="form-check form-switch">
+                                        <input type="checkbox" class="form-check-input" id="fan-enabled"
+                                            data-config="fan.enabled" role="switch">
+                                        <label class="form-check-label" for="fan-enabled">
+                                            <span data-i18n="runmode.settings.fan.enabled">Enabled</span>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="row g-3 mb-4">
+                                <div class="col-md-6 col-lg-3">
+                                    <label for="fan-device" class="form-label">
+                                        <span data-i18n="runmode.settings.fan.device">Device</span>
+                                    </label>
+                                    <select id="fan-device" class="form-select text-center"
+                                        data-config="fan.deviceAddress">
+                                        <option value="" data-i18n="runmode.settings.fan.device.none">(pair in
+                                            Bluetooth panel)</option>
+                                    </select>
+                                    <!-- Cached friendly name for the selected device, kept current by
+                                         fan-settings.js so the dropdown can label an offline device. -->
+                                    <input type="hidden" id="fan-device-name" data-config="fan.deviceName">
+                                    <small class="form-text text-muted"
+                                        data-i18n="runmode.settings.fan.device.hint">Pair the fan in the Bluetooth
+                                        panel, then select it here.</small>
+                                </div>
+
+                                <div class="col-md-6 col-lg-3">
+                                    <label for="fan-timeout" class="form-label">
+                                        <span data-i18n="runmode.settings.fan.commandtimeout">Command
+                                            Timeout</span>
+                                    </label>
+                                    <div class="input-with-suffix">
+                                        <input type="number" id="fan-timeout" class="form-control text-center"
+                                            data-config="fan.commandTimeoutMs" min="500" max="30000" step="500">
+                                        <span class="input-suffix">ms</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <h5 class="mb-3"><span class="icon" data-icon="wind"></span><span
+                                    data-i18n="runmode.settings.fan.windsim.title">Wind Simulator</span></h5>
+
+                            <div class="row g-3 mb-4">
+                                <div class="col-md-6 col-lg-3">
+                                    <label for="fan-mode" class="form-label">
+                                        <span data-i18n="runmode.settings.fan.mode">Mode</span>
+                                    </label>
+                                    <select id="fan-mode" class="form-select text-center" data-config="fan.mode">
+                                        <option value="manual" data-i18n="runmode.settings.fan.mode.manual">Manual
+                                        </option>
+                                        <option value="open" data-i18n="runmode.settings.fan.mode.open">Open Cockpit
+                                        </option>
+                                        <option value="all" data-i18n="runmode.settings.fan.mode.all">All Vehicles
+                                        </option>
+                                    </select>
+                                </div>
+
+                                <div class="col-md-6 col-lg-3">
+                                    <label for="fan-maxspeed" class="form-label">
+                                        <span data-i18n="runmode.settings.fan.windsim.maxspeed">Max Speed</span>
+                                    </label>
+                                    <div class="input-with-suffix">
+                                        <input type="number" id="fan-maxspeed" class="form-control text-center"
+                                            data-config="fan.maxSpeedKph" min="50" max="500" step="10">
+                                        <span class="input-suffix">km/h</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Pit Radio Section -->
                 <div class="settings-section-card" data-section-content="pitradio">
                     <div class="card">
@@ -2119,7 +2282,7 @@
                                         <span data-i18n="runmode.settings.pitradio.output">Output</span>
                                     </label>
                                     <select id="pitradio-output" class="form-select text-center"
-                                        data-config="haptics.pitRadioOutput">
+                                        data-config="pitRadio.output">
                                         <option value="log">Log</option>
                                         <option value="discord">Discord</option>
                                     </select>

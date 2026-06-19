@@ -16,6 +16,10 @@
         "value": {
             "file": "LeagueGothic-Regular.ttf",
             "size": 1
+        },
+        "variable": {
+            "file": "Roboto-Regular.ttf",
+            "size": 0.7
         }
     },
     "translations": {
@@ -37,7 +41,10 @@
         "ui.menu.return": "Return",
 
         "ui.menu.live": "Live",
-        "ui.menu.live.view": "Live View",
+        "ui.menu.live.pred": "Predictive",
+        "ui.menu.live.tyres": "Tyres",
+        "ui.menu.live.lap": "Lap",
+        "ui.menu.live.fuel": "Fuel",
         "ui.menu.live.dashboard": "Dashboard",
 
         "ui.menu.info": "Info",
@@ -56,11 +63,15 @@
         "ui.menu.app.language": "Language",
         "ui.menu.app.loglevel": "Log Level",
         "ui.menu.app.devtools": "Developer Tools",
+        "ui.menu.app.experimental": "Experimental Features",
         "ui.menu.app.telemetrysource": "Telemetry Source",
 
         "ui.menu.system": "System",
         "ui.menu.system.setupmode": "Setup Mode",
         "ui.menu.system.displayorientation": "Display Orientation",
+        "ui.menu.bluetooth": "Bluetooth",
+        "ui.menu.bluetooth.device": "Device",
+        "ui.menu.bluetooth.toggle": "Connect/Disconnect",
 
         "ui.menu.synth": "Synthesizer",
         "ui.menu.synth.samplerates": "Sample Rates",
@@ -111,6 +122,16 @@
         "ui.menu.haptics.enginesecondarybalance": "Secondary Balance",
         "ui.menu.haptics.enginepulsescale": "Pulse Scale",
         "ui.menu.haptics.enginepulsegain": "Pulse Gain",
+
+        "ui.menu.fan": "Fan",
+        "ui.menu.fan.enable": "Fan Enable",
+        "ui.menu.fan.windsim": "Wind Sim",
+        "ui.menu.fan.mode": "Mode",
+        "ui.menu.fan.mode.manual": "Manual",
+        "ui.menu.fan.mode.opencockpit": "Open",
+        "ui.menu.fan.mode.all": "All",
+        "ui.menu.fan.commandtimeout": "Cmd Timeout",
+        "ui.menu.fan.windsim.maxspeed": "Max Speed",
 
         "ui.menu.pitradio": "Pit Radio",
         "ui.menu.pitradio.enable": "Pit Radio Enable",
@@ -226,13 +247,6 @@
         "runmode.nav.developer": "Developer",
         "runmode.nav.settings": "Settings",
         "runmode.nav.logs": "Logs",
-        "runmode.nav.dev": "Dev",
-        "runmode.nav.hardware": "Hardware",
-        "runmode.hardware.screen": "Display",
-        "runmode.hardware.waiting": "Waiting for screen…",
-        "runmode.hardware.connected": "Connected",
-        "runmode.hardware.disconnected": "Disconnected",
-        "runmode.hardware.keyboardhint": "Keyboard: arrows, Enter, 1 / 2 / 3",
         "runmode.nav.info": "Info",
 
         "runmode.info.version": "Version:",
@@ -298,6 +312,8 @@
         "runmode.settings.app.advanced.title": "Advanced",
         "runmode.settings.app.advanced.enabledevtools": "Enable Developer Tools",
         "runmode.settings.app.advanced.enabledevtools.tooltip": "Enable developer tools and debugging features for advanced users and developers.",
+        "runmode.settings.app.advanced.enableexperimental": "Enable Experimental Features",
+        "runmode.settings.app.advanced.enableexperimental.tooltip": "Enable experimental, in-development features such as the fan wind simulator. These may be unstable or change without notice.",
         
         "runmode.settings.haptics.title": "Haptics",
         "runmode.settings.haptics.general.title": "General",
@@ -339,6 +355,28 @@
         "runmode.settings.haptics.engineprofiles.pulsescale": "Pulse Scale",
         "runmode.settings.haptics.engineprofiles.pulsescale.tooltip": "Scales the pulse rate (1.0 = normal, <1.0 = reduced rate). Useful for high-RPM or multi-cylinder engines to keep feedback in the tactile range.",
 
+        "runmode.settings.fan.title": "Fan",
+        "runmode.settings.fan.general.title": "General",
+        "runmode.settings.fan.enabled": "Enabled",
+        "runmode.settings.fan.mode": "Mode",
+        "runmode.settings.fan.mode.manual": "Manual Only",
+        "runmode.settings.fan.mode.opencockpit": "Open Cockpit",
+        "runmode.settings.fan.mode.all": "All Vehicles",
+        "runmode.settings.fan.device": "Device",
+        "runmode.settings.fan.device.none": "(pair in Bluetooth panel)",
+        "runmode.settings.fan.device.hint": "Pair the fan in the Bluetooth panel, then select it here.",
+        "runmode.settings.fan.commandtimeout": "Command Timeout",
+        "runmode.settings.fan.windsim.title": "Wind Simulation",
+        "runmode.settings.fan.windsim.maxspeed": "Max Speed",
+
+        "runmode.settings.bluetooth.title": "Bluetooth",
+        "runmode.settings.bluetooth.scan": "Scan",
+        "runmode.settings.bluetooth.device": "Device",
+        "runmode.settings.bluetooth.address": "Address",
+        "runmode.settings.bluetooth.status": "Status",
+        "runmode.settings.bluetooth.actions": "Actions",
+        "runmode.settings.bluetooth.empty": "No devices found. Press Scan to discover nearby devices.",
+        "runmode.settings.bluetooth.hint": "Pair a Bluetooth audio device to use it as a haptics or pit radio output. Connected devices appear in the audio device lists.",
         "runmode.settings.pitradio.title": "Pit Radio",
         "runmode.settings.pitradio.general.title": "General",
         "runmode.settings.pitradio.enable": "Enable",

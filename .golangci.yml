@@ -37,6 +37,7 @@ linters:
             - atomicgo.dev/keyboard
             - github.com/Wifx/gonetworkmanager
             - github.com/bwmarrin/discordgo
+            - github.com/godbus/dbus/v5
             - github.com/golang/freetype
             - github.com/gopxl/beep
             - github.com/gorilla/websocket
@@ -56,6 +57,7 @@ linters:
             - layeh.com/gopus
             - periph.io/x/conn/v3
             - periph.io/x/host/v3
+            - tinygo.org/x/bluetooth
     lll:
       line-length: 180
     gomoddirectives:

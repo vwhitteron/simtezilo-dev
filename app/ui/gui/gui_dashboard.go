@@ -24,8 +24,8 @@ type DashboardData struct {
 	ThrottleOut float64
 	BrakeIn     float64
 	BrakeOut    float64
-	Flash       bool // rev limit background flash
-	Ready       bool // waiting foractive telemetry
+	Flash       bool // rev-limit background flash
+	Ready       bool // waiting for active telemetry
 }
 
 // Dashboard geometry (240x240 panel).
@@ -36,17 +36,21 @@ const (
 	// dashLineThickness is shared by the RPM arc and the brake/throttle bars so
 	// all three read as the same weight.
 	dashLineThickness = 6
-	dashArcInner      = 90.0
+	dashArcInner      = 81.0 // 10% smaller diameter than the original 90px radius
 	dashArcOuter      = dashArcInner + dashLineThickness
 
-	dashBarWidth  = dashLineThickness
-	dashBarTop    = 0   // bars use the full vertical height...
-	dashBarBottom = 240 // ...edge to edge
-	dashBarInset  = 0   // ...and hard against the left/right edges
+	dashBarWidth = dashLineThickness
+	// Bars sit inside the live-view frame: their top aligns with the bottom of
+	// the header box (so 100% input stops level with it) and they run down to
+	// just inside the bottom border.
+	dashBarTop    = liveHeaderHeight
+	dashBarMargin = 5                                                  // gap between the bars and the inside of the border
+	dashBarBottom = dashPanelEdge - liveFrameThickness - dashBarMargin // sits inside the bottom border with a margin
+	dashBarInset  = liveFrameThickness + dashBarMargin                 // tucked inside the left/right border with a margin
 	dashBarHeight = dashBarBottom - dashBarTop
 	dashPanelEdge = 240
 	dashCenterX   = 120.0
-	dashCenterY   = 108.0 // arc centre shifted up a little
+	dashCenterY   = 138.0 // arc centre shifted down so the arc top clears the header box
 	degreesToRad  = math.Pi / 180.0
 	arcAngleStep  = 0.5 // degrees between arc samples
 	arcRadiusStep = 0.5 // radial sampling for arc thickness
@@ -54,29 +58,14 @@ const (
 	dashFontGear  = 24.0
 	dashFontSpeed = 10.0
 
-	dashGearCenterY   = 98  // hero gear, centred a touch above mid to clear the speed
-	dashSpeedBaseline = 192 // below the gear, clear of its descenders
+	dashGearCenterY = 138 // hero gear, centred on the arc circle (matches dashCenterY)
+	// Speed near the bottom, vertically centred level with the bottom row (best
+	// lap) of the lap live view: liveHeaderHeight + (203 * 90/100), where 203 is
+	// the body height between the header bottom and the inner bottom border.
+	dashSpeedCenterY = 216
 )
 
-func dashColorBlue() color.RGBA   { return color.RGBA{R: 50, G: 120, B: 235, A: 255} }
-func dashColorYellow() color.RGBA { return color.RGBA{R: 235, G: 210, B: 40, A: 255} }
-func dashColorRed() color.RGBA    { return color.RGBA{R: 235, G: 45, B: 45, A: 255} }
-
-// Brake bar (red) and throttle bar (blue). The darker shade marks the
-// input-beyond-output delta. Alpha is ignored by the panel, so the distinction
-// must come from the RGB value, not transparency.
-func dashColorBrake() color.RGBA           { return color.RGBA{R: 235, G: 45, B: 45, A: 255} }
-func dashColorBrakeDelta() color.RGBA      { return color.RGBA{R: 110, G: 22, B: 22, A: 255} }
-func dashColorThrottle() color.RGBA        { return color.RGBA{R: 40, G: 200, B: 70, A: 255} }
-func dashColorThrottleDelta() color.RGBA   { return color.RGBA{R: 20, G: 95, B: 38, A: 255} }
-func dashColorBackground() color.RGBA      { return color.RGBA{R: 0, G: 0, B: 0, A: 255} }
-func dashColorBackgroundFlash() color.RGBA { return color.RGBA{R: 130, G: 0, B: 0, A: 255} }
-
-// Text colours are fully opaque so they composite correctly over the coloured
-// flash background (the shared whiteColor/mediumGrayColor use near-zero alpha,
-// which only renders correctly over black).
-func dashColorText() color.RGBA  { return color.RGBA{R: 235, G: 235, B: 235, A: 255} }
-func dashColorReady() color.RGBA { return color.RGBA{R: 70, G: 70, B: 70, A: 255} }
+// Dashboard colour helpers (dashColor*) live in gui_palette.go.
 
 // RenderDashboardScreen renders the dashboard live view: brake/throttle bars on
 // the sides, an RPM arc across the top, and the speed in the centre.
@@ -104,6 +93,11 @@ func (r *Screen) RenderDashboardScreen(dash DashboardData) error {
 	}
 
 	r.drawDashboardText(canvas, dash)
+
+	// Framed live view: rounded gray border with a "Dash" header box, matching
+	// the other live views. Drawn after the body so the header sits on top of
+	// the arc.
+	r.drawFrame(canvas, "Dash", frameGray())
 
 	content := &display.Content{
 		Text:   fmt.Sprintf("Dash: %dkm/h %drpm", dash.SpeedKPH, dash.RPM),
@@ -213,7 +207,8 @@ func (r *Screen) drawArc(canvas *image.RGBA, from, target float64, col color.RGB
 	}
 }
 
-// drawDashboardText draws the gear (small, above centre) and speed (large, centre).
+// drawDashboardText draws the gear (small, above centre) and the speed (large,
+// centre).
 func (r *Screen) drawDashboardText(canvas *image.RGBA, dash DashboardData) {
 	// Gear centred both ways within the arc. Ready state uses a smaller font
 	// since it's a word rather than a single gear character.
@@ -226,9 +221,10 @@ func (r *Screen) drawDashboardText(canvas *image.RGBA, dash DashboardData) {
 		r.drawCenteredText(canvas, dash.Gear, gearFont, dashColorText(), dashGearCenterY, true)
 	}
 
-	// Speed along the bottom of the arc; suppressed in ready state.
+	// Speed along the bottom of the arc; suppressed in ready state and leaving
+	// the very bottom for the fan footer.
 	if !dash.Ready {
-		r.drawCenteredText(canvas, strconv.Itoa(dash.SpeedKPH), dashFontSpeed, dashColorText(), dashSpeedBaseline, false)
+		r.drawCenteredNumeric(canvas, strconv.Itoa(dash.SpeedKPH), dashFontSpeed, dashColorText(), dashSpeedCenterY)
 	}
 }
 

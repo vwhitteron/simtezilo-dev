@@ -34,6 +34,8 @@ type SPIDeviceConfig struct {
 	SPIFrequency physic.Frequency // SPI frequency to use, defaults to 40MHz.
 	SPIBits      uint8            // Number of bits per SPI transfer, defaults to 8 bits.
 	ColorBGR     bool             // If true, the display uses BGR color format, defaults to false (RGB).
+	RowOffset    int16            // GRAM row offset of the visible window (panel-specific), defaults to 0.
+	ColumnOffset int16            // GRAM column offset of the visible window (panel-specific), defaults to 0.
 
 	spiConn conn.Conn // Internal connection to the SPI device.
 
@@ -125,17 +127,19 @@ func validateConfig(config *SPIDeviceConfig) error {
 // newST7789Device initializes a new ST7789 device with the provided configuration.
 func newST7789Device(config *SPIDeviceConfig) (*Device, error) {
 	device := &Device{
-		conn:         config.spiConn,
-		dataComm:     config.DataCommPin,
-		rect:         image.Rect(0, 0, int(config.PixelColumns), int(config.PixelRows)),
-		rotation:     config.Rotation,
-		pixelColumns: config.PixelColumns,
-		pixelRows:    config.PixelRows,
-		batchLength:  int32(config.PixelColumns),
-		reset:        config.ResetPin,
-		backlight:    config.BacklightPin,
-		isBGR:        config.ColorBGR,
-		log:          config.log.With().Str("component", "st7789").Logger(),
+		conn:            config.spiConn,
+		dataComm:        config.DataCommPin,
+		rect:            image.Rect(0, 0, int(config.PixelColumns), int(config.PixelRows)),
+		rotation:        config.Rotation,
+		pixelColumns:    config.PixelColumns,
+		pixelRows:       config.PixelRows,
+		rowOffsetCfg:    config.RowOffset,
+		columnOffsetCfg: config.ColumnOffset,
+		batchLength:     int32(config.PixelColumns),
+		reset:           config.ResetPin,
+		backlight:       config.BacklightPin,
+		isBGR:           config.ColorBGR,
+		log:             config.log.With().Str("component", "st7789").Logger(),
 	}
 
 	device.batchLength &= 1
@@ -246,10 +250,10 @@ func (d *Device) PixelCount() uint32 {
 
 // SetWindow sets the current window dimensions for drawing on the display.
 func (d *Device) SetWindow() {
-	xMin := 0
-	yMin := 0
-	xMax := d.pixelColumns - 1
-	yMax := d.pixelRows - 1
+	xMin := int(d.columnOffset)
+	yMin := int(d.rowOffset)
+	xMax := int(d.columnOffset) + int(d.pixelColumns) - 1
+	yMax := int(d.rowOffset) + int(d.pixelRows) - 1
 
 	d.Command(CaSet)
 	d.Data(byte(xMin >> 8))
@@ -264,7 +268,6 @@ func (d *Device) SetWindow() {
 	d.Data(byte(yMax & 0xFF))
 
 	d.Command(Ramwr)
-	d.Data(0x89)
 }
 
 // InvertColors sends and invert color command to the display device.

@@ -113,6 +113,31 @@ func (a *App) buildFuelWarningContext() *fuelWarningContext {
 	}
 }
 
+// fuelViewData derives the values shown on the Fuel live view, reusing the same
+// thresholds as the pit-radio warnings so both share a single source of truth.
+// ready is false until enough samples exist to estimate range, in which case the
+// view shows an "Analysing..." placeholder.
+func (a *App) fuelViewData() (rangeLaps float64, ready, pitThisLap, insufficient bool) {
+	if a.fuelRange == nil || !a.fuelRange.IsReady() {
+		return 0, false, false, false
+	}
+
+	context := a.buildFuelWarningContext()
+	if context == nil || context.circuitLengthMetres <= 0 {
+		return 0, false, false, false
+	}
+
+	// insufficient: not enough fuel to reach the pit box on the current lap.
+	insufficient = context.fuelRangeMetres <= context.distanceToPitBox
+
+	// pitThisLap: the safe range runs out before completing another full lap and
+	// the pit box is within reach this lap (mirrors the boxthislap warning).
+	pitThisLap = context.fuelRangeMetresSafe <= context.distanceToPitBoxNextLap &&
+		context.distanceToPitBox <= context.boxNotifyDistance
+
+	return context.fuelRangeLaps, true, pitThisLap, insufficient
+}
+
 // determineFuelWarningMessage determines what fuel warning message to send based on current conditions.
 func (a *App) determineFuelWarningMessage(context *fuelWarningContext) (string, bool) {
 	fuelEmpty := a.gtClient.Telemetry.FuelLevelPercent() <= 0

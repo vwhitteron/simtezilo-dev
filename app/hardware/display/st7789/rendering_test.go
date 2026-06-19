@@ -8,16 +8,16 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/display/st7789"
 )
 
-// referencePackRGB565 is the original DrawRAW byte-packing logic reproduced
-// verbatim using image.Image.At() (interface-based, boxes to color.Color).
-// It is the golden reference: packRGB565 must produce byte-for-byte identical
-// output.
+// referencePackRGB565 is the DrawRAW byte-packing logic reproduced
+// independently using image.Image.At() (interface-based, boxes to color.Color):
+// output column c is a horizontal mirror of the source. It is the golden
+// reference: packRGB565 must produce byte-for-byte identical output.
 func referencePackRGB565(src image.Image, cols, rows int) []byte {
 	out := make([]byte, cols*rows*2)
 	idx := 0
 
 	for c := range cols {
-		srcX := src.Bounds().Min.X + cols - c
+		srcX := src.Bounds().Min.X + cols - 1 - c
 		for r := range rows {
 			srcY := src.Bounds().Min.Y + r
 
@@ -34,8 +34,8 @@ func referencePackRGB565(src image.Image, cols, rows int) []byte {
 			// Out of bounds → red/green/blue remain 0 (black, 0x0000).
 
 			c565 := (red << 11) | (green << 5) | blue
-			out[idx] = byte(c565)
-			out[idx+1] = byte(c565 >> 8)
+			out[idx] = byte(c565 >> 8)
+			out[idx+1] = byte(c565)
 			idx += 2
 		}
 	}

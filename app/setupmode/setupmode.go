@@ -25,6 +25,7 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/i18n/languagedb"
 	"github.com/vwhitteron/simtezilo-dev/app/platform"
 	"github.com/vwhitteron/simtezilo-dev/app/ui/gui"
+	"github.com/vwhitteron/simtezilo-dev/app/ui/icons"
 	"github.com/vwhitteron/simtezilo-dev/app/ui/sprites"
 	"github.com/vwhitteron/simtezilo-dev/app/ui/webui/webcommon"
 )
@@ -253,8 +254,19 @@ func handleRoot(writer http.ResponseWriter, _ *http.Request) {
 func handleStaticFiles(writer http.ResponseWriter, request *http.Request, logger *zerolog.Logger) {
 	filename := "static" + request.URL.Path
 
-	// Load from shared files
-	content, err := webcommon.StaticFiles.ReadFile(filename)
+	var (
+		content []byte
+		err     error
+	)
+
+	// Icons come from the shared icons package; everything else from the embedded
+	// shared static files.
+	if name, ok := strings.CutPrefix(request.URL.Path, "/images/icons/"); ok {
+		content, err = icons.ReadFile(name)
+	} else {
+		content, err = webcommon.StaticFiles.ReadFile(filename)
+	}
+
 	if err != nil {
 		writer.WriteHeader(http.StatusNotFound)
 		logger.Error().Err(err).Str("file", filename).Msg("Static file not found")

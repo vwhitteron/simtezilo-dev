@@ -2,6 +2,8 @@
 package fuelrange
 
 import (
+	"math"
+
 	"github.com/rs/zerolog"
 )
 
@@ -23,6 +25,10 @@ const (
 
 	// Number of samples to store in the buffer (~120s).
 	fuelRangeMaxSamples int = 7200
+
+	// Minimum fractional change in the estimated range before logging an update,
+	// used to throttle otherwise per-sample debug logging.
+	fuelRangeLogChangeThreshold float64 = 0.05
 )
 
 // Estimator defines the interface for fuel range calculations.
@@ -45,17 +51,18 @@ type fuelRangeSample struct {
 // FuelRange estimates the distance that can be travelled with the current fuel level.
 // Conforms to the fuelrange.Estimator interface.
 type FuelRange struct {
-	log                     zerolog.Logger
-	lastOdometerReading     float64           // Last processed odometer reading in metres
-	fuelLevelAtLastUpdate   float64           // Last processed fuel level in percent
-	distanceSinceLastUpdate float64           // Distance in metres travelled since last fuel range update
-	fuelRateSamples         []fuelRangeSample // Buffer of fuel consumption samples
-	fuelRate                float64           // Moving average fuel consumption rate in percent per km
-	distanceMetres          float64           // Estimated distance in metres that can be travelled with current fuel level
-	refueling               bool              // Flag to indicate if refuelling is in progress
-	isLive                  bool              // Flag to indicate if a session is live or a replay
-	maxSamples              int               // Maximum number of samples to store in the buffer
-	minSamples              int               // Minimum number of samples required to provide a reliable range estimate
+	log                      zerolog.Logger
+	lastOdometerReading      float64           // Last processed odometer reading in metres
+	fuelLevelAtLastUpdate    float64           // Last processed fuel level in percent
+	distanceSinceLastUpdate  float64           // Distance in metres travelled since last fuel range update
+	fuelRateSamples          []fuelRangeSample // Buffer of fuel consumption samples
+	fuelRate                 float64           // Moving average fuel consumption rate in percent per km
+	distanceMetres           float64           // Estimated distance in metres that can be travelled with current fuel level
+	lastLoggedDistanceMetres float64           // Estimated range at the last emitted debug log, used to throttle logging
+	refueling                bool              // Flag to indicate if refuelling is in progress
+	isLive                   bool              // Flag to indicate if a session is live or a replay
+	maxSamples               int               // Maximum number of samples to store in the buffer
+	minSamples               int               // Minimum number of samples required to provide a reliable range estimate
 }
 
 // New creates a new fuel range estimator.
@@ -75,6 +82,7 @@ func (r *FuelRange) Reset() {
 	r.distanceSinceLastUpdate = 0
 	r.fuelRate = 0
 	r.distanceMetres = rangeDistanceUnknown
+	r.lastLoggedDistanceMetres = 0
 	r.refueling = false
 
 	minSamples := fuelRangeMinSamples
@@ -97,6 +105,7 @@ func (r *FuelRange) Reset() {
 // ResetEstimate resets only the fuel range estimate but retains odometer and samples.
 func (r *FuelRange) ResetEstimate() {
 	r.distanceMetres = rangeDistanceUnknown
+	r.lastLoggedDistanceMetres = 0
 	r.fuelLevelAtLastUpdate = initialFuelLevel
 	r.lastOdometerReading = initialOdometerReading
 	r.distanceSinceLastUpdate = 0
@@ -267,13 +276,20 @@ func (r *FuelRange) calculateNewFuelRate(consumed float64) {
 	r.fuelRate = r.fuelRateMA()
 	r.distanceMetres = float64(r.fuelRateSamples[len(r.fuelRateSamples)-1].fuelPercent) / r.fuelRate
 
-	r.log.Debug().
-		Float64("fuel_rate", r.fuelRate).
-		Float64("consumed", consumed).
-		Float64("distance_m", r.distanceSinceLastUpdate).
-		Float64("range_m", r.distanceMetres).
-		Int("samples", len(r.fuelRateSamples)).
-		Msg("Update estimated fuel range")
+	// Throttle per-sample logging: only emit when the estimated range has
+	// changed by more than the threshold since the last logged value.
+	if r.lastLoggedDistanceMetres == 0 ||
+		math.Abs(r.distanceMetres-r.lastLoggedDistanceMetres) >= r.lastLoggedDistanceMetres*fuelRangeLogChangeThreshold {
+		r.lastLoggedDistanceMetres = r.distanceMetres
+
+		r.log.Debug().
+			Float64("fuel_rate", r.fuelRate).
+			Float64("consumed", consumed).
+			Float64("distance_m", r.distanceSinceLastUpdate).
+			Float64("range_m", r.distanceMetres).
+			Int("samples", len(r.fuelRateSamples)).
+			Msg("Update estimated fuel range")
+	}
 }
 
 // resetDistanceAndFuelLevel resets tracking variables after successful update.

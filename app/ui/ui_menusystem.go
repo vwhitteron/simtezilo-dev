@@ -8,10 +8,12 @@ const (
 )
 
 type MenuSystem struct {
-	root               *MenuNode
-	currentNode        *MenuNode
-	setupModeCountdown int
-	devToolsEnabled    func() bool
+	root                *MenuNode
+	currentNode         *MenuNode
+	setupModeCountdown  int
+	devToolsEnabled     func() bool
+	experimentalEnabled func() bool
+	bluetoothAvailable  func() bool
 }
 
 // NewMenuSystem builds the menu tree (declared in newMenuTree) and starts the
@@ -21,7 +23,7 @@ func NewMenuSystem() *MenuSystem {
 
 	return &MenuSystem{
 		root:               root,
-		currentNode:        root.find(languagedb.UIMenuLiveView), // Start on the live view leaf
+		currentNode:        root.find(languagedb.UIMenuLivePred), // Start on the first live view leaf
 		setupModeCountdown: setupModeCountdownStart,
 	}
 }
@@ -211,6 +213,17 @@ func (m *MenuSystem) SetDevToolsEnabledCallback(callback func() bool) {
 	m.devToolsEnabled = callback
 }
 
+// SetExperimentalEnabledCallback sets the callback function to check if experimental features are enabled.
+func (m *MenuSystem) SetExperimentalEnabledCallback(callback func() bool) {
+	m.experimentalEnabled = callback
+}
+
+// SetBluetoothAvailableCallback sets the callback used to decide whether the
+// Bluetooth menu branch should be shown.
+func (m *MenuSystem) SetBluetoothAvailableCallback(callback func() bool) {
+	m.bluetoothAvailable = callback
+}
+
 // previousSibling navigates to the previous visible sibling with wrapping.
 func (m *MenuSystem) previousSibling() *MenuNode {
 	if m.currentNode.parent == nil {
@@ -308,6 +321,10 @@ func (m *MenuSystem) isNodeVisible(node *MenuNode) bool {
 		return true
 	case PageContextDevTools:
 		return m.isDevToolsEnabled()
+	case PageContextExperimental:
+		return m.isExperimentalEnabled()
+	case PageContextBluetooth:
+		return m.isBluetoothAvailable()
 	default:
 		return true
 	}
@@ -320,4 +337,22 @@ func (m *MenuSystem) isDevToolsEnabled() bool {
 	}
 
 	return m.devToolsEnabled()
+}
+
+// isExperimentalEnabled returns true if experimental features are enabled.
+func (m *MenuSystem) isExperimentalEnabled() bool {
+	if m.experimentalEnabled == nil {
+		return false
+	}
+
+	return m.experimentalEnabled()
+}
+
+// isBluetoothAvailable returns true if Bluetooth management is available.
+func (m *MenuSystem) isBluetoothAvailable() bool {
+	if m.bluetoothAvailable == nil {
+		return false
+	}
+
+	return m.bluetoothAvailable()
 }

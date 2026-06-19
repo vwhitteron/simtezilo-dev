@@ -15,6 +15,7 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/exitcode"
 	"github.com/vwhitteron/simtezilo-dev/app/logstore"
 	"github.com/vwhitteron/simtezilo-dev/app/setupmode"
+	"github.com/vwhitteron/simtezilo-dev/app/ui/icons"
 	"github.com/vwhitteron/simtezilo-dev/app/ui/webui/webcommon"
 	"github.com/vwhitteron/simtezilo-dev/app/updater"
 )
@@ -42,6 +43,12 @@ type Options struct {
 	BuildTime          string
 	BuildPlatform      string
 	Updater            *updater.Updater
+
+	// OnHapticsOutputChanged is invoked (if non-nil) after the haptics output
+	// device/channels/sampleRate/latency are changed via a config update, so the
+	// app can restart the haptic audio stream live rather than requiring a
+	// restart. It is only called when one of those values actually changed.
+	OnHapticsOutputChanged func()
 }
 
 // WebUI composes a Broadcaster with focused sub-handlers for config, system, and update APIs.
@@ -71,24 +78,28 @@ func New(opts Options) *WebUI {
 		screenFrameFeed: opts.ScreenFrameFeed,
 	})
 
+	// Construct the system handler first: it owns the platform helper, so the
+	// config handler borrows its Bluetooth-availability gate for the config payload.
+	sysHandler := newSystemHandler(systemHandlerOptions{
+		log:             log,
+		config:          opts.Config,
+		setupMode:       opts.SetupMode,
+		shutdownChan:    opts.ShutdownChan,
+		logStore:        opts.LogStore,
+		sendHIDInput:    opts.SendHIDInput,
+		buildVersion:    opts.BuildVersion,
+		buildCommitHash: opts.BuildCommitHash,
+		buildTime:       opts.BuildTime,
+		buildPlatform:   opts.BuildPlatform,
+	})
+
 	webUI := &WebUI{
 		log:         log,
 		port:        opts.Port,
 		config:      opts.Config,
 		broadcaster: broadcaster,
-		cfgHandler:  newConfigHandler(log, opts.Config, opts.Calibrator, opts.Updater, broadcaster),
-		sysHandler: newSystemHandler(systemHandlerOptions{
-			log:             log,
-			config:          opts.Config,
-			setupMode:       opts.SetupMode,
-			shutdownChan:    opts.ShutdownChan,
-			logStore:        opts.LogStore,
-			sendHIDInput:    opts.SendHIDInput,
-			buildVersion:    opts.BuildVersion,
-			buildCommitHash: opts.BuildCommitHash,
-			buildTime:       opts.BuildTime,
-			buildPlatform:   opts.BuildPlatform,
-		}),
+		cfgHandler:  newConfigHandler(log, opts.Config, opts.Calibrator, opts.Updater, broadcaster, opts.OnHapticsOutputChanged, sysHandler.bluetoothAvailable, sysHandler.btDeviceList),
+		sysHandler:  sysHandler,
 		updHandler: newUpdateHandler(updateHandlerOptions{
 			log:          log,
 			config:       opts.Config,
@@ -118,6 +129,8 @@ func (w *WebUI) GetHTTPHandler() http.Handler {
 
 	// Config API
 	mux.HandleFunc("/api/calibration/sweep", w.cfgHandler.handleCalibrationSweep)
+	mux.HandleFunc("/api/bluetooth/devices", w.sysHandler.handleBluetoothDevices)
+	mux.HandleFunc("/api/bluetooth/action", w.sysHandler.handleBluetoothAction)
 	mux.HandleFunc("/api/config", w.cfgHandler.handleConfigAPI)
 	mux.HandleFunc("/api/config/export", w.cfgHandler.handleConfigExport)
 	mux.HandleFunc("/api/config/import", w.cfgHandler.handleConfigImport)
@@ -237,20 +250,31 @@ func (w *WebUI) corsMiddleware(next http.Handler) http.Handler {
 var staticFiles embed.FS
 
 // staticFileHandlerFunc serves static files with automatic content type detection.
-// It first tries to load from webui-specific static files, then falls back to shared files.
+// Icons come from the shared icons package (the single source of the SVGs); all
+// other files try the webui-specific static files first, then the shared files.
 func (w *WebUI) staticFileHandlerFunc(fileType string) func(http.ResponseWriter, *http.Request) {
 	return func(response http.ResponseWriter, request *http.Request) {
 		filename := "static" + request.URL.Path
 
-		content, err := staticFiles.ReadFile(filename)
-		if err != nil {
-			content, err = webcommon.StaticFiles.ReadFile(filename)
-			if err != nil {
-				response.WriteHeader(http.StatusNotFound)
-				w.log.Error().Err(err).Str("type", fileType).Msg("Invalid file")
+		var (
+			content []byte
+			err     error
+		)
 
-				return
+		if name, ok := strings.CutPrefix(request.URL.Path, "/images/icons/"); ok {
+			content, err = icons.ReadFile(name)
+		} else {
+			content, err = staticFiles.ReadFile(filename)
+			if err != nil {
+				content, err = webcommon.StaticFiles.ReadFile(filename)
 			}
+		}
+
+		if err != nil {
+			response.WriteHeader(http.StatusNotFound)
+			w.log.Error().Err(err).Str("type", fileType).Msg("Invalid file")
+
+			return
 		}
 
 		contentType := getContentType(filename)

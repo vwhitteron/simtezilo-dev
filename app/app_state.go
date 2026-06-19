@@ -41,6 +41,19 @@ type gameState struct {
 	mainMenuFrameCount     int            // Counter for consecutive main menu frames
 	isInPostRaceMenu       bool           // Flag to indicate if game is in post-race menu with fixed telemetry values
 	postRaceMenuFrameCount int            // Counter for consecutive post-race menu static telemetry frames
+	deltaDisplay           deltaDisplay   // Throttled predictive-delta display value
+}
+
+// deltaDisplay holds the last predictive-delta value shown on the live view. The
+// value is refreshed only when lap progress crosses into a new bucket (~once per
+// few hundred ms) so the display updates at the reference resolution rather than
+// every display frame.
+type deltaDisplay struct {
+	bucket int     // lap-progress bucket the held value was computed for
+	have   bool    // a value has been computed for the current lap
+	delta  float64 // held delta in seconds
+	valid  bool    // held validity
+	synth  bool    // held synthesized-source flag
 }
 
 // NewGameState creates and initializes a new appState instance.

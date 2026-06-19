@@ -65,6 +65,24 @@ buildcommit := $(shell git describe --tags --always --dirty)
 buildtime := $(shell date -u '+%Y-%m-%d_%H:%M:%S')
 platform := $(shell uname -s | tr '[:upper:]' '[:lower:]')
 
+# PortAudio backend (//go:build portaudio): PORTAUDIO=on|off|auto (default auto).
+# Native auto probes pkg-config (host may lack the lib); docker auto is always on
+# (build stages install portaudio19-dev). off forces beep-only everywhere.
+PORTAUDIO ?= auto
+ifeq ($(PORTAUDIO),on)
+portaudiotag := portaudio
+dockergotags := portaudio
+else ifeq ($(PORTAUDIO),off)
+portaudiotag :=
+dockergotags :=
+else
+portaudiotag := $(shell pkg-config --exists portaudio-2.0 2>/dev/null && echo portaudio)
+dockergotags := portaudio
+endif
+# cgo is only needed for the PortAudio backend; leave it at Go's default otherwise.
+portaudiocgo := $(if $(portaudiotag),CGO_ENABLED=1)
+portaudiostatus := $(if $(portaudiotag),PortAudio backend (-tags portaudio),beep-only)
+
 ## lint: run linter against project
 .PHONY: lint
 lint:
@@ -159,7 +177,8 @@ version/tag:
 ## build: build the application for the current platform
 .PHONY: build
 build:
-	go build -ldflags "X '$(buildmodule)/app.Version=$(buildversion)' -X '$(buildmodule)/app.CommitHash=$(buildcommit)' -X '$(buildmodule)/app.BuildTime=$(buildtime)' -X '$(buildmodule)/app.Platform=local'" \
+	@echo "audio: $(portaudiostatus) [PORTAUDIO=$(PORTAUDIO)]"
+	$(portaudiocgo) go build -tags "$(portaudiotag)" -ldflags "-X '$(buildmodule)/app.Version=$(buildversion)' -X '$(buildmodule)/app.CommitHash=$(buildcommit)' -X '$(buildmodule)/app.BuildTime=$(buildtime)' -X '$(buildmodule)/app.Platform=local'" \
 	-o ./out/simtezilo-local ./cmd/simtezilo/main.go
 	go build -ldflags "-X '$(buildmodule)/app.Version=$(buildversion)' -X '$(buildmodule)/app.CommitHash=$(buildcommit)' -X '$(buildmodule)/app.BuildTime=$(buildtime)' -X '$(buildmodule)/app.Platform=local'" \
 	-o ./out/platform-local ./cmd/platform-m1/*.go
@@ -167,8 +186,9 @@ build:
 ## build/darwin/silicon: build the application for Apple Silicon
 .PHONY: build/darwin/silicon
 build/darwin/silicon:
-	GOOS=darwin GOARCH=arm64 \
-	go build -ldflags "-X '$(buildmodule)/app.Version=$(buildversion)' -X '$(buildmodule)/app.CommitHash=$(buildcommit)' -X '$(buildmodule)/app.BuildTime=$(buildtime)' -X '$(buildmodule)/app.Platform=darwin'" \
+	@echo "audio: $(portaudiostatus) [PORTAUDIO=$(PORTAUDIO)]"
+	GOOS=darwin GOARCH=arm64 $(portaudiocgo) \
+	go build -tags "$(portaudiotag)" -ldflags "-X '$(buildmodule)/app.Version=$(buildversion)' -X '$(buildmodule)/app.CommitHash=$(buildcommit)' -X '$(buildmodule)/app.BuildTime=$(buildtime)' -X '$(buildmodule)/app.Platform=darwin'" \
 	-o ./out/simtezilo-macos ./cmd/simtezilo/main.go
 
 ## build/windows/amd64: build the application for Windows 64-bit
@@ -189,6 +209,7 @@ build/linux/amd64:
 	--build-arg BUILDVERSION=$(buildversion) \
 	--build-arg BUILDCOMMIT=$(buildcommit) \
 	--build-arg PLATFORM="simtezilo" \
+	--build-arg GOTAGS="$(dockergotags)" \
 	--output=out --target=binaries-amd64 --progress=plain \
 	-f build/docker/Dockerfile .
 
@@ -203,6 +224,7 @@ build/rpi:
 	--build-arg BUILDVERSION=$(buildversion) \
 	--build-arg BUILDCOMMIT=$(buildcommit) \
 	--build-arg PLATFORM="simtezilo" \
+	--build-arg GOTAGS="$(dockergotags)" \
 	--output=out --target=binaries-armhf --progress=plain \
 	-f build/docker/Dockerfile .
 
@@ -217,6 +239,7 @@ build/rpi/v6:
 	--build-arg BUILDVERSION=$(buildversion) \
 	--build-arg BUILDCOMMIT=$(buildcommit) \
 	--build-arg PLATFORM="simtezilo" \
+	--build-arg GOTAGS="$(dockergotags)" \
 	--output=out --target=binaries-armel --progress=plain \
 	-f build/docker/Dockerfile .
 
@@ -231,6 +254,7 @@ build/rpi/v7:
 	--build-arg BUILDVERSION=$(buildversion) \
 	--build-arg BUILDCOMMIT=$(buildcommit) \
 	--build-arg PLATFORM="simtezilo" \
+	--build-arg GOTAGS="$(dockergotags)" \
 	--output=out --target=binaries-armel --progress=plain \
 	-f build/docker/Dockerfile .
 
@@ -245,6 +269,7 @@ build/rpi/v8/32:
 	--build-arg BUILDVERSION=$(buildversion) \
 	--build-arg BUILDCOMMIT=$(buildcommit) \
 	--build-arg PLATFORM="simtezilo" \
+	--build-arg GOTAGS="$(dockergotags)" \
 	--output=out --target=binaries-armel-8 --progress=plain \
 	-f build/docker/Dockerfile .
 
@@ -259,18 +284,21 @@ build/rpi/v8/64:
 	--build-arg BUILDVERSION=$(buildversion) \
 	--build-arg BUILDCOMMIT=$(buildcommit) \
 	--build-arg PLATFORM="simtezilo" \
+	--build-arg GOTAGS="$(dockergotags)" \
 	--output=out --target=binaries-arm64-8 --progress=plain \
 	-f build/docker/Dockerfile .
 
 ## run: run the application locally
 .PHONY: run
 run:
-	@go run cmd/simtezilo/main.go -l info
+	@echo "audio: $(portaudiostatus) [PORTAUDIO=$(PORTAUDIO)]"
+	@$(portaudiocgo) go run -tags "$(portaudiotag)" cmd/simtezilo/main.go -l info
 
 ## run/debug: run the application locally with denug logging enabled
 .PHONY: run/debug
 run/debug:
-	@go run cmd/simtezilo/main.go -l debug -w=true
+	@echo "audio: $(portaudiostatus) [PORTAUDIO=$(PORTAUDIO)]"
+	@$(portaudiocgo) go run -tags "$(portaudiotag)" cmd/simtezilo/main.go -l debug -w=true
 
 ## run/watch: run the application locally and reload on file changes
 .PHONY: run/watch
@@ -286,7 +314,8 @@ run/watch:
 ## run/profile: run the application with profiling enabled
 .PHONY: run/profile
 run/profile:
-	@go run cmd/simtezilo/main.go -l info -p=http://localhost:4040 -w=true
+	@echo "audio: $(portaudiostatus) [PORTAUDIO=$(PORTAUDIO)]"
+	@$(portaudiocgo) go run -tags "$(portaudiotag)" cmd/simtezilo/main.go -l info -p=http://localhost:4040 -w=true
 
 ## start-pyroscope: start the Pyroscope profiler Docker container
 .PHONY: start-pyroscope

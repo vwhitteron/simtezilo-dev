@@ -22,6 +22,12 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/i18n"
 )
 
+const (
+	fanModeManual = "manual"
+	fanModeOpen   = "open"
+	fanModeAll    = "all"
+)
+
 type app struct {
 	Language       string  `json:"language"`
 	Accent         string  `json:"accent"`
@@ -32,6 +38,8 @@ type app struct {
 	EnabledWebUI   bool    `json:"enabledWebUI"`  //nolint:tagliatelle // schema uses Go-style acronym
 	WebUIPort      int     `json:"webUIPort"`     //nolint:tagliatelle // schema uses Go-style acronym
 	EnableDevTools bool    `json:"enableDevTools"`
+
+	EnableExperimentalFeatures bool `json:"enableExperimentalFeatures"`
 }
 
 type discord struct {
@@ -50,6 +58,7 @@ type fuelMonitoring struct {
 }
 
 type haptics struct {
+	Output                       HapticsOutput                       `json:"output"` // haptic feedback output stream
 	EnableReplay                 bool                                `json:"enableReplay"`
 	DynamicTransmissionFeedback  bool                                `json:"dynamicTransmissionFeedback"`
 	DynamicTransmissionCurve     int                                 `json:"dynamicTransmissionCurve"`
@@ -71,8 +80,18 @@ type haptics struct {
 }
 
 type hardware struct {
+	AudioBackend       string `json:"audioBackend"` // beep | portaudio
 	Model              string `json:"model"`
 	DisplayOrientation int    `json:"displayOrientation"`
+}
+
+type fan struct {
+	Enabled          bool   `json:"enabled"`
+	Mode             string `json:"mode"`
+	DeviceAddress    string `json:"deviceAddress"` // MAC address of the paired fan device (selected in the Bluetooth panel)
+	DeviceName       string `json:"deviceName"`    // Cached friendly name of the paired fan device, shown when it is offline/unlisted
+	CommandTimeoutMs int    `json:"commandTimeoutMs"`
+	MaxSpeedKPH      int    `json:"maxSpeedKph"`
 }
 
 type notifications struct {
@@ -89,12 +108,32 @@ type notifications struct {
 
 type pitRadio struct {
 	Enabled               bool            `json:"enabled"`
-	Output                string          `json:"output"`
+	Output                string          `json:"output"` // log | discord | audio
+	Audio                 PitRadioAudio   `json:"audio"`  // local audio device used when output is "audio"
 	MessageSendIntervalMs int             `json:"messageSendIntervalMs"`
 	Notifications         *notifications  `json:"notifications,omitempty"`
 	Discord               *discord        `json:"discord,omitempty"`
 	FuelMonitoring        *fuelMonitoring `json:"fuelMonitoring,omitempty"`
 	TyreMonitoring        *tyreMonitoring `json:"tyreMonitoring,omitempty"`
+}
+
+// HapticsOutput configures the haptic feedback output stream.
+type HapticsOutput struct {
+	Device     string `json:"device"`     // backend device ID ("" selects the default)
+	DeviceName string `json:"deviceName"` // human-readable device name; the stable, backend-agnostic selection key (Device is a tiebreaker)
+	Channels   int    `json:"channels"`   // number of haptic output channels
+	SampleRate int    `json:"sampleRate"` // output sample rate in Hz
+	LatencyMs  int    `json:"latencyMs"`  // requested buffer latency in milliseconds
+	CushionMs  int    `json:"cushionMs"`  // mixer buffer pre-fill cushion in milliseconds
+}
+
+// PitRadioAudio configures local playback of pit-radio audio on a dedicated
+// device, used when the pit-radio output mode is "audio". The beep backend
+// drives a single shared stereo device and cannot be used for this output.
+type PitRadioAudio struct {
+	Device     string `json:"device"`     // backend device ID ("" selects the default)
+	DeviceName string `json:"deviceName"` // human-readable device name; the stable, backend-agnostic selection key (Device is a tiebreaker)
+	SampleRate int    `json:"sampleRate"` // output sample rate in Hz
 }
 
 // EQBand represents a parametric equalizer band with center frequency, gain, and Q factor.
@@ -168,6 +207,7 @@ type viperConfig struct {
 	PitRadio      *pitRadio    `json:"pitRadio,omitempty"`
 	Synthesizer   *Synthesizer `json:"synthesizer,omitempty"`
 	Telemetry     *Telemetry   `json:"telemetry,omitempty"`
+	Fan           *fan         `json:"fan,omitempty"`
 }
 
 // Snapshot holds frequently-accessed configuration values for lock-free reads.
@@ -737,6 +777,286 @@ func (c *Config) SetDevToolsEnabled(enabled bool) {
 	c.viper.App.EnableDevTools = enabled
 
 	c.registerUpdate(false)
+}
+
+// GetExperimentalFeaturesEnabled returns true if experimental features are enabled.
+func (c *Config) GetExperimentalFeaturesEnabled() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.App.EnableExperimentalFeatures
+}
+
+// SetExperimentalFeaturesEnabled sets whether experimental features are enabled.
+func (c *Config) SetExperimentalFeaturesEnabled(enabled bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.App.EnableExperimentalFeatures = enabled
+
+	c.registerUpdate(false)
+}
+
+// ****************************************************************************
+// Fan methods.
+// ****************************************************************************
+
+// FanEnabled returns true if the fan controller is enabled.
+func (c *Config) FanEnabled() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if c.viper.Fan == nil {
+		return false
+	}
+
+	return c.viper.Fan.Enabled
+}
+
+// SetFanEnabled sets whether the fan controller is enabled.
+func (c *Config) SetFanEnabled(value bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.Fan.Enabled = value
+
+	// No restart required: the fan control loop re-reads FanEnabled() live —
+	// the idle gate picks up an enable, and runFanControlDutyCycle tears the
+	// connection down to duty-0 on a disable.
+	c.registerUpdate(false)
+}
+
+// GetFanMode returns the fan operating mode.
+// Allowed values are: off, open, all.
+func (c *Config) GetFanMode() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if c.viper.Fan == nil {
+		return fanModeManual
+	}
+
+	mode := strings.ToLower(strings.TrimSpace(c.viper.Fan.Mode))
+
+	switch mode {
+	case fanModeManual, fanModeOpen, fanModeAll:
+		return mode
+	default:
+		return fanModeManual
+	}
+}
+
+// IsFanModeValid returns true when the configured fan mode is valid.
+func (c *Config) IsFanModeValid() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if c.viper.Fan == nil {
+		return true
+	}
+
+	mode := strings.ToLower(strings.TrimSpace(c.viper.Fan.Mode))
+
+	switch mode {
+	case "", fanModeManual, fanModeOpen, fanModeAll:
+		return true
+	default:
+		return false
+	}
+}
+
+// GetFanConfiguredMode returns the configured fan mode without normalization.
+func (c *Config) GetFanConfiguredMode() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if c.viper.Fan == nil {
+		return ""
+	}
+
+	return c.viper.Fan.Mode
+}
+
+// GetFanDeviceAddress returns the MAC address of the paired fan device. It is
+// empty until a device is selected in the Bluetooth panel.
+func (c *Config) GetFanDeviceAddress() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if c.viper.Fan == nil {
+		return ""
+	}
+
+	return c.viper.Fan.DeviceAddress
+}
+
+// GetFanCommandTimeoutMs returns the BLE command timeout in milliseconds.
+func (c *Config) GetFanCommandTimeoutMs() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if c.viper.Fan == nil || c.viper.Fan.CommandTimeoutMs <= 0 {
+		return 5000
+	}
+
+	return c.viper.Fan.CommandTimeoutMs
+}
+
+// GetFanMaxSpeedKPH returns the vehicle speed in km/h that maps to 100% fan duty.
+func (c *Config) GetFanMaxSpeedKPH() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if c.viper.Fan == nil || c.viper.Fan.MaxSpeedKPH <= 0 {
+		return 250
+	}
+
+	return c.viper.Fan.MaxSpeedKPH
+}
+
+// SetFanMode sets the fan operating mode.
+func (c *Config) SetFanMode(value string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.Fan.Mode = value
+
+	c.registerUpdate(false)
+}
+
+// SetFanDeviceAddress sets the MAC address of the paired fan device.
+func (c *Config) SetFanDeviceAddress(value string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.Fan.DeviceAddress = value
+
+	c.registerUpdate(false)
+}
+
+// GetFanDeviceName returns the cached friendly name of the paired fan device.
+// It is used by the web UI to label the device when it is offline and so absent
+// from the live Bluetooth list.
+func (c *Config) GetFanDeviceName() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if c.viper.Fan == nil {
+		return ""
+	}
+
+	return c.viper.Fan.DeviceName
+}
+
+// SetFanDeviceName caches the friendly name of the paired fan device, refreshed
+// by the web UI whenever the device is seen in a scan or while connected.
+func (c *Config) SetFanDeviceName(value string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.Fan.DeviceName = value
+
+	c.registerUpdate(false)
+}
+
+// SetFanCommandTimeoutMs sets the BLE command timeout in milliseconds.
+func (c *Config) SetFanCommandTimeoutMs(value int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.Fan.CommandTimeoutMs = value
+
+	c.registerUpdate(false)
+}
+
+// SetFanMaxSpeedKPH sets the vehicle speed in km/h that maps to 100% fan duty.
+func (c *Config) SetFanMaxSpeedKPH(value int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.Fan.MaxSpeedKPH = value
+
+	c.registerUpdate(false)
+}
+
+// CycleFanMode cycles the fan mode forward or backward.
+// The order is: off -> open -> all -> off.
+func (c *Config) CycleFanMode(forward bool) string {
+	modes := []string{fanModeManual, fanModeOpen, fanModeAll}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	current := strings.ToLower(strings.TrimSpace(c.viper.Fan.Mode))
+
+	idx := 0
+
+	for i, m := range modes {
+		if m == current {
+			idx = i
+
+			break
+		}
+	}
+
+	if forward {
+		idx = (idx + 1) % len(modes)
+	} else {
+		idx = (idx + len(modes) - 1) % len(modes)
+	}
+
+	c.viper.Fan.Mode = modes[idx]
+	c.registerUpdate(false)
+
+	return modes[idx]
+}
+
+// IncreaseFanMaxSpeedKPH increases the max speed by 10 km/h, capped at 500.
+func (c *Config) IncreaseFanMaxSpeedKPH() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.Fan.MaxSpeedKPH = min(500, c.viper.Fan.MaxSpeedKPH+10)
+
+	c.registerUpdate(false)
+
+	return c.viper.Fan.MaxSpeedKPH
+}
+
+// DecreaseFanMaxSpeedKPH decreases the max speed by 10 km/h, floored at 50.
+func (c *Config) DecreaseFanMaxSpeedKPH() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.Fan.MaxSpeedKPH = max(50, c.viper.Fan.MaxSpeedKPH-10)
+
+	c.registerUpdate(false)
+
+	return c.viper.Fan.MaxSpeedKPH
+}
+
+// IncreaseFanCommandTimeoutMs increases the command timeout by 500 ms, capped at 10000.
+func (c *Config) IncreaseFanCommandTimeoutMs() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.Fan.CommandTimeoutMs = min(10000, c.viper.Fan.CommandTimeoutMs+100)
+
+	c.registerUpdate(false)
+
+	return c.viper.Fan.CommandTimeoutMs
+}
+
+// DecreaseFanCommandTimeoutMs decreases the command timeout by 100 ms, floored at 100.
+func (c *Config) DecreaseFanCommandTimeoutMs() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.Fan.CommandTimeoutMs = max(100, c.viper.Fan.CommandTimeoutMs-100)
+
+	c.registerUpdate(false)
+
+	return c.viper.Fan.CommandTimeoutMs
 }
 
 // ****************************************************************************
@@ -1563,7 +1883,7 @@ func (c *Config) SetPitRadioOutput(value string) {
 	defer c.mu.Unlock()
 
 	switch value {
-	case "discord":
+	case "discord", "audio":
 		c.viper.PitRadio.Output = value
 	default:
 		c.viper.PitRadio.Output = "log"
@@ -2915,6 +3235,236 @@ func (c *Config) SetTelemetryUpdateURL(value string) {
 	c.viper.Telemetry.UpdateURL = value
 
 	c.registerUpdate(true)
+}
+
+// ****************************************************************************
+// Audio backend and device routing accessors.
+//
+// Audio settings select the output backend (beep/portaudio) and route the
+// haptic and pit-radio streams to specific devices. The backend selection
+// changes the entire audio stack, so it is applied on restart (the setter marks
+// the config restart-required). Device/channel/sample-rate/latency changes are
+// applied live (the haptic stream is rebuilt and pit-radio resolves per message)
+// and do not require a restart. The cushion is the other restart-required value.
+// ****************************************************************************
+
+// GetAudioBackend returns the configured audio backend (beep, portaudio).
+func (c *Config) GetAudioBackend() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if c.viper.Hardware.AudioBackend == "" {
+		return "beep"
+	}
+
+	return c.viper.Hardware.AudioBackend
+}
+
+// SetAudioBackend sets the audio backend.
+func (c *Config) SetAudioBackend(value string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.Hardware.AudioBackend = value
+
+	// Switching backend rebuilds the entire audio stack; apply it on restart
+	// rather than swapping live (which was fragile).
+	c.registerUpdate(true)
+}
+
+// GetAudioHapticsDevice returns the haptics output device ID ("" = default).
+func (c *Config) GetAudioHapticsDevice() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.Haptics.Output.Device
+}
+
+// SetAudioHapticsDevice sets the haptics output device ID.
+func (c *Config) SetAudioHapticsDevice(value string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.Haptics.Output.Device = value
+
+	// Applied live (the haptic stream is rebuilt on change); no restart required.
+	c.registerUpdate(false)
+}
+
+// GetAudioHapticsDeviceName returns the haptics output device name (the stable,
+// backend-agnostic selection key).
+func (c *Config) GetAudioHapticsDeviceName() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.Haptics.Output.DeviceName
+}
+
+// SetAudioHapticsDeviceName sets the haptics output device name.
+func (c *Config) SetAudioHapticsDeviceName(value string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.Haptics.Output.DeviceName = value
+
+	// Applied live (used when resolving the device on the next stream rebuild).
+	c.registerUpdate(false)
+}
+
+// GetAudioHapticsChannels returns the number of haptic output channels.
+func (c *Config) GetAudioHapticsChannels() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if c.viper.Haptics.Output.Channels < 1 {
+		return 2
+	}
+
+	return c.viper.Haptics.Output.Channels
+}
+
+// SetAudioHapticsChannels sets the number of haptic output channels.
+func (c *Config) SetAudioHapticsChannels(value int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.Haptics.Output.Channels = value
+
+	// Applied live (the haptic stream is rebuilt on change); no restart required.
+	c.registerUpdate(false)
+}
+
+// GetAudioHapticsSampleRate returns the haptics output sample rate in Hz.
+func (c *Config) GetAudioHapticsSampleRate() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if c.viper.Haptics.Output.SampleRate < 1 {
+		return c.viper.Synthesizer.OutputSampleRateHz
+	}
+
+	return c.viper.Haptics.Output.SampleRate
+}
+
+// SetAudioHapticsSampleRate sets the haptics output sample rate in Hz.
+func (c *Config) SetAudioHapticsSampleRate(value int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.Haptics.Output.SampleRate = value
+
+	// Applied live (the haptic stream is rebuilt on change); no restart required.
+	c.registerUpdate(false)
+}
+
+// GetAudioHapticsLatencyMs returns the requested haptics buffer latency in ms.
+func (c *Config) GetAudioHapticsLatencyMs() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.Haptics.Output.LatencyMs
+}
+
+// SetAudioHapticsLatencyMs sets the requested haptics buffer latency in ms.
+func (c *Config) SetAudioHapticsLatencyMs(value int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.Haptics.Output.LatencyMs = value
+
+	// Applied live (the haptic stream is rebuilt on change); no restart required.
+	c.registerUpdate(false)
+}
+
+// defaultHapticsCushionMs is the mixer buffer pre-fill cushion used when no
+// value (or a non-positive one) is configured.
+const defaultHapticsCushionMs = 24
+
+// GetAudioHapticsCushionMs returns the mixer buffer pre-fill cushion in ms. This
+// is how much audio each haptic channel buffer holds in reserve; it must comfortably
+// exceed the per-read pull size to avoid underruns (and the resulting clicks) when
+// a telemetry frame is briefly late.
+func (c *Config) GetAudioHapticsCushionMs() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if c.viper.Haptics.Output.CushionMs <= 0 {
+		return defaultHapticsCushionMs
+	}
+
+	return c.viper.Haptics.Output.CushionMs
+}
+
+// SetAudioHapticsCushionMs sets the mixer buffer pre-fill cushion in ms.
+func (c *Config) SetAudioHapticsCushionMs(value int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.Haptics.Output.CushionMs = value
+
+	c.registerUpdate(true)
+}
+
+// GetAudioPitRadioDevice returns the pit-radio output device ID ("" = default).
+func (c *Config) GetAudioPitRadioDevice() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.PitRadio.Audio.Device
+}
+
+// SetAudioPitRadioDevice sets the pit-radio output device ID.
+func (c *Config) SetAudioPitRadioDevice(value string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.PitRadio.Audio.Device = value
+
+	// Applied live (resolved per message); no restart required.
+	c.registerUpdate(false)
+}
+
+// GetAudioPitRadioDeviceName returns the pit-radio output device name (the
+// stable, backend-agnostic selection key).
+func (c *Config) GetAudioPitRadioDeviceName() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.PitRadio.Audio.DeviceName
+}
+
+// SetAudioPitRadioDeviceName sets the pit-radio output device name.
+func (c *Config) SetAudioPitRadioDeviceName(value string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.PitRadio.Audio.DeviceName = value
+
+	// Applied live (resolved per message); no restart required.
+	c.registerUpdate(false)
+}
+
+// GetAudioPitRadioSampleRate returns the pit-radio output sample rate in Hz.
+func (c *Config) GetAudioPitRadioSampleRate() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if c.viper.PitRadio.Audio.SampleRate < 1 {
+		return 48000
+	}
+
+	return c.viper.PitRadio.Audio.SampleRate
+}
+
+// SetAudioPitRadioSampleRate sets the pit-radio output sample rate in Hz.
+func (c *Config) SetAudioPitRadioSampleRate(value int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.PitRadio.Audio.SampleRate = value
+
+	// Applied live (resolved per message); no restart required.
+	c.registerUpdate(false)
 }
 
 // ****************************************************************************

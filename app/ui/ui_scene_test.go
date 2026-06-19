@@ -55,20 +55,19 @@ func newCountingUI(t *testing.T) (*UserInterface, *countingDisplay) {
 func TestViewSceneByMode(t *testing.T) {
 	t.Parallel()
 
-	ready := newTestUI(t).i18n.GetString(languagedb.UIReady)
+	predPlaceholder := scene{kind: sceneDelta, delta: gui.DeltaView{Value: "--.---", Color: deltaPlaceholderColor()}}
 
 	tests := []struct {
 		name       string
 		mode       ScreenMode
 		activeView languagedb.Key
-		gearText   string
 		want       scene
 	}{
-		{"sleep", ScreenModeSleep, languagedb.UIMenuLiveView, "3", scene{kind: sceneNone}},
-		{"off", ScreenModeOff, languagedb.UIMenuLiveView, "3", scene{kind: sceneNone}},
-		{"startup", ScreenModeStartup, languagedb.UIMenuLiveView, "3", scene{kind: sceneNone}},
-		{"live gear", ScreenModeLive, languagedb.UIMenuLiveView, "3", scene{kind: sceneLive, text: "3"}},
-		{"wait gear", ScreenModeWait, languagedb.UIMenuLiveView, "3", scene{kind: sceneLive, text: ready}},
+		{"sleep", ScreenModeSleep, languagedb.UIMenuLivePred, scene{kind: sceneNone}},
+		{"off", ScreenModeOff, languagedb.UIMenuLivePred, scene{kind: sceneNone}},
+		{"startup", ScreenModeStartup, languagedb.UIMenuLivePred, scene{kind: sceneNone}},
+		{"live pred placeholder", ScreenModeLive, languagedb.UIMenuLivePred, predPlaceholder},
+		{"wait pred placeholder", ScreenModeWait, languagedb.UIMenuLivePred, predPlaceholder},
 	}
 
 	for _, testCase := range tests {
@@ -76,11 +75,10 @@ func TestViewSceneByMode(t *testing.T) {
 			t.Parallel()
 
 			// Each subtest gets its own UI so the parallel runs do not share
-			// mutable state (state.mode/activeLiveView/gearText).
+			// mutable state (state.mode/activeLiveView).
 			iface := newTestUI(t)
 			iface.state.mode = testCase.mode
 			iface.state.activeLiveView = testCase.activeView
-			iface.state.gearText = testCase.gearText
 
 			if got := iface.view(); got != testCase.want {
 				t.Errorf("view() = %+v, want %+v", got, testCase.want)
@@ -128,8 +126,8 @@ func TestRenderOnChangeSuppressesUnchangedScene(t *testing.T) {
 
 	iface, disp := newCountingUI(t)
 	iface.state.mode = ScreenModeLive
-	iface.state.activeLiveView = languagedb.UIMenuLiveView
-	iface.state.gearText = "3"
+	iface.state.activeLiveView = languagedb.UIMenuLivePred
+	iface.state.lastData = LiveData{PredValid: true, PredDelta: 0.5}
 
 	iface.render()
 
@@ -143,7 +141,7 @@ func TestRenderOnChangeSuppressesUnchangedScene(t *testing.T) {
 		t.Fatalf("unchanged render writes = %d, want 1 (suppressed)", disp.writes)
 	}
 
-	iface.state.gearText = "4" // scene changes
+	iface.state.lastData = LiveData{PredValid: true, PredDelta: -0.5} // scene changes
 	iface.render()
 
 	if disp.writes != 2 {
@@ -164,7 +162,7 @@ func TestUpdateLiveModelKeepsGearOnNull(t *testing.T) {
 	t.Parallel()
 
 	iface := newTestUI(t)
-	iface.state.activeLiveView = languagedb.UIMenuLiveView
+	iface.state.activeLiveView = languagedb.UIMenuLivePred
 
 	iface.updateLiveModel(LiveData{Gear: 3})
 

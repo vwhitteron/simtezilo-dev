@@ -25,7 +25,10 @@ const (
 	UISettings    Key = "ui.settings"
 
 	UIMenuLive          Key = "ui.menu.live"
-	UIMenuLiveView      Key = "ui.menu.live.view"
+	UIMenuLivePred      Key = "ui.menu.live.pred"
+	UIMenuLiveTyres     Key = "ui.menu.live.tyres"
+	UIMenuLiveLap       Key = "ui.menu.live.lap"
+	UIMenuLiveFuel      Key = "ui.menu.live.fuel"
 	UIMenuLiveDashboard Key = "ui.menu.live.dashboard"
 	UIMenuSettings      Key = "ui.menu.settings"
 	UIMenuReturn        Key = "ui.menu.return"
@@ -44,11 +47,16 @@ const (
 	UIMenuAppLanguage        Key = "ui.menu.app.language"
 	UIMenuAppLoglevel        Key = "ui.menu.app.loglevel"
 	UIMenuAppDevtools        Key = "ui.menu.app.devtools"
+	UIMenuAppExperimental    Key = "ui.menu.app.experimental"
 	UIMenuAppTelemetrySource Key = "ui.menu.app.telemetrysource"
 
 	UIMenuSystem                   Key = "ui.menu.system"
 	UIMenuSystemSetupmode          Key = "ui.menu.system.setupmode"
 	UIMenuSystemDisplayOrientation Key = "ui.menu.system.displayorientation"
+
+	UIMenuBluetooth       Key = "ui.menu.bluetooth"
+	UIMenuBluetoothDevice Key = "ui.menu.bluetooth.device"
+	UIMenuBluetoothToggle Key = "ui.menu.bluetooth.toggle"
 
 	UIMenuSynth                          Key = "ui.menu.synth"
 	UIMenuSynthSampleRates               Key = "ui.menu.synth.samplerates"
@@ -100,6 +108,15 @@ const (
 	UIMenuHapticsEngineSecondaryBalance  Key = "ui.menu.haptics.enginesecondarybalance"
 	UIMenuHapticsEnginePulseScale        Key = "ui.menu.haptics.enginepulsescale"
 	UIMenuHapticsEnginePulseGain         Key = "ui.menu.haptics.enginepulsegain"
+
+	UIMenuFan                Key = "ui.menu.fan"
+	UIMenuFanEnable          Key = "ui.menu.fan.enable"
+	UIMenuFanMode            Key = "ui.menu.fan.mode"
+	UIMenuFanModeManual      Key = "ui.menu.fan.mode.manual"
+	UIMenuFanModeOpenCockpit Key = "ui.menu.fan.mode.opencockpit"
+	UIMenuFanModeAll         Key = "ui.menu.fan.mode.all"
+	UIMenuFanCommandTimeout  Key = "ui.menu.fan.commandtimeout"
+	UIMenuFanWindSimMaxSpeed Key = "ui.menu.fan.windsim.maxspeed"
 
 	UIMenuPitRadio                     Key = "ui.menu.pitradio"
 	UIMenuPitRadioEnable               Key = "ui.menu.pitradio.enable"
@@ -295,6 +312,9 @@ const (
 	RunmodeSettingsAppAdvancedEnabledevtools        Key = "runmode.settings.app.advanced.enabledevtools"
 	RunmodeSettingsAppAdvancedEnabledevtoolsTooltip Key = "runmode.settings.app.advanced.enabledevtools.tooltip"
 
+	RunmodeSettingsAppAdvancedEnableexperimental        Key = "runmode.settings.app.advanced.enableexperimental"
+	RunmodeSettingsAppAdvancedEnableexperimentalTooltip Key = "runmode.settings.app.advanced.enableexperimental.tooltip"
+
 	RunmodeSettingsHapticsTitle          Key = "runmode.settings.haptics.title"
 	RunmodeSettingsHapticsGeneralTitle   Key = "runmode.settings.haptics.general.title"
 	RunmodeSettingsHapticsOutputmode     Key = "runmode.settings.haptics.outputmode"
@@ -338,6 +358,18 @@ const (
 	RunmodeSettingsHapticsEngineprofilesGainTooltip             Key = "runmode.settings.haptics.engineprofiles.gain.tooltip"
 	RunmodeSettingsHapticsEngineprofilesPulsescale              Key = "runmode.settings.haptics.engineprofiles.pulsescale"
 	RunmodeSettingsHapticsEngineprofilesPulsescaleTooltip       Key = "runmode.settings.haptics.engineprofiles.pulsescale.tooltip"
+
+	RunmodeSettingsFanTitle           Key = "runmode.settings.fan.title"
+	RunmodeSettingsFanGeneralTitle    Key = "runmode.settings.fan.general.title"
+	RunmodeSettingsFanEnabled         Key = "runmode.settings.fan.enabled"
+	RunmodeSettingsFanMode            Key = "runmode.settings.fan.mode"
+	RunmodeSettingsFanModeManual      Key = "runmode.settings.fan.mode.manual"
+	RunmodeSettingsFanModeOpenCockpit Key = "runmode.settings.fan.mode.opencockpit"
+	RunmodeSettingsFanModeAll         Key = "runmode.settings.fan.mode.all"
+	RunmodeSettingsFanDevice          Key = "runmode.settings.fan.device"
+	RunmodeSettingsFanCommandtimeout  Key = "runmode.settings.fan.commandtimeout"
+	RunmodeSettingsFanWindsimTitle    Key = "runmode.settings.windsim.title"
+	RunmodeSettingsFanWindsimMaxspeed Key = "runmode.settings.fan.windsim.maxspeed"
 
 	RunmodeSettingsPitradioTitle           Key = "runmode.settings.pitradio.title"
 	RunmodeSettingsPitradioGeneralTitle    Key = "runmode.settings.pitradio.general.title"

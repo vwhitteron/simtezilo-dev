@@ -14,6 +14,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/rs/zerolog"
+	"github.com/vwhitteron/simtezilo-dev/app/hardware/display"
 )
 
 // WSMessage is the typed envelope for all WebSocket messages.
@@ -658,7 +659,9 @@ func (b *Broadcaster) runBroadcastScreen(canvas *image.RGBA, lastHash uint32) ui
 
 	var buf bytes.Buffer
 
-	err := png.Encode(&buf, canvas)
+	// Encode the panel-accurate (RGB565-simulated) frame so the web dev view
+	// matches what the physical ST7789 displays.
+	err := png.Encode(&buf, display.SimulatePanelRGB565(canvas))
 	if err != nil {
 		b.log.Error().Err(err).Msg("failed to encode screen frame PNG")
 

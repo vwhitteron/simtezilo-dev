@@ -61,7 +61,7 @@ func TestMenuParentLinks(t *testing.T) {
 func TestMenuStartsOnLiveView(t *testing.T) {
 	t.Parallel()
 
-	if got := NewMenuSystem().currentNode.name; got != languagedb.UIMenuLiveView {
-		t.Fatalf("currentNode = %q, want %q", got, languagedb.UIMenuLiveView)
+	if got := NewMenuSystem().currentNode.name; got != languagedb.UIMenuLivePred {
+		t.Fatalf("currentNode = %q, want %q", got, languagedb.UIMenuLivePred)
 	}
 }

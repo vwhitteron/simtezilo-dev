@@ -7,13 +7,14 @@ import (
 	"image/draw"
 )
 
-// packRGB565 packs src into buf as a stream of RGB565 pixels (low byte first,
-// then high byte) using the same coordinate mapping as DrawRAW: for output
-// column c and row r, the source pixel is at x = src.Rect.Min.X + cols - c,
-// y = src.Rect.Min.Y + r. When the mapped (x, y) falls outside src.Bounds()
-// (which is always the case for column c == 0), the pixel is emitted as black
-// (0x0000). The buffer is grown only when its capacity is insufficient; the
-// returned slice has length cols*rows*2.
+// packRGB565 packs src into buf as a stream of RGB565 pixels (high byte first,
+// then low byte — the ST7789's big-endian 16-bit format) using the same
+// coordinate mapping as DrawRAW: output column c
+// is a horizontal mirror of the source, so for output column c and row r the
+// source pixel is at x = src.Rect.Min.X + cols - 1 - c, y = src.Rect.Min.Y + r.
+// When the mapped (x, y) falls outside src.Bounds() the pixel is emitted as
+// black (0x0000). The buffer is grown only when its capacity is insufficient;
+// the returned slice has length cols*rows*2.
 func packRGB565(src *image.RGBA, cols, rows int, buf []byte) []byte {
 	size := cols * rows * 2
 	if cap(buf) < size {
@@ -25,7 +26,7 @@ func packRGB565(src *image.RGBA, cols, rows int, buf []byte) []byte {
 	idx := 0
 
 	for c := range cols {
-		xPos := src.Rect.Min.X + cols - c
+		xPos := src.Rect.Min.X + cols - 1 - c
 		for r := range rows {
 			yPos := src.Rect.Min.Y + r
 
@@ -39,8 +40,8 @@ func packRGB565(src *image.RGBA, cols, rows int, buf []byte) []byte {
 				gv := uint16(src.Pix[off+1]) >> 2
 				bv := uint16(src.Pix[off+2]) >> 3
 				c565 := (rv << 11) | (gv << 5) | bv
-				buf[idx] = byte(c565)
-				buf[idx+1] = byte(c565 >> 8)
+				buf[idx] = byte(c565 >> 8)
+				buf[idx+1] = byte(c565)
 			}
 
 			idx += 2
@@ -61,14 +62,15 @@ func (d *Device) FillRectangle(x, y, width, height uint16, colorRGBA color.RGBA)
 	d.SetWindow()
 
 	c565 := RGBAToRGB565(colorRGBA)
-	// Safe conversion from uint16 to uint8 - RGB565 values fit in uint8 when split
-	c1 := byte(c565)      // Low byte
-	c2 := byte(c565 >> 8) // High byte
+	// Safe conversion from uint16 to uint8 - RGB565 values fit in uint8 when split.
+	// High byte first to match the ST7789's big-endian 16-bit format.
+	hi := byte(c565 >> 8) // High byte
+	lo := byte(c565)      // Low byte
 
 	data := make([]uint8, d.PixelCount())
 	for rowPixel := range int32(d.pixelColumns) {
-		data[rowPixel*2] = c1
-		data[rowPixel*2+1] = c2
+		data[rowPixel*2] = hi
+		data[rowPixel*2+1] = lo
 	}
 
 	column := int32(width) * int32(height)

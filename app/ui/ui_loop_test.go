@@ -140,7 +140,7 @@ func TestHandleTickSettingsMenuTimeoutSleeps(t *testing.T) {
 
 // TestHIDLiveLeafSetsActiveViewAndWait verifies that paging onto a live-view
 // leaf sets activeLiveView and transitions to Wait. The menu starts on the
-// UIMenuLiveView leaf; Right pages to its UIMenuLiveDashboard sibling.
+// UIMenuLivePred leaf; Right pages to its UIMenuLiveTyres sibling.
 func TestHIDLiveLeafSetsActiveViewAndWait(t *testing.T) {
 	t.Parallel()
 
@@ -149,8 +149,8 @@ func TestHIDLiveLeafSetsActiveViewAndWait(t *testing.T) {
 
 	iface.handleHIDEvent(HIDInputRight)
 
-	if iface.state.activeLiveView != languagedb.UIMenuLiveDashboard {
-		t.Fatalf("expected activeLiveView=LiveDashboard, got %v", iface.state.activeLiveView)
+	if iface.state.activeLiveView != languagedb.UIMenuLiveTyres {
+		t.Fatalf("expected activeLiveView=LiveTyres, got %v", iface.state.activeLiveView)
 	}
 
 	if iface.state.mode != ScreenModeWait {

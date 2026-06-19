@@ -1,6 +1,7 @@
 package webui
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -13,6 +14,7 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/calibrator"
 	appconfig "github.com/vwhitteron/simtezilo-dev/app/config"
 	"github.com/vwhitteron/simtezilo-dev/app/haptics"
+	"github.com/vwhitteron/simtezilo-dev/app/platform"
 	"github.com/vwhitteron/simtezilo-dev/app/updater"
 )
 
@@ -22,15 +24,42 @@ type configHandler struct {
 	calibrator  *calibrator.ToneGenerator
 	updater     *updater.Updater
 	broadcaster *Broadcaster
+
+	// onHapticsOutputChanged is invoked (if non-nil) after the haptics output
+	// device/channels/sampleRate/latency are changed via a config update, so the
+	// app can restart the haptic audio stream live. Only called when a value
+	// actually changed.
+	onHapticsOutputChanged func()
+	// bluetoothAvailable reports whether Bluetooth management is available; it is
+	// surfaced in the config payload so the UI can show/hide the section. Wired
+	// from the system handler, which owns the platform helper.
+	bluetoothAvailable func() bool
+	// btDevices returns the current paired/connected Bluetooth devices, used to
+	// enrich bluealsa audio outputs with their friendly alias. Wired from the
+	// system handler, which owns the platform helper. May be nil on builds with
+	// no helper.
+	btDevices func(context.Context) []platform.CmdBTDevice
 }
 
-func newConfigHandler(log zerolog.Logger, config *appconfig.Config, cal *calibrator.ToneGenerator, upd *updater.Updater, broadcaster *Broadcaster) *configHandler {
+func newConfigHandler(
+	log zerolog.Logger,
+	config *appconfig.Config,
+	cal *calibrator.ToneGenerator,
+	upd *updater.Updater,
+	broadcaster *Broadcaster,
+	onHapticsOutputChanged func(),
+	bluetoothAvailable func() bool,
+	btDevices func(context.Context) []platform.CmdBTDevice,
+) *configHandler {
 	return &configHandler{
-		log:         log,
-		config:      config,
-		calibrator:  cal,
-		updater:     upd,
-		broadcaster: broadcaster,
+		log:                    log,
+		config:                 config,
+		calibrator:             cal,
+		updater:                upd,
+		broadcaster:            broadcaster,
+		onHapticsOutputChanged: onHapticsOutputChanged,
+		bluetoothAvailable:     bluetoothAvailable,
+		btDevices:              btDevices,
 	}
 }
 
@@ -53,14 +82,15 @@ func (h *configHandler) handleConfigAPI(response http.ResponseWriter, request *h
 func (h *configHandler) handleGetConfig(response http.ResponseWriter, _ *http.Request) {
 	configData := map[string]any{
 		"app": map[string]any{
-			"language":       *h.config.GetAppLanguage(),
-			"accent":         h.config.GetAppAccent(),
-			"logLevel":       h.config.GetAppLogLevel(),
-			"baseDir":        h.config.GetAppBaseDir(),
-			"vehicleDBFile":  h.config.GetAppVehicleDBFile(),
-			"enabledWebUI":   h.config.GetAppWebUIEnabled(),
-			"webUIPort":      h.config.GetAppWebUIPort(),
-			"enableDevTools": h.config.GetDevToolsEnabled(),
+			"language":                   *h.config.GetAppLanguage(),
+			"accent":                     h.config.GetAppAccent(),
+			"logLevel":                   h.config.GetAppLogLevel(),
+			"baseDir":                    h.config.GetAppBaseDir(),
+			"vehicleDBFile":              h.config.GetAppVehicleDBFile(),
+			"enabledWebUI":               h.config.GetAppWebUIEnabled(),
+			"webUIPort":                  h.config.GetAppWebUIPort(),
+			"enableDevTools":             h.config.GetDevToolsEnabled(),
+			"enableExperimentalFeatures": h.config.GetExperimentalFeaturesEnabled(),
 			"updates": map[string]any{
 				"channel": h.config.GetAppUpdateChannel(),
 			},
@@ -75,9 +105,11 @@ func (h *configHandler) handleGetConfig(response http.ResponseWriter, _ *http.Re
 			"model":              h.config.GetHardwareModel(),
 			"displayOrientation": h.config.GetDisplayOrientation(),
 		},
+		"bluetooth": map[string]any{
+			"available": h.bluetoothAvailable != nil && h.bluetoothAvailable(),
+		},
 		"haptics": map[string]any{
 			"enableReplay":                 h.config.GetHapticsReplayEnabled(),
-			"pitRadioOutput":               h.config.GetPitRadioOutput(),
 			"dynamicTransmissionFeedback":  h.config.GethapticsDynamicTransFeedbackEnabled(),
 			"dynamicTransmissionCurve":     h.config.GetHapticsTransmissionCurve(),
 			"dynamicTransmissionGforceMax": h.config.GetHapticsTransmissionGforceMax(),
@@ -91,6 +123,7 @@ func (h *configHandler) handleGetConfig(response http.ResponseWriter, _ *http.Re
 		},
 		"pitRadio": map[string]any{
 			"enabled":               h.config.PitRadioEnabled(),
+			"output":                h.config.GetPitRadioOutput(),
 			"messageSendIntervalMs": h.config.GetPitRadioMessageSendIntervalMs(),
 			"notifications": map[string]any{
 				"enableRaceProgress":      h.config.GetPitRadioNotifyRaceProgressEnabled(),
@@ -163,6 +196,14 @@ func (h *configHandler) handleGetConfig(response http.ResponseWriter, _ *http.Re
 		"telemetry": map[string]any{
 			"source":    h.config.GetTelemetrySource(),
 			"updateURL": h.config.GetTelemetryUpdateURL(),
+		},
+		"fan": map[string]any{
+			"enabled":          h.config.FanEnabled(),
+			"mode":             h.config.GetFanMode(),
+			"deviceAddress":    h.config.GetFanDeviceAddress(),
+			"deviceName":       h.config.GetFanDeviceName(),
+			"commandTimeoutMs": h.config.GetFanCommandTimeoutMs(),
+			"maxSpeedKph":      h.config.GetFanMaxSpeedKPH(),
 		},
 		"calibration": map[string]any{
 			"enabled":       h.calibrator.IsEnabled(),
@@ -270,6 +311,7 @@ func (h *configHandler) applyConfigChanges(configData map[string]any) []string {
 		"discord":     h.applyDiscordConfig,
 		"calibration": h.applyCalibrationConfig,
 		"pitRadio":    h.applyPitRadioConfig,
+		"fan":         h.applyFanConfig,
 	}
 
 	var errors []string
@@ -304,6 +346,7 @@ func (h *configHandler) applyAppConfig(config map[string]any) []string {
 	errors = appendErr(errors, applyField(config, "logLevel", "invalid log level value", h.config.SetAppLogLevel))
 	errors = appendErr(errors, applyField(config, "baseDir", "invalid base directory value", h.config.SetAppBaseDir))
 	errors = appendErr(errors, applyField(config, "enableDevTools", "invalid enableDevTools value", h.config.SetDevToolsEnabled))
+	errors = appendErr(errors, applyField(config, "enableExperimentalFeatures", "invalid enableExperimentalFeatures value", h.config.SetExperimentalFeaturesEnabled))
 
 	errors = append(errors, applySubMap(config, "updates", "invalid updates configuration", h.applyUpdatesConfig)...)
 
@@ -583,7 +626,6 @@ func (h *configHandler) applyHapticsConfig(config map[string]any) []string {
 	errors = appendErr(errors, applyField(config, "pulseMaxFrequencyHz", "invalid pulse max frequency value", h.config.SetHapticsPulseMaxFrequencyHz))
 	errors = appendErr(errors, applyField(config, "pulseMinFrequencyHz", "invalid pulse min frequency value", h.config.SetHapticsPulseMinFrequencyHz))
 	errors = appendErr(errors, applyField(config, "enableReplay", "invalid enable replay value", h.config.SetHapticsEnableReplay))
-	errors = appendErr(errors, applyField(config, "pitRadioOutput", "invalid pit radio output value", h.config.SetPitRadioOutput))
 
 	return errors
 }
@@ -806,6 +848,7 @@ func (h *configHandler) applyPitRadioConfig(config map[string]any) []string {
 	var errors []string
 
 	errors = appendErr(errors, applyField(config, "enabled", "invalid pit radio enabled value", h.config.SetPitRadioEnabled))
+	errors = appendErr(errors, applyField(config, "output", "invalid pit radio output value", h.config.SetPitRadioOutput))
 	errors = appendErr(errors, applyField[float64](config, "messageSendIntervalMs", "invalid message send interval value", func(f float64) {
 		h.config.SetPitRadioMessageSendIntervalMs(int(f))
 	}))
@@ -813,6 +856,24 @@ func (h *configHandler) applyPitRadioConfig(config map[string]any) []string {
 	errors = append(errors, applySubMap(config, "discord", "invalid discord configuration structure", h.applyDiscordConfig)...)
 	errors = append(errors, applySubMap(config, "fuelMonitoring", "invalid fuel monitoring configuration structure", h.applyFuelConfig)...)
 	errors = append(errors, applySubMap(config, "tyreMonitoring", "invalid tyre monitoring configuration structure", h.applyTyresConfig)...)
+
+	return errors
+}
+
+// applyFanConfig applies fan device configuration changes.
+func (h *configHandler) applyFanConfig(config map[string]any) []string {
+	var errors []string
+
+	errors = appendErr(errors, applyField(config, "enabled", "invalid fan enabled value", h.config.SetFanEnabled))
+	errors = appendErr(errors, applyField(config, "mode", "invalid fan mode value", h.config.SetFanMode))
+	errors = appendErr(errors, applyField(config, "deviceAddress", "invalid fan device address value", h.config.SetFanDeviceAddress))
+	errors = appendErr(errors, applyField(config, "deviceName", "invalid fan device name value", h.config.SetFanDeviceName))
+	errors = appendErr(errors, applyField[float64](config, "commandTimeoutMs", "invalid fan command timeout value", func(f float64) {
+		h.config.SetFanCommandTimeoutMs(int(f))
+	}))
+	errors = appendErr(errors, applyField[float64](config, "maxSpeedKph", "invalid fan max speed value", func(f float64) {
+		h.config.SetFanMaxSpeedKPH(int(f))
+	}))
 
 	return errors
 }

@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gopxl/beep"
@@ -26,6 +27,7 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/hardware"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/console"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/display"
+	"github.com/vwhitteron/simtezilo-dev/app/hardware/fancontroller"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/pirateaudio"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/spotpear"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/virtual"
@@ -38,6 +40,7 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/pitradio"
 	"github.com/vwhitteron/simtezilo-dev/app/pitradio/discord"
 	"github.com/vwhitteron/simtezilo-dev/app/platform"
+	"github.com/vwhitteron/simtezilo-dev/app/predictivelap"
 	"github.com/vwhitteron/simtezilo-dev/app/setupmode"
 	"github.com/vwhitteron/simtezilo-dev/app/synthesizer"
 	"github.com/vwhitteron/simtezilo-dev/app/tyres"
@@ -74,6 +77,19 @@ type App struct {
 
 	setupMode *setupmode.SetupMode // Setup mode manager
 
+	// btReconcileOnce guards starting the Bluetooth audio bridge reconciler
+	// exactly once for the app lifetime (runAppMode may be re-entered).
+	btReconcileOnce sync.Once
+	// pitRadioLoopbackActive is true while the pit-radio sink is open on the
+	// snd-aloop Loopback device — the master the Bluetooth bridge slaves to. The
+	// bridge is only run while this holds.
+	pitRadioLoopbackActive atomic.Bool
+	// btMu guards routedBTMAC during bridge reconciliation.
+	btMu sync.Mutex
+	// routedBTMAC is the address of the device the audio bridge is currently
+	// routed to, "" when no bridge is up.
+	routedBTMAC string
+
 	ui *ui.UserInterface // User interface manager
 
 	i18n    *i18n.I18n       // Language translations
@@ -85,16 +101,19 @@ type App struct {
 	synth      *synthesizer.Synthesizer  // Audio synthesizer for haptic feedback
 	calibrator *calibrator.ToneGenerator // Calibration mode manager
 
-	odometer  *odometer.Odometer  // Odometer for distance tracking
-	fuelRange fuelrange.Estimator // Fuel range estimator
-	circuit   circuit.Manager     // Circuit information and tracking
+	odometer      *odometer.Odometer           // Odometer for distance tracking
+	fuelRange     fuelrange.Estimator          // Fuel range estimator
+	circuit       circuit.Manager              // Circuit information and tracking
+	predictiveLap *predictivelap.PredictiveLap // Predictive lap-time delta tracker
+	lapClock      *predictivelap.LapClock      // Synthesized lap timer (Addendum3 CurrentLaptime fallback)
 
 	transmissionGainMin float64 // Minimum transmission gain based on vehicle type
 
-	state         gameState               // Application state tracker
-	pitRadioState *pitRadioState          // Current pit radio state
-	vehicle       vehicle.Characteristics // Current vehicle information
-	tyres         *tyres.Tyre             // Tyre monitoring
+	state                 gameState               // Application state tracker
+	telemetryFormatLogged bool                    // Whether the first-telemetry format log has been emitted
+	pitRadioState         *pitRadioState          // Current pit radio state
+	vehicle               vehicle.Characteristics // Current vehicle information
+	tyres                 *tyres.Tyre             // Tyre monitoring
 
 	telemetryChartFeed chan map[string]float32 // Channel for sending telemetry data to web UI
 	vehicleInfoFeed    chan map[string]any     // Channel for sending vehicle info to web UI
@@ -122,12 +141,20 @@ type App struct {
 	crashLogger *crashlog.CrashLogger // Crash log manager for panic capture
 
 	// Chassis haptics state
-	jerkPeakHold         float64       // Peak hold value for jerk to prevent cancellation
-	jerkPeakHoldTime     time.Time     // Time when peak hold was last updated
+	jerkPeakHold         float64       //nolint:unused // peak-hold for planned inverse-jerk detection; deliberately kept
+	jerkPeakHoldTime     time.Time     //nolint:unused // peak-hold for planned inverse-jerk detection; deliberately kept
 	jerkPeakHoldDuration time.Duration // Duration to hold peak based on pulse length
+
+	fanController  fanClient                // Wind simulator BLE client
+	fanControlChan chan fanCommand          // Channel for sending wind duty from mainLoop to the BLE goroutine
+	fanEventChan   chan fancontroller.Event // Channel for Fan Event notifications from the device (button, control released)
 
 	// Telemetry source management
 	customTelemetrySource string // Stores custom telemetry source when user switches to auto/demo
+
+	// Bluetooth (LCD menu) state
+	btDevices       []platform.CmdBTDevice // Cached paired-device list for the LCD selector
+	btSelectedIndex int                    // Index of the currently selected paired device
 
 	// TODO: fix menu nav and remove this
 	activeBuildInfoItem int // Active build info item index
@@ -210,6 +237,7 @@ func New(opts Options) (*App, error) {
 	}
 
 	newApp.initializePitRadio(opts)
+	newApp.initializeFanController()
 
 	newApp.log.Debug().
 		Str("component", "app").
@@ -267,6 +295,8 @@ func (a *App) Close() {
 		a.webUI.Close()
 		a.log.Debug().Msg("WebUI closed")
 	}
+
+	a.closeFanController()
 
 	// Stop HTTP server to prevent new requests
 	a.log.Debug().Msg("Stopping HTTP server")
@@ -417,6 +447,12 @@ func (a *App) runAppMode() RunResult {
 	// Start the updater if initialized (pass parent context for lifecycle management)
 	if a.updater != nil {
 		a.updater.Start(context.Background())
+	}
+
+	// Ensure connected Bluetooth speakers have an audio bridge even when they
+	// connected outside the app (e.g. BlueZ auto-reconnect at boot).
+	if a.bluetoothAvailable() {
+		a.btReconcileOnce.Do(a.startBluetoothAudioReconciler)
 	}
 
 	a.run()
@@ -672,13 +708,15 @@ func (a *App) initializeVirtual() {
 // initializeUI sets up the user interface.
 func (a *App) initializeUI(opts Options, hidEvents chan ui.HIDInputEvent) error {
 	a.ui = ui.NewUserInterface(&ui.Config{
-		I18n:             a.i18n,
-		HIDEvents:        hidEvents,
-		Display:          a.wrapDisplayFrameTap(a.display),
-		Log:              *opts.Logger,
-		SettingsCallback: a.settingAction,
-		DevToolsEnabled:  a.config.GetDevToolsEnabled,
-		ExitCodeChan:     a.exitCodeChan,
+		I18n:                a.i18n,
+		HIDEvents:           hidEvents,
+		Display:             a.wrapDisplayFrameTap(a.display),
+		Log:                 *opts.Logger,
+		SettingsCallback:    a.settingAction,
+		DevToolsEnabled:     a.config.GetDevToolsEnabled,
+		ExperimentalEnabled: a.config.GetExperimentalFeaturesEnabled,
+		BluetoothAvailable:  a.bluetoothAvailable,
+		ExitCodeChan:        a.exitCodeChan,
 	})
 
 	startingMessage := a.i18n.GetString(languagedb.UIStarting)
@@ -836,6 +874,9 @@ func (a *App) initializeComponents(opts Options) error {
 	a.odometer = odometer.New(*opts.Logger)
 
 	a.fuelRange = fuelrange.New(*opts.Logger)
+
+	a.predictiveLap = predictivelap.New()
+	a.lapClock = predictivelap.NewLapClock(time.Second / telemetryFrameRate)
 
 	a.tyres = tyres.New(
 		a.config,
@@ -1171,6 +1212,7 @@ func (a *App) mainLoop() { //nolint:cyclop // compact and simple enough
 	tickerDisplay := time.NewTicker((1000 / displayFrameRate) * time.Millisecond)
 	tickerPitRadio := time.NewTicker((1000 / pitRadioFrameRate) * time.Millisecond)
 	tickerRaceData := time.NewTicker(500 * time.Millisecond)
+	tickerFanControl := time.NewTicker((1000 / FanControlFrameRate) * time.Millisecond)
 	tickerDebug := time.NewTicker(30 * time.Second)
 
 	a.log.Debug().Str("component", "app").Str("result", "success").Msg("main loop started")
@@ -1195,6 +1237,8 @@ func (a *App) mainLoop() { //nolint:cyclop // compact and simple enough
 			a.handlePitRadioTick()
 		case <-tickerRaceData.C:
 			a.handleRaceDataTick()
+		case <-tickerFanControl.C:
+			a.handleFanControlTick()
 		case <-tickerDebug.C:
 			a.handleDebugTick()
 		}
@@ -1240,6 +1284,10 @@ func (a *App) handleGeneralTick() {
 	if a.gtClient.Telemetry.IsOnCircuit() {
 		a.updateFuelRange()
 		a.updateTyreTemperature()
+
+		if lt, _, ok := a.currentLaptime(); ok {
+			a.predictiveLap.Record(a.circuit.LapProgress(), lt)
+		}
 	}
 
 	a.updateCircuit()
@@ -1263,6 +1311,13 @@ func (a *App) handleDisplayTick() {
 	telemetry := a.gtClient.Telemetry
 	revLight := telemetry.EngineRPMLight()
 
+	predDelta, predValid, predSynth := a.predictiveDelta()
+
+	tyreTemps := telemetry.TyreTemperatureCelsius()
+	tyreCold, tyreOptLow, tyreOptHigh, tyreHot := a.tyreThresholds()
+
+	fuelRangeLaps, fuelReady, fuelPitThisLap, fuelInsufficient := a.fuelViewData()
+
 	a.ui.UpdateDisplay(ui.LiveData{
 		Gear:            a.kinematics.Current.TransmissionGear,
 		TelemetryActive: a.state.telemetryActive,
@@ -1276,7 +1331,126 @@ func (a *App) handleDisplayTick() {
 		ThrottleOut:     float64(telemetry.ThrottleOutputPercent()),
 		BrakeIn:         float64(telemetry.BrakeInputPercent()),
 		BrakeOut:        float64(telemetry.BrakeOutputPercent()),
+
+		PredDelta: predDelta,
+		PredValid: predValid,
+		PredSynth: predSynth && predValid,
+
+		TyreTempC: [4]float64{
+			float64(tyreTemps.FrontLeft),
+			float64(tyreTemps.FrontRight),
+			float64(tyreTemps.RearLeft),
+			float64(tyreTemps.RearRight),
+		},
+		TyreColdC:    tyreCold,
+		TyreOptLowC:  tyreOptLow,
+		TyreOptHighC: tyreOptHigh,
+		TyreHotC:     tyreHot,
+		TyreValid:    a.state.telemetryActive,
+
+		LapNumber:   int(telemetry.CurrentLap()),
+		LastLapText: formatLapTimeOrDash(telemetry.LastLaptime()),
+		BestLapText: formatLapTimeOrDash(telemetry.BestLaptime()),
+
+		FuelPercent:      float64(telemetry.FuelLevelPercent()),
+		FuelRangeLaps:    fuelRangeLaps,
+		FuelReady:        fuelReady,
+		FuelPitThisLap:   fuelPitThisLap,
+		FuelInsufficient: fuelInsufficient,
 	})
+}
+
+// currentLaptime returns the live lap time for the predictive view. It prefers the
+// real Addendum3 CurrentLaptime field (ms-accurate); when that packet format is not
+// available it falls back to the synthesized lap clock. synth reports whether the
+// returned value came from the fallback; ok is false when no usable lap time exists.
+func (a *App) currentLaptime() (lap time.Duration, synth bool, ok bool) {
+	// TelemetryFormat() reads the parsed packet's kaitai stream, which is nil until
+	// the first packet arrives; guard against that so the display path doesn't panic
+	// before any telemetry has been received.
+	if !a.gtClient.Telemetry.TelemetryStarted() {
+		lt, ok := a.lapClock.Elapsed()
+
+		return lt, true, ok
+	}
+
+	// When the packet carries the Addendum3 format the CurrentLaptime field is
+	// authoritative (ms-accurate), including a legitimate 0 in the first frames of
+	// a lap — trust it and never fall back, to avoid flashing the synth indicator
+	// at each lap start.
+	if a.gtClient.Telemetry.TelemetryFormat() == gtmodels.Addendum3 {
+		return a.gtClient.Telemetry.CurrentLaptime(), false, true
+	}
+
+	lt, ok := a.lapClock.Elapsed()
+
+	return lt, true, ok
+}
+
+// predictiveDelta returns the predictive lap-time delta for the live view, its
+// validity and whether it came from the synthesized lap clock. The value is
+// refreshed only when lap progress crosses into a new reference bucket and held
+// otherwise, so the display updates at the reference resolution (~once per few
+// hundred ms) rather than on every display frame.
+func (a *App) predictiveDelta() (delta float64, valid bool, synth bool) {
+	progress := a.circuit.LapProgress()
+
+	bucket, bucketOK := predictivelap.Bucket(progress)
+
+	// Hold the last value while telemetry is active and progress stays within the
+	// same bucket. Holding only while active means going off-circuit invalidates
+	// immediately rather than freezing a stale delta until the next bucket cross;
+	// a new lap resets progress to bucket 0, which differs from the held bucket and
+	// forces a recompute. deltaDisplay is touched only here (display goroutine).
+	if a.state.telemetryActive && bucketOK && a.state.deltaDisplay.have && bucket == a.state.deltaDisplay.bucket {
+		held := a.state.deltaDisplay
+
+		return held.delta, held.valid, held.synth
+	}
+
+	lapTime, predSynth, lapOK := a.currentLaptime()
+
+	delta, valid = a.predictiveLap.Delta(progress, lapTime)
+	valid = valid && lapOK && a.state.telemetryActive
+	synth = predSynth && valid
+
+	if bucketOK {
+		a.state.deltaDisplay = deltaDisplay{
+			bucket: bucket,
+			have:   true,
+			delta:  delta,
+			valid:  valid,
+			synth:  synth,
+		}
+	} else {
+		a.state.deltaDisplay.have = false
+	}
+
+	return delta, valid, synth
+}
+
+// tyreThresholds derives the cold/optimal/hot temperature boundaries from the
+// pit-radio tyre configuration, matching the colour ramp on the Tyres live view.
+func (a *App) tyreThresholds() (cold, optLow, optHigh, hot float64) {
+	optimal := float64(a.config.GetPitRadioTyreTemperatureOptimalCelsius())
+	window := float64(a.config.GetPitRadioTyreTemperatureOperatingWindow())
+	margin := float64(a.config.GetPitRadioTyreTemperatureMarginCelsius())
+
+	optLow = optimal - window/2
+	optHigh = optimal + window/2
+	cold = optLow - margin
+	hot = optHigh + margin
+
+	return cold, optLow, optHigh, hot
+}
+
+// formatLapTimeOrDash formats a lap time, showing a dash placeholder when unset.
+func formatLapTimeOrDash(lapTime time.Duration) string {
+	if lapTime <= 0 {
+		return "--"
+	}
+
+	return FormatDuration(lapTime)
 }
 
 // handlePitRadioTick processes pit radio updates.
@@ -1369,6 +1543,8 @@ func (a *App) newLapHandler() bool {
 		case <-a.ctx.Done():
 			return false
 		case <-a.lapStartEvents:
+			a.lapClock.StartLap()
+
 			lap := a.state.current.lapNumber
 			lapTime := a.state.current.lastLapTime
 			position := a.gtClient.Telemetry.GridPosition()
@@ -1380,6 +1556,9 @@ func (a *App) newLapHandler() bool {
 			if lapTime > 0 && lap > 1 {
 				completedLap := lap - 1
 				a.addLapEvent(completedLap, lapTime, position)
+				// Promote the just-completed lap as the predictive reference if it
+				// is the fastest seen so far.
+				a.predictiveLap.CompleteLap(lapTime)
 			}
 
 			didUpdate := a.circuit.UpdateCircuit(odometerReading, lap, lapTime, coordinate, gtmodels.CoordinateTypeStartLine)
@@ -1519,6 +1698,8 @@ func (a *App) resetAllState(reason string) {
 	a.resetPitRadioState()
 	a.state.ResetRaceComplete()
 	a.circuit.Reset()
+	a.predictiveLap.Reset()
+	a.lapClock.Reset()
 	a.clearCircuitInfo()
 	a.clearRaceInfo()
 
@@ -1539,6 +1720,8 @@ func (a *App) resetRaceState(reason string) {
 	a.resetPitRadioState()
 	a.state.ResetRaceComplete()
 	a.circuit.ResetLapProgress()
+	a.predictiveLap.Reset()
+	a.lapClock.Reset()
 
 	a.log.Debug().Str("reason", reason).Msg("Reset race state")
 }
@@ -1555,6 +1738,8 @@ func (a *App) handleContinuityFlags() {
 		// Race state
 		a.resetPitRadioState()
 		a.circuit.ResetLapProgress()
+		a.predictiveLap.Reset()
+		a.lapClock.Reset()
 		a.state.ResetRaceComplete()
 
 		a.log.Debug().Msg("Time of day reset")

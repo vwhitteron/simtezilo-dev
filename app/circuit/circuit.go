@@ -85,7 +85,7 @@ func (c *Circuit) ResetLapProgress() {
 	c.bestLapTime = 100 * time.Hour
 	c.lastCoordinate = models.Coordinate{}
 
-	c.log.Info().
+	c.log.Debug().
 		Msg("Lap progress reset")
 }
 

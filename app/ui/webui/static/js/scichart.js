@@ -187,7 +187,8 @@ const CHART_CONFIGURATIONS = {
         { id: 'snap', containerId: 'scichart-root-4', enabled: true },
         { id: 'channel-output-left', containerId: 'scichart-root-5', enabled: true },
         { id: 'channel-output-right', containerId: 'scichart-root-6', enabled: true },
-        { id: 'compute-time', containerId: 'scichart-root-7', enabled: true }
+        { id: 'compute-time', containerId: 'scichart-root-7', enabled: true },
+        { id: 'audio-health', containerId: 'scichart-root-8', enabled: true }
     ],
 
     // Default/fallback - all charts enabled
@@ -354,68 +355,119 @@ async function initSciChart() {
         });
     };
 
+    // SciChart v4 routes pointer/wheel input through an overlay stacked above the
+    // 2D canvas, so DOM events bubble to the chart root rather than to the sibling
+    // domCanvas2D. Attach custom listeners here so they actually receive events.
+    const getEventElement = (surface) => surface.domChartRoot || surface.domCanvas2D;
+
+    // Adjust the x-axis time window based on a horizontal scroll delta.
+    // Shared by addZoomModifiers and addHorizontalZoomModifiers.
+    const applyTimeWindowZoom = (xAxis, deltaX) => {
+        const currentRange = xAxis.visibleRange;
+        const rangeSize = currentRange.max - currentRange.min;
+
+        // Scale the step size to the current window so control stays consistent.
+        const windowSizeInSeconds = rangeSize / 60;
+        let zoomFactor;
+        if (windowSizeInSeconds < 10) {
+            zoomFactor = deltaX > 0 ? 1.05 : 0.95;
+        } else if (windowSizeInSeconds < 60) {
+            zoomFactor = deltaX > 0 ? 1.03 : 0.97;
+        } else {
+            zoomFactor = deltaX > 0 ? 1.02 : 0.98;
+        }
+        const newRangeSize = rangeSize * zoomFactor;
+
+        // While live-scrolling, keep the right edge pinned to the latest data and
+        // resize only the left edge, so changing the window size doesn't drop out
+        // of follow mode. Apply to every chart (they share one time window) and
+        // guard the range change so it isn't treated as a manual pan.
+        const following = Object.values(chartFollowModes).some(Boolean);
+        if (following) {
+            isUpdatingRange = true;
+            Object.values(charts).forEach(chart => {
+                if (chart && chart.xAxis) {
+                    const max = chart.xAxis.visibleRange.max;
+                    chart.xAxis.visibleRange = new SciChart.NumberRange(
+                        Math.max(0, max - newRangeSize),
+                        max
+                    );
+                }
+            });
+            isUpdatingRange = false;
+            updateWindowSizeDisplay(newRangeSize);
+            return;
+        }
+
+        // Paused/zoomed into history: resize around the centre so the user can
+        // explore both directions. The visibleRangeChanged handler syncs the
+        // other charts to match.
+        const center = (currentRange.min + currentRange.max) / 2;
+        let newMin = center - newRangeSize / 2;
+        let newMax = center + newRangeSize / 2;
+
+        if (newMin < 0) {
+            newMin = 0;
+            newMax = newRangeSize;
+        }
+
+        xAxis.visibleRange = new SciChart.NumberRange(newMin, newMax);
+        updateWindowSizeDisplay(newRangeSize);
+    };
+
+    // Remembers the original autoRange of any Y axis we switch off, keyed by axis
+    // instance, so it can be restored on double-click (return to live).
+    const yAxisAutoFitDefaults = new WeakMap();
+
+    // Disable continuous auto-ranging on auto-fitting Y axes so a manual vertical
+    // zoom is not immediately overwritten when the next frame refits the axis.
+    const disableYAxisAutoFit = (surface) => {
+        surface.yAxes.asArray().forEach(axis => {
+            if (!yAxisAutoFitDefaults.has(axis)) {
+                yAxisAutoFitDefaults.set(axis, axis.autoRange);
+            }
+            if (axis.autoRange === SciChart.EAutoRange.Always) {
+                axis.autoRange = SciChart.EAutoRange.Never;
+            }
+        });
+    };
+
+    // Restore the original autoRange so the Y axis re-fits to live data again.
+    const restoreYAxisAutoFit = (surface) => {
+        surface.yAxes.asArray().forEach(axis => {
+            if (yAxisAutoFitDefaults.has(axis)) {
+                axis.autoRange = yAxisAutoFitDefaults.get(axis);
+            }
+        });
+    };
+
     const addZoomModifiers = (surface) => {
+        // Custom horizontal-scroll handler adjusts the time window. Vertical wheel
+        // zoom is handled by the native MouseWheelZoomModifier below, so only
+        // consume the event for horizontal scroll and let vertical events fall through.
+        getEventElement(surface).addEventListener('wheel', (event) => {
+            if (Math.abs(event.deltaX) > Math.abs(event.deltaY)) {
+                event.preventDefault();
+                const xAxis = surface.xAxes.get(0);
+                if (xAxis) {
+                    applyTimeWindowZoom(xAxis, event.deltaX);
+                }
+            } else {
+                // Vertical wheel: let the MouseWheelZoomModifier do the zoom, but
+                // first disable auto-fit so the new Y range persists.
+                disableYAxisAutoFit(surface);
+            }
+        }, { passive: false });
+
         // Mouse wheel zoom modifier - zoom Y-axis only (vertical scale)
         surface.chartModifiers.add(new SciChart.MouseWheelZoomModifier({
             xyDirection: SciChart.EXyDirection.YDirection
         }));
 
-        // Add custom horizontal scroll handler for adjusting time window
-        surface.domCanvas2D.addEventListener('wheel', (event) => {
-            // Check for horizontal scroll (deltaX != 0)
-            if (Math.abs(event.deltaX) > Math.abs(event.deltaY)) {
-                event.preventDefault();
-
-                const xAxis = surface.xAxes.get(0);
-                if (xAxis) {
-                    const currentRange = xAxis.visibleRange;
-                    const rangeSize = currentRange.max - currentRange.min;
-
-                    // Adjust the time window size based on horizontal scroll
-                    // Positive deltaX = scroll right = zoom out (show more time)
-                    // Negative deltaX = scroll left = zoom in (show less time)
-                    // Scale sensitivity based on current window size for better control
-                    // Smaller windows (< 10 seconds) use 5% steps, larger windows use smaller steps
-                    const windowSizeInSeconds = rangeSize / 60;
-                    let zoomFactor;
-                    if (windowSizeInSeconds < 10) {
-                        // Small windows: 5% steps
-                        zoomFactor = event.deltaX > 0 ? 1.05 : 0.95;
-                    } else if (windowSizeInSeconds < 60) {
-                        // Medium windows (10s-1min): 3% steps
-                        zoomFactor = event.deltaX > 0 ? 1.03 : 0.97;
-                    } else {
-                        // Large windows (>1 min): 2% steps
-                        zoomFactor = event.deltaX > 0 ? 1.02 : 0.98;
-                    }
-                    const newRangeSize = rangeSize * zoomFactor;
-
-                    // Keep the center point the same
-                    const center = (currentRange.min + currentRange.max) / 2;
-                    let newMin = center - newRangeSize / 2;
-                    let newMax = center + newRangeSize / 2;
-
-                    // Don't allow zooming below 0 on the minimum
-                    if (newMin < 0) {
-                        newMin = 0;
-                        newMax = newRangeSize;
-                    }
-
-                    xAxis.visibleRange = new SciChart.NumberRange(newMin, newMax);
-
-                    // Update the window size display
-                    updateWindowSizeDisplay(newRangeSize);
-                }
-            }
-        }, { passive: false });
-
         // Zoom pan modifier - pan by dragging with left mouse button
         surface.chartModifiers.add(new SciChart.ZoomPanModifier({
             xyDirection: SciChart.EXyDirection.XyDirection
         }));
-
-        // Zoom extents modifier - double click to fit the visible data
-        surface.chartModifiers.add(new SciChart.ZoomExtentsModifier({ isAnimated: false }));
 
         // Pinch zoom for touch devices
         surface.chartModifiers.add(new SciChart.PinchZoomModifier());
@@ -429,7 +481,6 @@ async function initSciChart() {
             tooltipTextStroke: "#ffffff",
             showAxisLabels: false,
             tooltipDataTemplate: (seriesInfo) => {
-                // Access the series name from the data series
                 const seriesName = seriesInfo.seriesName ||
                     seriesInfo.renderableSeries?.dataSeries?.dataSeriesName ||
                     'Value';
@@ -440,42 +491,14 @@ async function initSciChart() {
     };
 
     const addHorizontalZoomModifiers = (surface) => {
-        // No vertical zoom - only horizontal scroll for time window adjustment
-
-        // Add custom horizontal scroll handler for adjusting time window
-        surface.domCanvas2D.addEventListener('wheel', (event) => {
-            // Check for horizontal scroll (deltaX != 0)
+        // Custom wheel handler for horizontal scroll (time window) only. Only
+        // consume horizontal scroll so vertical wheel events fall through normally.
+        getEventElement(surface).addEventListener('wheel', (event) => {
             if (Math.abs(event.deltaX) > Math.abs(event.deltaY)) {
                 event.preventDefault();
-
                 const xAxis = surface.xAxes.get(0);
                 if (xAxis) {
-                    const currentRange = xAxis.visibleRange;
-                    const rangeSize = currentRange.max - currentRange.min;
-
-                    // Adjust the time window size based on horizontal scroll
-                    const windowSizeInSeconds = rangeSize / 60;
-                    let zoomFactor;
-                    if (windowSizeInSeconds < 10) {
-                        zoomFactor = event.deltaX > 0 ? 1.05 : 0.95;
-                    } else if (windowSizeInSeconds < 60) {
-                        zoomFactor = event.deltaX > 0 ? 1.03 : 0.97;
-                    } else {
-                        zoomFactor = event.deltaX > 0 ? 1.02 : 0.98;
-                    }
-                    const newRangeSize = rangeSize * zoomFactor;
-
-                    const center = (currentRange.min + currentRange.max) / 2;
-                    let newMin = center - newRangeSize / 2;
-                    let newMax = center + newRangeSize / 2;
-
-                    if (newMin < 0) {
-                        newMin = 0;
-                        newMax = newRangeSize;
-                    }
-
-                    xAxis.visibleRange = new SciChart.NumberRange(newMin, newMax);
-                    updateWindowSizeDisplay(newRangeSize);
+                    applyTimeWindowZoom(xAxis, event.deltaX);
                 }
             }
         }, { passive: false });
@@ -484,9 +507,6 @@ async function initSciChart() {
         surface.chartModifiers.add(new SciChart.ZoomPanModifier({
             xyDirection: SciChart.EXyDirection.XDirection
         }));
-
-        // Zoom extents modifier - double click to fit the visible data
-        surface.chartModifiers.add(new SciChart.ZoomExtentsModifier({ isAnimated: false }));
 
         // Pinch zoom for touch devices - horizontal only
         surface.chartModifiers.add(new SciChart.PinchZoomModifier({
@@ -1013,6 +1033,92 @@ async function initSciChart() {
             }
         },
 
+        'audio-health': {
+            title: 'Audio Pipeline Health',
+            titleKey: 'runmode.telemetry.chart.audiohealth',
+            create: async (containerId) => {
+                const { sciChartSurface, wasmContext } = await SciChart.SciChartSurface.createSingle(containerId);
+
+                addHorizontalZoomModifiers(sciChartSurface);
+
+                const xAxis = createAxisWithOptions(wasmContext, { autoRange: SciChart.EAutoRange.Never });
+                const yAxisFill = createAxisWithOptions(wasmContext, {
+                    id: "ID_Y_AXIS_FILL",
+                    axisAlignment: SciChart.EAxisAlignment.Left,
+                    visibleRange: new SciChart.NumberRange(0, 1),
+                    labelPrecision: 2,
+                    labelStyle: { color: "#50e06aff" }
+                });
+                const yAxisEvents = createAxisWithOptions(wasmContext, {
+                    id: "ID_Y_AXIS_EVENTS",
+                    axisAlignment: SciChart.EAxisAlignment.Right,
+                    visibleRange: new SciChart.NumberRange(0, 10),
+                    labelPrecision: 0,
+                    labelStyle: { color: "#e05050ff" }
+                });
+
+                sciChartSurface.xAxes.add(xAxis);
+                sciChartSurface.yAxes.add(yAxisFill, yAxisEvents);
+
+                const asyncFillSeries = createDataSeries(wasmContext, "Async Buffer Fill");
+                const engineFillSeries = createDataSeries(wasmContext, "Engine Fill");
+                const chassis0FillSeries = createDataSeries(wasmContext, "Chassis 0 Fill");
+                const silentGapsSeries = createDataSeries(wasmContext, "Silent Gaps");
+                const producerLagSeries = createDataSeries(wasmContext, "Producer Blocks");
+
+                sciChartSurface.renderableSeries.add(
+                    new SciChart.FastLineRenderableSeries(wasmContext, {
+                        dataSeries: asyncFillSeries,
+                        dataSeriesName: "Async Buffer Fill",
+                        yAxisId: "ID_Y_AXIS_FILL",
+                        strokeThickness: 2,
+                        stroke: "#50e06aff"
+                    }),
+                    new SciChart.FastLineRenderableSeries(wasmContext, {
+                        dataSeries: engineFillSeries,
+                        dataSeriesName: "Engine Fill",
+                        yAxisId: "ID_Y_AXIS_FILL",
+                        strokeThickness: 2,
+                        stroke: "#50c7e0ff"
+                    }),
+                    new SciChart.FastLineRenderableSeries(wasmContext, {
+                        dataSeries: chassis0FillSeries,
+                        dataSeriesName: "Chassis 0 Fill",
+                        yAxisId: "ID_Y_AXIS_FILL",
+                        strokeThickness: 2,
+                        stroke: "#c750e0ff"
+                    }),
+                    new SciChart.FastLineRenderableSeries(wasmContext, {
+                        dataSeries: silentGapsSeries,
+                        dataSeriesName: "Silent Gaps",
+                        yAxisId: "ID_Y_AXIS_EVENTS",
+                        strokeThickness: 2,
+                        stroke: "#e05050ff"
+                    }),
+                    new SciChart.FastLineRenderableSeries(wasmContext, {
+                        dataSeries: producerLagSeries,
+                        dataSeriesName: "Producer Blocks",
+                        yAxisId: "ID_Y_AXIS_EVENTS",
+                        strokeThickness: 2,
+                        stroke: "#e0c750ff"
+                    })
+                );
+
+                return {
+                    surface: sciChartSurface,
+                    xAxis,
+                    dataSeries: {
+                        asyncBufferFill: asyncFillSeries,
+                        mixerEngineFill: engineFillSeries,
+                        mixerChassis0Fill: chassis0FillSeries,
+                        asyncSilentGaps: silentGapsSeries,
+                        asyncProducerLag: producerLagSeries
+                    },
+                    dataFields: ['asyncBufferFill', 'mixerEngineFill', 'mixerChassis0Fill', 'asyncSilentGaps', 'asyncProducerLag']
+                };
+            }
+        },
+
         'channel-output-right': {
             title: 'Right Channel Output',
             titleKey: 'runmode.telemetry.chart.channeloutputright',
@@ -1127,28 +1233,23 @@ async function initSciChart() {
     Object.entries(charts).forEach(([chartId, chart]) => {
         chartFollowModes[chartId] = true;
 
-        // Disable the ZoomExtents modifier's double-click behavior
-        const zoomExtentsModifier = chart.surface.chartModifiers.asArray().find(
-            m => m instanceof SciChart.ZoomExtentsModifier
-        );
-        if (zoomExtentsModifier) {
-            zoomExtentsModifier.isEnabled = false;
-        }
-
         // Listen for single click to disable follow mode
-        chart.surface.domCanvas2D.addEventListener('click', (event) => {
+        getEventElement(chart.surface).addEventListener('click', (event) => {
             // Disable follow mode for all charts on single click
             Object.keys(charts).forEach(otherChartId => {
                 chartFollowModes[otherChartId] = false;
             });
         });
 
-        // Listen for double-click to enable follow mode without changing window size
-        chart.surface.domCanvas2D.addEventListener('dblclick', (event) => {
+        // Listen for double-click to switch back to following latest data
+        getEventElement(chart.surface).addEventListener('dblclick', (event) => {
             event.preventDefault();
             event.stopPropagation();
 
-            // Set flag that double-click was triggered
+            // Guard against the programmatic pan below (and the live-update pan on
+            // the next frame) being treated as a user-initiated range change, which
+            // would immediately cancel follow mode again. The visibleRangeChanged
+            // subscription checks this flag.
             isDoubleClickTriggered = true;
 
             // Re-enable follow mode for all charts on double-click (preserves window size)
@@ -1156,7 +1257,26 @@ async function initSciChart() {
                 chartFollowModes[otherChartId] = true;
             });
 
-            // Reset the flag after a short delay
+            // Immediately pan all charts to show the latest data point and
+            // re-enable Y auto-fit that a prior vertical zoom may have disabled.
+            isUpdatingRange = true;
+            const latestSeq = lastSeq;
+            Object.entries(charts).forEach(([otherChartId, otherChart]) => {
+                if (otherChart && otherChart.xAxis) {
+                    const currentRange = otherChart.xAxis.visibleRange;
+                    const windowSize = currentRange.max - currentRange.min;
+                    otherChart.xAxis.visibleRange = new SciChart.NumberRange(
+                        latestSeq - windowSize,
+                        latestSeq
+                    );
+                }
+                if (otherChart && otherChart.surface) {
+                    restoreYAxisAutoFit(otherChart.surface);
+                }
+            });
+            isUpdatingRange = false;
+
+            // Release the guard after any deferred visibleRangeChanged has settled.
             setTimeout(() => {
                 isDoubleClickTriggered = false;
             }, 100);

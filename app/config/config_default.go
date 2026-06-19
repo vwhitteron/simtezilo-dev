@@ -22,13 +22,30 @@ func defaultConfig() *viperConfig {
 				AutoInstall:          false,
 				CheckIntervalMinutes: 60,
 			},
-			EnableDevTools: false,
+			EnableDevTools:             false,
+			EnableExperimentalFeatures: false,
+		},
+		Fan: &fan{
+			Enabled:          false,
+			Mode:             fanModeManual,
+			DeviceAddress:    "",
+			DeviceName:       "",
+			CommandTimeoutMs: 1000,
+			MaxSpeedKPH:      300,
 		},
 		Hardware: &hardware{
+			AudioBackend:       "beep",
 			Model:              "none",
 			DisplayOrientation: 0,
 		},
 		Haptics: &haptics{
+			Output: HapticsOutput{
+				Device:     "",
+				Channels:   2,
+				SampleRate: 32000,
+				LatencyMs:  20,
+				CushionMs:  10,
+			},
 			EnableReplay:                 false,
 			DynamicTransmissionFeedback:  true,
 			DynamicTransmissionCurve:     150,
@@ -83,8 +100,12 @@ func defaultConfig() *viperConfig {
 			},
 		},
 		PitRadio: &pitRadio{
-			Enabled:               false,
-			Output:                "log",
+			Enabled: false,
+			Output:  "log",
+			Audio: PitRadioAudio{
+				Device:     "",
+				SampleRate: 48000,
+			},
 			MessageSendIntervalMs: 2000,
 			Notifications: &notifications{
 				EnableRaceProgress:      true,

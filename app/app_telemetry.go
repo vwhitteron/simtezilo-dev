@@ -4,6 +4,23 @@ import (
 	gtmodels "github.com/zetetos/gt-telemetry/v2/pkg/models"
 )
 
+// telemetryFormatName maps a telemetry packet format to a human-readable
+// addendum name for logging.
+func telemetryFormatName(format gtmodels.Name) string {
+	switch format {
+	case gtmodels.Standard:
+		return "Standard"
+	case gtmodels.Addendum1:
+		return "Addendum1"
+	case gtmodels.Addendum2:
+		return "Addendum2"
+	case gtmodels.Addendum3:
+		return "Addendum3"
+	default:
+		return "Unknown"
+	}
+}
+
 // checkForNewLap sends an event to the lapStartEvents channel when a new lap is detected.
 func (a *App) checkForNewLap() {
 	current := a.state.current.lapNumber
@@ -183,6 +200,14 @@ func (a *App) updateState() (didUpdate bool) {
 		return false
 	}
 
+	// Log the telemetry packet format once, the first time data is received.
+	if !a.telemetryFormatLogged {
+		a.telemetryFormatLogged = true
+		a.log.Info().
+			Str("format", telemetryFormatName(a.gtClient.Telemetry.TelemetryFormat())).
+			Msg("Telemetry data received")
+	}
+
 	a.state.last = a.state.current
 
 	// Game
@@ -205,6 +230,12 @@ func (a *App) updateState() (didUpdate bool) {
 	a.state.current.sequenceDelta = a.state.current.sequenceNumber - a.state.last.sequenceNumber
 	a.state.current.timeOfDay = a.gtClient.Telemetry.TimeOfDay()
 	a.state.current.isLive = a.gtClient.Telemetry.Flags().Live
+
+	// Accumulate live frames into the synthesized lap clock (the Addendum3
+	// CurrentLaptime fallback). Dropped packets still represent elapsed lap time
+	// and are counted; paused/loading frames are excluded.
+	liveFlags := a.gtClient.Telemetry.Flags()
+	a.lapClock.Advance(a.state.current.sequenceDelta, !liveFlags.GamePaused && !liveFlags.Loading)
 
 	// Vehicle
 	a.state.current.transmissionGear = a.gtClient.Telemetry.CurrentGear()

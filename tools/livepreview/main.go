@@ -6,10 +6,12 @@ package main
 
 import (
 	"image"
+	"image/color"
 	"image/png"
 	"os"
 
 	"github.com/rs/zerolog"
+	"github.com/vwhitteron/simtezilo-dev/app/hardware/display"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/virtual"
 	"github.com/vwhitteron/simtezilo-dev/app/i18n"
 	"github.com/vwhitteron/simtezilo-dev/app/ui/gui"
@@ -22,23 +24,6 @@ const (
 	outputDir   = "out"
 )
 
-// flatten mimics the ST7789 DrawRAW path, which ignores the alpha channel and
-// reads the RGB values directly onto an opaque (black) panel. The rendering code
-// draws text with a near-zero alpha, so saving the canvas as-is would let a PNG
-// viewer composite the text over white and hide it. virtual.Display.SavePNG
-// encodes the raw canvas; this tool flattens first so the preview is viewable.
-func flatten(src *image.RGBA) *image.RGBA {
-	out := image.NewRGBA(src.Bounds())
-	for i := 0; i < len(src.Pix); i += 4 {
-		out.Pix[i] = src.Pix[i]     // R
-		out.Pix[i+1] = src.Pix[i+1] // G
-		out.Pix[i+2] = src.Pix[i+2] // B
-		out.Pix[i+3] = 255          // force opaque
-	}
-
-	return out
-}
-
 func savePNG(name string, img *image.RGBA) {
 	file, err := os.Create(name)
 	if err != nil {
@@ -46,7 +31,11 @@ func savePNG(name string, img *image.RGBA) {
 	}
 	defer file.Close()
 
-	err = png.Encode(file, flatten(img))
+	// SimulatePanelRGB565 quantises to the panel's 5/6/5 bit depth and forces the
+	// frame opaque (the rendering code draws text with near-zero alpha, which would
+	// otherwise composite over a white PNG background and hide it), so the preview
+	// matches what the device displays.
+	err = png.Encode(file, display.SimulatePanelRGB565(img))
 	if err != nil {
 		panic(err)
 	}
@@ -71,8 +60,58 @@ func main() {
 	}
 
 	renderLiveViews(screen, disp)
+	renderFramedViews(screen, disp)
 	renderDashboardViews(screen, disp)
 	renderMiscViews(screen, disp)
+}
+
+// renderFramedViews renders the framed live views (Pred, Tyres, Lap, Fuel) so the
+// per-view border colours and layouts can be reviewed as they appear on the panel.
+func renderFramedViews(screen *gui.Screen, disp *virtual.Display) {
+	green := color.RGBA{R: 40, G: 200, B: 70, A: 255}
+	red := color.RGBA{R: 235, G: 45, B: 45, A: 255}
+
+	_ = screen.RenderDeltaScreen(gui.DeltaView{Value: "+0.123", Color: red})
+
+	savePNG(outputDir+"/live_pred_faster.png", disp.GetCanvas())
+
+	_ = screen.RenderDeltaScreen(gui.DeltaView{Value: "-0.456", Color: green})
+
+	savePNG(outputDir+"/live_pred_slower.png", disp.GetCanvas())
+
+	// Synthesized-laptime fallback: same delta with the "SYN" indicator shown.
+	_ = screen.RenderDeltaScreen(gui.DeltaView{Value: "+0.123", Color: red, Synth: true})
+
+	savePNG(outputDir+"/live_pred_synth.png", disp.GetCanvas())
+
+	// Tyres: FL cold, FR optimal, RL optimal, RR hot, against a typical window.
+	_ = screen.RenderTyresScreen(gui.TyresView{
+		TempC: [4]float64{74, 81, 82, 92},
+		ColdC: 75, OptLowC: 78, OptHighC: 84, HotC: 87,
+		Valid: true,
+	})
+
+	savePNG(outputDir+"/live_tyres.png", disp.GetCanvas())
+
+	_ = screen.RenderLapScreen(gui.LapView{Lap: "12", Last: "1:23.456", Best: "1:22.118"})
+
+	savePNG(outputDir+"/live_lap.png", disp.GetCanvas())
+
+	_ = screen.RenderFuelScreen(gui.FuelView{State: gui.FuelAnalysing})
+
+	savePNG(outputDir+"/live_fuel_analysing.png", disp.GetCanvas())
+
+	_ = screen.RenderFuelScreen(gui.FuelView{Percent: "73%", RangeLaps: "12.4 laps", State: gui.FuelNormal})
+
+	savePNG(outputDir+"/live_fuel_normal.png", disp.GetCanvas())
+
+	_ = screen.RenderFuelScreen(gui.FuelView{Percent: "8%", RangeLaps: "1.2 laps", State: gui.FuelPitThisLap})
+
+	savePNG(outputDir+"/live_fuel_pit.png", disp.GetCanvas())
+
+	_ = screen.RenderFuelScreen(gui.FuelView{Percent: "3%", RangeLaps: "0.4 laps", State: gui.FuelInsufficient})
+
+	savePNG(outputDir+"/live_fuel_low.png", disp.GetCanvas())
 }
 
 // renderLiveViews renders the live-view (gear/ready) screens.

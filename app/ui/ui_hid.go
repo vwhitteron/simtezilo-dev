@@ -129,10 +129,16 @@ func (u *UserInterface) handleMenuNavigation(key HIDInputEvent) (title string, v
 	}
 }
 
-// handleUpKey handles the up key for navigating to parent node.
+// handleUpKey handles the up key for navigating to parent node or increasing a value.
 func (u *UserInterface) handleUpKey() (title string, value string) {
 	// Reset inactivity timer on any menu interaction
 	u.state.lastMenuActivity = u.now()
+
+	// Up/Down do nothing on a live view: the fan device has its own physical
+	// controls, and live views are paged with Left/Right.
+	if isLiveLeaf(u.menuSystem.GetCurrentMenuPage()) {
+		return string(u.menuSystem.GetCurrentMenuPage()), ""
+	}
 
 	node, action := u.menuSystem.NavigateUp()
 	menuPage := node.name
@@ -147,7 +153,6 @@ func (u *UserInterface) handleUpKey() (title string, value string) {
 			Msg("HID event")
 
 		value = ""
-		// If exited to a branch, don't get value
 		if u.menuSystem.IsCurrentNodeBranch() {
 			return string(menuPage), value
 		}
@@ -164,7 +169,6 @@ func (u *UserInterface) handleUpKey() (title string, value string) {
 		return string(menuPage), value
 	}
 
-	// Get current value if we're on a leaf
 	if u.menuSystem.IsCurrentNodeLeaf() {
 		value = u.settingAction(menuPage, actionGet)
 	}
@@ -176,6 +180,12 @@ func (u *UserInterface) handleUpKey() (title string, value string) {
 func (u *UserInterface) handleDownKey() (title string, value string) {
 	// Reset inactivity timer on any menu interaction
 	u.state.lastMenuActivity = u.now()
+
+	// Up/Down do nothing on a live view: the fan device has its own physical
+	// controls, and live views are paged with Left/Right.
+	if isLiveLeaf(u.menuSystem.GetCurrentMenuPage()) {
+		return string(u.menuSystem.GetCurrentMenuPage()), ""
+	}
 
 	node, action := u.menuSystem.NavigateDown()
 	menuPage := node.name
@@ -197,7 +207,6 @@ func (u *UserInterface) handleDownKey() (title string, value string) {
 			Msg("HID event")
 
 		value = ""
-		// If exited to a branch, don't get value
 		if u.menuSystem.IsCurrentNodeBranch() {
 			return string(menuPage), value
 		}
@@ -260,7 +269,7 @@ func (u *UserInterface) handleLeftKey() (title string, value string) {
 			_ = u.menuSystem.ResetSetupModeCountdown()
 		}
 
-		if u.display.IsAwake() && u.menuSystem.IsCurrentNodeLeaf() {
+		if u.display.IsAwake() && u.menuSystem.IsCurrentNodeLeaf() && !isLiveLeaf(menuPage) {
 			value = u.settingAction(menuPage, actionGet)
 		} else {
 			value = ""
@@ -301,7 +310,7 @@ func (u *UserInterface) handleRightKey() (title string, value string) {
 			_ = u.menuSystem.ResetSetupModeCountdown()
 		}
 
-		if u.display.IsAwake() && u.menuSystem.IsCurrentNodeLeaf() {
+		if u.display.IsAwake() && u.menuSystem.IsCurrentNodeLeaf() && !isLiveLeaf(menuPage) {
 			value = u.settingAction(menuPage, actionGet)
 		} else {
 			value = ""
@@ -342,13 +351,32 @@ func (u *UserInterface) showMenuPage(layout gui.Layout, menuPage string, value s
 func (u *UserInterface) menuContent(layout gui.Layout, menuPage string, value string) gui.SettingContent {
 	switch layout { //nolint:exhaustive // only relevant layout types are handled
 	case gui.LayoutMenuSub:
-		// Branch nodes: parent at top (empty for top-level), current item in centre.
-		title := ""
-		if parent := u.menuSystem.GetCurrentNode().parent; parent != nil && parent.name != menuPageRoot {
-			title = u.getBranchTitle(string(parent.name))
+		// Branch nodes: parent at top, current item in centre. Top-level branches
+		// (whose parent is root) instead mirror the sub-menu Return layout: their
+		// own name at the top and just the enter glyph centred.
+		parent := u.menuSystem.GetCurrentNode().parent
+		topLevel := parent == nil || parent.name == menuPageRoot
+
+		if menuPage == string(languagedb.UIMenuReturn) {
+			// Return item: the exit glyph stands in for the "Return" label.
+			title := ""
+			if !topLevel {
+				title = u.getBranchTitle(string(parent.name))
+			}
+
+			return gui.SettingContent{Title: title, Icon: gui.MenuIconExit}
 		}
 
-		return gui.SettingContent{Title: title, Value: u.getBranchTitle(menuPage)}
+		if topLevel {
+			// Name at the top, enter glyph centred (no centre label).
+			return gui.SettingContent{Title: u.getBranchTitle(menuPage), Icon: gui.MenuIconEnter}
+		}
+
+		return gui.SettingContent{
+			Title: u.getBranchTitle(string(parent.name)),
+			Value: u.getBranchTitle(menuPage),
+			Icon:  gui.MenuIconEnter,
+		}
 
 	case gui.LayoutInfo:
 		// Info pages: title at top, multi-line value in centre.

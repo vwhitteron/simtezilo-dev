@@ -67,6 +67,11 @@
                     "type": "boolean",
                     "description": "Enable developer tools",
                     "default": false
+                },
+                "enableExperimentalFeatures": {
+                    "type": "boolean",
+                    "description": "Enable experimental features",
+                    "default": false
                 }
             },
             "additionalProperties": true
@@ -75,6 +80,12 @@
             "type": "object",
             "description": "Hardware configuration",
             "properties": {
+                "audioBackend": {
+                    "type": "string",
+                    "description": "Audio output backend",
+                    "enum": ["beep", "portaudio"],
+                    "default": "beep"
+                },
                 "model": {
                     "type": "string",
                     "enum": [
@@ -116,6 +127,47 @@
                     "type": "string",
                     "description": "URL for telemetry updates",
                     "default": ""
+                }
+            },
+            "additionalProperties": true
+        },
+        "fan": {
+            "type": "object",
+            "description": "Fan device configuration",
+            "properties": {
+                "mode": {
+                    "type": "string",
+                    "description": "Fan operating mode",
+                    "enum": [
+                        "manual",
+                        "open",
+                        "all"
+                    ],
+                    "default": "manual"
+                },
+                "deviceAddress": {
+                    "type": "string",
+                    "description": "MAC address of the paired fan device (selected in the Bluetooth panel)",
+                    "default": ""
+                },
+                "deviceName": {
+                    "type": "string",
+                    "description": "Cached friendly name of the paired fan device, shown when it is offline/unlisted",
+                    "default": ""
+                },
+                "commandTimeoutMs": {
+                    "type": "integer",
+                    "description": "BLE command timeout in milliseconds",
+                    "minimum": 100,
+                    "maximum": 120000,
+                    "default": 5000
+                },
+                "maxSpeedKph": {
+                    "type": "integer",
+                    "description": "Vehicle speed in km/h that maps to 100% fan duty",
+                    "minimum": 1,
+                    "maximum": 500,
+                    "default": 250
                 }
             },
             "additionalProperties": true
@@ -275,6 +327,48 @@
             "type": "object",
             "description": "Haptic feedback settings",
             "properties": {
+                "output": {
+                    "type": "object",
+                    "description": "Haptic feedback output stream",
+                    "properties": {
+                        "device": {
+                            "type": "string",
+                            "description": "Backend device ID (empty selects the default device)",
+                            "default": ""
+                        },
+                        "deviceName": {
+                            "type": "string",
+                            "description": "Human-readable device name; the stable, backend-agnostic selection key (device is a tiebreaker)",
+                            "default": ""
+                        },
+                        "channels": {
+                            "type": "integer",
+                            "description": "Number of haptic output channels",
+                            "minimum": 1,
+                            "maximum": 32,
+                            "default": 2
+                        },
+                        "sampleRate": {
+                            "type": "integer",
+                            "description": "Output sample rate in Hz",
+                            "minimum": 8000,
+                            "default": 32000
+                        },
+                        "latencyMs": {
+                            "type": "integer",
+                            "description": "Requested buffer latency in milliseconds (0 uses the backend default)",
+                            "minimum": 0,
+                            "default": 66
+                        },
+                        "cushionMs": {
+                            "type": "integer",
+                            "description": "Mixer buffer pre-fill cushion in milliseconds; raise above the default if real hardware still produces occasional pops (0 uses the default of 24)",
+                            "minimum": 0,
+                            "default": 24
+                        }
+                    },
+                    "additionalProperties": true
+                },
                 "enableReplay": {
                     "type": "boolean",
                     "description": "Enable haptic replay",
@@ -372,9 +466,33 @@
                     "description": "Output destination for pit radio messages",
                     "enum": [
                         "log",
-                        "discord"
+                        "discord",
+                        "audio"
                     ],
                     "default": "log"
+                },
+                "audio": {
+                    "type": "object",
+                    "description": "Local audio device used when output is set to \"audio\"",
+                    "properties": {
+                        "device": {
+                            "type": "string",
+                            "description": "Backend device ID (empty selects the default device)",
+                            "default": ""
+                        },
+                        "deviceName": {
+                            "type": "string",
+                            "description": "Human-readable device name; the stable, backend-agnostic selection key (device is a tiebreaker)",
+                            "default": ""
+                        },
+                        "sampleRate": {
+                            "type": "integer",
+                            "description": "Output sample rate in Hz",
+                            "minimum": 8000,
+                            "default": 48000
+                        }
+                    },
+                    "additionalProperties": true
                 },
                 "messageSendIntervalMs": {
                     "type": "integer",
