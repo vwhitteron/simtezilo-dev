@@ -1,0 +1,158 @@
+package app
+
+// Haptic latency/drift monitor. Telemetry arrives at a steady 60 fps carrying a
+// monotonic sequence ID, which gives a real-time reference clock. Comparing it
+// against what the audio pipeline has actually emitted (and how full the buffers
+// are) surfaces the output-side latency that accumulates when sample production
+// outruns the soundcard's consumption — the cause of haptics drifting out of
+// sync over time. The math helpers are pure so they can be unit-tested.
+
+import (
+	"time"
+
+	"github.com/vwhitteron/simtezilo-dev/app/audio"
+	"github.com/vwhitteron/simtezilo-dev/app/synthesizer"
+)
+
+// audioLatencyReport is a snapshot of haptic-pipeline latency and drift. All
+// latencies are milliseconds; Drift is positive when telemetry time has run
+// ahead of emitted audio time (the pipeline is lagging behind real time).
+type audioLatencyReport struct {
+	EngineLatencyMs  float64 // engine mixer-channel buffer depth
+	ChassisLatencyMs float64 // chassis channel 0 mixer-channel buffer depth
+	RingLatencyMs    float64 // async device ring buffer depth
+	DriftMs          float64 // telemetry-clock vs emitted-audio-clock divergence
+	SeqJitterMs      float64 // smoothed telemetry-cadence jitter (abs deviation from 60 fps)
+	Underruns        int64   // ring gap-fills (silence padding) since start
+	ProducerWaits    int64   // times the producer blocked on a full ring since start
+}
+
+// bufferLatencyMs converts a buffered mono-sample count at the given sample rate
+// into milliseconds of audio.
+func bufferLatencyMs(usedSamples int, rateHz float64) float64 {
+	if rateHz <= 0 {
+		return 0
+	}
+
+	return float64(usedSamples) / rateHz * 1000
+}
+
+// driftMs returns how far the telemetry clock has diverged from the emitted
+// audio clock since the baseline. audioElapsed comes from frames the soundcard
+// callback has pulled (outputRate); telemetryElapsed from sequence IDs advanced
+// (telemetryRate, the steady 60 fps). A positive result means audio output is
+// lagging behind real time.
+func driftMs(framesRead, baseFrames int64, seq, baseSeq uint32, outputRate, telemetryRate float64) float64 {
+	if outputRate <= 0 || telemetryRate <= 0 {
+		return 0
+	}
+
+	audioElapsed := float64(framesRead-baseFrames) / outputRate
+	telemetryElapsed := float64(seq-baseSeq) / telemetryRate
+
+	return (telemetryElapsed - audioElapsed) * 1000
+}
+
+// trackSequenceJitter updates the smoothed telemetry-cadence jitter: the
+// per-packet wall-clock interval's absolute deviation from the expected 60 fps
+// period. Called from updateState (main loop) only when the sequence advanced,
+// so a non-zero value flags telemetry-side stalls rather than audio drift.
+func (a *App) trackSequenceJitter() {
+	now := time.Now()
+	delta := a.state.current.sequenceDelta
+
+	if !a.lastSeqWallClock.IsZero() && delta > 0 {
+		perPacket := now.Sub(a.lastSeqWallClock) / time.Duration(delta)
+
+		deviation := perPacket - tickerPeriod(telemetryFrameRate)
+		if deviation < 0 {
+			deviation = -deviation
+		}
+
+		deviationMs := float64(deviation.Microseconds()) / 1000
+
+		a.driftMu.Lock()
+
+		if a.seqJitterMs == 0 {
+			a.seqJitterMs = deviationMs
+		} else {
+			// Light EWMA to smooth single-packet scheduling noise.
+			a.seqJitterMs = 0.9*a.seqJitterMs + 0.1*deviationMs
+		}
+
+		a.driftMu.Unlock()
+	}
+
+	a.lastSeqWallClock = now
+}
+
+// resetDriftBaseline clears the drift baseline so the next report re-establishes
+// it. Call this whenever the device frame counter restarts (a new async ring),
+// e.g. on audio output start/restart.
+func (a *App) resetDriftBaseline() {
+	a.driftMu.Lock()
+	a.driftBaseSet = false
+	a.driftMu.Unlock()
+}
+
+// buildAudioLatencyReport derives the latency/drift snapshot from an async-ring
+// health snapshot and the mixer channel diagnostics (both already gathered by
+// the caller). It lazily establishes the drift baseline and reads the smoothed
+// jitter under driftMu, so it is safe to call from the web-telemetry goroutine
+// as well as the main loop.
+func (a *App) buildAudioLatencyReport(health audio.HealthMetrics, diag synthesizer.MixerDiagnostics) audioLatencyReport {
+	internalRate := float64(a.synth.GetSampleRate())
+
+	// Prefer the rate the sink actually opened at; it can differ from the config
+	// when a device's native rate is used (Bluetooth, etc.). Fall back to config
+	// before the first audio start.
+	outputRate := float64(a.hapticOutputRate)
+	if outputRate <= 0 {
+		outputRate = float64(a.config.GetAudioHapticsSampleRate())
+	}
+
+	channels := a.config.GetAudioHapticsChannels()
+
+	channelUsed := func(name string) int {
+		for i := range diag.Channels {
+			if diag.Channels[i].Name == name {
+				return diag.Channels[i].Health.Used
+			}
+		}
+
+		return 0
+	}
+
+	report := audioLatencyReport{
+		EngineLatencyMs:  bufferLatencyMs(channelUsed(synthesizer.ChannelEngine), internalRate),
+		ChassisLatencyMs: bufferLatencyMs(channelUsed(synthesizer.ChassisChannelName(0)), internalRate),
+		Underruns:        health.GapFills,
+		ProducerWaits:    health.ProducerWaits,
+	}
+
+	if channels > 0 {
+		// RingUsed counts interleaved sample slots; divide by channels for frames.
+		report.RingLatencyMs = bufferLatencyMs(health.RingUsed/channels, outputRate)
+	}
+
+	seq := a.state.current.sequenceNumber
+
+	a.driftMu.Lock()
+	report.SeqJitterMs = a.seqJitterMs
+
+	if !a.driftBaseSet {
+		a.driftBaseFrames = health.FramesRead
+		a.driftBaseSeq = seq
+		a.driftBaseSet = true
+	} else {
+		report.DriftMs = driftMs(
+			health.FramesRead, a.driftBaseFrames,
+			seq, a.driftBaseSeq,
+			outputRate, float64(telemetryFrameRate),
+		)
+	}
+
+	a.driftMu.Unlock()
+
+	return report
+}

@@ -43,7 +43,7 @@ func TestAsyncSource_OrderedDelivery(t *testing.T) {
 
 	src := &rampSource{channels: channels}
 
-	source := audio.NewAsyncSource(src, channels, 200, 64)
+	source := audio.NewAsyncSource(src, channels, 200, 128, 64)
 	defer source.Close()
 
 	out := make([]float32, 128) // 64 frames per read
@@ -127,13 +127,13 @@ func TestAsyncSource_IdleGate(t *testing.T) {
 
 	inner := &countingSource{value: 0.5}
 
-	source := audio.NewAsyncSource(inner, channels, 400, 64)
+	source := audio.NewAsyncSource(inner, channels, 400, 256, 64)
 	source.SetIdleCheck(func() bool { return true })
 
 	defer source.Close()
 
-	// Drain the initial silence pre-fill: the ring starts full of zeros, so we
-	// must consume those before checking the idle path is producing zeros too.
+	// Drain the initial silence pre-fill: the ring starts pre-filled to the target
+	// with zeros, so we consume those before checking the idle path produces zeros.
 	drain := make([]float32, 400*channels)
 	source.ReadInterleaved(drain, channels)
 

@@ -528,6 +528,7 @@
         "runmode.telemetry.chart.translationalaccel": "6DOF並進加速度",
         "runmode.telemetry.chart.rotationalaccel": "6DOF回転加速度",
         "runmode.telemetry.chart.computetime": "計算時間",
+        "runmode.telemetry.chart.hapticlatency": "ハプティック遅延とドリフト",
 
         "runmode.settings.restart.required": "再起動が必要",
         "runmode.settings.restart.overlay.restarting": "再起動中...",

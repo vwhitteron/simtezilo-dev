@@ -107,6 +107,17 @@ type App struct {
 	audioMu        sync.Mutex         // Guards audio output state during start/restart
 	audioRestartMu sync.Mutex         // Serializes full stop+start restarts (e.g. device change)
 
+	// Haptic latency/drift monitor state. driftMu guards the fields shared
+	// between the main loop (writer) and the web-telemetry goroutine (reader);
+	// lastSeqWallClock is touched by the main loop only.
+	driftMu          sync.Mutex
+	driftBaseFrames  int64     // device frames pulled at the drift baseline
+	driftBaseSeq     uint32    // telemetry sequence at the drift baseline
+	driftBaseSet     bool      // whether the baseline has been established
+	seqJitterMs      float64   // smoothed telemetry-cadence jitter (ms, abs deviation from 60 fps)
+	lastSeqWallClock time.Time // wall-clock time the sequence last advanced
+	hapticOutputRate int       // actual sink sample rate (may differ from config on native-rate devices)
+
 	odometer      *odometer.Odometer           // Odometer for distance tracking
 	fuelRange     fuelrange.Estimator          // Fuel range estimator
 	circuit       circuit.Manager              // Circuit information and tracking
@@ -1308,11 +1319,11 @@ func (a *App) startAudioOutput() {
 
 	// Decouple synthesis from the device callback: a background producer runs
 	// the (heavy, allocating) mix + resample and the realtime callback only
-	// copies finished samples out of the ring. The ring is sized to a couple of
-	// device periods so it absorbs scheduler/GC jitter without adding more than
-	// ~2x the configured latency.
-	capacityFrames, blockFrames := hapticBufferFrames(outputRate, cfg.LatencyMs)
-	async := audio.NewAsyncSource(source, sink.Channels(), capacityFrames, blockFrames)
+	// copies finished samples out of the ring. The producer holds the ring at a
+	// one-period target fill (the added latency) while the capacity keeps a second
+	// period of headroom to absorb scheduler/GC jitter without underrunning.
+	capacityFrames, targetFrames, blockFrames := hapticBufferFrames(outputRate, cfg.LatencyMs)
+	async := audio.NewAsyncSource(source, sink.Channels(), capacityFrames, targetFrames, blockFrames)
 
 	// Skip the mix+resample work while the synth is silenced (telemetry
 	// inactive): the producer emits silence into the ring instead, so an idle
@@ -1335,6 +1346,11 @@ func (a *App) startAudioOutput() {
 
 	a.hapticSink = sink
 	a.hapticSource = async
+	a.hapticOutputRate = outputRate
+
+	// The new ring's frame counter starts at zero, so re-establish the drift
+	// baseline against it on the next monitor sample.
+	a.resetDriftBaseline()
 
 	a.log.Info().
 		Str("backend", backend.Name()).
@@ -1343,12 +1359,15 @@ func (a *App) startAudioOutput() {
 		Msg("Audio output started")
 }
 
-// hapticBufferFrames derives the async ring capacity and producer block size
-// from the output rate and requested device latency. The ring holds two device
-// periods so the producer can fall a whole period behind (a GC pause, a
-// scheduler hiccup) without the realtime callback underrunning; the block is a
+// hapticBufferFrames derives the async ring capacity, steady-state target fill
+// and producer block size from the output rate and requested device latency. The
+// target — the latency the ring adds — is one device period: enough to satisfy a
+// device callback plus a brief producer stall (a GC pause, a scheduler hiccup)
+// without underrunning, but no more. Capacity keeps a second period of headroom
+// above the target to absorb bursts; because the producer only fills to the
+// target, that headroom does not become steady-state latency. The block is a
 // shorter ~10 ms slice so production stays responsive.
-func hapticBufferFrames(outputRate, latencyMs int) (capacity, block int) {
+func hapticBufferFrames(outputRate, latencyMs int) (capacity, target, block int) {
 	if latencyMs <= 0 {
 		latencyMs = 50
 	}
@@ -1357,9 +1376,11 @@ func hapticBufferFrames(outputRate, latencyMs int) (capacity, block int) {
 
 	block = max(outputRate/100, 256) // ~10 ms, floored
 
+	target = max(periodFrames, block)
+
 	capacity = max(periodFrames*2, block*4)
 
-	return capacity, block
+	return capacity, target, block
 }
 
 // restartAudioOutput tears down the active haptic output and brings it back up,
@@ -1456,16 +1477,25 @@ func (a *App) signalStartupSuccess() {
 	a.log.Info().Msg("Successfully signaled startup to platform, failed start counter reset")
 }
 
+// tickerPeriod returns the exact tick period for a frame rate in Hz. Using
+// time.Second/rate (integer-nanosecond division) avoids the millisecond
+// truncation of the old (1000/rate)*time.Millisecond form, which ran the loops
+// fast — e.g. 120 Hz became 8 ms (125 Hz) and 60 Hz became 16 ms (62.5 Hz),
+// systematically over-producing audio samples relative to the soundcard clock.
+func tickerPeriod(rateHz int) time.Duration {
+	return time.Second / time.Duration(rateHz)
+}
+
 // mainLoop is the primary application loop handling telemetry updates, haptics, UI updates, and pit radio
 // notifications.
 func (a *App) mainLoop() { //nolint:cyclop // compact and simple enough
-	tickerHaptics := time.NewTicker((1000 / hapticFrameRate) * time.Millisecond)
-	tickerGeneral := time.NewTicker((1000 / telemetryFrameRate) * time.Millisecond)
-	tickerEngineHaptics := time.NewTicker((1000 / engineHapticFrameRate) * time.Millisecond)
-	tickerDisplay := time.NewTicker((1000 / displayFrameRate) * time.Millisecond)
-	tickerPitRadio := time.NewTicker((1000 / pitRadioFrameRate) * time.Millisecond)
+	tickerHaptics := time.NewTicker(tickerPeriod(hapticFrameRate))
+	tickerGeneral := time.NewTicker(tickerPeriod(telemetryFrameRate))
+	tickerEngineHaptics := time.NewTicker(tickerPeriod(engineHapticFrameRate))
+	tickerDisplay := time.NewTicker(tickerPeriod(displayFrameRate))
+	tickerPitRadio := time.NewTicker(tickerPeriod(pitRadioFrameRate))
 	tickerRaceData := time.NewTicker(500 * time.Millisecond)
-	tickerFanControl := time.NewTicker((1000 / FanControlFrameRate) * time.Millisecond)
+	tickerFanControl := time.NewTicker(tickerPeriod(FanControlFrameRate))
 	tickerDebug := time.NewTicker(30 * time.Second)
 
 	a.log.Debug().Str("component", "app").Str("result", "success").Msg("main loop started")
@@ -1749,6 +1779,19 @@ func (a *App) handleRaceDataTick() {
 
 // handleDebugTick processes debug logging.
 func (a *App) handleDebugTick() {
+	if a.hapticSource != nil {
+		latency := a.buildAudioLatencyReport(a.hapticSource.Health(), a.synth.Diagnostics())
+		a.log.Info().
+			Float64("engine_lat_ms", latency.EngineLatencyMs).
+			Float64("chassis_lat_ms", latency.ChassisLatencyMs).
+			Float64("ring_lat_ms", latency.RingLatencyMs).
+			Float64("drift_ms", latency.DriftMs).
+			Float64("seq_jitter_ms", latency.SeqJitterMs).
+			Int64("underruns", latency.Underruns).
+			Int64("producer_waits", latency.ProducerWaits).
+			Msg("haptic latency monitor")
+	}
+
 	if a.log.GetLevel() > zerolog.DebugLevel {
 		return
 	}

@@ -71,6 +71,8 @@ func (m *MockMixer) WriteChannel(_ string, _ []float64, _ float64, _ int, _ bool
 	return nil
 }
 
+func (m *MockMixer) CapChannelDepth(_ string, _ int) {}
+
 func (m *MockMixer) ClearChannelBuffer(_ string) {}
 
 func (m *MockMixer) ClearBuffers() {}

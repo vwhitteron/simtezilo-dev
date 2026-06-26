@@ -188,7 +188,8 @@ const CHART_CONFIGURATIONS = {
         { id: 'channel-output-left', containerId: 'scichart-root-5', enabled: true },
         { id: 'channel-output-right', containerId: 'scichart-root-6', enabled: true },
         { id: 'compute-time', containerId: 'scichart-root-7', enabled: true },
-        { id: 'audio-health', containerId: 'scichart-root-8', enabled: true }
+        { id: 'audio-health', containerId: 'scichart-root-8', enabled: true },
+        { id: 'haptic-latency', containerId: 'scichart-root-9', enabled: true }
     ],
 
     // Default/fallback - all charts enabled
@@ -1115,6 +1116,71 @@ async function initSciChart() {
                         asyncProducerLag: producerLagSeries
                     },
                     dataFields: ['asyncBufferFill', 'mixerEngineFill', 'mixerChassis0Fill', 'asyncSilentGaps', 'asyncProducerLag']
+                };
+            }
+        },
+
+        'haptic-latency': {
+            title: 'Haptic Latency & Drift (ms)',
+            titleKey: 'runmode.telemetry.chart.hapticlatency',
+            create: async (containerId) => {
+                // All five metrics share a millisecond scale, so a single
+                // auto-ranging Y axis keeps engine/chassis/ring buffer latency,
+                // the cumulative drift (signed) and the telemetry jitter together.
+                const { sciChartSurface, wasmContext } = await createStandardChart(containerId);
+
+                addHorizontalZoomModifiers(sciChartSurface);
+
+                const engineLatencySeries = createDataSeries(wasmContext, "Engine Latency (ms)");
+                const chassisLatencySeries = createDataSeries(wasmContext, "Chassis Latency (ms)");
+                const ringLatencySeries = createDataSeries(wasmContext, "Ring Latency (ms)");
+                const driftSeries = createDataSeries(wasmContext, "Drift (ms)");
+                const jitterSeries = createDataSeries(wasmContext, "Seq Jitter (ms)");
+
+                sciChartSurface.renderableSeries.add(
+                    new SciChart.FastLineRenderableSeries(wasmContext, {
+                        dataSeries: engineLatencySeries,
+                        dataSeriesName: "Engine Latency (ms)",
+                        strokeThickness: 2,
+                        stroke: "#50c7e0ff"
+                    }),
+                    new SciChart.FastLineRenderableSeries(wasmContext, {
+                        dataSeries: chassisLatencySeries,
+                        dataSeriesName: "Chassis Latency (ms)",
+                        strokeThickness: 2,
+                        stroke: "#c750e0ff"
+                    }),
+                    new SciChart.FastLineRenderableSeries(wasmContext, {
+                        dataSeries: ringLatencySeries,
+                        dataSeriesName: "Ring Latency (ms)",
+                        strokeThickness: 2,
+                        stroke: "#50e06aff"
+                    }),
+                    new SciChart.FastLineRenderableSeries(wasmContext, {
+                        dataSeries: driftSeries,
+                        dataSeriesName: "Drift (ms)",
+                        strokeThickness: 2,
+                        stroke: "#e05050ff"
+                    }),
+                    new SciChart.FastLineRenderableSeries(wasmContext, {
+                        dataSeries: jitterSeries,
+                        dataSeriesName: "Seq Jitter (ms)",
+                        strokeThickness: 2,
+                        stroke: "#e0c750ff"
+                    })
+                );
+
+                return {
+                    surface: sciChartSurface,
+                    xAxis: sciChartSurface.xAxes.get(0),
+                    dataSeries: {
+                        engineLatencyMs: engineLatencySeries,
+                        chassisLatencyMs: chassisLatencySeries,
+                        ringLatencyMs: ringLatencySeries,
+                        driftMs: driftSeries,
+                        seqJitterMs: jitterSeries
+                    },
+                    dataFields: ['engineLatencyMs', 'chassisLatencyMs', 'ringLatencyMs', 'driftMs', 'seqJitterMs']
                 };
             }
         },

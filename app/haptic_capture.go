@@ -492,12 +492,12 @@ func (a *App) captureThroughSink(next pullFunc, opts SinkCaptureOptions) (*SinkC
 	streamer := synthesizer.NewStreamer(a.synth)
 	source := audio.NewResamplingSource(streamer, internalRate, outputRate, channels)
 
-	capacity, block := hapticBufferFrames(outputRate, latencyMs)
+	capacity, target, block := hapticBufferFrames(outputRate, latencyMs)
 	if opts.RingCapacityFrames > 0 {
 		capacity = opts.RingCapacityFrames
 	}
 
-	async := audio.NewAsyncSource(source, channels, capacity, block)
+	async := audio.NewAsyncSource(source, channels, capacity, target, block)
 
 	defer async.Close()
 

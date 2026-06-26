@@ -218,6 +218,13 @@ func (s *Synthesizer) WriteBuffer(channel string, sample []float64, offset int) 
 	_ = s.mixer.WriteChannel(channel, sample, magnitude, offset, false)
 }
 
+// CapChannelDepth bounds the unread depth of a channel's buffer. The engine
+// haptic uses it to hold a small cushion instead of accumulating latency from
+// its per-tick overwrite writes.
+func (s *Synthesizer) CapChannelDepth(channel string, maxSamples int) {
+	s.mixer.CapChannelDepth(channel, maxSamples)
+}
+
 // OverwriteBuffer overwrites the specified channel buffer with the provided sample data at the given offset.
 func (s *Synthesizer) OverwriteBuffer(channel string, sample []float64, offset int) {
 	magnitude, err := s.mixer.GetChannelPowerRatio(channel)

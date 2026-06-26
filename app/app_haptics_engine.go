@@ -17,6 +17,14 @@ import (
 
 const maxPulseRate float64 = 300.0 // Max pulse rate for engine haptics
 
+// engineBufferFrames is the engine channel's target unread depth, in engine
+// frames. Each tick generates two frames (for stitch overlap) via an overwrite
+// write that appends faster than the channel drains; capping the buffered depth
+// to a few frames keeps just enough cushion to ride out a handful of
+// dropped/late telemetry frames and keep the zero-crossing stitch smooth,
+// instead of letting the buffer fill to its multi-second capacity.
+const engineBufferFrames = 3
+
 type engineState struct {
 	lastSeq       uint32    // Last sequence ID for engine haptics
 	lastKnownRPM  float64   // Cache last known RPM for fallback
@@ -39,7 +47,7 @@ func (a *App) generateEngineHaptic() {
 
 	// No haptics when engine is not running
 	if rpm == 0 {
-		a.synth.OverwriteBuffer(synthesizer.ChannelEngine, engineBuffer, offset)
+		a.writeEngineBuffer(engineBuffer, offset)
 
 		return
 	}
@@ -54,7 +62,21 @@ func (a *App) generateEngineHaptic() {
 	// a.generateTorqueCurveWaveform(rpm, engineRoughness, &engineBuffer)
 
 	a.adjustEngineBufferPolarity(engineBuffer, lastPolarity)
+	a.writeEngineBuffer(engineBuffer, offset)
+}
+
+// writeEngineBuffer stitches the freshly generated waveform into the engine
+// channel and then caps the channel to a small cushion. The per-tick write adds
+// two frames while the channel drains roughly one frame per tick, so without the
+// cap the buffer grows to its full capacity (~2 s of latency). Capping holds it
+// at engineBufferFrames worth of samples — enough to cover a few dropped/late
+// telemetry frames — without accumulating latency, and the discarded tail stays
+// readable for the next tick's zero-crossing stitch.
+func (a *App) writeEngineBuffer(engineBuffer []float64, offset int) {
 	a.synth.OverwriteBuffer(synthesizer.ChannelEngine, engineBuffer, offset)
+
+	samplesPerFrame := a.synth.GetSampleRate() / engineHapticFrameRate
+	a.synth.CapChannelDepth(synthesizer.ChannelEngine, samplesPerFrame*engineBufferFrames)
 }
 
 // shouldGenerateEngineHaptic checks if engine haptic generation should proceed.

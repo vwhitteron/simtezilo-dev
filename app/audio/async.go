@@ -14,13 +14,15 @@ import (
 // underruns the callback emits silence instead of stalling, so it can never miss
 // its period deadline and glitch.
 //
-// The ring's capacity bounds both the jitter the producer can absorb and the
-// steady-state latency added (the producer keeps the ring full). Size it from
-// the device latency so a lower latency setting yields a shallower buffer.
+// The ring's capacity bounds the jitter the producer can absorb; a separate,
+// smaller target fill bounds the steady-state latency added. The producer tops
+// the ring up to the target and no further, so the spare capacity above the
+// target absorbs bursts without that headroom turning into permanent latency.
 type AsyncSource struct {
 	inner       SampleSource
 	channels    int
 	blockFrames int
+	target      int // steady-state fill cap in samples; producer tops up to here, not capacity
 
 	mu      sync.Mutex
 	notFull *sync.Cond // producer waits here for the consumer to free space
@@ -46,19 +48,29 @@ type AsyncSource struct {
 	// gapFillSamples accumulates the total number of silence-padded samples.
 	gapFillSamples atomic.Int64
 
-	// producerWaits counts how many times the producer blocked on a full ring.
+	// producerWaits counts how many times the producer blocked because the ring
+	// reached its target fill (it is caught up). This is normal in steady state.
 	producerWaits atomic.Int64
 
 	// lastGapFill records the time of the most recent gap-fill event for
 	// recency awareness. Updated atomically; zero means never.
 	lastGapFill atomic.Int64 // Unix nanoseconds
+
+	// framesRead accumulates the total frames the device callback has pulled
+	// (including silence-padded frames on underrun). Because the callback runs on
+	// the soundcard clock, this is the playback-time reference the drift monitor
+	// compares against the telemetry sequence clock.
+	framesRead atomic.Int64
 }
 
 // NewAsyncSource wraps inner with a background producer and returns a source
-// suitable for handing to a realtime Sink. capacityFrames is the ring depth and
-// blockFrames is how many frames the producer synthesises per iteration. The
-// producer goroutine starts immediately.
-func NewAsyncSource(inner SampleSource, channels, capacityFrames, blockFrames int) *AsyncSource {
+// suitable for handing to a realtime Sink. capacityFrames is the ring depth
+// (jitter headroom), targetFrames is the steady-state fill the producer maintains
+// (the latency added), and blockFrames is how many frames the producer
+// synthesises per iteration. targetFrames is clamped to leave a block of room
+// below capacity; a non-positive value fills as close to capacity as possible
+// (the legacy "kept full" behaviour). The producer goroutine starts immediately.
+func NewAsyncSource(inner SampleSource, channels, capacityFrames, targetFrames, blockFrames int) *AsyncSource {
 	if blockFrames <= 0 {
 		blockFrames = pullBlockFrames
 	}
@@ -67,22 +79,32 @@ func NewAsyncSource(inner SampleSource, channels, capacityFrames, blockFrames in
 		capacityFrames = blockFrames * 2
 	}
 
+	// The producer never fills beyond the target, and a whole block must always
+	// fit above it, so cap the target a block below capacity.
+	maxTarget := capacityFrames - blockFrames
+	if targetFrames <= 0 || targetFrames > maxTarget {
+		targetFrames = maxTarget
+	}
+
 	source := &AsyncSource{
 		inner:       inner,
 		channels:    channels,
 		blockFrames: blockFrames,
+		target:      targetFrames * channels,
 		ring:        make([]float32, capacityFrames*channels),
 		scratch:     make([]float32, blockFrames*channels),
 		done:        make(chan struct{}),
 	}
 	source.notFull = sync.NewCond(&source.mu)
 
-	// Pre-fill the ring with silence so the device callback has something to
-	// play immediately and, crucially, the producer is not pulled until the ring
-	// drains. Pulling the synth to fill the ring at startup would drain the
-	// upstream mixer buffers before any haptic data exists — a burst of underruns
-	// heard as clicks on the first audio. The ring is already zeroed by make.
-	source.count = len(source.ring)
+	// Pre-fill the ring with `target` frames of silence (not the whole ring): the
+	// device callback has something to play immediately, and the producer is not
+	// pulled until the consumer drains below the target — so synthesis does not
+	// start (draining the upstream mixer buffers) before any haptic data exists.
+	// Holding only the target, rather than brim-full, is what keeps the
+	// steady-state latency low while the spare capacity still absorbs bursts. The
+	// ring is already zeroed by make.
+	source.count = source.target
 
 	go source.produce()
 
@@ -142,25 +164,25 @@ func (a *AsyncSource) ReadInterleaved(out []float32, channels int) (int, bool) {
 		out[i] = 0
 	}
 
-	return len(out) / channels, true
-}
+	frames := len(out) / channels
+	a.framesRead.Add(int64(frames))
 
-// freeFrames reports how many input frames can still be written. Caller holds mu.
-func (a *AsyncSource) freeFrames() int {
-	return (len(a.ring) - a.count) / a.channels
+	return frames, true
 }
 
 // produce runs in its own goroutine, synthesising blocks off-lock and copying
-// them into the ring, blocking only when the ring is full.
+// them into the ring, blocking only once the ring has reached its target fill.
 func (a *AsyncSource) produce() {
 	defer close(a.done)
 
 	for {
-		// Wait until there is room for a full block, then synthesise off-lock.
+		// Wait until the buffered fill drops below the target, then synthesise one
+		// block off-lock. The producer tops the ring back up to the target but no
+		// further, so the steady-state latency is the target depth, not capacity.
 		a.mu.Lock()
 
 		waited := false
-		for a.freeFrames() < a.blockFrames && !a.closed {
+		for a.count >= a.target && !a.closed {
 			if !waited {
 				waited = true
 
@@ -217,9 +239,9 @@ func (a *AsyncSource) produceSilence() bool {
 func (a *AsyncSource) produceSynth() bool {
 	frames, readOk := a.inner.ReadInterleaved(a.scratch, a.channels)
 
-	// The consumer only removes samples between the unlock above and the
-	// lock below, so the free space measured above is a safe lower bound and
-	// the synthesised block always fits.
+	// The producer only writes when count was below the target, and capacity keeps
+	// a full block of room above the target, so the block always fits; the
+	// consumer only frees more space between the unlock above and the lock below.
 	a.mu.Lock()
 	a.writeRing(a.scratch[:frames*a.channels])
 	closed := a.closed
@@ -248,6 +270,7 @@ type HealthMetrics struct {
 	RingCapacity    int     // total sample slots in the ring
 	RingUsed        int     // sample slots currently filled
 	FillRatio       float64 // RingUsed / RingCapacity (0..1)
+	FramesRead      int64   // total frames pulled by the device callback (soundcard-clock reference)
 	LastGapFillTime time.Time
 }
 
@@ -269,6 +292,7 @@ func (a *AsyncSource) Health() HealthMetrics {
 		RingCapacity:   capacity,
 		RingUsed:       used,
 		FillRatio:      float64(used) / float64(capacity),
+		FramesRead:     a.framesRead.Load(),
 		LastGapFillTime: func() time.Time {
 			if lastNS == 0 {
 				return time.Time{}

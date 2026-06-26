@@ -580,6 +580,7 @@
         "runmode.telemetry.chart.snap": "6DOF Snap",
         "runmode.telemetry.chart.translationalaccel": "6DOF Translational Acceleration",
         "runmode.telemetry.chart.rotationalaccel": "6DOF Rotational Acceleration",
-        "runmode.telemetry.chart.computetime": "Compute Time"
+        "runmode.telemetry.chart.computetime": "Compute Time",
+        "runmode.telemetry.chart.hapticlatency": "Haptic Latency & Drift"
     }
 }

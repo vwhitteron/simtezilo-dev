@@ -237,6 +237,28 @@ func (b *AdaptiveBuffer) Write(samples []float64, offset int, overwrite bool) {
 	b.writeMixMode(samples)
 }
 
+// CapDepth bounds the unread depth to at most maxSamples by discarding the
+// newest (not-yet-read) samples and snapping the write cursor to the end of the
+// retained data. Discarding from the write end never drops audio the consumer is
+// about to play. The discarded samples stay in the backing array, so a forward
+// Inspect from the write cursor still sees the most recently generated waveform
+// tail (used by the engine's zero-crossing stitch). Snapping writePos also
+// restores the writePos == readPos+used invariant that offset writes perturb.
+func (b *AdaptiveBuffer) CapDepth(maxSamples int) {
+	if maxSamples < 0 {
+		maxSamples = 0
+	}
+
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	if b.used > maxSamples {
+		b.used = maxSamples
+	}
+
+	b.writePos = (b.readPos + b.used) % b.capacity
+}
+
 // IsStarved returns true if buffer is running low.
 func (b *AdaptiveBuffer) IsStarved() bool {
 	b.mu.RLock()

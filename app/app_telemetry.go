@@ -231,6 +231,8 @@ func (a *App) updateState() (didUpdate bool) {
 	a.state.current.timeOfDay = a.gtClient.Telemetry.TimeOfDay()
 	a.state.current.isLive = a.gtClient.Telemetry.Flags().Live
 
+	a.trackSequenceJitter()
+
 	// Accumulate live frames into the synthesized lap clock (the Addendum3
 	// CurrentLaptime fallback). Dropped packets still represent elapsed lap time
 	// and are counted; paused/loading frames are excluded.

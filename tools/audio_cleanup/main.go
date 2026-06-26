@@ -33,10 +33,13 @@ package main
 
 import (
 	"encoding/binary"
+	"errors"
 	"flag"
 	"fmt"
 	"math"
 	"os"
+	"slices"
+	"sync/atomic"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -45,6 +48,15 @@ import (
 
 func main() {
 	cfg := parseFlags()
+
+	if cfg.mode == "latency" {
+		err := runLatency(cfg)
+		if err != nil {
+			fail(err)
+		}
+
+		return
+	}
 
 	switch cfg.backend {
 	case "capture":
@@ -83,6 +95,9 @@ type config struct {
 	backend   string  // capture | beep | portaudio
 	stage     string  // all | control | resample | async | full
 	wav       string  // when set, dump <wav>-<stage>.wav per stage
+	mode      string  // analyse (stage capture/audible) | latency
+	interval  float64 // latency mode: seconds between injected markers
+	threshold float64 // latency mode: |sample| impulse-detection threshold
 }
 
 func parseFlags() config {
@@ -102,6 +117,9 @@ func parseFlags() config {
 	flag.StringVar(&c.backend, "backend", "capture", "capture (analyse) | beep | portaudio (audible)")
 	flag.StringVar(&c.stage, "stage", "all", "all | control | resample | async | full")
 	flag.StringVar(&c.wav, "wav", "", "when set, write <wav>-<stage>.wav for each captured stage")
+	flag.StringVar(&c.mode, "mode", "analyse", "analyse (stage capture/audible) | latency (measure event->read delay)")
+	flag.Float64Var(&c.interval, "interval", 0.5, "latency mode: seconds between injected gear-change markers")
+	flag.Float64Var(&c.threshold, "threshold", 0.5, "latency mode: |sample| impulse-detection threshold")
 
 	flag.Parse()
 
@@ -222,7 +240,7 @@ func runCapture(c config) error {
 			c.freq, float64(c.inRate)/2, c.inRate)
 	}
 
-	capacity, block := bufferFrames(c.outRate, c.latencyMs)
+	capacity, target, block := bufferFrames(c.outRate, c.latencyMs)
 
 	devBuf := c.devBuf
 	if devBuf <= 0 {
@@ -231,14 +249,14 @@ func runCapture(c config) error {
 
 	fmt.Printf("input : %.1f Hz sine, amp %.3f, %d ch\n", c.freq, c.amp, c.channels)
 	fmt.Printf("rates : internal %d Hz -> output %d Hz (ratio %.3gx)\n", c.inRate, c.outRate, float64(c.outRate)/float64(c.inRate))
-	fmt.Printf("buffer: ring capacity %d frames, producer block %d frames, device buffer %d frames\n",
-		capacity, block, devBuf)
+	fmt.Printf("buffer: ring capacity %d frames, target %d frames, producer block %d frames, device buffer %d frames\n",
+		capacity, target, block, devBuf)
 	fmt.Printf("expect: peak residual <= %.4f, SNR >= %.0f dB\n\n", c.tol, c.minSNR)
 
 	var failures int
 
 	for _, st := range stages {
-		rec, err := captureStage(c, st, capacity, block, devBuf)
+		rec, err := captureStage(c, st, capacity, target, block, devBuf)
 		if err != nil {
 			return fmt.Errorf("stage %s: %w", st, err)
 		}
@@ -304,7 +322,7 @@ func usesInternalRate(stages []string) bool {
 // captured samples. The sine is generated at whichever rate that stage feeds the
 // device: at the output rate when no resampler is present, at the internal rate
 // when one is (so the resampler does the inRate->outRate conversion the app does).
-func captureStage(c config, stage string, capacity, block, devBuf int) ([]float32, error) {
+func captureStage(c config, stage string, capacity, target, block, devBuf int) ([]float32, error) {
 	resampling := stage == "resample" || stage == "full"
 
 	srcRate := c.outRate
@@ -321,7 +339,7 @@ func captureStage(c config, stage string, capacity, block, devBuf int) ([]float3
 	var closeAsync func()
 
 	if stage == "async" || stage == "full" {
-		async := audio.NewAsyncSource(src, c.channels, capacity, block)
+		async := audio.NewAsyncSource(src, c.channels, capacity, target, block)
 		src = async
 		closeAsync = async.Close
 	}
@@ -357,16 +375,17 @@ func captureStage(c config, stage string, capacity, block, devBuf int) ([]float3
 
 // bufferFrames mirrors the app's hapticBufferFrames so the harness exercises the
 // same ring depth and producer block size the live pipeline uses.
-func bufferFrames(outputRate, latencyMs int) (capacity, block int) {
+func bufferFrames(outputRate, latencyMs int) (capacity, target, block int) {
 	if latencyMs <= 0 {
 		latencyMs = 50
 	}
 
 	periodFrames := outputRate * latencyMs / 1000
 	block = max(outputRate/100, 256)
+	target = max(periodFrames, block)
 	capacity = max(periodFrames*2, block*4)
 
-	return capacity, block
+	return capacity, target, block
 }
 
 // ---------------------------------------------------------------------------
@@ -624,12 +643,12 @@ func runAudible(c config) error {
 
 	defer func() { _ = sink.Stop() }()
 
-	capacity, block := bufferFrames(c.outRate, c.latencyMs)
+	capacity, target, block := bufferFrames(c.outRate, c.latencyMs)
 
 	src := audio.NewResamplingSource(
 		&sineSource{freq: c.freq, amp: c.amp, rate: float64(c.inRate)},
 		c.inRate, c.outRate, sink.Channels())
-	async := audio.NewAsyncSource(src, sink.Channels(), capacity, block)
+	async := audio.NewAsyncSource(src, sink.Channels(), capacity, target, block)
 
 	defer async.Close()
 
@@ -642,6 +661,238 @@ func runAudible(c config) error {
 	time.Sleep(time.Duration(c.dur*float64(time.Second)) + 200*time.Millisecond)
 
 	return nil
+}
+
+// ---------------------------------------------------------------------------
+// Latency mode: inject a synthetic gear-change marker through the real pipeline
+// (resample -> async ring -> backend) and measure the delay from the event to
+// the moment the device callback reads it.
+// ---------------------------------------------------------------------------
+
+// probe carries the in-flight marker state shared across three goroutines: the
+// injector (arms a marker and stamps the event time), the markerSource (the
+// producer goroutine, which emits the impulse) and the latencyTap (the device
+// callback, which detects it). All fields are atomic, so nothing locks on the
+// realtime path.
+type probe struct {
+	pending atomic.Bool  // a marker is armed and not yet detected
+	eventNs atomic.Int64 // UnixNano when armed (the synthetic "gear change")
+}
+
+// markerSource emits silence at the internal rate and, when armed, writes a
+// single full-scale impulse on the first frame of its next read — the synthetic
+// gear-change onset, fed through the same resample/async path the live app uses.
+type markerSource struct {
+	pr   *probe
+	emit atomic.Bool // set by the injector, consumed once by ReadInterleaved
+}
+
+// arm stamps the event time and schedules one impulse on the next read.
+func (m *markerSource) arm() {
+	m.pr.eventNs.Store(time.Now().UnixNano())
+	m.pr.pending.Store(true)
+	m.emit.Store(true)
+}
+
+func (m *markerSource) ReadInterleaved(out []float32, channels int) (int, bool) {
+	for i := range out {
+		out[i] = 0
+	}
+
+	if m.emit.CompareAndSwap(true, false) {
+		for c := 0; c < channels && c < len(out); c++ {
+			out[c] = 1
+		}
+	}
+
+	return len(out) / channels, true
+}
+
+// latencyTap is the source handed to the sink, so its ReadInterleaved runs on
+// the device callback — the exact "moment portaudio reads". While a marker is
+// pending it scans the outgoing buffer for the impulse and records the
+// event->read delay. It is the only writer of results (the callback) and writes
+// lock-free into a preallocated slice; results are read after Stop.
+type latencyTap struct {
+	inner     audio.SampleSource
+	pr        *probe
+	threshold float32
+	results   []time.Duration // preallocated; valid up to count
+	count     atomic.Int64
+}
+
+func (t *latencyTap) ReadInterleaved(out []float32, channels int) (int, bool) {
+	n, ok := t.inner.ReadInterleaved(out, channels)
+
+	if t.pr.pending.Load() {
+		count := n * channels
+
+		for i := range count {
+			if out[i] >= t.threshold || out[i] <= -t.threshold {
+				delay := time.Duration(time.Now().UnixNano() - t.pr.eventNs.Load())
+
+				if idx := t.count.Add(1) - 1; int(idx) < len(t.results) {
+					t.results[idx] = delay
+				}
+
+				t.pr.pending.Store(false)
+
+				break
+			}
+		}
+	}
+
+	return n, ok
+}
+
+// runLatency drives the synthetic gear-change marker through the real output
+// pipeline and reports the event->device-read delay distribution plus the ring's
+// steady-state contribution. It needs a real backend (beep or portaudio): the
+// capture backend's read timing is synthetic, so it cannot measure real latency.
+func runLatency(c config) error {
+	if c.backend != audio.BackendBeep && c.backend != audio.BackendPortAudio {
+		return fmt.Errorf("latency mode needs a real backend: -backend beep or portaudio (got %q)", c.backend)
+	}
+
+	if c.interval <= 0 {
+		return errors.New("-interval must be > 0")
+	}
+
+	log := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr}).Level(zerolog.InfoLevel)
+
+	backend, err := audio.New(c.backend, log)
+	if err != nil {
+		return fmt.Errorf("open backend %q: %w (rebuild with -tags portaudio?)", c.backend, err)
+	}
+
+	defer func() { _ = backend.Close() }()
+
+	channels := c.channels
+	if c.backend == audio.BackendBeep {
+		channels = 2 // beep is fixed stereo
+	}
+
+	sink, err := backend.OpenSink(audio.SinkConfig{
+		Channels:   channels,
+		SampleRate: c.outRate,
+		LatencyMs:  c.latencyMs,
+	})
+	if err != nil {
+		return fmt.Errorf("open sink: %w", err)
+	}
+
+	defer func() { _ = sink.Stop() }()
+
+	channels = sink.Channels()
+
+	capacity, target, block := bufferFrames(c.outRate, c.latencyMs)
+
+	pr := &probe{}
+	marker := &markerSource{pr: pr}
+	source := audio.NewResamplingSource(marker, c.inRate, c.outRate, channels)
+	async := audio.NewAsyncSource(source, channels, capacity, target, block)
+
+	defer async.Close()
+
+	tap := &latencyTap{
+		inner:     async,
+		pr:        pr,
+		threshold: float32(c.threshold),
+		results:   make([]time.Duration, int(c.dur/c.interval)+8),
+	}
+
+	fmt.Printf("backend : %s\n", c.backend)
+	fmt.Printf("rates   : internal %d Hz -> output %d Hz, %d ch\n", c.inRate, c.outRate, channels)
+	fmt.Printf("buffer  : ring %d frames (%.1f ms cap), target %d frames (%.1f ms), block %d frames, latency hint %d ms\n",
+		capacity, framesToMs(capacity, c.outRate), target, framesToMs(target, c.outRate), block, c.latencyMs)
+	fmt.Printf("probe   : impulse every %.0f ms, detect |x|>=%.2f, for %.1fs\n\n",
+		c.interval*1000, c.threshold, c.dur)
+
+	if err := sink.Start(tap); err != nil {
+		return fmt.Errorf("start sink: %w", err)
+	}
+
+	misses := injectMarkers(c, pr, marker)
+
+	// Let the last in-flight marker drain through the ring and device.
+	time.Sleep(300 * time.Millisecond)
+
+	health := async.Health()
+	_ = sink.Stop()
+
+	n := min(int(tap.count.Load()), len(tap.results))
+	reportLatency(c, channels, tap.results[:n], misses, capacity, health)
+
+	return nil
+}
+
+// injectMarkers arms a marker every interval for the run duration, skipping ticks
+// while a previous marker is still in flight and giving up on one that is never
+// detected within a second (counted as a miss).
+func injectMarkers(c config, pr *probe, marker *markerSource) int {
+	stop := time.After(time.Duration(c.dur * float64(time.Second)))
+	ticker := time.NewTicker(time.Duration(c.interval * float64(time.Second)))
+
+	defer ticker.Stop()
+
+	misses := 0
+
+	for {
+		select {
+		case <-stop:
+			return misses
+		case <-ticker.C:
+			if pr.pending.Load() {
+				if time.Since(time.Unix(0, pr.eventNs.Load())) < time.Second {
+					continue // still waiting for the in-flight marker
+				}
+
+				pr.pending.Store(false)
+
+				misses++
+			}
+
+			marker.arm()
+		}
+	}
+}
+
+// framesToMs converts a frame count at rate Hz to milliseconds.
+func framesToMs(frames, rate int) float64 {
+	return float64(frames) / float64(rate) * 1000
+}
+
+// reportLatency prints the event->read delay distribution and the ring's
+// steady-state contribution.
+func reportLatency(c config, channels int, results []time.Duration, misses, capacity int, health audio.HealthMetrics) {
+	fmt.Printf("== results ==\n")
+
+	if len(results) == 0 {
+		fmt.Printf("  no markers detected (%d missed) — raise -dur, lower -threshold,\n", misses)
+		fmt.Printf("  or check the device is actually playing\n")
+
+		return
+	}
+
+	sorted := append([]time.Duration(nil), results...)
+	slices.Sort(sorted)
+
+	ms := func(d time.Duration) float64 { return float64(d.Microseconds()) / 1000 }
+	pct := func(f float64) time.Duration { return sorted[int(f*float64(len(sorted)-1)+0.5)] }
+
+	usedFrames := health.RingUsed / max(channels, 1)
+
+	fmt.Printf("  detected : %d markers (%d missed)\n", len(sorted), misses)
+	fmt.Printf("  event -> portaudio read:\n")
+	fmt.Printf("    min    %6.1f ms\n", ms(sorted[0]))
+	fmt.Printf("    median %6.1f ms\n", ms(pct(0.5)))
+	fmt.Printf("    p95    %6.1f ms\n", ms(pct(0.95)))
+	fmt.Printf("    max    %6.1f ms\n", ms(sorted[len(sorted)-1]))
+	fmt.Printf("  ring     : capacity %.1f ms, steady-state fill %.1f ms (%.0f%%)\n",
+		framesToMs(capacity, c.outRate), framesToMs(usedFrames, c.outRate), health.FillRatio*100)
+	fmt.Printf("  underruns: %d gap-fills (%d samples)\n", health.GapFills, health.GapFillSamples)
+	fmt.Printf("  note     : add the device's negotiated OutputLatency (logged above by\n")
+	fmt.Printf("             the backend) for the full input->DAC delay.\n")
 }
 
 // ---------------------------------------------------------------------------

@@ -195,6 +195,25 @@ func (m *StereoMixer) WriteChannel(name string, samples []float64, magnitude flo
 	return nil
 }
 
+// CapChannelDepth bounds a channel's unread buffered depth to maxSamples,
+// discarding the newest samples. The engine channel uses this so its per-tick
+// two-frame overwrite write tops up a small cushion instead of accumulating
+// latency (the write appends faster than the channel drains, which would
+// otherwise grow the buffer to its multi-second capacity).
+func (m *StereoMixer) CapChannelDepth(name string, maxSamples int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	channel, ok := m.channels[name]
+	if !ok {
+		return
+	}
+
+	if adaptiveBuffer, ok := channel.buffer.(*AdaptiveBuffer); ok {
+		adaptiveBuffer.CapDepth(maxSamples)
+	}
+}
+
 // ReadChannel reads the specified number of samples from the channel's buffer.
 func (m *StereoMixer) ReadChannel(name string, length int) []float64 {
 	m.mu.RLock()

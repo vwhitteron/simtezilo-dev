@@ -147,6 +147,20 @@ func (s *portAudioSink) Start(src SampleSource) error {
 
 	s.stream = stream
 
+	// Log the latency the host API actually negotiated. The Latency field in
+	// StreamParameters is only a hint, and FramesPerBufferUnspecified lets the
+	// host API choose the real buffer size, so the requested value (the
+	// configured LatencyMs) and the effective device latency often differ. This
+	// negotiated value is the device-side contribution to the input->output
+	// delay, and reveals whether changing the latency setting has any effect.
+	if info := stream.Info(); info != nil {
+		s.log.Info().
+			Dur("requested", s.params.Output.Latency).
+			Dur("negotiated", info.OutputLatency).
+			Float64("sampleRate", info.SampleRate).
+			Msg("portaudio stream latency")
+	}
+
 	return nil
 }
 

@@ -31,6 +31,7 @@ func (a *App) sendTelemetryChartData() {
 		// Snapshot the audio health/diagnostics once; both are derived per call.
 		health := a.hapticSource.Health()
 		diag := a.synth.Diagnostics()
+		latency := a.buildAudioLatencyReport(health, diag)
 		channelFill := func(name string) float32 {
 			for _, ch := range diag.Channels {
 				if ch.Name == name {
@@ -90,6 +91,12 @@ func (a *App) sendTelemetryChartData() {
 			"asyncProducerLag":  float32(health.ProducerWaits),
 			"mixerEngineFill":   channelFill("engine"),
 			"mixerChassis0Fill": channelFill("chassis_0"),
+			// Haptic latency/drift monitor (milliseconds)
+			"engineLatencyMs":  float32(latency.EngineLatencyMs),
+			"chassisLatencyMs": float32(latency.ChassisLatencyMs),
+			"ringLatencyMs":    float32(latency.RingLatencyMs),
+			"driftMs":          float32(latency.DriftMs),
+			"seqJitterMs":      float32(latency.SeqJitterMs),
 		}
 	}()
 }
