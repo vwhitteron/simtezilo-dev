@@ -63,7 +63,11 @@ func (a *App) generateForceHaptics() {
 
 	// a.ui.SetLive(true)
 
-	a.kinematics.Current.SequenceID = a.state.current.sequenceNumber
+	// NOTE: do not pre-set kinematics.Current.SequenceID here. Update() snapshots
+	// Current into Last before assigning the new sequence ID from the telemetry
+	// client; pre-setting it would make Last and Current carry the same sequence
+	// number, so resolveDerivatives' contiguity check (Current == Last+1) could
+	// never warm up and the resolved jerk/snap would stay zero.
 
 	// no haptics if telemetry packets dropped/missed
 	// if a.telemetryPacketsDropped() > 1 {

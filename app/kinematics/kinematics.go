@@ -71,6 +71,15 @@ type Kinematics struct {
 	GroundSpeed     float64
 	SurgeCalculated float64
 
+	// Resolved jerk/snap are the recovery-aware values the haptic path should
+	// consume. After a sequence gap the calculated chain is still re-warming, so
+	// these fall back to the telemetry-native envelope (translational only, and
+	// only on formats that carry it) until the calculated values are valid again.
+	ResolvedTransJerk float64
+	ResolvedTransSnap float64
+	ResolvedRotJerk   float64
+	ResolvedRotSnap   float64
+
 	SynthChannelAmplitude [2]float64
 	SynthChannelFrequency [2]float64
 }
@@ -79,6 +88,20 @@ type Kinematics struct {
 type State struct {
 	Last    Kinematics
 	Current Kinematics
+
+	// contiguousFrames counts consecutive gap-free telemetry frames (capped at the
+	// deepest warm-up depth). It resets to zero on any sequence gap, which is how
+	// the derivative chains re-warm rather than differencing across the gap. See
+	// resolveDerivatives.
+	contiguousFrames int
+
+	// Diagnostic counters for the resolveDerivatives gap gate. GapResets counts how
+	// many Update calls saw a non-contiguous sequence (delta != 1) and re-warmed;
+	// LastGapDelta records the sequence delta of the most recent such reset. These
+	// let the caller (which has a logger) gauge how often the haptic path is being
+	// suppressed and whether the gaps are real drops or single-frame jitter.
+	GapResets    int
+	LastGapDelta int
 }
 
 // NewKinematicsState creates and initializes a new KinematicsTracker.
@@ -153,6 +176,78 @@ func (k *State) Update(windowSeconds float64, vehicleDimensions vehicle.Dimensio
 	k.Current.GroundSpeed = float64(gtclient.Telemetry.GroundSpeedMetresPerSecond())
 	k.Current.TransmissionGear = gtclient.Telemetry.CurrentGear()
 	k.Current.SurgeCalculated = signal.Abs(float64(k.Current.SixDOFRotationCalc.Acceleration.X))
+
+	k.resolveDerivatives()
+}
+
+// Contiguous gap-free frames each source needs before its snap (the deepest
+// derivative the chassis pulse consumes) is free of the cross-gap finite-
+// difference artefact. The calculated chain differences velocity, so its
+// acceleration needs one delta and each further derivative one more frame. The
+// native translational envelope provides acceleration directly, so its snap warms
+// one frame sooner.
+const (
+	calcSnapWarmFrames   = 3
+	nativeSnapWarmFrames = 2
+)
+
+// resolveDerivatives selects, per domain, the jerk/snap values the chassis haptic
+// should consume after accounting for telemetry gaps. A frame is contiguous when
+// its sequence ID is exactly one greater than the previous frame's; any gap resets
+// contiguousFrames, so the chains re-warm from scratch instead of differencing
+// across the gap (which produces a spurious high-power pulse).
+//
+// Selection is whole-source: jerk and snap always come from the same fully-warmed
+// source, so the pulse never mixes a warmed jerk with an unwarmed snap. The
+// translational domain prefers the calculated chain, falls back to the native
+// envelope (on formats that carry it, which warms one frame sooner), and is
+// otherwise suppressed. The rotational domain has no native envelope, so it is
+// suppressed until the calculated chain warms — which is why a recovering pulse
+// can be translational-only for the one frame between native and calculated
+// readiness.
+func (k *State) resolveDerivatives() {
+	if k.Current.SequenceID == k.Last.SequenceID+1 {
+		if k.contiguousFrames < calcSnapWarmFrames {
+			k.contiguousFrames++
+		}
+	} else {
+		k.contiguousFrames = 0
+		k.GapResets++
+		k.LastGapDelta = int(int64(k.Current.SequenceID) - int64(k.Last.SequenceID))
+	}
+
+	calcWarm := k.contiguousFrames >= calcSnapWarmFrames
+	nativeWarm := formatSupportsNativeEnvelope(k.Current.Format) &&
+		k.contiguousFrames >= nativeSnapWarmFrames
+
+	// Translational: calc when warm, else native fallback, else suppressed.
+	switch {
+	case calcWarm:
+		k.Current.ResolvedTransJerk = k.Current.SixDOFTranslationCalc.Jerk
+		k.Current.ResolvedTransSnap = k.Current.SixDOFTranslationCalc.Snap
+	case nativeWarm:
+		k.Current.ResolvedTransJerk = k.Current.SixDOFTranslation.Jerk
+		k.Current.ResolvedTransSnap = k.Current.SixDOFTranslation.Snap
+	default:
+		k.Current.ResolvedTransJerk = 0
+		k.Current.ResolvedTransSnap = 0
+	}
+
+	// Rotational: no native envelope, so calc when warm, else suppressed.
+	if calcWarm {
+		k.Current.ResolvedRotJerk = k.Current.SixDOFRotationCalc.Jerk
+		k.Current.ResolvedRotSnap = k.Current.SixDOFRotationCalc.Snap
+	} else {
+		k.Current.ResolvedRotJerk = 0
+		k.Current.ResolvedRotSnap = 0
+	}
+}
+
+// formatSupportsNativeEnvelope reports whether the telemetry format carries a
+// trustworthy native translational acceleration envelope. Mirrors the format gate
+// used by GetSurgeGforce.
+func formatSupportsNativeEnvelope(format string) bool {
+	return format == "~" || format == "B"
 }
 
 // GetSurgeGforce calculates and returns the translational envelope surge G-force based on the current kinematic state.

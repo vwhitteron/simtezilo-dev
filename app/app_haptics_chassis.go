@@ -114,8 +114,8 @@ func (a *App) applyDRX(
 
 func (a *App) calculateChassisHapticPulseAmplitude() (pulseAmplitude float64, unclampedAmplitude float64) {
 	jerk := signal.LargestMagnitude(
-		a.kinematics.Current.SixDOFTranslationCalc.Jerk,
-		a.kinematics.Current.SixDOFRotationCalc.Jerk,
+		a.kinematics.Current.ResolvedTransJerk,
+		a.kinematics.Current.ResolvedRotJerk,
 	)
 
 	// Process the signal normally first
@@ -211,8 +211,8 @@ func (a *App) detectInverseJerk(currentJerk float64) bool { //nolint:unused // p
 
 func (a *App) calculateChassisHapticPulseFrequency() float64 {
 	snap := signal.LargestMagnitude(
-		a.kinematics.Current.SixDOFTranslationCalc.Snap,
-		a.kinematics.Current.SixDOFRotationCalc.Snap,
+		a.kinematics.Current.ResolvedTransSnap,
+		a.kinematics.Current.ResolvedRotSnap,
 	)
 
 	pulseFrequencyScaler := signal.Abs(signal.Exponent(snap, a.config.GetHapticsSnapCurve()/1000))

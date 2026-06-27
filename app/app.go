@@ -1790,6 +1790,8 @@ func (a *App) handleDebugTick() {
 			Float64("seq_jitter_ms", latency.SeqJitterMs).
 			Int64("underruns", latency.Underruns).
 			Int64("producer_waits", latency.ProducerWaits).
+			Int("kin_gap_resets", a.kinematics.GapResets).
+			Int("kin_last_gap_delta", a.kinematics.LastGapDelta).
 			Msg("haptic latency monitor")
 	}
 
