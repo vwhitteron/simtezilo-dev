@@ -55,16 +55,16 @@ func NewResamplingSource(src SampleSource, inRate, outRate, channels int) Sample
 // called when the reduced denominator L exceeds maxPolyphasePhases.
 func newLanczosSource(src SampleSource, inRate, outRate, channels int) *resamplingSource {
 	cutoff := math.Min(1.0, float64(outRate)/float64(inRate))
-	halfTaps := int(math.Ceil(float64(resampleLobes) / cutoff))
+	kernelHalfWidth := int(math.Ceil(float64(resampleLobes) / cutoff))
 
 	return &resamplingSource{
-		src:      src,
-		channels: channels,
-		step:     float64(inRate) / float64(outRate),
-		cutoff:   cutoff,
-		halfTaps: halfTaps,
-		weights:  make([]float64, 2*halfTaps),
-		srcOK:    true,
+		src:             src,
+		channels:        channels,
+		step:            float64(inRate) / float64(outRate),
+		cutoff:          cutoff,
+		kernelHalfWidth: kernelHalfWidth,
+		weights:         make([]float64, 2*kernelHalfWidth),
+		srcOK:           true,
 	}
 }
 
@@ -72,11 +72,11 @@ func newLanczosSource(src SampleSource, inRate, outRate, channels int) *resampli
 // for ratios whose reduced denominator exceeds maxPolyphasePhases. For normal
 // use cases (e.g. 8 kHz -> 32 kHz, L=4) the polyphaseSource is the hot path.
 type resamplingSource struct {
-	src      SampleSource
-	channels int
-	step     float64 // input frames advanced per output frame
-	cutoff   float64 // sinc cutoff relative to the input sample rate (<= 1)
-	halfTaps int     // kernel reaches halfTaps input frames either side of pos
+	src             SampleSource
+	channels        int
+	step            float64 // input frames advanced per output frame
+	cutoff          float64 // sinc cutoff relative to the input sample rate (<= 1)
+	kernelHalfWidth int     // kernel reaches kernelHalfWidth input frames either side of pos
 
 	inBuf   []float32 // buffered interleaved input frames
 	pos     float64   // fractional input-frame index of the next output sample
@@ -110,8 +110,8 @@ func (r *resamplingSource) ReadInterleaved(out []float32, channels int) (int, bo
 func (r *resamplingSource) mixFrame(out []float32, produced, channels int) { //nolint:cyclop // windowed-sinc kernel loop; complexity is inherent in the algorithm
 	baseFrameIdx := int(math.Floor(r.pos))
 
-	// Ensure the kernel's right-hand taps (up to baseFrameIdx+halfTaps) are buffered.
-	need := baseFrameIdx + r.halfTaps + 1
+	// Ensure the kernel's right-hand taps (up to baseFrameIdx+kernelHalfWidth) are buffered.
+	need := baseFrameIdx + r.kernelHalfWidth + 1
 	for r.frameCount() < need && r.srcOK {
 		before := r.frameCount()
 
@@ -142,9 +142,9 @@ func (r *resamplingSource) mixFrame(out []float32, produced, channels int) { //n
 	// and reuse across all channels.
 	wsum := 0.0
 
-	for tap := -r.halfTaps + 1; tap <= r.halfTaps; tap++ {
+	for tap := -r.kernelHalfWidth + 1; tap <= r.kernelHalfWidth; tap++ {
 		tapWeight := lanczos((frac-float64(tap))*r.cutoff, resampleLobes)
-		r.weights[tap+r.halfTaps-1] = tapWeight
+		r.weights[tap+r.kernelHalfWidth-1] = tapWeight
 		wsum += tapWeight
 	}
 
@@ -155,14 +155,14 @@ func (r *resamplingSource) mixFrame(out []float32, produced, channels int) { //n
 	for chanIdx := range channels {
 		sum := 0.0
 
-		for tap := -r.halfTaps + 1; tap <= r.halfTaps; tap++ {
+		for tap := -r.kernelHalfWidth + 1; tap <= r.kernelHalfWidth; tap++ {
 			idx := max(baseFrameIdx+tap, 0)
 
 			if idx >= count {
 				idx = count - 1
 			}
 
-			sum += r.weights[tap+r.halfTaps-1] * float64(r.inBuf[idx*r.channels+chanIdx])
+			sum += r.weights[tap+r.kernelHalfWidth-1] * float64(r.inBuf[idx*r.channels+chanIdx])
 		}
 
 		out[produced*channels+chanIdx] = float32(sum / wsum)
@@ -176,7 +176,7 @@ func (r *resamplingSource) mixFrame(out []float32, produced, channels int) { //n
 // slide drops fully-consumed input frames to keep inBuf bounded while retaining
 // enough history for the kernel's left-hand taps.
 func (r *resamplingSource) slide() {
-	keep := r.halfTaps + 1
+	keep := r.kernelHalfWidth + 1
 
 	drop := int(math.Floor(r.pos)) - keep
 	if drop < pullBlockFrames {
@@ -215,16 +215,16 @@ func (r *resamplingSource) fill() {
 
 // polyphaseSource resamples using precomputed per-phase kernel weights. At
 // construction it computes L weight vectors (one per sub-sample phase), each of
-// length 2*halfTaps, normalised so their sum equals 1. The hot loop then
+// length 2*kernelHalfWidth, normalised so their sum equals 1. The hot loop then
 // performs pure multiply-accumulate with no transcendental math, reducing the
 // idle CPU cost of the 8 kHz -> 32 kHz up-sample from ~87 % (math.Sin dominated)
 // to a handful of multiply-adds.
 type polyphaseSource struct {
-	src       SampleSource
-	channels  int
-	numPhases int // number of polyphase phases (= outRate/gcd)
-	inStep    int // input frames advanced per output frame numerator (= inRate/gcd)
-	halfTaps  int
+	src             SampleSource
+	channels        int
+	numPhases       int // number of polyphase phases (= outRate/gcd)
+	inStep          int // input frames advanced per output frame numerator (= inRate/gcd)
+	kernelHalfWidth int
 
 	weights [][]float64 // weights[phase][tap index], pre-normalised
 	inBuf   []float32   // buffered interleaved input frames
@@ -238,17 +238,17 @@ type polyphaseSource struct {
 func newPolyphaseSource(src SampleSource, inRate, outRate, channels, numPhases, gcd int) *polyphaseSource {
 	inStep := inRate / gcd
 	cutoff := math.Min(1.0, float64(outRate)/float64(inRate))
-	halfTaps := int(math.Ceil(float64(resampleLobes) / cutoff))
+	kernelHalfWidth := int(math.Ceil(float64(resampleLobes) / cutoff))
 
 	weights := make([][]float64, numPhases)
 	for phaseIdx := range numPhases {
 		frac := float64(phaseIdx) / float64(numPhases)
-		phaseWeights := make([]float64, 2*halfTaps)
+		phaseWeights := make([]float64, 2*kernelHalfWidth)
 		sum := 0.0
 
-		for tap := -halfTaps + 1; tap <= halfTaps; tap++ {
+		for tap := -kernelHalfWidth + 1; tap <= kernelHalfWidth; tap++ {
 			tapWeight := lanczos((frac-float64(tap))*cutoff, resampleLobes)
-			phaseWeights[tap+halfTaps-1] = tapWeight
+			phaseWeights[tap+kernelHalfWidth-1] = tapWeight
 			sum += tapWeight
 		}
 
@@ -264,13 +264,13 @@ func newPolyphaseSource(src SampleSource, inRate, outRate, channels, numPhases, 
 	}
 
 	return &polyphaseSource{
-		src:       src,
-		channels:  channels,
-		numPhases: numPhases,
-		inStep:    inStep,
-		halfTaps:  halfTaps,
-		weights:   weights,
-		srcOK:     true,
+		src:             src,
+		channels:        channels,
+		numPhases:       numPhases,
+		inStep:          inStep,
+		kernelHalfWidth: kernelHalfWidth,
+		weights:         weights,
+		srcOK:           true,
 	}
 }
 
@@ -301,7 +301,7 @@ func (r *polyphaseSource) mixFrame(out []float32, produced, channels int) {
 	phase := r.acc % r.numPhases
 
 	// Ensure right-hand taps are buffered.
-	need := baseFrame + r.halfTaps + 1
+	need := baseFrame + r.kernelHalfWidth + 1
 	for r.frameCount() < need && r.srcOK {
 		before := r.frameCount()
 
@@ -329,14 +329,14 @@ func (r *polyphaseSource) mixFrame(out []float32, produced, channels int) {
 	for chanIdx := range channels {
 		sum := 0.0
 
-		for tap := -r.halfTaps + 1; tap <= r.halfTaps; tap++ {
+		for tap := -r.kernelHalfWidth + 1; tap <= r.kernelHalfWidth; tap++ {
 			idx := max(baseFrame+tap, 0)
 
 			if idx >= count {
 				idx = count - 1
 			}
 
-			sum += phaseWeights[tap+r.halfTaps-1] * float64(r.inBuf[idx*r.channels+chanIdx])
+			sum += phaseWeights[tap+r.kernelHalfWidth-1] * float64(r.inBuf[idx*r.channels+chanIdx])
 		}
 
 		out[produced*channels+chanIdx] = float32(sum)
@@ -351,7 +351,7 @@ func (r *polyphaseSource) mixFrame(out []float32, produced, channels int) {
 // enough history for the kernel's left-hand taps. The integer accumulator acc is
 // adjusted to remain consistent with the new inBuf origin.
 func (r *polyphaseSource) slide() {
-	keep := r.halfTaps + 1
+	keep := r.kernelHalfWidth + 1
 	baseFrame := r.acc / r.numPhases
 	drop := baseFrame - keep
 
