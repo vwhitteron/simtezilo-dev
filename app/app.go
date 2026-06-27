@@ -113,6 +113,7 @@ type App struct {
 	driftMu          sync.Mutex
 	driftBaseFrames  int64     // device frames pulled at the drift baseline
 	driftBaseSeq     uint32    // telemetry sequence at the drift baseline
+	driftBaseTime    time.Time // wall-clock time the drift baseline was set
 	driftBaseSet     bool      // whether the baseline has been established
 	seqJitterMs      float64   // smoothed telemetry-cadence jitter (ms, abs deviation from 60 fps)
 	lastSeqWallClock time.Time // wall-clock time the sequence last advanced

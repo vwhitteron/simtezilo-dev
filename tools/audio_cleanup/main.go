@@ -890,7 +890,7 @@ func reportLatency(c config, channels int, results []time.Duration, misses, capa
 	fmt.Printf("    max    %6.1f ms\n", ms(sorted[len(sorted)-1]))
 	fmt.Printf("  ring     : capacity %.1f ms, steady-state fill %.1f ms (%.0f%%)\n",
 		framesToMs(capacity, c.outRate), framesToMs(usedFrames, c.outRate), health.FillRatio*100)
-	fmt.Printf("  underruns: %d gap-fills (%d samples)\n", health.GapFills, health.GapFillSamples)
+	fmt.Printf("  underruns: %d (%d samples)\n", health.Underruns, health.UnderrunSamples)
 	fmt.Printf("  note     : add the device's negotiated OutputLatency (logged above by\n")
 	fmt.Printf("             the backend) for the full input->DAC delay.\n")
 }

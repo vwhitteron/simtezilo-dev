@@ -14,6 +14,15 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/synthesizer"
 )
 
+// driftWindow bounds how long a drift baseline lives before it is re-established.
+// The telemetry and soundcard clocks are independent oscillators, so comparing
+// them against a fixed baseline integrates their natural crystal skew without
+// limit (tens of ppm ≈ a few ms/min climbing forever). Re-baselining over a short
+// window makes DriftMs report *recent* divergence instead: it sits near zero in
+// steady state and spikes only when the pipeline genuinely falls behind within
+// the window, then settles once the baseline rolls forward.
+const driftWindow = 5 * time.Second
+
 // audioLatencyReport is a snapshot of haptic-pipeline latency and drift. All
 // latencies are milliseconds; Drift is positive when telemetry time has run
 // ahead of emitted audio time (the pipeline is lagging behind real time).
@@ -21,7 +30,7 @@ type audioLatencyReport struct {
 	EngineLatencyMs  float64 // engine mixer-channel buffer depth
 	ChassisLatencyMs float64 // chassis channel 0 mixer-channel buffer depth
 	RingLatencyMs    float64 // async device ring buffer depth
-	DriftMs          float64 // telemetry-clock vs emitted-audio-clock divergence
+	DriftMs          float64 // telemetry-clock vs emitted-audio-clock divergence over the recent window
 	SeqJitterMs      float64 // smoothed telemetry-cadence jitter (abs deviation from 60 fps)
 	Underruns        int64   // ring gap-fills (silence padding) since start
 	ProducerWaits    int64   // times the producer blocked on a full ring since start
@@ -38,10 +47,12 @@ func bufferLatencyMs(usedSamples int, rateHz float64) float64 {
 }
 
 // driftMs returns how far the telemetry clock has diverged from the emitted
-// audio clock since the baseline. audioElapsed comes from frames the soundcard
-// callback has pulled (outputRate); telemetryElapsed from sequence IDs advanced
-// (telemetryRate, the steady 60 fps). A positive result means audio output is
-// lagging behind real time.
+// audio clock since the (rolling) baseline. audioElapsed comes from frames the
+// soundcard callback has pulled (outputRate); telemetryElapsed from sequence IDs
+// advanced (telemetryRate, the steady 60 fps). A positive result means audio
+// output is lagging behind real time. The baseline is re-established every
+// driftWindow, so this reflects recent divergence rather than lifetime crystal
+// skew between the two independent clocks.
 func driftMs(framesRead, baseFrames int64, seq, baseSeq uint32, outputRate, telemetryRate float64) float64 {
 	if outputRate <= 0 || telemetryRate <= 0 {
 		return 0
@@ -126,7 +137,7 @@ func (a *App) buildAudioLatencyReport(health audio.HealthMetrics, diag synthesiz
 	report := audioLatencyReport{
 		EngineLatencyMs:  bufferLatencyMs(channelUsed(synthesizer.ChannelEngine), internalRate),
 		ChassisLatencyMs: bufferLatencyMs(channelUsed(synthesizer.ChassisChannelName(0)), internalRate),
-		Underruns:        health.GapFills,
+		Underruns:        health.Underruns,
 		ProducerWaits:    health.ProducerWaits,
 	}
 
@@ -143,6 +154,7 @@ func (a *App) buildAudioLatencyReport(health audio.HealthMetrics, diag synthesiz
 	if !a.driftBaseSet {
 		a.driftBaseFrames = health.FramesRead
 		a.driftBaseSeq = seq
+		a.driftBaseTime = time.Now()
 		a.driftBaseSet = true
 	} else {
 		report.DriftMs = driftMs(
@@ -150,6 +162,15 @@ func (a *App) buildAudioLatencyReport(health audio.HealthMetrics, diag synthesiz
 			seq, a.driftBaseSeq,
 			outputRate, float64(telemetryFrameRate),
 		)
+
+		// Roll the baseline forward once the window elapses so DriftMs measures
+		// divergence over the recent window rather than integrating clock skew
+		// for the whole session.
+		if time.Since(a.driftBaseTime) >= driftWindow {
+			a.driftBaseFrames = health.FramesRead
+			a.driftBaseSeq = seq
+			a.driftBaseTime = time.Now()
+		}
 	}
 
 	a.driftMu.Unlock()

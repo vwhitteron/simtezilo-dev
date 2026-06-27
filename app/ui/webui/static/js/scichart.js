@@ -1064,8 +1064,8 @@ async function initSciChart() {
                 const asyncFillSeries = createDataSeries(wasmContext, "Async Buffer Fill");
                 const engineFillSeries = createDataSeries(wasmContext, "Engine Fill");
                 const chassis0FillSeries = createDataSeries(wasmContext, "Chassis 0 Fill");
-                const silentGapsSeries = createDataSeries(wasmContext, "Silent Gaps");
-                const producerLagSeries = createDataSeries(wasmContext, "Producer Blocks");
+                const underrunsSeries = createDataSeries(wasmContext, "Underruns");
+                const producerWaitsSeries = createDataSeries(wasmContext, "Producer Waits");
 
                 sciChartSurface.renderableSeries.add(
                     new SciChart.FastLineRenderableSeries(wasmContext, {
@@ -1090,15 +1090,15 @@ async function initSciChart() {
                         stroke: "#c750e0ff"
                     }),
                     new SciChart.FastLineRenderableSeries(wasmContext, {
-                        dataSeries: silentGapsSeries,
-                        dataSeriesName: "Silent Gaps",
+                        dataSeries: underrunsSeries,
+                        dataSeriesName: "Underruns",
                         yAxisId: "ID_Y_AXIS_EVENTS",
                         strokeThickness: 2,
                         stroke: "#e05050ff"
                     }),
                     new SciChart.FastLineRenderableSeries(wasmContext, {
-                        dataSeries: producerLagSeries,
-                        dataSeriesName: "Producer Blocks",
+                        dataSeries: producerWaitsSeries,
+                        dataSeriesName: "Producer Waits",
                         yAxisId: "ID_Y_AXIS_EVENTS",
                         strokeThickness: 2,
                         stroke: "#e0c750ff"
@@ -1112,10 +1112,10 @@ async function initSciChart() {
                         asyncBufferFill: asyncFillSeries,
                         mixerEngineFill: engineFillSeries,
                         mixerChassis0Fill: chassis0FillSeries,
-                        asyncSilentGaps: silentGapsSeries,
-                        asyncProducerLag: producerLagSeries
+                        asyncUnderruns: underrunsSeries,
+                        asyncProducerWaits: producerWaitsSeries
                     },
-                    dataFields: ['asyncBufferFill', 'mixerEngineFill', 'mixerChassis0Fill', 'asyncSilentGaps', 'asyncProducerLag']
+                    dataFields: ['asyncBufferFill', 'mixerEngineFill', 'mixerChassis0Fill', 'asyncUnderruns', 'asyncProducerWaits']
                 };
             }
         },

@@ -40,21 +40,21 @@ type AsyncSource struct {
 	idle func() bool
 
 	// Diagnostic counters (atomic — safe to read from any goroutine without mu).
-	// gapFills counts how many times ReadInterleaved had to zero-pad because the
+	// underruns counts how many times ReadInterleaved had to zero-pad because the
 	// ring did not contain enough samples. A non-zero value indicates the producer
 	// is falling behind the device callback timing.
-	gapFills atomic.Int64
+	underruns atomic.Int64
 
-	// gapFillSamples accumulates the total number of silence-padded samples.
-	gapFillSamples atomic.Int64
+	// underrunSamples accumulates the total number of silence-padded samples.
+	underrunSamples atomic.Int64
 
 	// producerWaits counts how many times the producer blocked because the ring
 	// reached its target fill (it is caught up). This is normal in steady state.
 	producerWaits atomic.Int64
 
-	// lastGapFill records the time of the most recent gap-fill event for
+	// lastUnderrun records the time of the most recent underrun event for
 	// recency awareness. Updated atomically; zero means never.
-	lastGapFill atomic.Int64 // Unix nanoseconds
+	lastUnderrun atomic.Int64 // Unix nanoseconds
 
 	// framesRead accumulates the total frames the device callback has pulled
 	// (including silence-padded frames on underrun). Because the callback runs on
@@ -150,14 +150,14 @@ func (a *AsyncSource) ReadInterleaved(out []float32, channels int) (int, bool) {
 
 	a.notFull.Signal()
 
-	// Gap-fill: ring was shallow so the consumer had to emit silence.
+	// Underrun: ring was shallow so the consumer had to emit silence.
 	// Record diagnostics atomically — no allocation, no lock on the hot path.
 	if sampleCount < len(out) {
 		gaps := int64(len(out) - sampleCount)
 
-		a.gapFills.Add(1)
-		a.gapFillSamples.Add(gaps)
-		a.lastGapFill.Store(time.Now().UnixNano())
+		a.underruns.Add(1)
+		a.underrunSamples.Add(gaps)
+		a.lastUnderrun.Store(time.Now().UnixNano())
 	}
 
 	for i := sampleCount; i < len(out); i++ {
@@ -264,14 +264,14 @@ func (a *AsyncSource) writeRing(samples []float32) {
 
 // HealthMetrics holds a snapshot of async source diagnostic counters.
 type HealthMetrics struct {
-	GapFills        int64   // number of callback invocations that had to zero-pad
-	GapFillSamples  int64   // total silence-padded samples produced
-	ProducerWaits   int64   // number of times the producer blocked on a full ring
-	RingCapacity    int     // total sample slots in the ring
-	RingUsed        int     // sample slots currently filled
-	FillRatio       float64 // RingUsed / RingCapacity (0..1)
-	FramesRead      int64   // total frames pulled by the device callback (soundcard-clock reference)
-	LastGapFillTime time.Time
+	Underruns        int64   // number of callback invocations that had to zero-pad
+	UnderrunSamples  int64   // total silence-padded samples produced
+	ProducerWaits    int64   // number of times the producer blocked on a full ring
+	RingCapacity     int     // total sample slots in the ring
+	RingUsed         int     // sample slots currently filled
+	FillRatio        float64 // RingUsed / RingCapacity (0..1)
+	FramesRead       int64   // total frames pulled by the device callback (soundcard-clock reference)
+	LastUnderrunTime time.Time
 }
 
 // Health returns a snapshot of diagnostic counters. Safe to call from any
@@ -283,17 +283,17 @@ func (a *AsyncSource) Health() HealthMetrics {
 	capacity := len(a.ring)
 	a.mu.Unlock()
 
-	lastNS := a.lastGapFill.Load()
+	lastNS := a.lastUnderrun.Load()
 
 	return HealthMetrics{
-		GapFills:       a.gapFills.Load(),
-		GapFillSamples: a.gapFillSamples.Load(),
-		ProducerWaits:  a.producerWaits.Load(),
-		RingCapacity:   capacity,
-		RingUsed:       used,
-		FillRatio:      float64(used) / float64(capacity),
-		FramesRead:     a.framesRead.Load(),
-		LastGapFillTime: func() time.Time {
+		Underruns:       a.underruns.Load(),
+		UnderrunSamples: a.underrunSamples.Load(),
+		ProducerWaits:   a.producerWaits.Load(),
+		RingCapacity:    capacity,
+		RingUsed:        used,
+		FillRatio:       float64(used) / float64(capacity),
+		FramesRead:      a.framesRead.Load(),
+		LastUnderrunTime: func() time.Time {
 			if lastNS == 0 {
 				return time.Time{}
 			}

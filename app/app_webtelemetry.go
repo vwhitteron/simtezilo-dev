@@ -86,11 +86,11 @@ func (a *App) sendTelemetryChartData() {
 				return 0
 			}(),
 			// Audio pipeline health metrics
-			"asyncBufferFill":   float32(health.FillRatio),
-			"asyncSilentGaps":   float32(health.GapFills),
-			"asyncProducerLag":  float32(health.ProducerWaits),
-			"mixerEngineFill":   channelFill("engine"),
-			"mixerChassis0Fill": channelFill("chassis_0"),
+			"asyncBufferFill":    float32(health.FillRatio),
+			"asyncUnderruns":     float32(health.Underruns),
+			"asyncProducerWaits": float32(health.ProducerWaits),
+			"mixerEngineFill":    channelFill("engine"),
+			"mixerChassis0Fill":  channelFill("chassis_0"),
 			// Haptic latency/drift monitor (milliseconds)
 			"engineLatencyMs":  float32(latency.EngineLatencyMs),
 			"chassisLatencyMs": float32(latency.ChassisLatencyMs),
