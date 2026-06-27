@@ -480,20 +480,9 @@ func (m *StereoMixer) MixToMaster(length int) {
 
 	magnitude := 1.0
 
-	// Mix output channels for master (average of all)
-	masterSamples := make([]float64, length)
-	for sampleIdx := range length {
-		sum := 0.0
-		for channel := range m.numOutputChannels {
-			sum += channelSamples[channel][sampleIdx]
-		}
-
-		masterSamples[sampleIdx] = sum / float64(m.numOutputChannels)
-	}
-
-	// Write to master and per-channel outputs
-	m.channels[ChannelMaster].Write(masterSamples, magnitude, 0, true)
-
+	// Write the per-channel outputs. The master channel carries only the live
+	// master gain (applied downstream by the Streamer); it no longer holds a
+	// sample buffer, so nothing is mixed into it here.
 	for channel := range m.numOutputChannels {
 		m.channels[OutputChannelName(channel)].Write(channelSamples[channel], magnitude, 0, true)
 	}
@@ -842,8 +831,6 @@ func (m *StereoMixer) mixCalibratorOutput(outSamples []float64) bool { //nolint:
 				}
 			}
 
-			m.channels[ChannelMaster].Write(outSamples, 1.0, 0, true)
-
 			for ch := range m.numOutputChannels {
 				m.channels[OutputChannelName(ch)].Write(channelSamples[ch], 1.0, 0, true)
 			}
@@ -853,8 +840,6 @@ func (m *StereoMixer) mixCalibratorOutput(outSamples []float64) bool { //nolint:
 	}
 
 	m.mu.RUnlock()
-
-	m.channels[ChannelMaster].Write(outSamples, 1.0, 0, true)
 
 	for ch := range m.numOutputChannels {
 		m.channels[OutputChannelName(ch)].Write(channelSamples[ch], 1.0, 0, true)

@@ -194,11 +194,14 @@ func (s *Synthesizer) InspectChannelBuffer(name string, length int, offset int) 
 	return s.mixer.InspectChannelBuffer(name, length, offset)
 }
 
-// ReadBuffer mixes all channels to the master and returns the mixed sample data.
+// ReadBuffer mixes all channels into the per-channel outputs and returns the
+// first output channel's samples. The master channel no longer carries a sample
+// buffer (it holds only the live master gain), so the capture path reads output
+// channel 0 directly rather than a synthesised master mix.
 func (s *Synthesizer) ReadBuffer(length int) []float64 {
 	s.mixer.MixToMaster(length)
 
-	return s.mixer.ReadChannel(ChannelMaster, length)
+	return s.mixer.ReadChannel(OutputChannelName(0), length)
 }
 
 // GetChannelMute returns the mute state for the specified channel index.
