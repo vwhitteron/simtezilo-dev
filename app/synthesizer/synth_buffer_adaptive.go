@@ -296,26 +296,31 @@ func (b *AdaptiveBuffer) writeOverwriteMode(samples []float64) {
 }
 
 // writeMixMode writes samples in mix mode, combining with existing content.
+//
+// Combining uses a priority/ducking mix (mixSamplePriority): overlapping
+// waveforms are summed with the louder component taking precedence and the
+// weaker ducked into the remaining headroom, so the result is bounded to ±1.0
+// without a separate peak-limiting pass. A retroactive peak limiter is
+// deliberately avoided here — scaling only the written window of a shared,
+// in-flight buffer injected amplitude steps (audible clicks) into longer
+// waveforms still playing past the end of the write.
 func (b *AdaptiveBuffer) writeMixMode(samples []float64) {
-	peak := 0.0
-
 	for index, inputSample := range samples {
-		mixedSample := b.mixSampleAtIndex(index, inputSample, &peak)
+		mixedSample := b.mixSampleAtIndex(index, inputSample)
 		mixPos := (b.readPos + index) % b.capacity
 		b.buffer[mixPos] = mixedSample
 	}
 
 	b.syncBufferState(len(samples))
-	b.applyPeakLimiting(samples, peak)
 }
 
 // mixSampleAtIndex mixes an input sample with existing content at the given index.
-func (b *AdaptiveBuffer) mixSampleAtIndex(index int, inputSample float64, peak *float64) float64 {
+func (b *AdaptiveBuffer) mixSampleAtIndex(index int, inputSample float64) float64 {
 	if index < b.used {
 		mixPos := (b.readPos + index) % b.capacity
 		existingSample := b.buffer[mixPos]
 
-		return mixSampleSum(inputSample, existingSample, peak)
+		return mixSamplePriority(inputSample, existingSample)
 	}
 
 	return inputSample
@@ -327,16 +332,6 @@ func (b *AdaptiveBuffer) syncBufferState(samplesWritten int) {
 		b.used = samplesWritten
 		// Update writePos to maintain consistency with used count
 		b.writePos = (b.readPos + b.used) % b.capacity
-	}
-}
-
-// applyPeakLimiting applies peak limiting if the peak exceeds 1.0.
-func (b *AdaptiveBuffer) applyPeakLimiting(samples []float64, peak float64) {
-	if peak > 1.0 {
-		for i := range samples {
-			pos := (b.readPos + i) % b.capacity
-			b.buffer[pos] /= peak
-		}
 	}
 }
 

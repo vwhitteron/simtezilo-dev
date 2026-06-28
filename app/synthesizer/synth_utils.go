@@ -152,3 +152,32 @@ func mixSampleSum(sample1 float64, sample2 float64, peak *float64) float64 {
 
 	return sum
 }
+
+// mixSamplePriority mixes two samples with priority/ducking so the result never
+// exceeds unity while preserving the dynamics of the louder component. The
+// larger-magnitude sample (the "dominant") keeps its full amplitude; the weaker
+// sample (the "subordinate") is ducked into whatever headroom remains below
+// unity. This gives high-energy events prevalence over weaker overlapping
+// waveforms instead of attenuating both equally.
+//
+// Because the ducking amount is driven by the samples' magnitudes, it tapers to
+// zero wherever one component is zero — so for self-terminating pulses (zero at
+// their edges) the combine introduces no amplitude step at the pulse boundaries.
+func mixSamplePriority(a float64, b float64) float64 {
+	dominant, subordinate := a, b
+	if math.Abs(b) > math.Abs(a) {
+		dominant, subordinate = b, a
+	}
+
+	// A single component already at or over unity leaves no headroom; clamp it
+	// and drop the subordinate entirely.
+	if math.Abs(dominant) >= 1.0 {
+		return math.Max(-1.0, math.Min(1.0, dominant))
+	}
+
+	headroom := 1.0 - math.Abs(dominant)
+
+	ducked := math.Max(-headroom, math.Min(headroom, subordinate))
+
+	return dominant + ducked
+}
