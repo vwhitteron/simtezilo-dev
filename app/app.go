@@ -510,9 +510,13 @@ func (a *App) runAppMode() RunResult {
 
 // run starts the main application loop and associated goroutines.
 func (a *App) run() {
-	a.startBackgroundTasks()
-
+	// Bring audio up and prime the device (macOS cold-start re-open) before
+	// starting telemetry/haptics, so the buzzy first CoreAudio stream only ever
+	// plays silence and real playback begins on the clean re-opened stream.
 	a.startAudioOutput()
+	a.primeAudioOutput()
+
+	a.startBackgroundTasks()
 
 	a.mainLoop()
 
