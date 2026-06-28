@@ -7,8 +7,8 @@ toolchain go1.25.11
 require (
 	atomicgo.dev/keyboard v0.2.10
 	github.com/Wifx/gonetworkmanager/v2 v2.2.0
-	github.com/bwmarrin/discordgo v0.0.0-00010101000000-000000000000
-	github.com/godbus/dbus/v5 v5.1.0
+	github.com/bwmarrin/discordgo v0.29.0
+	github.com/godbus/dbus/v5 v5.2.2
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0
 	github.com/gopxl/beep v1.4.1
 	github.com/gordonklaus/portaudio v0.0.0-20260203164431-765aa7dfa631
@@ -23,7 +23,7 @@ require (
 	github.com/theojulienne/go-wireless v1.2.0
 	github.com/zetetos/gt-telemetry/v2 v2.0.4
 	golang.org/x/crypto v0.53.0
-	golang.org/x/image v0.42.0
+	golang.org/x/image v0.43.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	layeh.com/gopus v0.0.0-20210501142526-1ee02d434e32
 	periph.io/x/conn/v3 v3.7.3
