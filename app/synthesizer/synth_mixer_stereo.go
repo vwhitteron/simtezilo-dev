@@ -349,68 +349,104 @@ func (m *StereoMixer) GetChannelAmplitudeRatio(name string) (float64, error) {
 	return GainToAmplitudeRatio(channel.activeGain), nil
 }
 
-// SetFader sets the fader gain, which controls the overall output level.
-func (m *StereoMixer) SetFader(gain float64) {
+// fadeInRunning reports whether a fade-in goroutine is active, under the lock.
+func (m *StereoMixer) fadeInRunning() bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	return m.fadeInActive
+}
+
+// setFadeInActive sets the fade-in-active flag under the lock.
+func (m *StereoMixer) setFadeInActive(active bool) {
+	m.mu.Lock()
+	m.fadeInActive = active
+	m.mu.Unlock()
+}
+
+// getFaderGain reads the fader gain under the lock.
+func (m *StereoMixer) getFaderGain() float64 {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	return m.faderGain
+}
+
+// setFaderGain writes the fader gain under the lock.
+func (m *StereoMixer) setFaderGain(gain float64) {
 	m.mu.Lock()
 	m.faderGain = gain
 	m.mu.Unlock()
+}
 
-	_ = m.SetChannelGain(ChannelMaster, m.faderGain)
+// SetFader sets the fader gain, which controls the overall output level.
+func (m *StereoMixer) SetFader(gain float64) {
+	m.setFaderGain(gain)
+
+	_ = m.SetChannelGain(ChannelMaster, gain)
 }
 
 // FadeIn gradually increases the master gain from minimum to the configured level over the specified period.
 func (m *StereoMixer) FadeIn(period time.Duration) {
 	m.mu.RLock()
-	master := m.channels[ChannelMaster]
+	masterGain := m.channels[ChannelMaster].activeGain
 	m.mu.RUnlock()
 
 	// Lock-free config read
 	targetGain := m.config.GetSynthMasterGain()
 
-	if master.activeGain == targetGain || m.fadeInActive {
+	// FadeIn is the explicit "resume output" signal, so lift silence here
+	// unconditionally. The async producer idles while silenced (SetIdleCheck);
+	// if we only cleared this inside the goroutine below it would stay set
+	// whenever the fader is already at target (e.g. a disable/enable race during
+	// a session restart left the gain ramped up but silenced still true),
+	// leaving the producer idle and haptics dead until the next Silence().
+	m.mu.Lock()
+	m.silenced = false
+	m.mu.Unlock()
+
+	if masterGain == targetGain || m.fadeInRunning() {
 		return
 	}
 
 	go func() {
-		m.silenced = false
-		m.fadeInActive = true
+		m.setFadeInActive(true)
 
 		fadeInInterval := 50 * time.Millisecond
 		incrementTime := float64(period.Milliseconds() / fadeInInterval.Milliseconds())
-		fadeInIncrement := (targetGain - m.faderGain) / incrementTime
+		fadeInIncrement := (targetGain - m.getFaderGain()) / incrementTime
 
 		m.log.Debug().
-			Float64("current", m.faderGain).
+			Float64("current", m.getFaderGain()).
 			Float64("target", targetGain).
 			Str("state", "begin").
 			Msg("fade in")
 
 		for {
-			m.faderGain += fadeInIncrement
+			gain := m.getFaderGain() + fadeInIncrement
 
 			// fade in complete
-			if m.faderGain >= targetGain {
-				m.mu.Lock()
-				m.faderGain = targetGain
-				m.mu.Unlock()
+			if gain >= targetGain {
+				m.setFaderGain(targetGain)
 				_ = m.SetChannelGain(ChannelMaster, targetGain)
 
 				break
 			}
 
-			_ = m.SetChannelGain(ChannelMaster, m.faderGain)
+			m.setFaderGain(gain)
+			_ = m.SetChannelGain(ChannelMaster, gain)
 
 			time.Sleep(fadeInInterval)
 		}
 
-		m.fadeInActive = false
+		m.setFadeInActive(false)
 
 		m.mu.RLock()
-		master := m.channels[ChannelMaster]
+		currentGain := m.channels[ChannelMaster].activeGain
 		m.mu.RUnlock()
 
 		m.log.Debug().
-			Float64("current", master.activeGain).
+			Float64("current", currentGain).
 			Float64("target", targetGain).
 			Str("state", "complete").
 			Msg("fade in")
@@ -656,7 +692,11 @@ func (m *StereoMixer) watchForConfigChanges() {
 		case <-ticker.C:
 		}
 
-		if m.fadeInActive || m.silenced {
+		m.mu.RLock()
+		skip := m.fadeInActive || m.silenced
+		m.mu.RUnlock()
+
+		if skip {
 			continue
 		}
 
@@ -719,10 +759,8 @@ func (m *StereoMixer) watchForConfigChanges() {
 			_ = m.SetChannelGain(name, configGain)
 
 			if name == ChannelMaster {
-				if m.faderGain != channel.activeGain {
-					m.mu.Lock()
-					m.faderGain = channel.activeGain
-					m.mu.Unlock()
+				if m.getFaderGain() != configGain {
+					m.setFaderGain(configGain)
 				}
 			}
 
