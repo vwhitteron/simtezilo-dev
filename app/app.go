@@ -1358,10 +1358,11 @@ func (a *App) startAudioOutput() {
 	a.resetDriftBaseline()
 
 	a.log.Info().
+		Str("action", "start").
 		Str("backend", backend.Name()).
 		Int("channels", sink.Channels()).
 		Int("sampleRate", outputRate).
-		Msg("Audio output started")
+		Msg("Audio output")
 }
 
 // hapticBufferFrames derives the async ring capacity, steady-state target fill
@@ -1403,7 +1404,10 @@ func (a *App) restartAudioOutput() {
 	a.audioRestartMu.Lock()
 	defer a.audioRestartMu.Unlock()
 
-	a.log.Info().Msg("restarting haptic audio output for configuration change")
+	a.log.Info().
+		Str("backend", a.config.GetAudioBackend()).
+		Str("action", "restart").
+		Msg("Audio output")
 
 	a.stopAudioOutput()
 	a.startAudioOutput()
@@ -1784,21 +1788,6 @@ func (a *App) handleRaceDataTick() {
 
 // handleDebugTick processes debug logging.
 func (a *App) handleDebugTick() {
-	if a.hapticSource != nil {
-		latency := a.buildAudioLatencyReport(a.hapticSource.Health(), a.synth.Diagnostics())
-		a.log.Info().
-			Float64("engine_lat_ms", latency.EngineLatencyMs).
-			Float64("chassis_lat_ms", latency.ChassisLatencyMs).
-			Float64("ring_lat_ms", latency.RingLatencyMs).
-			Float64("drift_ms", latency.DriftMs).
-			Float64("seq_jitter_ms", latency.SeqJitterMs).
-			Int64("underruns", latency.Underruns).
-			Int64("producer_waits", latency.ProducerWaits).
-			Int("kin_gap_resets", a.kinematics.GapResets).
-			Int("kin_last_gap_delta", a.kinematics.LastGapDelta).
-			Msg("haptic latency monitor")
-	}
-
 	if a.log.GetLevel() > zerolog.DebugLevel {
 		return
 	}
@@ -1834,6 +1823,21 @@ func (a *App) handleDebugTick() {
 		Float32("temp_rl", a.gtClient.Telemetry.TyreTemperatureCelsius().RearLeft).
 		Float32("temp_rr", a.gtClient.Telemetry.TyreTemperatureCelsius().RearRight).
 		Msg("debug tyre temp")
+
+	if a.hapticSource != nil {
+		latency := a.buildAudioLatencyReport(a.hapticSource.Health(), a.synth.Diagnostics())
+		a.log.Debug().
+			Float64("engine_lat_ms", latency.EngineLatencyMs).
+			Float64("chassis_lat_ms", latency.ChassisLatencyMs).
+			Float64("ring_lat_ms", latency.RingLatencyMs).
+			Float64("drift_ms", latency.DriftMs).
+			Float64("seq_jitter_ms", latency.SeqJitterMs).
+			Int64("underruns", latency.Underruns).
+			Int64("producer_waits", latency.ProducerWaits).
+			Int("kin_gap_resets", a.kinematics.GapResets).
+			Int("kin_last_gap_delta", a.kinematics.LastGapDelta).
+			Msg("haptic latency monitor")
+	}
 }
 
 func (a *App) newLapHandler() bool {
@@ -2196,7 +2200,7 @@ func (a *App) logVehicleUpdate(engine vehicle.EngineCharacteristics, revLimit ui
 		Float64("pulse_scale", a.vehicle.Engine.Haptics.PulseScale).
 		Float64("peak_pulse_rate", peakPulseRate).
 		Float64("pulse_overlap", a.vehicle.Engine.PulseOverlap).
-		Msg("engine characteristics")
+		Msg("Engine characteristics")
 
 	a.log.Info().
 		Uint32("ID", a.vehicle.ID).
@@ -2206,7 +2210,7 @@ func (a *App) logVehicleUpdate(engine vehicle.EngineCharacteristics, revLimit ui
 		Str("engine", a.vehicle.Engine.DBEntry).
 		Str("wheelbase", fmt.Sprintf("%.2f m", a.vehicle.Dimensions.WheelbaseMetres)).
 		Str("track_width", fmt.Sprintf("%.2f m", a.vehicle.Dimensions.TrackWidthMetres)).
-		Msg("vehicle update")
+		Msg("Vehicle update")
 }
 
 // gearHasChanged checks if the gear has changed based on telemetry data.

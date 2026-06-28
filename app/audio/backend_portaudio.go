@@ -1,4 +1,4 @@
-//go:build portaudio
+// //go:build portaudio
 
 package audio
 
@@ -13,7 +13,8 @@ import (
 
 func init() {
 	registerBackend(BackendPortAudio, func(log zerolog.Logger) (Backend, error) {
-		if err := portaudio.Initialize(); err != nil {
+		err := portaudio.Initialize()
+		if err != nil {
 			return nil, fmt.Errorf("portaudio: initialize: %w", err)
 		}
 
@@ -63,8 +64,10 @@ func (b *portAudioBackend) ListDevices() ([]Device, error) {
 }
 
 func (b *portAudioBackend) OpenSink(cfg SinkConfig) (Sink, error) {
-	var dev *portaudio.DeviceInfo
-	var err error
+	var (
+		dev *portaudio.DeviceInfo
+		err error
+	)
 
 	if cfg.DeviceID != "" {
 		idx, err := strconv.Atoi(cfg.DeviceID)
@@ -80,6 +83,7 @@ func (b *portAudioBackend) OpenSink(cfg SinkConfig) (Sink, error) {
 		for _, d := range all {
 			if d.Index == idx {
 				dev = d
+
 				break
 			}
 		}
@@ -117,7 +121,8 @@ func (b *portAudioBackend) OpenSink(cfg SinkConfig) (Sink, error) {
 }
 
 func (b *portAudioBackend) Close() error {
-	if err := portaudio.Terminate(); err != nil {
+	err := portaudio.Terminate()
+	if err != nil {
 		return fmt.Errorf("portaudio: terminate: %w", err)
 	}
 
@@ -142,6 +147,7 @@ func (s *portAudioSink) Start(src SampleSource) error {
 
 	if err := stream.Start(); err != nil {
 		_ = stream.Close()
+
 		return fmt.Errorf("portaudio: start stream: %w", err)
 	}
 
@@ -154,11 +160,11 @@ func (s *portAudioSink) Start(src SampleSource) error {
 	// negotiated value is the device-side contribution to the input->output
 	// delay, and reveals whether changing the latency setting has any effect.
 	if info := stream.Info(); info != nil {
-		s.log.Info().
+		s.log.Debug().
 			Dur("requested", s.params.Output.Latency).
 			Dur("negotiated", info.OutputLatency).
 			Float64("sampleRate", info.SampleRate).
-			Msg("portaudio stream latency")
+			Msg("Portaudio stream latency")
 	}
 
 	return nil
@@ -175,11 +181,13 @@ func (s *portAudioSink) Stop() error {
 	// isn't selected). Pa_AbortStream stops immediately, discarding buffered
 	// frames — the right behaviour both at shutdown and when reopening on a
 	// device change.
-	if err := s.stream.Abort(); err != nil {
+	err := s.stream.Abort()
+	if err != nil {
 		return fmt.Errorf("portaudio: abort stream: %w", err)
 	}
 
-	if err := s.stream.Close(); err != nil {
+	err = s.stream.Close()
+	if err != nil {
 		return fmt.Errorf("portaudio: close stream: %w", err)
 	}
 

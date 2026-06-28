@@ -192,13 +192,13 @@ func TestCurateLocalLoopback(t *testing.T) {
 
 	var loop *Device
 
-	for i := range got {
-		if got[i].Type == DeviceBluetooth {
-			loop = &got[i]
+	for idx := range got {
+		if got[idx].Type == DeviceBluetooth {
+			loop = &got[idx]
 		}
 
-		if got[i].Name == "Loopback: PCM (hw:1,1)" {
-			t.Fatalf("device 1 (bridge capture side) must be hidden, got %+v", got[i])
+		if got[idx].Name == "Loopback: PCM (hw:1,1)" {
+			t.Fatalf("device 1 (bridge capture side) must be hidden, got %+v", got[idx])
 		}
 	}
 

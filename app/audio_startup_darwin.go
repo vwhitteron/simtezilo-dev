@@ -16,7 +16,11 @@ func (a *App) primeAudioOutput() {
 	// Warm-up: let the just-opened (silent) first stream run so the device wakes.
 	time.Sleep(audioStartupWarmup)
 
-	a.log.Info().Msg("priming haptic audio output (macOS cold-start stream re-open)")
+	a.log.Info().
+		Str("action", "prime").
+		Str("backend", a.config.GetAudioBackend()).
+		Str("reason", "fix MacOS first stream artefacts").
+		Msg("Audio output")
 
 	a.restartAudioOutput()
 

@@ -295,7 +295,8 @@ func (o *Output) ensureSink() {
 
 	src.channels = sink.Channels()
 
-	if err := sink.Start(src); err != nil {
+	err = sink.Start(src)
+	if err != nil {
 		o.log.Error().Err(err).Msg("start pit-radio sink")
 
 		_ = sink.Stop()

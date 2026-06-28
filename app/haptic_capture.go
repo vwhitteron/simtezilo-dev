@@ -111,7 +111,8 @@ func CaptureHaptics(opts HapticCaptureOptions) (*HapticCapture, error) {
 	defer stop()
 
 	// Advance to the first live frame that carries a vehicle, honouring the seek.
-	if err := app.seekToVehicle(next, opts.SeekSeconds); err != nil {
+	err = app.seekToVehicle(next, opts.SeekSeconds)
+	if err != nil {
 		return nil, err
 	}
 
@@ -445,7 +446,8 @@ func CaptureHapticsThroughSink(opts SinkCaptureOptions) (*SinkCapture, error) {
 
 	defer stop()
 
-	if err := app.seekToVehicle(next, opts.SeekSeconds); err != nil {
+	err = app.seekToVehicle(next, opts.SeekSeconds)
+	if err != nil {
 		return nil, err
 	}
 
@@ -505,7 +507,8 @@ func (a *App) captureThroughSink(next pullFunc, opts SinkCaptureOptions) (*SinkC
 	totalSamples := int((opts.DurSeconds + 0.5) * float64(outputRate) * float64(channels))
 	tap := &tapSource{inner: async, rec: make([]float32, totalSamples)}
 
-	if err := sink.Start(tap); err != nil {
+	err = sink.Start(tap)
+	if err != nil {
 		return nil, fmt.Errorf("start sink: %w", err)
 	}
 

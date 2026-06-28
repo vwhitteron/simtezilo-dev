@@ -109,11 +109,13 @@ func (p *manager) btAudioRoute() exitcode.Code {
 		return exitcode.Success
 	}
 
-	if err := p.ensureLoopbackModule(); err != nil {
+	err = p.ensureLoopbackModule()
+	if err != nil {
 		return btFailure(p, "load snd-aloop module", err)
 	}
 
-	if err := p.writeBluealsaPCM(pcmName, colonMAC); err != nil {
+	err = p.writeBluealsaPCM(pcmName, colonMAC)
+	if err != nil {
 		return btFailure(p, "write bluealsa PCM config", err)
 	}
 
@@ -124,7 +126,8 @@ func (p *manager) btAudioRoute() exitcode.Code {
 
 	// Restart only when the unit changed (first bring-up); otherwise start is a
 	// no-op gap-free idempotent call.
-	if err := p.startBridge(instance, changedUnit); err != nil {
+	err = p.startBridge(instance, changedUnit)
+	if err != nil {
 		return btFailure(p, "start Bluetooth audio bridge", err)
 	}
 
@@ -136,7 +139,8 @@ func (p *manager) btAudioRoute() exitcode.Code {
 // ensureLoopbackModule loads snd-aloop now and persists it for boot. modprobe is
 // a no-op when the module is already loaded.
 func (p *manager) ensureLoopbackModule() error {
-	if _, err := writeFileIfChanged(modulesLoadFile, []byte(loopbackModule+"\n"), 0o644); err != nil {
+	_, err := writeFileIfChanged(modulesLoadFile, []byte(loopbackModule+"\n"), 0o644)
+	if err != nil {
 		return err
 	}
 
@@ -168,7 +172,9 @@ func (p *manager) writeBluealsaPCM(pcmName, colonMAC string) error {
 `, pcmName, colonMAC)
 
 	path := filepath.Join(alsaConfDir, pcmName+".conf")
-	if _, err := writeFileIfChanged(path, []byte(conf), 0o644); err != nil {
+
+	_, err = writeFileIfChanged(path, []byte(conf), 0o644)
+	if err != nil {
 		return err
 	}
 
@@ -243,11 +249,12 @@ func (p *manager) startBridge(instance string, restart bool) error {
 // current contents, reporting whether a write occurred. This keeps the
 // reconciler from rewriting config/units (and triggering reloads) every tick.
 func writeFileIfChanged(path string, content []byte, perm os.FileMode) (bool, error) {
-	if existing, err := os.ReadFile(path); err == nil && bytes.Equal(existing, content) {
+	existing, err := os.ReadFile(path)
+	if err == nil && bytes.Equal(existing, content) {
 		return false, nil
 	}
 
-	err := os.WriteFile(path, content, perm)
+	err = os.WriteFile(path, content, perm)
 	if err != nil {
 		return false, fmt.Errorf("write %s: %w", path, err)
 	}

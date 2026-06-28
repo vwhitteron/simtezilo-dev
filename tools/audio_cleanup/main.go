@@ -493,7 +493,8 @@ func runAudible(c config) error {
 
 	fmt.Printf("playing %.1f Hz tone through %s for %.1fs (listen for artifacts)...\n", c.freq, c.backend, c.dur)
 
-	if err := sink.Start(async); err != nil {
+	err = sink.Start(async)
+	if err != nil {
 		return fmt.Errorf("start sink: %w", err)
 	}
 
@@ -647,7 +648,8 @@ func runLatency(c config) error {
 	fmt.Printf("probe   : impulse every %.0f ms, detect |x|>=%.2f, for %.1fs\n\n",
 		c.interval*1000, c.threshold, c.dur)
 
-	if err := sink.Start(tap); err != nil {
+	err = sink.Start(tap)
+	if err != nil {
 		return fmt.Errorf("start sink: %w", err)
 	}
 
@@ -767,7 +769,8 @@ func writeWAV(path string, interleaved []float32, channels, rate int) error {
 	h = append(h, "data"...)
 	h = binary.LittleEndian.AppendUint32(h, uint32(dataLen))
 
-	if _, err := f.Write(h); err != nil {
+	_, err = f.Write(h)
+	if err != nil {
 		return err
 	}
 

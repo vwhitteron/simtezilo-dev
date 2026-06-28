@@ -10,7 +10,9 @@ import (
 // time.Second/rate must yield the true period, not the millisecond-truncated
 // value that ran 120 Hz at 8 ms (125 Hz) and 60 Hz at 16 ms (62.5 Hz).
 func TestTickerPeriodExact(t *testing.T) {
-	cases := []struct {
+	t.Parallel()
+
+	testCases := []struct {
 		rate int
 		want time.Duration
 		// buggy is the old (1000/rate)*time.Millisecond value we must not equal.
@@ -21,20 +23,22 @@ func TestTickerPeriodExact(t *testing.T) {
 		{engineHapticFrameRate, 33333333 * time.Nanosecond, 33 * time.Millisecond},
 	}
 
-	for _, c := range cases {
-		got := tickerPeriod(c.rate)
-		if got != c.want {
-			t.Errorf("tickerPeriod(%d) = %v, want %v", c.rate, got, c.want)
+	for _, testCase := range testCases {
+		got := tickerPeriod(testCase.rate)
+		if got != testCase.want {
+			t.Errorf("tickerPeriod(%d) = %v, want %v", testCase.rate, got, testCase.want)
 		}
 
-		if got == c.buggy {
-			t.Errorf("tickerPeriod(%d) = %v, must not equal the truncated %v", c.rate, got, c.buggy)
+		if got == testCase.buggy {
+			t.Errorf("tickerPeriod(%d) = %v, must not equal the truncated %v", testCase.rate, got, testCase.buggy)
 		}
 	}
 }
 
 func TestBufferLatencyMs(t *testing.T) {
-	cases := []struct {
+	t.Parallel()
+
+	testCases := []struct {
 		used int
 		rate float64
 		want float64
@@ -45,21 +49,23 @@ func TestBufferLatencyMs(t *testing.T) {
 		{100, 0, 0}, // guard: zero rate
 	}
 
-	for _, c := range cases {
-		got := bufferLatencyMs(c.used, c.rate)
-		if math.Abs(got-c.want) > 1e-9 {
-			t.Errorf("bufferLatencyMs(%d, %v) = %v, want %v", c.used, c.rate, got, c.want)
+	for _, testCase := range testCases {
+		got := bufferLatencyMs(testCase.used, testCase.rate)
+		if math.Abs(got-testCase.want) > 1e-9 {
+			t.Errorf("bufferLatencyMs(%d, %v) = %v, want %v", testCase.used, testCase.rate, got, testCase.want)
 		}
 	}
 }
 
 func TestDriftMs(t *testing.T) {
+	t.Parallel()
+
 	const (
 		outputRate    = 48000.0
 		telemetryRate = 60.0
 	)
 
-	cases := []struct {
+	testCases := []struct {
 		name                   string
 		framesRead, baseFrames int64
 		seq, baseSeq           uint32
@@ -85,10 +91,10 @@ func TestDriftMs(t *testing.T) {
 		},
 	}
 
-	for _, c := range cases {
-		got := driftMs(c.framesRead, c.baseFrames, c.seq, c.baseSeq, outputRate, telemetryRate)
-		if math.Abs(got-c.want) > 1e-6 {
-			t.Errorf("%s: driftMs = %v, want %v", c.name, got, c.want)
+	for _, testCase := range testCases {
+		got := driftMs(testCase.framesRead, testCase.baseFrames, testCase.seq, testCase.baseSeq, outputRate, telemetryRate)
+		if math.Abs(got-testCase.want) > 1e-6 {
+			t.Errorf("%s: driftMs = %v, want %v", testCase.name, got, testCase.want)
 		}
 	}
 

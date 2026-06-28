@@ -73,7 +73,8 @@ func run(file string, topN int, rpmFloor float64) error {
 		return err
 	}
 
-	if _, err := os.Stat(abs); err != nil {
+	_, err = os.Stat(abs)
+	if err != nil {
 		return fmt.Errorf("replay file: %w", err)
 	}
 
@@ -87,17 +88,17 @@ func run(file string, topN int, rpmFloor float64) error {
 
 	frames := make([]frame, 0, 1<<16)
 
-	for tf, scanErr := range client.Scan(context.Background()) {
+	for packet, scanErr := range client.Scan(context.Background()) {
 		if scanErr != nil {
 			return fmt.Errorf("scan: %w", scanErr)
 		}
 
 		frames = append(frames, frame{
-			seq:      tf.SequenceID(),
-			rpm:      float64(tf.EngineRPM()),
-			gear:     tf.CurrentGear(),
-			throttle: float64(tf.ThrottleOutputPercent()),
-			state:    tf.GameState(),
+			seq:      packet.SequenceID(),
+			rpm:      float64(packet.EngineRPM()),
+			gear:     packet.CurrentGear(),
+			throttle: float64(packet.ThrottleOutputPercent()),
+			state:    packet.GameState(),
 		})
 	}
 
