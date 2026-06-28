@@ -1497,7 +1497,7 @@ func (a *App) mainLoop() { //nolint:cyclop // compact and simple enough
 	tickerPitRadio := time.NewTicker(tickerPeriod(pitRadioFrameRate))
 	tickerRaceData := time.NewTicker(500 * time.Millisecond)
 	tickerFanControl := time.NewTicker(tickerPeriod(FanControlFrameRate))
-	tickerDebug := time.NewTicker(30 * time.Second)
+	tickerDebug := time.NewTicker(5 * time.Second)
 
 	a.log.Debug().Str("component", "app").Str("result", "success").Msg("main loop started")
 

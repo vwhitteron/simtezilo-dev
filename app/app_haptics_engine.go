@@ -17,22 +17,26 @@ import (
 
 const maxPulseRate float64 = 300.0 // Max pulse rate for engine haptics
 
-// engineBufferFrames is the engine channel's target unread depth, in engine
-// frames. Each tick generates two frames (for stitch overlap) via an overwrite
-// write that appends faster than the channel drains; capping the buffered depth
-// to a few frames keeps just enough cushion to ride out a handful of
-// dropped/late telemetry frames and keep the zero-crossing stitch smooth,
-// instead of letting the buffer fill to its multi-second capacity.
-const engineBufferFrames = 3
+// engineCushionFrames is the engine channel's target unread depth, in engine
+// frames. Each tick tops the channel back up to this depth with freshly
+// generated, phase-continuous samples; a few frames is enough to ride out a
+// handful of dropped/late telemetry frames without accumulating latency. Because
+// the generator is phase-continuous, no zero-crossing stitch or depth cap is
+// needed — successive blocks join seamlessly.
+const engineCushionFrames = 3
 
 type engineState struct {
-	lastSeq       uint32    // Last sequence ID for engine haptics
-	lastKnownRPM  float64   // Cache last known RPM for fallback
-	lastEventTime time.Time // Timestamp of last engine haptic event
-	pulsePolarity bool      // Alternating polarity for engine pulses
+	lastSeq       uint32                   // Last sequence ID for engine haptics
+	lastKnownRPM  float64                  // Cache last known RPM for fallback
+	lastEventTime time.Time                // Timestamp of last engine haptic event
+	generator     *engineWaveformGenerator // Phase-continuous engine waveform generator
 }
 
-// generateEngineHaptic creates a wavform to simulate engine vibrations.
+// generateEngineHaptic tops the engine channel back up to its cushion with
+// freshly generated, phase-continuous waveform. Each tick it appends only as many
+// samples as the channel has drained since the last tick, so the buffered depth
+// stays at the cushion (bounded latency) and successive blocks join seamlessly
+// (no stitch, no stale-gap click).
 func (a *App) generateEngineHaptic() {
 	if !a.shouldGenerateEngineHaptic() {
 		return
@@ -43,40 +47,76 @@ func (a *App) generateEngineHaptic() {
 		return // RPM unavailable due to telemetry timeout
 	}
 
-	engineBuffer, offset, lastPolarity := a.prepareEngineBuffer()
+	need := a.engineRefillSamples()
+	if need <= 0 {
+		return // channel already at cushion depth
+	}
 
-	// No haptics when engine is not running
+	engineBuffer := make([]float64, need)
+
+	// No haptics when the engine is not running: feed silence to keep the channel
+	// fed and hold the generator phase so it restarts in phase.
 	if rpm == 0 {
-		a.writeEngineBuffer(engineBuffer, offset)
+		a.appendEngineBuffer(engineBuffer)
 
 		return
 	}
 
 	engineRoughness := a.calculateEngineRoughness(rpm)
-	a.generatePulseWaveform(rpm, engineRoughness, &engineBuffer)
+	params := a.calculatePulseWaveformParams(rpm, engineRoughness)
 
-	// Alternative experimental waveform generation - comment out above line and uncomment below to test
-	// a.generateBalancedWaveform(rpm, engineRoughness, &engineBuffer)
+	a.engineGenerator().Generate(engineBuffer, engineGenParams{
+		amplitude:      params.amplitude,
+		pulseRate:      params.pulseRate,
+		pulseDutyCycle: params.pulseDutyCycle,
+		rpmPercent:     params.rpmPercent,
+		revLimit:       float64(a.vehicle.RevLimit),
+	})
 
-	// Engine-specific torque curve waveform - uncomment below to use torque curve based haptics
-	// a.generateTorqueCurveWaveform(rpm, engineRoughness, &engineBuffer)
-
-	a.adjustEngineBufferPolarity(engineBuffer, lastPolarity)
-	a.writeEngineBuffer(engineBuffer, offset)
+	a.appendEngineBuffer(engineBuffer)
 }
 
-// writeEngineBuffer stitches the freshly generated waveform into the engine
-// channel and then caps the channel to a small cushion. The per-tick write adds
-// two frames while the channel drains roughly one frame per tick, so without the
-// cap the buffer grows to its full capacity (~2 s of latency). Capping holds it
-// at engineBufferFrames worth of samples — enough to cover a few dropped/late
-// telemetry frames — without accumulating latency, and the discarded tail stays
-// readable for the next tick's zero-crossing stitch.
-func (a *App) writeEngineBuffer(engineBuffer []float64, offset int) {
-	a.synth.OverwriteBuffer(synthesizer.ChannelEngine, engineBuffer, offset)
-
+// engineRefillSamples returns how many samples to generate this tick to restore
+// the channel to its cushion depth, clamped to at most two frames so a long stall
+// cannot produce an oversized block.
+func (a *App) engineRefillSamples() int {
 	samplesPerFrame := a.synth.GetSampleRate() / engineHapticFrameRate
-	a.synth.CapChannelDepth(synthesizer.ChannelEngine, samplesPerFrame*engineBufferFrames)
+
+	need := max(samplesPerFrame*engineCushionFrames-a.synth.ChannelDepth(synthesizer.ChannelEngine), 0)
+
+	if maxBlock := samplesPerFrame * 2; need > maxBlock {
+		need = maxBlock
+	}
+
+	return need
+}
+
+// appendEngineBuffer appends the generated samples contiguously at the channel's
+// write cursor (offset 0, no overwrite of unread audio), so the new block joins
+// the previous one without a seam.
+func (a *App) appendEngineBuffer(engineBuffer []float64) {
+	a.synth.OverwriteBuffer(synthesizer.ChannelEngine, engineBuffer, 0)
+}
+
+// engineGenerator returns the engine waveform generator, creating it on first use
+// and recreating it if the sample rate changes. The current geometry and profile
+// are refreshed each tick so a vehicle change takes effect without resetting the
+// carried phase.
+func (a *App) engineGenerator() *engineWaveformGenerator {
+	rate := a.synth.GetSampleRate()
+
+	gen := a.state.engine.generator
+	if gen == nil || gen.sampleRate != float64(rate) {
+		gen = newEngineWaveformGenerator(rate, a.vehicle.Engine.Geometry, a.vehicle.Engine.Haptics)
+		a.state.engine.generator = gen
+
+		return gen
+	}
+
+	gen.geometry = a.vehicle.Engine.Geometry
+	gen.engine = a.vehicle.Engine.Haptics
+
+	return gen
 }
 
 // shouldGenerateEngineHaptic checks if engine haptic generation should proceed.
@@ -121,49 +161,6 @@ func (a *App) getCurrentRPM() float64 {
 	default:
 		// Use cached RPM if telemetry is unavailable
 		return a.state.engine.lastKnownRPM
-	}
-}
-
-// prepareEngineBuffer prepares the engine buffer for waveform generation.
-func (a *App) prepareEngineBuffer() ([]float64, int, int) {
-	// Generate engine vibration waveform for 2 frames worth of samples
-	// This provides a small buffer to prevent underruns while keeping latency low
-	sampleRate := float64(a.synth.GetSampleRate())
-	samplesPerFrame := int(sampleRate / engineHapticFrameRate)
-	bufferSamples := samplesPerFrame * 2
-	engineBuffer := make([]float64, bufferSamples)
-
-	offset := 0
-	lastPolarity := 0
-	lookback := 20
-
-	// Stitch the new engine samples smoothly with the current buffer contents
-	// Note: There's a small race window between Inspect and the subsequent OverwriteBuffer call.
-	// The offset calculation may become slightly stale, but the impact is minimal (small audio glitch).
-	// The offset is clamped to valid range to prevent out-of-bounds writes.
-	inspectBuffer := a.synth.InspectChannelBuffer(synthesizer.ChannelEngine, samplesPerFrame+lookback, -lookback)
-	if inspectBuffer != nil && len(inspectBuffer) >= samplesPerFrame {
-		offset, lastPolarity = synthesizer.FindSampleZeroCrossing(inspectBuffer[lookback:samplesPerFrame])
-	}
-
-	// Clamp offset to valid range for the buffer we're about to write
-	if offset >= bufferSamples {
-		offset = 0
-	}
-
-	return engineBuffer, offset, lastPolarity
-}
-
-// adjustEngineBufferPolarity adjusts engine buffer polarity to be the inverse of the last pulse.
-func (a *App) adjustEngineBufferPolarity(engineBuffer []float64, lastPolarity int) {
-	lookback := 20
-	if len(engineBuffer) < lookback {
-		return
-	}
-
-	currentPolarity := synthesizer.SamplePolarity(engineBuffer[0:lookback])
-	if currentPolarity == float64(lastPolarity) {
-		synthesizer.InvertSamplePolarity(&engineBuffer)
 	}
 }
 
@@ -503,12 +500,6 @@ func (a *App) calculateEngineRoughness(rpm float64) float64 {
 	return engineRoughness
 }
 
-// generatePulseWaveform creates a vibration pulse waveform based on engine RPM and roughness characteristics.
-func (a *App) generatePulseWaveform(rpm float64, engineRoughness float64, engineBuffer *[]float64) {
-	params := a.calculatePulseWaveformParams(rpm, engineRoughness)
-	a.generatePulseWaveformSamples(params, engineBuffer)
-}
-
 // pulseWaveformParams holds all calculated parameters for pulse waveform generation.
 type pulseWaveformParams struct {
 	rpmPercent      float64
@@ -568,92 +559,6 @@ func (a *App) calculatePulseAmplitude(throttlePercent, engineRoughness, rpmPerce
 	amplitude, _ = signal.LimitWindow(amplitude, 0, 1)
 
 	return amplitude
-}
-
-// generatePulseWaveformSamples generates the actual pulse waveform samples.
-func (a *App) generatePulseWaveformSamples(params *pulseWaveformParams, engineBuffer *[]float64) {
-	for index := range *engineBuffer {
-		pulseValue := a.calculatePulseValueAtIndex(index, params)
-		(*engineBuffer)[index] = params.amplitude * pulseValue
-	}
-}
-
-// calculatePulseValueAtIndex calculates the pulse value at a specific sample index.
-func (a *App) calculatePulseValueAtIndex(index int, params *pulseWaveformParams) float64 {
-	samplesPerPulse := params.sampleRate / params.pulseRate
-	pulsePosition := float64(index) / samplesPerPulse
-
-	// Detect pulse trigger point and manage polarity
-	a.updatePulsePolarityIfNeeded(index, samplesPerPulse)
-
-	pulsePhase := pulsePosition - math.Floor(pulsePosition) // 0.0 to 1.0 within each pulse cycle
-	if pulsePhase >= params.pulseDutyCycle {
-		return 0.0 // Outside the pulse
-	}
-
-	// Inside the pulse - create a sharp, distinct pulse
-	pulsePhaseNormalized := pulsePhase / params.pulseDutyCycle // 0.0 to 1.0 within pulse width
-	pulseValue := a.generatePulseValueByGeometry(pulsePhaseNormalized)
-
-	// Apply polarity - alternating positive and negative pulses
-	if !a.state.engine.pulsePolarity {
-		pulseValue = -pulseValue
-	}
-
-	// Add roughness variation
-	pulseValue = a.applyPulseRoughnessVariation(pulseValue, index, params.rpmPercent)
-
-	// Ensure the magnitude stays within bounds
-	pulseValue, _ = signal.LimitWindow(pulseValue, -1.0, 1.0)
-
-	return pulseValue
-}
-
-// updatePulsePolarityIfNeeded updates the pulse polarity when crossing into a new pulse cycle.
-func (a *App) updatePulsePolarityIfNeeded(index int, samplesPerPulse float64) {
-	pulsePosition := float64(index) / samplesPerPulse
-	currentPulseIndex := int(math.Floor(pulsePosition))
-
-	var lastPulseIndex int
-
-	if index > 0 {
-		lastPulsePosition := float64(index-1) / samplesPerPulse
-		lastPulseIndex = int(math.Floor(lastPulsePosition))
-	} else {
-		lastPulseIndex = -1
-	}
-
-	// Check if the waveform has crossed into a new pulse cycle
-	pulseTriggered := (index > 0) && (currentPulseIndex != lastPulseIndex)
-	if pulseTriggered {
-		a.state.engine.pulsePolarity = !a.state.engine.pulsePolarity
-	}
-}
-
-// generatePulseValueByGeometry generates pulse value based on engine geometry.
-func (a *App) generatePulseValueByGeometry(pulsePhaseNormalized float64) float64 {
-	switch a.vehicle.Engine.Geometry {
-	case "K":
-		return generatePulseWankel(pulsePhaseNormalized, a.vehicle.Engine.Haptics)
-	case "S":
-		return generatePulseTwoStroke(pulsePhaseNormalized, a.vehicle.Engine.Haptics)
-	default:
-		return generatePulseFourStroke(pulsePhaseNormalized, a.vehicle.Engine.Haptics)
-	}
-}
-
-// applyPulseRoughnessVariation applies roughness variation to the pulse value.
-func (a *App) applyPulseRoughnessVariation(pulseValue float64, index int, rpmPercent float64) float64 {
-	secondaryImbalance := 1.0 - a.vehicle.Engine.Haptics.SecondaryBalance
-	rpm := rpmPercent * float64(a.vehicle.RevLimit)
-
-	if rpm <= 2400.0 && secondaryImbalance > 0.02 {
-		roughnessPhase := (float64(a.state.current.sequenceNumber) + float64(index)) * 0.0005
-		roughnessVariation := 1.0 + (math.Sin(roughnessPhase) * secondaryImbalance * 0.3)
-		pulseValue *= roughnessVariation
-	}
-
-	return pulseValue
 }
 
 // generatePulswWankel creates a single pulse value for a Wankel engine based on a given phase value

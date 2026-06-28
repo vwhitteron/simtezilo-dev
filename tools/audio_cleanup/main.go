@@ -44,6 +44,7 @@ import (
 
 	"github.com/rs/zerolog"
 	"github.com/vwhitteron/simtezilo-dev/app/audio"
+	"github.com/vwhitteron/simtezilo-dev/app/audio/audioqa"
 )
 
 func main() {
@@ -270,8 +271,8 @@ func runCapture(c config) error {
 			}
 		}
 
-		m := analyse(channel0(rec, c.channels), c.outRate, c.freq, c.amp)
-		ok := m.report(st, c)
+		m, tone := audioqa.AnalyseTone(channel0(rec, c.channels), c.outRate, c.freq, c.amp)
+		ok := report(st, c, m, tone)
 
 		if !ok {
 			failures++
@@ -392,195 +393,33 @@ func bufferFrames(outputRate, latencyMs int) (capacity, target, block int) {
 // Analysis
 // ---------------------------------------------------------------------------
 
-type metrics struct {
-	frames     int
-	regionFrom int
-	regionTo   int
-	peak       float64
-	clipped    int
-	nonFinite  int
-	dropouts   int     // count of interior zero-runs (underruns)
-	maxDropout int     // longest zero-run in samples
-	maxStep    float64 // largest |x[i]-x[i-1]| in the region
-	stepBound  float64 // theoretical max step for a clean tone
-	glitches   int     // steps exceeding 3x the bound
-	gain       float64 // recovered fundamental amplitude / input amplitude
-	rmsResid   float64 // RMS of (signal - fitted fundamental)
-	peakResid  float64 // peak of the residual
-	snr        float64 // 20*log10(fundamental / (sqrt2 * rmsResid))
-	empty      bool
-}
-
-// analyse measures a single channel of captured output against the known tone.
-func analyse(x []float64, rate int, freq, inAmp float64) metrics {
-	m := metrics{frames: len(x), stepBound: inAmp * 2 * math.Pi * freq / float64(rate)}
-
-	from, to := signalRegion(x, inAmp)
-
-	// Trim a short guard band (~10 ms) inside each edge so the onset/offset ramps —
-	// where the tone fades up from the ring's pre-filled silence — do not inflate
-	// the peak residual or step measurements. Those ramps are real but transient;
-	// the steady-state body is what reveals whether the pipeline distorts the tone.
-	guard := rate / 100
-	if from+guard < to-guard {
-		from += guard
-		to -= guard
-	}
-
-	m.regionFrom, m.regionTo = from, to
-
-	if to-from < rate/int(math.Max(freq, 1)) {
-		m.empty = true
-
-		return m
-	}
-
-	region := x[from:to]
-
-	// Hard checks over the active signal region.
-	for i, v := range region {
-		if math.IsNaN(v) || math.IsInf(v, 0) {
-			m.nonFinite++
-
-			continue
-		}
-
-		if a := math.Abs(v); a > m.peak {
-			m.peak = a
-		}
-
-		if math.Abs(v) >= 0.999 {
-			m.clipped++
-		}
-
-		if i > 0 {
-			if step := math.Abs(v - region[i-1]); step > m.maxStep {
-				m.maxStep = step
-			}
-		}
-
-		if i > 0 && math.Abs(region[i-1]-region[i]) > 3*m.stepBound {
-			m.glitches++
-		}
-	}
-
-	m.dropouts, m.maxDropout = zeroRuns(region)
-
-	// Best-fit fundamental: project the region onto cos/sin at freq. The phase is
-	// absorbed by the two coefficients, so no alignment is needed. Whatever does
-	// not fit the single expected sinusoid is distortion + noise the pipeline added.
-	w := 2 * math.Pi * freq / float64(rate)
-	n := float64(len(region))
-
-	var ac, as float64
-
-	for i, v := range region {
-		ac += v * math.Cos(w*float64(i))
-		as += v * math.Sin(w*float64(i))
-	}
-
-	ac *= 2 / n
-	as *= 2 / n
-	fundAmp := math.Hypot(ac, as)
-	m.gain = fundAmp / inAmp
-
-	var sumSq float64
-
-	for i, v := range region {
-		fit := ac*math.Cos(w*float64(i)) + as*math.Sin(w*float64(i))
-		r := v - fit
-
-		sumSq += r * r
-		if a := math.Abs(r); a > m.peakResid {
-			m.peakResid = a
-		}
-	}
-
-	m.rmsResid = math.Sqrt(sumSq / n)
-	if m.rmsResid > 0 {
-		m.snr = 20 * math.Log10(fundAmp/(math.Sqrt2*m.rmsResid))
-	} else {
-		m.snr = math.Inf(1)
-	}
-
-	return m
-}
-
-// signalRegion returns the [from,to) frame range carrying the tone, trimming the
-// async ring's silent lead and any silent tail by locating the first and last
-// samples that reach a quarter of the input amplitude (a sine crosses this every
-// cycle, so the bound is hit promptly once the tone is flowing).
-func signalRegion(x []float64, inAmp float64) (from, to int) {
-	thresh := 0.25 * inAmp
-
-	from = 0
-	for from < len(x) && math.Abs(x[from]) < thresh {
-		from++
-	}
-
-	to = len(x)
-	for to > from && math.Abs(x[to-1]) < thresh {
-		to--
-	}
-
-	return from, to
-}
-
-// zeroRuns counts interior runs of exact zeros longer than two samples — the
-// signature of an async ring underrun, which zero-pads the device callback.
-func zeroRuns(x []float64) (count, longest int) {
-	run := 0
-
-	flush := func() {
-		if run > 2 {
-			count++
-
-			if run > longest {
-				longest = run
-			}
-		}
-
-		run = 0
-	}
-
-	for _, v := range x {
-		if v == 0 {
-			run++
-		} else {
-			flush()
-		}
-	}
-
-	flush()
-
-	return count, longest
-}
-
-// report prints the metrics for one stage and returns whether it passed.
-func (m metrics) report(stage string, c config) bool {
+// report prints one stage's metrics and tone fit and returns whether it passed.
+// The numeric analysis now lives in app/audio/audioqa; this only formats and
+// applies the tool's pass thresholds.
+func report(stage string, c config, m audioqa.Metrics, t audioqa.Tone) bool {
 	fmt.Printf("== %s ==\n", stage)
 
-	if m.empty {
-		fmt.Printf("  no signal captured (region %d..%d of %d frames)\n", m.regionFrom, m.regionTo, m.frames)
+	if m.Empty {
+		fmt.Printf("  no signal captured (region %d..%d of %d frames)\n", m.RegionFrom, m.RegionTo, m.Frames)
 
 		return false
 	}
 
-	pass := m.nonFinite == 0 &&
-		m.clipped == 0 &&
-		m.dropouts == 0 &&
-		m.peakResid <= c.tol &&
-		m.snr >= c.minSNR &&
-		math.Abs(m.gain-1) <= c.tol
+	pass := m.NonFinite == 0 &&
+		m.Clipped == 0 &&
+		m.Dropouts == 0 &&
+		t.PeakResid <= c.tol &&
+		t.SNR >= c.minSNR &&
+		math.Abs(t.Gain-1) <= c.tol
 
-	fmt.Printf("  region     : %d..%d (%d frames analysed)\n", m.regionFrom, m.regionTo, m.regionTo-m.regionFrom)
-	fmt.Printf("  peak level : %.4f%s\n", m.peak, marker(m.clipped > 0, "  CLIPPING"))
-	fmt.Printf("  non-finite : %d%s\n", m.nonFinite, marker(m.nonFinite > 0, "  NaN/Inf"))
-	fmt.Printf("  dropouts   : %d (longest %d samples)%s\n", m.dropouts, m.maxDropout, marker(m.dropouts > 0, "  UNDERRUN"))
-	fmt.Printf("  max step   : %.5f (clean bound %.5f)%s\n", m.maxStep, m.stepBound, marker(m.glitches > 0, fmt.Sprintf("  %d glitches", m.glitches)))
-	fmt.Printf("  gain       : %.4f (%.2f dB)%s\n", m.gain, 20*math.Log10(m.gain), marker(math.Abs(m.gain-1) > c.tol, "  LEVEL"))
-	fmt.Printf("  residual   : peak %.5f, rms %.5f%s\n", m.peakResid, m.rmsResid, marker(m.peakResid > c.tol, "  OVER TOL"))
-	fmt.Printf("  SNR        : %.1f dB%s\n", m.snr, marker(m.snr < c.minSNR, "  LOW"))
+	fmt.Printf("  region     : %d..%d (%d frames analysed)\n", m.RegionFrom, m.RegionTo, m.RegionTo-m.RegionFrom)
+	fmt.Printf("  peak level : %.4f%s\n", m.Peak, marker(m.Clipped > 0, "  CLIPPING"))
+	fmt.Printf("  non-finite : %d%s\n", m.NonFinite, marker(m.NonFinite > 0, "  NaN/Inf"))
+	fmt.Printf("  dropouts   : %d (longest %d samples)%s\n", m.Dropouts, m.MaxDropout, marker(m.Dropouts > 0, "  UNDERRUN"))
+	fmt.Printf("  max step   : %.5f (clean bound %.5f)%s\n", m.MaxStep, m.StepBound, marker(m.Glitches > 0, fmt.Sprintf("  %d glitches", m.Glitches)))
+	fmt.Printf("  gain       : %.4f (%.2f dB)%s\n", t.Gain, 20*math.Log10(t.Gain), marker(math.Abs(t.Gain-1) > c.tol, "  LEVEL"))
+	fmt.Printf("  residual   : peak %.5f, rms %.5f%s\n", t.PeakResid, t.RMSResid, marker(t.PeakResid > c.tol, "  OVER TOL"))
+	fmt.Printf("  SNR        : %.1f dB%s\n", t.SNR, marker(t.SNR < c.minSNR, "  LOW"))
 	fmt.Printf("  result     : %s\n\n", verdict(pass))
 
 	return pass

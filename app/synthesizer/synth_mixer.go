@@ -16,7 +16,7 @@ type Mixer interface { //nolint:interfacebloat // Large interface for core mixer
 	SetChannelGain(name string, gain float64) error
 	GetChannelPowerRatio(name string) (float64, error)
 	WriteChannel(name string, samples []float64, magnitude float64, offset int, accumulate bool) error
-	CapChannelDepth(name string, maxSamples int)
+	ChannelDepth(name string) int
 	ClearChannelBuffer(name string)
 	ClearBuffers()
 	InspectChannelBuffer(name string, length int, offset int) []float64
