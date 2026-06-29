@@ -196,14 +196,26 @@ func (m *MixerChannel) Read(dst []float64) int {
 	return m.buffer.Read(dst)
 }
 
-// Write writes samples to the channel's buffer with the specified magnitude and offset.
+// Write writes samples to the channel's buffer with the specified magnitude and
+// offset. It scales the caller's slice in place (see ScaleSamples) and is
+// reserved for callers that own the buffer outright, notably MixToMaster's
+// per-channel output writes on the audio-callback thread.
 func (m *MixerChannel) Write(samples []float64, magnitude float64, offset int, overwrite bool) {
 	ScaleSamples(&samples, magnitude)
 
 	m.buffer.Write(samples, offset, overwrite)
 }
 
-// WriteChannel writes the provided sample data to the specified channel buffer at the given offset.
+// WriteScaled writes samples to the channel's buffer with the specified
+// magnitude without mutating the caller's slice (see AdaptiveBuffer.WriteScaled).
+// It is the safe path for writers handing in a shared or cached source slice.
+func (m *MixerChannel) WriteScaled(samples []float64, magnitude float64, offset int, overwrite bool) {
+	m.buffer.WriteScaled(samples, magnitude, offset, overwrite)
+}
+
+// WriteChannel writes the provided sample data to the specified channel buffer
+// at the given offset. It does not mutate the caller's slice, so callers may
+// hand in shared or cached buffers (e.g. effect samples) safely.
 func (m *StereoMixer) WriteChannel(name string, samples []float64, magnitude float64, offset int, overwrite bool) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -212,7 +224,7 @@ func (m *StereoMixer) WriteChannel(name string, samples []float64, magnitude flo
 		return fmt.Errorf("channel not found: %q", name)
 	}
 
-	m.channels[name].Write(samples, magnitude, offset, overwrite)
+	m.channels[name].WriteScaled(samples, magnitude, offset, overwrite)
 
 	return nil
 }

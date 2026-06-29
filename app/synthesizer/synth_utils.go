@@ -121,8 +121,14 @@ func InvertSamplePolarity(samples *[]float64) {
 	}
 }
 
-// ScaleSamples adjusts the scale of the samples by the given magnitude.
+// ScaleSamples adjusts the scale of the samples by the given magnitude. A unity
+// magnitude is a no-op, so it skips the full-buffer multiply that hot callers
+// (MixToMaster, the calibrator) would otherwise do every frame.
 func ScaleSamples(samples *[]float64, magnitude float64) {
+	if magnitude == 1.0 {
+		return
+	}
+
 	for i := range *samples {
 		(*samples)[i] *= magnitude
 	}

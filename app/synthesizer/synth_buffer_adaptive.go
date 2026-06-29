@@ -23,6 +23,10 @@ type AdaptiveBuffer struct {
 	lastOverflow    time.Time // timestamp of the most recent overflow event (zero if never)
 	lastUnderrun    time.Time // timestamp of the most recent underrun event (zero if never)
 	overflowSamples int       // cumulative samples dropped due to overflow
+
+	// scaleScratch holds the magnitude-scaled copy used by WriteScaled so the
+	// caller's slice is never mutated.
+	scaleScratch []float64
 }
 
 // defaultBufferCushionMs is the read-delay cushion used by NewAdaptiveBuffer
@@ -238,6 +242,47 @@ func (b *AdaptiveBuffer) Write(samples []float64, offset int, overwrite bool) {
 	}
 
 	b.writeMixMode(samples)
+}
+
+// WriteScaled adds samples to the buffer scaled by magnitude without mutating
+// the caller's slice. The scaled copy is staged in a reusable scratch buffer, so
+// repeated writes of a shared, cached source slice (e.g. an effect sample) are
+// not corrupted in place. A magnitude of 1.0 needs no scaling and delegates to
+// Write directly.
+func (b *AdaptiveBuffer) WriteScaled(samples []float64, magnitude float64, offset int, overwrite bool) {
+	if magnitude == 1.0 {
+		b.Write(samples, offset, overwrite)
+
+		return
+	}
+
+	if len(samples) == 0 {
+		return
+	}
+
+	b.updateLastAccess()
+
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	if cap(b.scaleScratch) < len(samples) {
+		b.scaleScratch = make([]float64, len(samples))
+	}
+
+	b.scaleScratch = b.scaleScratch[:len(samples)]
+	for i, sample := range samples {
+		b.scaleScratch[i] = sample * magnitude
+	}
+
+	b.applyOffset(offset)
+
+	if overwrite {
+		b.writeOverwriteMode(b.scaleScratch)
+
+		return
+	}
+
+	b.writeMixMode(b.scaleScratch)
 }
 
 // IsStarved returns true if buffer is running low.

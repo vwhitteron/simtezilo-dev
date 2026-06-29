@@ -89,18 +89,11 @@ func (s *EffectsSampleBank) GetSample(name string, sampleRate int) codec.PCMFloa
 		return codec.PCMFloat64{}
 	}
 
-	// TODO: copying to a new sample as the slice is scaled by magnitude in-place which
-	// causes the effect volume to be reduced every time it is played
-	copied := make([]float64, sample.Len())
-	copy(copied, sample.Samples())
-
-	sampleCopy := *codec.NewPCMFloat64(
-		copied,
-		sample.SampleRate(),
-		sample.Channels(),
-	)
-
-	return sampleCopy
+	// The cached sample is returned directly: the mixer write path
+	// (StereoMixer.WriteChannel -> MixerChannel.WriteScaled) no longer scales
+	// its input in place, and the remaining read-only consumers (DCA encoding)
+	// do not mutate it, so no defensive copy is required.
+	return sample
 }
 
 // generateGearShiftSample creates a sample for the gear shift sound effect.
