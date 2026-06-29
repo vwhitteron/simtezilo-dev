@@ -210,9 +210,12 @@ func (b *AdaptiveBuffer) Inspect(length int, offset int) []float64 {
 	return result
 }
 
-// Read returns samples and consumes them.
-func (b *AdaptiveBuffer) Read(length int) []float64 {
-	return b.readFromBuffer(length, true)
+// Read copies up to len(dst) consumed samples into dst and returns the number
+// actually written. On an underrun fewer than len(dst) samples are written (the
+// available count); callers must respect the returned count rather than
+// assuming len(dst).
+func (b *AdaptiveBuffer) Read(dst []float64) int {
+	return b.readIntoBuffer(dst, true)
 }
 
 // Write adds samples to the buffer with overflow protection.
@@ -350,12 +353,17 @@ func (b *AdaptiveBuffer) handleOverflow(samples []float64, overwrite bool) {
 	}
 }
 
-// readFromBuffer internal implementation for reading.
-func (b *AdaptiveBuffer) readFromBuffer(length int, consume bool) []float64 {
+// readIntoBuffer is the shared read core: it copies up to len(dst) samples into
+// dst (truncating to the available count on underrun) and returns the number
+// written. When consume is true the read advances the read position and zeroes
+// the consumed samples.
+func (b *AdaptiveBuffer) readIntoBuffer(dst []float64, consume bool) int {
 	b.updateLastAccess()
 
 	b.mu.Lock()
 	defer b.mu.Unlock()
+
+	length := len(dst)
 
 	// Check for underrun
 	if length > b.used {
@@ -367,10 +375,8 @@ func (b *AdaptiveBuffer) readFromBuffer(length int, consume bool) []float64 {
 		length = b.used
 	}
 
-	samples := make([]float64, length)
-
 	for i := range length {
-		samples[i] = b.buffer[b.readPos]
+		dst[i] = b.buffer[b.readPos]
 
 		if consume {
 			b.buffer[b.readPos] = 0 // Clear consumed samples
@@ -380,7 +386,7 @@ func (b *AdaptiveBuffer) readFromBuffer(length int, consume bool) []float64 {
 		b.readPos = (b.readPos + 1) % b.capacity
 	}
 
-	return samples
+	return length
 }
 
 // dropOldestSamples removes oldest samples to prevent overflow.

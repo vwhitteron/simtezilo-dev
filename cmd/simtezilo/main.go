@@ -141,6 +141,7 @@ func setupSignalHandler(exitCodeChan chan exitcode.Code) {
 
 func parseFlags() cliFlags {
 	var flags cliFlags
+
 	flags.profilerTags = tagFlag{}
 
 	flag.StringVar(&flags.configFile, "c", "", "Configuration file to load")

@@ -264,6 +264,8 @@ func (a *App) runCaptureLoop(next pullFunc, opts HapticCaptureOptions) *HapticCa
 
 	const chunkFrames = 64
 
+	readBuf := make([]float64, chunkFrames)
+
 	chunkDur := float64(chunkFrames) / float64(internalRate)
 	packetPeriod := 1.0 / float64(telemetryFrameRate)
 	enginePeriod := 1.0 / float64(engineHapticFrameRate)
@@ -356,9 +358,9 @@ func (a *App) runCaptureLoop(next pullFunc, opts HapticCaptureOptions) *HapticCa
 
 		// Drain one chunk of combined master output (only the enabled haptics' channels
 		// carry signal; the rest are silent).
-		samples := a.synth.ReadBuffer(chunkFrames)
-		out.Samples = append(out.Samples, samples...)
-		cursor += len(samples)
+		n := a.synth.ReadBuffer(readBuf)
+		out.Samples = append(out.Samples, readBuf[:n]...)
+		cursor += n
 
 		simTime += chunkDur
 	}

@@ -53,7 +53,10 @@ func TestAdaptiveBufferWriteRead(t *testing.T) {
 	}
 
 	// Read some samples
-	read := buffer.Read(3)
+	buf := make([]float64, 3)
+	length := buffer.Read(buf)
+	read := buf[:length]
+
 	if len(read) != 3 {
 		t.Errorf("Expected 3 samples read, got %d", len(read))
 	}
@@ -111,7 +114,9 @@ func TestAdaptiveBufferMixing(t *testing.T) {
 	buffer.Write(samples2, 0, false) // false = mix mode
 
 	// Read back and check mixing occurred
-	result := buffer.Read(3)
+	buf := make([]float64, 3)
+	length := buffer.Read(buf)
+	result := buf[:length]
 
 	// The key test is that the operation completed without error
 	// and we got some samples back
@@ -140,7 +145,9 @@ func TestAdaptiveBufferUnderrun(t *testing.T) {
 	currentUsed := buffer.Used()
 
 	// Try to read much more than available to force underrun
-	result := buffer.Read(currentUsed + 50)
+	buf := make([]float64, currentUsed+50)
+	length := buffer.Read(buf)
+	result := buf[:length]
 
 	// Should only get what's available or less
 	if len(result) > currentUsed {
@@ -224,8 +231,9 @@ func TestAdaptiveBufferConcurrency(t *testing.T) {
 
 	// Reader goroutine
 	go func() {
+		buf := make([]float64, 2)
 		for range 10 {
-			buffer.Read(2)
+			buffer.Read(buf)
 			time.Sleep(time.Millisecond)
 		}
 

@@ -47,12 +47,16 @@ func (m *MockMixer) OutputChannelName(ch int) string {
 	return OutputChannelName(ch)
 }
 
-func (m *MockMixer) ReadChannel(_ string, length int) []float64 {
+func (m *MockMixer) ReadChannel(_ string, dst []float64) int {
 	if len(m.lastSamples) == 0 {
-		return make([]float64, length)
+		for i := range dst {
+			dst[i] = 0
+		}
+
+		return len(dst)
 	}
 
-	return m.lastSamples
+	return copy(dst, m.lastSamples)
 }
 
 func (m *MockMixer) AddChannel(_ string, _ float64) error {

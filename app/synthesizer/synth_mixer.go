@@ -8,7 +8,7 @@ import (
 type Mixer interface { //nolint:interfacebloat // Large interface for core mixer functionality
 	// Core mixing operations
 	MixToMaster(length int)
-	ReadChannel(name string, length int) []float64
+	ReadChannel(name string, dst []float64) int
 
 	// OutputChannelName returns the precomputed channel name for output channel ch.
 	OutputChannelName(ch int) string

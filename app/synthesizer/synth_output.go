@@ -156,19 +156,23 @@ func (s *Streamer) readOutputBuffers(length int) [][]float64 {
 
 	buffers := s.ensureBufs(channels, length)
 
-	for ch := range channels {
-		raw := s.synth.mixer.ReadChannel(s.synth.mixer.OutputChannelName(ch), length)
-		buf := buffers[ch]
+	for channel := range channels {
+		buf := buffers[channel]
 
-		gain := outputChannels[ch].Gain
-		mute := outputChannels[ch].Mute
+		// Read directly into the reusable per-channel buffer, then apply gain in
+		// place. count is the number actually written (an underrun returns fewer
+		// than length); the unwritten tail is zeroed below.
+		count := s.synth.mixer.ReadChannel(s.synth.mixer.OutputChannelName(channel), buf)
+
+		gain := outputChannels[channel].Gain
+		mute := outputChannels[channel].Mute
 
 		for i := range length {
 			switch {
-			case mute || raw == nil || i >= len(raw):
+			case mute || i >= count:
 				buf[i] = 0
 			default:
-				buf[i] = raw[i] * gain
+				buf[i] *= gain
 			}
 		}
 	}

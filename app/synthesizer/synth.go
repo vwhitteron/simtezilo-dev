@@ -62,6 +62,24 @@ func IsChassisChannel(name string) bool {
 	return len(name) > len(chassisChannelPrefix) && name[:len(chassisChannelPrefix)] == chassisChannelPrefix
 }
 
+// channelMuted reports whether the named channel is muted, using lock-free
+// config reads. The calibrator channel and any unrecognised name are never
+// muted.
+func channelMuted(cfg *config.Config, name string) bool {
+	switch {
+	case name == ChannelMaster:
+		return cfg.GetSynthMasterMute()
+	case IsChassisChannel(name):
+		return cfg.GetSynthChassisMute()
+	case name == ChannelTransmission:
+		return cfg.GetSynthTransmissionMute()
+	case name == ChannelEngine:
+		return cfg.GetSynthEngineMute()
+	default:
+		return false
+	}
+}
+
 // IsOutputChannel returns true if the channel name is an output channel.
 func IsOutputChannel(name string) bool {
 	return len(name) > len(outputChannelPrefix) && name[:len(outputChannelPrefix)] == outputChannelPrefix
@@ -202,18 +220,20 @@ func (s *Synthesizer) GetBufferCapacity() int {
 }
 
 // InspectChannelBuffer returns a copy of the specified channel buffer for inspection.
-func (s *Synthesizer) InspectChannelBuffer(name string, length int, offset int) []float64 {
+func (s *Synthesizer) InspectChannelBuffer(name string, length int, offset int) (samples []float64) {
 	return s.mixer.InspectChannelBuffer(name, length, offset)
 }
 
-// ReadBuffer mixes all channels into the per-channel outputs and returns the
-// first output channel's samples. The master channel no longer carries a sample
-// buffer (it holds only the live master gain), so the capture path reads output
-// channel 0 directly rather than a synthesised master mix.
-func (s *Synthesizer) ReadBuffer(length int) []float64 {
-	s.mixer.MixToMaster(length)
+// ReadBuffer mixes all channels into the per-channel outputs and reads the first
+// output channel's samples into dst, returning the number written. The master
+// channel no longer carries a sample buffer (it holds only the live master
+// gain), so the capture path reads output channel 0 directly rather than a
+// synthesised master mix. On an underrun fewer than len(dst) samples are written
+// (see Mixer.ReadChannel).
+func (s *Synthesizer) ReadBuffer(dst []float64) (length int) {
+	s.mixer.MixToMaster(len(dst))
 
-	return s.mixer.ReadChannel(OutputChannelName(0), length)
+	return s.mixer.ReadChannel(OutputChannelName(0), dst)
 }
 
 // GetChannelMute returns the mute state for the specified channel index.

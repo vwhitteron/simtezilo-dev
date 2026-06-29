@@ -75,7 +75,8 @@ func TestMixModeNoBoundaryStep(t *testing.T) {
 	// Consume the first part so the short pulse lands partway into the long wave.
 	const consumed = 50
 
-	_ = buffer.Read(consumed)
+	buf := make([]float64, consumed)
+	buffer.Read(buf)
 
 	// A short, high-amplitude pulse whose overlap with the long wave would clip.
 	const shortLen = 40
@@ -85,7 +86,9 @@ func TestMixModeNoBoundaryStep(t *testing.T) {
 
 	// Read back the remaining contiguous region: long-wave tail with the short
 	// pulse mixed into indices [0, shortLen).
-	out := buffer.Read(longLen - consumed)
+	buf = make([]float64, longLen-consumed)
+	length := buffer.Read(buf)
+	out := buf[:length]
 
 	// Nothing may exceed unity.
 	for i, s := range out {
@@ -164,7 +167,9 @@ func TestMixModeNoDiscontinuities(t *testing.T) {
 		pulseLen := int(float64(rate) / freqHz)
 		buffer.Write(halfSinePulse(pulseLen, 1.0), 0, false)
 
-		stream = append(stream, buffer.Read(frameAdv)...)
+		block := make([]float64, frameAdv)
+		length := buffer.Read(block)
+		stream = append(stream, block[:length]...)
 	}
 
 	for i, s := range stream {

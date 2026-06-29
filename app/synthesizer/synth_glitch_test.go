@@ -128,13 +128,17 @@ func TestAdaptiveBuffer_RampPassThrough(t *testing.T) {
 				break
 			}
 
-			readStream = append(readStream, buf.Read(readSize)...)
+			block := make([]float64, readSize)
+			length := buf.Read(block)
+			readStream = append(readStream, block[:length]...)
 			toRead -= readSize
 		}
 	}
 
 	for buf.Used() > 0 {
-		readStream = append(readStream, buf.Read(buf.Used())...)
+		block := make([]float64, buf.Used())
+		length := buf.Read(block)
+		readStream = append(readStream, block[:length]...)
 	}
 
 	breaks := detectSequenceBreaks(readStream)
@@ -168,7 +172,9 @@ func TestAdaptiveBuffer_UnderrunInsertsZeros(t *testing.T) {
 
 	const request = 512
 
-	got := buf.Read(request)
+	block := make([]float64, request)
+	length := buf.Read(block)
+	got := block[:length]
 
 	if len(got) >= request {
 		t.Fatalf("expected a short read on underrun, requested %d got %d", request, len(got))
@@ -260,7 +266,9 @@ func simulateUpstream(s cadenceScenario) cadenceResult {
 	}
 
 	pull := func() {
-		got := buf.Read(s.pull)
+		block := make([]float64, s.pull)
+		length := buf.Read(block)
+		got := block[:length]
 
 		out := make([]float64, s.pull) // consumer zero-pads short reads
 		copy(out, got)

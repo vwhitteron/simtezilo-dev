@@ -73,6 +73,8 @@ func runEngineChannel(rate, ticks int, paramsAt func(tick int) engineGenParams) 
 	frame := rate / engineHapticFrameRate
 	capDepth := frame * 3
 
+	got := make([]float64, frame) // reused drain scratch, one frame per tick
+
 	run := channelRun{minUsed: 1 << 30}
 
 	for tick := range ticks {
@@ -86,12 +88,12 @@ func runEngineChannel(rate, ticks int, paramsAt func(tick int) engineGenParams) 
 			buf.Write(block, 0, true) // append at write cursor (offset 0, overwrite mode)
 		}
 
-		got := buf.Read(frame)
-		if len(got) < frame {
+		n := buf.Read(got) // n < frame on underrun
+		if n < frame {
 			run.shortReads++
 		}
 
-		run.played = append(run.played, got...)
+		run.played = append(run.played, got[:n]...)
 
 		used := buf.Used()
 		if used < run.minUsed {

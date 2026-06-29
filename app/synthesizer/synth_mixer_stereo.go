@@ -47,6 +47,7 @@ type StereoMixer struct {
 	mixOutSamples          channelBuffer
 	mixChannelSamples      deviceBuffer
 	mixPeaks               channelValues
+	mixReadScratch         channelBuffer
 	engineWorkScratch      deviceBuffer
 	calibratorEqAmplitudes channelValues
 
@@ -188,10 +189,11 @@ func (m *StereoMixer) OutputChannelName(ch int) string {
 	return m.outputChannelNames[ch]
 }
 
-// Read reads the specified number of samples from the channel's buffer.
-// All samples read are removed from the buffer.
-func (m *MixerChannel) Read(length int) []float64 {
-	return m.buffer.Read(length)
+// Read reads up to len(dst) samples into dst and returns the number written.
+// All samples read are removed from the buffer; on an underrun fewer than
+// len(dst) samples are returned (see Buffer.Read).
+func (m *MixerChannel) Read(dst []float64) int {
+	return m.buffer.Read(dst)
 }
 
 // Write writes samples to the channel's buffer with the specified magnitude and offset.
@@ -231,40 +233,32 @@ func (m *StereoMixer) ChannelDepth(name string) int {
 }
 
 // ReadChannel reads the specified number of samples from the channel's buffer.
-func (m *StereoMixer) ReadChannel(name string, length int) []float64 {
+// ReadChannel reads up to len(dst) samples from the named channel into the
+// caller-supplied dst, returning the number of samples written. Muted channels
+// zero dst and report len(dst); a missing channel reports 0. On an underrun
+// fewer than len(dst) samples are written (see Buffer.Read) — callers must zero
+// or ignore the unwritten tail themselves.
+func (m *StereoMixer) ReadChannel(name string, dst []float64) int {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
 	channel, ok := m.channels[name]
 	if !ok {
-		return nil
+		return 0
 	}
 
-	// Check if channel is muted using lock-free config reads
-	var muted bool
+	if channelMuted(m.config, name) {
+		for i := range dst {
+			dst[i] = 0
+		}
 
-	switch {
-	case name == ChannelMaster:
-		muted = m.config.GetSynthMasterMute()
-	case IsChassisChannel(name):
-		muted = m.config.GetSynthChassisMute()
-	case name == ChannelTransmission:
-		muted = m.config.GetSynthTransmissionMute()
-	case name == ChannelEngine:
-		muted = m.config.GetSynthEngineMute()
-	case name == ChannelCalibrator:
-		muted = false
-	}
-
-	if muted {
-		// Return silence for muted channels
-		return make([]float64, length)
+		return len(dst)
 	}
 
 	// Check buffer health periodically
 	m.checkBufferHealth()
 
-	return channel.Read(length)
+	return channel.Read(dst)
 }
 
 // InspectChannelBuffer returns a copy of the specified channel buffer for inspection.
@@ -536,13 +530,18 @@ func (v *channelValues) zero() {
 //
 // MixToMaster must never run concurrently with itself: it reuses the
 // callback-thread-only scratch fields on StereoMixer (mixOutSamples,
-// mixChannelSamples, mixPeaks, and—via the helpers it calls—engineWorkScratch
-// and calibratorEqAmplitudes). This holds today because it runs only from the
-// single audio callback.
+// mixChannelSamples, mixPeaks, mixReadScratch, and—via the helpers it
+// calls—engineWorkScratch and calibratorEqAmplitudes). This holds today because
+// it runs only from the single audio callback.
 func (m *StereoMixer) MixToMaster(length int) {
 	// Reusable callback-thread-only scratch (grown on demand). See struct doc.
 	m.mixOutSamples.grow(length)
 	outSamples := m.mixOutSamples
+
+	// Shared read scratch for the per-channel chassis/transmission/engine reads
+	// below. Each read fully consumes it before the next, so a single buffer is
+	// safe.
+	m.mixReadScratch.grow(length)
 
 	m.mu.RLock()
 
@@ -570,8 +569,8 @@ func (m *StereoMixer) MixToMaster(length int) {
 	if !chassisMuted {
 		for ch := range m.numOutputChannels {
 			if chassisCh, ok := m.channels[m.chassisChannelNames[ch]]; ok {
-				samples := chassisCh.Read(length)
-				for i, sample := range samples {
+				n := chassisCh.Read(m.mixReadScratch)
+				for i, sample := range m.mixReadScratch[:n] {
 					channelSamples[ch][i] = mixSampleSum(channelSamples[ch][i], sample, &peaks[ch])
 				}
 			}
@@ -582,8 +581,8 @@ func (m *StereoMixer) MixToMaster(length int) {
 	if transmissionChannel, ok := m.channels[ChannelTransmission]; ok {
 		transmissionMuted := m.config.GetSynthTransmissionMute()
 		if !transmissionMuted {
-			samples := transmissionChannel.Read(length)
-			for i, sample := range samples {
+			n := transmissionChannel.Read(m.mixReadScratch)
+			for i, sample := range m.mixReadScratch[:n] {
 				for ch := range m.numOutputChannels {
 					channelSamples[ch][i] = mixSampleSum(channelSamples[ch][i], sample, &peaks[ch])
 				}
@@ -599,7 +598,7 @@ func (m *StereoMixer) MixToMaster(length int) {
 	}
 
 	// Mix engine channel into all outputs with lower priority
-	m.mixEngineChannelMulti(channelSamples, length)
+	m.mixEngineChannelMulti(channelSamples)
 
 	m.mu.RUnlock()
 
@@ -980,7 +979,7 @@ func (m *StereoMixer) mixCalibratorOutput(outSamples []float64) bool { //nolint:
 }
 
 // mixEngineChannelMulti mixes the engine channel into all output samples with lower priority.
-func (m *StereoMixer) mixEngineChannelMulti(outSamples deviceBuffer, length int) {
+func (m *StereoMixer) mixEngineChannelMulti(outSamples deviceBuffer) {
 	channel, ok := m.channels[ChannelEngine]
 	if !ok {
 		m.log.Error().Str("channel", ChannelEngine).Msg("channel not found in mixer")
@@ -993,13 +992,15 @@ func (m *StereoMixer) mixEngineChannelMulti(outSamples deviceBuffer, length int)
 		return
 	}
 
-	engineSamples := channel.Read(length)
-	if len(engineSamples) == 0 {
+	// Reuse the shared mix read scratch; the chassis/transmission reads above it
+	// in MixToMaster have already been consumed by this point.
+	count := channel.Read(m.mixReadScratch)
+	if count == 0 {
 		return
 	}
 
 	// Process engine for all output channels
-	m.processEngineSamplesMulti(outSamples, engineSamples)
+	m.processEngineSamplesMulti(outSamples, m.mixReadScratch[:count])
 }
 
 // processEngineSamplesMulti processes and mixes engine samples into all output channels.
