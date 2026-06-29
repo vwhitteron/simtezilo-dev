@@ -30,7 +30,7 @@ func (t *frameTapDisplay) Write(content *display.Content) error {
 // wrapDisplayFrameTap returns the display wrapped so that every rendered frame is
 // mirrored to the web UI screen feed.
 //
-//nolint:ireturn // wrapping a hardware.Display must return the same interface
+
 func (a *App) wrapDisplayFrameTap(d hardware.Display) hardware.Display {
 	return &frameTapDisplay{Display: d, sink: a.captureScreenFrame}
 }

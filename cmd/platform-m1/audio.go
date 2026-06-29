@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -144,7 +145,7 @@ func (p *manager) ensureLoopbackModule() error {
 		return err
 	}
 
-	out, err := exec.Command("modprobe", loopbackModule).CombinedOutput()
+	out, err := exec.CommandContext(context.Background(), "modprobe", loopbackModule).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("modprobe %s: %w: %s", loopbackModule, err, strings.TrimSpace(string(out)))
 	}
@@ -212,7 +213,7 @@ WantedBy=default.target
 	// Only reload when the unit actually changed; the reconciler calls this
 	// repeatedly and a reload on every tick is needless churn.
 	if changed {
-		out, err := exec.Command("systemctl", "daemon-reload").CombinedOutput()
+		out, err := exec.CommandContext(context.Background(), "systemctl", "daemon-reload").CombinedOutput()
 		if err != nil {
 			return false, fmt.Errorf("daemon-reload: %w: %s", err, strings.TrimSpace(string(out)))
 		}
@@ -230,14 +231,14 @@ func (p *manager) startBridge(instance string, restart bool) error {
 	unit := "simtezilo-btbridge@" + instance + ".service"
 
 	// Best-effort: reset-failed is a no-op on a healthy/active unit.
-	_ = exec.Command("systemctl", "reset-failed", unit).Run()
+	_ = exec.CommandContext(context.Background(), "systemctl", "reset-failed", unit).Run()
 
 	verb := "start"
 	if restart {
 		verb = "restart"
 	}
 
-	out, err := exec.Command("systemctl", verb, unit).CombinedOutput()
+	out, err := exec.CommandContext(context.Background(), "systemctl", verb, unit).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%s %s: %w: %s", verb, unit, err, strings.TrimSpace(string(out)))
 	}
@@ -267,7 +268,7 @@ func writeFileIfChanged(path string, content []byte, perm os.FileMode) (bool, er
 func (p *manager) stopBridge(instance string) error {
 	unit := "simtezilo-btbridge@" + instance + ".service"
 
-	out, err := exec.Command("systemctl", "stop", unit).CombinedOutput()
+	out, err := exec.CommandContext(context.Background(), "systemctl", "stop", unit).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("stop %s: %w: %s", unit, err, strings.TrimSpace(string(out)))
 	}

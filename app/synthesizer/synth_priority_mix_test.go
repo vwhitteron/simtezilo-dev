@@ -151,7 +151,7 @@ func TestMixModeNoDiscontinuities(t *testing.T) {
 	maxSinglePulseSlope := 1.0 * math.Pi / (float64(rate) / maxPulseHz)
 	maxLegitStep := maxSinglePulseSlope * 2 * 4
 
-	var stream []float64
+	stream := make([]float64, 0, frames*frameAdv)
 
 	for frame := range frames {
 		// Alternate long low-frequency and short high-frequency pulses at full

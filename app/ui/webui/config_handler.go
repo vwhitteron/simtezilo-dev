@@ -374,7 +374,7 @@ func (h *configHandler) applyUpdatesConfig(cfg map[string]any) []string {
 
 	errors = appendErr(errors, applyField(cfg, "autoCheck", "invalid autoCheck value", h.config.SetAppUpdateAutoCheck))
 	errors = appendErr(errors, applyField(cfg, "autoInstall", "invalid autoInstall value", h.config.SetAppUpdateAutoInstall))
-	errors = appendErr(errors, applyField[float64](cfg, "checkIntervalMinutes", "invalid checkIntervalMinutes value", func(f float64) {
+	errors = appendErr(errors, applyField(cfg, "checkIntervalMinutes", "invalid checkIntervalMinutes value", func(f float64) {
 		h.config.SetAppUpdateCheckIntervalMinutes(int(f))
 	}))
 
@@ -473,16 +473,16 @@ func (h *configHandler) applySynthGainMuteFields(config map[string]any) []string
 
 	errors = appendErr(errors, applyField(config, "masterGain", "invalid master gain value", h.config.SetSynthMasterGain))
 	errors = appendErr(errors, applyField(config, "masterMute", "invalid master gain mute value", h.config.SetSynthMasterMute))
-	errors = appendErr(errors, applyField[float64](config, "channel0Gain", "invalid left channel gain value", func(f float64) {
+	errors = appendErr(errors, applyField(config, "channel0Gain", "invalid left channel gain value", func(f float64) {
 		h.config.SetSynthChannelGain(0, f)
 	}))
-	errors = appendErr(errors, applyField[bool](config, "channel0Mute", "invalid left channel mute value", func(b bool) {
+	errors = appendErr(errors, applyField(config, "channel0Mute", "invalid left channel mute value", func(b bool) {
 		h.config.SetSynthChannelMute(0, b)
 	}))
-	errors = appendErr(errors, applyField[float64](config, "channel1Gain", "invalid right channel gain value", func(f float64) {
+	errors = appendErr(errors, applyField(config, "channel1Gain", "invalid right channel gain value", func(f float64) {
 		h.config.SetSynthChannelGain(1, f)
 	}))
-	errors = appendErr(errors, applyField[bool](config, "channel1Mute", "invalid right channel mute value", func(b bool) {
+	errors = appendErr(errors, applyField(config, "channel1Mute", "invalid right channel mute value", func(b bool) {
 		h.config.SetSynthChannelMute(1, b)
 	}))
 	errors = appendErr(errors, applyField(config, "chassisGain", "invalid chassis gain value", h.config.SetSynthChassisGain))
@@ -621,19 +621,19 @@ func (h *configHandler) applyHapticsConfig(config map[string]any) []string {
 	var errors []string
 
 	errors = appendErr(errors, applyField(config, "dynamicTransmissionFeedback", "invalid dynamic transmission feedback value", h.config.SetHapticsDynamicTransFeedbackEnabled))
-	errors = appendErr(errors, applyField[float64](config, "jerkCurve", "invalid jerk curve value", func(f float64) {
+	errors = appendErr(errors, applyField(config, "jerkCurve", "invalid jerk curve value", func(f float64) {
 		h.config.SetHapticsJerkCurve(int(f * 1000.0))
 	}))
-	errors = appendErr(errors, applyField[float64](config, "jerkMax", "invalid jerk max value", func(f float64) {
+	errors = appendErr(errors, applyField(config, "jerkMax", "invalid jerk max value", func(f float64) {
 		h.config.SetHapticsJerkMax(int(f))
 	}))
-	errors = appendErr(errors, applyField[float64](config, "snapCurve", "invalid snap curve value", func(f float64) {
+	errors = appendErr(errors, applyField(config, "snapCurve", "invalid snap curve value", func(f float64) {
 		h.config.SetHapticsSnapCurve(int(f * 1000.0))
 	}))
-	errors = appendErr(errors, applyField[float64](config, "snapMax", "invalid snap max value", func(f float64) {
+	errors = appendErr(errors, applyField(config, "snapMax", "invalid snap max value", func(f float64) {
 		h.config.SetHapticsSnapMax(int(f))
 	}))
-	errors = appendErr(errors, applyField[float64](config, "dynamicTransmissionCurve", "invalid transmission curve value", func(f float64) {
+	errors = appendErr(errors, applyField(config, "dynamicTransmissionCurve", "invalid transmission curve value", func(f float64) {
 		h.config.SetHapticsTransmissionCurve(int(f * 1000.0))
 	}))
 	errors = appendErr(errors, applyField(config, "dynamicTransmissionGforceMax", "invalid transmission G-force max value", h.config.SetHapticsTransmissionGforceMax))
@@ -850,17 +850,17 @@ func (h *configHandler) applyNotificationsConfig(config map[string]any) []string
 	var errors []string
 
 	errors = appendErr(errors, applyField(config, "enableRaceProgress", "invalid race progress enabled value", h.config.SetPitRadioNotifyRaceProgressEnabled))
-	errors = appendErr(errors, applyField[float64](config, "raceProgressMinLaps", "invalid race progress min laps value", func(f float64) {
+	errors = appendErr(errors, applyField(config, "raceProgressMinLaps", "invalid race progress min laps value", func(f float64) {
 		h.config.SetPitRadioNotifyRaceProgressMinLaps(int(f))
 	}))
-	errors = appendErr(errors, applyField[float64](config, "raceProgressIntervalPc", "invalid race progress interval percentage value", func(f float64) {
+	errors = appendErr(errors, applyField(config, "raceProgressIntervalPc", "invalid race progress interval percentage value", func(f float64) {
 		h.config.SetPitRadioNotifyRaceProgressIntervalPc(int(f))
 	}))
 	errors = appendErr(errors, applyField(config, "enableRaceLaps", "invalid race laps enabled value", h.config.SetPitRadioNotifyRaceLapsEnabled))
-	errors = appendErr(errors, applyField[float64](config, "raceLapsIntervalLaps", "invalid race laps interval laps value", func(f float64) {
+	errors = appendErr(errors, applyField(config, "raceLapsIntervalLaps", "invalid race laps interval laps value", func(f float64) {
 		h.config.SetPitRadioNotifyRaceLapsIntervalLaps(int(f))
 	}))
-	errors = appendErr(errors, applyField[float64](config, "raceLapsCountdownLaps", "invalid race laps countdown laps value", func(f float64) {
+	errors = appendErr(errors, applyField(config, "raceLapsCountdownLaps", "invalid race laps countdown laps value", func(f float64) {
 		h.config.SetPitRadioNotifyRaceLapsCountdownLaps(int(f))
 	}))
 	errors = appendErr(errors, applyField(config, "enableLapTimes", "invalid lap times enabled value", h.config.SetPitRadioNotifyLapTimesEnabled))
@@ -876,7 +876,7 @@ func (h *configHandler) applyPitRadioConfig(config map[string]any) []string {
 
 	errors = appendErr(errors, applyField(config, "enabled", "invalid pit radio enabled value", h.config.SetPitRadioEnabled))
 	errors = appendErr(errors, applyField(config, "output", "invalid pit radio output value", h.config.SetPitRadioOutput))
-	errors = appendErr(errors, applyField[float64](config, "messageSendIntervalMs", "invalid message send interval value", func(f float64) {
+	errors = appendErr(errors, applyField(config, "messageSendIntervalMs", "invalid message send interval value", func(f float64) {
 		h.config.SetPitRadioMessageSendIntervalMs(int(f))
 	}))
 	errors = append(errors, applySubMap(config, "audio", "invalid pit radio audio configuration structure", h.applyPitRadioAudioConfig)...)
@@ -896,10 +896,10 @@ func (h *configHandler) applyFanConfig(config map[string]any) []string {
 	errors = appendErr(errors, applyField(config, "mode", "invalid fan mode value", h.config.SetFanMode))
 	errors = appendErr(errors, applyField(config, "deviceAddress", "invalid fan device address value", h.config.SetFanDeviceAddress))
 	errors = appendErr(errors, applyField(config, "deviceName", "invalid fan device name value", h.config.SetFanDeviceName))
-	errors = appendErr(errors, applyField[float64](config, "commandTimeoutMs", "invalid fan command timeout value", func(f float64) {
+	errors = appendErr(errors, applyField(config, "commandTimeoutMs", "invalid fan command timeout value", func(f float64) {
 		h.config.SetFanCommandTimeoutMs(int(f))
 	}))
-	errors = appendErr(errors, applyField[float64](config, "maxSpeedKph", "invalid fan max speed value", func(f float64) {
+	errors = appendErr(errors, applyField(config, "maxSpeedKph", "invalid fan max speed value", func(f float64) {
 		h.config.SetFanMaxSpeedKPH(int(f))
 	}))
 

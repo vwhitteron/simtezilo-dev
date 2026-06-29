@@ -225,22 +225,8 @@ func (suite *WSClientTestSuite) TestNewWSClient_HasDefaultSubscriptions() {
 	// Arrange
 	logger := zerolog.Nop()
 
-	// Act - we need a mock connection, but we can test the struct creation
-	client := &wsClient{
-		conn: nil,
-		send: make(chan wsMessage, 64),
-		subscriptions: map[string]bool{
-			"vehicle":     true,
-			"gameState":   true,
-			"circuit":     true,
-			"race":        true,
-			"logStats":    true,
-			"calibration": true,
-			"telemetry":   false,
-		},
-		done: make(chan struct{}),
-		log:  logger,
-	}
+	// Act
+	client := newWSClient(nil, logger)
 
 	// Assert
 	suite.True(client.subscriptions["vehicle"])
@@ -250,6 +236,7 @@ func (suite *WSClientTestSuite) TestNewWSClient_HasDefaultSubscriptions() {
 	suite.True(client.subscriptions["logStats"])
 	suite.True(client.subscriptions["calibration"])
 	suite.False(client.subscriptions["telemetry"], "telemetry should be off by default")
+	suite.False(client.subscriptions["screen"], "screen should be off by default")
 }
 
 func (suite *WSClientTestSuite) TestWSClient_UpdateSubscriptions() {

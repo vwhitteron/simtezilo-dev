@@ -27,13 +27,13 @@ func (h *configHandler) applyHapticsOutputConfig(config map[string]any) []string
 	// The name is metadata for device resolution; a device change is saved
 	// alongside it and already triggers the restart, so it isn't change-tracked.
 	errors = appendErr(errors, applyField(config, "deviceName", "invalid haptics device name value", h.config.SetAudioHapticsDeviceName))
-	errors = appendErr(errors, applyField[float64](config, "channels", "invalid haptics channels value", func(f float64) {
+	errors = appendErr(errors, applyField(config, "channels", "invalid haptics channels value", func(f float64) {
 		h.config.SetAudioHapticsChannels(int(f))
 	}))
-	errors = appendErr(errors, applyField[float64](config, "sampleRate", "invalid haptics sample rate value", func(f float64) {
+	errors = appendErr(errors, applyField(config, "sampleRate", "invalid haptics sample rate value", func(f float64) {
 		h.config.SetAudioHapticsSampleRate(int(f))
 	}))
-	errors = appendErr(errors, applyField[float64](config, "latencyMs", "invalid haptics latency value", func(f float64) {
+	errors = appendErr(errors, applyField(config, "latencyMs", "invalid haptics latency value", func(f float64) {
 		h.config.SetAudioHapticsLatencyMs(int(f))
 	}))
 
