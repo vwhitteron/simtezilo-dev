@@ -105,22 +105,23 @@ func (a *App) sendHIDInput(key string) bool {
 	}
 }
 
-// hidKeyAction maps a web UI key name to its HID input event.
+// hidKeyMap maps a web UI key name to its HID input event.
 // Button 1 → Escape, Button 2 → None, Button 3 → Power.
+var hidKeyMap = map[string]ui.HIDInputEvent{ //nolint:gochecknoglobals // unavoidable global to avoid allocations on hidKeyAction() calls
+	"up":    ui.HIDInputUp,
+	"down":  ui.HIDInputDown,
+	"left":  ui.HIDInputLeft,
+	"right": ui.HIDInputRight,
+	"enter": ui.HIDInputEnter,
+	"1":     ui.HIDInputEscape,
+	"2":     ui.HIDInputNone,
+	"3":     ui.HIDInputPower,
+}
+
+// hidKeyAction returns the HID input event for a web UI key name.
 // Returns (event, true) on a known key, or (0, false) otherwise.
 func hidKeyAction(key string) (ui.HIDInputEvent, bool) {
-	keyMap := map[string]ui.HIDInputEvent{
-		"up":    ui.HIDInputUp,
-		"down":  ui.HIDInputDown,
-		"left":  ui.HIDInputLeft,
-		"right": ui.HIDInputRight,
-		"enter": ui.HIDInputEnter,
-		"1":     ui.HIDInputEscape,
-		"2":     ui.HIDInputNone,
-		"3":     ui.HIDInputPower,
-	}
-
-	event, known := keyMap[key]
+	event, known := hidKeyMap[key]
 
 	return event, known
 }

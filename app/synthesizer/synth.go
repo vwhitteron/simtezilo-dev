@@ -3,6 +3,7 @@ package synthesizer
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -37,12 +38,23 @@ func (s *Synthesizer) NumOutputChannels() int {
 
 // OutputChannelName returns the channel name for output channel n (e.g., "_output_0").
 func OutputChannelName(n int) string {
-	return fmt.Sprintf("%s%d", outputChannelPrefix, n)
+	return outputChannelPrefix + strconv.Itoa(n)
 }
 
 // ChassisChannelName returns the channel name for chassis channel n (e.g., "chassis_0").
 func ChassisChannelName(n int) string {
-	return fmt.Sprintf("%s%d", chassisChannelPrefix, n)
+	return chassisChannelPrefix + strconv.Itoa(n)
+}
+
+// buildChannelNames returns a list of precomputed channel names for the given
+// prefix and channel count.
+func buildChannelNames(prefix string, count int) []string {
+	names := make([]string, count)
+	for n := range count {
+		names[n] = prefix + strconv.Itoa(n)
+	}
+
+	return names
 }
 
 // IsChassisChannel returns true if the channel name is a chassis channel.

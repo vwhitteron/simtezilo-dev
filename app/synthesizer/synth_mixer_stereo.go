@@ -39,10 +39,17 @@ type StereoMixer struct {
 	sampleRateHz      int
 	cushionMs         int
 	numOutputChannels int
-	log               zerolog.Logger
-	faderGain         float64
-	fadeInActive      bool
-	silenced          bool
+
+	// Precomputed channel names indexed by channel number, built once at
+	// construction. The hot mix/read loops index into these instead of calling
+	// OutputChannelName / ChassisChannelName (which allocate a string per call).
+	outputChannelNames  []string
+	chassisChannelNames []string
+
+	log          zerolog.Logger
+	faderGain    float64
+	fadeInActive bool
+	silenced     bool
 
 	// Calibration mode state
 	calibrator     calibrator.Calibrator
@@ -95,14 +102,18 @@ func NewStereoMixer(mixerConfig StereoMixerConfig) (*StereoMixer, error) {
 		sampleRateHz:      mixerConfig.SampleRateHz,
 		cushionMs:         mixerConfig.Config.GetAudioHapticsCushionMs(),
 		numOutputChannels: numOutputChannels,
-		channels:          map[string]*MixerChannel{},
-		log:               mixerConfig.Log,
-		faderGain:         config.MinimumGain,
-		fadeInActive:      false,
-		silenced:          true,
-		calibrator:        mixerConfig.Calibrator,
-		sineWavePhaseL:    0,
-		sineWavePhaseR:    0,
+
+		outputChannelNames:  buildChannelNames(outputChannelPrefix, numOutputChannels),
+		chassisChannelNames: buildChannelNames(chassisChannelPrefix, numOutputChannels),
+
+		channels:       map[string]*MixerChannel{},
+		log:            mixerConfig.Log,
+		faderGain:      config.MinimumGain,
+		fadeInActive:   false,
+		silenced:       true,
+		calibrator:     mixerConfig.Calibrator,
+		sineWavePhaseL: 0,
+		sineWavePhaseR: 0,
 
 		// Initialize buffer monitoring
 		lastHealthCheck:     time.Now(),
@@ -166,6 +177,11 @@ func (m *StereoMixer) AddChannel(name string, initialGain float64) error {
 	}
 
 	return nil
+}
+
+// OutputChannelName returns the precomputed channel name for output channel ch.
+func (m *StereoMixer) OutputChannelName(ch int) string {
+	return m.outputChannelNames[ch]
 }
 
 // Read reads the specified number of samples from the channel's buffer.
@@ -476,7 +492,7 @@ func (m *StereoMixer) MixToMaster(length int) {
 	chassisMuted := m.config.GetSynthChassisMute()
 	if !chassisMuted {
 		for ch := range m.numOutputChannels {
-			if chassisCh, ok := m.channels[ChassisChannelName(ch)]; ok {
+			if chassisCh, ok := m.channels[m.chassisChannelNames[ch]]; ok {
 				samples := chassisCh.Read(length)
 				for i, sample := range samples {
 					channelSamples[ch][i] = mixSampleSum(channelSamples[ch][i], sample, &peaks[ch])
@@ -516,7 +532,7 @@ func (m *StereoMixer) MixToMaster(length int) {
 	// master gain (applied downstream by the Streamer); it no longer holds a
 	// sample buffer, so nothing is mixed into it here.
 	for channel := range m.numOutputChannels {
-		m.channels[OutputChannelName(channel)].Write(channelSamples[channel], magnitude, 0, true)
+		m.channels[m.outputChannelNames[channel]].Write(channelSamples[channel], magnitude, 0, true)
 	}
 }
 
@@ -866,7 +882,7 @@ func (m *StereoMixer) mixCalibratorOutput(outSamples []float64) bool { //nolint:
 			}
 
 			for ch := range m.numOutputChannels {
-				m.channels[OutputChannelName(ch)].Write(channelSamples[ch], 1.0, 0, true)
+				m.channels[m.outputChannelNames[ch]].Write(channelSamples[ch], 1.0, 0, true)
 			}
 
 			return true

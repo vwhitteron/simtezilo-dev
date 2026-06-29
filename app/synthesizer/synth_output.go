@@ -128,7 +128,7 @@ func (s *Streamer) getOutputChannels() []OutputChannelSettings {
 	channelGains := s.settings[:n]
 
 	for ch := range s.synth.numOutputChannels {
-		channelName := OutputChannelName(ch)
+		channelName := s.synth.mixer.OutputChannelName(ch)
 		channelGainDB, _ := s.synth.mixer.GetChannelGain(channelName)
 		channelGains[ch] = OutputChannelSettings{
 			Gain: GainToPowerRatio(channelGainDB + masterGainDB),
@@ -157,7 +157,7 @@ func (s *Streamer) readOutputBuffers(length int) [][]float64 {
 	buffers := s.ensureBufs(channels, length)
 
 	for ch := range channels {
-		raw := s.synth.mixer.ReadChannel(OutputChannelName(ch), length)
+		raw := s.synth.mixer.ReadChannel(s.synth.mixer.OutputChannelName(ch), length)
 		buf := buffers[ch]
 
 		gain := outputChannels[ch].Gain

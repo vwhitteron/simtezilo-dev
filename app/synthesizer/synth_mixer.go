@@ -10,6 +10,9 @@ type Mixer interface { //nolint:interfacebloat // Large interface for core mixer
 	MixToMaster(length int)
 	ReadChannel(name string, length int) []float64
 
+	// OutputChannelName returns the precomputed channel name for output channel ch.
+	OutputChannelName(ch int) string
+
 	// Channel management
 	AddChannel(name string, gain float64) error
 	GetChannelGain(name string) (float64, error)

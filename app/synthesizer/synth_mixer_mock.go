@@ -43,6 +43,10 @@ func (m *MockMixer) MixToMaster(length int) {
 	}
 }
 
+func (m *MockMixer) OutputChannelName(ch int) string {
+	return OutputChannelName(ch)
+}
+
 func (m *MockMixer) ReadChannel(_ string, length int) []float64 {
 	if len(m.lastSamples) == 0 {
 		return make([]float64, length)
