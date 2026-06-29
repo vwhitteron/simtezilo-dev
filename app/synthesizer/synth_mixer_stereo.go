@@ -34,17 +34,21 @@ type MixerDiagnostics struct {
 type StereoMixer struct {
 	config *config.Config
 
-	channels          map[string]*MixerChannel
-	bufferLength      time.Duration
-	sampleRateHz      int
-	cushionMs         int
-	numOutputChannels int
-
-	// Precomputed channel names indexed by channel number, built once at
-	// construction. The hot mix/read loops index into these instead of calling
-	// OutputChannelName / ChassisChannelName (which allocate a string per call).
+	channels            map[string]*MixerChannel
+	bufferLength        time.Duration
+	sampleRateHz        int
+	cushionMs           int
+	numOutputChannels   int
 	outputChannelNames  []string
 	chassisChannelNames []string
+
+	// Reusable scratch for the mix path, AUDIO-CALLBACK-THREAD ONLY (see
+	// MixToMaster). Grown on demand to avoid per-frame heap allocations.
+	mixOutSamples          channelBuffer
+	mixChannelSamples      deviceBuffer
+	mixPeaks               channelValues
+	engineWorkScratch      deviceBuffer
+	calibratorEqAmplitudes channelValues
 
 	log          zerolog.Logger
 	faderGain    float64
@@ -469,9 +473,76 @@ func (m *StereoMixer) FadeIn(period time.Duration) {
 	}()
 }
 
+// channelBuffer holds one channel's audio samples.
+type channelBuffer []float64
+
+// grow resizes the channel buffer to the specified length.
+func (b *channelBuffer) grow(length int) {
+	if cap(*b) < length {
+		*b = make(channelBuffer, length)
+	}
+
+	*b = (*b)[:length]
+}
+
+// zero overwrites all elements in the channel buffer with zeros.
+func (b *channelBuffer) zero() {
+	for i := range *b {
+		(*b)[i] = 0
+	}
+}
+
+// scalePeak reduces the amplitude of the channel buffer to no larger than the specified peak.
+func (b *channelBuffer) scalePeak(peak float64) {
+	scaleSamplesPeak((*[]float64)(b), peak)
+}
+
+// deviceBuffer holds one channelBuffer per output channel (channels x length).
+type deviceBuffer []channelBuffer
+
+// grow resizes the device buffer to the specified number of channels and length.
+func (d *deviceBuffer) grow(channels, length int) {
+	if cap(*d) < channels {
+		*d = make(deviceBuffer, channels)
+	}
+
+	*d = (*d)[:channels]
+
+	for ch := range channels {
+		(*d)[ch].grow(length)
+	}
+}
+
+// channelValues holds one scalar per output channel.
+type channelValues []float64
+
+// grow resizes the channel values slice to the specified number of channels.
+func (v *channelValues) grow(channels int) {
+	if cap(*v) < channels {
+		*v = make(channelValues, channels)
+	}
+
+	*v = (*v)[:channels]
+}
+
+// zero overwrites all elements in the channel values slice with zeros.
+func (v *channelValues) zero() {
+	for i := range *v {
+		(*v)[i] = 0
+	}
+}
+
 // MixToMaster mixes all active channels into the master channel buffer using an alternative algorithm.
+//
+// MixToMaster must never run concurrently with itself: it reuses the
+// callback-thread-only scratch fields on StereoMixer (mixOutSamples,
+// mixChannelSamples, mixPeaks, and—via the helpers it calls—engineWorkScratch
+// and calibratorEqAmplitudes). This holds today because it runs only from the
+// single audio callback.
 func (m *StereoMixer) MixToMaster(length int) {
-	outSamples := make([]float64, length)
+	// Reusable callback-thread-only scratch (grown on demand). See struct doc.
+	m.mixOutSamples.grow(length)
+	outSamples := m.mixOutSamples
 
 	m.mu.RLock()
 
@@ -479,14 +550,20 @@ func (m *StereoMixer) MixToMaster(length int) {
 		return
 	}
 
-	// Normal haptic mode - mix per-channel chassis with transmission and engine
-	// Create separate output buffers for each channel to support per-channel EQ
-	channelSamples := make([][]float64, m.numOutputChannels)
-	peaks := make([]float64, m.numOutputChannels)
+	// Normal haptic mode - mix per-channel chassis with transmission and engine.
+	// Separate output buffers per channel support per-channel EQ.
+	m.mixChannelSamples.grow(m.numOutputChannels, length)
+	m.mixPeaks.grow(m.numOutputChannels)
 
+	channelSamples := m.mixChannelSamples
+	peaks := m.mixPeaks
+
+	// Scratch is reused across calls; clear the accumulators before mixing.
 	for ch := range m.numOutputChannels {
-		channelSamples[ch] = make([]float64, length)
+		channelSamples[ch].zero()
 	}
+
+	peaks.zero()
 
 	// Mix per-channel chassis with appropriate EQ
 	chassisMuted := m.config.GetSynthChassisMute()
@@ -517,7 +594,7 @@ func (m *StereoMixer) MixToMaster(length int) {
 	// Scale peaks for each channel
 	for ch := range m.numOutputChannels {
 		if peaks[ch] > 1.0 {
-			scaleSamplesPeak(&channelSamples[ch], peaks[ch])
+			channelSamples[ch].scalePeak(peaks[ch])
 		}
 	}
 
@@ -826,8 +903,11 @@ func (m *StereoMixer) mixCalibratorOutput(outSamples []float64) bool { //nolint:
 	isStopping := m.calibrator.IsStopping()
 	length := len(outSamples)
 
-	// Compute per-channel EQ amplitude multipliers.
-	eqAmplitudes := make([]float64, m.numOutputChannels)
+	// Compute per-channel EQ amplitude multipliers. Reusable callback-thread-only
+	// scratch (fully overwritten below, so no clear needed).
+	m.calibratorEqAmplitudes.grow(m.numOutputChannels)
+	eqAmplitudes := m.calibratorEqAmplitudes
+
 	for channelIndex := range m.numOutputChannels {
 		eqAmplitudes[channelIndex] = 1.0
 
@@ -842,10 +922,11 @@ func (m *StereoMixer) mixCalibratorOutput(outSamples []float64) bool { //nolint:
 		}
 	}
 
-	channelSamples := make([][]float64, m.numOutputChannels)
-	for ch := range m.numOutputChannels {
-		channelSamples[ch] = make([]float64, length)
-	}
+	// Reuse the shared per-channel scratch (fully overwritten per offset below,
+	// so no clear needed). Safe because the calibrator path and the normal mix
+	// path never run within the same MixToMaster call.
+	m.mixChannelSamples.grow(m.numOutputChannels, length)
+	channelSamples := m.mixChannelSamples
 
 	var prevPhase float64
 
@@ -899,7 +980,7 @@ func (m *StereoMixer) mixCalibratorOutput(outSamples []float64) bool { //nolint:
 }
 
 // mixEngineChannelMulti mixes the engine channel into all output samples with lower priority.
-func (m *StereoMixer) mixEngineChannelMulti(outSamples [][]float64, length int) {
+func (m *StereoMixer) mixEngineChannelMulti(outSamples deviceBuffer, length int) {
 	channel, ok := m.channels[ChannelEngine]
 	if !ok {
 		m.log.Error().Str("channel", ChannelEngine).Msg("channel not found in mixer")
@@ -922,11 +1003,18 @@ func (m *StereoMixer) mixEngineChannelMulti(outSamples [][]float64, length int) 
 }
 
 // processEngineSamplesMulti processes and mixes engine samples into all output channels.
-func (m *StereoMixer) processEngineSamplesMulti(outSamples [][]float64, engineSamples []float64) {
-	// Create work buffers for each channel
-	outSamplesWork := make([][]float64, len(outSamples))
-	for channel := range outSamples {
-		outSamplesWork[channel] = make([]float64, len(outSamples[channel]))
+func (m *StereoMixer) processEngineSamplesMulti(outSamples deviceBuffer, engineSamples []float64) {
+	// Reusable callback-thread-only work buffers, grown on demand. outSamples is
+	// the caller's per-channel scratch (numOutputChannels x length), so the
+	// dimensions match. Clear before use: on a short engine read (underrun
+	// truncation) the loop below fills only the leading indices, and the
+	// copy-back overwrites all of outSamples — the cleared tail preserves the
+	// original behaviour of zeroing those trailing samples.
+	m.engineWorkScratch.grow(len(outSamples), len(outSamples[0]))
+	outSamplesWork := m.engineWorkScratch
+
+	for channel := range outSamplesWork {
+		outSamplesWork[channel].zero()
 	}
 
 	for index, engineSample := range engineSamples {
