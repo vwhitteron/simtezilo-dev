@@ -118,8 +118,8 @@ type gap struct {
 	rpmJump  float64 // |RPM change| measured across the gap
 }
 
-// rpmStep is an RPM change between two consecutive delivered packets.
-type rpmStep struct {
+// rpmStepData is an RPM change between two consecutive delivered packets.
+type rpmStepData struct {
 	fromSeq   uint32
 	delta     float64 // signed RPM change
 	fromRPM   float64
@@ -128,9 +128,9 @@ type rpmStep struct {
 }
 
 func report(file string, frames []frame, topN int, rpmFloor float64) {
-	fmt.Printf("file   : %s\n", file)
-	fmt.Printf("packets: %d decoded\n", len(frames))
-	fmt.Printf("states : %s\n\n", stateBreakdown(frames))
+	fmt.Fprintf(os.Stdout, "file   : %s\n", file)
+	fmt.Fprintf(os.Stdout, "packets: %d decoded\n", len(frames))
+	fmt.Fprintf(os.Stdout, "states : %s\n\n", stateBreakdown(frames))
 
 	// --- Sequence / drop analysis -----------------------------------------
 	// Sessions restart the sequence at a low value; treat a non-increasing step
@@ -140,8 +140,8 @@ func report(file string, frames []frame, topN int, rpmFloor float64) {
 		delivered   int // consecutive-pair count where seq advanced
 		totalMissed int
 		sessions    int
-		contiguous  []rpmStep
-		acrossGaps  []rpmStep
+		contiguous  []rpmStepData
+		acrossGaps  []rpmStepData
 	)
 
 	for i := 1; i < len(frames); i++ {
@@ -156,17 +156,17 @@ func report(file string, frames []frame, topN int, rpmFloor float64) {
 
 		delivered++
 
-		rs := rpmStep{fromSeq: prev.seq, delta: cur.rpm - prev.rpm, fromRPM: prev.rpm, toRPM: cur.rpm}
+		rpmStep := rpmStepData{fromSeq: prev.seq, delta: cur.rpm - prev.rpm, fromRPM: prev.rpm, toRPM: cur.rpm}
 
 		if step > 1 {
 			missing := int(step - 1)
 			totalMissed += missing
-			rs.acrossGap = true
+			rpmStep.acrossGap = true
 
 			gaps = append(gaps, gap{afterSeq: prev.seq, missing: missing, rpmJump: math.Abs(cur.rpm - prev.rpm)})
-			acrossGaps = append(acrossGaps, rs)
+			acrossGaps = append(acrossGaps, rpmStep)
 		} else {
-			contiguous = append(contiguous, rs)
+			contiguous = append(contiguous, rpmStep)
 		}
 	}
 
@@ -177,46 +177,46 @@ func report(file string, frames []frame, topN int, rpmFloor float64) {
 		dropRate = 100 * float64(totalMissed) / float64(expected)
 	}
 
-	fmt.Println("== packet reception (hypothesis 1: drops/jitter) ==")
-	fmt.Printf("  session resets   : %d\n", sessions)
-	fmt.Printf("  delivered pairs  : %d\n", delivered)
-	fmt.Printf("  dropped packets  : %d across %d gaps (%.3f%% of expected stream)\n", totalMissed, len(gaps), dropRate)
+	fmt.Fprintln(os.Stdout, "== packet reception (hypothesis 1: drops/jitter) ==")
+	fmt.Fprintf(os.Stdout, "  session resets   : %d\n", sessions)
+	fmt.Fprintf(os.Stdout, "  delivered pairs  : %d\n", delivered)
+	fmt.Fprintf(os.Stdout, "  dropped packets  : %d across %d gaps (%.3f%% of expected stream)\n", totalMissed, len(gaps), dropRate)
 
 	if len(gaps) > 0 {
-		fmt.Printf("  lost time        : ~%.1f ms total (%.1f ms in the largest gap)\n",
+		fmt.Fprintf(os.Stdout, "  lost time        : ~%.1f ms total (%.1f ms in the largest gap)\n",
 			1000*float64(totalMissed)/packetRateHz, 1000*float64(maxMissing(gaps))/packetRateHz)
-		fmt.Printf("  largest gaps     :\n")
+		fmt.Fprintf(os.Stdout, "  largest gaps     :\n")
 
 		sort.Slice(gaps, func(a, b int) bool { return gaps[a].missing > gaps[b].missing })
 
 		for _, g := range gaps[:min(topN, len(gaps))] {
-			fmt.Printf("    after seq %-8d  %2d missing (~%5.1f ms)  RPM jump %7.0f\n",
+			fmt.Fprintf(os.Stdout, "    after seq %-8d  %2d missing (~%5.1f ms)  RPM jump %7.0f\n",
 				g.afterSeq, g.missing, 1000*float64(g.missing)/packetRateHz, g.rpmJump)
 		}
 	}
 
 	// --- RPM-step analysis (hypothesis 2: seam discontinuity magnitude) ----
-	fmt.Println("\n== RPM steps between packets (hypothesis 2: seam jump size) ==")
-	fmt.Printf("  (engine RPM >= %.0f; one step bounds the engine-haptic buffer seam)\n", rpmFloor)
+	fmt.Fprintln(os.Stdout, "== RPM steps between packets (hypothesis 2: seam jump size) ==")
+	fmt.Fprintf(os.Stdout, "  (engine RPM >= %.0f; one step bounds the engine-haptic buffer seam)\n", rpmFloor)
 
 	reportSteps("  contiguous (seq+1)", filterSteps(contiguous, rpmFloor))
 	reportSteps("  across a drop     ", filterSteps(acrossGaps, rpmFloor))
 
 	// Largest individual steps, regardless of gap, for inspection.
-	all := append(append([]rpmStep{}, contiguous...), acrossGaps...)
-	all = filterSteps(all, rpmFloor)
-	sort.Slice(all, func(a, b int) bool { return math.Abs(all[a].delta) > math.Abs(all[b].delta) })
+	allSteps := append(append([]rpmStepData{}, contiguous...), acrossGaps...)
+	allSteps = filterSteps(allSteps, rpmFloor)
+	sort.Slice(allSteps, func(a, b int) bool { return math.Abs(allSteps[a].delta) > math.Abs(allSteps[b].delta) })
 
-	if len(all) > 0 {
-		fmt.Printf("  largest RPM steps :\n")
+	if len(allSteps) > 0 {
+		fmt.Fprintf(os.Stdout, "  largest RPM steps :\n")
 
-		for _, s := range all[:min(topN, len(all))] {
+		for _, thisStep := range allSteps[:min(topN, len(allSteps))] {
 			tag := ""
-			if s.acrossGap {
+			if thisStep.acrossGap {
 				tag = "  (across drop)"
 			}
 
-			fmt.Printf("    seq %-8d  %+7.0f rpm  (%6.0f -> %6.0f)%s\n", s.fromSeq, s.delta, s.fromRPM, s.toRPM, tag)
+			fmt.Fprintf(os.Stdout, "    seq %-8d  %+7.0f rpm  (%6.0f -> %6.0f)%s\n", thisStep.fromSeq, thisStep.delta, thisStep.fromRPM, thisStep.toRPM, tag)
 		}
 	}
 
@@ -229,17 +229,17 @@ func report(file string, frames []frame, topN int, rpmFloor float64) {
 		}
 	}
 
-	fmt.Printf("\n== events ==\n  gear changes     : %d (transmission haptic triggers)\n", gearChanges)
+	fmt.Fprintf(os.Stdout, "\n== events ==\n  gear changes     : %d (transmission haptic triggers)\n", gearChanges)
 
 	// --- Verdict ----------------------------------------------------------
-	fmt.Println()
+	fmt.Fprintln(os.Stdout, "")
 	conclude(dropRate, len(gaps), filterSteps(contiguous, rpmFloor), filterSteps(acrossGaps, rpmFloor))
 }
 
 // reportSteps prints summary statistics for a set of RPM steps.
-func reportSteps(label string, steps []rpmStep) {
+func reportSteps(label string, steps []rpmStepData) {
 	if len(steps) == 0 {
-		fmt.Printf("%s: (none)\n", label)
+		fmt.Fprintf(os.Stdout, "%s: (none)\n", label)
 
 		return
 	}
@@ -251,57 +251,57 @@ func reportSteps(label string, steps []rpmStep) {
 
 	sort.Float64s(abss)
 
-	fmt.Printf("%s: n=%-6d  mean %5.0f  p50 %5.0f  p95 %5.0f  p99 %5.0f  max %6.0f rpm\n",
+	fmt.Fprintf(os.Stdout, "%s: n=%-6d  mean %5.0f  p50 %5.0f  p95 %5.0f  p99 %5.0f  max %6.0f rpm\n",
 		label, len(steps), mean(abss), pct(abss, 0.50), pct(abss, 0.95), pct(abss, 0.99), abss[len(abss)-1])
 }
 
 // conclude prints a short interpretation pointing at the likely artifact source.
-func conclude(dropRate float64, gapCount int, contiguous, acrossGaps []rpmStep) {
-	fmt.Println("== reading ==")
+func conclude(dropRate float64, gapCount int, contiguous, acrossGaps []rpmStepData) {
+	fmt.Fprintln(os.Stdout, "== reading ==")
 
 	switch {
 	case gapCount == 0:
-		fmt.Println("  No dropped packets in this recording: hypothesis 1 (reception loss) is not")
-		fmt.Println("  the cause of artifacts in THIS replay. Inter-arrival jitter is not recoverable")
-		fmt.Println("  from a batch read, so a live-source capture is still needed to rule it out.")
+		fmt.Fprintln(os.Stdout, "  No dropped packets in this recording: hypothesis 1 (reception loss) is not")
+		fmt.Fprintln(os.Stdout, "  the cause of artifacts in THIS replay. Inter-arrival jitter is not recoverable")
+		fmt.Fprintln(os.Stdout, "  from a batch read, so a live-source capture is still needed to rule it out.")
 	case dropRate < 0.5:
-		fmt.Printf("  Sparse drops (%.3f%%). Unlikely to be the dominant artifact source on their own,\n", dropRate)
-		fmt.Println("  but each drop enlarges an engine-haptic seam step (see across-drop stats above).")
+		fmt.Fprintf(os.Stdout, "  Sparse drops (%.3f%%). Unlikely to be the dominant artifact source on their own,\n", dropRate)
+		fmt.Fprintln(os.Stdout, "  but each drop enlarges an engine-haptic seam step (see across-drop stats above).")
 	default:
-		fmt.Printf("  Frequent drops (%.3f%%). A plausible contributor: every gap forces a larger RPM\n", dropRate)
-		fmt.Println("  step at the engine-haptic buffer seam.")
+		fmt.Fprintf(os.Stdout, "  Frequent drops (%.3f%%). A plausible contributor: every gap forces a larger RPM\n", dropRate)
+		fmt.Fprintln(os.Stdout, "  step at the engine-haptic buffer seam.")
 	}
 
 	if len(contiguous) > 0 && len(acrossGaps) > 0 {
 		cm, am := pct(absDeltas(contiguous), 0.95), pct(absDeltas(acrossGaps), 0.95)
 		if am > 1.5*cm && cm > 0 {
-			fmt.Printf("  RPM steps across drops are ~%.1fx larger at p95 (%.0f vs %.0f rpm): drops do\n", am/cm, am, cm)
-			fmt.Println("  measurably worsen the seam discontinuity the engine haptic must absorb.")
+			fmt.Fprintf(os.Stdout, "  RPM steps across drops are ~%.1fx larger at p95 (%.0f vs %.0f rpm): drops do\n", am/cm, am, cm)
+			fmt.Fprintln(os.Stdout, "  measurably worsen the seam discontinuity the engine haptic must absorb.")
 		}
 	}
 
-	fmt.Println("  Next: feed this RPM sequence through the engine waveform + buffer seam and capture")
-	fmt.Println("  the output to see whether these steps actually become audible discontinuities.")
+	fmt.Fprintln(os.Stdout, "  Next: feed this RPM sequence through the engine waveform + buffer seam and capture")
+	fmt.Fprintln(os.Stdout, "  the output to see whether these steps actually become audible discontinuities.")
 }
 
 // --- helpers --------------------------------------------------------------
 
-func filterSteps(steps []rpmStep, rpmFloor float64) []rpmStep {
+func filterSteps(steps []rpmStepData, rpmFloor float64) []rpmStepData {
 	out := steps[:0:0]
 
-	for _, s := range steps {
-		if s.fromRPM >= rpmFloor && s.toRPM >= rpmFloor {
-			out = append(out, s)
+	for _, step := range steps {
+		if step.fromRPM >= rpmFloor && step.toRPM >= rpmFloor {
+			out = append(out, step)
 		}
 	}
 
 	return out
 }
 
-func absDeltas(steps []rpmStep) []float64 {
+func absDeltas(steps []rpmStepData) []float64 {
 	out := make([]float64, len(steps))
-	for i, s := range steps {
-		out[i] = math.Abs(s.delta)
+	for i, step := range steps {
+		out[i] = math.Abs(step.delta)
 	}
 
 	sort.Float64s(out)
@@ -310,27 +310,28 @@ func absDeltas(steps []rpmStep) []float64 {
 }
 
 func maxMissing(gaps []gap) int {
-	m := 0
-	for _, g := range gaps {
-		if g.missing > m {
-			m = g.missing
+	largest := 0
+	for _, gap := range gaps {
+		if gap.missing > largest {
+			largest = gap.missing
 		}
 	}
 
-	return m
+	return largest
 }
 
-func mean(xs []float64) float64 {
-	if len(xs) == 0 {
+// mean returns the arithmetic mean of a slice of float64s, or 0 if the slice is empty.
+func mean(values []float64) float64 {
+	if len(values) == 0 {
 		return 0
 	}
 
-	var s float64
-	for _, x := range xs {
-		s += x
+	var sum float64
+	for _, value := range values {
+		sum += value
 	}
 
-	return s / float64(len(xs))
+	return sum / float64(len(values))
 }
 
 // pct returns the p-quantile (0..1) of an already-sorted slice.
@@ -346,8 +347,8 @@ func pct(sorted []float64, p float64) float64 {
 
 func stateBreakdown(frames []frame) string {
 	counts := map[gtmodels.GameState]int{}
-	for _, f := range frames {
-		counts[f.state]++
+	for _, frame := range frames {
+		counts[frame.state]++
 	}
 
 	name := map[gtmodels.GameState]string{
@@ -365,9 +366,9 @@ func stateBreakdown(frames []frame) string {
 
 	parts := make([]string, 0, len(order))
 
-	for _, s := range order {
-		if c := counts[s]; c > 0 {
-			parts = append(parts, fmt.Sprintf("%s=%d", name[s], c))
+	for _, state := range order {
+		if c := counts[state]; c > 0 {
+			parts = append(parts, fmt.Sprintf("%s=%d", name[state], c))
 		}
 	}
 
@@ -375,12 +376,12 @@ func stateBreakdown(frames []frame) string {
 
 	var outSb373 strings.Builder
 
-	for i, p := range parts {
+	for i, part := range parts {
 		if i > 0 {
 			outSb373.WriteString(", ")
 		}
 
-		outSb373.WriteString(p)
+		outSb373.WriteString(part)
 	}
 
 	out += outSb373.String()

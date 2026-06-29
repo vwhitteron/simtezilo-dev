@@ -23,7 +23,7 @@ func halfSinePulse(length int, amplitude float64) []float64 {
 func TestMixSamplePriority(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
+	testCases := []struct {
 		name string
 		a, b float64
 		want float64
@@ -37,17 +37,17 @@ func TestMixSamplePriority(t *testing.T) {
 		{"dominant over unity is clamped", 1.4, 0.5, 1.0},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := mixSamplePriority(tc.a, tc.b)
-			if math.Abs(got-tc.want) > 1e-9 {
-				t.Errorf("mixSamplePriority(%v, %v) = %v, want %v", tc.a, tc.b, got, tc.want)
+			got := mixSamplePriority(testCase.a, testCase.b)
+			if math.Abs(got-testCase.want) > 1e-9 {
+				t.Errorf("mixSamplePriority(%v, %v) = %v, want %v", testCase.a, testCase.b, got, testCase.want)
 			}
 
 			if math.Abs(got) > 1.0+1e-9 {
-				t.Errorf("mixSamplePriority(%v, %v) = %v exceeds unity", tc.a, tc.b, got)
+				t.Errorf("mixSamplePriority(%v, %v) = %v exceeds unity", testCase.a, testCase.b, got)
 			}
 		})
 	}

@@ -7,7 +7,7 @@ import (
 // telemetryFormatName maps a telemetry packet format to a human-readable
 // addendum name for logging.
 func telemetryFormatName(format gtmodels.Name) string {
-	switch format {
+	switch format { //nolint:exhaustive // all effectively handled
 	case gtmodels.Standard:
 		return "Standard"
 	case gtmodels.Addendum1:

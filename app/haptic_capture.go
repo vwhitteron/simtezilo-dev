@@ -175,7 +175,7 @@ func (a *App) seekToVehicle(next pullFunc, seekSeconds float64) error {
 	seen := 0
 
 	for {
-		tf, scanErr, ok := next()
+		frame, scanErr, ok := next()
 		if scanErr != nil {
 			return fmt.Errorf("scan: %w", scanErr)
 		}
@@ -186,9 +186,9 @@ func (a *App) seekToVehicle(next pullFunc, seekSeconds float64) error {
 
 		seen++
 
-		a.state.current.sequenceNumber = tf.SequenceID()
+		a.state.current.sequenceNumber = frame.SequenceID()
 
-		if seen >= skip && tf.VehicleEngineLayout() != "" {
+		if seen >= skip && frame.VehicleEngineLayout() != "" {
 			return nil
 		}
 	}
@@ -218,21 +218,21 @@ func (a *App) buildVehicleForCapture() {
 // captureDimensions reproduces updateVehicle's wheelbase/track derivation, which
 // the chassis path needs (kinematics scales rotational velocity by these radii).
 func (a *App) captureDimensions() vehicle.Dimensions {
-	t := a.gtClient.Telemetry
+	client := a.gtClient.Telemetry
 
 	var wheelbaseMetres float32
-	if wb := t.VehicleWheelbaseMillimetres(); wb > 0 {
+	if wb := client.VehicleWheelbaseMillimetres(); wb > 0 {
 		wheelbaseMetres = float32(wb) / 1000
 	} else {
-		wheelbaseMetres = (float32(t.VehicleLengthMillimetres()) / 1000) * 0.55
+		wheelbaseMetres = (float32(client.VehicleLengthMillimetres()) / 1000) * 0.55
 	}
 
 	var trackFrontMetres, trackRearMetres float32
-	if tf, tr := t.VehicleTrackFrontMillimetres(), t.VehicleTrackRearMillimetres(); tf > 0 || tr > 0 {
+	if tf, tr := client.VehicleTrackFrontMillimetres(), client.VehicleTrackRearMillimetres(); tf > 0 || tr > 0 {
 		trackFrontMetres = float32(tf) / 1000
 		trackRearMetres = float32(tr) / 1000
 	} else {
-		trackFrontMetres = (float32(t.VehicleWidthMillimetres()) / 1000) * 0.85
+		trackFrontMetres = (float32(client.VehicleWidthMillimetres()) / 1000) * 0.85
 		trackRearMetres = trackFrontMetres
 	}
 
@@ -284,14 +284,14 @@ func (a *App) runCaptureLoop(next pullFunc, opts HapticCaptureOptions) *HapticCa
 		// granularity (a sequence gap between consecutive packets), not across the
 		// wider engine-tick interval, which normally spans two packets.
 		for nextPacket <= simTime {
-			tf, _, ok := next()
+			frame, _, ok := next()
 			if !ok {
 				ended = true
 
 				break
 			}
 
-			seq := tf.SequenceID()
+			seq := frame.SequenceID()
 			if gap := int(int64(seq)-int64(prevSeq)) - 1; gap > 0 {
 				dropsPending += gap
 			}
@@ -408,8 +408,11 @@ type tapSource struct {
 	pos   int
 }
 
-func (t *tapSource) ReadInterleaved(out []float32, channels int) (int, bool) {
-	n, ok := t.inner.ReadInterleaved(out, channels)
+// ReadInterleaved implements SampleSource. It copies the requested samples into
+// the preallocated rec buffer, advancing pos, and returns the number of frames read
+// and whether the source is still producing.
+func (t *tapSource) ReadInterleaved(out []float32, channels int) (n int, ok bool) {
+	n, ok = t.inner.ReadInterleaved(out, channels)
 
 	if t.pos < len(t.rec) {
 		t.pos += copy(t.rec[t.pos:], out[:n*channels])

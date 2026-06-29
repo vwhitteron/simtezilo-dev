@@ -110,6 +110,12 @@ func (f *fakeDevice) Disconnected() <-chan struct{} {
 	return f.discCh
 }
 
+func (f *fakeDevice) Close() error {
+	f.closeDisc()
+
+	return nil
+}
+
 // closeDisc closes the disconnect channel exactly once, guarded by closeOnce.
 func (f *fakeDevice) closeDisc() {
 	f.closeOnce.Do(func() {
@@ -120,12 +126,6 @@ func (f *fakeDevice) closeDisc() {
 			close(f.discCh)
 		}
 	})
-}
-
-func (f *fakeDevice) Close() error {
-	f.closeDisc()
-
-	return nil
 }
 
 // simulateDrop models the BLE link dropping unexpectedly (the watchDisconnect

@@ -102,29 +102,29 @@ type config struct {
 }
 
 func parseFlags() config {
-	var c config
+	var cfg config
 
-	flag.IntVar(&c.inRate, "in", 8000, "internal (synthesizer) sample rate in Hz")
-	flag.IntVar(&c.outRate, "out", 32000, "device output sample rate in Hz")
-	flag.IntVar(&c.channels, "channels", 2, "output channel count")
-	flag.Float64Var(&c.freq, "freq", audio.DefaultTestToneHz, "test tone frequency in Hz")
-	flag.Float64Var(&c.amp, "amp", 0.5, "test tone amplitude (0..1)")
-	flag.Float64Var(&c.dur, "dur", 2.0, "seconds of signal to analyse/play")
-	flag.IntVar(&c.latencyMs, "latency", 50, "requested device latency in ms")
-	flag.IntVar(&c.devBuf, "devbuf", 0, "device callback buffer in frames (0 = derive from latency)")
-	flag.BoolVar(&c.realtime, "realtime", true, "pace capture pulls at wall-clock rate (reveals real underruns)")
-	flag.Float64Var(&c.tol, "tol", 0.02, "max acceptable peak residual vs fitted fundamental")
-	flag.Float64Var(&c.minSNR, "snr", 50, "min acceptable fundamental-to-residual SNR in dB")
-	flag.StringVar(&c.backend, "backend", "capture", "capture (analyse) | beep | portaudio (audible)")
-	flag.StringVar(&c.stage, "stage", "all", "all | control | resample | async | full")
-	flag.StringVar(&c.wav, "wav", "", "when set, write <wav>-<stage>.wav for each captured stage")
-	flag.StringVar(&c.mode, "mode", "analyse", "analyse (stage capture/audible) | latency (measure event->read delay)")
-	flag.Float64Var(&c.interval, "interval", 0.5, "latency mode: seconds between injected gear-change markers")
-	flag.Float64Var(&c.threshold, "threshold", 0.5, "latency mode: |sample| impulse-detection threshold")
+	flag.IntVar(&cfg.inRate, "in", 8000, "internal (synthesizer) sample rate in Hz")
+	flag.IntVar(&cfg.outRate, "out", 32000, "device output sample rate in Hz")
+	flag.IntVar(&cfg.channels, "channels", 2, "output channel count")
+	flag.Float64Var(&cfg.freq, "freq", audio.DefaultTestToneHz, "test tone frequency in Hz")
+	flag.Float64Var(&cfg.amp, "amp", 0.5, "test tone amplitude (0..1)")
+	flag.Float64Var(&cfg.dur, "dur", 2.0, "seconds of signal to analyse/play")
+	flag.IntVar(&cfg.latencyMs, "latency", 50, "requested device latency in ms")
+	flag.IntVar(&cfg.devBuf, "devbuf", 0, "device callback buffer in frames (0 = derive from latency)")
+	flag.BoolVar(&cfg.realtime, "realtime", true, "pace capture pulls at wall-clock rate (reveals real underruns)")
+	flag.Float64Var(&cfg.tol, "tol", 0.02, "max acceptable peak residual vs fitted fundamental")
+	flag.Float64Var(&cfg.minSNR, "snr", 50, "min acceptable fundamental-to-residual SNR in dB")
+	flag.StringVar(&cfg.backend, "backend", "capture", "capture (analyse) | beep | portaudio (audible)")
+	flag.StringVar(&cfg.stage, "stage", "all", "all | control | resample | async | full")
+	flag.StringVar(&cfg.wav, "wav", "", "when set, write <wav>-<stage>.wav for each captured stage")
+	flag.StringVar(&cfg.mode, "mode", "analyse", "analyse (stage capture/audible) | latency (measure event->read delay)")
+	flag.Float64Var(&cfg.interval, "interval", 0.5, "latency mode: seconds between injected gear-change markers")
+	flag.Float64Var(&cfg.threshold, "threshold", 0.5, "latency mode: |sample| impulse-detection threshold")
 
 	flag.Parse()
 
-	return c
+	return cfg
 }
 
 // ---------------------------------------------------------------------------
@@ -145,8 +145,8 @@ func (s *sineSource) ReadInterleaved(out []float32, channels int) (int, bool) {
 	frames := len(out) / channels
 	inc := 2 * math.Pi * s.freq / s.rate
 
-	for f := range frames {
-		v := float32(s.amp * math.Sin(s.phase))
+	for frame := range frames {
+		value := float32(s.amp * math.Sin(s.phase))
 
 		s.phase += inc
 		if s.phase > 2*math.Pi {
@@ -154,7 +154,7 @@ func (s *sineSource) ReadInterleaved(out []float32, channels int) (int, bool) {
 		}
 
 		for c := range channels {
-			out[f*channels+c] = v
+			out[frame*channels+c] = value
 		}
 	}
 
@@ -203,13 +203,13 @@ func (s *captureSink) Start(src audio.SampleSource) error {
 	for captured := 0; captured < s.totalFrames; {
 		frames, _ := src.ReadInterleaved(buf, s.channels)
 
-		n := frames
-		if captured+n > s.totalFrames {
-			n = s.totalFrames - captured
+		count := frames
+		if captured+count > s.totalFrames {
+			count = s.totalFrames - captured
 		}
 
-		s.rec = append(s.rec, buf[:n*s.channels]...)
-		captured += n
+		s.rec = append(s.rec, buf[:count*s.channels]...)
+		captured += count
 
 		if s.realtime {
 			next = next.Add(period)
@@ -226,68 +226,68 @@ func (s *captureSink) Start(src audio.SampleSource) error {
 // Capture run: build each stage's pipeline, capture, analyse
 // ---------------------------------------------------------------------------
 
-func runCapture(c config) error {
-	stages := stageList(c.stage)
+func runCapture(cfg config) error {
+	stages := stageList(cfg.stage)
 	if stages == nil {
-		return fmt.Errorf("unknown -stage %q", c.stage)
+		return fmt.Errorf("unknown -stage %q", cfg.stage)
 	}
 
 	// The resample/full stages generate the tone at the internal rate before
 	// up-sampling, so a tone at or above the internal Nyquist cannot be represented
 	// and will alias — a test-input error that would masquerade as a resampler bug.
-	if usesInternalRate(stages) && c.freq >= float64(c.inRate)/2 {
+	if usesInternalRate(stages) && cfg.freq >= float64(cfg.inRate)/2 {
 		return fmt.Errorf("freq %.0f Hz is at/above the internal Nyquist %.0f Hz (inRate %d); "+
 			"lower -freq, raise -in, or test only -stage control/async",
-			c.freq, float64(c.inRate)/2, c.inRate)
+			cfg.freq, float64(cfg.inRate)/2, cfg.inRate)
 	}
 
-	capacity, target, block := bufferFrames(c.outRate, c.latencyMs)
+	capacity, target, block := bufferFrames(cfg.outRate, cfg.latencyMs)
 
-	devBuf := c.devBuf
+	devBuf := cfg.devBuf
 	if devBuf <= 0 {
 		devBuf = block
 	}
 
-	fmt.Printf("input : %.1f Hz sine, amp %.3f, %d ch\n", c.freq, c.amp, c.channels)
-	fmt.Printf("rates : internal %d Hz -> output %d Hz (ratio %.3gx)\n", c.inRate, c.outRate, float64(c.outRate)/float64(c.inRate))
-	fmt.Printf("buffer: ring capacity %d frames, target %d frames, producer block %d frames, device buffer %d frames\n",
+	fmt.Fprintf(os.Stdout, "input : %.1f Hz sine, amp %.3f, %d ch\n", cfg.freq, cfg.amp, cfg.channels)
+	fmt.Fprintf(os.Stdout, "rates : internal %d Hz -> output %d Hz (ratio %.3gx)\n", cfg.inRate, cfg.outRate, float64(cfg.outRate)/float64(cfg.inRate))
+	fmt.Fprintf(os.Stdout, "buffer: ring capacity %d frames, target %d frames, producer block %d frames, device buffer %d frames\n",
 		capacity, target, block, devBuf)
-	fmt.Printf("expect: peak residual <= %.4f, SNR >= %.0f dB\n\n", c.tol, c.minSNR)
+	fmt.Fprintf(os.Stdout, "expect: peak residual <= %.4f, SNR >= %.0f dB\n\n", cfg.tol, cfg.minSNR)
 
 	var failures int
 
-	for _, st := range stages {
-		rec, err := captureStage(c, st, capacity, target, block, devBuf)
+	for _, stage := range stages {
+		rec, err := captureStage(cfg, stage, capacity, target, block, devBuf)
 		if err != nil {
-			return fmt.Errorf("stage %s: %w", st, err)
+			return fmt.Errorf("stage %s: %w", stage, err)
 		}
 
-		if c.wav != "" {
-			path := fmt.Sprintf("%s-%s.wav", c.wav, st)
+		if cfg.wav != "" {
+			path := fmt.Sprintf("%s-%s.wav", cfg.wav, stage)
 
-			err := writeWAV(path, rec, c.channels, c.outRate)
+			err := writeWAV(path, rec, cfg.channels, cfg.outRate)
 			if err != nil {
 				return fmt.Errorf("write %s: %w", path, err)
 			}
 		}
 
-		m, tone := audioqa.AnalyseTone(channel0(rec, c.channels), c.outRate, c.freq, c.amp)
-		ok := report(st, c, m, tone)
+		m, tone := audioqa.AnalyseTone(channel0(rec, cfg.channels), cfg.outRate, cfg.freq, cfg.amp)
+		ok := report(stage, cfg, m, tone)
 
 		if !ok {
 			failures++
 		}
 	}
 
-	fmt.Println()
+	fmt.Fprintln(os.Stdout)
 
 	if failures == 0 {
-		fmt.Println("PASS: all stages within tolerance")
+		fmt.Fprintln(os.Stdout, "PASS: all stages within tolerance")
 
 		return nil
 	}
 
-	fmt.Printf("FAIL: %d stage(s) introduced artifacts above tolerance\n", failures)
+	fmt.Fprintf(os.Stdout, "FAIL: %d stage(s) introduced artifacts above tolerance\n", failures)
 	os.Exit(2)
 
 	return nil
@@ -323,24 +323,24 @@ func usesInternalRate(stages []string) bool {
 // captured samples. The sine is generated at whichever rate that stage feeds the
 // device: at the output rate when no resampler is present, at the internal rate
 // when one is (so the resampler does the inRate->outRate conversion the app does).
-func captureStage(c config, stage string, capacity, target, block, devBuf int) ([]float32, error) {
+func captureStage(cfg config, stage string, capacity, target, block, devBuf int) ([]float32, error) {
 	resampling := stage == "resample" || stage == "full"
 
-	srcRate := c.outRate
+	srcRate := cfg.outRate
 	if resampling {
-		srcRate = c.inRate
+		srcRate = cfg.inRate
 	}
 
-	var src audio.SampleSource = &sineSource{freq: c.freq, amp: c.amp, rate: float64(srcRate)}
+	var src audio.SampleSource = &sineSource{freq: cfg.freq, amp: cfg.amp, rate: float64(srcRate)}
 
 	if resampling {
-		src = audio.NewResamplingSource(src, c.inRate, c.outRate, c.channels)
+		src = audio.NewResamplingSource(src, cfg.inRate, cfg.outRate, cfg.channels)
 	}
 
 	var closeAsync func()
 
 	if stage == "async" || stage == "full" {
-		async := audio.NewAsyncSource(src, c.channels, capacity, target, block)
+		async := audio.NewAsyncSource(src, cfg.channels, capacity, target, block)
 		src = async
 		closeAsync = async.Close
 	}
@@ -349,17 +349,17 @@ func captureStage(c config, stage string, capacity, target, block, devBuf int) (
 	// drives beep/portaudio: open a sink for the requested format, then Start it on
 	// the source chain. The capture-specific knobs (pacing, how long to record) are
 	// set on the concrete sink after opening.
-	sinkIface, err := captureBackend{}.OpenSink(audio.SinkConfig{Channels: c.channels, SampleRate: c.outRate})
+	sinkIface, err := captureBackend{}.OpenSink(audio.SinkConfig{Channels: cfg.channels, SampleRate: cfg.outRate})
 	if err != nil {
 		return nil, err
 	}
 
 	sink := sinkIface.(*captureSink) //nolint:forcetypeassert // captureBackend only ever returns *captureSink
 	sink.blockFrames = devBuf
-	sink.realtime = c.realtime
+	sink.realtime = cfg.realtime
 	// Capture the requested duration plus enough lead to cover the async ring's
 	// pre-filled silence; analyse() trims the silent head and tail.
-	sink.totalFrames = int(c.dur*float64(c.outRate)) + 2*capacity
+	sink.totalFrames = int(cfg.dur*float64(cfg.outRate)) + 2*capacity
 
 	err = sink.Start(src)
 
@@ -396,31 +396,37 @@ func bufferFrames(outputRate, latencyMs int) (capacity, target, block int) {
 // report prints one stage's metrics and tone fit and returns whether it passed.
 // The numeric analysis now lives in app/audio/audioqa; this only formats and
 // applies the tool's pass thresholds.
-func report(stage string, c config, m audioqa.Metrics, t audioqa.Tone) bool {
-	fmt.Printf("== %s ==\n", stage)
+func report(stage string, cfg config, metrics audioqa.Metrics, tone audioqa.Tone) bool {
+	fmt.Fprintf(os.Stdout, "== %s ==\n", stage)
 
-	if m.Empty {
-		fmt.Printf("  no signal captured (region %d..%d of %d frames)\n", m.RegionFrom, m.RegionTo, m.Frames)
+	if metrics.Empty {
+		fmt.Fprintf(os.Stdout, "  no signal captured (region %d..%d of %d frames)\n", metrics.RegionFrom, metrics.RegionTo, metrics.Frames)
 
 		return false
 	}
 
-	pass := m.NonFinite == 0 &&
-		m.Clipped == 0 &&
-		m.Dropouts == 0 &&
-		t.PeakResid <= c.tol &&
-		t.SNR >= c.minSNR &&
-		math.Abs(t.Gain-1) <= c.tol
+	pass := metrics.NonFinite == 0 &&
+		metrics.Clipped == 0 &&
+		metrics.Dropouts == 0 &&
+		tone.PeakResid <= cfg.tol &&
+		tone.SNR >= cfg.minSNR &&
+		math.Abs(tone.Gain-1) <= cfg.tol
 
-	fmt.Printf("  region     : %d..%d (%d frames analysed)\n", m.RegionFrom, m.RegionTo, m.RegionTo-m.RegionFrom)
-	fmt.Printf("  peak level : %.4f%s\n", m.Peak, marker(m.Clipped > 0, "  CLIPPING"))
-	fmt.Printf("  non-finite : %d%s\n", m.NonFinite, marker(m.NonFinite > 0, "  NaN/Inf"))
-	fmt.Printf("  dropouts   : %d (longest %d samples)%s\n", m.Dropouts, m.MaxDropout, marker(m.Dropouts > 0, "  UNDERRUN"))
-	fmt.Printf("  max step   : %.5f (clean bound %.5f)%s\n", m.MaxStep, m.StepBound, marker(m.Glitches > 0, fmt.Sprintf("  %d glitches", m.Glitches)))
-	fmt.Printf("  gain       : %.4f (%.2f dB)%s\n", t.Gain, 20*math.Log10(t.Gain), marker(math.Abs(t.Gain-1) > c.tol, "  LEVEL"))
-	fmt.Printf("  residual   : peak %.5f, rms %.5f%s\n", t.PeakResid, t.RMSResid, marker(t.PeakResid > c.tol, "  OVER TOL"))
-	fmt.Printf("  SNR        : %.1f dB%s\n", t.SNR, marker(t.SNR < c.minSNR, "  LOW"))
-	fmt.Printf("  result     : %s\n\n", verdict(pass))
+	fmt.Fprintf(os.Stdout, "  region     : %d..%d (%d frames analysed)\n", metrics.RegionFrom, metrics.RegionTo, metrics.RegionTo-metrics.RegionFrom)
+	fmt.Fprintf(os.Stdout, "  peak level : %.4f%s\n", metrics.Peak, marker(metrics.Clipped > 0, "  CLIPPING"))
+	fmt.Fprintf(os.Stdout, "  non-finite : %d%s\n", metrics.NonFinite, marker(metrics.NonFinite > 0, "  NaN/Inf"))
+	fmt.Fprintf(os.Stdout, "  dropouts   : %d (longest %d samples)%s\n", metrics.Dropouts, metrics.MaxDropout, marker(metrics.Dropouts > 0, "  UNDERRUN"))
+	fmt.Fprintf(os.Stdout, "  max step   : %.5f (clean bound %.5f)%s\n",
+		metrics.MaxStep,
+		metrics.StepBound,
+		marker(metrics.Glitches > 0,
+			fmt.Sprintf("  %d glitches", metrics.Glitches),
+		),
+	)
+	fmt.Fprintf(os.Stdout, "  gain       : %.4f (%.2f dB)%s\n", tone.Gain, 20*math.Log10(tone.Gain), marker(math.Abs(tone.Gain-1) > cfg.tol, "  LEVEL"))
+	fmt.Fprintf(os.Stdout, "  residual   : peak %.5f, rms %.5f%s\n", tone.PeakResid, tone.RMSResid, marker(tone.PeakResid > cfg.tol, "  OVER TOL"))
+	fmt.Fprintf(os.Stdout, "  SNR        : %.1f dB%s\n", tone.SNR, marker(tone.SNR < cfg.minSNR, "  LOW"))
+	fmt.Fprintf(os.Stdout, "  result     : %s\n\n", verdict(pass))
 
 	return pass
 }
@@ -456,25 +462,25 @@ func channel0(interleaved []float32, channels int) []float64 {
 // Audible mode: drive a real backend for a listening check
 // ---------------------------------------------------------------------------
 
-func runAudible(c config) error {
+func runAudible(cfg config) error {
 	log := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr}).Level(zerolog.InfoLevel)
 
-	backend, err := audio.New(c.backend, log)
+	backend, err := audio.New(cfg.backend, log)
 	if err != nil {
-		return fmt.Errorf("open backend %q: %w (rebuild with -tags portaudio?)", c.backend, err)
+		return fmt.Errorf("open backend %q: %w (rebuild with -tags portaudio?)", cfg.backend, err)
 	}
 
 	defer func() { _ = backend.Close() }()
 
-	channels := c.channels
-	if c.backend == audio.BackendBeep {
+	channels := cfg.channels
+	if cfg.backend == audio.BackendBeep {
 		channels = 2 // beep is fixed stereo
 	}
 
 	sink, err := backend.OpenSink(audio.SinkConfig{
 		Channels:   channels,
-		SampleRate: c.outRate,
-		LatencyMs:  c.latencyMs,
+		SampleRate: cfg.outRate,
+		LatencyMs:  cfg.latencyMs,
 	})
 	if err != nil {
 		return fmt.Errorf("open sink: %w", err)
@@ -482,23 +488,23 @@ func runAudible(c config) error {
 
 	defer func() { _ = sink.Stop() }()
 
-	capacity, target, block := bufferFrames(c.outRate, c.latencyMs)
+	capacity, target, block := bufferFrames(cfg.outRate, cfg.latencyMs)
 
 	src := audio.NewResamplingSource(
-		&sineSource{freq: c.freq, amp: c.amp, rate: float64(c.inRate)},
-		c.inRate, c.outRate, sink.Channels())
+		&sineSource{freq: cfg.freq, amp: cfg.amp, rate: float64(cfg.inRate)},
+		cfg.inRate, cfg.outRate, sink.Channels())
 	async := audio.NewAsyncSource(src, sink.Channels(), capacity, target, block)
 
 	defer async.Close()
 
-	fmt.Printf("playing %.1f Hz tone through %s for %.1fs (listen for artifacts)...\n", c.freq, c.backend, c.dur)
+	fmt.Fprintf(os.Stdout, "playing %.1f Hz tone through %s for %.1fs (listen for artifacts)...\n", cfg.freq, cfg.backend, cfg.dur)
 
 	err = sink.Start(async)
 	if err != nil {
 		return fmt.Errorf("start sink: %w", err)
 	}
 
-	time.Sleep(time.Duration(c.dur*float64(time.Second)) + 200*time.Millisecond)
+	time.Sleep(time.Duration(cfg.dur*float64(time.Second)) + 200*time.Millisecond)
 
 	return nil
 }
@@ -509,12 +515,12 @@ func runAudible(c config) error {
 // the moment the device callback reads it.
 // ---------------------------------------------------------------------------
 
-// probe carries the in-flight marker state shared across three goroutines: the
+// probeState carries the in-flight marker state shared across three goroutines: the
 // injector (arms a marker and stamps the event time), the markerSource (the
 // producer goroutine, which emits the impulse) and the latencyTap (the device
 // callback, which detects it). All fields are atomic, so nothing locks on the
 // realtime path.
-type probe struct {
+type probeState struct {
 	pending atomic.Bool  // a marker is armed and not yet detected
 	eventNs atomic.Int64 // UnixNano when armed (the synthetic "gear change")
 }
@@ -523,15 +529,8 @@ type probe struct {
 // single full-scale impulse on the first frame of its next read — the synthetic
 // gear-change onset, fed through the same resample/async path the live app uses.
 type markerSource struct {
-	pr   *probe
+	pr   *probeState
 	emit atomic.Bool // set by the injector, consumed once by ReadInterleaved
-}
-
-// arm stamps the event time and schedules one impulse on the next read.
-func (m *markerSource) arm() {
-	m.pr.eventNs.Store(time.Now().UnixNano())
-	m.pr.pending.Store(true)
-	m.emit.Store(true)
 }
 
 func (m *markerSource) ReadInterleaved(out []float32, channels int) (int, bool) {
@@ -548,6 +547,13 @@ func (m *markerSource) ReadInterleaved(out []float32, channels int) (int, bool) 
 	return len(out) / channels, true
 }
 
+// arm stamps the event time and schedules one impulse on the next read.
+func (m *markerSource) arm() {
+	m.pr.eventNs.Store(time.Now().UnixNano())
+	m.pr.pending.Store(true)
+	m.emit.Store(true)
+}
+
 // latencyTap is the source handed to the sink, so its ReadInterleaved runs on
 // the device callback — the exact "moment portaudio reads". While a marker is
 // pending it scans the outgoing buffer for the impulse and records the
@@ -555,14 +561,14 @@ func (m *markerSource) ReadInterleaved(out []float32, channels int) (int, bool) 
 // lock-free into a preallocated slice; results are read after Stop.
 type latencyTap struct {
 	inner     audio.SampleSource
-	pr        *probe
+	pr        *probeState
 	threshold float32
 	results   []time.Duration // preallocated; valid up to count
 	count     atomic.Int64
 }
 
-func (t *latencyTap) ReadInterleaved(out []float32, channels int) (int, bool) {
-	n, ok := t.inner.ReadInterleaved(out, channels)
+func (t *latencyTap) ReadInterleaved(out []float32, channels int) (n int, ok bool) {
+	n, ok = t.inner.ReadInterleaved(out, channels)
 
 	if t.pr.pending.Load() {
 		count := n * channels
@@ -589,33 +595,33 @@ func (t *latencyTap) ReadInterleaved(out []float32, channels int) (int, bool) {
 // pipeline and reports the event->device-read delay distribution plus the ring's
 // steady-state contribution. It needs a real backend (beep or portaudio): the
 // capture backend's read timing is synthetic, so it cannot measure real latency.
-func runLatency(c config) error {
-	if c.backend != audio.BackendBeep && c.backend != audio.BackendPortAudio {
-		return fmt.Errorf("latency mode needs a real backend: -backend beep or portaudio (got %q)", c.backend)
+func runLatency(cfg config) error {
+	if cfg.backend != audio.BackendBeep && cfg.backend != audio.BackendPortAudio {
+		return fmt.Errorf("latency mode needs a real backend: -backend beep or portaudio (got %q)", cfg.backend)
 	}
 
-	if c.interval <= 0 {
+	if cfg.interval <= 0 {
 		return errors.New("-interval must be > 0")
 	}
 
 	log := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr}).Level(zerolog.InfoLevel)
 
-	backend, err := audio.New(c.backend, log)
+	backend, err := audio.New(cfg.backend, log)
 	if err != nil {
-		return fmt.Errorf("open backend %q: %w (rebuild with -tags portaudio?)", c.backend, err)
+		return fmt.Errorf("open backend %q: %w (rebuild with -tags portaudio?)", cfg.backend, err)
 	}
 
 	defer func() { _ = backend.Close() }()
 
-	channels := c.channels
-	if c.backend == audio.BackendBeep {
+	channels := cfg.channels
+	if cfg.backend == audio.BackendBeep {
 		channels = 2 // beep is fixed stereo
 	}
 
 	sink, err := backend.OpenSink(audio.SinkConfig{
 		Channels:   channels,
-		SampleRate: c.outRate,
-		LatencyMs:  c.latencyMs,
+		SampleRate: cfg.outRate,
+		LatencyMs:  cfg.latencyMs,
 	})
 	if err != nil {
 		return fmt.Errorf("open sink: %w", err)
@@ -625,35 +631,35 @@ func runLatency(c config) error {
 
 	channels = sink.Channels()
 
-	capacity, target, block := bufferFrames(c.outRate, c.latencyMs)
+	capacity, target, block := bufferFrames(cfg.outRate, cfg.latencyMs)
 
-	pr := &probe{}
-	marker := &markerSource{pr: pr}
-	source := audio.NewResamplingSource(marker, c.inRate, c.outRate, channels)
+	probe := &probeState{}
+	marker := &markerSource{pr: probe}
+	source := audio.NewResamplingSource(marker, cfg.inRate, cfg.outRate, channels)
 	async := audio.NewAsyncSource(source, channels, capacity, target, block)
 
 	defer async.Close()
 
 	tap := &latencyTap{
 		inner:     async,
-		pr:        pr,
-		threshold: float32(c.threshold),
-		results:   make([]time.Duration, int(c.dur/c.interval)+8),
+		pr:        probe,
+		threshold: float32(cfg.threshold),
+		results:   make([]time.Duration, int(cfg.dur/cfg.interval)+8),
 	}
 
-	fmt.Printf("backend : %s\n", c.backend)
-	fmt.Printf("rates   : internal %d Hz -> output %d Hz, %d ch\n", c.inRate, c.outRate, channels)
-	fmt.Printf("buffer  : ring %d frames (%.1f ms cap), target %d frames (%.1f ms), block %d frames, latency hint %d ms\n",
-		capacity, framesToMs(capacity, c.outRate), target, framesToMs(target, c.outRate), block, c.latencyMs)
-	fmt.Printf("probe   : impulse every %.0f ms, detect |x|>=%.2f, for %.1fs\n\n",
-		c.interval*1000, c.threshold, c.dur)
+	fmt.Fprintf(os.Stdout, "backend : %s\n", cfg.backend)
+	fmt.Fprintf(os.Stdout, "rates   : internal %d Hz -> output %d Hz, %d ch\n", cfg.inRate, cfg.outRate, channels)
+	fmt.Fprintf(os.Stdout, "buffer  : ring %d frames (%.1f ms cap), target %d frames (%.1f ms), block %d frames, latency hint %d ms\n",
+		capacity, framesToMs(capacity, cfg.outRate), target, framesToMs(target, cfg.outRate), block, cfg.latencyMs)
+	fmt.Fprintf(os.Stdout, "probe   : impulse every %.0f ms, detect |x|>=%.2f, for %.1fs\n\n",
+		cfg.interval*1000, cfg.threshold, cfg.dur)
 
 	err = sink.Start(tap)
 	if err != nil {
 		return fmt.Errorf("start sink: %w", err)
 	}
 
-	misses := injectMarkers(c, pr, marker)
+	misses := injectMarkers(cfg, probe, marker)
 
 	// Let the last in-flight marker drain through the ring and device.
 	time.Sleep(300 * time.Millisecond)
@@ -662,7 +668,7 @@ func runLatency(c config) error {
 	_ = sink.Stop()
 
 	n := min(int(tap.count.Load()), len(tap.results))
-	reportLatency(c, channels, tap.results[:n], misses, capacity, health)
+	reportLatency(cfg, channels, tap.results[:n], misses, capacity, health)
 
 	return nil
 }
@@ -670,7 +676,7 @@ func runLatency(c config) error {
 // injectMarkers arms a marker every interval for the run duration, skipping ticks
 // while a previous marker is still in flight and giving up on one that is never
 // detected within a second (counted as a miss).
-func injectMarkers(c config, pr *probe, marker *markerSource) int {
+func injectMarkers(c config, probe *probeState, marker *markerSource) int {
 	stop := time.After(time.Duration(c.dur * float64(time.Second)))
 	ticker := time.NewTicker(time.Duration(c.interval * float64(time.Second)))
 
@@ -683,12 +689,12 @@ func injectMarkers(c config, pr *probe, marker *markerSource) int {
 		case <-stop:
 			return misses
 		case <-ticker.C:
-			if pr.pending.Load() {
-				if time.Since(time.Unix(0, pr.eventNs.Load())) < time.Second {
+			if probe.pending.Load() {
+				if time.Since(time.Unix(0, probe.eventNs.Load())) < time.Second {
 					continue // still waiting for the in-flight marker
 				}
 
-				pr.pending.Store(false)
+				probe.pending.Store(false)
 
 				misses++
 			}
@@ -705,12 +711,12 @@ func framesToMs(frames, rate int) float64 {
 
 // reportLatency prints the event->read delay distribution and the ring's
 // steady-state contribution.
-func reportLatency(c config, channels int, results []time.Duration, misses, capacity int, health audio.HealthMetrics) {
-	fmt.Printf("== results ==\n")
+func reportLatency(cfg config, channels int, results []time.Duration, misses, capacity int, health audio.HealthMetrics) {
+	fmt.Fprintf(os.Stdout, "== results ==\n")
 
 	if len(results) == 0 {
-		fmt.Printf("  no markers detected (%d missed) — raise -dur, lower -threshold,\n", misses)
-		fmt.Printf("  or check the device is actually playing\n")
+		fmt.Fprintf(os.Stdout, "  no markers detected (%d missed) — raise -dur, lower -threshold,\n", misses)
+		fmt.Fprintf(os.Stdout, "  or check the device is actually playing\n")
 
 		return
 	}
@@ -718,22 +724,22 @@ func reportLatency(c config, channels int, results []time.Duration, misses, capa
 	sorted := append([]time.Duration(nil), results...)
 	slices.Sort(sorted)
 
-	ms := func(d time.Duration) float64 { return float64(d.Microseconds()) / 1000 }
+	millisec := func(d time.Duration) float64 { return float64(d.Microseconds()) / 1000 }
 	pct := func(f float64) time.Duration { return sorted[int(f*float64(len(sorted)-1)+0.5)] }
 
 	usedFrames := health.RingUsed / max(channels, 1)
 
-	fmt.Printf("  detected : %d markers (%d missed)\n", len(sorted), misses)
-	fmt.Printf("  event -> portaudio read:\n")
-	fmt.Printf("    min    %6.1f ms\n", ms(sorted[0]))
-	fmt.Printf("    median %6.1f ms\n", ms(pct(0.5)))
-	fmt.Printf("    p95    %6.1f ms\n", ms(pct(0.95)))
-	fmt.Printf("    max    %6.1f ms\n", ms(sorted[len(sorted)-1]))
-	fmt.Printf("  ring     : capacity %.1f ms, steady-state fill %.1f ms (%.0f%%)\n",
-		framesToMs(capacity, c.outRate), framesToMs(usedFrames, c.outRate), health.FillRatio*100)
-	fmt.Printf("  underruns: %d (%d samples)\n", health.Underruns, health.UnderrunSamples)
-	fmt.Printf("  note     : add the device's negotiated OutputLatency (logged above by\n")
-	fmt.Printf("             the backend) for the full input->DAC delay.\n")
+	fmt.Fprintf(os.Stdout, "  detected : %d markers (%d missed)\n", len(sorted), misses)
+	fmt.Fprintf(os.Stdout, "  event -> portaudio read:\n")
+	fmt.Fprintf(os.Stdout, "    min    %6.1f ms\n", millisec(sorted[0]))
+	fmt.Fprintf(os.Stdout, "    median %6.1f ms\n", millisec(pct(0.5)))
+	fmt.Fprintf(os.Stdout, "    p95    %6.1f ms\n", millisec(pct(0.95)))
+	fmt.Fprintf(os.Stdout, "    max    %6.1f ms\n", millisec(sorted[len(sorted)-1]))
+	fmt.Fprintf(os.Stdout, "  ring     : capacity %.1f ms, steady-state fill %.1f ms (%.0f%%)\n",
+		framesToMs(capacity, cfg.outRate), framesToMs(usedFrames, cfg.outRate), health.FillRatio*100)
+	fmt.Fprintf(os.Stdout, "  underruns: %d (%d samples)\n", health.Underruns, health.UnderrunSamples)
+	fmt.Fprintf(os.Stdout, "  note     : add the device's negotiated OutputLatency (logged above by\n")
+	fmt.Fprintf(os.Stdout, "             the backend) for the full input->DAC delay.\n")
 }
 
 // ---------------------------------------------------------------------------
@@ -741,12 +747,12 @@ func reportLatency(c config, channels int, results []time.Duration, misses, capa
 // ---------------------------------------------------------------------------
 
 func writeWAV(path string, interleaved []float32, channels, rate int) error {
-	f, err := os.Create(path)
+	file, err := os.Create(path)
 	if err != nil {
 		return err
 	}
 
-	defer func() { _ = f.Close() }()
+	defer func() { _ = file.Close() }()
 
 	const bitsPerSample = 16
 
@@ -754,22 +760,22 @@ func writeWAV(path string, interleaved []float32, channels, rate int) error {
 	byteRate := rate * channels * bitsPerSample / 8
 	blockAlign := channels * bitsPerSample / 8
 
-	h := make([]byte, 0, 44)
-	h = append(h, "RIFF"...)
-	h = binary.LittleEndian.AppendUint32(h, uint32(36+dataLen))
-	h = append(h, "WAVE"...)
-	h = append(h, "fmt "...)
-	h = binary.LittleEndian.AppendUint32(h, 16)
-	h = binary.LittleEndian.AppendUint16(h, 1) // PCM
-	h = binary.LittleEndian.AppendUint16(h, uint16(channels))
-	h = binary.LittleEndian.AppendUint32(h, uint32(rate))
-	h = binary.LittleEndian.AppendUint32(h, uint32(byteRate))
-	h = binary.LittleEndian.AppendUint16(h, uint16(blockAlign))
-	h = binary.LittleEndian.AppendUint16(h, bitsPerSample)
-	h = append(h, "data"...)
-	h = binary.LittleEndian.AppendUint32(h, uint32(dataLen))
+	header := make([]byte, 0, 44)
+	header = append(header, "RIFF"...)
+	header = binary.LittleEndian.AppendUint32(header, uint32(36+dataLen))
+	header = append(header, "WAVE"...)
+	header = append(header, "fmt "...)
+	header = binary.LittleEndian.AppendUint32(header, 16)
+	header = binary.LittleEndian.AppendUint16(header, 1) // PCM
+	header = binary.LittleEndian.AppendUint16(header, uint16(channels))
+	header = binary.LittleEndian.AppendUint32(header, uint32(rate))
+	header = binary.LittleEndian.AppendUint32(header, uint32(byteRate))
+	header = binary.LittleEndian.AppendUint16(header, uint16(blockAlign))
+	header = binary.LittleEndian.AppendUint16(header, bitsPerSample)
+	header = append(header, "data"...)
+	header = binary.LittleEndian.AppendUint32(header, uint32(dataLen))
 
-	_, err = f.Write(h)
+	_, err = file.Write(header)
 	if err != nil {
 		return err
 	}
@@ -782,7 +788,7 @@ func writeWAV(path string, interleaved []float32, channels, rate int) error {
 		binary.LittleEndian.PutUint16(pcm[i*2:], uint16(int16(s)))
 	}
 
-	_, err = f.Write(pcm)
+	_, err = file.Write(pcm)
 
 	return err
 }

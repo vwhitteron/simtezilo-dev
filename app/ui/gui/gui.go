@@ -443,14 +443,14 @@ func (r *Screen) drawCenteredIcon(canvas *image.RGBA, icon *image.Alpha, col col
 		return
 	}
 
-	w := icon.Bounds().Dx()
-	h := icon.Bounds().Dy()
-	x := (canvas.Rect.Max.X - w) / 2
-	y := centreY - h/2
+	width := icon.Bounds().Dx()
+	height := icon.Bounds().Dy()
+	x := (canvas.Rect.Max.X - width) / 2
+	y := centreY - height/2
 
 	draw.DrawMask(
 		canvas,
-		image.Rect(x, y, x+w, y+h),
+		image.Rect(x, y, x+width, y+height),
 		image.NewUniform(col), image.Point{},
 		icon, icon.Bounds().Min,
 		draw.Over,

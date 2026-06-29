@@ -192,22 +192,22 @@ func (h *configHandler) enrichBluetoothNames(ctx context.Context, devices []audi
 		}
 	}
 
-	for i := range devices {
-		if devices[i].Type != audio.DeviceBluetooth {
+	for idx := range devices {
+		if devices[idx].Type != audio.DeviceBluetooth {
 			continue
 		}
 
 		// A bluealsa PCM carries its MAC; the Loopback bridge does not.
-		if addr := audio.BTAddress(devices[i].Name); addr != "" {
+		if addr := audio.BTAddress(devices[idx].Name); addr != "" {
 			if alias, ok := aliasByAddr[addr]; ok && alias != "" {
-				devices[i].DisplayName = alias
+				devices[idx].DisplayName = alias
 			}
 
 			continue
 		}
 
 		if connectedAlias != "" {
-			devices[i].DisplayName = connectedAlias
+			devices[idx].DisplayName = connectedAlias
 		}
 	}
 }

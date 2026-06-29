@@ -404,10 +404,13 @@ type streamSource struct {
 	channels int
 }
 
-func (s *streamSource) ReadInterleaved(out []float32, channels int) (int, bool) {
+// ReadInterleaved implements audio.SampleSource. It copies the current clip
+// buffer into out, then emits silence once the clip is exhausted. It is safe to
+// call from the realtime audio callback.
+func (s *streamSource) ReadInterleaved(out []float32, channels int) (n int, ok bool) {
 	s.mu.Lock()
 
-	n := 0
+	n = 0
 	if s.buf != nil {
 		n = copy(out, s.buf[s.pos:])
 		s.pos += n

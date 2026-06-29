@@ -40,6 +40,7 @@ linters:
             - github.com/godbus/dbus/v5
             - github.com/golang/freetype
             - github.com/gopxl/beep
+            - github.com/gordonklaus/portaudio
             - github.com/gorilla/websocket
             - github.com/grafana/pyroscope-go
             - github.com/kennygrant/sanitize

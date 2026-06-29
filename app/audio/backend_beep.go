@@ -39,6 +39,14 @@ type beepBackend struct {
 	log zerolog.Logger
 }
 
+// beepSink wraps a beep speaker output and adheres to the Sink interface.
+// Note: Not safe for concurrent use; the caller must ensure that Start and Stop are not called concurrently.
+type beepSink struct {
+	rate    beep.SampleRate
+	bufSize int
+	log     zerolog.Logger
+}
+
 func (b *beepBackend) Name() string { return BackendBeep }
 
 func (b *beepBackend) ListDevices() ([]Device, error) {
@@ -69,12 +77,6 @@ func (b *beepBackend) OpenSink(cfg SinkConfig) (Sink, error) {
 }
 
 func (b *beepBackend) Close() error { return nil }
-
-type beepSink struct {
-	rate    beep.SampleRate
-	bufSize int
-	log     zerolog.Logger
-}
 
 func (s *beepSink) Start(src SampleSource) error {
 	speakerMu.Lock()

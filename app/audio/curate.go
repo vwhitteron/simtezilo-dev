@@ -43,17 +43,17 @@ func parseCardIndex(name string) int {
 // parseCardDevice returns the ALSA card and device indices from a "(hw:C,D)"
 // token. ok is false when the name carries no such token.
 func parseCardDevice(name string) (card, device int, ok bool) {
-	m := hwTokenRE.FindStringSubmatch(name)
-	if m == nil {
+	match := hwTokenRE.FindStringSubmatch(name)
+	if match == nil {
 		return 0, 0, false
 	}
 
-	card, err := strconv.Atoi(m[1])
+	card, err := strconv.Atoi(match[1])
 	if err != nil {
 		return 0, 0, false
 	}
 
-	device, err = strconv.Atoi(m[2])
+	device, err = strconv.Atoi(match[2])
 	if err != nil {
 		return 0, 0, false
 	}

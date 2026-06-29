@@ -63,6 +63,18 @@ type AsyncSource struct {
 	framesRead atomic.Int64
 }
 
+// HealthMetrics holds a snapshot of async source diagnostic counters.
+type HealthMetrics struct {
+	Underruns        int64   // number of callback invocations that had to zero-pad
+	UnderrunSamples  int64   // total silence-padded samples produced
+	ProducerWaits    int64   // number of times the producer blocked on a full ring
+	RingCapacity     int     // total sample slots in the ring
+	RingUsed         int     // sample slots currently filled
+	FillRatio        float64 // RingUsed / RingCapacity (0..1)
+	FramesRead       int64   // total frames pulled by the device callback (soundcard-clock reference)
+	LastUnderrunTime time.Time
+}
+
 // NewAsyncSource wraps inner with a background producer and returns a source
 // suitable for handing to a realtime Sink. capacityFrames is the ring depth
 // (jitter headroom), targetFrames is the steady-state fill the producer maintains
@@ -170,6 +182,35 @@ func (a *AsyncSource) ReadInterleaved(out []float32, channels int) (int, bool) {
 	return frames, true
 }
 
+// Health returns a snapshot of diagnostic counters. Safe to call from any
+// goroutine; does not hold mu while reading the atomics so values are eventually
+// consistent but the call never blocks the realtime path.
+func (a *AsyncSource) Health() HealthMetrics {
+	a.mu.Lock()
+	used := a.count
+	capacity := len(a.ring)
+	a.mu.Unlock()
+
+	lastNS := a.lastUnderrun.Load()
+
+	return HealthMetrics{
+		Underruns:       a.underruns.Load(),
+		UnderrunSamples: a.underrunSamples.Load(),
+		ProducerWaits:   a.producerWaits.Load(),
+		RingCapacity:    capacity,
+		RingUsed:        used,
+		FillRatio:       float64(used) / float64(capacity),
+		FramesRead:      a.framesRead.Load(),
+		LastUnderrunTime: func() time.Time {
+			if lastNS == 0 {
+				return time.Time{}
+			}
+
+			return time.Unix(0, lastNS)
+		}(),
+	}
+}
+
 // produce runs in its own goroutine, synthesising blocks off-lock and copying
 // them into the ring, blocking only once the ring has reached its target fill.
 func (a *AsyncSource) produce() {
@@ -259,46 +300,5 @@ func (a *AsyncSource) writeRing(samples []float32) {
 		samples = samples[n:]
 		a.count += n
 		wpos = (wpos + n) % len(a.ring)
-	}
-}
-
-// HealthMetrics holds a snapshot of async source diagnostic counters.
-type HealthMetrics struct {
-	Underruns        int64   // number of callback invocations that had to zero-pad
-	UnderrunSamples  int64   // total silence-padded samples produced
-	ProducerWaits    int64   // number of times the producer blocked on a full ring
-	RingCapacity     int     // total sample slots in the ring
-	RingUsed         int     // sample slots currently filled
-	FillRatio        float64 // RingUsed / RingCapacity (0..1)
-	FramesRead       int64   // total frames pulled by the device callback (soundcard-clock reference)
-	LastUnderrunTime time.Time
-}
-
-// Health returns a snapshot of diagnostic counters. Safe to call from any
-// goroutine; does not hold mu while reading the atomics so values are eventually
-// consistent but the call never blocks the realtime path.
-func (a *AsyncSource) Health() HealthMetrics {
-	a.mu.Lock()
-	used := a.count
-	capacity := len(a.ring)
-	a.mu.Unlock()
-
-	lastNS := a.lastUnderrun.Load()
-
-	return HealthMetrics{
-		Underruns:       a.underruns.Load(),
-		UnderrunSamples: a.underrunSamples.Load(),
-		ProducerWaits:   a.producerWaits.Load(),
-		RingCapacity:    capacity,
-		RingUsed:        used,
-		FillRatio:       float64(used) / float64(capacity),
-		FramesRead:      a.framesRead.Load(),
-		LastUnderrunTime: func() time.Time {
-			if lastNS == 0 {
-				return time.Time{}
-			}
-
-			return time.Unix(0, lastNS)
-		}(),
 	}
 }

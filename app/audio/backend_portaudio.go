@@ -145,7 +145,8 @@ func (s *portAudioSink) Start(src SampleSource) error {
 		return fmt.Errorf("portaudio: open stream: %w", err)
 	}
 
-	if err := stream.Start(); err != nil {
+	err = stream.Start()
+	if err != nil {
 		_ = stream.Close()
 
 		return fmt.Errorf("portaudio: start stream: %w", err)

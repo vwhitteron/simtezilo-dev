@@ -22,7 +22,6 @@ import "image/color"
 // table; keep it sorted by hue and shade so it stays diffable against a swatch
 // chart.
 
-// Material Red.
 func MaterialRed50() color.RGBA   { return color.RGBA{R: 0xFF, G: 0xEB, B: 0xEE, A: 0xFF} }
 func MaterialRed100() color.RGBA  { return color.RGBA{R: 0xFF, G: 0xCD, B: 0xD2, A: 0xFF} }
 func MaterialRed200() color.RGBA  { return color.RGBA{R: 0xEF, G: 0x9A, B: 0x9A, A: 0xFF} }
@@ -39,7 +38,6 @@ func MaterialRedA400() color.RGBA { return color.RGBA{R: 0xFF, G: 0x17, B: 0x44,
 func MaterialRedA700() color.RGBA { return color.RGBA{R: 0xD5, G: 0x00, B: 0x00, A: 0xFF} }
 func MaterialRed() color.RGBA     { return MaterialRed500() }
 
-// Material Pink.
 func MaterialPink50() color.RGBA   { return color.RGBA{R: 0xFC, G: 0xE4, B: 0xEC, A: 0xFF} }
 func MaterialPink100() color.RGBA  { return color.RGBA{R: 0xF8, G: 0xBB, B: 0xD0, A: 0xFF} }
 func MaterialPink200() color.RGBA  { return color.RGBA{R: 0xF4, G: 0x8F, B: 0xB1, A: 0xFF} }
@@ -56,7 +54,6 @@ func MaterialPinkA400() color.RGBA { return color.RGBA{R: 0xF5, G: 0x00, B: 0x57
 func MaterialPinkA700() color.RGBA { return color.RGBA{R: 0xC5, G: 0x11, B: 0x62, A: 0xFF} }
 func MaterialPink() color.RGBA     { return MaterialPink500() }
 
-// Material Purple.
 func MaterialPurple50() color.RGBA   { return color.RGBA{R: 0xF3, G: 0xE5, B: 0xF5, A: 0xFF} }
 func MaterialPurple100() color.RGBA  { return color.RGBA{R: 0xE1, G: 0xBE, B: 0xE7, A: 0xFF} }
 func MaterialPurple200() color.RGBA  { return color.RGBA{R: 0xCE, G: 0x93, B: 0xD8, A: 0xFF} }
@@ -73,7 +70,6 @@ func MaterialPurpleA400() color.RGBA { return color.RGBA{R: 0xD5, G: 0x00, B: 0x
 func MaterialPurpleA700() color.RGBA { return color.RGBA{R: 0xAA, G: 0x00, B: 0xFF, A: 0xFF} }
 func MaterialPurple() color.RGBA     { return MaterialPurple500() }
 
-// Material Deep Purple.
 func MaterialDeepPurple50() color.RGBA   { return color.RGBA{R: 0xED, G: 0xE7, B: 0xF6, A: 0xFF} }
 func MaterialDeepPurple100() color.RGBA  { return color.RGBA{R: 0xD1, G: 0xC4, B: 0xE9, A: 0xFF} }
 func MaterialDeepPurple200() color.RGBA  { return color.RGBA{R: 0xB3, G: 0x9D, B: 0xDB, A: 0xFF} }
@@ -90,7 +86,6 @@ func MaterialDeepPurpleA400() color.RGBA { return color.RGBA{R: 0x65, G: 0x1F, B
 func MaterialDeepPurpleA700() color.RGBA { return color.RGBA{R: 0x62, G: 0x00, B: 0xEA, A: 0xFF} }
 func MaterialDeepPurple() color.RGBA     { return MaterialDeepPurple500() }
 
-// Material Indigo.
 func MaterialIndigo50() color.RGBA   { return color.RGBA{R: 0xE8, G: 0xEA, B: 0xF6, A: 0xFF} }
 func MaterialIndigo100() color.RGBA  { return color.RGBA{R: 0xC5, G: 0xCA, B: 0xE9, A: 0xFF} }
 func MaterialIndigo200() color.RGBA  { return color.RGBA{R: 0x9F, G: 0xA8, B: 0xDA, A: 0xFF} }
@@ -107,7 +102,6 @@ func MaterialIndigoA400() color.RGBA { return color.RGBA{R: 0x3D, G: 0x5A, B: 0x
 func MaterialIndigoA700() color.RGBA { return color.RGBA{R: 0x30, G: 0x4F, B: 0xFE, A: 0xFF} }
 func MaterialIndigo() color.RGBA     { return MaterialIndigo500() }
 
-// Material Blue.
 func MaterialBlue50() color.RGBA   { return color.RGBA{R: 0xE3, G: 0xF2, B: 0xFD, A: 0xFF} }
 func MaterialBlue100() color.RGBA  { return color.RGBA{R: 0xBB, G: 0xDE, B: 0xFB, A: 0xFF} }
 func MaterialBlue200() color.RGBA  { return color.RGBA{R: 0x90, G: 0xCA, B: 0xF9, A: 0xFF} }
@@ -124,7 +118,6 @@ func MaterialBlueA400() color.RGBA { return color.RGBA{R: 0x29, G: 0x79, B: 0xFF
 func MaterialBlueA700() color.RGBA { return color.RGBA{R: 0x29, G: 0x62, B: 0xFF, A: 0xFF} }
 func MaterialBlue() color.RGBA     { return MaterialBlue500() }
 
-// Material Light Blue.
 func MaterialLightBlue50() color.RGBA   { return color.RGBA{R: 0xE1, G: 0xF5, B: 0xFE, A: 0xFF} }
 func MaterialLightBlue100() color.RGBA  { return color.RGBA{R: 0xB3, G: 0xE5, B: 0xFC, A: 0xFF} }
 func MaterialLightBlue200() color.RGBA  { return color.RGBA{R: 0x81, G: 0xD4, B: 0xFA, A: 0xFF} }
@@ -141,7 +134,6 @@ func MaterialLightBlueA400() color.RGBA { return color.RGBA{R: 0x00, G: 0xB0, B:
 func MaterialLightBlueA700() color.RGBA { return color.RGBA{R: 0x00, G: 0x91, B: 0xEA, A: 0xFF} }
 func MaterialLightBlue() color.RGBA     { return MaterialLightBlue500() }
 
-// Material Cyan.
 func MaterialCyan50() color.RGBA   { return color.RGBA{R: 0xE0, G: 0xF7, B: 0xFA, A: 0xFF} }
 func MaterialCyan100() color.RGBA  { return color.RGBA{R: 0xB2, G: 0xEB, B: 0xF2, A: 0xFF} }
 func MaterialCyan200() color.RGBA  { return color.RGBA{R: 0x80, G: 0xDE, B: 0xEA, A: 0xFF} }
@@ -158,7 +150,6 @@ func MaterialCyanA400() color.RGBA { return color.RGBA{R: 0x00, G: 0xE5, B: 0xFF
 func MaterialCyanA700() color.RGBA { return color.RGBA{R: 0x00, G: 0xB8, B: 0xD4, A: 0xFF} }
 func MaterialCyan() color.RGBA     { return MaterialCyan500() }
 
-// Material Teal.
 func MaterialTeal50() color.RGBA   { return color.RGBA{R: 0xE0, G: 0xF2, B: 0xF1, A: 0xFF} }
 func MaterialTeal100() color.RGBA  { return color.RGBA{R: 0xB2, G: 0xDF, B: 0xDB, A: 0xFF} }
 func MaterialTeal200() color.RGBA  { return color.RGBA{R: 0x80, G: 0xCB, B: 0xC4, A: 0xFF} }
@@ -175,7 +166,6 @@ func MaterialTealA400() color.RGBA { return color.RGBA{R: 0x1D, G: 0xE9, B: 0xB6
 func MaterialTealA700() color.RGBA { return color.RGBA{R: 0x00, G: 0xBF, B: 0xA5, A: 0xFF} }
 func MaterialTeal() color.RGBA     { return MaterialTeal500() }
 
-// Material Green.
 func MaterialGreen50() color.RGBA   { return color.RGBA{R: 0xE8, G: 0xF5, B: 0xE9, A: 0xFF} }
 func MaterialGreen100() color.RGBA  { return color.RGBA{R: 0xC8, G: 0xE6, B: 0xC9, A: 0xFF} }
 func MaterialGreen200() color.RGBA  { return color.RGBA{R: 0xA5, G: 0xD6, B: 0xA7, A: 0xFF} }
@@ -192,7 +182,6 @@ func MaterialGreenA400() color.RGBA { return color.RGBA{R: 0x00, G: 0xE6, B: 0x7
 func MaterialGreenA700() color.RGBA { return color.RGBA{R: 0x00, G: 0xC8, B: 0x53, A: 0xFF} }
 func MaterialGreen() color.RGBA     { return MaterialGreen500() }
 
-// Material Light Green.
 func MaterialLightGreen50() color.RGBA   { return color.RGBA{R: 0xF1, G: 0xF8, B: 0xE9, A: 0xFF} }
 func MaterialLightGreen100() color.RGBA  { return color.RGBA{R: 0xDC, G: 0xED, B: 0xC8, A: 0xFF} }
 func MaterialLightGreen200() color.RGBA  { return color.RGBA{R: 0xC5, G: 0xE1, B: 0xA5, A: 0xFF} }
@@ -209,7 +198,6 @@ func MaterialLightGreenA400() color.RGBA { return color.RGBA{R: 0x76, G: 0xFF, B
 func MaterialLightGreenA700() color.RGBA { return color.RGBA{R: 0x64, G: 0xDD, B: 0x17, A: 0xFF} }
 func MaterialLightGreen() color.RGBA     { return MaterialLightGreen500() }
 
-// Material Lime.
 func MaterialLime50() color.RGBA   { return color.RGBA{R: 0xF9, G: 0xFB, B: 0xE7, A: 0xFF} }
 func MaterialLime100() color.RGBA  { return color.RGBA{R: 0xF0, G: 0xF4, B: 0xC3, A: 0xFF} }
 func MaterialLime200() color.RGBA  { return color.RGBA{R: 0xE6, G: 0xEE, B: 0x9C, A: 0xFF} }
@@ -226,7 +214,6 @@ func MaterialLimeA400() color.RGBA { return color.RGBA{R: 0xC6, G: 0xFF, B: 0x00
 func MaterialLimeA700() color.RGBA { return color.RGBA{R: 0xAE, G: 0xEA, B: 0x00, A: 0xFF} }
 func MaterialLime() color.RGBA     { return MaterialLime500() }
 
-// Material Yellow.
 func MaterialYellow50() color.RGBA   { return color.RGBA{R: 0xFF, G: 0xFD, B: 0xE7, A: 0xFF} }
 func MaterialYellow100() color.RGBA  { return color.RGBA{R: 0xFF, G: 0xF9, B: 0xC4, A: 0xFF} }
 func MaterialYellow200() color.RGBA  { return color.RGBA{R: 0xFF, G: 0xF5, B: 0x9D, A: 0xFF} }
@@ -243,7 +230,6 @@ func MaterialYellowA400() color.RGBA { return color.RGBA{R: 0xFF, G: 0xEA, B: 0x
 func MaterialYellowA700() color.RGBA { return color.RGBA{R: 0xFF, G: 0xD6, B: 0x00, A: 0xFF} }
 func MaterialYellow() color.RGBA     { return MaterialYellow500() }
 
-// Material Amber.
 func MaterialAmber50() color.RGBA   { return color.RGBA{R: 0xFF, G: 0xF8, B: 0xE1, A: 0xFF} }
 func MaterialAmber100() color.RGBA  { return color.RGBA{R: 0xFF, G: 0xEC, B: 0xB3, A: 0xFF} }
 func MaterialAmber200() color.RGBA  { return color.RGBA{R: 0xFF, G: 0xE0, B: 0x82, A: 0xFF} }
@@ -260,7 +246,6 @@ func MaterialAmberA400() color.RGBA { return color.RGBA{R: 0xFF, G: 0xC4, B: 0x0
 func MaterialAmberA700() color.RGBA { return color.RGBA{R: 0xFF, G: 0xAB, B: 0x00, A: 0xFF} }
 func MaterialAmber() color.RGBA     { return MaterialAmber500() }
 
-// Material Orange.
 func MaterialOrange50() color.RGBA   { return color.RGBA{R: 0xFF, G: 0xF3, B: 0xE0, A: 0xFF} }
 func MaterialOrange100() color.RGBA  { return color.RGBA{R: 0xFF, G: 0xE0, B: 0xB2, A: 0xFF} }
 func MaterialOrange200() color.RGBA  { return color.RGBA{R: 0xFF, G: 0xCC, B: 0x80, A: 0xFF} }
@@ -277,7 +262,6 @@ func MaterialOrangeA400() color.RGBA { return color.RGBA{R: 0xFF, G: 0x91, B: 0x
 func MaterialOrangeA700() color.RGBA { return color.RGBA{R: 0xFF, G: 0x6D, B: 0x00, A: 0xFF} }
 func MaterialOrange() color.RGBA     { return MaterialOrange500() }
 
-// Material Deep Orange.
 func MaterialDeepOrange50() color.RGBA   { return color.RGBA{R: 0xFB, G: 0xE9, B: 0xE7, A: 0xFF} }
 func MaterialDeepOrange100() color.RGBA  { return color.RGBA{R: 0xFF, G: 0xCC, B: 0xBC, A: 0xFF} }
 func MaterialDeepOrange200() color.RGBA  { return color.RGBA{R: 0xFF, G: 0xAB, B: 0x91, A: 0xFF} }
@@ -294,7 +278,6 @@ func MaterialDeepOrangeA400() color.RGBA { return color.RGBA{R: 0xFF, G: 0x3D, B
 func MaterialDeepOrangeA700() color.RGBA { return color.RGBA{R: 0xDD, G: 0x2C, B: 0x00, A: 0xFF} }
 func MaterialDeepOrange() color.RGBA     { return MaterialDeepOrange500() }
 
-// Material Brown.
 func MaterialBrown50() color.RGBA  { return color.RGBA{R: 0xEF, G: 0xEB, B: 0xE9, A: 0xFF} }
 func MaterialBrown100() color.RGBA { return color.RGBA{R: 0xD7, G: 0xCC, B: 0xC8, A: 0xFF} }
 func MaterialBrown200() color.RGBA { return color.RGBA{R: 0xBC, G: 0xAA, B: 0xA4, A: 0xFF} }
@@ -307,7 +290,6 @@ func MaterialBrown800() color.RGBA { return color.RGBA{R: 0x4E, G: 0x34, B: 0x2E
 func MaterialBrown900() color.RGBA { return color.RGBA{R: 0x3E, G: 0x27, B: 0x23, A: 0xFF} }
 func MaterialBrown() color.RGBA    { return MaterialBrown500() }
 
-// Material Grey.
 func MaterialGrey50() color.RGBA  { return color.RGBA{R: 0xFA, G: 0xFA, B: 0xFA, A: 0xFF} }
 func MaterialGrey100() color.RGBA { return color.RGBA{R: 0xF5, G: 0xF5, B: 0xF5, A: 0xFF} }
 func MaterialGrey200() color.RGBA { return color.RGBA{R: 0xEE, G: 0xEE, B: 0xEE, A: 0xFF} }
@@ -320,7 +302,6 @@ func MaterialGrey800() color.RGBA { return color.RGBA{R: 0x42, G: 0x42, B: 0x42,
 func MaterialGrey900() color.RGBA { return color.RGBA{R: 0x21, G: 0x21, B: 0x21, A: 0xFF} }
 func MaterialGrey() color.RGBA    { return MaterialGrey500() }
 
-// Material Blue Grey.
 func MaterialBlueGrey50() color.RGBA  { return color.RGBA{R: 0xEC, G: 0xEF, B: 0xF1, A: 0xFF} }
 func MaterialBlueGrey100() color.RGBA { return color.RGBA{R: 0xCF, G: 0xD8, B: 0xDC, A: 0xFF} }
 func MaterialBlueGrey200() color.RGBA { return color.RGBA{R: 0xB0, G: 0xBE, B: 0xC5, A: 0xFF} }

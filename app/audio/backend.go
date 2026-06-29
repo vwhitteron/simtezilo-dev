@@ -21,7 +21,7 @@ func registerBackend(name string, f backendFactory) {
 // New constructs the named backend. An empty name selects the beep backend.
 // If the portaudio backend is requested but was not compiled into the binary,
 // ErrBackendUnavailable is returned so callers can fall back.
-func New(name string, log zerolog.Logger) (Backend, error) {
+func New(name string, log zerolog.Logger) (Backend, error) { //nolint:ireturn // intentional interface return for factory
 	if name == "" {
 		name = BackendBeep
 	}
