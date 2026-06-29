@@ -1,4 +1,3 @@
-version: "3.7"
 services:
   pyroscope:
     container_name: pyroscope
@@ -8,3 +7,15 @@ services:
     volumes:
       - "./data/persist/pyroscope:/data"
     # profiles: ["withProfiling"]
+  grafana:
+    container_name: grafana
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    volumes:
+      - "./data/persist/grafana:/var/lib/grafana"
+    environment:
+      - "GF_PLUGINS_PREINSTALL_SYNC=grafana-pyroscope-app"
+      - "GF_AUTH_ANONYMOUS_ENABLED=true"
+      - "GF_AUTH_ANONYMOUS_ORG_ROLE=Admin"
+      - "GF_AUTH_DISABLE_LOGIN_FORM=true"

@@ -5,9 +5,11 @@ import (
 	"fmt"
 	_ "image/png"
 	"log"
+	"maps"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -24,7 +26,39 @@ type cliFlags struct {
 	crashLogDir      string
 	logLevel         string
 	profilerEndpoint string
+	profilerTags     tagFlag
 	version          bool
+}
+
+// tagFlag collects repeated/comma-separated key=value profiler tags from the
+// command line, e.g. -t env=local,scenario=startup -t build=manual.
+type tagFlag map[string]string
+
+func (t tagFlag) String() string {
+	pairs := make([]string, 0, len(t))
+	for k, v := range t {
+		pairs = append(pairs, k+"="+v)
+	}
+
+	return strings.Join(pairs, ",")
+}
+
+func (t tagFlag) Set(value string) error {
+	for pair := range strings.SplitSeq(value, ",") {
+		pair = strings.TrimSpace(pair)
+		if pair == "" {
+			continue
+		}
+
+		key, val, ok := strings.Cut(pair, "=")
+		if !ok || key == "" {
+			return fmt.Errorf("invalid tag %q, want key=value", pair)
+		}
+
+		t[strings.TrimSpace(key)] = strings.TrimSpace(val)
+	}
+
+	return nil
 }
 
 func main() {
@@ -48,7 +82,7 @@ func main() {
 
 	logStartupInfo(&logger)
 
-	prof, err := startPyroscope(flags.profilerEndpoint, &logger)
+	prof, err := startPyroscope(flags.profilerEndpoint, flags.profilerTags, &logger)
 	if err != nil {
 		logger.Fatal().Err(err).Msg("Failed to setup Pyroscope profiler")
 	}
@@ -107,11 +141,13 @@ func setupSignalHandler(exitCodeChan chan exitcode.Code) {
 
 func parseFlags() cliFlags {
 	var flags cliFlags
+	flags.profilerTags = tagFlag{}
 
 	flag.StringVar(&flags.configFile, "c", "", "Configuration file to load")
 	flag.StringVar(&flags.crashLogDir, "d", "", "Directory for crash logs. Default is $TMPDIR/simtezilo")
 	flag.StringVar(&flags.logLevel, "l", "info", "Log level. Default is 'info'")
 	flag.StringVar(&flags.profilerEndpoint, "p", "", "Send profiles to this Pyroscope endpoint (http://host:port). Default is off")
+	flag.Var(&flags.profilerTags, "t", "Extra Pyroscope tags as key=value (repeatable or comma-separated)")
 	flag.BoolVar(&flags.version, "v", false, "Print version information and exit")
 
 	flag.Parse()
@@ -196,20 +232,20 @@ func shutdownProfiler(prof *profiler.PyroscopeProfiler, logger *zerolog.Logger) 
 	}
 }
 
-func startPyroscope(endpoint string, logger *zerolog.Logger) (*profiler.PyroscopeProfiler, error) {
+func startPyroscope(endpoint string, extraTags map[string]string, logger *zerolog.Logger) (*profiler.PyroscopeProfiler, error) {
 	if endpoint == "" {
 		return nil, nil
 	}
 
-	profiler, err := profiler.NewPyroscopeProfiler(
-		endpoint,
-		map[string]string{
-			"app":       "simtezilo",
-			"version":   app.Version,
-			"buildTime": app.BuildTime,
-			"hostname":  os.Getenv("HOSTNAME"),
-		},
-	)
+	tags := map[string]string{
+		"app":       "simtezilo",
+		"version":   app.Version,
+		"buildTime": app.BuildTime,
+		"hostname":  os.Getenv("HOSTNAME"),
+	}
+	maps.Copy(tags, extraTags)
+
+	profiler, err := profiler.NewPyroscopeProfiler(endpoint, tags)
 	if err != nil {
 		return nil, fmt.Errorf("create profiler: %w", err)
 	}

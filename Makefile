@@ -311,27 +311,24 @@ run/watch:
 		--build.send_interrupt "true" \
 		--misc.clean_on_exit "true"
 
-## run/profile: run the application with profiling enabled
+## run/profile: run the application with profiling enabled (optional TAG=key=value,...)
 .PHONY: run/profile
-run/profile:
+run/profile: start-pyroscope
 	@echo "audio: $(portaudiostatus) [PORTAUDIO=$(PORTAUDIO)]"
-	@$(portaudiocgo) go run -tags "$(portaudiotag)" cmd/simtezilo/main.go -l info -p=http://localhost:4040 -w=true
+	@$(portaudiocgo) go run -tags "$(portaudiotag)" cmd/simtezilo/main.go -l info -p=http://localhost:4040 $(if $(TAG),-t "$(TAG)")
 
 ## start-pyroscope: start the Pyroscope profiler Docker container
 .PHONY: start-pyroscope
 start-pyroscope:
-	@docker run \
-	--name pyroscope \
-	--rm --detach \
-	-p 4040:4040 \
-	-v $(shell pwd)/data/persist/pyroscope:/data \
-	grafana/pyroscope:latest
+	@docker compose -f docker-compose.yml up -d
 	@echo "Pyroscope started. Access it at http://localhost:4040"
+	@echo "Grafana started. Access it at http://localhost:3000"
 
 ## stop-pyroscope: stop the Pyroscope profiler Docker container
 .PHONY: stop-pyroscope
 stop-pyroscope:
-	@docker stop pyroscope
+	@docker compose down -f docker-compose.yml
+	@echo "Pyroscope stopped."
 
 ## clean: clean up build output files
 .PHONY: clean
@@ -344,4 +341,5 @@ clean:
 distclean: clean
 	@rm -rf dist
 	@rm -rf data/persist/pyroscope
+	@rm -rf data/persist/grafana
 	@docker builder prune -af
