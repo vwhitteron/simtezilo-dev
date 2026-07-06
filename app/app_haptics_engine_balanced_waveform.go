@@ -4,7 +4,6 @@ import (
 	"math"
 
 	"github.com/vwhitteron/simtezilo-dev/app/signal"
-	"github.com/vwhitteron/simtezilo-dev/app/synthesizer"
 	"github.com/vwhitteron/simtezilo-dev/app/vehicle"
 )
 
@@ -73,7 +72,7 @@ func (a *App) calculateBalancedAmplitude(rpm float64, engineRoughness float64) f
 	rpmNormalized, _ := signal.LimitWindow(rpmPercent, 0.0, 1.0)
 
 	// Apply full gain control - this should be able to reduce volume significantly
-	gainAdjust := synthesizer.GainToPowerRatio(a.vehicle.Engine.Haptics.Gain + gainOffset)
+	gainAdjust := signal.GainToPowerRatio(a.vehicle.Engine.Haptics.Gain + gainOffset)
 
 	// Calculate boost to reach signal max at 0dB gain, but scaled for proper gain response
 	targetMaxAmplitude := 0.95 // Slightly below 1.0 to avoid clipping

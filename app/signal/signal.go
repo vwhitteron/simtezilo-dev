@@ -265,6 +265,28 @@ func AmplitudeToDecibels(ratio float64) float64 {
 	return 20 * math.Log10(ratio)
 }
 
+// GainToPowerRatio converts a gain value in dB to a power ratio magnitude.
+func GainToPowerRatio(gain float64) float64 {
+	if gain == 0 {
+		return 1.0
+	}
+
+	powerRatio := math.Pow(10, gain/10)
+
+	return powerRatio
+}
+
+// GainToAmplitudeRatio converts a gain value in dB to an amplitude magnitude.
+func GainToAmplitudeRatio(gain float64) float64 {
+	if gain == 0 {
+		return 1.0
+	}
+
+	amplitudeRatio := math.Pow(10, gain/20)
+
+	return amplitudeRatio
+}
+
 // Scale multiplies the given value by the specified scale factor.
 func Scale(value float64, scale float64) float64 {
 	return value * scale

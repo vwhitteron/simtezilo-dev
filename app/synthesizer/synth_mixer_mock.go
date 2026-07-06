@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/vwhitteron/simtezilo-dev/app/calibrator"
+	"github.com/vwhitteron/simtezilo-dev/app/signal"
 )
 
 // MockMixer implements MixerInterface for testing.
@@ -30,7 +31,7 @@ func (m *MockMixer) MixToMaster(length int) {
 	if m.calibrator != nil && m.calibrator.IsEnabled() {
 		freq := m.calibrator.GetFrequency()
 		gainDB := m.calibrator.GetGain()
-		gain := GainToPowerRatio(gainDB)
+		gain := signal.GainToPowerRatio(gainDB)
 
 		for i := range m.lastSamples {
 			m.lastSamples[i] = math.Sin(m.phase) * gain

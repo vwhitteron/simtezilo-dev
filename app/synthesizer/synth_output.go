@@ -3,6 +3,8 @@ package synthesizer
 import (
 	"github.com/gopxl/beep"
 	"github.com/rs/zerolog"
+
+	"github.com/vwhitteron/simtezilo-dev/app/signal"
 )
 
 type OutputDevice struct {
@@ -131,7 +133,7 @@ func (s *Streamer) getOutputChannels() []OutputChannelSettings {
 		channelName := s.synth.mixer.OutputChannelName(ch)
 		channelGainDB, _ := s.synth.mixer.GetChannelGain(channelName)
 		channelGains[ch] = OutputChannelSettings{
-			Gain: GainToPowerRatio(channelGainDB + masterGainDB),
+			Gain: signal.GainToPowerRatio(channelGainDB + masterGainDB),
 			Mute: s.synth.GetChannelMute(ch),
 		}
 	}

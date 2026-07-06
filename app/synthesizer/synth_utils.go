@@ -4,28 +4,6 @@ import (
 	"math"
 )
 
-// GainToPowerRatio converts a gain value in dB to a power ratio magnitude.
-func GainToPowerRatio(gain float64) float64 {
-	if gain == 0 {
-		return 1.0
-	}
-
-	powerRatio := math.Pow(10, gain/10)
-
-	return powerRatio
-}
-
-// GainToAmplitudeRatio converts a gain value in dB to an amplitude magnitude.
-func GainToAmplitudeRatio(gain float64) float64 {
-	if gain == 0 {
-		return 1.0
-	}
-
-	amplitudeRatio := math.Pow(10, gain/20)
-
-	return amplitudeRatio
-}
-
 // FindSampleZeroCrossing searches for the first zero point or crossing in a given array of samples
 // Returns the position of the zero crossing and the polarity just before the crossing (-1 or 1)
 // If no zero point or crossing is found then it returns the first index and polarity of first sample.

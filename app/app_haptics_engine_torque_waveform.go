@@ -4,7 +4,6 @@ import (
 	"math"
 
 	"github.com/vwhitteron/simtezilo-dev/app/signal"
-	"github.com/vwhitteron/simtezilo-dev/app/synthesizer"
 	"github.com/vwhitteron/simtezilo-dev/app/vehicle"
 )
 
@@ -143,8 +142,8 @@ func (a *App) calculateTorqueAmplitudes(rpmNormalized float64) torqueAmplitudes 
 	gainOffset, amplitudeScale := a.getVehicleTypeAdjustments()
 	baseAmplitude := 0.6 + (throttlePercent * amplitudeScale)
 
-	rpmPowerRatio := synthesizer.GainToPowerRatio(-1.0 * rpmNormalized)
-	adjust := synthesizer.GainToPowerRatio(a.vehicle.Engine.Haptics.Gain + gainOffset)
+	rpmPowerRatio := signal.GainToPowerRatio(-1.0 * rpmNormalized)
+	adjust := signal.GainToPowerRatio(a.vehicle.Engine.Haptics.Gain + gainOffset)
 
 	// Calculate component amplitudes
 	primaryAmplitude := baseAmplitude * (2.0 - a.vehicle.Engine.Haptics.PrimaryBalance) * rpmPowerRatio

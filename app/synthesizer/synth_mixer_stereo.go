@@ -359,7 +359,7 @@ func (m *StereoMixer) GetChannelPowerRatio(name string) (float64, error) {
 		return 0, fmt.Errorf("channel %q does not exist", name)
 	}
 
-	return GainToPowerRatio(channel.activeGain), nil
+	return signal.GainToPowerRatio(channel.activeGain), nil
 }
 
 // GetChannelAmplitudeRatio returns the current amplitude ratio of the specified channel.
@@ -372,7 +372,7 @@ func (m *StereoMixer) GetChannelAmplitudeRatio(name string) (float64, error) {
 		return 0, fmt.Errorf("channel %q does not exist", name)
 	}
 
-	return GainToAmplitudeRatio(channel.activeGain), nil
+	return signal.GainToAmplitudeRatio(channel.activeGain), nil
 }
 
 // fadeInRunning reports whether a fade-in goroutine is active, under the lock.

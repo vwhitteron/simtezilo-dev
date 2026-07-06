@@ -36,7 +36,7 @@ func (a *App) determineGearShiftMagnitude() float64 {
 	gforceMax := a.config.GetHapticsTransmissionGforceMax()
 	volumeCurve := a.config.GetHapticsTransmissionCurve() / 1000
 
-	magnitudeMin := synthesizer.GainToPowerRatio(a.transmissionGainMin)
+	magnitudeMin := signal.GainToPowerRatio(a.transmissionGainMin)
 
 	magnitude := math.Pow((gForce/gforceMax), volumeCurve) * synthMagnitude
 	magnitude, _ = signal.LimitWindow(magnitude, magnitudeMin, synthMagnitude)

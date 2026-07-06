@@ -555,7 +555,7 @@ func (a *App) calculatePulseAmplitude(throttlePercent, engineRoughness, rpmPerce
 	engineLoadGain := (1 - throttlePercent) * engineLoadGainIncrease
 	roughness := 1.0 - (engineRoughness * rpmPercent * 0.1)
 	gain := a.vehicle.Engine.Haptics.Gain + vehicleTypeGain + engineLoadGain
-	amplitude := synthesizer.GainToPowerRatio(gain) * roughness
+	amplitude := signal.GainToPowerRatio(gain) * roughness
 	amplitude, _ = signal.LimitWindow(amplitude, 0, 1)
 
 	return amplitude
