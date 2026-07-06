@@ -189,7 +189,8 @@ const CHART_CONFIGURATIONS = {
         { id: 'channel-output-right', containerId: 'scichart-root-6', enabled: true },
         { id: 'compute-time', containerId: 'scichart-root-7', enabled: true },
         { id: 'audio-health', containerId: 'scichart-root-8', enabled: true },
-        { id: 'haptic-latency', containerId: 'scichart-root-9', enabled: true }
+        { id: 'haptic-latency', containerId: 'scichart-root-9', enabled: true },
+        { id: 'seq-gap', containerId: 'scichart-root-10', enabled: true }
     ],
 
     // Default/fallback - all charts enabled
@@ -1124,9 +1125,10 @@ async function initSciChart() {
             title: 'Haptic Latency & Drift (ms)',
             titleKey: 'runmode.telemetry.chart.hapticlatency',
             create: async (containerId) => {
-                // All five metrics share a millisecond scale, so a single
-                // auto-ranging Y axis keeps engine/chassis/ring buffer latency,
-                // the cumulative drift (signed) and the telemetry jitter together.
+                // These four metrics share a millisecond scale, so a single
+                // auto-ranging Y axis keeps engine/chassis/ring buffer latency
+                // and the cumulative drift (signed) together. Telemetry cadence
+                // jitter lives on the Sequence ID Gaps chart instead.
                 const { sciChartSurface, wasmContext } = await createStandardChart(containerId);
 
                 addHorizontalZoomModifiers(sciChartSurface);
@@ -1135,7 +1137,6 @@ async function initSciChart() {
                 const chassisLatencySeries = createDataSeries(wasmContext, "Chassis Latency (ms)");
                 const ringLatencySeries = createDataSeries(wasmContext, "Ring Latency (ms)");
                 const driftSeries = createDataSeries(wasmContext, "Drift (ms)");
-                const jitterSeries = createDataSeries(wasmContext, "Seq Jitter (ms)");
 
                 sciChartSurface.renderableSeries.add(
                     new SciChart.FastLineRenderableSeries(wasmContext, {
@@ -1161,12 +1162,6 @@ async function initSciChart() {
                         dataSeriesName: "Drift (ms)",
                         strokeThickness: 2,
                         stroke: "#e05050ff"
-                    }),
-                    new SciChart.FastLineRenderableSeries(wasmContext, {
-                        dataSeries: jitterSeries,
-                        dataSeriesName: "Seq Jitter (ms)",
-                        strokeThickness: 2,
-                        stroke: "#e0c750ff"
                     })
                 );
 
@@ -1177,10 +1172,76 @@ async function initSciChart() {
                         engineLatencyMs: engineLatencySeries,
                         chassisLatencyMs: chassisLatencySeries,
                         ringLatencyMs: ringLatencySeries,
-                        driftMs: driftSeries,
-                        seqJitterMs: jitterSeries
+                        driftMs: driftSeries
                     },
-                    dataFields: ['engineLatencyMs', 'chassisLatencyMs', 'ringLatencyMs', 'driftMs', 'seqJitterMs']
+                    dataFields: ['engineLatencyMs', 'chassisLatencyMs', 'ringLatencyMs', 'driftMs']
+                };
+            }
+        },
+
+        'seq-gap': {
+            title: 'Sequence ID Gaps',
+            titleKey: 'runmode.telemetry.chart.seqgap',
+            create: async (containerId) => {
+                // Two telemetry-packet health metrics on a shared time axis:
+                // dropped-packet count (left, integer) and cadence jitter in ms
+                // (right, auto-ranged). Jitter is a smoothed absolute deviation
+                // from the nominal 60 fps cadence.
+                const { sciChartSurface, wasmContext } = await SciChart.SciChartSurface.createSingle(containerId);
+
+                addZoomModifiers(sciChartSurface);
+
+                const xAxis = createAxisWithOptions(wasmContext, { autoRange: SciChart.EAutoRange.Never });
+                const yAxisGap = createAxisWithOptions(wasmContext, {
+                    id: "ID_Y_AXIS_GAP",
+                    axisAlignment: SciChart.EAxisAlignment.Left,
+                    autoRange: SciChart.EAutoRange.Always,
+                    labelPrecision: 0,
+                    labelStyle: { color: "#e05050ff" }
+                });
+                const yAxisJitter = createAxisWithOptions(wasmContext, {
+                    id: "ID_Y_AXIS_JITTER",
+                    axisAlignment: SciChart.EAxisAlignment.Right,
+                    autoRange: SciChart.EAutoRange.Always,
+                    labelPrecision: 2,
+                    labelStyle: { color: "#e0c750ff" }
+                });
+
+                sciChartSurface.xAxes.add(xAxis);
+                sciChartSurface.yAxes.add(yAxisGap, yAxisJitter);
+
+                const seqGapSeries = createDataSeries(wasmContext, "Dropped Packets");
+                const seqJitterSeries = createDataSeries(wasmContext, "Jitter (ms)");
+
+                sciChartSurface.renderableSeries.add(
+                    new SciChart.FastMountainRenderableSeries(wasmContext, {
+                        dataSeries: seqGapSeries,
+                        dataSeriesName: "Dropped Packets",
+                        yAxisId: "ID_Y_AXIS_GAP",
+                        strokeThickness: 1,
+                        stroke: "#e05050ff",
+                        fillLinearGradient: new SciChart.GradientParams(new SciChart.Point(0, 0), new SciChart.Point(0, 1), [
+                            { color: "#e0505099", offset: 0 },
+                            { color: "#e050501e", offset: 1 },
+                        ]),
+                    }),
+                    new SciChart.FastLineRenderableSeries(wasmContext, {
+                        dataSeries: seqJitterSeries,
+                        dataSeriesName: "Jitter (ms)",
+                        yAxisId: "ID_Y_AXIS_JITTER",
+                        strokeThickness: 2,
+                        stroke: "#e0c750ff"
+                    })
+                );
+
+                return {
+                    surface: sciChartSurface,
+                    xAxis,
+                    dataSeries: {
+                        seqGap: seqGapSeries,
+                        seqJitterMs: seqJitterSeries
+                    },
+                    dataFields: ['seqGap', 'seqJitterMs']
                 };
             }
         },

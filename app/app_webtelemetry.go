@@ -42,9 +42,18 @@ func (a *App) sendTelemetryChartData() {
 			return 0
 		}
 
+		// Sequence-id gap: dropped telemetry packets since the previous frame.
+		// sequenceDelta is 1 in the nominal case; guard the subtraction so a
+		// zero delta cannot underflow the unsigned counter.
+		var seqGap float32
+		if a.state.current.sequenceDelta > 1 {
+			seqGap = float32(a.state.current.sequenceDelta - 1)
+		}
+
 		a.telemetryChartFeed <- map[string]float32{
 			"computeTime":                 float32(a.kinematics.Last.ComputeTime.Microseconds()),
 			"seq":                         float32(a.state.current.sequenceNumber),
+			"seqGap":                      seqGap,
 			"timeOfDay":                   float32(a.gtClient.Telemetry.TimeOfDay().Milliseconds()),
 			"throttleInput":               a.gtClient.Telemetry.ThrottleInputPercent(),
 			"throttleOutput":              a.gtClient.Telemetry.ThrottleOutputPercent(),
