@@ -1260,7 +1260,8 @@ func (c *Config) SetHapticsEnableReplay(value bool) {
 
 	c.viper.Haptics.EnableReplay = value
 
-	c.registerUpdate(true)
+	// Applied live (read per telemetry packet in telemetryActive); no restart required.
+	c.registerUpdate(false)
 }
 
 // GetHapticsSnapCurve returns the snap curve value.
