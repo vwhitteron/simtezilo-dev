@@ -255,6 +255,7 @@
 
     async function doAction(action, address) {
         showActionStatus();
+        let succeeded = false;
         try {
             const response = await fetch('/api/bluetooth/action', {
                 method: 'POST',
@@ -262,7 +263,9 @@
                 body: JSON.stringify({ action: action, address: address }),
             });
             const data = await response.json();
-            if (!data || data.status !== 'success') {
+            if (data && data.status === 'success') {
+                succeeded = true;
+            } else {
                 const detail = (data && data.message) ? data.message : 'request failed';
                 console.error('bluetooth-settings: action failed', data);
                 showActionStatus('error', capitalize(action) + ' failed: ' + detail);
@@ -273,6 +276,14 @@
         }
 
         await refresh(false);
+
+        // Pairing/forgetting a device adds or removes its bluealsa output, and
+        // connecting changes which one the bridge is labelled with, so let the
+        // audio-device dropdowns (which fetch only at load) rebuild their lists
+        // without a page reload.
+        if (succeeded) {
+            document.dispatchEvent(new CustomEvent('bluetooth-devices-changed'));
+        }
     }
 
     function capitalize(s) {

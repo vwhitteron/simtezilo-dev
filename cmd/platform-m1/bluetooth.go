@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/godbus/dbus/v5"
+	"github.com/rs/zerolog"
 	"github.com/vwhitteron/simtezilo-dev/app/exitcode"
 	"github.com/vwhitteron/simtezilo-dev/app/platform"
 )
@@ -77,6 +78,7 @@ func (btAgent) DisplayPasskey(dbus.ObjectPath, uint32, uint16) *dbus.Error { ret
 type btClient struct {
 	conn    *dbus.Conn
 	adapter dbus.ObjectPath
+	log     zerolog.Logger
 }
 
 // btReadRequest reads the {address} JSON payload from stdin.
@@ -130,7 +132,7 @@ func (p *manager) btOpen() (*btClient, error) {
 		}
 	}
 
-	return &btClient{conn: conn, adapter: adapter}, nil
+	return &btClient{conn: conn, adapter: adapter, log: p.log}, nil
 }
 
 func (c *btClient) close() {
@@ -261,11 +263,67 @@ func classifyDevice(bluezIcon string, cod uint32, serviceUUIDs []string) string 
 		}
 	}
 
+	// A paired device that advertises a standard A2DP/HFP audio profile is an
+	// audio device even when BlueZ has not resolved an Icon or Class-of-Device
+	// (common right after pairing). The specific sink/source shape is unknown
+	// here, so classify as the generic "audio" type the bridge accepts.
+	if hasAudioServiceUUID(serviceUUIDs) {
+		return "audio"
+	}
+
 	// Fall back to the Class-of-Device. BlueZ derives "Icon" from the CoD only
 	// after name/SDP resolution, so a freshly discovered (unpaired) device often
 	// has an empty Icon during a scan even though its CoD is already known from
 	// the inquiry result.
 	return classifyByCoD(cod)
+}
+
+// audioServiceUUID16 holds the 16-bit Bluetooth SIG UUIDs of the audio profiles
+// that mark a device as an audio sink/source: A2DP (AudioSource/Sink and the
+// distribution profile) and the headset/hands-free profiles.
+var audioServiceUUID16 = map[string]struct{}{ //nolint:gochecknoglobals
+	"110a": {}, // AudioSource (A2DP)
+	"110b": {}, // AudioSink (A2DP)
+	"110d": {}, // AdvancedAudioDistribution (A2DP)
+	"1108": {}, // Headset
+	"1112": {}, // Headset Audio Gateway
+	"111e": {}, // Handsfree
+	"111f": {}, // Handsfree Audio Gateway
+}
+
+// hasAudioServiceUUID reports whether any advertised UUID is a standard audio
+// profile. BlueZ reports full 128-bit UUIDs (e.g.
+// "0000110b-0000-1000-8000-00805f9b34fb"); the 16-bit assigned number is the
+// third group of the base UUID, so match on that segment.
+func hasAudioServiceUUID(serviceUUIDs []string) bool {
+	for _, uuid := range serviceUUIDs {
+		short := strings.ToLower(uuid)
+		// Reduce "0000110b-0000-1000-8000-..." to its 16-bit "110b".
+		if len(short) >= 8 && strings.HasPrefix(short, "0000") {
+			short = short[4:8]
+		}
+
+		if _, ok := audioServiceUUID16[short]; ok {
+			return true
+		}
+	}
+
+	return false
+}
+
+// hasFriendlyName reports whether BlueZ has a real (non-MAC) name for a device.
+// An unpaired device with no resolved name is aliased to its address — BlueZ
+// uses the '-' separated form, our own fallback the raw ':' form — so a name
+// equal to either is not a friendly name.
+func hasFriendlyName(device platform.CmdBTDevice) bool {
+	if device.Name == "" {
+		return false
+	}
+
+	dashForm := strings.ReplaceAll(device.Address, ":", "-")
+
+	return !strings.EqualFold(device.Name, device.Address) &&
+		!strings.EqualFold(device.Name, dashForm)
 }
 
 // classifyByCoD maps a Bluetooth Class-of-Device to an audio device type. It
@@ -348,13 +406,39 @@ func (c *btClient) listDevices(pairedOnly bool) ([]platform.CmdBTDevice, error) 
 
 		device := parseDevice(props)
 
-		// Only surface managed devices (audio sinks/sources and fan devices).
-		if !isManagedDevice(device) {
-			continue
-		}
+		// Trace every discovered Device1 object and how it classified, so a
+		// device that BlueZ sees but we drop (e.g. an unresolved Icon/CoD) is
+		// visible in the logs at debug level.
+		bluezIcon, _ := props["Icon"].Value().(string)
+		cod, _ := props["Class"].Value().(uint32)
+		uuids, _ := props["UUIDs"].Value().([]string)
+		c.log.Debug().
+			Str("address", device.Address).
+			Str("name", device.Name).
+			Str("icon", bluezIcon).
+			Uint32("class", cod).
+			Strs("uuids", uuids).
+			Int16("rssi", device.RSSI).
+			Str("classifiedType", device.Type).
+			Bool("managed", isManagedDevice(device)).
+			Msg("bt-scan: discovered device")
 
-		if pairedOnly && !device.Paired && !device.Connected {
-			continue
+		if pairedOnly {
+			// bt-list: only classified audio/fan devices that are paired or
+			// connected.
+			if !isManagedDevice(device) || (!device.Paired && !device.Connected) {
+				continue
+			}
+		} else {
+			// bt-scan: classified devices plus any device with a friendly name
+			// BlueZ has not classified yet. An unpaired audio device advertises
+			// over LE with no Class-of-Device or SDP, so it stays unclassified
+			// until paired; surfacing named unknowns lets the user pick and pair
+			// their headset, while MAC-only beacons stay hidden to keep the list
+			// usable.
+			if !isManagedDevice(device) && !hasFriendlyName(device) {
+				continue
+			}
 		}
 
 		devices = append(devices, device)
@@ -479,6 +563,23 @@ func (c *btClient) runDiscovery() error {
 	}
 
 	obj := c.conn.Object(btService, c.adapter)
+
+	// Set an explicit discovery filter with Transport "auto" so BlueZ scans
+	// both BR/EDR (Classic) and LE. Without a filter the session inherits
+	// whatever transport the adapter last used, which on some setups is BR/EDR
+	// only — so LE / dual-mode headphones that a phone or macOS sees (they
+	// always scan LE) never appear. DuplicateData surfaces repeated
+	// advertisements so a device that starts advertising mid-scan is still
+	// caught. Best effort: a filter rejection must not abort the scan.
+	filter := map[string]dbus.Variant{
+		"Transport":     dbus.MakeVariant("auto"),
+		"DuplicateData": dbus.MakeVariant(true),
+	}
+
+	err = obj.Call(btAdapterIface+".SetDiscoveryFilter", 0, filter).Err
+	if err != nil {
+		c.log.Debug().Err(err).Msg("bt-scan: SetDiscoveryFilter failed; using adapter default")
+	}
 
 	err = obj.Call(btAdapterIface+".StartDiscovery", 0).Err
 	if err != nil {

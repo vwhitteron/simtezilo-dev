@@ -342,6 +342,15 @@
             backendSelect.addEventListener('change', refreshDevices);
         }
 
+        // The Bluetooth panel pairs/forgets/connects devices, which changes the
+        // available output list. Re-read the config first (a forgotten device may
+        // have had its saved pit-radio selection cleared server-side), then rebuild
+        // the dropdowns, so neither needs a page reload to stay current.
+        document.addEventListener('bluetooth-devices-changed', async () => {
+            await fetchAudioConfig();
+            await refreshDevices();
+        });
+
         // Keep each hidden device-name field in sync when the user picks a device,
         // mirror the choice into audioConfig, and rebuild the other dropdown so
         // mutual exclusion reflects the new selection.

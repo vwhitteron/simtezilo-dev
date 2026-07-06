@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
+	"github.com/vwhitteron/simtezilo-dev/app/audio"
 	"github.com/vwhitteron/simtezilo-dev/app/platform"
 )
 
@@ -192,10 +194,50 @@ func (h *systemHandler) handleBluetoothAction(response http.ResponseWriter, requ
 	// lifecycle + a periodic reconcile), so connect/disconnect here doesn't touch
 	// it directly.
 
+	// Forgetting a device removes its bluealsa PCM: drop any saved pit-radio
+	// selection that pointed at it, so the app stops trying to open a device that
+	// no longer exists (which otherwise spams sink-open errors on every startup
+	// until the setting is changed by hand).
+	if action == platform.BTRemove {
+		h.clearRemovedBluetoothDevice(reqData.Address)
+	}
+
 	_ = json.NewEncoder(response).Encode(map[string]string{ //nolint:errchkjson // simple encoding
 		"status":  "success",
 		"message": "Bluetooth " + reqData.Action + " succeeded",
 	})
+}
+
+// clearRemovedBluetoothDevice clears the saved pit-radio audio selection when it
+// references the just-forgotten device, matched by the Bluetooth MAC embedded in
+// the stored bluealsa device name/ID. This keeps a stale selection from driving a
+// doomed sink-open on the next start. Best-effort: persisted only when the
+// selection actually pointed at the removed device. Selections that carry no MAC
+// (e.g. the snd-aloop "Bluetooth" bridge, whose device survives the unpair) are
+// left untouched.
+func (h *systemHandler) clearRemovedBluetoothDevice(address string) {
+	target := strings.ToUpper(address)
+	if target == "" {
+		return
+	}
+
+	name := h.config.GetAudioPitRadioDeviceName()
+	id := h.config.GetAudioPitRadioDevice()
+
+	if audio.BTAddress(name) != target && audio.BTAddress(id) != target {
+		return
+	}
+
+	h.config.SetAudioPitRadioDevice("")
+	h.config.SetAudioPitRadioDeviceName("")
+
+	if err := h.config.SaveConfigToFile(); err != nil {
+		h.log.Warn().Err(err).Msg("failed to save config after clearing removed bluetooth device")
+
+		return
+	}
+
+	h.log.Info().Str("address", target).Msg("cleared pit-radio selection for forgotten bluetooth device")
 }
 
 // writeBluetoothError writes a JSON error response with the given status code.
