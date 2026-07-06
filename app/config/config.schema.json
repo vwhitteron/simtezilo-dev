@@ -512,6 +512,13 @@
                             "description": "Output sample rate in Hz",
                             "minimum": 8000,
                             "default": 48000
+                        },
+                        "volume": {
+                            "type": "integer",
+                            "description": "Playback volume as a percentage (0-100); scales the pit-radio audio level linearly",
+                            "minimum": 0,
+                            "maximum": 100,
+                            "default": 100
                         }
                     },
                     "additionalProperties": true

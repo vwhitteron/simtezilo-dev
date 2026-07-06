@@ -89,6 +89,7 @@ func (a *App) settingAction(setting languagedb.Key, action string) string {
 
 		// Pit Radio handlers
 		languagedb.UIMenuPitRadioEnable:               a.handlePitRadioEnableSetting,
+		languagedb.UIMenuPitRadioVolume:               a.handlePitradioVolumeSetting,
 		languagedb.UIMenuPitRadioLapTimesEnable:       a.handlePitradioLapTimesEnableSetting,
 		languagedb.UIMenuPitRadioLapTimesMaxDelta:     a.handlePitradioLapTimesMaxDeltaSetting,
 		languagedb.UIMenuPitRadioRaceLapsEnable:       a.handlePitradioRaceLapsEnableSetting,
@@ -836,6 +837,21 @@ func (a *App) handlePitRadioEnableSetting(action string) string {
 	}
 
 	return settingStateOff
+}
+
+func (a *App) handlePitradioVolumeSetting(action string) string {
+	var value int
+
+	switch action {
+	case "increase":
+		value = a.config.IncreaseAudioPitRadioVolume()
+	case "decrease":
+		value = a.config.DecreaseAudioPitRadioVolume()
+	default:
+		value = a.config.GetAudioPitRadioVolume()
+	}
+
+	return strconv.Itoa(value) + "%"
 }
 
 // Pit Radio - Lap Times notification handlers.

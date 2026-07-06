@@ -139,6 +139,7 @@ func (h *configHandler) handleGetConfig(response http.ResponseWriter, _ *http.Re
 				"device":     h.config.GetAudioPitRadioDevice(),
 				"deviceName": h.config.GetAudioPitRadioDeviceName(),
 				"sampleRate": h.config.GetAudioPitRadioSampleRate(),
+				"volume":     h.config.GetAudioPitRadioVolume(),
 			},
 			"notifications": map[string]any{
 				"enableRaceProgress":      h.config.GetPitRadioNotifyRaceProgressEnabled(),

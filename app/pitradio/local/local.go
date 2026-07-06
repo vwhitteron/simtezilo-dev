@@ -16,6 +16,7 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/codec"
 	"github.com/vwhitteron/simtezilo-dev/app/pitradio"
 	"github.com/vwhitteron/simtezilo-dev/app/pitradio/tts"
+	"github.com/vwhitteron/simtezilo-dev/app/signal"
 )
 
 // outputChannels is the channel count used for local pit-radio playback. Pit
@@ -52,6 +53,11 @@ type Config struct {
 	DeviceNameFn func() string
 	SampleRateFn func() int
 
+	// VolumeFn, when non-nil, is read before each clip is scaled so the output
+	// level can be changed at runtime. It returns the playback volume as a
+	// percentage (0-100); 100 (or a nil VolumeFn) leaves the audio unattenuated.
+	VolumeFn func() int
+
 	// OnSinkActive, when non-nil, is called when the persistent playback sink is
 	// (re)opened on a device (active=true) or torn down (active=false), with the
 	// resolved device name. The app uses it to drive the Bluetooth audio bridge
@@ -67,6 +73,7 @@ type Output struct {
 	deviceFn     func() string
 	deviceNameFn func() string
 	sampleRateFn func() int
+	volumeFn     func() int
 	messageGap   time.Duration
 	queue        chan pitradio.Message
 	log          zerolog.Logger
@@ -118,6 +125,7 @@ func New(config Config) (*Output, error) {
 		deviceFn:     config.DeviceFn,
 		deviceNameFn: config.DeviceNameFn,
 		sampleRateFn: config.SampleRateFn,
+		volumeFn:     config.VolumeFn,
 		messageGap:   config.MessageGap,
 		queue:        make(chan pitradio.Message, 100),
 		log:          config.Logger.With().Str("component", "pitradio local").Logger(),
@@ -233,6 +241,7 @@ func (o *Output) playMessage(message pitradio.Message) {
 	}
 
 	rendered := o.render(pcm, o.source.channels, o.openRate)
+	o.applyVolume(rendered)
 	o.source.enqueue(rendered)
 
 	// Wait for the clip to play out (plus a short drain tail) before the next.
@@ -387,6 +396,49 @@ func (o *Output) render(pcm codec.PCMFloat64, channels, rate int) []float32 {
 	}
 
 	return buf
+}
+
+// volumeFloorDB is the attenuation applied at the bottom of the volume slider
+// (just above 0%). A logarithmic taper cannot reach true silence (0 gain is
+// -∞ dB), so the slider spans 0 dB (100%) down to this floor, with 0% forced to
+// silence.
+const volumeFloorDB = -40.0
+
+// applyVolume scales the interleaved buffer in place by the configured playback
+// volume. The volume is read live per clip via volumeFn (percentage 0-100), so a
+// change in the UI takes effect on the next message. A nil volumeFn or a value of
+// 100 leaves the audio untouched; out-of-range values are clamped.
+//
+// The taper is logarithmic (perceptual): the slider position maps linearly onto
+// decibels between 0 dB at 100% and volumeFloorDB just above 0%, which is then
+// converted back to a linear amplitude. This matches how loudness is perceived,
+// so equal slider movements give roughly equal changes in loudness.
+func (o *Output) applyVolume(buf []float32) {
+	if o.volumeFn == nil {
+		return
+	}
+
+	volume := min(100, max(0, o.volumeFn()))
+	if volume == 100 {
+		return
+	}
+
+	if volume == 0 {
+		for i := range buf {
+			buf[i] = 0
+		}
+
+		return
+	}
+
+	// Map the slider position onto decibels (100% -> 0 dB, ~0% -> floor), then
+	// back to a linear amplitude via the shared dB conversion.
+	db := volumeFloorDB * (1 - float64(volume)/100)
+	gain := float32(signal.GainToAmplitudeRatio(db))
+
+	for i := range buf {
+		buf[i] *= gain
+	}
 }
 
 // pullBlockSamples bounds how many frames render pulls from the resampler per

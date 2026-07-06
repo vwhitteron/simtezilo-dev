@@ -882,6 +882,12 @@ class ConfigManager {
                     input.value = this.formatDecimalValue(value);
                 } else {
                     input.value = value;
+                    // Range sliders drive a separate value label via their oninput
+                    // handler, which populateForm's direct assignment doesn't trigger;
+                    // fire it so the label reflects the loaded value.
+                    if (input.type === 'range') {
+                        input.dispatchEvent(new Event('input', { bubbles: true }));
+                    }
                 }
                 // Update previous values
                 this.previousValues.set(configPath, value);

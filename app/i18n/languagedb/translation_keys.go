@@ -125,6 +125,7 @@ const (
 
 	UIMenuPitRadio                     Key = "ui.menu.pitradio"
 	UIMenuPitRadioEnable               Key = "ui.menu.pitradio.enable"
+	UIMenuPitRadioVolume               Key = "ui.menu.pitradio.volume"
 	UIMenuPitRadioNotifications        Key = "ui.menu.pitradio.notifications"
 	UIMenuPitRadioLapTimes             Key = "ui.menu.pitradio.laptimes"
 	UIMenuPitRadioLapTimesEnable       Key = "ui.menu.pitradio.laptimesenable"

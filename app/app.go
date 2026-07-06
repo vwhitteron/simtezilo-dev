@@ -1044,6 +1044,7 @@ func (a *App) initialiseLocalPitRadioOutput() bool {
 		DeviceFn:     a.config.GetAudioPitRadioDevice,
 		DeviceNameFn: a.config.GetAudioPitRadioDeviceName,
 		SampleRateFn: a.config.GetAudioPitRadioSampleRate,
+		VolumeFn:     a.config.GetAudioPitRadioVolume,
 		MessageGap:   time.Duration(a.config.GetPitRadioMessageSendIntervalMs()) * time.Millisecond,
 		Logger:       a.log,
 		// Drive the Bluetooth audio bridge from the sink lifecycle: the bridge can

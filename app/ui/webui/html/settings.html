@@ -2407,6 +2407,17 @@
                                         </div>
                                     </div>
                                 </div>
+                                <div class="row g-3 mb-3">
+                                    <div class="col-md-8 col-lg-6">
+                                        <label for="audio-pitradio-volume" class="form-label">Volume
+                                            <span id="audio-pitradio-volume-value" class="text-muted">100%</span>
+                                        </label>
+                                        <input type="range" id="audio-pitradio-volume" class="form-range"
+                                            data-config="pitRadio.audio.volume" data-type="number"
+                                            min="0" max="100" step="5"
+                                            oninput="document.getElementById('audio-pitradio-volume-value').textContent = this.value + '%'">
+                                    </div>
+                                </div>
                                 <div class="row g-3 mb-3 align-items-center">
                                     <div class="col-auto">
                                         <button type="button" id="audio-pitradio-test" class="btn btn-outline-secondary">Test</button>

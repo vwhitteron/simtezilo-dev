@@ -105,6 +105,7 @@ func defaultConfig() *viperConfig {
 			Audio: PitRadioAudio{
 				Device:     "",
 				SampleRate: 48000,
+				Volume:     100,
 			},
 			MessageSendIntervalMs: 2000,
 			Notifications: &notifications{

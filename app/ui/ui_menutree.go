@@ -108,6 +108,7 @@ func newMenuTree(hapticsChannels int) *MenuNode {
 			).setVisibility(PageContextExperimental),
 			branch(languagedb.UIMenuPitRadio,
 				leaf(languagedb.UIMenuPitRadioEnable),
+				leaf(languagedb.UIMenuPitRadioVolume),
 				branch(languagedb.UIMenuPitRadioNotifications,
 					branch(languagedb.UIMenuPitRadioLapTimes,
 						leaf(languagedb.UIMenuPitRadioLapTimesEnable),

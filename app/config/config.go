@@ -150,6 +150,7 @@ type PitRadioAudio struct {
 	Device     string `json:"device"`     // backend device ID ("" selects the default)
 	DeviceName string `json:"deviceName"` // human-readable device name; the stable, backend-agnostic selection key (Device is a tiebreaker)
 	SampleRate int    `json:"sampleRate"` // output sample rate in Hz
+	Volume     int    `json:"volume"`     // playback volume as a percentage (0-100); scales the pit-radio audio level linearly
 }
 
 // EQBand represents a parametric equalizer band with center frequency, gain, and Q factor.
@@ -3567,6 +3568,49 @@ func (c *Config) SetAudioPitRadioSampleRate(value int) {
 
 	// Applied live (resolved per message); no restart required.
 	c.registerUpdate(false)
+}
+
+// GetAudioPitRadioVolume returns the pit-radio playback volume as a percentage
+// (0-100). The value is clamped so a hand-edited config can never drive the
+// linear gain outside the sensible range.
+func (c *Config) GetAudioPitRadioVolume() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return min(100, max(0, c.viper.PitRadio.Audio.Volume))
+}
+
+// SetAudioPitRadioVolume sets the pit-radio playback volume percentage (0-100).
+func (c *Config) SetAudioPitRadioVolume(value int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.PitRadio.Audio.Volume = min(100, max(0, value))
+
+	// Applied live (read per message); no restart required.
+	c.registerUpdate(false)
+}
+
+// IncreaseAudioPitRadioVolume raises the pit-radio volume by 5% (max 100).
+func (c *Config) IncreaseAudioPitRadioVolume() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.PitRadio.Audio.Volume = min(100, max(0, c.viper.PitRadio.Audio.Volume)+5)
+	c.registerUpdate(false)
+
+	return c.viper.PitRadio.Audio.Volume
+}
+
+// DecreaseAudioPitRadioVolume lowers the pit-radio volume by 5% (min 0).
+func (c *Config) DecreaseAudioPitRadioVolume() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.PitRadio.Audio.Volume = max(0, min(100, c.viper.PitRadio.Audio.Volume)-5)
+	c.registerUpdate(false)
+
+	return c.viper.PitRadio.Audio.Volume
 }
 
 // ****************************************************************************

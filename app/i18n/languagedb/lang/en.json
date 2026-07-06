@@ -139,6 +139,7 @@
 
         "ui.menu.pitradio": "Pit Radio",
         "ui.menu.pitradio.enable": "Pit Radio Enable",
+        "ui.menu.pitradio.volume": "Volume",
         "ui.menu.pitradio.notifications": "Notifications",
         "ui.menu.pitradio.laptimes": "Lap Times",
         "ui.menu.pitradio.laptimesenable": "Enable",

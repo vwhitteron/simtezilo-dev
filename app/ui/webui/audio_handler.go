@@ -97,6 +97,14 @@ func (h *configHandler) applyPitRadioAudioConfig(config map[string]any) []string
 		}
 	}
 
+	if volume, ok := config["volume"]; ok {
+		if value, ok := volume.(float64); ok {
+			h.config.SetAudioPitRadioVolume(int(value))
+		} else {
+			errors = append(errors, "invalid pit-radio volume value")
+		}
+	}
+
 	return errors
 }
 
