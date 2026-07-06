@@ -29,9 +29,23 @@ func TestClearRemovedBluetoothDevice_MatchingMACClears(t *testing.T) {
 
 	// Address casing differs from the stored form to confirm the match is
 	// case-insensitive.
-	handler.clearRemovedBluetoothDevice("90:7a:58:d9:14:b3")
+	handler.clearRemovedBluetoothDevice("90:7a:58:d9:14:b3", "")
 
 	assert.Empty(t, handler.config.GetAudioPitRadioDevice())
+	assert.Empty(t, handler.config.GetAudioPitRadioDeviceName())
+}
+
+// TestClearRemovedBluetoothDevice_MatchingNameClears verifies that forgetting the
+// device whose friendly name is the saved pit-radio selection drops it — the
+// name-based selection stored for a paired Bluetooth output.
+func TestClearRemovedBluetoothDevice_MatchingNameClears(t *testing.T) {
+	t.Parallel()
+
+	handler := newBluetoothTestHandler()
+	handler.config.SetAudioPitRadioDeviceName("Garage Speaker")
+
+	handler.clearRemovedBluetoothDevice("90:7A:58:D9:14:B3", "Garage Speaker")
+
 	assert.Empty(t, handler.config.GetAudioPitRadioDeviceName())
 }
 
@@ -43,7 +57,7 @@ func TestClearRemovedBluetoothDevice_OtherDeviceUntouched(t *testing.T) {
 	handler := newBluetoothTestHandler()
 	handler.config.SetAudioPitRadioDeviceName("bluealsa:DEV=90:7A:58:D9:14:B3,PROFILE=a2dp")
 
-	handler.clearRemovedBluetoothDevice("AA:BB:CC:DD:EE:FF")
+	handler.clearRemovedBluetoothDevice("AA:BB:CC:DD:EE:FF", "Some Other Speaker")
 
 	assert.Equal(t, "bluealsa:DEV=90:7A:58:D9:14:B3,PROFILE=a2dp",
 		handler.config.GetAudioPitRadioDeviceName())
@@ -58,7 +72,7 @@ func TestClearRemovedBluetoothDevice_NoMACSelectionUntouched(t *testing.T) {
 	handler := newBluetoothTestHandler()
 	handler.config.SetAudioPitRadioDeviceName("Loopback: PCM (hw:2,0)")
 
-	handler.clearRemovedBluetoothDevice("90:7A:58:D9:14:B3")
+	handler.clearRemovedBluetoothDevice("90:7A:58:D9:14:B3", "")
 
 	assert.Equal(t, "Loopback: PCM (hw:2,0)", handler.config.GetAudioPitRadioDeviceName())
 }

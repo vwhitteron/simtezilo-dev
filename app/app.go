@@ -84,11 +84,16 @@ type App struct {
 	// snd-aloop Loopback device — the master the Bluetooth bridge slaves to. The
 	// bridge is only run while this holds.
 	pitRadioLoopbackActive atomic.Bool
-	// btMu guards routedBTMAC during bridge reconciliation.
+	// btMu guards routedBTMAC and desiredBTMAC during bridge reconciliation.
 	btMu sync.Mutex
 	// routedBTMAC is the address of the device the audio bridge is currently
 	// routed to, "" when no bridge is up.
 	routedBTMAC string
+	// desiredBTMAC is the address of the paired Bluetooth speaker the user has
+	// selected as the pit-radio output (resolved from the saved device name),
+	// "" when the current selection is not a paired Bluetooth audio device. The
+	// reconciler connects and routes to this specific device.
+	desiredBTMAC string
 
 	ui *ui.UserInterface // User interface manager
 
@@ -490,7 +495,7 @@ func (a *App) runAppMode() RunResult {
 	code := <-a.exitCodeChan
 
 	// Check for special exit codes
-	switch code { //nolint:exhaustive // other codes mean normal exit
+	switch code {
 	case exitcode.SetupMode:
 		a.log.Info().Msg("Setup mode requested from run mode")
 

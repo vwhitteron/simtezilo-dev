@@ -140,7 +140,8 @@ func (a *App) settingAction(setting languagedb.Key, action string) string {
 		result := a.handleRoutingLeafSetting(string(setting), action)
 
 		if action != "get" && action != "" {
-			if err := a.config.SaveConfigToFile(); err != nil {
+			err := a.config.SaveConfigToFile()
+			if err != nil {
 				a.log.Error().Err(err).Msg("failed to save configuration to file")
 			}
 		}

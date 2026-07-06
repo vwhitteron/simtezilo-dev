@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"encoding/json"
-	"strings"
 	"time"
 
 	"github.com/vwhitteron/simtezilo-dev/app/platform"
@@ -152,12 +151,47 @@ func (a *App) handleBluetoothToggleSetting(action string) string {
 
 // onPitRadioSinkActive is the local pit-radio Output's sink callback. The
 // Bluetooth bridge can only run while the pit-radio sink (its loopback master) is
-// open, so this tracks whether that sink is on the Loopback device and reconciles
-// the bridge whenever it changes.
+// open, so this records which paired speaker (if any) the current selection names
+// and reconciles the bridge whenever it changes. deviceName is the saved
+// selection name; for a Bluetooth output it is the paired device's friendly name
+// (all Bluetooth selections open the same loopback master), which resolves here to
+// the device's address so the reconciler can connect and route that specific one.
 func (a *App) onPitRadioSinkActive(deviceName string, active bool) {
-	a.pitRadioLoopbackActive.Store(active && strings.Contains(strings.ToLower(deviceName), "loopback"))
+	addr := ""
+	if active {
+		addr = a.btAddressForName(deviceName)
+	}
+
+	a.btMu.Lock()
+	a.desiredBTMAC = addr
+	a.btMu.Unlock()
+
+	a.pitRadioLoopbackActive.Store(addr != "")
 
 	go a.reconcileBluetoothAudio()
+}
+
+// btAddressForName returns the address of the paired audio device whose friendly
+// name matches the selection, or "" when the name is not a paired Bluetooth audio
+// device (e.g. a local sound card, or a forgotten speaker).
+func (a *App) btAddressForName(name string) string {
+	if name == "" {
+		return ""
+	}
+
+	resp, err := a.runBluetooth(platform.BTList, nil)
+	if err != nil || resp == nil {
+		return ""
+	}
+
+	for i := range resp.BTDevices {
+		device := resp.BTDevices[i]
+		if device.Paired && isAudioBTDevice(device) && device.Name == name {
+			return device.Address
+		}
+	}
+
+	return ""
 }
 
 // startBluetoothAudioReconciler runs a background loop that periodically
@@ -197,7 +231,7 @@ func (a *App) reconcileBluetoothAudio() {
 	want := ""
 
 	if a.pitRadioLoopbackActive.Load() {
-		want = a.ensureBluetoothAudioConnected()
+		want = a.ensureBluetoothAudioConnected(a.desiredBTMAC)
 	}
 
 	// Tear down a stale bridge (sink closed, device changed, or disconnected).
@@ -212,48 +246,80 @@ func (a *App) reconcileBluetoothAudio() {
 	}
 }
 
-// ensureBluetoothAudioConnected returns the address of a connected Bluetooth
-// audio device, connecting a paired one if none is currently connected. BlueZ
+// ensureBluetoothAudioConnected returns the address of the connected Bluetooth
+// speaker for the pit-radio output, connecting it if necessary. target is the
+// address of the specifically-selected speaker; when set, only that device is
+// considered so selecting a particular speaker routes to it. When target is empty
+// it falls back to any connected (else the first paired) audio device. BlueZ
 // trusts devices at pair time but does not proactively reconnect a trusted
 // speaker (the speaker has to initiate), so this drives the (re)connect itself.
-// Called only while the Bluetooth device is the selected pit-radio output, so a
+// Called only while a Bluetooth device is the selected pit-radio output, so a
 // dropped speaker is reconnected on the periodic tick. Best-effort: connect
 // failures (device off/out of range) are logged and the next tick retries.
-func (a *App) ensureBluetoothAudioConnected() string {
+func (a *App) ensureBluetoothAudioConnected(target string) string {
 	resp, err := a.runBluetooth(platform.BTList, nil)
 	if err != nil || resp == nil {
 		return ""
 	}
 
-	for _, device := range resp.BTDevices {
-		if device.Connected && isAudioBTDevice(device) {
-			return device.Address
-		}
+	device := pickBTAudioDevice(resp.BTDevices, target)
+	if device == nil {
+		return ""
 	}
 
-	// None connected: (re)connect the first paired audio device. A successful
-	// Connect is synchronous, so the returned address is now connected. Skip
-	// non-audio devices (e.g. the fan/windsim) so we never route them as a sink.
-	for _, device := range resp.BTDevices {
-		if !device.Paired || !isAudioBTDevice(device) {
-			continue
-		}
-
-		payload, _ := json.Marshal(map[string]string{"address": device.Address}) //nolint:errchkjson // simple encoding
-
-		_, err := a.runBluetooth(platform.BTConnect, payload)
-		if err != nil {
-			a.log.Debug().Err(err).Str("address", device.Address).Msg("bluetooth auto-reconnect failed")
-
-			continue
-		}
-
-		a.log.Info().Str("address", device.Address).Str("name", device.Name).Msg("bluetooth auto-reconnected")
-
+	if device.Connected {
 		return device.Address
 	}
 
-	return ""
+	// Not connected: (re)connect it. A successful Connect is synchronous, so the
+	// returned address is now connected.
+	payload, _ := json.Marshal(map[string]string{"address": device.Address}) //nolint:errchkjson // simple encoding
+
+	_, err = a.runBluetooth(platform.BTConnect, payload)
+	if err != nil {
+		a.log.Debug().Err(err).Str("address", device.Address).Msg("bluetooth auto-reconnect failed")
+
+		return ""
+	}
+
+	a.log.Info().Str("address", device.Address).Str("name", device.Name).Msg("bluetooth auto-reconnected")
+
+	return device.Address
+}
+
+// pickBTAudioDevice selects the paired audio device to route pit-radio to. When
+// target (an address) is set it returns that specific paired audio device, so a
+// deliberate speaker choice is honoured even while it is disconnected. Otherwise
+// it prefers a connected audio device, then the first paired one. Non-audio
+// devices (e.g. the fan/windsim) are never eligible. Returns nil when no suitable
+// device exists.
+func pickBTAudioDevice(devices []platform.CmdBTDevice, target string) *platform.CmdBTDevice {
+	if target != "" {
+		return firstBTDevice(devices, func(d platform.CmdBTDevice) bool {
+			return d.Address == target && d.Paired && isAudioBTDevice(d)
+		})
+	}
+
+	if d := firstBTDevice(devices, func(d platform.CmdBTDevice) bool {
+		return d.Connected && isAudioBTDevice(d)
+	}); d != nil {
+		return d
+	}
+
+	return firstBTDevice(devices, func(d platform.CmdBTDevice) bool {
+		return d.Paired && isAudioBTDevice(d)
+	})
+}
+
+// firstBTDevice returns a pointer to the first device satisfying match, or nil.
+func firstBTDevice(devices []platform.CmdBTDevice, match func(platform.CmdBTDevice) bool) *platform.CmdBTDevice {
+	for i := range devices {
+		if match(devices[i]) {
+			return &devices[i]
+		}
+	}
+
+	return nil
 }
 
 // routeBluetoothAudio brings the snd-aloop→bluealsa audio bridge up or down for a

@@ -168,6 +168,14 @@ func (h *systemHandler) handleBluetoothAction(response http.ResponseWriter, requ
 	ctx, cancel := context.WithTimeout(request.Context(), timeout)
 	defer cancel()
 
+	// For a remove, capture the device's friendly name up-front: a Bluetooth
+	// pit-radio selection is stored by name, and the device is gone by the time we
+	// clear a stale selection below.
+	removedName := ""
+	if action == platform.BTRemove {
+		removedName = h.btDeviceName(ctx, reqData.Address)
+	}
+
 	resp, err := h.runPlatform(ctx, action, payload)
 	if err != nil {
 		// The raw helper error (e.g. "platform command bt-connect failed with no
@@ -199,7 +207,7 @@ func (h *systemHandler) handleBluetoothAction(response http.ResponseWriter, requ
 	// no longer exists (which otherwise spams sink-open errors on every startup
 	// until the setting is changed by hand).
 	if action == platform.BTRemove {
-		h.clearRemovedBluetoothDevice(reqData.Address)
+		h.clearRemovedBluetoothDevice(reqData.Address, removedName)
 	}
 
 	_ = json.NewEncoder(response).Encode(map[string]string{ //nolint:errchkjson // simple encoding
@@ -208,14 +216,29 @@ func (h *systemHandler) handleBluetoothAction(response http.ResponseWriter, requ
 	})
 }
 
+// btDeviceName returns the friendly name of the paired device with the given
+// address, or "" if it is not found. Used to capture a device's name before it is
+// forgotten so a name-based pit-radio selection can be recognised afterwards.
+func (h *systemHandler) btDeviceName(ctx context.Context, address string) string {
+	target := strings.ToUpper(address)
+
+	for _, dev := range h.btDeviceList(ctx) {
+		if strings.ToUpper(dev.Address) == target {
+			return dev.Name
+		}
+	}
+
+	return ""
+}
+
 // clearRemovedBluetoothDevice clears the saved pit-radio audio selection when it
-// references the just-forgotten device, matched by the Bluetooth MAC embedded in
-// the stored bluealsa device name/ID. This keeps a stale selection from driving a
-// doomed sink-open on the next start. Best-effort: persisted only when the
-// selection actually pointed at the removed device. Selections that carry no MAC
-// (e.g. the snd-aloop "Bluetooth" bridge, whose device survives the unpair) are
-// left untouched.
-func (h *systemHandler) clearRemovedBluetoothDevice(address string) {
+// references the just-forgotten device. A Bluetooth selection is stored by the
+// device's friendly name (removedName); older selections may instead carry the
+// Bluetooth MAC embedded in a bluealsa device name/ID. Either match clears the
+// selection, keeping a stale one from driving a doomed sink-open on the next
+// start. Best-effort: persisted only when the selection actually pointed at the
+// removed device.
+func (h *systemHandler) clearRemovedBluetoothDevice(address, removedName string) {
 	target := strings.ToUpper(address)
 	if target == "" {
 		return
@@ -224,14 +247,18 @@ func (h *systemHandler) clearRemovedBluetoothDevice(address string) {
 	name := h.config.GetAudioPitRadioDeviceName()
 	id := h.config.GetAudioPitRadioDevice()
 
-	if audio.BTAddress(name) != target && audio.BTAddress(id) != target {
+	byName := removedName != "" && name == removedName
+	byMAC := audio.BTAddress(name) == target || audio.BTAddress(id) == target
+
+	if !byName && !byMAC {
 		return
 	}
 
 	h.config.SetAudioPitRadioDevice("")
 	h.config.SetAudioPitRadioDeviceName("")
 
-	if err := h.config.SaveConfigToFile(); err != nil {
+	err := h.config.SaveConfigToFile()
+	if err != nil {
 		h.log.Warn().Err(err).Msg("failed to save config after clearing removed bluetooth device")
 
 		return

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/vwhitteron/simtezilo-dev/app/audio"
+	"github.com/vwhitteron/simtezilo-dev/app/platform"
 )
 
 // testToneDuration is how long a device/channel test tone plays.
@@ -151,6 +152,7 @@ func (h *configHandler) handleAudioDevices(response http.ResponseWriter, request
 	}
 
 	h.enrichBluetoothNames(request.Context(), devices)
+	devices = h.injectPairedBluetoothDevices(request.Context(), devices)
 
 	_ = json.NewEncoder(response).Encode(map[string]any{ //nolint:errchkjson // simple encoding
 		"status":            "success",
@@ -158,6 +160,18 @@ func (h *configHandler) handleAudioDevices(response http.ResponseWriter, request
 		"availableBackends": audio.AvailableBackends(),
 		"devices":           devices,
 	})
+}
+
+// isAudioBTDevice reports whether a Bluetooth device's semantic type is an audio
+// sink. Only these can be the snd-aloop bridge target; a non-audio peripheral
+// (the fan/windsim, type "fan") must not be treated as the Bluetooth output.
+func isAudioBTDevice(deviceType string) bool {
+	switch deviceType {
+	case "speaker", "headphones", "headset", "audio":
+		return true
+	default:
+		return false
+	}
 }
 
 // enrichBluetoothNames replaces the MAC-derived label of each bluealsa output
@@ -195,7 +209,10 @@ func (h *configHandler) enrichBluetoothNames(ctx context.Context, devices []audi
 	for _, dev := range h.btDevices(ctx) {
 		aliasByAddr[strings.ToUpper(dev.Address)] = dev.Name
 
-		if dev.Connected && connectedAlias == "" {
+		// Only an audio device can be the snd-aloop bridge's target; a connected
+		// non-audio peripheral (the fan/windsim, type "fan") must never label the
+		// Bluetooth output, or it appears as the selected pit-radio device.
+		if dev.Connected && connectedAlias == "" && isAudioBTDevice(dev.Type) {
 			connectedAlias = dev.Name
 		}
 	}
@@ -218,6 +235,96 @@ func (h *configHandler) enrichBluetoothNames(ctx context.Context, devices []audi
 			devices[idx].DisplayName = connectedAlias
 		}
 	}
+}
+
+// injectPairedBluetoothDevices expands the single snd-aloop Bluetooth bridge entry
+// into one entry per paired audio device, labelled by the device's friendly name,
+// so every paired speaker/headset is selectable even while disconnected. All
+// Bluetooth selections share the bridge (Loopback) device ID: the app always plays
+// to the loopback master and the reconciler connects and routes the
+// specifically-selected device (matched back by this name). When no bridge device
+// is present yet (snd-aloop not loaded because nothing has ever connected) the
+// entries carry an empty ID and become fully functional after the first bring-up.
+//
+// No-op when the platform helper is unavailable or no audio device is paired, so
+// backends without Bluetooth (or hosts with a single native BT output, e.g. macOS)
+// keep their device list untouched.
+func (h *configHandler) injectPairedBluetoothDevices(ctx context.Context, devices []audio.Device) []audio.Device {
+	if h.btDevices == nil {
+		return devices
+	}
+
+	paired := pairedBluetoothDevices(h.btDevices(ctx))
+	if len(paired) == 0 {
+		return devices
+	}
+
+	// Drop the backend's Bluetooth entries and adopt the bridge (Loopback) ID that
+	// every Bluetooth selection actually opens.
+	bridgeID, kept := bridgeIDAndNonBluetooth(devices)
+
+	for i := range paired {
+		paired[i].ID = bridgeID
+		kept = append(kept, paired[i])
+	}
+
+	return kept
+}
+
+// pairedBluetoothDevices turns the paired audio devices reported by the helper
+// into selectable Bluetooth output entries, one per device, keyed and labelled by
+// friendly name. Non-audio peripherals (the fan/windsim) and duplicate names are
+// skipped.
+func pairedBluetoothDevices(btDevices []platform.CmdBTDevice) []audio.Device {
+	out := make([]audio.Device, 0, len(btDevices))
+	seen := map[string]bool{}
+
+	for _, dev := range btDevices {
+		if !dev.Paired || !isAudioBTDevice(dev.Type) || dev.Name == "" || seen[dev.Name] {
+			continue
+		}
+
+		seen[dev.Name] = true
+		out = append(out, audio.Device{
+			Name:        dev.Name,
+			DisplayName: dev.Name,
+			Type:        audio.DeviceBluetooth,
+			MaxChannels: 2, // A2DP is stereo.
+		})
+	}
+
+	return out
+}
+
+// bridgeIDAndNonBluetooth splits a device list into the bridge (Loopback) device
+// ID that every Bluetooth selection opens and the non-Bluetooth devices to keep.
+// It prefers the loopback entry's ID and falls back to the first Bluetooth entry's
+// (empty when there is no Bluetooth device yet).
+func bridgeIDAndNonBluetooth(devices []audio.Device) (string, []audio.Device) {
+	kept := make([]audio.Device, 0, len(devices))
+	loopbackID, firstBTID := "", ""
+
+	for _, dev := range devices {
+		if dev.Type != audio.DeviceBluetooth {
+			kept = append(kept, dev)
+
+			continue
+		}
+
+		if firstBTID == "" {
+			firstBTID = dev.ID
+		}
+
+		if loopbackID == "" && strings.Contains(strings.ToLower(dev.Name), "loopback") {
+			loopbackID = dev.ID
+		}
+	}
+
+	if loopbackID != "" {
+		return loopbackID, kept
+	}
+
+	return firstBTID, kept
 }
 
 // handleAudioTest plays a short test tone on a device/channel so the user can
