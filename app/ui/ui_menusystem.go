@@ -17,9 +17,10 @@ type MenuSystem struct {
 }
 
 // NewMenuSystem builds the menu tree (declared in newMenuTree) and starts the
-// cursor on the live view leaf.
-func NewMenuSystem() *MenuSystem {
-	root := newMenuTree()
+// cursor on the live view leaf. hapticsChannels is the number of haptic output
+// channels; it determines how many routing toggle leaves are created.
+func NewMenuSystem(hapticsChannels int) *MenuSystem {
+	root := newMenuTree(hapticsChannels)
 
 	return &MenuSystem{
 		root:               root,

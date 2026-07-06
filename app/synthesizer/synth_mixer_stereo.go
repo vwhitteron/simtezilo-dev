@@ -51,6 +51,13 @@ type StereoMixer struct {
 	engineWorkScratch      deviceBuffer
 	calibratorEqAmplitudes channelValues
 
+	// Per-output-channel routing masks, AUDIO-CALLBACK-THREAD ONLY. Refreshed
+	// from the lock-free config snapshot at the top of each MixToMaster call so
+	// routing edits apply live without locking or allocating on the hot path.
+	routeEngine       []bool
+	routeChassis      []bool
+	routeTransmission []bool
+
 	log          zerolog.Logger
 	faderGain    float64
 	fadeInActive bool
@@ -110,6 +117,10 @@ func NewStereoMixer(mixerConfig StereoMixerConfig) (*StereoMixer, error) {
 
 		outputChannelNames:  buildChannelNames(outputChannelPrefix, numOutputChannels),
 		chassisChannelNames: buildChannelNames(chassisChannelPrefix, numOutputChannels),
+
+		routeEngine:       make([]bool, numOutputChannels),
+		routeChassis:      make([]bool, numOutputChannels),
+		routeTransmission: make([]bool, numOutputChannels),
 
 		channels:       map[string]*MixerChannel{},
 		log:            mixerConfig.Log,
@@ -555,6 +566,14 @@ func (m *StereoMixer) MixToMaster(length int) {
 	// safe.
 	m.mixReadScratch.grow(length)
 
+	// Refresh the per-channel routing masks from the lock-free config snapshot.
+	// Cheap atomic reads, no allocation; keeps routing edits hot-applied.
+	for ch := range m.numOutputChannels {
+		m.routeEngine[ch] = m.config.GetSynthRouteEnabled(ChannelEngine, ch)
+		m.routeChassis[ch] = m.config.GetSynthRouteEnabled(ChannelChassis, ch)
+		m.routeTransmission[ch] = m.config.GetSynthRouteEnabled(ChannelTransmission, ch)
+	}
+
 	m.mu.RLock()
 
 	if m.mixCalibratorOutput(outSamples) {
@@ -576,12 +595,19 @@ func (m *StereoMixer) MixToMaster(length int) {
 
 	peaks.zero()
 
-	// Mix per-channel chassis with appropriate EQ
+	// Mix per-channel chassis with appropriate EQ. The internal chassis_ch buffer
+	// maps 1:1 to output ch; the chassis routing mask gates which channels receive
+	// it. The buffer is always drained (Read) so a route toggled off does not leave
+	// stale samples to surface later.
 	chassisMuted := m.config.GetSynthChassisMute()
 	if !chassisMuted {
 		for ch := range m.numOutputChannels {
 			if chassisCh, ok := m.channels[m.chassisChannelNames[ch]]; ok {
 				n := chassisCh.Read(m.mixReadScratch)
+				if !m.routeChassis[ch] {
+					continue
+				}
+
 				for i, sample := range m.mixReadScratch[:n] {
 					channelSamples[ch][i] = mixSampleSum(channelSamples[ch][i], sample, &peaks[ch])
 				}
@@ -589,13 +615,17 @@ func (m *StereoMixer) MixToMaster(length int) {
 		}
 	}
 
-	// Mix transmission into all outputs (shared channel)
+	// Mix transmission into routed outputs (shared mono channel).
 	if transmissionChannel, ok := m.channels[ChannelTransmission]; ok {
 		transmissionMuted := m.config.GetSynthTransmissionMute()
 		if !transmissionMuted {
 			n := transmissionChannel.Read(m.mixReadScratch)
 			for i, sample := range m.mixReadScratch[:n] {
 				for ch := range m.numOutputChannels {
+					if !m.routeTransmission[ch] {
+						continue
+					}
+
 					channelSamples[ch][i] = mixSampleSum(channelSamples[ch][i], sample, &peaks[ch])
 				}
 			}
@@ -1032,6 +1062,14 @@ func (m *StereoMixer) processEngineSamplesMulti(outSamples deviceBuffer, engineS
 
 	for index, engineSample := range engineSamples {
 		for channel := range outSamples {
+			// Engine routed off for this channel: carry the existing samples
+			// through unchanged (copy-back below overwrites all of outSamples).
+			if channel < len(m.routeEngine) && !m.routeEngine[channel] {
+				outSamplesWork[channel][index] = outSamples[channel][index]
+
+				continue
+			}
+
 			peak := 0.0
 			engineScaled := engineSample
 			engineMax := 1.0 - signal.Abs(outSamples[channel][index])

@@ -30,6 +30,7 @@ type Config struct {
 	BluetoothAvailable  func() bool
 	ExitCodeChan        chan exitcode.Code
 	Log                 zerolog.Logger
+	HapticsChannels     int // number of haptic output channels; fixed at startup
 }
 
 // LiveData holds the dynamic telemetry that can be displayed on the UI.
@@ -126,7 +127,7 @@ func NewUserInterface(config *Config) *UserInterface {
 		i18n:                config.I18n,
 		display:             config.Display,
 		hidEvents:           config.HIDEvents,
-		menuSystem:          NewMenuSystem(),
+		menuSystem:          NewMenuSystem(config.HapticsChannels),
 		log:                 config.Log.With().Str("package", "ui").Logger(),
 		settingsCallback:    config.SettingsCallback,
 		experimentalEnabled: config.ExperimentalEnabled,

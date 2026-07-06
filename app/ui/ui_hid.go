@@ -2,6 +2,7 @@ package ui
 
 import (
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/vwhitteron/simtezilo-dev/app/exitcode"
@@ -402,12 +403,48 @@ func (u *UserInterface) menuContent(layout gui.Layout, menuPage string, value st
 
 // getSettingName returns the translated name of the setting (leaf node).
 func (u *UserInterface) getSettingName(menuPage string) string {
+	// Routing channel leaves ("ui.menu.haptics.routing.<source>.chN") are composed
+	// dynamically so the label scales to any output channel count without needing a
+	// translation key per channel.
+	if label, ok := routingChannelLabel(menuPage); ok {
+		return label
+	}
+
 	key, err := languagedb.StringToKey(menuPage)
 	if err != nil {
 		return menuPage
 	}
 
 	return u.i18n.GetString(key)
+}
+
+// routingChannelLabel detects a routing channel leaf key of the form
+// "ui.menu.haptics.routing.<source>.chN" and returns a composed "→ ChN" label.
+func routingChannelLabel(menuPage string) (string, bool) {
+	const prefix = "ui.menu.haptics.routing."
+	if !strings.HasPrefix(menuPage, prefix) {
+		return "", false
+	}
+
+	lastDot := strings.LastIndex(menuPage, ".")
+
+	segment := menuPage[lastDot+1:]
+	if !strings.HasPrefix(segment, "ch") {
+		return "", false
+	}
+
+	digits := segment[len("ch"):]
+	if digits == "" {
+		return "", false
+	}
+
+	for _, r := range digits {
+		if r < '0' || r > '9' {
+			return "", false
+		}
+	}
+
+	return "→ Ch" + digits, true
 }
 
 // getBranchTitle returns the title for a branch node.

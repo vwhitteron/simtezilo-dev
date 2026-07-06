@@ -788,6 +788,7 @@
     <script src="/js/audio-settings.js"></script>
     <script src="/js/bluetooth-settings.js"></script>
     <script src="/js/fan-settings.js"></script>
+    <script src="/js/routing-matrix.js"></script>
     <title>Settings - Simtezilo</title>
 </head>
 
@@ -1940,25 +1941,47 @@
                                     </div>
                                 </div>
                             </div>
-                            <div class="row g-3 mb-3 align-items-end">
-                                <div class="col-auto">
-                                    <label for="audio-haptics-test-channel" class="form-label">Test Channel</label>
-                                    <input type="number" id="audio-haptics-test-channel" class="form-control text-center"
-                                        style="width: 80px;" value="0" min="0">
+
+                            <!-- Channels -->
+                            <h5 class="mb-3"><span class="icon" data-icon="sliders"></span><span>Channels</span></h5>
+                            <div class="mb-2">
+                                <div class="d-flex align-items-start flex-wrap gap-5 mb-2">
+                                    <div class="d-flex flex-column gap-1">
+                                        <label for="routing-channel-select" class="form-label mb-1"
+                                            data-i18n="runmode.settings.synth.equalizer.channel">Channel</label>
+                                        <select id="routing-channel-select" class="form-select form-select-sm"
+                                            style="width: auto;">
+                                            <!-- Options populated by JavaScript -->
+                                        </select>
+                                    </div>
+                                    <div class="d-flex flex-column gap-1">
+                                        <span class="form-label mb-1">Output Routing</span>
+                                        <div class="d-flex flex-wrap gap-2" role="group">
+                                            <input type="checkbox" class="btn-check" id="routing-engine" autocomplete="off">
+                                            <label class="btn btn-sm btn-outline-primary d-inline-flex align-items-center" for="routing-engine"><span
+                                                    class="icon icon-lg routing-icon me-1"></span>Engine</label>
+
+                                            <input type="checkbox" class="btn-check" id="routing-chassis" autocomplete="off">
+                                            <label class="btn btn-sm btn-outline-primary d-inline-flex align-items-center" for="routing-chassis"><span
+                                                    class="icon icon-lg routing-icon me-1"></span>Chassis</label>
+
+                                            <input type="checkbox" class="btn-check" id="routing-transmission"
+                                                autocomplete="off">
+                                            <label class="btn btn-sm btn-outline-primary d-inline-flex align-items-center" for="routing-transmission"><span
+                                                    class="icon icon-lg routing-icon me-1"></span>Transmission</label>
+                                        </div>
+                                    </div>
+                                    <div class="d-flex flex-column gap-1">
+                                        <span class="form-label mb-1">Identify</span>
+                                        <div class="d-flex align-items-center gap-2">
+                                            <button type="button" id="audio-haptics-test" class="btn btn-sm btn-outline-secondary">Play Tone</button>
+                                            <span id="audio-haptics-test-status" class="small text-muted"></span>
+                                        </div>
+                                    </div>
                                 </div>
-                                <div class="col-auto">
-                                    <button type="button" id="audio-haptics-test" class="btn btn-outline-secondary">Test</button>
-                                    <span id="audio-haptics-test-status" class="ms-2 small text-muted"></span>
-                                </div>
-                            </div>
-                            <div class="mb-4">
-                                <small class="text-muted">
-                                    <i class="fa-solid fa-info-circle me-1"></i>
-                                    Test tones require the <strong>portaudio</strong> backend. The <strong>beep</strong> backend uses a single shared stereo device and does not support per-channel test tones.
-                                </small>
                             </div>
 
-                            <h5 class="mb-3"><span class="icon" data-icon="gear"></span><span
+                            <h5 class="mt-5 mb-3"><span class="icon" data-icon="gear"></span><span
                                     data-i18n="runmode.settings.haptics.general.title">General</span></h5>
                             <div class="d-flex align-items-center gap-3 mb-4">
                                 <div class="d-flex align-items-center gap-1">

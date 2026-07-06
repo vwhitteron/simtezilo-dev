@@ -319,6 +319,28 @@
                             "$ref": "#/$defs/eqBand"
                         }
                     }
+                },
+                "routing": {
+                    "type": "object",
+                    "description": "Output routing matrix mapping each source to a per-output-channel enable mask",
+                    "properties": {
+                        "engine": {
+                            "type": "array",
+                            "description": "Per-output-channel enable mask for the engine source",
+                            "items": { "type": "boolean" }
+                        },
+                        "chassis": {
+                            "type": "array",
+                            "description": "Per-output-channel enable mask for the chassis source",
+                            "items": { "type": "boolean" }
+                        },
+                        "transmission": {
+                            "type": "array",
+                            "description": "Per-output-channel enable mask for the transmission source",
+                            "items": { "type": "boolean" }
+                        }
+                    },
+                    "additionalProperties": false
                 }
             },
             "additionalProperties": true

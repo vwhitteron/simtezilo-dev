@@ -746,6 +746,7 @@ func (a *App) initializeUI(opts Options, hidEvents chan ui.HIDInputEvent) error 
 		ExperimentalEnabled: a.config.GetExperimentalFeaturesEnabled,
 		BluetoothAvailable:  a.bluetoothAvailable,
 		ExitCodeChan:        a.exitCodeChan,
+		HapticsChannels:     a.config.GetAudioHapticsChannels(),
 	})
 
 	startingMessage := a.i18n.GetString(languagedb.UIStarting)

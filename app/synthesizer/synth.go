@@ -21,6 +21,12 @@ const (
 	ChannelTransmission = "transmission"
 	ChannelCalibrator   = "calibration"
 
+	// ChannelChassis is the user-facing routing source key for chassis haptics.
+	// It is distinct from the internal per-channel chassis buffers named with the
+	// "chassis_" prefix (see ChassisChannelName); routing controls which output
+	// channels those per-channel chassis generators are mixed into.
+	ChannelChassis = "chassis"
+
 	// DefaultOutputChannels is the fallback output channel count (stereo) used
 	// when no explicit channel count is configured.
 	DefaultOutputChannels = 2

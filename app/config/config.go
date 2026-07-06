@@ -28,6 +28,22 @@ const (
 	fanModeAll    = "all"
 )
 
+// Routing source keys identify the user-facing haptic sources that can be routed
+// to output channels. The chassis row gates the internal per-channel chassis
+// generators; engine and transmission are single mono buses.
+const (
+	RoutingSourceEngine       = "engine"
+	RoutingSourceChassis      = "chassis"
+	RoutingSourceTransmission = "transmission"
+)
+
+// routingSources is the canonical ordered list of routable sources.
+var routingSources = []string{
+	RoutingSourceEngine,
+	RoutingSourceChassis,
+	RoutingSourceTransmission,
+}
+
 type app struct {
 	Language       string  `json:"language"`
 	Accent         string  `json:"accent"`
@@ -145,30 +161,33 @@ type EQBand struct {
 
 // Synthesizer represents an audio synthesizer used for haptic feedback.
 type Synthesizer struct {
-	InternalSampleRateHz      int         `json:"internalSampleRateHz"`
-	OutputSampleRateHz        int         `json:"outputSampleRateHz"`
-	OutputFile                string      `json:"outputFile,omitempty"`
-	MasterMute                bool        `json:"masterMute"`
-	MasterGain                float64     `json:"masterGain"`
-	ChannelMute               []bool      `json:"channelMute"`
-	ChannelGain               []float64   `json:"channelGain"`
-	ChassisMute               bool        `json:"chassisMute"`
-	ChassisGain               float64     `json:"chassisGain"`
-	TransmissionMute          bool        `json:"transmissionMute"`
-	TransmissionGain          float64     `json:"transmissionGain"`
-	TransmissionGainMinRace   float64     `json:"transmissionGainMinRace"`
-	TransmissionGainMinStreet float64     `json:"transmissionGainMinStreet"`
-	EngineMute                bool        `json:"engineMute"`
-	EngineGain                float64     `json:"engineGain"`
-	GainIncrement             float64     `json:"gainIncrement"`
-	EnableEq                  []bool      `json:"enableEq"`
-	EnableDRX                 bool        `json:"enableDrx"`
-	EqBands                   [][]EQBand  `json:"eqBands,omitempty"`
-	_eqCurve                  [][]float64 `json:"-"` // Computed curve for fast lookup (per channel)
-	_eqMinFreq                float64     `json:"-"` // Minimum frequency for curve
-	_eqMaxFreq                float64     `json:"-"` // Maximum frequency for curve
-	_eqResolution             float64     `json:"-"` // Frequency resolution (Hz per bucket)
-	_drxHeadroom              []float64   `json:"-"` // Deepest EQ attenuation in dB per channel (DRX headroom)
+	InternalSampleRateHz      int       `json:"internalSampleRateHz"`
+	OutputSampleRateHz        int       `json:"outputSampleRateHz"`
+	OutputFile                string    `json:"outputFile,omitempty"`
+	MasterMute                bool      `json:"masterMute"`
+	MasterGain                float64   `json:"masterGain"`
+	ChannelMute               []bool    `json:"channelMute"`
+	ChannelGain               []float64 `json:"channelGain"`
+	ChassisMute               bool      `json:"chassisMute"`
+	ChassisGain               float64   `json:"chassisGain"`
+	TransmissionMute          bool      `json:"transmissionMute"`
+	TransmissionGain          float64   `json:"transmissionGain"`
+	TransmissionGainMinRace   float64   `json:"transmissionGainMinRace"`
+	TransmissionGainMinStreet float64   `json:"transmissionGainMinStreet"`
+	EngineMute                bool      `json:"engineMute"`
+	EngineGain                float64   `json:"engineGain"`
+	GainIncrement             float64   `json:"gainIncrement"`
+	EnableEq                  []bool    `json:"enableEq"`
+	EnableDRX                 bool      `json:"enableDrx"`
+	// Routing maps each source ("engine", "chassis", "transmission") to a
+	// per-output-channel enable mask. Each row has length numOutputChannels.
+	Routing       map[string][]bool `json:"routing,omitempty"`
+	EqBands       [][]EQBand        `json:"eqBands,omitempty"`
+	_eqCurve      [][]float64       `json:"-"` // Computed curve for fast lookup (per channel)
+	_eqMinFreq    float64           `json:"-"` // Minimum frequency for curve
+	_eqMaxFreq    float64           `json:"-"` // Maximum frequency for curve
+	_eqResolution float64           `json:"-"` // Frequency resolution (Hz per bucket)
+	_drxHeadroom  []float64         `json:"-"` // Deepest EQ attenuation in dB per channel (DRX headroom)
 }
 
 // Telemetry represents the telemetry data source configuration.
@@ -256,6 +275,9 @@ type Snapshot struct {
 
 	// EQ settings (per channel)
 	EqEnabled []bool
+
+	// Output routing matrix: source -> per-output-channel enable mask
+	Routing map[string][]bool
 
 	// Monitoring flags
 	FuelMonitoringEnabled bool
@@ -2787,6 +2809,86 @@ func (c *Config) DecreaseSynthChannelGain(channel int) float64 {
 	return result
 }
 
+// normaliseRouting ensures the routing matrix has exactly the three known source
+// rows, each of length numChannels. Missing rows and newly added cells default to
+// enabled (true), preserving the historical "all sources to all channels" behaviour.
+// Unknown source rows are dropped. The caller must hold c.mu.
+func (c *Config) normaliseRouting(numChannels int) {
+	if c.viper.Synthesizer.Routing == nil {
+		c.viper.Synthesizer.Routing = make(map[string][]bool, len(routingSources))
+	}
+
+	for _, source := range routingSources {
+		row := c.viper.Synthesizer.Routing[source]
+		if len(row) == numChannels {
+			continue
+		}
+
+		newRow := make([]bool, numChannels)
+		for i := range newRow {
+			if i < len(row) {
+				newRow[i] = row[i]
+			} else {
+				newRow[i] = true
+			}
+		}
+
+		c.viper.Synthesizer.Routing[source] = newRow
+	}
+
+	// Drop any rows that are not recognised sources.
+	for source := range c.viper.Synthesizer.Routing {
+		if source != RoutingSourceEngine &&
+			source != RoutingSourceChassis &&
+			source != RoutingSourceTransmission {
+			delete(c.viper.Synthesizer.Routing, source)
+		}
+	}
+}
+
+// GetSynthRouting returns a deep copy of the output routing matrix.
+func (c *Config) GetSynthRouting() map[string][]bool {
+	snap := c.snapshot.Load()
+
+	out := make(map[string][]bool, len(snap.Routing))
+	for source, row := range snap.Routing {
+		dup := make([]bool, len(row))
+		copy(dup, row)
+		out[source] = dup
+	}
+
+	return out
+}
+
+// GetSynthRouteEnabled reports whether the given source is routed to the given
+// output channel. Unknown sources or out-of-range channels return false.
+func (c *Config) GetSynthRouteEnabled(source string, channel int) bool {
+	snap := c.snapshot.Load()
+
+	row, ok := snap.Routing[source]
+	if !ok || channel < 0 || channel >= len(row) {
+		return false
+	}
+
+	return row[channel]
+}
+
+// SetSynthRoute enables or disables routing of a source to an output channel.
+func (c *Config) SetSynthRoute(source string, channel int, enabled bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	row, ok := c.viper.Synthesizer.Routing[source]
+	if !ok || channel < 0 || channel >= len(row) {
+		return
+	}
+
+	row[channel] = enabled
+
+	c.rebuildSnapshot()
+	c.registerUpdate(false)
+}
+
 // GetSynthChassisGain returns the chassis gain of the synthesizer (i.e. the volume level for chassis bump haptics).
 // 0.0 is maximum gain and -60.0 will mute chassis bump haptic output.
 func (c *Config) GetSynthChassisGain() float64 {
@@ -3630,6 +3732,14 @@ func (c *Config) finalise() {
 		c.viper.Synthesizer.EnableEq = make([]bool, numChannels)
 	}
 
+	// Normalise the output routing matrix to the configured channel count.
+	numOutputChannels := c.viper.Haptics.Output.Channels
+	if numOutputChannels < 1 {
+		numOutputChannels = 2
+	}
+
+	c.normaliseRouting(numOutputChannels)
+
 	// Compute the EQ curve for each channel
 	for ch := range c.viper.Synthesizer.EqBands {
 		c.computeEqCurve(ch)
@@ -3821,6 +3931,17 @@ func (c *Config) rebuildSnapshot() {
 			copy(eqEnabled, c.viper.Synthesizer.EnableEq)
 
 			return eqEnabled
+		}(),
+
+		Routing: func() map[string][]bool {
+			routing := make(map[string][]bool, len(c.viper.Synthesizer.Routing))
+			for source, row := range c.viper.Synthesizer.Routing {
+				dup := make([]bool, len(row))
+				copy(dup, row)
+				routing[source] = dup
+			}
+
+			return routing
 		}(),
 
 		FuelMonitoringEnabled: c.viper.PitRadio.FuelMonitoring.Enabled,

@@ -24,6 +24,12 @@ func (a *App) generateChassisHaptic() {
 
 	// Generate pulse buffers for each channel
 	for channel := range a.synth.NumOutputChannels() {
+		// Skip channels the chassis source is not routed to; no point generating
+		// a per-channel buffer the mixer will not consume.
+		if !a.config.GetSynthRouteEnabled(synthesizer.ChannelChassis, channel) {
+			continue
+		}
+
 		channelFreqHz, channelAmplitude, drxActive := a.applyDRX(
 			pulseFrequencyHz, pulseAmplitude, unclampedAmplitude, channel,
 		)

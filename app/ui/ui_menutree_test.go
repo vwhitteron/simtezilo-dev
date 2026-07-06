@@ -26,7 +26,7 @@ func TestMenuTreeMatchesGolden(t *testing.T) {
 
 	var builder strings.Builder
 
-	dumpMenuNode(NewMenuSystem().root, 0, &builder)
+	dumpMenuNode(NewMenuSystem(2).root, 0, &builder)
 
 	want, err := os.ReadFile("testdata/menu_tree.golden")
 	if err != nil {
@@ -54,14 +54,14 @@ func TestMenuParentLinks(t *testing.T) {
 		}
 	}
 
-	check(NewMenuSystem().root)
+	check(NewMenuSystem(2).root)
 }
 
 // TestMenuStartsOnLiveView asserts the initial cursor is the live view leaf.
 func TestMenuStartsOnLiveView(t *testing.T) {
 	t.Parallel()
 
-	if got := NewMenuSystem().currentNode.name; got != languagedb.UIMenuLivePred {
+	if got := NewMenuSystem(2).currentNode.name; got != languagedb.UIMenuLivePred {
 		t.Fatalf("currentNode = %q, want %q", got, languagedb.UIMenuLivePred)
 	}
 }

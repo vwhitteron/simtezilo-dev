@@ -109,6 +109,11 @@ const (
 	UIMenuHapticsEnginePulseScale        Key = "ui.menu.haptics.enginepulsescale"
 	UIMenuHapticsEnginePulseGain         Key = "ui.menu.haptics.enginepulsegain"
 
+	UIMenuHapticsRouting             Key = "ui.menu.haptics.routing"
+	UIMenuHapticsRoutingEngine       Key = "ui.menu.haptics.routing.engine"
+	UIMenuHapticsRoutingChassis      Key = "ui.menu.haptics.routing.chassis"
+	UIMenuHapticsRoutingTransmission Key = "ui.menu.haptics.routing.transmission"
+
 	UIMenuFan                Key = "ui.menu.fan"
 	UIMenuFanEnable          Key = "ui.menu.fan.enable"
 	UIMenuFanMode            Key = "ui.menu.fan.mode"

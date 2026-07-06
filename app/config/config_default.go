@@ -157,6 +157,11 @@ func defaultConfig() *viperConfig {
 			EngineGain:                -4.25,
 			EnableEq:                  []bool{false, false},
 			EnableDRX:                 false,
+			Routing: map[string][]bool{
+				RoutingSourceEngine:       {true, true},
+				RoutingSourceChassis:      {true, true},
+				RoutingSourceTransmission: {true, true},
+			},
 			EqBands: [][]EQBand{
 				{ // Channel 0 (Left)
 					{Frequency: 8, Gain: 0.0, Q: 2.0},

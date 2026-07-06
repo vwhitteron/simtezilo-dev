@@ -2,6 +2,7 @@ package app
 
 import (
 	"strconv"
+	"strings"
 
 	"github.com/vwhitteron/simtezilo-dev/app/calibrator"
 	"github.com/vwhitteron/simtezilo-dev/app/i18n/languagedb"
@@ -125,6 +126,20 @@ func (a *App) settingAction(setting languagedb.Key, action string) string {
 		if action != "get" && action != "" {
 			err := a.config.SaveConfigToFile()
 			if err != nil {
+				a.log.Error().Err(err).Msg("failed to save configuration to file")
+			}
+		}
+
+		return result
+	}
+
+	// Dynamic routing leaf keys: "ui.menu.haptics.routing.<source>.ch<n>"
+	const routingPrefix = "ui.menu.haptics.routing."
+	if strings.HasPrefix(string(setting), routingPrefix) {
+		result := a.handleRoutingLeafSetting(string(setting), action)
+
+		if action != "get" && action != "" {
+			if err := a.config.SaveConfigToFile(); err != nil {
 				a.log.Error().Err(err).Msg("failed to save configuration to file")
 			}
 		}
@@ -1283,6 +1298,43 @@ func (a *App) handleTransmissionGforceMaxSetting(action string) string {
 	}
 
 	return strconv.FormatFloat(value, 'f', 1, 64) + "G"
+}
+
+// handleRoutingLeafSetting parses a dynamic routing leaf key of the form
+// "ui.menu.haptics.routing.<source>.ch<n>", toggles the route on increase or
+// decrease (mirroring other boolean settings), and returns "on"/"off".
+func (a *App) handleRoutingLeafSetting(key, action string) string {
+	// key format: "ui.menu.haptics.routing.<source>.ch<n>"
+	const prefix = "ui.menu.haptics.routing."
+
+	rest := strings.TrimPrefix(key, prefix)
+	// rest is now "<source>.ch<n>"
+	dotIdx := strings.LastIndex(rest, ".ch")
+	if dotIdx < 0 {
+		return "error"
+	}
+
+	source := rest[:dotIdx]
+	chStr := rest[dotIdx+3:] // skip ".ch"
+
+	ch, err := strconv.Atoi(chStr)
+	if err != nil || ch < 0 {
+		return "error"
+	}
+
+	enabled := a.config.GetSynthRouteEnabled(source, ch)
+
+	switch action {
+	case "increase", "decrease":
+		enabled = !enabled
+		a.config.SetSynthRoute(source, ch, enabled)
+	}
+
+	if enabled {
+		return settingStateOn
+	}
+
+	return settingStateOff
 }
 
 // cycleSampleRate handles cycling through sample rates based on the action.

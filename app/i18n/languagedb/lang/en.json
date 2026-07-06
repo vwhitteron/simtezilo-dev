@@ -122,6 +122,10 @@
         "ui.menu.haptics.enginesecondarybalance": "Secondary Balance",
         "ui.menu.haptics.enginepulsescale": "Pulse Scale",
         "ui.menu.haptics.enginepulsegain": "Pulse Gain",
+        "ui.menu.haptics.routing": "Routing",
+        "ui.menu.haptics.routing.engine": "Engine",
+        "ui.menu.haptics.routing.chassis": "Chassis",
+        "ui.menu.haptics.routing.transmission": "Transmission",
 
         "ui.menu.fan": "Fan",
         "ui.menu.fan.enable": "Fan Enable",

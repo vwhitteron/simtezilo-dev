@@ -194,6 +194,7 @@ func (h *configHandler) handleGetConfig(response http.ResponseWriter, _ *http.Re
 			"enableEQ":                  h.config.GetSynthChannelsEqEnabled(),
 			"enableDrx":                 h.config.GetSynthDRXEnabled(),
 			"eq":                        h.config.GetSynthChannelsEq(),
+			"routing":                   h.config.GetSynthRouting(),
 		},
 		"eqCurve": func() map[string]any {
 			curves, minFreq, resolution := h.config.GetSynthChannelsEqCurve()
@@ -430,6 +431,7 @@ func (h *configHandler) applySynthesizerConfig(config map[string]any) []string {
 	errors = append(errors, h.applyEQEnabled(config)...)
 	errors = appendErr(errors, applyField(config, "enableDrx", "invalid DRX enabled value (expected bool)", h.config.SetSynthDRXEnabled))
 	errors = append(errors, h.applyEQBands(config)...)
+	errors = append(errors, h.applySynthRouting(config)...)
 
 	return errors
 }
@@ -610,6 +612,56 @@ func (h *configHandler) applyEQChannel(channel int, channelVal any) []string {
 			h.config.SetSynthChannelEq(channel, eqBands)
 		} else {
 			errors = append(errors, fmt.Sprintf("EQ for channel %d must have exactly 8 bands, got %d", channel, len(eqBands)))
+		}
+	}
+
+	return errors
+}
+
+// applySynthRouting applies the synthesizer output routing matrix.
+// Each provided source row is validated to match the current channel count before
+// being applied cell-by-cell. Routing is not a stream-restart change.
+func (h *configHandler) applySynthRouting(config map[string]any) []string {
+	raw, found := config["routing"]
+	if !found {
+		return nil
+	}
+
+	routingMap, ok := raw.(map[string]any)
+	if !ok {
+		return []string{"invalid routing value (expected object)"}
+	}
+
+	numChannels := h.config.GetAudioHapticsChannels()
+
+	var errors []string
+
+	for source, rowRaw := range routingMap {
+		rowAny, ok := rowRaw.([]any)
+		if !ok {
+			errors = append(errors, fmt.Sprintf("invalid routing row for source %q (expected array)", source))
+
+			continue
+		}
+
+		if len(rowAny) != numChannels {
+			errors = append(errors, fmt.Sprintf(
+				"routing row for source %q has %d entries but channel count is %d",
+				source, len(rowAny), numChannels,
+			))
+
+			continue
+		}
+
+		for ch, valRaw := range rowAny {
+			enabled, ok := valRaw.(bool)
+			if !ok {
+				errors = append(errors, fmt.Sprintf("invalid routing value for source %q channel %d (expected bool)", source, ch))
+
+				continue
+			}
+
+			h.config.SetSynthRoute(source, ch, enabled)
 		}
 	}
 

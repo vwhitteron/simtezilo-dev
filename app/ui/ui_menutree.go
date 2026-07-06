@@ -1,6 +1,10 @@
 package ui
 
-import "github.com/vwhitteron/simtezilo-dev/app/i18n/languagedb"
+import (
+	"fmt"
+
+	"github.com/vwhitteron/simtezilo-dev/app/i18n/languagedb"
+)
 
 // The menu is declared as a nested literal of the constructors below and
 // finalised by MenuNode.build, which derives parent pointers, injects Return items,
@@ -9,7 +13,9 @@ import "github.com/vwhitteron/simtezilo-dev/app/i18n/languagedb"
 // one — the wiring is derived, not maintained by hand.
 
 // newMenuTree declares the full menu hierarchy and returns its finalised root.
-func newMenuTree() *MenuNode {
+// hapticsChannels is the number of haptic output channels; it is fixed at
+// startup so building the routing sub-tree once here is safe.
+func newMenuTree(hapticsChannels int) *MenuNode {
 	menu := branch(menuNodeRoot,
 		branch(languagedb.UIMenuLive,
 			liveLeaf(languagedb.UIMenuLivePred),
@@ -90,6 +96,7 @@ func newMenuTree() *MenuNode {
 					leaf(languagedb.UIMenuHapticsEnginePulseGain),
 					leaf(languagedb.UIMenuHapticsEnginePulseScale),
 				),
+				newRoutingSubtree(hapticsChannels),
 			),
 			// The fan/wind simulator is experimental, so the whole submenu is gated
 			// behind the experimental features flag.
@@ -201,4 +208,33 @@ func (node *MenuNode) build() {
 	}
 
 	buildSubtree(node, true)
+}
+
+// newRoutingSubtree builds the Haptics → Routing branch for n output channels.
+// Each source gets its own sub-branch containing one toggle leaf per channel.
+// The leaf key format is "ui.menu.haptics.routing.<source>.ch<n>".
+func newRoutingSubtree(n int) *MenuNode {
+	sources := []struct {
+		key  languagedb.Key
+		name string
+	}{
+		{languagedb.UIMenuHapticsRoutingEngine, "engine"},
+		{languagedb.UIMenuHapticsRoutingChassis, "chassis"},
+		{languagedb.UIMenuHapticsRoutingTransmission, "transmission"},
+	}
+
+	sourceBranches := make([]*MenuNode, len(sources))
+
+	for i, src := range sources {
+		leaves := make([]*MenuNode, n)
+
+		for ch := range n {
+			leafKey := languagedb.Key(fmt.Sprintf("ui.menu.haptics.routing.%s.ch%d", src.name, ch))
+			leaves[ch] = leaf(leafKey)
+		}
+
+		sourceBranches[i] = branch(src.key, leaves...)
+	}
+
+	return branch(languagedb.UIMenuHapticsRouting, sourceBranches...)
 }
