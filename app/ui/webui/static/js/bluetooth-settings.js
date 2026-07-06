@@ -60,7 +60,13 @@
             buttons.push(btn('pair', addr, 'btn-outline-primary', 'Pair'));
         }
 
-        if (device.paired) {
+        // Forget removes a known device from BlueZ. Gate on "known to BlueZ"
+        // rather than paired alone: some devices (e.g. the simtezilo fan) connect
+        // without ever bonding, so paired stays false while the device is very
+        // much present and removable. bt-remove works regardless of bond state.
+        // A fresh scan-only "Available" device (all flags false) has nothing to
+        // forget, so it still gets only Pair.
+        if (device.paired || device.connected || device.trusted) {
             buttons.push(btn('remove', addr, 'btn-outline-danger', 'Forget'));
         }
 
