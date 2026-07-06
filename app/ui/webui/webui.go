@@ -151,6 +151,7 @@ func (w *WebUI) GetHTTPHandler() http.Handler {
 	mux.HandleFunc("/api/logs", w.sysHandler.handleLogsAPI)
 	mux.HandleFunc("/api/system/cache-clear", w.sysHandler.handleCacheClear)
 	mux.HandleFunc("/api/system/cache-size", w.sysHandler.handleCacheSize)
+	mux.HandleFunc("/api/system/health", w.sysHandler.handleHealth)
 	mux.HandleFunc("/api/system/info", w.sysHandler.handleSystemInfo)
 	mux.HandleFunc("/api/system/restart", w.sysHandler.handleRestart)
 

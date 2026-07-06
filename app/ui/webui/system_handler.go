@@ -2,12 +2,15 @@ package webui
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -44,6 +47,10 @@ type systemHandler struct {
 	buildCommitHash string
 	buildTime       string
 	buildPlatform   string
+	// instanceID uniquely identifies this process launch. It lets the web UI
+	// tell an old, still-draining server apart from a freshly restarted one so
+	// it only reloads once the new process is serving.
+	instanceID string
 }
 
 func newSystemHandler(opts systemHandlerOptions) *systemHandler {
@@ -58,7 +65,20 @@ func newSystemHandler(opts systemHandlerOptions) *systemHandler {
 		buildCommitHash: opts.buildCommitHash,
 		buildTime:       opts.buildTime,
 		buildPlatform:   opts.buildPlatform,
+		instanceID:      newInstanceID(),
 	}
+}
+
+// newInstanceID returns a unique identifier for this process launch. It uses
+// random bytes and falls back to a nanosecond timestamp if the system RNG is
+// unavailable.
+func newInstanceID() string {
+	buf := make([]byte, 8)
+	if _, err := rand.Read(buf); err != nil {
+		return strconv.FormatInt(time.Now().UnixNano(), 16)
+	}
+
+	return hex.EncodeToString(buf)
 }
 
 // handleSystemInfo handles GET requests for system information including build info and hardware platform.
@@ -112,6 +132,26 @@ func (h *systemHandler) handleSystemInfo(response http.ResponseWriter, request *
 	}
 
 	h.log.Debug().Bool("setupModeAvailable", setupModeAvailable).Msg("served system info")
+}
+
+// handleHealth is a lightweight liveness endpoint returning this process's
+// instance ID. The web UI polls it during a restart to detect when a new
+// process (a changed instance ID) is serving. It deliberately does no blocking
+// work so it stays responsive under a 1s poll.
+func (h *systemHandler) handleHealth(response http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodGet {
+		response.WriteHeader(http.StatusMethodNotAllowed)
+
+		return
+	}
+
+	response.Header().Set("Content-Type", "application/json")
+	response.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+
+	_ = json.NewEncoder(response).Encode(map[string]string{ //nolint:errchkjson // simple encoding
+		"status":     "ok",
+		"instanceID": h.instanceID,
+	})
 }
 
 // handleRestart handles POST requests to restart the application.

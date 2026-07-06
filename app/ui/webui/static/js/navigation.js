@@ -181,6 +181,11 @@ window.triggerRestart = async function () {
             window.showNavbarStatus('saving');
         }
 
+        // Capture the current process instance ID before restarting so the poll
+        // can tell the old, still-draining server apart from the new one. If this
+        // fails we fall back to the down-then-up detection in pollForReconnection.
+        const previousInstanceID = await window.fetchInstanceID();
+
         const response = await fetch('/api/system/restart', { method: 'POST' });
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
@@ -197,7 +202,7 @@ window.triggerRestart = async function () {
         }
 
         window.showRestartOverlay();
-        window.pollForReconnection();
+        window.pollForReconnection(previousInstanceID);
     } catch (error) {
         console.error('Failed to restart application:', error);
         if (typeof window.showNavbarStatus === 'function') {
@@ -255,27 +260,58 @@ window.hideRestartOverlay = function () {
     document.body.classList.remove('restart-blur');
 };
 
-window.pollForReconnection = function () {
-    const maxAttempts = 60; // Try for 60 seconds
+// Fetch the current process instance ID, or null if the server is unreachable
+// or does not report one.
+window.fetchInstanceID = async function () {
+    try {
+        const response = await fetch('/api/system/health', {
+            method: 'GET',
+            cache: 'no-cache'
+        });
+
+        if (!response.ok) {
+            return null;
+        }
+
+        const data = await response.json();
+        return data && data.instanceID ? data.instanceID : null;
+    } catch (error) {
+        return null;
+    }
+};
+
+// Poll for the app to finish restarting, then reload the page. The overlay stays
+// up until a *new* process is serving. When we captured the previous instance ID
+// we simply wait for a different one to appear. If we could not capture it, we
+// fall back to observing the server go down and then come back up, so we never
+// reload into the old, still-draining server.
+window.pollForReconnection = function (previousInstanceID) {
+    const maxAttempts = 90; // Try for ~90 seconds (audio-engine reinit can be slow).
     let attempts = 0;
+    let sawServerDown = false;
 
     const poll = async () => {
         attempts++;
 
-        try {
-            const response = await fetch('/api/config/status', {
-                method: 'GET',
-                cache: 'no-cache'
-            });
+        const instanceID = await window.fetchInstanceID();
 
-            if (response.ok) {
-                // Successfully reconnected - reload for fresh state.
+        if (instanceID === null) {
+            // Server is unreachable - the old process has stopped serving.
+            sawServerDown = true;
+        } else if (previousInstanceID) {
+            // A different instance ID means the new process is up and serving.
+            if (instanceID !== previousInstanceID) {
                 window.hideRestartOverlay();
                 window.location.reload();
                 return;
             }
-        } catch (error) {
-            // Expected during restart - server is down.
+            // Same ID: old server still draining - keep the overlay up.
+        } else if (sawServerDown) {
+            // Fallback path: we never captured the previous ID, but we have now
+            // seen the server go down and come back up, so it is safe to reload.
+            window.hideRestartOverlay();
+            window.location.reload();
+            return;
         }
 
         if (attempts < maxAttempts) {
