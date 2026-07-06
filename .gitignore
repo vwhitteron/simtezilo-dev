@@ -3,7 +3,7 @@
 
 # Build files
 out/
-platform-m1
+/platform-m1
 
 # Distribution files
 dist/
