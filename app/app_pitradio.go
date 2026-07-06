@@ -1,8 +1,11 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 	"time"
+
+	"github.com/vwhitteron/simtezilo-dev/app/pitradio"
 )
 
 const (
@@ -45,6 +48,25 @@ func (a *App) resetPitRadioState() {
 	a.log.Debug().
 		Str("state", fmt.Sprintf("%+v", a.state)).
 		Msg("pit radio state reset")
+}
+
+// sendPitRadioTest speaks a short test announcement through the live pit-radio
+// output so the audio settings "Test" button verifies the configured device end
+// to end (TTS, resampling, sink and — for Bluetooth — the audio bridge), exactly
+// as a real notification would. It is independent of session state and reports an
+// error when no pit-radio output is available.
+func (a *App) sendPitRadioTest() error {
+	if a.pitRadio == nil {
+		return errors.New("pit radio output is not available")
+	}
+
+	return a.pitRadio.Send(pitradio.Message{
+		MessageType: pitradio.TextMessage,
+		Text:        "Testing 1 2 3",
+		Lang:        a.i18n.LanguageCode(),
+		Accent:      a.config.GetAppAccent(),
+		NoCache:     true,
+	})
 }
 
 // pitRadioIsActive checks if the pit radio is active and ready for sending messages.

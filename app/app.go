@@ -450,6 +450,10 @@ func (a *App) runAppMode() RunResult {
 			// (A backend change is restart-required, not live, so there is no
 			// backend callback.)
 			OnHapticsOutputChanged: func() { go a.restartAudioOutput() },
+			// Speak a test announcement through the live pit-radio output for the
+			// audio settings "Test" button, so it exercises the same path as real
+			// notifications (bound method reads a.pitRadio at call time).
+			SendPitRadioTest: a.sendPitRadioTest,
 		})
 	}
 

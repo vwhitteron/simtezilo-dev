@@ -233,6 +233,7 @@ func (h *configHandler) handleAudioTest(response http.ResponseWriter, request *h
 	response.Header().Set("Content-Type", "application/json")
 
 	var reqData struct {
+		Target     string  `json:"target"`
 		Backend    string  `json:"backend"`
 		Device     string  `json:"device"`
 		Channel    int     `json:"channel"`
@@ -254,49 +255,29 @@ func (h *configHandler) handleAudioTest(response http.ResponseWriter, request *h
 		return
 	}
 
-	backendName := reqData.Backend
-	if backendName == "" {
-		backendName = h.config.GetAudioBackend()
+	// The haptics identify tone plays through the live synthesizer pipeline (via
+	// the calibrator) so it uses the configured per-channel + master gain and EQ,
+	// rather than opening a second, gain-agnostic sink on the device.
+	if reqData.Target == "haptics" {
+		h.playHapticsIdentifyTone(response, reqData.Channel, reqData.Frequency)
+
+		return
 	}
 
-	if backendName == audio.BackendBeep {
-		response.WriteHeader(http.StatusBadRequest)
+	// The pit-radio test speaks a short announcement through the live pit-radio
+	// output, so it exercises exactly the same TTS + device path (including the
+	// Bluetooth bridge) as real notifications rather than opening a one-off sink.
+	if h.sendPitRadioTest == nil {
+		response.WriteHeader(http.StatusServiceUnavailable)
 		_ = json.NewEncoder(response).Encode(map[string]string{ //nolint:errchkjson // simple encoding
 			"status":  "error",
-			"message": "Test tones require the portaudio backend (beep shares one device with haptics)",
+			"message": "Pit radio audio output is not enabled",
 		})
 
 		return
 	}
 
-	if reqData.Channels <= 0 {
-		reqData.Channels = h.config.GetAudioHapticsChannels()
-	}
-
-	if reqData.SampleRate <= 0 {
-		reqData.SampleRate = h.config.GetAudioHapticsSampleRate()
-	}
-
-	backend, err := audio.New(backendName, h.log)
-	if err != nil {
-		response.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(response).Encode(map[string]string{ //nolint:errchkjson // simple encoding
-			"status":  "error",
-			"message": err.Error(),
-		})
-
-		return
-	}
-
-	defer func() { _ = backend.Close() }()
-
-	cfg := audio.SinkConfig{
-		DeviceID:   reqData.Device,
-		Channels:   reqData.Channels,
-		SampleRate: reqData.SampleRate,
-	}
-
-	err = audio.PlayTestTone(backend, cfg, reqData.Channel, reqData.Frequency, testToneDuration)
+	err = h.sendPitRadioTest()
 	if err != nil {
 		response.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(response).Encode(map[string]string{ //nolint:errchkjson // simple encoding
@@ -306,6 +287,48 @@ func (h *configHandler) handleAudioTest(response http.ResponseWriter, request *h
 
 		return
 	}
+
+	_ = json.NewEncoder(response).Encode(map[string]string{ //nolint:errchkjson // simple encoding
+		"status":  "success",
+		"message": "Test announcement sent",
+	})
+}
+
+// playHapticsIdentifyTone plays a short tone on a single haptic output channel by
+// driving the calibrator through the live synthesizer pipeline. The tone inherits
+// the channel's configured gain and EQ, so it reflects how that channel is
+// actually driven. It blocks for the tone duration, then restores calibrator state.
+func (h *configHandler) playHapticsIdentifyTone(response http.ResponseWriter, channel int, freq float64) {
+	if h.calibrator == nil {
+		response.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(response).Encode(map[string]string{ //nolint:errchkjson // simple encoding
+			"status":  "error",
+			"message": "Calibrator unavailable",
+		})
+
+		return
+	}
+
+	if freq <= 0 {
+		freq = audio.DefaultTestToneHz
+	}
+
+	// Preserve the user's calibration frequency so an identify tone does not
+	// clobber it.
+	prevFreq := h.calibrator.GetFrequency()
+
+	h.calibrator.SetTargetChannel(channel)
+	h.calibrator.SetFrequency(freq)
+	h.calibrator.SetEnabled(true)
+
+	time.Sleep(testToneDuration)
+
+	// Initiate the zero-crossing stop, give it a moment to land on zero, then
+	// restore the calibrator to its prior (all-channel) state.
+	h.calibrator.SetEnabled(false)
+	time.Sleep(150 * time.Millisecond)
+	h.calibrator.SetTargetChannel(-1)
+	h.calibrator.SetFrequency(prevFreq)
 
 	_ = json.NewEncoder(response).Encode(map[string]string{ //nolint:errchkjson // simple encoding
 		"status":  "success",

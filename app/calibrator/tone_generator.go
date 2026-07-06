@@ -41,6 +41,7 @@ type ToneGenerator struct {
 	frequency          float64
 	gain               float64
 	channel            OutputChannel
+	targetChannel      int            // Output channel index to emit on; -1 = all channels
 	frequencyIncrement float64        // Frequency adjustment increment in Hz
 	config             *config.Config // Reference to config for accessing haptic range and gain increment
 	mu                 sync.RWMutex
@@ -65,6 +66,7 @@ func NewToneGenerator(cfg *config.Config) (*ToneGenerator, error) {
 		frequency:          5,
 		gain:               -30,
 		channel:            OutputChannelBoth,
+		targetChannel:      -1, // all channels by default
 		frequencyIncrement: 1.0, // Default 1Hz increment
 		config:             cfg,
 		sweepDuration:      10,
@@ -228,6 +230,29 @@ func (c *ToneGenerator) SetChannel(channel OutputChannel) {
 		c.channel = channel
 	default:
 		c.channel = OutputChannelBoth
+	}
+}
+
+// GetTargetChannel returns the output channel index the tone is emitted on, or
+// -1 for all channels.
+func (c *ToneGenerator) GetTargetChannel() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.targetChannel
+}
+
+// SetTargetChannel sets the output channel index the tone is emitted on. A
+// negative value targets all channels (the default, used by the calibration
+// sweep); a non-negative value restricts the tone to that single channel.
+func (c *ToneGenerator) SetTargetChannel(channel int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if channel < 0 {
+		c.targetChannel = -1
+	} else {
+		c.targetChannel = channel
 	}
 }
 

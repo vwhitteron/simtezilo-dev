@@ -261,9 +261,12 @@
             lastDevices, audioConfig.pitRadio, audioConfig.haptics.deviceName || '');
     }
 
-    async function playTest(kind, statusEl) {
+    async function playTest(kind, button, statusEl) {
         const backend = selectedBackend();
-        if (backend === 'beep') {
+        // The haptics tone plays through the live synthesizer pipeline (calibrator),
+        // so it works on any backend. The pit-radio tone opens its own sink, which
+        // conflicts with beep's single shared device, so it stays portaudio-only.
+        if (backend === 'beep' && kind !== 'haptics') {
             return;
         }
 
@@ -274,7 +277,8 @@
 
         if (kind === 'haptics') {
             device = (el('audio-haptics-device') || {}).value || '';
-            channel = parseInt((el('audio-haptics-test-channel') || {}).value, 10);
+            // Channel comes from the shared Channels dropdown (also used for routing).
+            channel = parseInt((el('routing-channel-select') || {}).value, 10);
             if (isNaN(channel)) {
                 channel = 0;
             }
@@ -287,8 +291,11 @@
             sampleRate = parseInt((el('audio-pitradio-samplerate') || {}).value, 10) || 0;
         }
 
-        if (statusEl) {
-            statusEl.textContent = 'Playing…';
+        // Highlight the button green while the tone plays (the request stays in
+        // flight for the duration of playback).
+        if (button) {
+            button.classList.remove('btn-outline-secondary');
+            button.classList.add('btn-success');
         }
 
         try {
@@ -296,6 +303,7 @@
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
+                    target: kind === 'haptics' ? 'haptics' : 'pitradio',
                     backend: backend,
                     device: device,
                     channel: channel,
@@ -306,17 +314,24 @@
 
             const data = await response.json();
 
+            // Only surface errors; success is conveyed by the green highlight.
             if (statusEl) {
-                statusEl.textContent = data && data.status === 'success'
-                    ? 'Done'
-                    : ('Error: ' + ((data && data.message) || 'unknown'));
-
-                setTimeout(() => { statusEl.textContent = ''; }, 3000);
+                if (data && data.status === 'success') {
+                    statusEl.textContent = '';
+                } else {
+                    statusEl.textContent = 'Error: ' + ((data && data.message) || 'unknown');
+                    setTimeout(() => { statusEl.textContent = ''; }, 3000);
+                }
             }
         } catch (err) {
             console.error('audio-settings: test tone failed', err);
             if (statusEl) {
                 statusEl.textContent = 'Error';
+            }
+        } finally {
+            if (button) {
+                button.classList.remove('btn-success');
+                button.classList.add('btn-outline-secondary');
             }
         }
     }
@@ -351,14 +366,14 @@
         const hapticsTest = el('audio-haptics-test');
         if (hapticsTest) {
             hapticsTest.addEventListener('click', () => {
-                playTest('haptics', el('audio-haptics-test-status'));
+                playTest('haptics', hapticsTest, el('audio-haptics-test-status'));
             });
         }
 
         const pitRadioTest = el('audio-pitradio-test');
         if (pitRadioTest) {
             pitRadioTest.addEventListener('click', () => {
-                playTest('pitradio', el('audio-pitradio-test-status'));
+                playTest('pitradio', pitRadioTest, el('audio-pitradio-test-status'));
             });
         }
     }

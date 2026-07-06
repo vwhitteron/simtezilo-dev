@@ -7,6 +7,7 @@ type Calibrator interface {
 	GetFrequency() float64
 	GetGain() float64
 	GetChannel() OutputChannel
+	GetTargetChannel() int
 	GetSweepFrequency() float64
 	ConfirmStopped()
 }

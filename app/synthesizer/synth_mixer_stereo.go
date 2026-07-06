@@ -14,6 +14,12 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/signal"
 )
 
+// calibratorToneGainDB attenuates the calibrator/identify tone below full scale.
+// The generated tone is a unity-amplitude sine, which is far hotter than real
+// haptic content; this backs it off to a comfortable level before the per-channel
+// and master gains are applied downstream.
+const calibratorToneGainDB = -9.0
+
 // ChannelDiagnostic holds per-channel buffer health metrics.
 type ChannelDiagnostic struct {
 	Name   string
@@ -942,6 +948,7 @@ func (m *StereoMixer) mixCalibratorOutput(outSamples []float64) bool { //nolint:
 
 	frequency := m.calibrator.GetSweepFrequency()
 	isStopping := m.calibrator.IsStopping()
+	targetChannel := m.calibrator.GetTargetChannel()
 	length := len(outSamples)
 
 	// Compute per-channel EQ amplitude multipliers. Reusable callback-thread-only
@@ -971,13 +978,25 @@ func (m *StereoMixer) mixCalibratorOutput(outSamples []float64) bool { //nolint:
 
 	var prevPhase float64
 
+	// Back the unity-amplitude tone off to a comfortable level; the per-channel
+	// and master gains are still applied downstream in readOutputBuffers.
+	toneAmplitude := signal.GainToAmplitudeRatio(calibratorToneGainDB)
+
 	for offset := range outSamples {
 		prevPhase = m.sineWavePhaseL
 
-		baseSample := math.Sin(m.sineWavePhaseL)
+		baseSample := math.Sin(m.sineWavePhaseL) * toneAmplitude
 		outSamples[offset] = baseSample
 
 		for ch := range m.numOutputChannels {
+			// targetChannel < 0 emits on every channel (calibration sweep);
+			// otherwise only the selected channel carries the tone.
+			if targetChannel >= 0 && ch != targetChannel {
+				channelSamples[ch][offset] = 0
+
+				continue
+			}
+
 			channelSamples[ch][offset] = baseSample * eqAmplitudes[ch]
 		}
 

@@ -49,6 +49,11 @@ type Options struct {
 	// app can restart the haptic audio stream live rather than requiring a
 	// restart. It is only called when one of those values actually changed.
 	OnHapticsOutputChanged func()
+
+	// SendPitRadioTest speaks a short test announcement through the live pit-radio
+	// output, used by the audio settings "Test" button to verify the pit-radio
+	// audio device end to end. Nil when no pit-radio audio output is active.
+	SendPitRadioTest func() error
 }
 
 // WebUI composes a Broadcaster with focused sub-handlers for config, system, and update APIs.
@@ -98,7 +103,7 @@ func New(opts Options) *WebUI {
 		port:        opts.Port,
 		config:      opts.Config,
 		broadcaster: broadcaster,
-		cfgHandler:  newConfigHandler(log, opts.Config, opts.Calibrator, opts.Updater, broadcaster, opts.OnHapticsOutputChanged, sysHandler.bluetoothAvailable, sysHandler.btDeviceList),
+		cfgHandler:  newConfigHandler(log, opts.Config, opts.Calibrator, opts.Updater, broadcaster, opts.OnHapticsOutputChanged, sysHandler.bluetoothAvailable, sysHandler.btDeviceList, opts.SendPitRadioTest),
 		sysHandler:  sysHandler,
 		updHandler: newUpdateHandler(updateHandlerOptions{
 			log:          log,

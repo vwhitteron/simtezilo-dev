@@ -386,6 +386,18 @@ func (s *Synthesizer) startCalibrator() {
 		s.mixer.ClearChannelBuffer(ChannelMaster)
 		s.log.Debug().Msg("Flushed master channel buffer")
 	}
+
+	// Wake the output pipeline so the calibration tone is actually produced and
+	// audible even when telemetry is inactive. The async producer idles (emits
+	// silence, never runs MixToMaster) while the mixer is silenced — see
+	// SetIdleCheck(IsSilenced) — and the master gain sits at minimum until faded
+	// in. FadeIn lifts silence unconditionally and ramps the master gain to the
+	// configured level; if the pipeline is already live (telemetry active) it
+	// returns early without a dip. Without this, entering calibration mode (or the
+	// identify tone, which drives the calibrator) produces no sound and can never
+	// reach the zero-crossing that completes a disable, leaving calibration stuck
+	// on and suppressing all other haptics.
+	s.mixer.FadeIn(config.FadeInDuration)
 }
 
 func (s *Synthesizer) stopCalibrator() {

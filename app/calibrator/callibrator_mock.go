@@ -2,19 +2,21 @@ package calibrator
 
 // MockCalibrator implements CalibratorInterface for testing.
 type MockCalibrator struct {
-	enabled   bool
-	frequency float64
-	gain      float64
-	channel   OutputChannel
+	enabled       bool
+	frequency     float64
+	gain          float64
+	channel       OutputChannel
+	targetChannel int
 }
 
 // NewMockCalibrator creates a new mockCalibrator instance.
 func NewMockCalibrator(enabled bool, frequency, gain float64, channel OutputChannel) *MockCalibrator {
 	return &MockCalibrator{
-		enabled:   enabled,
-		frequency: frequency,
-		gain:      gain,
-		channel:   channel,
+		enabled:       enabled,
+		frequency:     frequency,
+		gain:          gain,
+		channel:       channel,
+		targetChannel: -1,
 	}
 }
 
@@ -41,6 +43,11 @@ func (c *MockCalibrator) GetGain() float64 {
 // GetChannel returns the output channel for calibration.
 func (c *MockCalibrator) GetChannel() OutputChannel {
 	return c.channel
+}
+
+// GetTargetChannel returns the target output channel index (-1 for all).
+func (c *MockCalibrator) GetTargetChannel() int {
+	return c.targetChannel
 }
 
 // GetSweepFrequency returns the sweep frequency for calibration.

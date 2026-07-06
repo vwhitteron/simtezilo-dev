@@ -40,6 +40,10 @@ type configHandler struct {
 	// system handler, which owns the platform helper. May be nil on builds with
 	// no helper.
 	btDevices func(context.Context) []platform.CmdBTDevice
+	// sendPitRadioTest speaks a short test announcement through the live pit-radio
+	// output, used by the audio settings "Test" button to verify the pit-radio
+	// audio device. Wired from the app; nil when no pit-radio output is active.
+	sendPitRadioTest func() error
 }
 
 func newConfigHandler(
@@ -51,6 +55,7 @@ func newConfigHandler(
 	onHapticsOutputChanged func(),
 	bluetoothAvailable func() bool,
 	btDevices func(context.Context) []platform.CmdBTDevice,
+	sendPitRadioTest func() error,
 ) *configHandler {
 	return &configHandler{
 		log:                    log,
@@ -61,6 +66,7 @@ func newConfigHandler(
 		onHapticsOutputChanged: onHapticsOutputChanged,
 		bluetoothAvailable:     bluetoothAvailable,
 		btDevices:              btDevices,
+		sendPitRadioTest:       sendPitRadioTest,
 	}
 }
 
