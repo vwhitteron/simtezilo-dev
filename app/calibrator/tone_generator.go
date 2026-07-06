@@ -66,7 +66,7 @@ func NewToneGenerator(cfg *config.Config) (*ToneGenerator, error) {
 		frequency:          5,
 		gain:               -30,
 		channel:            OutputChannelBoth,
-		targetChannel:      -1, // all channels by default
+		targetChannel:      -1,  // all channels by default
 		frequencyIncrement: 1.0, // Default 1Hz increment
 		config:             cfg,
 		sweepDuration:      10,
