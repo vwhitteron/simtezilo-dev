@@ -20,34 +20,157 @@ func halfSinePulse(length int, amplitude float64) []float64 {
 	return pulse
 }
 
-func TestMixSamplePriority(t *testing.T) {
+// TestSoftCombine covers the soft-knee mix: transparency below the knee, a
+// strict asymptote below the rail above it, and commutativity.
+func TestSoftCombine(t *testing.T) {
 	t.Parallel()
 
 	testCases := []struct {
 		name string
 		a, b float64
-		want float64
+		want float64 // exact expected value; NaN means "assert properties only"
 	}{
-		{"zero subordinate returns dominant unchanged", 0.4, 0.0, 0.4},
-		{"zero dominant returns subordinate unchanged", 0.0, -0.7, -0.7},
-		{"both fit under unity sum normally", 0.3, 0.2, 0.5},
-		{"louder wins, weaker ducked into headroom", 0.9, 0.5, 1.0},
-		{"negative louder wins, weaker ducked", -0.9, -0.5, -1.0},
-		{"dominant at unity drops subordinate", 1.0, 0.5, 1.0},
-		{"dominant over unity is clamped", 1.4, 0.5, 1.0},
+		{"zero returns the other sample unchanged", 0.4, 0.0, 0.4},
+		{"negative single sample unchanged", 0.0, -0.65, -0.65},
+		{"sum below knee passes through exactly", 0.3, 0.2, 0.5},
+		{"sum at the knee passes through exactly", 0.5, 0.2, 0.7},
+		{"opposite polarity subtracts, stays transparent", 0.9, -0.5, 0.4},
+		{"same polarity above knee is compressed", 0.9, 0.5, math.NaN()},
+		{"negative same polarity above knee is compressed", -0.9, -0.5, math.NaN()},
+		{"large sum stays strictly below unity", 1.4, 0.5, math.NaN()},
 	}
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := mixSamplePriority(testCase.a, testCase.b)
-			if math.Abs(got-testCase.want) > 1e-9 {
-				t.Errorf("mixSamplePriority(%v, %v) = %v, want %v", testCase.a, testCase.b, got, testCase.want)
+			got := softCombine(testCase.a, testCase.b)
+
+			// Exact expectation where the sum is at or below the knee.
+			if !math.IsNaN(testCase.want) && math.Abs(got-testCase.want) > 1e-9 {
+				t.Errorf("softCombine(%v, %v) = %v, want %v", testCase.a, testCase.b, got, testCase.want)
 			}
 
-			if math.Abs(got) > 1.0+1e-9 {
-				t.Errorf("mixSamplePriority(%v, %v) = %v exceeds unity", testCase.a, testCase.b, got)
+			// The knee asymptotes toward the rail but must never reach it.
+			if math.Abs(got) >= 1.0 {
+				t.Errorf("softCombine(%v, %v) = %v reached or exceeded unity", testCase.a, testCase.b, got)
+			}
+
+			// Combining is a function of the sum, so it must be commutative.
+			if swapped := softCombine(testCase.b, testCase.a); math.Abs(got-swapped) > 1e-12 {
+				t.Errorf("softCombine not commutative: (%v,%v)=%v vs (%v,%v)=%v",
+					testCase.a, testCase.b, got, testCase.b, testCase.a, swapped)
+			}
+		})
+	}
+}
+
+// TestSoftKneeProperties guards the two safety-critical invariants of the knee:
+// it never reaches the ±1 rail for any finite input (no sustained DC flatline),
+// and it is 1-Lipschitz (never manufactures a per-sample step from a smooth
+// input).
+func TestSoftKneeProperties(t *testing.T) {
+	t.Parallel()
+
+	prev := softKnee(-4.0)
+	for x := -4.0; x <= 4.0; x += 0.001 {
+		y := softKnee(x)
+
+		if math.Abs(y) >= 1.0 {
+			t.Fatalf("softKnee(%v) = %v reached the rail", x, y)
+		}
+
+		// Monotone, 1-Lipschitz: 0 <= dy <= dx (+ float slack).
+		if dy := y - prev; dy < -1e-12 || dy > 0.001+1e-9 {
+			t.Fatalf("softKnee slope out of [0,1] at x=%v: dy=%v over dx=0.001", x, dy)
+		}
+
+		prev = y
+	}
+
+	// Below the knee it must be the exact identity.
+	for _, x := range []float64{-0.7, -0.5, 0.0, 0.35, 0.7} {
+		if y := softKnee(x); math.Abs(y-x) > 1e-12 {
+			t.Errorf("softKnee(%v) = %v, want identity below the knee", x, y)
+		}
+	}
+}
+
+// TestSoftCombineNoFlatline drives the real pipeline cadence with full-amplitude
+// pulses whose overlaps would clip, for both same- and opposite-polarity pulse
+// trains, and asserts the consumed stream never sits pinned at the rail — the
+// hard-clamp failure mode that produced damaging sustained DC.
+func TestSoftCombineNoFlatline(t *testing.T) {
+	t.Parallel()
+
+	const (
+		rate     = 8000
+		frames   = 200
+		frameAdv = rate / 60
+	)
+
+	for _, tc := range []struct {
+		name     string
+		polarity float64 // sign applied to every other pulse
+	}{
+		{"same polarity", 1.0},
+		{"opposite polarity", -1.0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			buffer := NewAdaptiveBuffer(2*time.Second, rate)
+			buffer.Clear()
+
+			stream := make([]float64, 0, frames*frameAdv)
+
+			for frame := range frames {
+				sign := 1.0
+				if frame%2 == 1 {
+					sign = tc.polarity
+				}
+
+				// Long low-frequency and short high-frequency full-amplitude
+				// pulses, densely overlapping so the sum drives deep into
+				// compression.
+				freqHz := 20.0
+				if frame%2 == 1 {
+					freqHz = 90.0
+				}
+
+				pulseLen := int(float64(rate) / freqHz)
+				buffer.Write(halfSinePulse(pulseLen, sign*1.0), 0, false)
+
+				block := make([]float64, frameAdv)
+				length := buffer.Read(block)
+				stream = append(stream, block[:length]...)
+			}
+
+			// Nothing may reach the rail, and no run of samples may sit pinned
+			// near it (a flatline). A short run at a smooth crest is legitimate;
+			// a sustained one is DC.
+			const (
+				railBand    = 0.999 // "at the rail" band
+				maxPinnedRun = 8    // consecutive near-rail, near-identical samples
+			)
+
+			run := 0
+
+			for i, s := range stream {
+				if math.Abs(s) >= 1.0 {
+					t.Fatalf("sample %d = %v reached the rail", i, s)
+				}
+
+				pinned := math.Abs(s) > railBand &&
+					i > 0 && math.Abs(s-stream[i-1]) < 1e-6
+				if pinned {
+					run++
+					if run > maxPinnedRun {
+						t.Fatalf("flatline: %d consecutive samples pinned near the rail at index %d", run, i)
+					}
+				} else {
+					run = 0
+				}
 			}
 		})
 	}

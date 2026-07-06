@@ -137,31 +137,49 @@ func mixSampleSum(sample1 float64, sample2 float64, peak *float64) float64 {
 	return sum
 }
 
-// mixSamplePriority mixes two samples with priority/ducking so the result never
-// exceeds unity while preserving the dynamics of the louder component. The
-// larger-magnitude sample (the "dominant") keeps its full amplitude; the weaker
-// sample (the "subordinate") is ducked into whatever headroom remains below
-// unity. This gives high-energy events prevalence over weaker overlapping
-// waveforms instead of attenuating both equally.
+// softKneeThreshold is the level below which softKnee is bit-exact transparent.
+// Sums with magnitude at or under this pass through unchanged; only the portion
+// above it is compressed. 0.7 leaves normal-level pulses untouched while giving
+// the knee 0.3 of range to asymptote toward the rail.
+const softKneeThreshold = 0.7
+
+// softKnee maps a value through a memoryless soft-knee limiter. For magnitudes at
+// or below softKneeThreshold it is the identity (no colouration of normal-level
+// signal); above the threshold it follows an exponential that asymptotically
+// approaches ±1 without ever reaching it. The join at the threshold is C¹ (both
+// the value and the slope are continuous), so the transfer curve has no corner.
 //
-// Because the ducking amount is driven by the samples' magnitudes, it tapers to
-// zero wherever one component is zero — so for self-terminating pulses (zero at
-// their edges) the combine introduces no amplitude step at the pulse boundaries.
-func mixSamplePriority(a float64, b float64) float64 {
-	dominant, subordinate := a, b
-	if math.Abs(b) > math.Abs(a) {
-		dominant, subordinate = b, a
+// Two properties matter downstream:
+//   - It never reaches ±1, so a saturating input produces a curved output rather
+//     than a flat rail — no sustained DC that would overheat the transducer.
+//   - It is 1-Lipschitz (|f'| ≤ 1 everywhere), so it can never amplify a
+//     per-sample step; a smooth input stays smooth through the limiter.
+func softKnee(x float64) float64 {
+	magnitude := math.Abs(x)
+	if magnitude <= softKneeThreshold {
+		return x
 	}
 
-	// A single component already at or over unity leaves no headroom; clamp it
-	// and drop the subordinate entirely.
-	if math.Abs(dominant) >= 1.0 {
-		return math.Max(-1.0, math.Min(1.0, dominant))
-	}
+	headroom := 1.0 - softKneeThreshold
+	shaped := softKneeThreshold + headroom*(1.0-math.Exp(-(magnitude-softKneeThreshold)/headroom))
 
-	headroom := 1.0 - math.Abs(dominant)
+	return math.Copysign(shaped, x)
+}
 
-	ducked := math.Max(-headroom, math.Min(headroom, subordinate))
-
-	return dominant + ducked
+// softCombine mixes two samples by summing them and passing the sum through the
+// soft-knee limiter. It replaces the older hard-clamping priority mix.
+//
+// Summing preserves the pulse energy the receptors integrate, and because the
+// combine is a memoryless function of the sum it introduces no window-dependent
+// gain — so mixing a new pulse over content already in the buffer creates no
+// amplitude step at the pulse boundaries (the failure mode of the old
+// retroactive per-window peak limiter), and never pins to the rail (the failure
+// mode of the hard clamp it replaces).
+//
+// The louder component still prevails without any explicit priority logic: it
+// sets the operating point on the knee, so once the sum is in compression a
+// weaker overlapping component only adds the locally-reduced slope — high-energy
+// events dominate weaker ones automatically.
+func softCombine(a float64, b float64) float64 {
+	return softKnee(a + b)
 }

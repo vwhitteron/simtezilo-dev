@@ -1,6 +1,7 @@
 package synthesizer_test
 
 import (
+	"math"
 	"math/rand"
 	"testing"
 	"time"
@@ -153,12 +154,12 @@ func TestAdaptiveBuffer_RampPassThrough(t *testing.T) {
 	}
 }
 
-// TestAdaptiveBuffer_UnderrunInsertsZeros proves the click mechanism: when a Read
-// requests more than is buffered, the buffer returns a SHORT slice and bumps the
-// underrun counter. Consumers (MixToMaster, Streamer.readOutputBuffers) then
-// zero-pad the missing tail, inserting a silent step into a live signal — an
-// audible click.
-func TestAdaptiveBuffer_UnderrunInsertsZeros(t *testing.T) {
+// TestAdaptiveBuffer_UnderrunFadesToZero proves the concealment: when a Read
+// requests more than is buffered, the buffered samples come back intact and the
+// shortfall is filled with a smooth fade to zero rather than an abrupt zero step.
+// The underrun counter still increments, but a consumer reading the returned
+// block sees no silent cliff — the mechanism that used to click.
+func TestAdaptiveBuffer_UnderrunFadesToZero(t *testing.T) {
 	t.Parallel()
 
 	const internalRate = 8000
@@ -170,44 +171,50 @@ func TestAdaptiveBuffer_UnderrunInsertsZeros(t *testing.T) {
 
 	available := buf.Used()
 
-	const request = 512
+	// Request well beyond available + the declick ramp so the read is genuinely
+	// short even after concealment.
+	request := available + 200
 
 	block := make([]float64, request)
 	length := buf.Read(block)
 	got := block[:length]
-
-	if len(got) >= request {
-		t.Fatalf("expected a short read on underrun, requested %d got %d", request, len(got))
-	}
-
-	if len(got) != available {
-		t.Fatalf("expected short read to return all %d buffered samples, got %d", available, len(got))
-	}
 
 	_, underruns, _ := buf.Health()
 	if underruns == 0 {
 		t.Fatal("expected underrun counter to increment")
 	}
 
-	// Reproduce what a consumer does: zero-pad to the requested length and show
-	// the detector flags the inserted silence as a "zero" break.
-	padded := make([]float64, request)
-	copy(padded, got)
+	// Concealment is bounded: more than the available samples (a fade was added)
+	// but still short of the request (no full block of fabricated data).
+	if length <= available {
+		t.Fatalf("expected concealment beyond %d available samples, got length %d", available, length)
+	}
 
-	breaks := detectSequenceBreaks(padded)
+	if length >= request {
+		t.Fatalf("expected a short read, requested %d got %d", request, length)
+	}
 
-	sawZero := false
+	// The real region is undamaged: the integer ramp survives with no breaks.
+	if breaks := detectSequenceBreaks(got[:available]); len(breaks) != 0 {
+		t.Fatalf("buffered ramp corrupted: %d break(s), first=%+v", len(breaks), breaks[0])
+	}
 
-	for _, b := range breaks {
-		if b.Kind == "zero" {
-			sawZero = true
+	// The concealment tail eases from the last real sample to (near) zero with no
+	// step at the join and monotonically non-increasing magnitude.
+	lastReal := got[available-1]
+	if step := math.Abs(got[available] - lastReal); step > math.Abs(lastReal)*0.1 {
+		t.Fatalf("step at concealment join: %v (last real %v)", step, lastReal)
+	}
 
-			break
+	for i := available; i < length; i++ {
+		if math.Abs(got[i]) > math.Abs(got[i-1])+1e-9 {
+			t.Fatalf("concealment tail not monotonically fading at %d: |%v| > |%v|",
+				i, got[i], got[i-1])
 		}
 	}
 
-	if !sawZero {
-		t.Fatalf("expected a zero-insertion break from the zero-padded underrun, got %+v", breaks)
+	if end := math.Abs(got[length-1]); end > math.Abs(lastReal)*0.05 {
+		t.Fatalf("concealment tail did not fade to near zero: |%v| (last real %v)", got[length-1], lastReal)
 	}
 }
 

@@ -3,6 +3,7 @@ package synthesizer_test
 // TODO: LLM generated code, needs review
 
 import (
+	"math"
 	"testing"
 	"time"
 
@@ -149,9 +150,25 @@ func TestAdaptiveBufferUnderrun(t *testing.T) {
 	length := buffer.Read(buf)
 	result := buf[:length]
 
-	// Should only get what's available or less
-	if len(result) > currentUsed {
-		t.Errorf("Expected at most %d samples (underrun), got %d", currentUsed, len(result))
+	// The read is still well short of the request: concealment is a bounded
+	// declick ramp, not a full block of fabricated data.
+	if len(result) >= len(buf) {
+		t.Errorf("Expected a short read on underrun, requested %d got %d", len(buf), len(result))
+	}
+
+	// On underrun the shortfall is concealed with a fade to zero rather than a
+	// hard truncation, so the count is the available samples plus a small ramp.
+	if len(result) < currentUsed {
+		t.Errorf("Expected at least the %d available samples, got %d", currentUsed, len(result))
+	}
+
+	// The concealment tail must ease to zero, never step: magnitude
+	// non-increasing across the ramp region.
+	for i := currentUsed; i < len(result); i++ {
+		if math.Abs(result[i]) > math.Abs(result[i-1])+1e-9 {
+			t.Errorf("concealment tail not monotonically fading at %d: |%v| > |%v|",
+				i, result[i], result[i-1])
+		}
 	}
 
 	_, underruns, _ := buffer.Health()

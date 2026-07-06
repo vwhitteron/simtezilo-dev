@@ -1,6 +1,7 @@
 package synthesizer
 
 import (
+	"math"
 	"sync"
 	"time"
 )
@@ -27,11 +28,27 @@ type AdaptiveBuffer struct {
 	// scaleScratch holds the magnitude-scaled copy used by WriteScaled so the
 	// caller's slice is never mutated.
 	scaleScratch []float64
+
+	// Underrun concealment. On a short read the tail is not zeroed abruptly;
+	// instead the last delivered sample is faded to zero over declickLen samples
+	// with a raised-cosine ramp, so a starved channel eases out instead of
+	// stepping to silence (which clicks). declickLeft is the remaining ramp
+	// budget, recharged whenever real samples are read; lastSample is the value
+	// the ramp starts from. The ramp can span multiple reads, so a gap longer
+	// than one block still fades over exactly declickLen samples.
+	declickLen  int
+	declickLeft int
+	lastSample  float64
 }
 
 // defaultBufferCushionMs is the read-delay cushion used by NewAdaptiveBuffer
 // when no explicit cushion is supplied.
 const defaultBufferCushionMs = 24
+
+// declickRampMs is the duration of the underrun fade-to-zero ramp. A few
+// milliseconds is long enough to be click-free yet short enough not to smear a
+// transient's tail.
+const declickRampMs = 3
 
 // NewAdaptiveBuffer creates a new adaptive buffer with the default 24 ms cushion.
 // bufferDuration: duration of audio the buffer should hold
@@ -61,13 +78,19 @@ func NewAdaptiveBufferCushion(length time.Duration, sampleRateHz, cushionMs int)
 		readDelay = maxReadDelay
 	}
 
+	declickLen := (sampleRateHz / 1000) * declickRampMs
+	if declickLen < 1 {
+		declickLen = 1
+	}
+
 	buffer := &AdaptiveBuffer{
-		buffer:    make([]float64, capacity),
-		writePos:  readDelay,
-		readPos:   0,
-		capacity:  capacity,
-		used:      readDelay,
-		readDelay: readDelay,
+		buffer:     make([]float64, capacity),
+		writePos:   readDelay,
+		readPos:    0,
+		capacity:   capacity,
+		used:       readDelay,
+		readDelay:  readDelay,
+		declickLen: declickLen,
 	}
 
 	buffer.updateLastAccess()
@@ -90,6 +113,8 @@ func (b *AdaptiveBuffer) Clear() {
 	b.used = b.readDelay
 	b.overflows = 0
 	b.underruns = 0
+	b.declickLeft = 0
+	b.lastSample = 0
 
 	b.mu.Unlock()
 
@@ -345,13 +370,15 @@ func (b *AdaptiveBuffer) writeOverwriteMode(samples []float64) {
 
 // writeMixMode writes samples in mix mode, combining with existing content.
 //
-// Combining uses a priority/ducking mix (mixSamplePriority): overlapping
-// waveforms are summed with the louder component taking precedence and the
-// weaker ducked into the remaining headroom, so the result is bounded to ±1.0
-// without a separate peak-limiting pass. A retroactive peak limiter is
-// deliberately avoided here — scaling only the written window of a shared,
-// in-flight buffer injected amplitude steps (audible clicks) into longer
-// waveforms still playing past the end of the write.
+// Combining uses a memoryless soft-knee mix (softCombine): overlapping waveforms
+// are summed and the sum is passed through a soft-knee limiter that asymptotes
+// toward ±1 without reaching it. This bounds the result close to unity without a
+// separate peak-limiting pass, while avoiding two failure modes: a retroactive
+// per-window peak limiter injects amplitude steps (audible clicks) into longer
+// waveforms still in flight past the end of the write, and a hard clamp pins the
+// output to the rail (sustained DC that overheats the transducer). The soft knee
+// does neither — it is 1-Lipschitz so it never manufactures a step, and it never
+// flatlines at the rail.
 func (b *AdaptiveBuffer) writeMixMode(samples []float64) {
 	for index, inputSample := range samples {
 		mixedSample := b.mixSampleAtIndex(index, inputSample)
@@ -368,7 +395,7 @@ func (b *AdaptiveBuffer) mixSampleAtIndex(index int, inputSample float64) float6
 		mixPos := (b.readPos + index) % b.capacity
 		existingSample := b.buffer[mixPos]
 
-		return mixSamplePriority(inputSample, existingSample)
+		return softCombine(inputSample, existingSample)
 	}
 
 	return inputSample
@@ -398,10 +425,16 @@ func (b *AdaptiveBuffer) handleOverflow(samples []float64, overwrite bool) {
 	}
 }
 
-// readIntoBuffer is the shared read core: it copies up to len(dst) samples into
-// dst (truncating to the available count on underrun) and returns the number
-// written. When consume is true the read advances the read position and zeroes
-// the consumed samples.
+// readIntoBuffer is the shared read core. It copies the available samples into
+// dst and, on a short read (underrun), conceals the shortfall by fading the last
+// delivered sample to zero with a raised-cosine ramp rather than leaving an
+// abrupt zero tail. When consume is true the read advances the read position and
+// zeroes the consumed samples.
+//
+// It returns the number of "sounding" samples written — the real samples plus
+// any concealment ramp samples emitted this call. dst indices at or beyond that
+// count are zero. A fully idle buffer whose ramp has already run out returns 0,
+// preserving the caller's ability to detect true silence.
 func (b *AdaptiveBuffer) readIntoBuffer(dst []float64, consume bool) int {
 	b.updateLastAccess()
 
@@ -410,17 +443,17 @@ func (b *AdaptiveBuffer) readIntoBuffer(dst []float64, consume bool) int {
 
 	length := len(dst)
 
-	// Check for underrun
-	if length > b.used {
+	avail := length
+	if avail > b.used {
+		avail = b.used
+
 		if consume {
 			b.underruns++
 			b.lastUnderrun = time.Now()
 		}
-
-		length = b.used
 	}
 
-	for i := range length {
+	for i := range avail {
 		dst[i] = b.buffer[b.readPos]
 
 		if consume {
@@ -431,7 +464,38 @@ func (b *AdaptiveBuffer) readIntoBuffer(dst []float64, consume bool) int {
 		b.readPos = (b.readPos + 1) % b.capacity
 	}
 
-	return length
+	// Any real samples this block reset the ramp: remember where to fade from and
+	// recharge the budget. The budget persists across calls, so a gap spanning
+	// several blocks still fades over exactly declickLen samples.
+	if avail > 0 {
+		b.lastSample = dst[avail-1]
+		b.declickLeft = b.declickLen
+	}
+
+	// Fully satisfied read: no concealment needed.
+	if avail == length {
+		return length
+	}
+
+	written := avail
+
+	for i := avail; i < length; i++ {
+		if b.declickLeft <= 0 {
+			dst[i] = 0
+
+			continue
+		}
+
+		// Raised-cosine from lastSample (at declickLeft==declickLen) to zero (at
+		// declickLeft==0): continuous in value at the join and reaching zero with
+		// zero slope.
+		phase := math.Pi * float64(b.declickLen-b.declickLeft) / float64(b.declickLen)
+		dst[i] = b.lastSample * 0.5 * (1.0 + math.Cos(phase))
+		b.declickLeft--
+		written++
+	}
+
+	return written
 }
 
 // dropOldestSamples removes oldest samples to prevent overflow.
