@@ -22,6 +22,9 @@
     // The deviceName last known to be persisted server-side, so we only write
     // back when it actually changes (a new sighting or a different selection).
     let persistedName = '';
+    // The deviceAddress last known to be persisted server-side, so an auto-select
+    // only writes the address back when it actually changes.
+    let persistedAddress = '';
 
     async function fetchSaved() {
         try {
@@ -34,6 +37,7 @@
             savedAddress = fan.deviceAddress || '';
             savedName = fan.deviceName || '';
             persistedName = savedName;
+            persistedAddress = savedAddress;
         } catch (err) {
             console.error('fan-settings: failed to load config', err);
         }
@@ -60,6 +64,26 @@
         }
     }
 
+    // Persist the selected device address when it changes. Used when the first
+    // paired device is auto-selected so the choice is not lost on reload; manual
+    // selections are persisted through the data-config path in settings.js.
+    async function persistDeviceAddress(address) {
+        address = address || '';
+        if (address === persistedAddress) {
+            return;
+        }
+        persistedAddress = address;
+        try {
+            await fetch('/api/config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ fan: { deviceAddress: address } }),
+            });
+        } catch (err) {
+            console.error('fan-settings: failed to persist device address', err);
+        }
+    }
+
     async function fetchFanDevices() {
         try {
             const response = await fetch('/api/bluetooth/devices');
@@ -77,7 +101,7 @@
 
     function placeholderText() {
         const opt = document.querySelector('#fan-device option[value=""]');
-        return (opt && opt.textContent) || '(pair in Bluetooth panel)';
+        return (opt && opt.textContent) || 'No paired devices';
     }
 
     // Mirror the cached friendly name into the hidden input so it is persisted
@@ -103,7 +127,9 @@
     // Rebuild the <select>, restoring the saved address. The saved device is
     // always kept selectable so the stored config value is never silently
     // dropped; when it is offline (not in the live list) it is labelled with its
-    // cached friendly name rather than a bare MAC address.
+    // cached friendly name rather than a bare MAC address. When no fan devices
+    // are paired the list carries a single "No paired devices" placeholder; when
+    // at least one is paired and none has been set yet the first is auto-selected.
     function populate(devices) {
         const select = el('fan-device');
         if (!select) {
@@ -111,7 +137,9 @@
         }
 
         select.innerHTML = '';
-        addOption(select, '', placeholderText(), '');
+        if (devices.length === 0) {
+            addOption(select, '', placeholderText(), '');
+        }
 
         let liveName = '';
         devices.forEach(device => {
@@ -133,6 +161,14 @@
         if (savedAddress && !known) {
             const display = savedName || savedAddress;
             addOption(select, savedAddress, display + ' (not connected)', savedName);
+        }
+
+        // No device set yet but at least one is paired: adopt the first so the
+        // fan works out of the box, persisting the address like a manual pick.
+        if (!savedAddress && devices.length > 0) {
+            savedAddress = devices[0].address;
+            savedName = devices[0].name || devices[0].address;
+            persistDeviceAddress(savedAddress);
         }
 
         select.value = savedAddress || '';
