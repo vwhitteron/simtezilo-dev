@@ -163,7 +163,6 @@ type EQBand struct {
 // Synthesizer represents an audio synthesizer used for haptic feedback.
 type Synthesizer struct {
 	InternalSampleRateHz      int       `json:"internalSampleRateHz"`
-	OutputSampleRateHz        int       `json:"outputSampleRateHz"`
 	OutputFile                string    `json:"outputFile,omitempty"`
 	MasterMute                bool      `json:"masterMute"`
 	MasterGain                float64   `json:"masterGain"`
@@ -247,7 +246,6 @@ type Snapshot struct {
 	EngineGain                float64
 	GainIncrement             float64
 	InternalSampleRateHz      int
-	OutputSampleRateHz        int
 
 	// Haptics jerk settings (chassis amplitude)
 	JerkCurve float64
@@ -2620,22 +2618,6 @@ func (c *Config) SetSynthInternalSampleRateHz(value int) {
 	c.mu.Unlock()
 }
 
-// GetSynthOutputSampleRateHz returns the output sample rate of the synthesizer in Hz.
-// This is the sample rate at which audio is output to the audio device or file.
-// 32000 Hz is suitable for most common hardware but some may work at lower rates.
-func (c *Config) GetSynthOutputSampleRateHz() int {
-	return c.snapshot.Load().OutputSampleRateHz
-}
-
-// SetSynthOutputSampleRateHz sets the output sample rate of the synthesizer in Hz.
-func (c *Config) SetSynthOutputSampleRateHz(value int) {
-	c.mu.Lock()
-	c.viper.Synthesizer.OutputSampleRateHz = value
-	c.rebuildSnapshot()
-	c.registerUpdate(true)
-	c.mu.Unlock()
-}
-
 // GetSynthGainIncrement returns the gain increment value.
 func (c *Config) GetSynthGainIncrement() float64 {
 	return c.snapshot.Load().GainIncrement
@@ -3438,13 +3420,24 @@ func (c *Config) SetAudioHapticsChannels(value int) {
 	c.registerUpdate(false)
 }
 
-// GetAudioHapticsSampleRate returns the haptics output sample rate in Hz.
+// defaultHapticsOutputSampleRateHz is the last-resort output rate used when the
+// haptics rate is unset/invalid and no output device can be enumerated for its
+// native rate. 48 kHz is a near-universal default-device rate; the polyphase
+// resampler bridges the synth internal rate to it. Callers that hold an audio
+// backend (see startAudioOutput / captureThroughSink) prefer the actual output
+// device's native rate over this value.
+const defaultHapticsOutputSampleRateHz = 48000
+
+// GetAudioHapticsSampleRate returns the haptics output sample rate in Hz. This is
+// a pure config accessor: it returns the configured rate, or a safe default when
+// that value is unset/invalid. Device-native rate resolution lives in the audio
+// init paths that hold a backend handle, not here.
 func (c *Config) GetAudioHapticsSampleRate() int {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	if c.viper.Haptics.Output.SampleRate < 1 {
-		return c.viper.Synthesizer.OutputSampleRateHz
+	if c.viper.Haptics.Output.SampleRate < 8000 {
+		return defaultHapticsOutputSampleRateHz
 	}
 
 	return c.viper.Haptics.Output.SampleRate
@@ -3949,7 +3942,6 @@ func (c *Config) rebuildSnapshot() {
 		EngineGain:                c.viper.Synthesizer.EngineGain,
 		GainIncrement:             c.viper.Synthesizer.GainIncrement,
 		InternalSampleRateHz:      c.viper.Synthesizer.InternalSampleRateHz,
-		OutputSampleRateHz:        c.viper.Synthesizer.OutputSampleRateHz,
 
 		JerkCurve: float64(c.viper.Haptics.JerkCurve),
 		JerkMax:   c.viper.Haptics.JerkMax,

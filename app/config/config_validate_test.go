@@ -209,7 +209,6 @@ func TestValidateJSONSchema_SampleRateOutOfRange(t *testing.T) {
 	}{
 		{"internalSampleRate too low", "internalSampleRateHz", 4000},
 		{"internalSampleRate too high", "internalSampleRateHz", 200000},
-		{"outputSampleRate too low", "outputSampleRateHz", 1000},
 	}
 
 	for _, testCase := range tests {
@@ -630,7 +629,6 @@ func TestConfig_Validate_Integration(t *testing.T) {
 			},
 			Synthesizer: &Synthesizer{
 				InternalSampleRateHz:      8000,
-				OutputSampleRateHz:        32000,
 				MasterGain:                -7.0,
 				ChassisGain:               0.0,
 				EngineGain:                -3.5,

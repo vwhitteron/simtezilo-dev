@@ -141,7 +141,6 @@ func defaultConfig() *viperConfig {
 		},
 		Synthesizer: &Synthesizer{
 			InternalSampleRateHz:      8000,
-			OutputSampleRateHz:        32000,
 			OutputFile:                "",
 			MasterMute:                false,
 			MasterGain:                0.00,

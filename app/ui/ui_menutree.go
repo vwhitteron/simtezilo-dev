@@ -44,7 +44,6 @@ func newMenuTree(hapticsChannels int) *MenuNode {
 			branch(languagedb.UIMenuSynth,
 				branch(languagedb.UIMenuSynthSampleRates,
 					leaf(languagedb.UIMenuSynthInternalSampleRate),
-					leaf(languagedb.UIMenuSynthOutputSampleRate),
 				),
 				branch(languagedb.UIMenuSynthMute,
 					leaf(languagedb.UIMenuSynthMuteMaster),

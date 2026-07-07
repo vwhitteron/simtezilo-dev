@@ -61,7 +61,6 @@ const (
 	UIMenuSynth                          Key = "ui.menu.synth"
 	UIMenuSynthSampleRates               Key = "ui.menu.synth.samplerates"
 	UIMenuSynthInternalSampleRate        Key = "ui.menu.synth.internalsamplerate"
-	UIMenuSynthOutputSampleRate          Key = "ui.menu.synth.outputsamplerate"
 	UIMenuSynthGainControls              Key = "ui.menu.synth.gaincontrols"
 	UIMenuSynthMasterGain                Key = "ui.menu.synth.mastergain"
 	UIMenuSynthChassisGain               Key = "ui.menu.synth.chassisgain"
@@ -429,8 +428,6 @@ const (
 	RunmodeSettingsSynthSampleratesTitle           Key = "runmode.settings.synth.samplerates.title"
 	RunmodeSettingsSynthSampleratesInternal        Key = "runmode.settings.synth.samplerates.internal"
 	RunmodeSettingsSynthSampleratesInternalTooltip Key = "runmode.settings.synth.samplerates.internal.tooltip"
-	RunmodeSettingsSynthSampleratesOutput          Key = "runmode.settings.synth.samplerates.output"
-	RunmodeSettingsSynthSampleratesOutputTooltip   Key = "runmode.settings.synth.samplerates.output.tooltip"
 
 	RunmodeSettingsSynthGaincontrolsTitle                        Key = "runmode.settings.synth.gaincontrols.title"
 	RunmodeSettingsSynthGaincontrolsMaster                       Key = "runmode.settings.synth.gaincontrols.master"

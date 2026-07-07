@@ -180,7 +180,6 @@ func (h *configHandler) handleGetConfig(response http.ResponseWriter, _ *http.Re
 		},
 		"synthesizer": map[string]any{
 			"internalSampleRateHz":      h.config.GetSynthInternalSampleRateHz(),
-			"outputSampleRateHz":        h.config.GetSynthOutputSampleRateHz(),
 			"outputFile":                h.config.GetSynthOutputFile(),
 			"masterMute":                h.config.GetSynthMasterMute(),
 			"masterGain":                h.config.GetSynthMasterGain(),
@@ -443,7 +442,7 @@ func (h *configHandler) applySynthesizerConfig(config map[string]any) []string {
 	return errors
 }
 
-// applySynthSampleRates applies the internalSampleRateHz and outputSampleRateHz fields with debug logging.
+// applySynthSampleRates applies the internalSampleRateHz field with debug logging.
 func (h *configHandler) applySynthSampleRates(config map[string]any) []string {
 	var errors []string
 
@@ -457,19 +456,6 @@ func (h *configHandler) applySynthSampleRates(config map[string]any) []string {
 			errors = append(errors, "invalid internal sample rate value")
 
 			h.log.Error().Interface("value", val).Msg("invalid internal sample rate value type")
-		}
-	}
-
-	if val, ok := config["outputSampleRateHz"]; ok {
-		h.log.Debug().Interface("value", val).Type("type", val).Msg("processing outputSampleRateHz")
-
-		if rateFloat, ok := val.(float64); ok {
-			h.config.SetSynthOutputSampleRateHz(int(rateFloat))
-			h.log.Debug().Int("rate", int(rateFloat)).Msg("set output sample rate")
-		} else {
-			errors = append(errors, "invalid output sample rate value")
-
-			h.log.Error().Interface("value", val).Msg("invalid output sample rate value type")
 		}
 	}
 

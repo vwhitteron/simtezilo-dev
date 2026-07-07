@@ -2272,7 +2272,6 @@ func testSynthesizer(t *testing.T) {
 	synth := cfg.GetSynthesizer()
 	require.NotNil(t, synth)
 	assert.Equal(t, 8000, synth.InternalSampleRateHz)
-	assert.Equal(t, 32000, synth.OutputSampleRateHz)
 }
 
 func testSynthInternalSampleRateHz(t *testing.T) {
@@ -2289,22 +2288,6 @@ func testSynthInternalSampleRateHz(t *testing.T) {
 
 	// Assert
 	assert.InDelta(t, 16000, cfg.GetSynthInternalSampleRateHz(), 0.001)
-}
-
-func testSynthOutputSampleRateHz(t *testing.T) {
-	t.Parallel()
-
-	// Arrange
-	cfg := newTestConfig()
-
-	// Act & Assert - default is 32000
-	assert.InDelta(t, 32000, cfg.GetSynthOutputSampleRateHz(), 0.001)
-
-	// Act - set new value
-	cfg.SetSynthOutputSampleRateHz(44100)
-
-	// Assert
-	assert.InDelta(t, 44100, cfg.GetSynthOutputSampleRateHz(), 0.001)
 }
 
 func testSynthGainIncrement(t *testing.T) {
@@ -2675,7 +2658,6 @@ func TestSynthesizerGains(t *testing.T) { //nolint:dupl // Test runners have sim
 
 	t.Run("testSynthesizer", testSynthesizer)
 	t.Run("testSynthInternalSampleRateHz", testSynthInternalSampleRateHz)
-	t.Run("testSynthOutputSampleRateHz", testSynthOutputSampleRateHz)
 	t.Run("testSynthGainIncrement", testSynthGainIncrement)
 	t.Run("testSynthGainIncrementClamping", testSynthGainIncrementClamping)
 	t.Run("testSynthMasterGain", testSynthMasterGain)

@@ -37,7 +37,6 @@ func (a *App) settingAction(setting languagedb.Key, action string) string {
 
 		// Synthesizer handlers
 		languagedb.UIMenuSynthInternalSampleRate:        a.handleInternalSampleRateSetting,
-		languagedb.UIMenuSynthOutputSampleRate:          a.handleOutputSampleRateSetting,
 		languagedb.UIMenuSynthMasterGain:                a.handleMasterGainSetting,
 		languagedb.UIMenuSynthLeftGain:                  a.handleLeftGainSetting,
 		languagedb.UIMenuSynthRightGain:                 a.handleRightGainSetting,
@@ -1121,18 +1120,6 @@ func (a *App) handleInternalSampleRateSetting(action string) string {
 	}
 
 	return formatSampleRate(a.config.GetSynthInternalSampleRateHz())
-}
-
-func (a *App) handleOutputSampleRateSetting(action string) string {
-	rates := []int{8000, 16000, 22050, 32000, 44100, 48000}
-	current := a.config.GetSynthOutputSampleRateHz()
-
-	if action == "increase" || action == "decrease" {
-		newRate := cycleSampleRate(action, current, rates)
-		a.config.SetSynthOutputSampleRateHz(newRate)
-	}
-
-	return formatSampleRate(a.config.GetSynthOutputSampleRateHz())
 }
 
 // Synthesizer - Transmission Min Gain handlers.
