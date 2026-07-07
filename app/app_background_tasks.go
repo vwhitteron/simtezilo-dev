@@ -16,7 +16,7 @@ func (a *App) startBackgroundTasks() {
 	a.startGTClient()
 	a.startStartupSignaler()
 	a.startCrashLogManager()
-	a.startFanControllerTask()
+	a.windsim.StartTask()
 }
 
 // startHIDEventHandler starts the UI event loop goroutine.

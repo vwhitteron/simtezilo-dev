@@ -32,8 +32,8 @@ func (a *App) settingAction(setting languagedb.Key, action string) string {
 		languagedb.UIMenuSystemDisplayOrientation: a.handleDisplayOrientationSetting,
 
 		// Bluetooth handlers
-		languagedb.UIMenuBluetoothDevice: a.handleBluetoothDeviceSetting,
-		languagedb.UIMenuBluetoothToggle: a.handleBluetoothToggleSetting,
+		languagedb.UIMenuBluetoothDevice: a.bluetooth.HandleDeviceSetting,
+		languagedb.UIMenuBluetoothToggle: a.bluetooth.HandleToggleSetting,
 
 		// Synthesizer handlers
 		languagedb.UIMenuSynthInternalSampleRate:        a.handleInternalSampleRateSetting,
@@ -777,20 +777,6 @@ func (a *App) fanModeDisplay(mode string) string {
 		return a.i18n.GetString(languagedb.UIMenuFanModeAll)
 	default:
 		return a.i18n.GetString(languagedb.UIMenuFanModeManual)
-	}
-}
-
-// fanModeIcon maps a fan mode to the SVG icon name shown on the device screen:
-// "manual" → a fan symbol, "open" → the wind glyph with auto badge, "all" →
-// the wind glyph with an infinity badge.
-func fanModeIcon(mode string) string {
-	switch mode {
-	case "open":
-		return "wind-auto"
-	case "all":
-		return "wind-all"
-	default:
-		return "fan2"
 	}
 }
 

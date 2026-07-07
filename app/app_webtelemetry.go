@@ -31,7 +31,7 @@ func (a *App) sendTelemetryChartData() {
 		// Snapshot the audio health/diagnostics once; both are derived per call.
 		health := a.hapticSource.Health()
 		diag := a.synth.Diagnostics()
-		latency := a.buildAudioLatencyReport(health, diag)
+		latency := a.audioMon.BuildReport(health, diag, a.state.current.sequenceNumber)
 		channelFill := func(name string) float32 {
 			for _, ch := range diag.Channels {
 				if ch.Name == name {

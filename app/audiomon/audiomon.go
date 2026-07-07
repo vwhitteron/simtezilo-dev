@@ -1,16 +1,18 @@
-package app
-
-// Haptic latency/drift monitor. Telemetry arrives at a steady 60 fps carrying a
-// monotonic sequence ID, which gives a real-time reference clock. Comparing it
-// against what the audio pipeline has actually emitted (and how full the buffers
-// are) surfaces the output-side latency that accumulates when sample production
-// outruns the soundcard's consumption — the cause of haptics drifting out of
-// sync over time. The math helpers are pure so they can be unit-tested.
+// Package audiomon implements the haptic audio latency/drift monitor. Telemetry
+// arrives at a steady 60 fps carrying a monotonic sequence ID, which gives a
+// real-time reference clock. Comparing it against what the audio pipeline has
+// actually emitted (and how full the buffers are) surfaces the output-side
+// latency that accumulates when sample production outruns the soundcard's
+// consumption — the cause of haptics drifting out of sync over time. The math
+// helpers are pure so they can be unit-tested.
+package audiomon
 
 import (
+	"sync"
 	"time"
 
 	"github.com/vwhitteron/simtezilo-dev/app/audio"
+	"github.com/vwhitteron/simtezilo-dev/app/config"
 	"github.com/vwhitteron/simtezilo-dev/app/synthesizer"
 )
 
@@ -23,10 +25,10 @@ import (
 // the window, then settles once the baseline rolls forward.
 const driftWindow = 5 * time.Second
 
-// audioLatencyReport is a snapshot of haptic-pipeline latency and drift. All
+// Report is a snapshot of haptic-pipeline latency and drift. All
 // latencies are milliseconds; Drift is positive when telemetry time has run
 // ahead of emitted audio time (the pipeline is lagging behind real time).
-type audioLatencyReport struct {
+type Report struct {
 	EngineLatencyMs  float64 // engine mixer-channel buffer depth
 	ChassisLatencyMs float64 // chassis channel 0 mixer-channel buffer depth
 	RingLatencyMs    float64 // async device ring buffer depth
@@ -34,6 +36,35 @@ type audioLatencyReport struct {
 	SeqJitterMs      float64 // smoothed telemetry-cadence jitter (abs deviation from 60 fps)
 	Underruns        int64   // ring gap-fills (silence padding) since start
 	ProducerWaits    int64   // times the producer blocked on a full ring since start
+}
+
+// Monitor owns all haptic audio latency/drift monitor state.
+type Monitor struct {
+	config        *config.Config // application configuration
+	sampleRate    func() int     // synth internal sample rate, read lazily
+	telemetryRate int            // telemetry frame rate in Hz (60)
+
+	mu               sync.Mutex // guards fields shared between main loop and web-telemetry goroutine
+	driftBaseFrames  int64
+	driftBaseSeq     uint32
+	driftBaseTime    time.Time
+	driftBaseSet     bool
+	seqJitterMs      float64
+	lastSeqWallClock time.Time
+	outputRate       int // actual sink sample rate (may differ from config on native-rate devices)
+}
+
+// NewMonitor creates a Monitor. sampleRate is a lazy accessor for the synth's
+// internal sample rate, evaluated at call time so the Monitor never holds a
+// direct pointer into the synthesizer.
+func NewMonitor(cfg *config.Config, sampleRate func() int, telemetryRate int) *Monitor {
+	return &Monitor{config: cfg, sampleRate: sampleRate, telemetryRate: telemetryRate}
+}
+
+// SetOutputRate records the actual sink sample rate. No lock — matches the
+// original unsynchronised field write.
+func (m *Monitor) SetOutputRate(rate int) {
+	m.outputRate = rate
 }
 
 // bufferLatencyMs converts a buffered mono-sample count at the given sample rate
@@ -64,65 +95,64 @@ func driftMs(framesRead, baseFrames int64, seq, baseSeq uint32, outputRate, tele
 	return (telemetryElapsed - audioElapsed) * 1000
 }
 
-// trackSequenceJitter updates the smoothed telemetry-cadence jitter: the
+// TrackSequenceJitter updates the smoothed telemetry-cadence jitter: the
 // per-packet wall-clock interval's absolute deviation from the expected 60 fps
 // period. Called from updateState (main loop) only when the sequence advanced,
 // so a non-zero value flags telemetry-side stalls rather than audio drift.
-func (a *App) trackSequenceJitter() {
+func (m *Monitor) TrackSequenceJitter(delta uint32) {
 	now := time.Now()
-	delta := a.state.current.sequenceDelta
 
-	if !a.lastSeqWallClock.IsZero() && delta > 0 {
-		perPacket := now.Sub(a.lastSeqWallClock) / time.Duration(delta)
+	if !m.lastSeqWallClock.IsZero() && delta > 0 {
+		perPacket := now.Sub(m.lastSeqWallClock) / time.Duration(delta)
 
-		deviation := perPacket - tickerPeriod(telemetryFrameRate)
+		deviation := perPacket - time.Second/time.Duration(m.telemetryRate)
 		if deviation < 0 {
 			deviation = -deviation
 		}
 
 		deviationMs := float64(deviation.Microseconds()) / 1000
 
-		a.driftMu.Lock()
+		m.mu.Lock()
 
-		if a.seqJitterMs == 0 {
-			a.seqJitterMs = deviationMs
+		if m.seqJitterMs == 0 {
+			m.seqJitterMs = deviationMs
 		} else {
 			// Light EWMA to smooth single-packet scheduling noise.
-			a.seqJitterMs = 0.9*a.seqJitterMs + 0.1*deviationMs
+			m.seqJitterMs = 0.9*m.seqJitterMs + 0.1*deviationMs
 		}
 
-		a.driftMu.Unlock()
+		m.mu.Unlock()
 	}
 
-	a.lastSeqWallClock = now
+	m.lastSeqWallClock = now
 }
 
-// resetDriftBaseline clears the drift baseline so the next report re-establishes
+// ResetBaseline clears the drift baseline so the next report re-establishes
 // it. Call this whenever the device frame counter restarts (a new async ring),
 // e.g. on audio output start/restart.
-func (a *App) resetDriftBaseline() {
-	a.driftMu.Lock()
-	a.driftBaseSet = false
-	a.driftMu.Unlock()
+func (m *Monitor) ResetBaseline() {
+	m.mu.Lock()
+	m.driftBaseSet = false
+	m.mu.Unlock()
 }
 
-// buildAudioLatencyReport derives the latency/drift snapshot from an async-ring
-// health snapshot and the mixer channel diagnostics (both already gathered by
-// the caller). It lazily establishes the drift baseline and reads the smoothed
-// jitter under driftMu, so it is safe to call from the web-telemetry goroutine
-// as well as the main loop.
-func (a *App) buildAudioLatencyReport(health audio.HealthMetrics, diag synthesizer.MixerDiagnostics) audioLatencyReport {
-	internalRate := float64(a.synth.GetSampleRate())
+// BuildReport derives the latency/drift snapshot from an async-ring health
+// snapshot and the mixer channel diagnostics (both already gathered by the
+// caller). It lazily establishes the drift baseline and reads the smoothed
+// jitter under mu, so it is safe to call from the web-telemetry goroutine as
+// well as the main loop.
+func (m *Monitor) BuildReport(health audio.HealthMetrics, diag synthesizer.MixerDiagnostics, seq uint32) Report {
+	internalRate := float64(m.sampleRate())
 
 	// Prefer the rate the sink actually opened at; it can differ from the config
 	// when a device's native rate is used (Bluetooth, etc.). Fall back to config
 	// before the first audio start.
-	outputRate := float64(a.hapticOutputRate)
+	outputRate := float64(m.outputRate)
 	if outputRate <= 0 {
-		outputRate = float64(a.config.GetAudioHapticsSampleRate())
+		outputRate = float64(m.config.GetAudioHapticsSampleRate())
 	}
 
-	channels := a.config.GetAudioHapticsChannels()
+	channels := m.config.GetAudioHapticsChannels()
 
 	channelUsed := func(name string) int {
 		for i := range diag.Channels {
@@ -134,7 +164,7 @@ func (a *App) buildAudioLatencyReport(health audio.HealthMetrics, diag synthesiz
 		return 0
 	}
 
-	report := audioLatencyReport{
+	report := Report{
 		EngineLatencyMs:  bufferLatencyMs(channelUsed(synthesizer.ChannelEngine), internalRate),
 		ChassisLatencyMs: bufferLatencyMs(channelUsed(synthesizer.ChassisChannelName(0)), internalRate),
 		Underruns:        health.Underruns,
@@ -146,34 +176,32 @@ func (a *App) buildAudioLatencyReport(health audio.HealthMetrics, diag synthesiz
 		report.RingLatencyMs = bufferLatencyMs(health.RingUsed/channels, outputRate)
 	}
 
-	seq := a.state.current.sequenceNumber
+	m.mu.Lock()
+	report.SeqJitterMs = m.seqJitterMs
 
-	a.driftMu.Lock()
-	report.SeqJitterMs = a.seqJitterMs
-
-	if !a.driftBaseSet {
-		a.driftBaseFrames = health.FramesRead
-		a.driftBaseSeq = seq
-		a.driftBaseTime = time.Now()
-		a.driftBaseSet = true
+	if !m.driftBaseSet {
+		m.driftBaseFrames = health.FramesRead
+		m.driftBaseSeq = seq
+		m.driftBaseTime = time.Now()
+		m.driftBaseSet = true
 	} else {
 		report.DriftMs = driftMs(
-			health.FramesRead, a.driftBaseFrames,
-			seq, a.driftBaseSeq,
-			outputRate, float64(telemetryFrameRate),
+			health.FramesRead, m.driftBaseFrames,
+			seq, m.driftBaseSeq,
+			outputRate, float64(m.telemetryRate),
 		)
 
 		// Roll the baseline forward once the window elapses so DriftMs measures
 		// divergence over the recent window rather than integrating clock skew
 		// for the whole session.
-		if time.Since(a.driftBaseTime) >= driftWindow {
-			a.driftBaseFrames = health.FramesRead
-			a.driftBaseSeq = seq
-			a.driftBaseTime = time.Now()
+		if time.Since(m.driftBaseTime) >= driftWindow {
+			m.driftBaseFrames = health.FramesRead
+			m.driftBaseSeq = seq
+			m.driftBaseTime = time.Now()
 		}
 	}
 
-	a.driftMu.Unlock()
+	m.mu.Unlock()
 
 	return report
 }

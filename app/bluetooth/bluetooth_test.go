@@ -1,4 +1,4 @@
-package app //nolint:testpackage // white-box: exercises the unexported device picker
+package bluetooth //nolint:testpackage // white-box: exercises the unexported device picker
 
 import (
 	"testing"

@@ -1,4 +1,4 @@
-package app //nolint:testpackage // white-box testing
+package windsim
 
 import (
 	"context"
@@ -144,8 +144,8 @@ func (f *fakeFanClient) counts() (take, release int) {
 	return f.takeCount, f.releaseCount
 }
 
-// newTestApp builds the minimal App needed to exercise runFanControlDutyCycle.
-func newTestApp(t *testing.T, fake *fakeFanClient) (*App, context.CancelFunc) {
+// newTestController builds the minimal Controller needed to exercise runFanControlDutyCycle.
+func newTestController(t *testing.T, fake *fakeFanClient) (*Controller, context.CancelFunc) {
 	t.Helper()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -154,33 +154,32 @@ func newTestApp(t *testing.T, fake *fakeFanClient) (*App, context.CancelFunc) {
 	// so context.WithTimeout in the duty cycle is never instantly expired.
 	cfg := config.NewFromJSON([]byte(`{}`), zerolog.Nop())
 
-	testApp := &App{
-		ctx:            ctx,
-		config:         cfg,
-		log:            zerolog.Nop(),
-		i18n:           createTestI18n(),
-		fanControlChan: make(chan fanCommand, 1),
-		fanEventChan:   make(chan fancontroller.Event, 8),
-		fanController:  fake,
+	ctrl := &Controller{
+		ctx:         ctx,
+		config:      cfg,
+		log:         zerolog.Nop(),
+		controlChan: make(chan fanCommand, 1),
+		eventChan:   make(chan fancontroller.Event, 8),
+		client:      fake,
 	}
 
-	return testApp, cancel
+	return ctrl, cancel
 }
 
 func TestRunFanControlDutyCycleDrivesAndReleases(t *testing.T) {
 	t.Parallel()
 
 	fake := newFakeFanClient()
-	testApp, cancel := newTestApp(t, fake)
+	ctrl, cancel := newTestController(t, fake)
 
 	retCh := make(chan bool, 1)
 
 	go func() {
-		retCh <- testApp.runFanControlDutyCycle()
+		retCh <- ctrl.runFanControlDutyCycle()
 	}()
 
 	// A drive command takes control of the fan and writes the duty.
-	testApp.fanControlChan <- fanCommand{drive: true, duty: 42}
+	ctrl.controlChan <- fanCommand{drive: true, duty: 42}
 
 	require.Eventually(t, func() bool {
 		ds := fake.duties()
@@ -210,17 +209,17 @@ func TestRunFanControlDutyCycleReleasesOnIdleCommand(t *testing.T) {
 	t.Parallel()
 
 	fake := newFakeFanClient()
-	testApp, cancel := newTestApp(t, fake)
+	ctrl, cancel := newTestController(t, fake)
 
 	defer cancel()
 
 	retCh := make(chan bool, 1)
 
 	go func() {
-		retCh <- testApp.runFanControlDutyCycle()
+		retCh <- ctrl.runFanControlDutyCycle()
 	}()
 
-	testApp.fanControlChan <- fanCommand{drive: true, duty: 30}
+	ctrl.controlChan <- fanCommand{drive: true, duty: 30}
 
 	require.Eventually(t, func() bool {
 		take, _ := fake.counts()
@@ -229,7 +228,7 @@ func TestRunFanControlDutyCycleReleasesOnIdleCommand(t *testing.T) {
 	}, time.Second, 5*time.Millisecond, "TakeControl not recorded")
 
 	// An idle command (drive=false) hands control back to the device.
-	testApp.fanControlChan <- fanCommand{drive: false}
+	ctrl.controlChan <- fanCommand{drive: false}
 
 	require.Eventually(t, func() bool {
 		_, release := fake.counts()
@@ -245,15 +244,15 @@ func TestHandleFanEventButtonCyclesModeAndUpdatesDisplay(t *testing.T) {
 	t.Parallel()
 
 	fake := newFakeFanClient()
-	testApp, cancel := newTestApp(t, fake)
+	ctrl, cancel := newTestController(t, fake)
 
 	defer cancel()
 
 	state := &fanControlState{display: make(chan fanDisplayJob, 1)}
 
-	before := testApp.config.GetFanMode()
-	testApp.handleFanEvent(fancontroller.EventButton, state)
-	after := testApp.config.GetFanMode()
+	before := ctrl.config.GetFanMode()
+	ctrl.handleFanEvent(fancontroller.EventButton, state)
+	after := ctrl.config.GetFanMode()
 
 	require.NotEqual(t, before, after, "button press should cycle the fan mode")
 	require.Len(t, state.display, 1, "button press should queue a mode icon for upload")
@@ -265,14 +264,14 @@ func TestFanDisplayUploaderUploads(t *testing.T) {
 	t.Parallel()
 
 	fake := newFakeFanClient()
-	testApp, cancel := newTestApp(t, fake)
+	ctrl, cancel := newTestController(t, fake)
 
 	defer cancel()
 
 	ctx := t.Context()
 
 	jobs := make(chan fanDisplayJob, 1)
-	go testApp.runFanDisplayUploader(ctx, fake, jobs)
+	go ctrl.runFanDisplayUploader(ctx, fake, jobs)
 
 	jobs <- fanDisplayJob{name: "fan2", foreground: color.White}
 
@@ -292,14 +291,14 @@ func TestFanDisplayUploaderPreemptsInflight(t *testing.T) {
 	fake := newFakeFanClient()
 	fake.displayBlock = true
 
-	testApp, cancel := newTestApp(t, fake)
+	ctrl, cancel := newTestController(t, fake)
 
 	defer cancel()
 
 	ctx := t.Context()
 
 	jobs := make(chan fanDisplayJob, 1)
-	go testApp.runFanDisplayUploader(ctx, fake, jobs)
+	go ctrl.runFanDisplayUploader(ctx, fake, jobs)
 
 	jobs <- fanDisplayJob{name: "fan2", foreground: color.White}
 
@@ -324,14 +323,14 @@ func TestRunFanControlDutyCycleReturnsTrueOnDisconnect(t *testing.T) {
 	t.Parallel()
 
 	fake := newFakeFanClient()
-	testApp, cancel := newTestApp(t, fake)
+	ctrl, cancel := newTestController(t, fake)
 
 	defer cancel()
 
 	retCh := make(chan bool, 1)
 
 	go func() {
-		retCh <- testApp.runFanControlDutyCycle()
+		retCh <- ctrl.runFanControlDutyCycle()
 	}()
 
 	close(fake.disc)

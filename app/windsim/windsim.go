@@ -1,17 +1,31 @@
-package app
+// Package windsim implements the wind-simulator fan-control subsystem.
+// It maintains a BLE connection to the fan controller device and drives the
+// fan duty cycle in proportion to the vehicle's ground speed.
+package windsim
 
 import (
 	"context"
 	"image/color"
+	"sync"
 	"time"
 
+	"github.com/rs/zerolog"
+	"github.com/vwhitteron/simtezilo-dev/app/config"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/fancontroller"
 	"github.com/vwhitteron/simtezilo-dev/app/ui/gui"
 	"github.com/vwhitteron/simtezilo-dev/app/ui/icons"
 )
 
-// fanClient is the subset of *fancontroller.Client used by the app, extracted
-// so the control loop can be tested with a fake.
+// Telemetry is the subset of gt-telemetry the wind simulator reads.
+type Telemetry interface {
+	GroundSpeedKPH() float32
+	TelemetryStarted() bool
+	IsOnCircuit() bool
+	VehicleHasOpenCockpit() bool
+}
+
+// fanClient is the subset of *fancontroller.Client used by the controller,
+// extracted so the control loop can be tested with a fake.
 type fanClient interface {
 	Connect(ctx context.Context) error
 	Close() error
@@ -47,108 +61,149 @@ const (
 	fanDisplayUploadTimeout = 5 * time.Second
 )
 
-// initializeFanController sets up the fan controller channel and logs the configured mode.
+// Controller owns all wind-simulator state and the BLE fan-controller connection.
+type Controller struct {
+	config *config.Config
+	log    zerolog.Logger
+	ctx    context.Context //nolint:containedctx // Context for managing lifecycle
+	wg     *sync.WaitGroup
+
+	// Lazy host accessors (evaluated at call time, matching the original
+	// a.gtClient.Telemetry / a.telemetryIsActive() / a.state.isInPostRaceMenu reads).
+	telemetry       func() Telemetry
+	telemetryActive func() bool
+	inPostRaceMenu  func() bool
+
+	controlChan chan fanCommand          // was fanControlChan
+	eventChan   chan fancontroller.Event // was fanEventChan
+	client      fanClient                // was fanController
+}
+
+// NewController creates a Controller. telemetry, telemetryActive and inPostRaceMenu
+// are lazy accessors evaluated at call time so the Controller never holds a
+// direct pointer into the App struct.
+func NewController(
+	cfg *config.Config,
+	log zerolog.Logger,
+	ctx context.Context,
+	wg *sync.WaitGroup,
+	telemetry func() Telemetry,
+	telemetryActive func() bool,
+	inPostRaceMenu func() bool,
+) *Controller {
+	return &Controller{
+		config:          cfg,
+		log:             log,
+		ctx:             ctx,
+		wg:              wg,
+		telemetry:       telemetry,
+		telemetryActive: telemetryActive,
+		inPostRaceMenu:  inPostRaceMenu,
+	}
+}
+
+// Initialize sets up the fan controller channel and logs the configured mode.
 // The BLE goroutine is always started and waits for the mode to become active.
-func (a *App) initializeFanController() {
-	if !a.config.IsFanModeValid() {
-		a.log.Warn().
+func (c *Controller) Initialize() {
+	if !c.config.IsFanModeValid() {
+		c.log.Warn().
 			Str("component", "fan").
-			Str("configuredMode", a.config.GetFanConfiguredMode()).
+			Str("configuredMode", c.config.GetFanConfiguredMode()).
 			Str("fallbackMode", "manual").
 			Msg("Invalid fan mode configured, falling back to manual")
 	}
 
-	a.fanControlChan = make(chan fanCommand, 1)
-	a.fanEventChan = make(chan fancontroller.Event, 8)
+	c.controlChan = make(chan fanCommand, 1)
+	c.eventChan = make(chan fancontroller.Event, 8)
 
-	a.log.Info().
+	c.log.Info().
 		Str("component", "fan").
-		Str("mode", a.config.GetFanMode()).
-		Str("address", a.config.GetFanDeviceAddress()).
+		Str("mode", c.config.GetFanMode()).
+		Str("address", c.config.GetFanDeviceAddress()).
 		Msg("Initialized")
 }
 
-// startFanControllerTask starts the wind simulator background goroutine.
-func (a *App) startFanControllerTask() {
-	a.wg.Add(1)
+// StartTask starts the wind simulator background goroutine.
+func (c *Controller) StartTask() {
+	c.wg.Add(1)
 
 	go func() {
 		defer func() {
-			a.log.Debug().Msg("Fan control goroutine exiting")
-			a.wg.Done()
+			c.log.Debug().Msg("Fan control goroutine exiting")
+			c.wg.Done()
 		}()
 
-		a.runFanControlTask()
+		c.runFanControlTask()
 	}()
 }
 
-// closeFanController cleanly closes the wind simulator client connection.
-func (a *App) closeFanController() {
-	if a.fanController == nil {
+// Close cleanly closes the wind simulator client connection.
+func (c *Controller) Close() {
+	if c.client == nil {
 		return
 	}
 
-	a.log.Info().Msg("Closing fan controller client")
+	c.log.Info().Msg("Closing fan controller client")
 
-	err := a.fanController.Close()
+	err := c.client.Close()
 	if err != nil {
-		a.log.Error().
+		c.log.Error().
 			Err(err).
 			Str("component", "fan").
 			Str("result", "failure").
 			Msg("Close")
 	}
 
-	a.log.Info().Msg("Fan controller close phase complete")
+	c.log.Info().Msg("Fan controller close phase complete")
 }
 
 // runFanControlTask connects to the fan device and maintains the output duty cycle, reconnecting on errors.
 // When mode is "manual" it waits, polling periodically for the mode to change.
-func (a *App) runFanControlTask() {
+func (c *Controller) runFanControlTask() {
 	for {
 		select {
-		case <-a.ctx.Done():
+		case <-c.ctx.Done():
 			return
 		default:
 		}
 
-		if a.fanShouldIdle() {
-			if a.fanWait(fanModeCheckDelay) {
+		if c.fanShouldIdle() {
+			if c.fanWait(fanModeCheckDelay) {
 				return
 			}
 
 			continue
 		}
 
-		a.log.Info().Str("component", "fan").Msg("Scanning for device")
+		c.log.Info().Str("component", "fan").Msg("Scanning for device")
 
-		client := a.createFanControllerClient()
+		client := c.createFanControllerClient()
 
-		connectCtx, connectCancel := context.WithTimeout(a.ctx, fanConnectTimeout)
+		connectCtx, connectCancel := context.WithTimeout(c.ctx, fanConnectTimeout)
 		err := client.Connect(connectCtx)
 
 		connectCancel()
 
 		if err != nil {
-			a.log.Warn().
+			c.log.Warn().
 				Err(err).
 				Str("component", "fan").
 				Msg("Connect failed, retrying")
 
-			if a.fanWait(fanReconnectDelay) {
+			if c.fanWait(fanReconnectDelay) {
 				return
 			}
 
 			continue
 		}
 
-		a.fanController = client
+		c.client = client
 
-		a.log.Info().Str("component", "fan").Str("address", client.DeviceAddress()).Msg("Connected")
+		c.log.Info().Str("component", "fan").Str("address", client.DeviceAddress()).Msg("Connected")
 
-		reconnect := a.runFanControlDutyCycle()
+		reconnect := c.runFanControlDutyCycle()
 
-		a.fanController = nil
+		c.client = nil
 
 		_ = client.Close()
 
@@ -156,22 +211,22 @@ func (a *App) runFanControlTask() {
 			return
 		}
 
-		a.log.Info().Str("component", "fan").Msg("Connection lost, reconnecting")
+		c.log.Info().Str("component", "fan").Msg("Connection lost, reconnecting")
 
-		if a.fanWait(fanReconnectDelay) {
+		if c.fanWait(fanReconnectDelay) {
 			return
 		}
 	}
 }
 
-// fanWait sleeps for delay or until the app context is cancelled. It returns true
+// fanWait sleeps for delay or until the controller context is cancelled. It returns true
 // if the context was cancelled (the caller should stop), false if the delay
 // elapsed normally.
-func (a *App) fanWait(delay time.Duration) bool {
+func (c *Controller) fanWait(delay time.Duration) bool {
 	select {
 	case <-time.After(delay):
 		return false
-	case <-a.ctx.Done():
+	case <-c.ctx.Done():
 		return true
 	}
 }
@@ -181,25 +236,25 @@ func (a *App) fanWait(delay time.Duration) bool {
 // address is set, regardless of mode: the device's button (mode cycling) and
 // screen (mode display) need a live link even in manual mode, when the app never
 // drives the fan itself.
-func (a *App) fanShouldIdle() bool {
-	return !a.config.GetExperimentalFeaturesEnabled() ||
-		!a.config.FanEnabled() ||
-		a.config.GetFanDeviceAddress() == ""
+func (c *Controller) fanShouldIdle() bool {
+	return !c.config.GetExperimentalFeaturesEnabled() ||
+		!c.config.FanEnabled() ||
+		c.config.GetFanDeviceAddress() == ""
 }
 
 // createFanControllerClient builds a new fancontroller.Client from the current config.
-func (a *App) createFanControllerClient() *fancontroller.Client {
-	cmdTimeout := time.Duration(a.config.GetFanCommandTimeoutMs()) * time.Millisecond
+func (c *Controller) createFanControllerClient() *fancontroller.Client {
+	cmdTimeout := time.Duration(c.config.GetFanCommandTimeoutMs()) * time.Millisecond
 
 	return fancontroller.New(fancontroller.Options{
-		Address:        a.config.GetFanDeviceAddress(),
+		Address:        c.config.GetFanDeviceAddress(),
 		CommandTimeout: cmdTimeout,
 		// OnEvent runs on the BLE notification goroutine and must not block, so it
 		// hands the event to the duty-cycle loop via a buffered channel. A full
 		// channel drops the event rather than stalling the BLE stack.
 		OnEvent: func(e fancontroller.Event) {
 			select {
-			case a.fanEventChan <- e:
+			case c.eventChan <- e:
 			default:
 			}
 		},
@@ -231,8 +286,8 @@ type fanDisplayJob struct {
 // restores the user's manual (encoder) setpoint when the app is not driving. It
 // also reacts to Fan Events: a front-button press cycles the fan mode (reflected
 // back to the device screen). Returns true to reconnect, false to shut down.
-func (a *App) runFanControlDutyCycle() bool {
-	client := a.fanController
+func (c *Controller) runFanControlDutyCycle() bool {
+	client := c.client
 
 	disconnected := client.Disconnected()
 
@@ -241,7 +296,7 @@ func (a *App) runFanControlDutyCycle() bool {
 	// control loop only enqueues the desired icon (instant) and a newer icon
 	// preempts an in-flight upload. This keeps mode changes and duty writes
 	// responsive while an icon is still streaming.
-	uploadCtx, stopUploader := context.WithCancel(a.ctx)
+	uploadCtx, stopUploader := context.WithCancel(c.ctx)
 	state := fanControlState{display: make(chan fanDisplayJob, 1)}
 
 	uploaderDone := make(chan struct{})
@@ -249,7 +304,7 @@ func (a *App) runFanControlDutyCycle() bool {
 	go func() {
 		defer close(uploaderDone)
 
-		a.runFanDisplayUploader(uploadCtx, client, state.display)
+		c.runFanDisplayUploader(uploadCtx, client, state.display)
 	}()
 
 	defer func() {
@@ -260,7 +315,7 @@ func (a *App) runFanControlDutyCycle() bool {
 	// Show the current mode on the device screen as soon as the link is up
 	// (covers both initial connect and every reconnect). A fresh link never holds
 	// control, so the icon starts in its manual-control (grey) colour.
-	a.requestFanModeDisplay(&state, false)
+	c.requestFanModeDisplay(&state, false)
 
 	// Periodically re-evaluate config so enable/disable and device-selection
 	// changes take effect live, without waiting for the BLE link to drop.
@@ -269,34 +324,34 @@ func (a *App) runFanControlDutyCycle() bool {
 
 	for {
 		select {
-		case <-a.ctx.Done():
-			a.releaseFanControl(client, &state)
+		case <-c.ctx.Done():
+			c.releaseFanControl(client, &state)
 
 			return false
 
 		case <-disconnected:
-			a.log.Warn().
+			c.log.Warn().
 				Str("component", "fan").
 				Msg("BLE device disconnected")
 
 			return true
 
 		case <-configCheck.C:
-			if a.fanConfigChanged(client) {
-				a.log.Info().Str("component", "fan").Msg("Config changed, reconfiguring")
-				a.stopFanForReconfigure(client, &state)
+			if c.fanConfigChanged(client) {
+				c.log.Info().Str("component", "fan").Msg("Config changed, reconfiguring")
+				c.stopFanForReconfigure(client, &state)
 
 				return true
 			}
 
-		case event := <-a.fanEventChan:
-			a.handleFanEvent(event, &state)
+		case event := <-c.eventChan:
+			c.handleFanEvent(event, &state)
 
-		case cmd := <-a.fanControlChan:
-			if !a.applyFanCommand(client, cmd, &state) {
+		case cmd := <-c.controlChan:
+			if !c.applyFanCommand(client, cmd, &state) {
 				// Reconnect on a genuine command error; return false (shut down) if
 				// the context was cancelled out from under the command.
-				return a.ctx.Err() == nil
+				return c.ctx.Err() == nil
 			}
 		}
 	}
@@ -306,39 +361,39 @@ func (a *App) runFanControlDutyCycle() bool {
 // drive, it takes control on the first drive and writes the duty; when it should
 // not drive, it releases any held control. It returns false on a BLE command
 // error so the caller can reconnect.
-func (a *App) applyFanCommand(client fanClient, cmd fanCommand, state *fanControlState) bool {
+func (c *Controller) applyFanCommand(client fanClient, cmd fanCommand, state *fanControlState) bool {
 	if !cmd.drive {
 		// The app is idle this tick: hand control back to the device, which
 		// restores the user's encoder setpoint. If control was actually released,
 		// recolour the mode icon back to its manual-control (grey) colour.
-		if a.releaseFanControl(client, state) {
-			a.requestFanModeDisplay(state, false)
+		if c.releaseFanControl(client, state) {
+			c.requestFanModeDisplay(state, false)
 		}
 
 		return true
 	}
 
-	cmdTimeout := time.Duration(a.config.GetFanCommandTimeoutMs()) * time.Millisecond
+	cmdTimeout := time.Duration(c.config.GetFanCommandTimeoutMs()) * time.Millisecond
 
-	cmdCtx, cancel := context.WithTimeout(a.ctx, cmdTimeout)
+	cmdCtx, cancel := context.WithTimeout(c.ctx, cmdTimeout)
 	defer cancel()
 
 	if !state.controlHeld {
 		err := client.TakeControl(cmdCtx)
 		if err != nil {
-			return a.logFanCommandErr(err)
+			return c.logFanCommandErr(err)
 		}
 
 		state.controlHeld = true
 
 		// The app now drives the fan; recolour the mode icon to its host-control
 		// colour (indigo for "open", deep purple for "all").
-		a.requestFanModeDisplay(state, true)
+		c.requestFanModeDisplay(state, true)
 	}
 
 	_, err := client.SetFanDuty(cmdCtx, cmd.duty)
 	if err != nil {
-		return a.logFanCommandErr(err)
+		return c.logFanCommandErr(err)
 	}
 
 	return true
@@ -346,9 +401,9 @@ func (a *App) applyFanCommand(client fanClient, cmd fanCommand, state *fanContro
 
 // logFanCommandErr logs a BLE command failure (unless the context was cancelled
 // during shutdown) and always returns false so callers can signal a reconnect.
-func (a *App) logFanCommandErr(err error) bool {
-	if a.ctx.Err() == nil {
-		a.log.Warn().
+func (c *Controller) logFanCommandErr(err error) bool {
+	if c.ctx.Err() == nil {
+		c.log.Warn().
 			Err(err).
 			Str("component", "fan").
 			Msg("Command failed")
@@ -357,11 +412,11 @@ func (a *App) logFanCommandErr(err error) bool {
 	return false
 }
 
-// releaseFanControl hands control back to the device if the app currently holds
+// releaseFanControl hands control back to the device if the controller currently holds
 // it, so the device restores the user's manual setpoint. It returns true if it
 // actually released control (so the caller can refresh the screen) and false
-// when the app was not holding control.
-func (a *App) releaseFanControl(client fanClient, state *fanControlState) bool {
+// when the controller was not holding control.
+func (c *Controller) releaseFanControl(client fanClient, state *fanControlState) bool {
 	if !state.controlHeld {
 		return false
 	}
@@ -371,7 +426,7 @@ func (a *App) releaseFanControl(client fanClient, state *fanControlState) bool {
 
 	err := client.ReleaseControl(ctx)
 	if err != nil {
-		a.log.Debug().
+		c.log.Debug().
 			Err(err).
 			Str("component", "fan").
 			Msg("release control failed")
@@ -383,14 +438,14 @@ func (a *App) releaseFanControl(client fanClient, state *fanControlState) bool {
 }
 
 // handleFanEvent reacts to a Fan Event notification from the device.
-func (a *App) handleFanEvent(event fancontroller.Event, state *fanControlState) {
+func (c *Controller) handleFanEvent(event fancontroller.Event, state *fanControlState) {
 	switch event {
 	case fancontroller.EventButton:
 		// The device's front button cycles the fan mode; reflect the new mode back
 		// to its screen, keeping the current control colour.
-		mode := a.config.CycleFanMode(true)
-		a.log.Info().Str("component", "fan").Str("mode", mode).Msg("Mode cycled by device button")
-		a.requestFanModeDisplay(state, state.controlHeld)
+		mode := c.config.CycleFanMode(true)
+		c.log.Info().Str("component", "fan").Str("mode", mode).Msg("Mode cycled by device button")
+		c.requestFanModeDisplay(state, state.controlHeld)
 
 	case fancontroller.EventImageOK:
 		// A mode icon transfer completed and rendered; nothing to do.
@@ -398,7 +453,7 @@ func (a *App) handleFanEvent(event fancontroller.Event, state *fanControlState) 
 	case fancontroller.EventImageAbort:
 		// The device rejected the mode icon transfer. The icon is cosmetic and the
 		// next mode change re-sends it, so just log it.
-		a.log.Warn().Str("component", "fan").Msg("Display image transfer aborted by device")
+		c.log.Warn().Str("component", "fan").Msg("Display image transfer aborted by device")
 	}
 }
 
@@ -407,8 +462,8 @@ func (a *App) handleFanEvent(event fancontroller.Event, state *fanControlState) 
 // mode's active colour when the app drives the fan). It never blocks the control
 // loop: the latest icon wins, replacing any still-queued job, and an in-flight
 // upload is preempted by the uploader when it sees the new job.
-func (a *App) requestFanModeDisplay(state *fanControlState, hostControl bool) {
-	mode := a.config.GetFanMode()
+func (c *Controller) requestFanModeDisplay(state *fanControlState, hostControl bool) {
+	mode := c.config.GetFanMode()
 	job := fanDisplayJob{
 		name:       fanModeIcon(mode),
 		foreground: fanModeIconColor(mode, hostControl),
@@ -432,13 +487,13 @@ func (a *App) requestFanModeDisplay(state *fanControlState, hostControl bool) {
 
 // runFanDisplayUploader serialises Display Image uploads for one connection,
 // uploading queued jobs one at a time until ctx is cancelled.
-func (a *App) runFanDisplayUploader(ctx context.Context, client fanClient, jobs <-chan fanDisplayJob) {
+func (c *Controller) runFanDisplayUploader(ctx context.Context, client fanClient, jobs <-chan fanDisplayJob) {
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case job := <-jobs:
-			a.uploadFanDisplay(ctx, client, job, jobs)
+			c.uploadFanDisplay(ctx, client, job, jobs)
 		}
 	}
 }
@@ -446,7 +501,7 @@ func (a *App) runFanDisplayUploader(ctx context.Context, client fanClient, jobs 
 // uploadFanDisplay uploads job, restarting with a newer job if one is queued
 // mid-transfer. Preemption cancels the in-flight upload before COMMIT, so the
 // device discards the partial and only ever renders a complete icon.
-func (a *App) uploadFanDisplay(ctx context.Context, client fanClient, job fanDisplayJob, jobs <-chan fanDisplayJob) {
+func (c *Controller) uploadFanDisplay(ctx context.Context, client fanClient, job fanDisplayJob, jobs <-chan fanDisplayJob) {
 	for {
 		upCtx, cancel := context.WithTimeout(ctx, fanDisplayUploadTimeout)
 		done := make(chan struct{})
@@ -454,7 +509,7 @@ func (a *App) uploadFanDisplay(ctx context.Context, client fanClient, job fanDis
 		go func() {
 			defer close(done)
 
-			a.sendFanDisplayJob(upCtx, client, job)
+			c.sendFanDisplayJob(upCtx, client, job)
 		}()
 
 		select {
@@ -481,10 +536,10 @@ func (a *App) uploadFanDisplay(ctx context.Context, client fanClient, job fanDis
 
 // sendFanDisplayJob renders job's icon and streams it to the device screen,
 // honouring ctx so a preempted or shutting-down upload stops quietly.
-func (a *App) sendFanDisplayJob(ctx context.Context, client fanClient, job fanDisplayJob) {
+func (c *Controller) sendFanDisplayJob(ctx context.Context, client fanClient, job fanDisplayJob) {
 	icon, err := fanModeIconImage(job.name, job.foreground)
 	if err != nil {
-		a.log.Warn().
+		c.log.Warn().
 			Err(err).
 			Str("component", "fan").
 			Msg("render fan mode icon failed")
@@ -500,7 +555,7 @@ func (a *App) sendFanDisplayJob(ctx context.Context, client fanClient, job fanDi
 			return // preempted or shutting down: not a real failure
 		}
 
-		a.log.Warn().
+		c.log.Warn().
 			Err(err).
 			Str("component", "fan").
 			Msg("set display image failed")
@@ -508,7 +563,7 @@ func (a *App) sendFanDisplayJob(ctx context.Context, client fanClient, job fanDi
 		return
 	}
 
-	a.log.Info().
+	c.log.Info().
 		Str("component", "fan").
 		Str("icon", job.name).
 		Int("bytes", len(icon.pixels)).
@@ -563,48 +618,62 @@ func fanModeIconColor(mode string, hostControl bool) color.Color {
 	}
 }
 
+// fanModeIcon maps a fan mode to the SVG icon name shown on the device screen:
+// "manual" → a fan symbol, "open" → the wind glyph with auto badge, "all" →
+// the wind glyph with an infinity badge.
+func fanModeIcon(mode string) string {
+	switch mode {
+	case "open":
+		return "wind-auto"
+	case "all":
+		return "wind-all"
+	default:
+		return "fan2"
+	}
+}
+
 // fanConfigChanged reports whether the live config no longer matches the
 // connected client: experimental features were turned off, the fan was
 // disabled, or a different device was selected. In any of these cases the
 // current connection must be torn down so the outer loop reconciles to the new
 // desired state (idle when disabled, reconnect when the address changed).
-func (a *App) fanConfigChanged(client fanClient) bool {
-	if !a.config.GetExperimentalFeaturesEnabled() || !a.config.FanEnabled() {
+func (c *Controller) fanConfigChanged(client fanClient) bool {
+	if !c.config.GetExperimentalFeaturesEnabled() || !c.config.FanEnabled() {
 		return true
 	}
 
-	return a.config.GetFanDeviceAddress() != client.DeviceAddress()
+	return c.config.GetFanDeviceAddress() != client.DeviceAddress()
 }
 
 // stopFanForReconfigure hands control back to the device before the connection is
 // closed for a live config change, so a disabled or reselected fan reverts to the
 // user's manual setpoint immediately rather than coasting at the app's last duty.
-func (a *App) stopFanForReconfigure(client fanClient, state *fanControlState) {
-	a.releaseFanControl(client, state)
+func (c *Controller) stopFanForReconfigure(client fanClient, state *fanControlState) {
+	c.releaseFanControl(client, state)
 }
 
-// handleFanControlTick is called by mainLoop at the wind sim frame rate. When
+// HandleControlTick is called by mainLoop at the wind sim frame rate. When
 // wind simulation is active it sends the speed-based duty for the app to drive;
 // otherwise it signals "not driving" so the duty-cycle loop hands control back to
 // the device, whose rotary encoder then controls the fan locally.
-func (a *App) handleFanControlTick() {
-	if a.fanControlChan == nil {
+func (c *Controller) HandleControlTick() {
+	if c.controlChan == nil {
 		return
 	}
 
 	// The fan/wind simulator is gated behind experimental features.
-	if !a.config.GetExperimentalFeaturesEnabled() {
+	if !c.config.GetExperimentalFeaturesEnabled() {
 		return
 	}
 
 	cmd := fanCommand{drive: false}
 
-	if a.shouldUpdateFanSpeed() {
-		cmd = fanCommand{drive: true, duty: a.calculateFanDutyCycle()}
+	if c.shouldUpdateFanSpeed() {
+		cmd = fanCommand{drive: true, duty: c.calculateFanDutyCycle()}
 	}
 
 	select {
-	case a.fanControlChan <- cmd:
+	case c.controlChan <- cmd:
 	default:
 	}
 }
@@ -613,13 +682,13 @@ func (a *App) handleFanControlTick() {
 // Duty scales linearly from 0% at 0 km/h to 100% at the configured max speed.
 // Conditions mirror haptic control: wind is stopped when paused, during replays
 // (unless enableReplay is set), or in the post-race menu.
-func (a *App) calculateFanDutyCycle() int {
-	maxKPH := float32(a.config.GetFanMaxSpeedKPH())
+func (c *Controller) calculateFanDutyCycle() int {
+	maxKPH := float32(c.config.GetFanMaxSpeedKPH())
 	if maxKPH <= 0 {
 		maxKPH = fanMaxSpeedKPH
 	}
 
-	speedKPH := a.gtClient.Telemetry.GroundSpeedKPH()
+	speedKPH := c.telemetry().GroundSpeedKPH()
 	duty := int(speedKPH / maxKPH * 100)
 
 	switch {
@@ -632,32 +701,32 @@ func (a *App) calculateFanDutyCycle() int {
 	}
 }
 
-func (a *App) shouldUpdateFanSpeed() bool {
-	if !a.gtClient.Telemetry.TelemetryStarted() {
+func (c *Controller) shouldUpdateFanSpeed() bool {
+	if !c.telemetry().TelemetryStarted() {
 		return false
 	}
 
-	if !a.gtClient.Telemetry.IsOnCircuit() {
+	if !c.telemetry().IsOnCircuit() {
 		return false
 	}
 
-	if !a.telemetryIsActive() {
+	if !c.telemetryActive() {
 		return false
 	}
 
-	if a.state.isInPostRaceMenu {
+	if c.inPostRaceMenu() {
 		return false
 	}
 
-	return a.shouldSimulateWindForCurrentVehicle()
+	return c.shouldSimulateWindForCurrentVehicle()
 }
 
-func (a *App) shouldSimulateWindForCurrentVehicle() bool {
-	switch a.config.GetFanMode() {
+func (c *Controller) shouldSimulateWindForCurrentVehicle() bool {
+	switch c.config.GetFanMode() {
 	case "all":
 		return true
 	case "open":
-		return a.gtClient.Telemetry.VehicleHasOpenCockpit()
+		return c.telemetry().VehicleHasOpenCockpit()
 	default:
 		return false
 	}

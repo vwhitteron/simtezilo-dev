@@ -10,12 +10,13 @@ import (
 	"path/filepath"
 	"strconv"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/vwhitteron/simtezilo-dev/app/audio"
+	"github.com/vwhitteron/simtezilo-dev/app/audiomon"
+	"github.com/vwhitteron/simtezilo-dev/app/bluetooth"
 	"github.com/vwhitteron/simtezilo-dev/app/cache"
 	"github.com/vwhitteron/simtezilo-dev/app/calibrator"
 	"github.com/vwhitteron/simtezilo-dev/app/circuit"
@@ -26,7 +27,6 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/hardware"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/console"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/display"
-	"github.com/vwhitteron/simtezilo-dev/app/hardware/fancontroller"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/pirateaudio"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/spotpear"
 	"github.com/vwhitteron/simtezilo-dev/app/hardware/virtual"
@@ -48,6 +48,7 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/ui/webui"
 	"github.com/vwhitteron/simtezilo-dev/app/updater"
 	"github.com/vwhitteron/simtezilo-dev/app/vehicle"
+	"github.com/vwhitteron/simtezilo-dev/app/windsim"
 	gttelemetry "github.com/zetetos/gt-telemetry/v2"
 	gtmodels "github.com/zetetos/gt-telemetry/v2/pkg/models"
 )
@@ -76,24 +77,7 @@ type App struct {
 	cache cache.Cache // Cache manager
 
 	setupMode *setupmode.SetupMode // Setup mode manager
-
-	// btReconcileOnce guards starting the Bluetooth audio bridge reconciler
-	// exactly once for the app lifetime (runAppMode may be re-entered).
-	btReconcileOnce sync.Once
-	// pitRadioLoopbackActive is true while the pit-radio sink is open on the
-	// snd-aloop Loopback device — the master the Bluetooth bridge slaves to. The
-	// bridge is only run while this holds.
-	pitRadioLoopbackActive atomic.Bool
-	// btMu guards routedBTMAC and desiredBTMAC during bridge reconciliation.
-	btMu sync.Mutex
-	// routedBTMAC is the address of the device the audio bridge is currently
-	// routed to, "" when no bridge is up.
-	routedBTMAC string
-	// desiredBTMAC is the address of the paired Bluetooth speaker the user has
-	// selected as the pit-radio output (resolved from the saved device name),
-	// "" when the current selection is not a paired Bluetooth audio device. The
-	// reconciler connects and routes to this specific device.
-	desiredBTMAC string
+	bluetooth *bluetooth.Manager   // Bluetooth device and audio bridge manager
 
 	ui *ui.UserInterface // User interface manager
 
@@ -112,17 +96,7 @@ type App struct {
 	audioMu        sync.Mutex         // Guards audio output state during start/restart
 	audioRestartMu sync.Mutex         // Serializes full stop+start restarts (e.g. device change)
 
-	// Haptic latency/drift monitor state. driftMu guards the fields shared
-	// between the main loop (writer) and the web-telemetry goroutine (reader);
-	// lastSeqWallClock is touched by the main loop only.
-	driftMu          sync.Mutex
-	driftBaseFrames  int64     // device frames pulled at the drift baseline
-	driftBaseSeq     uint32    // telemetry sequence at the drift baseline
-	driftBaseTime    time.Time // wall-clock time the drift baseline was set
-	driftBaseSet     bool      // whether the baseline has been established
-	seqJitterMs      float64   // smoothed telemetry-cadence jitter (ms, abs deviation from 60 fps)
-	lastSeqWallClock time.Time // wall-clock time the sequence last advanced
-	hapticOutputRate int       // actual sink sample rate (may differ from config on native-rate devices)
+	audioMon *audiomon.Monitor // haptic audio latency/drift monitor
 
 	odometer      *odometer.Odometer           // Odometer for distance tracking
 	fuelRange     fuelrange.Estimator          // Fuel range estimator
@@ -168,16 +142,10 @@ type App struct {
 	jerkPeakHoldTime     time.Time     //nolint:unused // peak-hold for planned inverse-jerk detection; deliberately kept
 	jerkPeakHoldDuration time.Duration // Duration to hold peak based on pulse length
 
-	fanController  fanClient                // Wind simulator BLE client
-	fanControlChan chan fanCommand          // Channel for sending wind duty from mainLoop to the BLE goroutine
-	fanEventChan   chan fancontroller.Event // Channel for Fan Event notifications from the device (button, control released)
+	windsim *windsim.Controller // Wind simulator fan-control subsystem
 
 	// Telemetry source management
 	customTelemetrySource string // Stores custom telemetry source when user switches to auto/demo
-
-	// Bluetooth (LCD menu) state
-	btDevices       []platform.CmdBTDevice // Cached paired-device list for the LCD selector
-	btSelectedIndex int                    // Index of the currently selected paired device
 
 	// TODO: fix menu nav and remove this
 	activeBuildInfoItem int // Active build info item index
@@ -248,6 +216,7 @@ func New(opts Options) (*App, error) {
 		Logger:       &newApp.log,
 		Display:      newApp.getDisplayLCD(),
 	})
+	newApp.bluetooth = bluetooth.NewManager(newApp.setupMode, newApp.log, &newApp.wg, newApp.ctx)
 
 	err = newApp.initializeUI(opts, hidEvents)
 	if err != nil {
@@ -260,7 +229,18 @@ func New(opts Options) (*App, error) {
 	}
 
 	newApp.initializePitRadio(opts)
-	newApp.initializeFanController()
+	newApp.windsim = windsim.NewController(
+		newApp.config, newApp.log, newApp.ctx, &newApp.wg,
+		func() windsim.Telemetry { return newApp.gtClient.Telemetry },
+		newApp.telemetryIsActive,
+		func() bool { return newApp.state.isInPostRaceMenu },
+	)
+	newApp.windsim.Initialize()
+	newApp.audioMon = audiomon.NewMonitor(
+		newApp.config,
+		func() int { return newApp.synth.GetSampleRate() },
+		telemetryFrameRate,
+	)
 
 	newApp.log.Debug().
 		Str("component", "app").
@@ -319,7 +299,7 @@ func (a *App) Close() {
 		a.log.Debug().Msg("WebUI closed")
 	}
 
-	a.closeFanController()
+	a.windsim.Close()
 
 	// Stop HTTP server to prevent new requests
 	a.log.Debug().Msg("Stopping HTTP server")
@@ -485,8 +465,8 @@ func (a *App) runAppMode() RunResult {
 
 	// Ensure connected Bluetooth speakers have an audio bridge even when they
 	// connected outside the app (e.g. BlueZ auto-reconnect at boot).
-	if a.bluetoothAvailable() {
-		a.btReconcileOnce.Do(a.startBluetoothAudioReconciler)
+	if a.bluetooth.Available() {
+		a.bluetooth.StartReconciler()
 	}
 
 	a.run()
@@ -753,7 +733,7 @@ func (a *App) initializeUI(opts Options, hidEvents chan ui.HIDInputEvent) error 
 		SettingsCallback:    a.settingAction,
 		DevToolsEnabled:     a.config.GetDevToolsEnabled,
 		ExperimentalEnabled: a.config.GetExperimentalFeaturesEnabled,
-		BluetoothAvailable:  a.bluetoothAvailable,
+		BluetoothAvailable:  a.bluetooth.Available,
 		ExitCodeChan:        a.exitCodeChan,
 		HapticsChannels:     a.config.GetAudioHapticsChannels(),
 	})
@@ -1058,7 +1038,7 @@ func (a *App) initialiseLocalPitRadioOutput() bool {
 		Logger:       a.log,
 		// Drive the Bluetooth audio bridge from the sink lifecycle: the bridge can
 		// only run while this sink (its loopback master) is open.
-		OnSinkActive: a.onPitRadioSinkActive,
+		OnSinkActive: a.bluetooth.OnPitRadioSinkActive,
 	})
 	if err != nil {
 		_ = backend.Close()
@@ -1368,11 +1348,11 @@ func (a *App) startAudioOutput() {
 
 	a.hapticSink = sink
 	a.hapticSource = async
-	a.hapticOutputRate = outputRate
+	a.audioMon.SetOutputRate(outputRate)
 
 	// The new ring's frame counter starts at zero, so re-establish the drift
 	// baseline against it on the next monitor sample.
-	a.resetDriftBaseline()
+	a.audioMon.ResetBaseline()
 
 	a.log.Info().
 		Str("action", "start").
@@ -1547,7 +1527,7 @@ func (a *App) mainLoop() { //nolint:cyclop // compact and simple enough
 		case <-tickerRaceData.C:
 			a.handleRaceDataTick()
 		case <-tickerFanControl.C:
-			a.handleFanControlTick()
+			a.windsim.HandleControlTick()
 		case <-tickerDebug.C:
 			a.handleDebugTick()
 		}
@@ -1842,7 +1822,7 @@ func (a *App) handleDebugTick() {
 		Msg("debug tyre temp")
 
 	if a.hapticSource != nil {
-		latency := a.buildAudioLatencyReport(a.hapticSource.Health(), a.synth.Diagnostics())
+		latency := a.audioMon.BuildReport(a.hapticSource.Health(), a.synth.Diagnostics(), a.state.current.sequenceNumber)
 		a.log.Debug().
 			Float64("engine_lat_ms", latency.EngineLatencyMs).
 			Float64("chassis_lat_ms", latency.ChassisLatencyMs).
