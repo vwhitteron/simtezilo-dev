@@ -475,6 +475,10 @@ func (a *App) captureThroughSink(next pullFunc, opts SinkCaptureOptions) (*SinkC
 	outputRate := a.config.GetAudioHapticsSampleRate()
 	if opts.OutputRate > 0 {
 		outputRate = opts.OutputRate
+	} else if dev, ok := audio.DefaultOutputDevice(backend); ok && dev.DefaultSampleRate > 0 {
+		// The sink opens the system default device (no DeviceID); adopt its native
+		// rate so the OS does not insert its own resampling layer.
+		outputRate = dev.DefaultSampleRate
 	}
 
 	latencyMs := opts.LatencyMs

@@ -1288,16 +1288,22 @@ func (a *App) startAudioOutput() {
 	deviceID := a.config.GetAudioHapticsDevice()
 	if devFound {
 		deviceID = dev.ID
+	} else if deviceID == "" {
+		// No device pinned: OpenSink will open the system default device, so adopt
+		// that device's native rate below. deviceID stays empty.
+		dev, devFound = audio.DefaultOutputDevice(backend)
+	}
 
-		if dev.DefaultSampleRate > 0 && dev.DefaultSampleRate != outputRate {
-			a.log.Info().
-				Int("configured", outputRate).
-				Int("device", dev.DefaultSampleRate).
-				Str("deviceName", dev.Name).
-				Msg("using device native sample rate to avoid OS resampling")
+	// Prefer the resolved device's native rate over the configured rate to keep
+	// the OS from inserting its own SRC layer (see comment above).
+	if devFound && dev.DefaultSampleRate > 0 && dev.DefaultSampleRate != outputRate {
+		a.log.Info().
+			Int("configured", outputRate).
+			Int("device", dev.DefaultSampleRate).
+			Str("deviceName", dev.Name).
+			Msg("using device native sample rate to avoid OS resampling")
 
-			outputRate = dev.DefaultSampleRate
-		}
+		outputRate = dev.DefaultSampleRate
 	}
 
 	cfg := audio.SinkConfig{

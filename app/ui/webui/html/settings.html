@@ -1908,11 +1908,15 @@
                                 </div>
                                 <div class="col-md-4 col-lg-3">
                                     <label for="audio-haptics-samplerate" class="form-label">Sample Rate</label>
-                                    <div class="input-with-suffix">
-                                        <input type="number" id="audio-haptics-samplerate" class="form-control text-center"
-                                            data-config="haptics.output.sampleRate" min="8000" step="4000">
-                                        <span class="input-suffix">Hz</span>
-                                    </div>
+                                    <select id="audio-haptics-samplerate" class="form-select text-center"
+                                        data-config="haptics.output.sampleRate" data-type="number">
+                                        <option value="8000">8 kHz</option>
+                                        <option value="16000">16 kHz</option>
+                                        <option value="22050">22.05 kHz</option>
+                                        <option value="32000">32 kHz</option>
+                                        <option value="44100">44.1 kHz</option>
+                                        <option value="48000">48 kHz</option>
+                                    </select>
                                 </div>
                                 <div class="col-md-4 col-lg-3">
                                     <label for="audio-haptics-latency" class="form-label">Latency</label>

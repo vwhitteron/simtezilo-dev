@@ -95,6 +95,24 @@ func ResolveOutputDevice(b Backend, name, savedID string) string {
 	}
 }
 
+// DefaultOutputDevice returns the backend's system default output device so
+// callers can inspect its DefaultSampleRate. Returns the zero Device and false
+// when the backend reports no default or the device list cannot be read.
+func DefaultOutputDevice(b Backend) (Device, bool) {
+	devices, err := b.ListDevices()
+	if err != nil {
+		return Device{}, false
+	}
+
+	for _, d := range devices {
+		if d.IsDefault {
+			return d, true
+		}
+	}
+
+	return Device{}, false
+}
+
 // FindOutputDevice resolves the same selection as ResolveOutputDevice but
 // returns the matching Device so callers can inspect its DefaultSampleRate.
 // Returns the zero Device and false when no device matches or the device list
