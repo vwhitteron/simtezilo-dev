@@ -1,6 +1,7 @@
 package app
 
 import (
+	"hash/crc32"
 	"image"
 
 	"github.com/vwhitteron/simtezilo-dev/app/hardware"
@@ -41,10 +42,23 @@ func (a *App) wrapDisplayFrameTap(d hardware.Display) hardware.Display {
 // are rendered by a single write at a moment when the live-view stream may have
 // the feed saturated, and once in the menu no further frames are produced. The
 // feed therefore keeps only the latest frame (older pending frames are discarded),
-// guaranteeing the final rendered screen always reaches the browser. De-duplication
-// of identical frames happens in the web UI broadcaster.
+// guaranteeing the final rendered screen always reaches the browser. Frames
+// identical to the last one forwarded are deduplicated here via a cheap CRC32
+// hash, before the (comparatively expensive) clone and channel send, so a static
+// screen doesn't repeatedly allocate and enqueue copies of the same canvas. The
+// web UI broadcaster performs its own hash check as a second guard, e.g. for the
+// replay-to-new-client path.
 func (a *App) captureScreenFrame(canvas *image.RGBA) {
 	if a.screenFrameFeed == nil {
+		return
+	}
+
+	// Skip the frame entirely if it's identical to the last one forwarded. The hash
+	// is stored as sum+1 so the zero value of the atomic (before any frame has been
+	// forwarded) never matches a real checksum, which would otherwise wrongly skip
+	// the first frame if its CRC32 happened to be 0 (e.g. an all-zero/black canvas).
+	sum := crc32.ChecksumIEEE(canvas.Pix) + 1
+	if a.lastScreenFrameHash.Swap(sum) == sum {
 		return
 	}
 

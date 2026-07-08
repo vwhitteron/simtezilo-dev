@@ -2563,8 +2563,7 @@ func (a *App) logStatsBroadcaster() {
 			}
 
 			stats := a.logStore.GetStats()
-			allLogs := a.logStore.GetAll()
-			totalCount := len(allLogs)
+			totalCount := a.logStore.Count()
 
 			// Calculate total pages based on default page size of 100
 			pageSize := 100
