@@ -52,7 +52,18 @@ func (a *App) generateEngineHaptic() {
 		return // channel already at cushion depth
 	}
 
-	engineBuffer := make([]float64, need)
+	// Reuse the scratch buffer across ticks, growing it on demand.
+	if cap(a.enginePulseScratch) < need {
+		a.enginePulseScratch = make([]float64, need)
+	} else {
+		a.enginePulseScratch = a.enginePulseScratch[:need]
+	}
+
+	engineBuffer := a.enginePulseScratch
+
+	for index := range engineBuffer {
+		engineBuffer[index] = 0
+	}
 
 	// No haptics when the engine is not running: feed silence to keep the channel
 	// fed and hold the generator phase so it restarts in phase.
@@ -511,7 +522,7 @@ type pulseWaveformParams struct {
 }
 
 // calculatePulseWaveformParams calculates all parameters needed for pulse waveform generation.
-func (a *App) calculatePulseWaveformParams(rpm, engineRoughness float64) *pulseWaveformParams {
+func (a *App) calculatePulseWaveformParams(rpm, engineRoughness float64) pulseWaveformParams {
 	rpmPercent := rpm / float64(a.vehicle.RevLimit)
 	rpmPercent, _ = signal.LimitWindow(rpmPercent, 0.0, 1.0)
 
@@ -525,7 +536,7 @@ func (a *App) calculatePulseWaveformParams(rpm, engineRoughness float64) *pulseW
 	pulseRate := rpm * a.vehicle.Engine.FiringFrequency * a.vehicle.Engine.Haptics.PulseScale
 	pulseDutyCycle := a.vehicle.Engine.PulseOverlap + (rpmPercent * a.vehicle.Engine.PulseOverlap * 2)
 
-	return &pulseWaveformParams{
+	return pulseWaveformParams{
 		rpmPercent:      rpmPercent,
 		throttlePercent: throttlePercent,
 		amplitude:       amplitude,

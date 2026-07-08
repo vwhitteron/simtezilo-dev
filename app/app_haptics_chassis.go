@@ -50,7 +50,20 @@ func (a *App) generateChassisHaptic() {
 		waveOffset := channelPulseWidth / 2
 		waveSamplePeriod := math.Pi / channelPulseWidth
 
-		pulseBuffer := make([]float64, bufferSize)
+		// Reuse the scratch buffer across ticks, growing it on demand. The generation
+		// loop below breaks early once index > channelPulseLength, leaving a tail
+		// that must be zero-filled since it is no longer guaranteed by make.
+		if cap(a.chassisPulseScratch) < bufferSize {
+			a.chassisPulseScratch = make([]float64, bufferSize)
+		} else {
+			a.chassisPulseScratch = a.chassisPulseScratch[:bufferSize]
+		}
+
+		pulseBuffer := a.chassisPulseScratch
+
+		for index := range pulseBuffer {
+			pulseBuffer[index] = 0
+		}
 
 		// Generate the complete pulse waveform
 		for index := range bufferSize {

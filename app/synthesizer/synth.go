@@ -42,13 +42,32 @@ func (s *Synthesizer) NumOutputChannels() int {
 	return s.numOutputChannels
 }
 
+// cachedNameCount bounds the precomputed channel-name tables below. Callers on
+// hot paths (e.g. the 120 Hz chassis pulse loop) look names up per tick, so
+// small indices must not allocate a fresh string each call.
+const cachedNameCount = 16
+
+//nolint:gochecknoglobals // precomputed name tables keep hot-path lookups allocation-free
+var (
+	cachedOutputChannelNames  = buildChannelNames(outputChannelPrefix, cachedNameCount)
+	cachedChassisChannelNames = buildChannelNames(chassisChannelPrefix, cachedNameCount)
+)
+
 // OutputChannelName returns the channel name for output channel n (e.g., "_output_0").
 func OutputChannelName(n int) string {
+	if n >= 0 && n < len(cachedOutputChannelNames) {
+		return cachedOutputChannelNames[n]
+	}
+
 	return outputChannelPrefix + strconv.Itoa(n)
 }
 
 // ChassisChannelName returns the channel name for chassis channel n (e.g., "chassis_0").
 func ChassisChannelName(n int) string {
+	if n >= 0 && n < len(cachedChassisChannelNames) {
+		return cachedChassisChannelNames[n]
+	}
+
 	return chassisChannelPrefix + strconv.Itoa(n)
 }
 
