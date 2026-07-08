@@ -758,6 +758,14 @@ func (m *StereoMixer) logFillRatioWarning(name string, detail BufferHealth) {
 
 // Diagnostics returns a snapshot of mixer channel buffer health for all channels.
 func (m *StereoMixer) Diagnostics() MixerDiagnostics {
+	return m.DiagnosticsInto(nil)
+}
+
+// DiagnosticsInto returns a snapshot of mixer channel buffer health for all
+// channels, appending into channels[:0] rather than allocating a new slice.
+// Callers can retain the returned MixerDiagnostics.Channels backing array and
+// pass it back in on the next call to avoid per-call heap allocation.
+func (m *StereoMixer) DiagnosticsInto(channels []ChannelDiagnostic) MixerDiagnostics {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -771,7 +779,7 @@ func (m *StereoMixer) Diagnostics() MixerDiagnostics {
 		FaderGain:    gain,
 		Silenced:     m.silenced,
 		FadeInActive: m.fadeInActive,
-		Channels:     make([]ChannelDiagnostic, 0, len(m.channels)),
+		Channels:     channels[:0],
 	}
 
 	for name, channel := range m.channels {

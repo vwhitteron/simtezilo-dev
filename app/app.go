@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -112,17 +113,21 @@ type App struct {
 	vehicle               vehicle.Characteristics // Current vehicle information
 	tyres                 *tyres.Tyre             // Tyre monitoring
 
-	telemetryChartFeed chan map[string]float32 // Channel for sending telemetry data to web UI
-	vehicleInfoFeed    chan map[string]any     // Channel for sending vehicle info to web UI
-	circuitInfoFeed    chan map[string]string  // Channel for sending circuit info to web UI
-	raceInfoFeed       chan map[string]any     // Channel for sending race info to web UI
-	gameStateFeed      chan string             // Channel for sending game state to web UI
-	logStatsFeed       chan map[string]any     // Channel for sending log stats to web UI
-	screenFrameFeed    chan *image.RGBA        // Channel for sending rendered display frames to web UI
-	hidEvents          chan ui.HIDInputEvent   // HID input events (hardware buttons / web UI hardware view)
-	webUI              *webui.WebUI            // Web UI server and handler
-	webSequenceID      uint32                  // Last sequence ID sent to the web UI
-	ipAddress          string                  // Local IP address for web UI access
+	telemetryChartFeed chan webui.TelemetryFrame // Channel for sending telemetry data to web UI
+	vehicleInfoFeed    chan map[string]any       // Channel for sending vehicle info to web UI
+	circuitInfoFeed    chan map[string]string    // Channel for sending circuit info to web UI
+	raceInfoFeed       chan map[string]any       // Channel for sending race info to web UI
+	gameStateFeed      chan string               // Channel for sending game state to web UI
+	logStatsFeed       chan map[string]any       // Channel for sending log stats to web UI
+	screenFrameFeed    chan *image.RGBA          // Channel for sending rendered display frames to web UI
+	// lastScreenFrameHash is the CRC32 of the last frame forwarded on screenFrameFeed.
+	// captureScreenFrame is called from both the display tick and the HID event
+	// goroutine, so this must be updated atomically rather than as a plain field.
+	lastScreenFrameHash atomic.Uint32
+	hidEvents           chan ui.HIDInputEvent // HID input events (hardware buttons / web UI hardware view)
+	webUI               *webui.WebUI          // Web UI server and handler
+	webSequenceID       uint32                // Last sequence ID sent to the web UI
+	ipAddress           string                // Local IP address for web UI access
 
 	lapEvents      []lapEvent    // History of lap events
 	lapEventsMutex sync.Mutex    // Mutex for lap events slice
@@ -138,9 +143,12 @@ type App struct {
 	crashLogger *crashlog.CrashLogger // Crash log manager for panic capture
 
 	// Chassis haptics state
-	jerkPeakHold         float64       //nolint:unused // peak-hold for planned inverse-jerk detection; deliberately kept
-	jerkPeakHoldTime     time.Time     //nolint:unused // peak-hold for planned inverse-jerk detection; deliberately kept
-	jerkPeakHoldDuration time.Duration // Duration to hold peak based on pulse length
+	jerkPeakHold         float64                         //nolint:unused // peak-hold for planned inverse-jerk detection; deliberately kept
+	jerkPeakHoldTime     time.Time                       //nolint:unused // peak-hold for planned inverse-jerk detection; deliberately kept
+	jerkPeakHoldDuration time.Duration                   // Duration to hold peak based on pulse length
+	chassisPulseScratch  []float64                       // Reusable per-tick pulse buffer for generateChassisHaptic; main-loop goroutine only
+	enginePulseScratch   []float64                       // Reusable per-tick pulse buffer for generateEngineHaptic; main-loop goroutine only
+	diagScratch          []synthesizer.ChannelDiagnostic // Reusable synth diagnostics buffer for sendTelemetryChartData; main-loop goroutine only
 
 	windsim *windsim.Controller // Wind simulator fan-control subsystem
 
@@ -173,7 +181,7 @@ func New(opts Options) (*App, error) {
 		cancel:             cancel,
 		state:              NewGameState(opts.Logger),
 		kinematics:         kinematics.NewKinematicsState(),
-		telemetryChartFeed: make(chan map[string]float32, 600),
+		telemetryChartFeed: make(chan webui.TelemetryFrame, 600),
 		vehicleInfoFeed:    make(chan map[string]any, 10),
 		circuitInfoFeed:    make(chan map[string]string, 10),
 		raceInfoFeed:       make(chan map[string]any, 10),

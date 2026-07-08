@@ -187,7 +187,7 @@ func (c *wsClient) sendPing() bool {
 // broadcasterOptions are the constructor parameters for Broadcaster.
 type broadcasterOptions struct {
 	log             zerolog.Logger
-	telemetryFeed   chan map[string]float32
+	telemetryFeed   chan TelemetryFrame
 	vehicleInfoFeed chan map[string]any
 	circuitInfoFeed chan map[string]string
 	raceInfoFeed    chan map[string]any
@@ -202,7 +202,7 @@ type Broadcaster struct {
 	log zerolog.Logger
 
 	// Feed channels from the app layer
-	telemetryChartFeed chan map[string]float32
+	telemetryChartFeed chan TelemetryFrame
 	vehicleInfoFeed    chan map[string]any
 	circuitInfoFeed    chan map[string]string
 	raceInfoFeed       chan map[string]any
@@ -545,7 +545,7 @@ func (b *Broadcaster) run() { //nolint:cyclop // simple enough to be clear
 	batchFrameRate := 30
 	bufferSize := batchFrameRate / 60
 	batchInterval := time.Duration(1000/batchFrameRate) * time.Millisecond
-	batchBuffer := make([]map[string]float32, 0, bufferSize)
+	batchBuffer := make([]TelemetryFrame, 0, bufferSize)
 
 	sid := 0
 
@@ -621,16 +621,16 @@ func (b *Broadcaster) runRemoveClient(client *wsClient) {
 }
 
 // runAccumulateTelemetry deduplicates and accumulates a telemetry frame into the batch buffer.
-func (b *Broadcaster) runAccumulateTelemetry(data map[string]float32, sid int, buf []map[string]float32) (int, []map[string]float32) {
-	if sid != 0 && int(data["seq"])-sid == 0 {
+func (b *Broadcaster) runAccumulateTelemetry(data TelemetryFrame, sid int, buf []TelemetryFrame) (int, []TelemetryFrame) {
+	if sid != 0 && int(data.Seq) == sid {
 		return sid, buf
 	}
 
-	return int(data["seq"]), append(buf, data)
+	return int(data.Seq), append(buf, data)
 }
 
 // runFlushTelemetry broadcasts the accumulated batch and resets the buffer.
-func (b *Broadcaster) runFlushTelemetry(buf []map[string]float32) []map[string]float32 {
+func (b *Broadcaster) runFlushTelemetry(buf []TelemetryFrame) []TelemetryFrame {
 	if len(buf) == 0 {
 		return buf
 	}

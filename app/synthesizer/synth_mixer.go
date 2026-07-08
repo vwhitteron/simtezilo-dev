@@ -43,4 +43,8 @@ type Mixer interface { //nolint:interfacebloat // Large interface for core mixer
 
 	// Diagnostics returns buffer health diagnostics for all channels
 	Diagnostics() MixerDiagnostics
+
+	// DiagnosticsInto returns buffer health diagnostics for all channels,
+	// reusing the caller-supplied channels backing array to avoid allocation.
+	DiagnosticsInto(channels []ChannelDiagnostic) MixerDiagnostics
 }

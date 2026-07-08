@@ -2,7 +2,21 @@ package app
 
 import (
 	"github.com/vwhitteron/simtezilo-dev/app/kinematics"
+	"github.com/vwhitteron/simtezilo-dev/app/synthesizer"
+	"github.com/vwhitteron/simtezilo-dev/app/ui/webui"
 )
+
+// channelFill returns the fill ratio of the named mixer channel, or 0 if the
+// channel is not present in the diagnostics snapshot.
+func channelFill(diag synthesizer.MixerDiagnostics, name string) float32 {
+	for _, ch := range diag.Channels {
+		if ch.Name == name {
+			return float32(ch.Health.FillRatio)
+		}
+	}
+
+	return 0
+}
 
 func (a *App) sendTelemetryChartData() {
 	if a.webUI == nil {
@@ -27,85 +41,83 @@ func (a *App) sendTelemetryChartData() {
 
 	a.webSequenceID = a.kinematics.Current.SequenceID
 
-	go func() {
-		// Snapshot the audio health/diagnostics once; both are derived per call.
-		health := a.hapticSource.Health()
-		diag := a.synth.Diagnostics()
-		latency := a.audioMon.BuildReport(health, diag, a.state.current.sequenceNumber)
-		channelFill := func(name string) float32 {
-			for _, ch := range diag.Channels {
-				if ch.Name == name {
-					return float32(ch.Health.FillRatio)
-				}
-			}
+	// Snapshot the audio health/diagnostics once; both are derived per call.
+	// This runs on the main loop goroutine, so it is safe to reuse and retain
+	// the diagScratch backing array across calls.
+	health := a.hapticSource.Health()
+	diag := a.synth.DiagnosticsInto(a.diagScratch)
+	a.diagScratch = diag.Channels
+	latency := a.audioMon.BuildReport(health, diag, a.state.current.sequenceNumber)
 
-			return 0
-		}
+	// Sequence-id gap: dropped telemetry packets since the previous frame.
+	// sequenceDelta is 1 in the nominal case; guard the subtraction so a
+	// zero delta cannot underflow the unsigned counter.
+	var seqGap float32
+	if a.state.current.sequenceDelta > 1 {
+		seqGap = float32(a.state.current.sequenceDelta - 1)
+	}
 
-		// Sequence-id gap: dropped telemetry packets since the previous frame.
-		// sequenceDelta is 1 in the nominal case; guard the subtraction so a
-		// zero delta cannot underflow the unsigned counter.
-		var seqGap float32
-		if a.state.current.sequenceDelta > 1 {
-			seqGap = float32(a.state.current.sequenceDelta - 1)
-		}
+	var engineVibrationEnabled float32
+	if a.gtClient.Telemetry.EngineRPM() > 0 {
+		engineVibrationEnabled = 1
+	}
 
-		a.telemetryChartFeed <- map[string]float32{
-			"computeTime":                 float32(a.kinematics.Last.ComputeTime.Microseconds()),
-			"seq":                         float32(a.state.current.sequenceNumber),
-			"seqGap":                      seqGap,
-			"timeOfDay":                   float32(a.gtClient.Telemetry.TimeOfDay().Milliseconds()),
-			"throttleInput":               a.gtClient.Telemetry.ThrottleInputPercent(),
-			"throttleOutput":              a.gtClient.Telemetry.ThrottleOutputPercent(),
-			"brakeInput":                  a.gtClient.Telemetry.BrakeInputPercent(),
-			"brakeOutput":                 a.gtClient.Telemetry.BrakeOutputPercent(),
-			"rpm":                         a.gtClient.Telemetry.EngineRPM(),
-			"speed":                       a.gtClient.Telemetry.GroundSpeedKPH(),
-			"gear":                        float32(a.kinematics.Current.TransmissionGear),
-			"fuelUsagePerKm":              float32(a.fuelRange.UsageRatePerKm()),
-			"fuelRangeKm":                 float32(a.fuelRange.DistanceMetres() / 1000),
-			"fuelRangeLaps":               float32(a.fuelRange.DistanceLaps(a.circuit.LengthMetres())),
-			"tyreTempFL":                  a.gtClient.Telemetry.TyreTemperatureCelsius().FrontLeft,
-			"tyreTempFR":                  a.gtClient.Telemetry.TyreTemperatureCelsius().FrontRight,
-			"tyreTempRL":                  a.gtClient.Telemetry.TyreTemperatureCelsius().RearLeft,
-			"tyreTempRR":                  a.gtClient.Telemetry.TyreTemperatureCelsius().RearRight,
-			"surgeGforce":                 float32(a.kinematics.Current.SixDOFTranslation.Acceleration.Surge) / kinematics.GravityConstant,
-			"surgeGforceCalc":             float32(a.kinematics.Current.SurgeCalculated) / kinematics.GravityConstant,
-			"SixDOFTranslationalJerk":     float32(a.kinematics.Current.SixDOFTranslation.Jerk),
-			"SixDOFTranslationalSnap":     float32(a.kinematics.Current.SixDOFTranslation.Snap),
-			"SixDOFTranslationalJerkCalc": float32(a.kinematics.Current.SixDOFTranslationCalc.Jerk),
-			"SixDOFTranslationalSnapCalc": float32(a.kinematics.Current.SixDOFTranslationCalc.Snap),
-			"SixDOFTranslationalAccelX":   float32(a.kinematics.Current.SixDOFTranslationCalc.Acceleration.X),
-			"SixDOFTranslationalAccelY":   float32(a.kinematics.Current.SixDOFTranslationCalc.Acceleration.Y),
-			"SixDOFTranslationalAccelZ":   float32(a.kinematics.Current.SixDOFTranslationCalc.Acceleration.Z),
-			"SixDOFRotationalJerk":        float32(a.kinematics.Current.SixDOFRotationCalc.Jerk),
-			"SixDOFRotationalSnap":        float32(a.kinematics.Current.SixDOFRotationCalc.Snap),
-			"SixDOFRotationalAccelX":      float32(a.kinematics.Current.SixDOFRotationCalc.Acceleration.X),
-			"SixDOFRotationalAccelY":      float32(a.kinematics.Current.SixDOFRotationCalc.Acceleration.Y),
-			"SixDOFRotationalAccelZ":      float32(a.kinematics.Current.SixDOFRotationCalc.Acceleration.Z),
-			"synthChannelAmplitudeL":      float32(a.kinematics.Current.SynthChannelAmplitude[0]),
-			"synthChannelFrequencyL":      float32(a.kinematics.Current.SynthChannelFrequency[0]),
-			"synthChannelAmplitudeR":      float32(a.kinematics.Current.SynthChannelAmplitude[1]),
-			"synthChannelFrequencyR":      float32(a.kinematics.Current.SynthChannelFrequency[1]),
-			"engineVibrationEnabled": func() float32 {
-				if a.gtClient.Telemetry.EngineRPM() > 0 {
-					return 1
-				}
+	tyreTemp := a.gtClient.Telemetry.TyreTemperatureCelsius()
 
-				return 0
-			}(),
-			// Audio pipeline health metrics
-			"asyncBufferFill":    float32(health.FillRatio),
-			"asyncUnderruns":     float32(health.Underruns),
-			"asyncProducerWaits": float32(health.ProducerWaits),
-			"mixerEngineFill":    channelFill("engine"),
-			"mixerChassis0Fill":  channelFill("chassis_0"),
-			// Haptic latency/drift monitor (milliseconds)
-			"engineLatencyMs":  float32(latency.EngineLatencyMs),
-			"chassisLatencyMs": float32(latency.ChassisLatencyMs),
-			"ringLatencyMs":    float32(latency.RingLatencyMs),
-			"driftMs":          float32(latency.DriftMs),
-			"seqJitterMs":      float32(latency.SeqJitterMs),
-		}
-	}()
+	frame := webui.TelemetryFrame{
+		ComputeTime:                 float32(a.kinematics.Last.ComputeTime.Microseconds()),
+		Seq:                         float32(a.state.current.sequenceNumber),
+		SeqGap:                      seqGap,
+		TimeOfDay:                   float32(a.gtClient.Telemetry.TimeOfDay().Milliseconds()),
+		ThrottleInput:               a.gtClient.Telemetry.ThrottleInputPercent(),
+		ThrottleOutput:              a.gtClient.Telemetry.ThrottleOutputPercent(),
+		BrakeInput:                  a.gtClient.Telemetry.BrakeInputPercent(),
+		BrakeOutput:                 a.gtClient.Telemetry.BrakeOutputPercent(),
+		RPM:                         a.gtClient.Telemetry.EngineRPM(),
+		Speed:                       a.gtClient.Telemetry.GroundSpeedKPH(),
+		Gear:                        float32(a.kinematics.Current.TransmissionGear),
+		FuelUsagePerKm:              float32(a.fuelRange.UsageRatePerKm()),
+		FuelRangeKm:                 float32(a.fuelRange.DistanceMetres() / 1000),
+		FuelRangeLaps:               float32(a.fuelRange.DistanceLaps(a.circuit.LengthMetres())),
+		TyreTempFL:                  tyreTemp.FrontLeft,
+		TyreTempFR:                  tyreTemp.FrontRight,
+		TyreTempRL:                  tyreTemp.RearLeft,
+		TyreTempRR:                  tyreTemp.RearRight,
+		SurgeGforce:                 float32(a.kinematics.Current.SixDOFTranslation.Acceleration.Surge) / kinematics.GravityConstant,
+		SurgeGforceCalc:             float32(a.kinematics.Current.SurgeCalculated) / kinematics.GravityConstant,
+		SixDOFTranslationalJerk:     float32(a.kinematics.Current.SixDOFTranslation.Jerk),
+		SixDOFTranslationalSnap:     float32(a.kinematics.Current.SixDOFTranslation.Snap),
+		SixDOFTranslationalJerkCalc: float32(a.kinematics.Current.SixDOFTranslationCalc.Jerk),
+		SixDOFTranslationalSnapCalc: float32(a.kinematics.Current.SixDOFTranslationCalc.Snap),
+		SixDOFTranslationalAccelX:   float32(a.kinematics.Current.SixDOFTranslationCalc.Acceleration.X),
+		SixDOFTranslationalAccelY:   float32(a.kinematics.Current.SixDOFTranslationCalc.Acceleration.Y),
+		SixDOFTranslationalAccelZ:   float32(a.kinematics.Current.SixDOFTranslationCalc.Acceleration.Z),
+		SixDOFRotationalJerk:        float32(a.kinematics.Current.SixDOFRotationCalc.Jerk),
+		SixDOFRotationalSnap:        float32(a.kinematics.Current.SixDOFRotationCalc.Snap),
+		SixDOFRotationalAccelX:      float32(a.kinematics.Current.SixDOFRotationCalc.Acceleration.X),
+		SixDOFRotationalAccelY:      float32(a.kinematics.Current.SixDOFRotationCalc.Acceleration.Y),
+		SixDOFRotationalAccelZ:      float32(a.kinematics.Current.SixDOFRotationCalc.Acceleration.Z),
+		SynthChannelAmplitudeL:      float32(a.kinematics.Current.SynthChannelAmplitude[0]),
+		SynthChannelFrequencyL:      float32(a.kinematics.Current.SynthChannelFrequency[0]),
+		SynthChannelAmplitudeR:      float32(a.kinematics.Current.SynthChannelAmplitude[1]),
+		SynthChannelFrequencyR:      float32(a.kinematics.Current.SynthChannelFrequency[1]),
+		EngineVibrationEnabled:      engineVibrationEnabled,
+		// Audio pipeline health metrics
+		AsyncBufferFill:    float32(health.FillRatio),
+		AsyncUnderruns:     float32(health.Underruns),
+		AsyncProducerWaits: float32(health.ProducerWaits),
+		MixerEngineFill:    channelFill(diag, "engine"),
+		MixerChassis0Fill:  channelFill(diag, "chassis_0"),
+		// Haptic latency/drift monitor (milliseconds)
+		EngineLatencyMs:  float32(latency.EngineLatencyMs),
+		ChassisLatencyMs: float32(latency.ChassisLatencyMs),
+		RingLatencyMs:    float32(latency.RingLatencyMs),
+		DriftMs:          float32(latency.DriftMs),
+		SeqJitterMs:      float32(latency.SeqJitterMs),
+	}
+
+	select {
+	case a.telemetryChartFeed <- frame:
+	default:
+	}
 }

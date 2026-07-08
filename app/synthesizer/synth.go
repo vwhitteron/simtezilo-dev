@@ -436,3 +436,9 @@ func (s *Synthesizer) stopCalibrator() {
 func (s *Synthesizer) Diagnostics() MixerDiagnostics {
 	return s.mixer.Diagnostics()
 }
+
+// DiagnosticsInto returns mixer buffer health diagnostics, reusing the
+// caller-supplied channels backing array to avoid a per-call allocation.
+func (s *Synthesizer) DiagnosticsInto(channels []ChannelDiagnostic) MixerDiagnostics {
+	return s.mixer.DiagnosticsInto(channels)
+}

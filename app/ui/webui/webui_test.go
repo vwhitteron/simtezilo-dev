@@ -37,7 +37,7 @@ func createTestWebUI() *WebUI {
 
 	broadcaster := &Broadcaster{
 		log:                log,
-		telemetryChartFeed: make(chan map[string]float32, 10),
+		telemetryChartFeed: make(chan TelemetryFrame, 10),
 		vehicleInfoFeed:    make(chan map[string]any, 10),
 		currentVehicleInfo: make(map[string]any),
 		gameStateFeed:      make(chan string, 10),

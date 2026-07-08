@@ -117,3 +117,7 @@ func (m *MockMixer) IsSilenced() bool { return false }
 func (m *MockMixer) Diagnostics() MixerDiagnostics {
 	return MixerDiagnostics{}
 }
+
+func (m *MockMixer) DiagnosticsInto(_ []ChannelDiagnostic) MixerDiagnostics {
+	return MixerDiagnostics{}
+}

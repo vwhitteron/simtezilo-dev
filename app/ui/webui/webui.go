@@ -25,7 +25,7 @@ import (
 type Options struct {
 	Log                zerolog.Logger
 	Port               int
-	TelemetryChartFeed chan map[string]float32
+	TelemetryChartFeed chan TelemetryFrame
 	VehicleInfoFeed    chan map[string]any
 	CircuitInfoFeed    chan map[string]string
 	RaceInfoFeed       chan map[string]any
