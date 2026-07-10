@@ -46,7 +46,6 @@ linters:
             - github.com/kennygrant/sanitize
             - github.com/rs/zerolog
             - github.com/santhosh-tekuri/jsonschema/v5
-            - github.com/yeqown/go-qrcode
             - github.com/skip2/go-qrcode
             - github.com/spf13/viper
             - github.com/stretchr/testify
