@@ -122,7 +122,7 @@ graph TD
     Audio Synthesis
     - synth.go: Main synthesizer
     - synth_mixer.go: Audio mixing
-    - synth_mixer_stereo.go: Stereo output
+    - synth_mixer_multichannel.go: Multichannel output
     - synth_buffer.go: Buffer management
     - synth_buffer_adaptive.go: Adaptive buffering
     - synth_buffer_linear.go: Linear buffer

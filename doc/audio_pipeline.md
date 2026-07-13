@@ -87,9 +87,9 @@ graph TD
     end
 
     subgraph Synth["Synthesizer @ 8 kHz — app/synthesizer"]
-        Mix["`StereoMixer
+        Mix["`ChannelMixer
         per-channel AdaptiveBuffer (2 s, 24 ms read margin)
-        synth_mixer_stereo.go`"]
+        synth_mixer_multichannel.go`"]
         Master["`MixToMaster → per-channel outputs
         (master channel = gain only)`"]
         Stream["`Streamer (interleaved f32)
@@ -122,7 +122,7 @@ graph TD
 |---|---|---|---|
 | Detection | `app_telemetry.go`, `app.go` | 60–120 Hz | poll telemetry, detect events |
 | Event synth | `app_haptics_*.go`, `synth_effects.go` | 8 kHz | event → waveform into a channel |
-| Mixer | `synth_mixer_stereo.go`, `synth_buffer_adaptive.go` | 8 kHz | per-channel buffers → output channels |
+| Mixer | `synth_mixer_multichannel.go`, `synth_buffer_adaptive.go` | 8 kHz | per-channel buffers → output channels |
 | Streamer | `synth_output.go` | 8 kHz | mix-on-demand, × master gain, interleaved f32 |
 | Resampler | `resample.go` | 8 k→dev | band-limited up-sample |
 | Async ring | `async.go` | dev | decouple synthesis from callback |
