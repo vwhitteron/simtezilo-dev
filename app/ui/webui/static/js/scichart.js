@@ -973,7 +973,7 @@ async function initSciChart() {
         },
 
         'channel-output-left': {
-            title: 'Left Channel Output',
+            title: 'Channel 0 Output',
             titleKey: 'runmode.telemetry.chart.channeloutputleft',
             create: async (containerId) => {
                 const { sciChartSurface, wasmContext } = await SciChart.SciChartSurface.createSingle(containerId);
@@ -1030,7 +1030,10 @@ async function initSciChart() {
                         channelAmplitudeL: amplitudeSeries,
                         channelFrequencyL: frequencySeries
                     },
-                    dataFields: ['synthChannelAmplitudeL', 'synthChannelFrequencyL']
+                    // Telemetry now sends per-channel arrays (synthChannelAmplitude /
+                    // synthChannelFrequency); index into channel 0 here (the ":N" suffix
+                    // is a synthetic field name understood by the frame ingestion code).
+                    dataFields: ['synthChannelAmplitude:0', 'synthChannelFrequency:0']
                 };
             }
         },
@@ -1116,7 +1119,8 @@ async function initSciChart() {
                         asyncUnderruns: underrunsSeries,
                         asyncProducerWaits: producerWaitsSeries
                     },
-                    dataFields: ['asyncBufferFill', 'mixerEngineFill', 'mixerChassis0Fill', 'asyncUnderruns', 'asyncProducerWaits']
+                    // mixerChassisFill is now a per-channel array; chart channel 0's fill only.
+                    dataFields: ['asyncBufferFill', 'mixerEngineFill', 'mixerChassisFill:0', 'asyncUnderruns', 'asyncProducerWaits']
                 };
             }
         },
@@ -1247,7 +1251,7 @@ async function initSciChart() {
         },
 
         'channel-output-right': {
-            title: 'Right Channel Output',
+            title: 'Channel 1 Output',
             titleKey: 'runmode.telemetry.chart.channeloutputright',
             create: async (containerId) => {
                 const { sciChartSurface, wasmContext } = await SciChart.SciChartSurface.createSingle(containerId);
@@ -1304,7 +1308,8 @@ async function initSciChart() {
                         channelAmplitudeR: amplitudeSeries,
                         channelFrequencyR: frequencySeries
                     },
-                    dataFields: ['synthChannelAmplitudeR', 'synthChannelFrequencyR']
+                    // See channel-output-left: index into channel 1 of the arrays.
+                    dataFields: ['synthChannelAmplitude:1', 'synthChannelFrequency:1']
                 };
             }
         }
@@ -1487,16 +1492,33 @@ async function initSciChart() {
                             "SixDOFRotationalAccelX": 'rotationalAccelerationX',
                             "SixDOFRotationalAccelY": 'rotationalAccelerationY',
                             "SixDOFRotationalAccelZ": 'rotationalAccelerationZ',
-                            'synthChannelAmplitudeL': 'channelAmplitudeL',
-                            'synthChannelFrequencyL': 'channelFrequencyL',
-                            'synthChannelAmplitudeR': 'channelAmplitudeR',
-                            'synthChannelFrequencyR': 'channelFrequencyR'
+                            'synthChannelAmplitude:0': 'channelAmplitudeL',
+                            'synthChannelFrequency:0': 'channelFrequencyL',
+                            'synthChannelAmplitude:1': 'channelAmplitudeR',
+                            'synthChannelFrequency:1': 'channelFrequencyR',
+                            'mixerChassisFill:0': 'mixerChassis0Fill'
                         };
                         return fieldMappings[fieldName] === key || fieldName === key;
                     });
 
-                    if (seriesKey && data[fieldName] !== undefined) {
-                        dataFieldMappings[seriesKey] = data[fieldName];
+                    if (seriesKey) {
+                        // Synthetic "arrayField:index" field names index into a telemetry
+                        // array field (e.g. synthChannelAmplitude, synthChannelFrequency,
+                        // mixerChassisFill), which replaced the old flat per-channel
+                        // (...L/...R/...0) fields.
+                        const separatorIndex = fieldName.indexOf(':');
+                        let value;
+                        if (separatorIndex !== -1) {
+                            const arrayField = fieldName.slice(0, separatorIndex);
+                            const channelIndex = parseInt(fieldName.slice(separatorIndex + 1), 10);
+                            value = Array.isArray(data[arrayField]) ? data[arrayField][channelIndex] : undefined;
+                        } else {
+                            value = data[fieldName];
+                        }
+
+                        if (value !== undefined) {
+                            dataFieldMappings[seriesKey] = value;
+                        }
                     }
                 });
             });

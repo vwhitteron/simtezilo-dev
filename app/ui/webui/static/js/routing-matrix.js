@@ -196,26 +196,6 @@
         });
     }
 
-    // Wire into the channel-count input so the control updates immediately when the
-    // user changes the channel count (before a config reload fires).
-    function wireChannelInput() {
-        const channelInput = el('audio-haptics-channels');
-        if (!channelInput) {
-            return;
-        }
-
-        channelInput.addEventListener('change', function () {
-            const n = parseInt(channelInput.value, 10);
-            if (!n || n < 1) {
-                return;
-            }
-
-            resizeRows(n);
-            renderChannelOptions();
-            updateSwitches();
-        });
-    }
-
     async function init() {
         // Only run on pages that contain the routing control.
         if (!el('routing-channel-select')) {
@@ -223,7 +203,6 @@
         }
 
         wireControls();
-        wireChannelInput();
 
         // Load the current config and render.
         try {

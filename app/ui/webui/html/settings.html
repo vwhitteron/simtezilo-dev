@@ -789,6 +789,7 @@
     <script src="/js/bluetooth-settings.js"></script>
     <script src="/js/fan-settings.js"></script>
     <script src="/js/routing-matrix.js"></script>
+    <script src="/js/channel-gains.js"></script>
     <title>Settings - Simtezilo</title>
 </head>
 
@@ -1020,7 +1021,8 @@
                         <div class="card-body">
 
                             <!-- Audio Backend -->
-                            <h5 class="mb-3"><span class="icon" data-icon="volume-high"></span><span>Audio Backend</span></h5>
+                            <h5 class="mb-3"><span class="icon" data-icon="volume-high"></span><span>Audio
+                                    Backend</span></h5>
                             <div class="row g-3 mb-4">
                                 <div class="col-md-6 col-lg-4">
                                     <label for="audio-backend" class="form-label">Backend</label>
@@ -1399,7 +1401,8 @@
                                 </div>
                             </div>
 
-                            <div id="bluetooth-action-status" class="alert py-2 px-3 small" style="display: none;" role="alert"></div>
+                            <div id="bluetooth-action-status" class="alert py-2 px-3 small" style="display: none;"
+                                role="alert"></div>
 
                             <div class="table-responsive">
                                 <table class="table table-sm align-middle">
@@ -1408,7 +1411,8 @@
                                             <th data-i18n="runmode.settings.bluetooth.device">Device</th>
                                             <th data-i18n="runmode.settings.bluetooth.address">Address</th>
                                             <th data-i18n="runmode.settings.bluetooth.status">Status</th>
-                                            <th class="text-end" data-i18n="runmode.settings.bluetooth.actions">Actions</th>
+                                            <th class="text-end" data-i18n="runmode.settings.bluetooth.actions">Actions
+                                            </th>
                                         </tr>
                                     </thead>
                                     <tbody id="bluetooth-device-list">
@@ -1423,7 +1427,9 @@
                             <div class="mb-3 mt-3">
                                 <small class="text-muted">
                                     <span class="icon icon-sm me-1" data-icon="circle-question"></span>
-                                    <span data-i18n="runmode.settings.bluetooth.hint">Pair a Bluetooth audio device to use it as a haptics or pit radio output. Connected devices appear in the audio device lists.</span>
+                                    <span data-i18n="runmode.settings.bluetooth.hint">Pair a Bluetooth audio device to
+                                        use it as a haptics or pit radio output. Connected devices appear in the audio
+                                        device lists.</span>
                                 </small>
                             </div>
                         </div>
@@ -1434,31 +1440,8 @@
                 <div class="settings-section-card" data-section-content="synthesizer">
                     <div class="card">
                         <div class="card-body">
-                            <h5 class="mb-3"><span class="icon" data-icon="caret-square-right"></span><span
-                                    data-i18n="runmode.settings.synth.samplerates.title">Sample Rates</span></h5>
-                            <div class="row g-3 mb-3">
-                                <div class="col-md-6 col-lg-4">
-                                    <label for="synth-internalsamplerate" class="form-label">
-                                        <span data-i18n="runmode.settings.synth.samplerates.internal">Internal
-                                            Sample
-                                            Rate</span>
-                                        <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
-                                            role="button"
-                                            data-i18n-tooltip="runmode.settings.synth.samplerates.internal.tooltip"></i>
-                                    </label>
-                                    <select id="synth-internalsamplerate" class="form-select text-center"
-                                        data-config="synthesizer.internalSampleRateHz" data-type="number">
-                                        <option value="8000">8 kHz</option>
-                                        <option value="16000">16 kHz</option>
-                                        <option value="22050">22.05 kHz</option>
-                                        <option value="32000">32 kHz</option>
-                                        <option value="44100">44.1 kHz</option>
-                                        <option value="48000">48 kHz</option>
-                                    </select>
-                                </div>
-                            </div>
 
-                            <h5 class="mt-5 mb-3"><span class="icon" data-icon="gauge-high"></span><span
+                            <h5 class="mb-3"><span class="icon" data-icon="gauge-high"></span><span
                                     data-i18n="runmode.settings.synth.gaincontrols.title">Gain Controls</span></h5>
                             <div class="row g-3">
                                 <div class="col-md-6 col-lg-4">
@@ -1483,51 +1466,35 @@
                                     </div>
                                 </div>
                                 <div class="col-md-6 col-lg-4">
-                                    <label for="synth-channel0gain" class="form-label">
-                                        <span data-i18n="runmode.settings.synth.gaincontrols.outputchannel0">Left
-                                            Output</span>
+                                    <label for="synth-channel-gain-select" class="form-label">
+                                        <span data-i18n="runmode.settings.synth.gaincontrols.outputchannel">Output
+                                            Channels</span>
                                         <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
                                             role="button"
-                                            data-i18n-tooltip="runmode.settings.synth.gaincontrols.outputchannel0.tooltip"></i>
+                                            data-i18n-tooltip="runmode.settings.synth.gaincontrols.outputchannel.tooltip"></i>
                                     </label>
-                                    <div class="input-group">
-                                        <button type="button" class="btn btn-outline-primary mute-toggle-btn"
-                                            data-gain-input="synth-channel0gain"
-                                            data-mute-checkbox="synth-channel0mute">
-                                        </button>
-                                        <div class="input-with-suffix" style="flex: 1;">
-                                            <input type="number" id="synth-channel0gain"
-                                                class="form-control text-center gain-input"
-                                                data-config="synthesizer.channel0Gain" min="-60" max="0" step="0.25">
-                                            <span class="input-suffix">dB</span>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <select id="synth-channel-gain-select" class="form-select"
+                                            style="flex: 0 0 30%; min-width: 0;">
+                                            <!-- Options populated by JavaScript -->
+                                        </select>
+                                        <div class="input-group flex-nowrap" style="flex: 1 1 auto; min-width: 0;">
+                                            <button type="button" class="btn btn-outline-primary mute-toggle-btn"
+                                                data-gain-input="synth-channel-gain"
+                                                data-mute-checkbox="synth-channel-mute">
+                                            </button>
+                                            <div class="input-with-suffix" style="flex: 1; min-width: 0;">
+                                                <input type="number" id="synth-channel-gain"
+                                                    class="form-control text-center gain-input" min="-70" max="0"
+                                                    step="0.25">
+                                                <span class="input-suffix">dB</span>
+                                            </div>
+                                            <input type="checkbox" id="synth-channel-mute" style="display: none;">
                                         </div>
-                                        <input type="checkbox" id="synth-channel0mute"
-                                            data-config="synthesizer.channel0Mute" style="display: none;">
                                     </div>
                                 </div>
-                                <div class="col-md-6 col-lg-4">
-                                    <label for="synth-channel1gain" class="form-label">
-                                        <span data-i18n="runmode.settings.synth.gaincontrols.outputchannel1">Right
-                                            Output</span>
-                                        <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
-                                            role="button"
-                                            data-i18n-tooltip="runmode.settings.synth.gaincontrols.outputchannel1.tooltip"></i>
-                                    </label>
-                                    <div class="input-group">
-                                        <button type="button" class="btn btn-outline-primary mute-toggle-btn"
-                                            data-gain-input="synth-channel1gain"
-                                            data-mute-checkbox="synth-channel1mute">
-                                        </button>
-                                        <div class="input-with-suffix" style="flex: 1;">
-                                            <input type="number" id="synth-channel1gain"
-                                                class="form-control text-center gain-input"
-                                                data-config="synthesizer.channel1Gain" min="-60" max="0" step="0.25">
-                                            <span class="input-suffix">dB</span>
-                                        </div>
-                                        <input type="checkbox" id="synth-channel1mute"
-                                            data-config="synthesizer.channel1Mute" style="display: none;">
-                                    </div>
-                                </div>
+                                <!-- Row break: keep Chassis/Engine/Transmission on the next row -->
+                                <div class="w-100 d-none d-lg-block"></div>
                                 <div class="col-md-6 col-lg-4">
                                     <label for="synth-chassisgain" class="form-label">
                                         <span data-i18n="runmode.settings.synth.gaincontrols.chassis">Chassis</span>
@@ -1664,6 +1631,29 @@
                                 </div>
 
                                 <div id="advancedSettingsSynth" class="collapse">
+                                    <!-- Sample Rates Card -->
+                                    <div class="row g-3 mb-3">
+                                        <div class="col-md-6 col-lg-4">
+                                            <label for="synth-internalsamplerate" class="form-label">
+                                                <span data-i18n="runmode.settings.synth.samplerate.title">Sample
+                                                    Rate</span>
+                                                <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
+                                                    role="button"
+                                                    data-i18n-tooltip="runmode.settings.synth.samplerate.tooltip"></i>
+                                            </label>
+                                            <select id="synth-internalsamplerate" class="form-select text-center"
+                                                data-config="synthesizer.internalSampleRateHz" data-type="number">
+                                                <option value="8000">8 kHz</option>
+                                                <option value="16000">16 kHz</option>
+                                                <option value="22050">22.05 kHz</option>
+                                                <option value="32000">32 kHz</option>
+                                                <option value="44100">44.1 kHz</option>
+                                                <option value="48000">48 kHz</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+
                                     <!-- Calibration Mode Card -->
                                     <h5 class="mb-3 mt-5"><span class="icon" data-icon="bullseye"></span><span
                                             data-i18n="runmode.settings.synth.calibration.title">Calibration
@@ -1802,12 +1792,7 @@
                                         </h6>
                                         <div class="d-flex align-items-center gap-2">
                                             <select id="eq-channel-select" class="form-select" style="width: auto;">
-                                                <option value="0"
-                                                    data-i18n="runmode.settings.synth.equalizer.channel.left">Left
-                                                </option>
-                                                <option value="1"
-                                                    data-i18n="runmode.settings.synth.equalizer.channel.right">Right
-                                                </option>
+                                                <!-- Options populated by JavaScript -->
                                             </select>
                                             <div class="form-check form-switch ms-3 mb-0">
                                                 <input type="checkbox" class="form-check-input" id="synth-eqenabled"
@@ -1892,19 +1877,17 @@
                         <div class="card-body">
 
                             <!-- Haptics Output -->
-                            <h5 class="mb-3"><span class="icon" data-icon="wave-square"></span><span>Haptics Output</span></h5>
+                            <h5 class="mb-3"><span class="icon" data-icon="wave-square"></span><span>Haptics
+                                    Output</span></h5>
                             <div class="row g-3 mb-3">
                                 <div class="col-md-8 col-lg-6">
                                     <label for="audio-haptics-device" class="form-label">Device</label>
-                                    <select id="audio-haptics-device" class="form-select" data-config="haptics.output.device">
+                                    <select id="audio-haptics-device" class="form-select"
+                                        data-config="haptics.output.device">
                                         <option value="">System default</option>
                                     </select>
-                                    <input type="hidden" id="audio-haptics-devicename" data-config="haptics.output.deviceName">
-                                </div>
-                                <div class="col-md-4 col-lg-3">
-                                    <label for="audio-haptics-channels" class="form-label">Channels</label>
-                                    <input type="number" id="audio-haptics-channels" class="form-control text-center"
-                                        data-config="haptics.output.channels" min="1" max="32">
+                                    <input type="hidden" id="audio-haptics-devicename"
+                                        data-config="haptics.output.deviceName">
                                 </div>
                                 <div class="col-md-4 col-lg-3">
                                     <label for="audio-haptics-samplerate" class="form-label">Sample Rate</label>
@@ -1943,24 +1926,33 @@
                                     <div class="d-flex flex-column gap-1">
                                         <span class="form-label mb-1">Output Routing</span>
                                         <div class="d-flex flex-wrap gap-2" role="group">
-                                            <input type="checkbox" class="btn-check" id="routing-engine" autocomplete="off">
-                                            <label class="btn btn-sm btn-outline-primary d-inline-flex align-items-center" for="routing-engine"><span
+                                            <input type="checkbox" class="btn-check" id="routing-engine"
+                                                autocomplete="off">
+                                            <label
+                                                class="btn btn-sm btn-outline-primary d-inline-flex align-items-center"
+                                                for="routing-engine"><span
                                                     class="icon icon-lg routing-icon me-1"></span>Engine</label>
 
-                                            <input type="checkbox" class="btn-check" id="routing-chassis" autocomplete="off">
-                                            <label class="btn btn-sm btn-outline-primary d-inline-flex align-items-center" for="routing-chassis"><span
+                                            <input type="checkbox" class="btn-check" id="routing-chassis"
+                                                autocomplete="off">
+                                            <label
+                                                class="btn btn-sm btn-outline-primary d-inline-flex align-items-center"
+                                                for="routing-chassis"><span
                                                     class="icon icon-lg routing-icon me-1"></span>Chassis</label>
 
                                             <input type="checkbox" class="btn-check" id="routing-transmission"
                                                 autocomplete="off">
-                                            <label class="btn btn-sm btn-outline-primary d-inline-flex align-items-center" for="routing-transmission"><span
+                                            <label
+                                                class="btn btn-sm btn-outline-primary d-inline-flex align-items-center"
+                                                for="routing-transmission"><span
                                                     class="icon icon-lg routing-icon me-1"></span>Transmission</label>
                                         </div>
                                     </div>
                                     <div class="d-flex flex-column gap-1">
                                         <span class="form-label mb-1">Identify</span>
                                         <div class="d-flex align-items-center gap-2">
-                                            <button type="button" id="audio-haptics-test" class="btn btn-sm btn-outline-secondary">Play Tone</button>
+                                            <button type="button" id="audio-haptics-test"
+                                                class="btn btn-sm btn-outline-secondary">Play Tone</button>
                                             <span id="audio-haptics-test-status" class="small text-muted"></span>
                                         </div>
                                     </div>
@@ -2372,20 +2364,24 @@
 
                             <!-- Local Audio Output -->
                             <div id="local-audio-settings-section" style="display: none;">
-                                <h5 class="mt-5 mb-3"><span class="icon" data-icon="volume-high"></span><span>Local Audio Output</span></h5>
+                                <h5 class="mt-5 mb-3"><span class="icon" data-icon="volume-high"></span><span>Local
+                                        Audio Output</span></h5>
                                 <div class="row g-3 mb-3">
                                     <div class="col-md-8 col-lg-6">
                                         <label for="audio-pitradio-device" class="form-label">Device</label>
-                                        <select id="audio-pitradio-device" class="form-select" data-config="pitRadio.audio.device">
+                                        <select id="audio-pitradio-device" class="form-select"
+                                            data-config="pitRadio.audio.device">
                                             <option value="">System default</option>
                                         </select>
-                                        <input type="hidden" id="audio-pitradio-devicename" data-config="pitRadio.audio.deviceName">
+                                        <input type="hidden" id="audio-pitradio-devicename"
+                                            data-config="pitRadio.audio.deviceName">
                                     </div>
                                     <div class="col-md-4 col-lg-3">
                                         <label for="audio-pitradio-samplerate" class="form-label">Sample Rate</label>
                                         <div class="input-with-suffix">
-                                            <input type="number" id="audio-pitradio-samplerate" class="form-control text-center"
-                                                data-config="pitRadio.audio.sampleRate" min="8000" step="4000">
+                                            <input type="number" id="audio-pitradio-samplerate"
+                                                class="form-control text-center" data-config="pitRadio.audio.sampleRate"
+                                                min="8000" step="4000">
                                             <span class="input-suffix">Hz</span>
                                         </div>
                                     </div>
@@ -2396,21 +2392,25 @@
                                             <span id="audio-pitradio-volume-value" class="text-muted">100%</span>
                                         </label>
                                         <input type="range" id="audio-pitradio-volume" class="form-range"
-                                            data-config="pitRadio.audio.volume" data-type="number"
-                                            min="0" max="100" step="5"
+                                            data-config="pitRadio.audio.volume" data-type="number" min="0" max="100"
+                                            step="5"
                                             oninput="document.getElementById('audio-pitradio-volume-value').textContent = this.value + '%'">
                                     </div>
                                 </div>
                                 <div class="row g-3 mb-3 align-items-center">
                                     <div class="col-auto">
-                                        <button type="button" id="audio-pitradio-test" class="btn btn-outline-secondary">Test</button>
+                                        <button type="button" id="audio-pitradio-test"
+                                            class="btn btn-outline-secondary">Test</button>
                                         <span id="audio-pitradio-test-status" class="ms-2 small text-muted"></span>
                                     </div>
                                 </div>
                                 <div class="mb-3">
                                     <small class="text-muted">
                                         <i class="fa-solid fa-info-circle me-1"></i>
-                                        Local audio output requires the <strong>portaudio</strong> backend. The <strong>beep</strong> backend uses a single shared stereo device and cannot be used for pit radio output.
+                                        Local audio output requires the <strong>portaudio</strong> backend. The
+                                        <strong>beep</strong> backend uses a single shared 2-channel device and cannot
+                                        be
+                                        used for pit radio output.
                                     </small>
                                 </div>
                             </div>

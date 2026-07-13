@@ -34,7 +34,6 @@ func TestApplyHapticsOutputConfig_RestartTriggers(t *testing.T) {
 		wantRestart bool
 	}{
 		{"device change", map[string]any{"device": "newdev"}, true},
-		{"channels change", map[string]any{"channels": float64(4)}, true},
 		{"sampleRate change", map[string]any{"sampleRate": float64(48000)}, true},
 		{"latency change", map[string]any{"latencyMs": float64(40)}, true},
 		{"deviceName only", map[string]any{"deviceName": "Speakers"}, false},

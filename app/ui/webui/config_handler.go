@@ -179,14 +179,30 @@ func (h *configHandler) handleGetConfig(response http.ResponseWriter, _ *http.Re
 			},
 		},
 		"synthesizer": map[string]any{
-			"internalSampleRateHz":      h.config.GetSynthInternalSampleRateHz(),
-			"outputFile":                h.config.GetSynthOutputFile(),
-			"masterMute":                h.config.GetSynthMasterMute(),
-			"masterGain":                h.config.GetSynthMasterGain(),
-			"channel0Mute":              h.config.GetSynthChannelMute(0),
-			"channel0Gain":              h.config.GetSynthChannelGain(0),
-			"channel1Mute":              h.config.GetSynthChannelMute(1),
-			"channel1Gain":              h.config.GetSynthChannelGain(1),
+			"internalSampleRateHz": h.config.GetSynthInternalSampleRateHz(),
+			"outputFile":           h.config.GetSynthOutputFile(),
+			"masterMute":           h.config.GetSynthMasterMute(),
+			"masterGain":           h.config.GetSynthMasterGain(),
+			"channelMute": func() []bool {
+				n := h.config.GetAudioHapticsChannels()
+
+				vals := make([]bool, n)
+				for i := range n {
+					vals[i] = h.config.GetSynthChannelMute(i)
+				}
+
+				return vals
+			}(),
+			"channelGain": func() []float64 {
+				n := h.config.GetAudioHapticsChannels()
+
+				vals := make([]float64, n)
+				for i := range n {
+					vals[i] = h.config.GetSynthChannelGain(i)
+				}
+
+				return vals
+			}(),
 			"chassisMute":               h.config.GetSynthChassisMute(),
 			"chassisGain":               h.config.GetSynthChassisGain(),
 			"transmissionMute":          h.config.GetSynthTransmissionMute(),
@@ -211,10 +227,16 @@ func (h *configHandler) handleGetConfig(response http.ResponseWriter, _ *http.Re
 				"resolution": resolution,
 			}
 		}(),
-		"drxHeadroom": []float64{
-			h.config.GetSynthChannelDRXHeadroom(0),
-			h.config.GetSynthChannelDRXHeadroom(1),
-		},
+		"drxHeadroom": func() []float64 {
+			n := h.config.GetAudioHapticsChannels()
+
+			vals := make([]float64, n)
+			for i := range n {
+				vals[i] = h.config.GetSynthChannelDRXHeadroom(i)
+			}
+
+			return vals
+		}(),
 		"telemetry": map[string]any{
 			"source":    h.config.GetTelemetrySource(),
 			"updateURL": h.config.GetTelemetryUpdateURL(),
@@ -468,18 +490,7 @@ func (h *configHandler) applySynthGainMuteFields(config map[string]any) []string
 
 	errors = appendErr(errors, applyField(config, "masterGain", "invalid master gain value", h.config.SetSynthMasterGain))
 	errors = appendErr(errors, applyField(config, "masterMute", "invalid master gain mute value", h.config.SetSynthMasterMute))
-	errors = appendErr(errors, applyField(config, "channel0Gain", "invalid left channel gain value", func(f float64) {
-		h.config.SetSynthChannelGain(0, f)
-	}))
-	errors = appendErr(errors, applyField(config, "channel0Mute", "invalid left channel mute value", func(b bool) {
-		h.config.SetSynthChannelMute(0, b)
-	}))
-	errors = appendErr(errors, applyField(config, "channel1Gain", "invalid right channel gain value", func(f float64) {
-		h.config.SetSynthChannelGain(1, f)
-	}))
-	errors = appendErr(errors, applyField(config, "channel1Mute", "invalid right channel mute value", func(b bool) {
-		h.config.SetSynthChannelMute(1, b)
-	}))
+	errors = append(errors, h.applyChannelGainMute(config)...)
 	errors = appendErr(errors, applyField(config, "chassisGain", "invalid chassis gain value", h.config.SetSynthChassisGain))
 	errors = appendErr(errors, applyField(config, "chassisMute", "invalid chassis gain mute value", h.config.SetSynthChassisMute))
 	errors = appendErr(errors, applyField(config, "transmissionGain", "invalid transmission gain value", h.config.SetSynthTransmissionGain))
@@ -520,6 +531,45 @@ func (h *configHandler) applyEngineProfiles(profilesMap map[string]any) []string
 	}
 
 	return nil
+}
+
+// applyChannelGainMute applies the per-channel channelGain and channelMute
+// arrays. Each index maps to an output channel; out-of-range indices are
+// ignored by the config setters.
+func (h *configHandler) applyChannelGainMute(config map[string]any) []string {
+	var errors []string
+
+	if gains, found := config["channelGain"]; found {
+		gainArray, valid := gains.([]any)
+		if !valid {
+			errors = append(errors, "invalid channelGain value (expected array)")
+		} else {
+			for channel, val := range gainArray {
+				if gain, ok := val.(float64); ok {
+					h.config.SetSynthChannelGain(channel, gain)
+				} else {
+					errors = append(errors, fmt.Sprintf("invalid gain value for channel %d", channel))
+				}
+			}
+		}
+	}
+
+	if mutes, found := config["channelMute"]; found {
+		muteArray, valid := mutes.([]any)
+		if !valid {
+			errors = append(errors, "invalid channelMute value (expected array)")
+		} else {
+			for channel, val := range muteArray {
+				if mute, ok := val.(bool); ok {
+					h.config.SetSynthChannelMute(channel, mute)
+				} else {
+					errors = append(errors, fmt.Sprintf("invalid mute value for channel %d", channel))
+				}
+			}
+		}
+	}
+
+	return errors
 }
 
 // applyEQEnabled applies the enableEQ array field.

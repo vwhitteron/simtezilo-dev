@@ -1964,11 +1964,29 @@ class ConfigManager {
         // Initialize current channel
         this.currentChannel = 0;
 
-        // Get EQ bands array (per-channel: [[{frequency, gain, q}, ...], [{frequency, gain, q}, ...]])
+        // Number of output channels (variable, driven by haptics.output.channels)
+        const numChannels = (this.config.haptics && this.config.haptics.output &&
+            this.config.haptics.output.channels) || 2;
+        this.numEqChannels = numChannels;
+
+        // Populate the channel select dropdown (Ch0..ChN-1) since the HTML no
+        // longer ships static Left/Right options.
+        if (channelSelect) {
+            channelSelect.innerHTML = '';
+            for (let ch = 0; ch < numChannels; ch++) {
+                const option = document.createElement('option');
+                option.value = String(ch);
+                option.textContent = 'Ch' + ch;
+                channelSelect.appendChild(option);
+            }
+            channelSelect.value = '0';
+        }
+
+        // Get EQ bands array (per-channel: [[{frequency, gain, q}, ...], ...])
         // Deep copy to avoid reference issues with config object
         let eqBandsAll = JSON.parse(JSON.stringify(this.config.synthesizer.eq || []));
 
-        // Default bands for both channels
+        // Default bands for a channel
         const defaultBands = [
             { frequency: 12, gain: 0.0, q: 2.0 },
             { frequency: 16, gain: 0.0, q: 2.0 },
@@ -1980,20 +1998,17 @@ class ConfigManager {
             { frequency: 58, gain: 0.0, q: 2.0 }
         ];
 
-        // Initialize eqBandsAll as array of 2 channels
-        if (!Array.isArray(eqBandsAll) || eqBandsAll.length !== 2) {
-            eqBandsAll = [
-                JSON.parse(JSON.stringify(defaultBands)),
-                JSON.parse(JSON.stringify(defaultBands))
-            ];
-        } else {
-            // Validate each channel has 8 bands
-            for (let ch = 0; ch < 2; ch++) {
-                if (!Array.isArray(eqBandsAll[ch]) || eqBandsAll[ch].length !== 8) {
-                    eqBandsAll[ch] = JSON.parse(JSON.stringify(defaultBands));
-                }
+        // Initialize eqBandsAll to have exactly numChannels entries, each with
+        // 8 bands, seeding any missing/invalid channels with defaultBands.
+        if (!Array.isArray(eqBandsAll)) {
+            eqBandsAll = [];
+        }
+        for (let ch = 0; ch < numChannels; ch++) {
+            if (!Array.isArray(eqBandsAll[ch]) || eqBandsAll[ch].length !== 8) {
+                eqBandsAll[ch] = JSON.parse(JSON.stringify(defaultBands));
             }
         }
+        eqBandsAll.length = numChannels;
 
         // Store all channel bands
         this.eqBandsAll = eqBandsAll;
@@ -2521,14 +2536,15 @@ class ConfigManager {
     // Save equalizer settings
     async saveEqualizer() {
         const eqEnabledCheckbox = document.getElementById('synth-eqenabled');
+        const numChannels = this.numEqChannels || 2;
 
-        if (!this.eqBandsAll || this.eqBandsAll.length !== 2) {
-            console.error('EQ must have exactly 2 channels');
+        if (!this.eqBandsAll || this.eqBandsAll.length !== numChannels) {
+            console.error(`EQ must have exactly ${numChannels} channels`);
             return;
         }
 
         // Validate each channel has 8 bands
-        for (let ch = 0; ch < 2; ch++) {
+        for (let ch = 0; ch < numChannels; ch++) {
             if (!this.eqBandsAll[ch] || this.eqBandsAll[ch].length !== 8) {
                 console.error(`Channel ${ch} must have exactly 8 bands`);
                 return;
@@ -2552,8 +2568,8 @@ class ConfigManager {
 
             // Update enableEQ for the current channel
             let enableEQArray = this.config.synthesizer.enableEQ;
-            if (!Array.isArray(enableEQArray) || enableEQArray.length !== 2) {
-                enableEQArray = [false, false];
+            if (!Array.isArray(enableEQArray) || enableEQArray.length !== numChannels) {
+                enableEQArray = new Array(numChannels).fill(false);
             }
             if (eqEnabledCheckbox) {
                 enableEQArray[this.currentChannel] = eqEnabledCheckbox.checked;

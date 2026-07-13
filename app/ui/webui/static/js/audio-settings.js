@@ -14,7 +14,7 @@
     let audioConfig = {
         backend: 'beep',
         availableBackends: ['beep'],
-        haptics: { device: '', deviceName: '' },
+        haptics: { device: '', deviceName: '', channels: 2 },
         pitRadio: { device: '', deviceName: '' },
     };
 
@@ -36,14 +36,17 @@
         return document.getElementById(id);
     }
 
-    // Friendly option label: prefer the curated DisplayName, and only surface a
-    // channel count when it is meaningful (multichannel cards).
-    function deviceLabel(device) {
+    // Friendly option label: prefer the curated DisplayName and always surface the
+    // device's channel count in brackets, e.g. "HiFiBerry DAC (2ch)". The count is
+    // only appended when showChannels is set (the haptics role, where the channel
+    // count drives output routing); it is meaningless for pit-radio voice output.
+    function deviceLabel(device, showChannels) {
         const name = device.DisplayName || device.Name || '';
-        if (device.MaxChannels && device.MaxChannels > 2) {
-            return name + ' (' + device.MaxChannels + 'ch)';
+        if (!showChannels) {
+            return name;
         }
-        return name;
+        const channels = device.MaxChannels || 2;
+        return name + ' (' + channels + 'ch)';
     }
 
     async function fetchAudioConfig() {
@@ -65,6 +68,7 @@
                 audioConfig.haptics = {
                     device: hapticsOutput.device || '',
                     deviceName: hapticsOutput.deviceName || '',
+                    channels: parseInt(hapticsOutput.channels, 10) || 2,
                 };
                 audioConfig.pitRadio = {
                     device: pitRadioAudio.device || '',
@@ -74,6 +78,28 @@
         } catch (err) {
             console.error('audio-settings: failed to load config', err);
         }
+    }
+
+    // After a haptics device change the server re-derives the channel count from
+    // the device. Re-read the config and broadcast a 'configloaded' event so the
+    // channel-gains and routing controls resize to match. A short delay lets the
+    // device/deviceName saves (fired asynchronously by settings.js) land
+    // server-side before we read the derived count back.
+    function refreshDerivedChannels() {
+        setTimeout(async () => {
+            try {
+                const response = await fetch('/api/config?t=' + Date.now());
+                if (!response.ok) {
+                    return;
+                }
+                const config = await response.json();
+                const hapticsOutput = (config.haptics && config.haptics.output) || {};
+                audioConfig.haptics.channels = parseInt(hapticsOutput.channels, 10) || 2;
+                document.dispatchEvent(new CustomEvent('configloaded', { detail: config }));
+            } catch (err) {
+                console.error('audio-settings: failed to refresh channel count', err);
+            }
+        }, 700);
     }
 
     function selectedBackend() {
@@ -152,7 +178,7 @@
     // their A2DP link adds 100-200 ms of latency, which is unusable for haptics
     // (the feedback would lag the on-screen event), so they are never offered
     // for the haptic role.
-    function populateDeviceSelect(select, hiddenId, devices, saved, excludeName, excludeBluetooth) {
+    function populateDeviceSelect(select, hiddenId, devices, saved, excludeName, excludeBluetooth, showChannels) {
         if (!select) {
             return;
         }
@@ -164,7 +190,7 @@
 
         const defaultOption = document.createElement('option');
         defaultOption.value = '';
-        defaultOption.textContent = 'System default';
+        defaultOption.textContent = showChannels ? 'System default (2ch)' : 'System default';
         defaultOption.dataset.name = '';
         select.appendChild(defaultOption);
 
@@ -191,7 +217,7 @@
             items.forEach(device => {
                 const option = document.createElement('option');
                 option.value = device.ID;
-                option.textContent = deviceLabel(device);
+                option.textContent = deviceLabel(device, showChannels);
                 option.dataset.name = device.Name;
                 group.appendChild(option);
             });
@@ -256,9 +282,9 @@
     // other's current selection so a device can't be picked for both roles.
     function repopulateDevices() {
         populateDeviceSelect(el('audio-haptics-device'), 'audio-haptics-devicename',
-            lastDevices, audioConfig.haptics, audioConfig.pitRadio.deviceName || '', true);
+            lastDevices, audioConfig.haptics, audioConfig.pitRadio.deviceName || '', true, true);
         populateDeviceSelect(el('audio-pitradio-device'), 'audio-pitradio-devicename',
-            lastDevices, audioConfig.pitRadio, audioConfig.haptics.deviceName || '');
+            lastDevices, audioConfig.pitRadio, audioConfig.haptics.deviceName || '', false, false);
     }
 
     async function playTest(kind, button, statusEl) {
@@ -282,7 +308,8 @@
             if (isNaN(channel)) {
                 channel = 0;
             }
-            channels = parseInt((el('audio-haptics-channels') || {}).value, 10) || 2;
+            // Channel count is device-derived; use the loaded config's value.
+            channels = audioConfig.haptics.channels || 2;
             sampleRate = parseInt((el('audio-haptics-samplerate') || {}).value, 10) || 0;
         } else {
             device = (el('audio-pitradio-device') || {}).value || '';
@@ -368,6 +395,10 @@
                     audioConfig[role].deviceName = (option && option.dataset && option.dataset.name) || '';
 
                     repopulateDevices();
+
+                    if (role === 'haptics') {
+                        refreshDerivedChannels();
+                    }
                 });
             }
         });

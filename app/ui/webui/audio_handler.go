@@ -14,6 +14,10 @@ import (
 // testToneDuration is how long a device/channel test tone plays.
 const testToneDuration = 1500 * time.Millisecond
 
+// maxHapticsChannels caps the device-derived output channel count, guarding
+// against virtual/backend devices that advertise an implausibly large count.
+const maxHapticsChannels = 32
+
 // applyHapticsOutputConfig applies updates to the haptic output stream
 // configuration. The incoming map mirrors the "output" object of the haptics
 // section of the config JSON.
@@ -24,19 +28,27 @@ func (h *configHandler) applyHapticsOutputConfig(config map[string]any) []string
 
 	var errors []string
 
+	_, deviceChange := config["device"]
+	_, nameChange := config["deviceName"]
+
 	errors = appendErr(errors, applyField(config, "device", "invalid haptics device value", h.config.SetAudioHapticsDevice))
 	// The name is metadata for device resolution; a device change is saved
 	// alongside it and already triggers the restart, so it isn't change-tracked.
 	errors = appendErr(errors, applyField(config, "deviceName", "invalid haptics device name value", h.config.SetAudioHapticsDeviceName))
-	errors = appendErr(errors, applyField(config, "channels", "invalid haptics channels value", func(f float64) {
-		h.config.SetAudioHapticsChannels(int(f))
-	}))
 	errors = appendErr(errors, applyField(config, "sampleRate", "invalid haptics sample rate value", func(f float64) {
 		h.config.SetAudioHapticsSampleRate(int(f))
 	}))
 	errors = appendErr(errors, applyField(config, "latencyMs", "invalid haptics latency value", func(f float64) {
 		h.config.SetAudioHapticsLatencyMs(int(f))
 	}))
+
+	// The output channel count is a property of the selected device, not a user
+	// setting. Whenever the device (or its resolution name) changes, re-derive it
+	// from the device's reported capability so the per-channel routing/gain/EQ
+	// arrays resize to match.
+	if deviceChange || nameChange {
+		h.config.SetAudioHapticsChannels(h.deriveHapticsChannels())
+	}
 
 	if changed && h.onHapticsOutputChanged != nil {
 		h.onHapticsOutputChanged()
@@ -45,15 +57,40 @@ func (h *configHandler) applyHapticsOutputConfig(config map[string]any) []string
 	return errors
 }
 
+// deriveHapticsChannels resolves the configured haptics output device on the
+// active backend and returns its usable output channel count. The channel count
+// is a property of the device, not a user setting. It falls back to stereo when
+// the backend cannot be opened, no concrete device resolves (e.g. the System
+// default selection), or the reported count is out of range, and caps the
+// result at maxHapticsChannels.
+func (h *configHandler) deriveHapticsChannels() int {
+	const fallback = 2
+
+	backend, err := audio.New(h.config.GetAudioBackend(), h.log)
+	if err != nil {
+		return fallback
+	}
+
+	defer func() { _ = backend.Close() }()
+
+	device, ok := audio.FindOutputDevice(backend,
+		h.config.GetAudioHapticsDeviceName(), h.config.GetAudioHapticsDevice())
+	if !ok || device.MaxChannels < 1 {
+		return fallback
+	}
+
+	if device.MaxChannels > maxHapticsChannels {
+		return maxHapticsChannels
+	}
+
+	return device.MaxChannels
+}
+
 // hapticsOutputChanged reports whether the patch alters any haptic output value
 // that requires restarting the live stream. deviceName is metadata only and is
 // deliberately excluded from the comparison.
 func (h *configHandler) hapticsOutputChanged(config map[string]any) bool {
 	if v, ok := config["device"].(string); ok && v != h.config.GetAudioHapticsDevice() {
-		return true
-	}
-
-	if v, ok := config["channels"].(float64); ok && int(v) != h.config.GetAudioHapticsChannels() {
 		return true
 	}
 
