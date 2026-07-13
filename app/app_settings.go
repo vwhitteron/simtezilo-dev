@@ -4,7 +4,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/vwhitteron/simtezilo-dev/app/calibrator"
 	"github.com/vwhitteron/simtezilo-dev/app/i18n/languagedb"
 )
 
@@ -38,20 +37,15 @@ func (a *App) settingAction(setting languagedb.Key, action string) string {
 		// Synthesizer handlers
 		languagedb.UIMenuSynthInternalSampleRate:        a.handleInternalSampleRateSetting,
 		languagedb.UIMenuSynthMasterGain:                a.handleMasterGainSetting,
-		languagedb.UIMenuSynthLeftGain:                  a.handleLeftGainSetting,
-		languagedb.UIMenuSynthRightGain:                 a.handleRightGainSetting,
 		languagedb.UIMenuSynthChassisGain:               a.handleChassisGainSetting,
 		languagedb.UIMenuSynthEngineGain:                a.handleEngineGainSetting,
 		languagedb.UIMenuSynthTransmissionGain:          a.handleTransmissionGainSetting,
 		languagedb.UIMenuSynthTransmissionGainMinRace:   a.handleTransmissionGainMinRaceSetting,
 		languagedb.UIMenuSynthTransmissionGainMinStreet: a.handleTransmissionGainMinStreetSetting,
-		languagedb.UIMenuSynthEqMode:                    a.handleEqModeSetting,
 		languagedb.UIMenuSynthDrx:                       a.handleDrxSetting,
 
 		// Mute handlers
 		languagedb.UIMenuSynthMuteMaster:       a.handleMasterMuteSetting,
-		languagedb.UIMenuSynthMuteLeft:         a.handleLeftMuteSetting,
-		languagedb.UIMenuSynthMuteRight:        a.handleRightMuteSetting,
 		languagedb.UIMenuSynthMuteChassis:      a.handleChassisMuteSetting,
 		languagedb.UIMenuSynthMuteEngine:       a.handleEngineMuteSetting,
 		languagedb.UIMenuSynthMuteTransmission: a.handleTransmissionMuteSetting,
@@ -137,6 +131,51 @@ func (a *App) settingAction(setting languagedb.Key, action string) string {
 	const routingPrefix = "ui.menu.haptics.routing."
 	if strings.HasPrefix(string(setting), routingPrefix) {
 		result := a.handleRoutingLeafSetting(string(setting), action)
+
+		if action != "get" && action != "" {
+			err := a.config.SaveConfigToFile()
+			if err != nil {
+				a.log.Error().Err(err).Msg("failed to save configuration to file")
+			}
+		}
+
+		return result
+	}
+
+	// Dynamic synth channel gain leaf keys: "ui.menu.synth.gain.ch<n>"
+	const channelGainPrefix = "ui.menu.synth.gain.ch"
+	if strings.HasPrefix(string(setting), channelGainPrefix) {
+		result := a.handleChannelGainLeafSetting(string(setting), action)
+
+		if action != "get" && action != "" {
+			err := a.config.SaveConfigToFile()
+			if err != nil {
+				a.log.Error().Err(err).Msg("failed to save configuration to file")
+			}
+		}
+
+		return result
+	}
+
+	// Dynamic synth channel mute leaf keys: "ui.menu.synth.mute.ch<n>"
+	const channelMutePrefix = "ui.menu.synth.mute.ch"
+	if strings.HasPrefix(string(setting), channelMutePrefix) {
+		result := a.handleChannelMuteLeafSetting(string(setting), action)
+
+		if action != "get" && action != "" {
+			err := a.config.SaveConfigToFile()
+			if err != nil {
+				a.log.Error().Err(err).Msg("failed to save configuration to file")
+			}
+		}
+
+		return result
+	}
+
+	// Dynamic synth channel EQ leaf keys: "ui.menu.synth.eq.ch<n>"
+	const channelEqPrefix = "ui.menu.synth.eq.ch"
+	if strings.HasPrefix(string(setting), channelEqPrefix) {
+		result := a.handleChannelEqLeafSetting(string(setting), action)
 
 		if action != "get" && action != "" {
 			err := a.config.SaveConfigToFile()
@@ -241,62 +280,6 @@ func (a *App) handleEngineGainSetting(action string) string {
 	return strconv.FormatFloat(value, 'f', 2, 64)
 }
 
-func (a *App) handleEqModeSetting(action string) string {
-	// EQ modes: off, left, right, left+right
-	leftEnabled := a.config.GetSynthChannelEqEnabled(0)
-	rightEnabled := a.config.GetSynthChannelEqEnabled(1)
-
-	// Determine current mode index: 0=off, 1=left, 2=right, 3=left+right
-	currentMode := a.getEqModeIndex(leftEnabled, rightEnabled)
-
-	switch action {
-	case "increase":
-		currentMode = (currentMode + 1) % 4
-	case "decrease":
-		currentMode = (currentMode + 3) % 4 // +3 is equivalent to -1 mod 4
-	}
-
-	return a.applyEqMode(currentMode)
-}
-
-func (a *App) getEqModeIndex(leftEnabled, rightEnabled bool) int {
-	switch {
-	case leftEnabled && rightEnabled:
-		return 3
-	case rightEnabled:
-		return 2
-	case leftEnabled:
-		return 1
-	default:
-		return 0
-	}
-}
-
-func (a *App) applyEqMode(mode int) string {
-	switch mode {
-	case 1: // left
-		a.config.SetSynthChannelEqEnabled(0, true)
-		a.config.SetSynthChannelEqEnabled(1, false)
-
-		return "Left"
-	case 2: // right
-		a.config.SetSynthChannelEqEnabled(0, false)
-		a.config.SetSynthChannelEqEnabled(1, true)
-
-		return "Right"
-	case 3: // left+right
-		a.config.SetSynthChannelEqEnabled(0, true)
-		a.config.SetSynthChannelEqEnabled(1, true)
-
-		return "Left+Right"
-	default: // off
-		a.config.SetSynthChannelEqEnabled(0, false)
-		a.config.SetSynthChannelEqEnabled(1, false)
-
-		return "Off"
-	}
-}
-
 func (a *App) handleDrxSetting(action string) string {
 	enabled := a.config.GetSynthDRXEnabled()
 
@@ -369,36 +352,6 @@ func (a *App) handleMasterGainSetting(action string) string {
 	return strconv.FormatFloat(value, 'f', 2, 64) + " dB"
 }
 
-func (a *App) handleLeftGainSetting(action string) string {
-	var value float64
-
-	switch action {
-	case "increase":
-		value = a.config.IncreaseSynthChannelGain(0)
-	case "decrease":
-		value = a.config.DecreaseSynthChannelGain(0)
-	default:
-		value = a.config.GetSynthChannelGain(0)
-	}
-
-	return strconv.FormatFloat(value, 'f', 2, 64) + " dB"
-}
-
-func (a *App) handleRightGainSetting(action string) string {
-	var value float64
-
-	switch action {
-	case "increase":
-		value = a.config.IncreaseSynthChannelGain(1)
-	case "decrease":
-		value = a.config.DecreaseSynthChannelGain(1)
-	default:
-		value = a.config.GetSynthChannelGain(1)
-	}
-
-	return strconv.FormatFloat(value, 'f', 2, 64) + " dB"
-}
-
 func (a *App) handleMasterMuteSetting(action string) string {
 	muted := a.config.GetSynthMasterMute()
 
@@ -406,38 +359,6 @@ func (a *App) handleMasterMuteSetting(action string) string {
 	case "increase", "decrease":
 		muted = !muted
 		a.config.SetSynthMasterMute(muted)
-	}
-
-	if muted {
-		return settingStateOn
-	}
-
-	return settingStateOff
-}
-
-func (a *App) handleLeftMuteSetting(action string) string {
-	muted := a.config.GetSynthChannelMute(0)
-
-	switch action {
-	case "increase", "decrease":
-		muted = !muted
-		a.config.SetSynthChannelMute(0, muted)
-	}
-
-	if muted {
-		return settingStateOn
-	}
-
-	return settingStateOff
-}
-
-func (a *App) handleRightMuteSetting(action string) string {
-	muted := a.config.GetSynthChannelMute(1)
-
-	switch action {
-	case "increase", "decrease":
-		muted = !muted
-		a.config.SetSynthChannelMute(1, muted)
 	}
 
 	if muted {
@@ -1327,6 +1248,91 @@ func (a *App) handleRoutingLeafSetting(key, action string) string {
 	return settingStateOff
 }
 
+// handleChannelGainLeafSetting parses a dynamic synth channel gain leaf key of
+// the form "ui.menu.synth.gain.ch<n>" and adjusts the gain for that channel.
+func (a *App) handleChannelGainLeafSetting(key, action string) string {
+	// key format: "ui.menu.synth.gain.ch<n>"
+	const prefix = "ui.menu.synth.gain.ch"
+
+	chStr := strings.TrimPrefix(key, prefix)
+
+	ch, err := strconv.Atoi(chStr)
+	if err != nil || ch < 0 {
+		return "error"
+	}
+
+	var value float64
+
+	switch action {
+	case "increase":
+		value = a.config.IncreaseSynthChannelGain(ch)
+	case "decrease":
+		value = a.config.DecreaseSynthChannelGain(ch)
+	default:
+		value = a.config.GetSynthChannelGain(ch)
+	}
+
+	return strconv.FormatFloat(value, 'f', 2, 64) + " dB"
+}
+
+// handleChannelMuteLeafSetting parses a dynamic synth channel mute leaf key of
+// the form "ui.menu.synth.mute.ch<n>", toggles the mute for that channel on
+// increase or decrease, and returns "on"/"off".
+func (a *App) handleChannelMuteLeafSetting(key, action string) string {
+	// key format: "ui.menu.synth.mute.ch<n>"
+	const prefix = "ui.menu.synth.mute.ch"
+
+	chStr := strings.TrimPrefix(key, prefix)
+
+	ch, err := strconv.Atoi(chStr)
+	if err != nil || ch < 0 {
+		return "error"
+	}
+
+	muted := a.config.GetSynthChannelMute(ch)
+
+	switch action {
+	case "increase", "decrease":
+		muted = !muted
+		a.config.SetSynthChannelMute(ch, muted)
+	}
+
+	if muted {
+		return settingStateOn
+	}
+
+	return settingStateOff
+}
+
+// handleChannelEqLeafSetting parses a dynamic synth channel EQ leaf key of the
+// form "ui.menu.synth.eq.ch<n>", toggles EQ enablement for that channel on
+// increase or decrease, and returns "on"/"off".
+func (a *App) handleChannelEqLeafSetting(key, action string) string {
+	// key format: "ui.menu.synth.eq.ch<n>"
+	const prefix = "ui.menu.synth.eq.ch"
+
+	chStr := strings.TrimPrefix(key, prefix)
+
+	ch, err := strconv.Atoi(chStr)
+	if err != nil || ch < 0 {
+		return "error"
+	}
+
+	enabled := a.config.GetSynthChannelEqEnabled(ch)
+
+	switch action {
+	case "increase", "decrease":
+		enabled = !enabled
+		a.config.SetSynthChannelEqEnabled(ch, enabled)
+	}
+
+	if enabled {
+		return settingStateOn
+	}
+
+	return settingStateOff
+}
+
 // cycleSampleRate handles cycling through sample rates based on the action.
 // Returns the new rate after the action is applied.
 func cycleSampleRate(action string, current int, rates []int) int {
@@ -1391,34 +1397,31 @@ func (a *App) handleCalibrationEnableSetting(action string) string {
 	return settingStateOff
 }
 
+// handleCalibrationChannelSetting cycles the calibration tone's target output
+// channel through the sequence All (-1), Ch0, Ch1, ..., Ch(N-1), where N is
+// the configured haptic output channel count.
 func (a *App) handleCalibrationChannelSetting(action string) string {
-	channels := []calibrator.OutputChannel{
-		calibrator.OutputChannelBoth,
-		calibrator.OutputChannelLeft,
-		calibrator.OutputChannelRight,
-	}
+	channelCount := a.config.GetAudioHapticsChannels()
 
-	current := a.calibrator.GetChannel()
-	currentIdx := 0
-
-	for i, ch := range channels {
-		if ch == current {
-			currentIdx = i
-
-			break
-		}
-	}
+	// Sequence indices 0..channelCount map to target channels -1 (all), 0, 1, ...
+	current := a.calibrator.GetTargetChannel()
+	currentIdx := current + 1
 
 	switch action {
 	case "increase":
-		currentIdx = (currentIdx + 1) % len(channels)
-		a.calibrator.SetChannel(channels[currentIdx])
+		currentIdx = (currentIdx + 1) % (channelCount + 1)
+		a.calibrator.SetTargetChannel(currentIdx - 1)
 	case "decrease":
-		currentIdx = (currentIdx - 1 + len(channels)) % len(channels)
-		a.calibrator.SetChannel(channels[currentIdx])
+		currentIdx = (currentIdx - 1 + channelCount + 1) % (channelCount + 1)
+		a.calibrator.SetTargetChannel(currentIdx - 1)
 	}
 
-	return string(a.calibrator.GetChannel())
+	target := a.calibrator.GetTargetChannel()
+	if target < 0 {
+		return "All"
+	}
+
+	return "Ch" + strconv.Itoa(target)
 }
 
 func (a *App) handleCalibrationFrequencySetting(action string) string {

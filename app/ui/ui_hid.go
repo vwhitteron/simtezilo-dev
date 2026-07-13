@@ -410,6 +410,13 @@ func (u *UserInterface) getSettingName(menuPage string) string {
 		return label
 	}
 
+	// Synth channel gain/mute/EQ leaves ("ui.menu.synth.gain.chN",
+	// "ui.menu.synth.mute.chN", "ui.menu.synth.eq.chN") are composed dynamically
+	// for the same reason.
+	if label, ok := channelLeafLabel(menuPage); ok {
+		return label
+	}
+
 	key, err := languagedb.StringToKey(menuPage)
 	if err != nil {
 		return menuPage
@@ -423,6 +430,53 @@ func (u *UserInterface) getSettingName(menuPage string) string {
 func routingChannelLabel(menuPage string) (string, bool) {
 	const prefix = "ui.menu.haptics.routing."
 	if !strings.HasPrefix(menuPage, prefix) {
+		return "", false
+	}
+
+	lastDot := strings.LastIndex(menuPage, ".")
+
+	segment := menuPage[lastDot+1:]
+	if !strings.HasPrefix(segment, "ch") {
+		return "", false
+	}
+
+	digits := segment[len("ch"):]
+	if digits == "" {
+		return "", false
+	}
+
+	for _, r := range digits {
+		if r < '0' || r > '9' {
+			return "", false
+		}
+	}
+
+	return "→ Ch" + digits, true
+}
+
+// channelLeafPrefixes lists the dynamic per-channel synth leaf key prefixes
+// that are composed rather than translated, mirroring the routing subtree.
+var channelLeafPrefixes = []string{
+	"ui.menu.synth.gain.",
+	"ui.menu.synth.mute.ch",
+	"ui.menu.synth.eq.",
+}
+
+// channelLeafLabel detects a dynamic synth channel leaf key of the form
+// "ui.menu.synth.<gain|eq>.chN" or "ui.menu.synth.mute.chN" and returns a
+// composed "→ ChN" label.
+func channelLeafLabel(menuPage string) (string, bool) {
+	matched := false
+
+	for _, prefix := range channelLeafPrefixes {
+		if strings.HasPrefix(menuPage, prefix) {
+			matched = true
+
+			break
+		}
+	}
+
+	if !matched {
 		return "", false
 	}
 

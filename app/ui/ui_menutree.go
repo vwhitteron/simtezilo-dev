@@ -47,22 +47,20 @@ func newMenuTree(hapticsChannels int) *MenuNode {
 				),
 				branch(languagedb.UIMenuSynthMute,
 					leaf(languagedb.UIMenuSynthMuteMaster),
-					leaf(languagedb.UIMenuSynthMuteLeft),
-					leaf(languagedb.UIMenuSynthMuteRight),
+					newChannelMuteSubtree(hapticsChannels),
 					leaf(languagedb.UIMenuSynthMuteChassis),
 					leaf(languagedb.UIMenuSynthMuteEngine),
 					leaf(languagedb.UIMenuSynthMuteTransmission),
 				),
 				branch(languagedb.UIMenuSynthGainControls,
 					leaf(languagedb.UIMenuSynthMasterGain),
-					leaf(languagedb.UIMenuSynthLeftGain),
-					leaf(languagedb.UIMenuSynthRightGain),
+					newChannelGainSubtree(hapticsChannels),
 					leaf(languagedb.UIMenuSynthChassisGain),
 					leaf(languagedb.UIMenuSynthEngineGain),
 					leaf(languagedb.UIMenuSynthTransmissionGain),
 					leaf(languagedb.UIMenuSynthTransmissionGainMinRace),
 					leaf(languagedb.UIMenuSynthTransmissionGainMinStreet),
-					leaf(languagedb.UIMenuSynthEqMode),
+					newChannelEqSubtree(hapticsChannels),
 					leaf(languagedb.UIMenuSynthDrx),
 					branch(languagedb.UIMenuSynthCalibration,
 						leaf(languagedb.UIMenuSynthCalibrationEnable),
@@ -237,4 +235,48 @@ func newRoutingSubtree(n int) *MenuNode {
 	}
 
 	return branch(languagedb.UIMenuHapticsRouting, sourceBranches...)
+}
+
+// newChannelGainSubtree builds the Synth → Gain Controls → Channel Gain branch
+// for n output channels. Each channel gets its own leaf, keyed
+// "ui.menu.synth.gain.ch<n>".
+func newChannelGainSubtree(n int) *MenuNode {
+	leaves := make([]*MenuNode, n)
+
+	for ch := range n {
+		leafKey := languagedb.Key(fmt.Sprintf("ui.menu.synth.gain.ch%d", ch))
+		leaves[ch] = leaf(leafKey)
+	}
+
+	return branch(languagedb.UIMenuSynthChannelGain, leaves...)
+}
+
+// newChannelMuteSubtree builds the Synth → Mute → Channel Mute branch for n
+// output channels. Each channel gets its own toggle leaf, keyed
+// "ui.menu.synth.mute.ch<n>". The leaf prefix "ui.menu.synth.mute.ch" is
+// distinct from the sibling keys ui.menu.synth.mute.master/chassis/engine/
+// transmission so it cannot collide with them.
+func newChannelMuteSubtree(n int) *MenuNode {
+	leaves := make([]*MenuNode, n)
+
+	for ch := range n {
+		leafKey := languagedb.Key(fmt.Sprintf("ui.menu.synth.mute.ch%d", ch))
+		leaves[ch] = leaf(leafKey)
+	}
+
+	return branch(languagedb.UIMenuSynthMuteChannels, leaves...)
+}
+
+// newChannelEqSubtree builds the Synth → Gain Controls → Channel EQ branch for
+// n output channels. Each channel gets its own toggle leaf, keyed
+// "ui.menu.synth.eq.ch<n>".
+func newChannelEqSubtree(n int) *MenuNode {
+	leaves := make([]*MenuNode, n)
+
+	for ch := range n {
+		leafKey := languagedb.Key(fmt.Sprintf("ui.menu.synth.eq.ch%d", ch))
+		leaves[ch] = leaf(leafKey)
+	}
+
+	return branch(languagedb.UIMenuSynthEq, leaves...)
 }
