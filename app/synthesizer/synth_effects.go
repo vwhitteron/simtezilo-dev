@@ -90,7 +90,7 @@ func (s *EffectsSampleBank) GetSample(name string, sampleRate int) codec.PCMFloa
 	}
 
 	// The cached sample is returned directly: the mixer write path
-	// (StereoMixer.WriteChannel -> MixerChannel.WriteScaled) no longer scales
+	// (ChannelMixer.WriteChannel -> MixerChannel.WriteScaled) no longer scales
 	// its input in place, and the remaining read-only consumers (DCA encoding)
 	// do not mutate it, so no defensive copy is required.
 	return sample

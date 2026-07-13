@@ -36,7 +36,7 @@ const maxPolyphasePhases = 4096
 // stereo [][2]float64 streams. Unlike plain linear interpolation it band-limits
 // the signal, so the large 8 kHz -> 32 kHz up-sample no longer introduces the
 // imaging/aliasing artifacts that made the output sound harsh and choppy.
-func NewResamplingSource(src SampleSource, inRate, outRate, channels int) SampleSource { //nolint:ireturn // constructor returns SampleSource interface by design
+func NewResamplingSource(src SampleSource, inRate, outRate, channels int) SampleSource {
 	if src == nil || inRate <= 0 || outRate <= 0 || inRate == outRate {
 		return src
 	}

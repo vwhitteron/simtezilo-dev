@@ -182,7 +182,7 @@ func New(opts *SynthOpts) (*Synthesizer, error) {
 
 	if synthesizer.mixer == nil {
 		// Pass full config for lock-free reads
-		synthesizer.mixer, err = NewStereoMixer(StereoMixerConfig{
+		synthesizer.mixer, err = NewChannelMixer(ChannelMixerConfig{
 			Config:       opts.BaseConfig,
 			Calibrator:   opts.Calibrator,
 			BufferLength: bufferLength,

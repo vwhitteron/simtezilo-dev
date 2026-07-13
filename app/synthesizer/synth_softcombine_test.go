@@ -150,8 +150,8 @@ func TestSoftCombineNoFlatline(t *testing.T) {
 			// near it (a flatline). A short run at a smooth crest is legitimate;
 			// a sustained one is DC.
 			const (
-				railBand    = 0.999 // "at the rail" band
-				maxPinnedRun = 8    // consecutive near-rail, near-identical samples
+				railBand     = 0.999 // "at the rail" band
+				maxPinnedRun = 8     // consecutive near-rail, near-identical samples
 			)
 
 			run := 0

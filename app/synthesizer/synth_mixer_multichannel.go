@@ -36,8 +36,9 @@ type MixerDiagnostics struct {
 	FadeInActive bool
 }
 
-// StereoMixer handles two audio channels, mixing them into a master output channel.
-type StereoMixer struct {
+// ChannelMixer mixes the configured number of output channels, routing per-source
+// buffers into each channel and combining them into a master output.
+type ChannelMixer struct {
 	config *config.Config
 
 	channels            map[string]*MixerChannel
@@ -91,8 +92,8 @@ type MixerChannel struct {
 	buffer     Buffer
 }
 
-// StereoMixerConfig holds configuration options for the Mixer.
-type StereoMixerConfig struct {
+// ChannelMixerConfig holds configuration options for the Mixer.
+type ChannelMixerConfig struct {
 	Config       *config.Config        // Full config reference for lock-free reads
 	Calibrator   calibrator.Calibrator // Calibration mode signal manager
 	BufferLength time.Duration         // Duration of audio the buffer should hold
@@ -100,8 +101,8 @@ type StereoMixerConfig struct {
 	Log          zerolog.Logger        // Logger instance for logging
 }
 
-// NewStereoMixer creates a new Mixer instance with the provided configuration.
-func NewStereoMixer(mixerConfig StereoMixerConfig) (*StereoMixer, error) {
+// NewChannelMixer creates a new Mixer instance with the provided configuration.
+func NewChannelMixer(mixerConfig ChannelMixerConfig) (*ChannelMixer, error) {
 	if mixerConfig.Config == nil {
 		return nil, errors.New("config must be a valid pointer")
 	}
@@ -113,7 +114,7 @@ func NewStereoMixer(mixerConfig StereoMixerConfig) (*StereoMixer, error) {
 		numOutputChannels = n
 	}
 
-	mixer := &StereoMixer{
+	mixer := &ChannelMixer{
 		config: mixerConfig.Config,
 
 		bufferLength:      mixerConfig.BufferLength,
@@ -170,7 +171,7 @@ func NewStereoMixer(mixerConfig StereoMixerConfig) (*StereoMixer, error) {
 }
 
 // Close gracefully shuts down the mixer, silencing output.
-func (m *StereoMixer) Close() {
+func (m *ChannelMixer) Close() {
 	_ = m.SetChannelGain(ChannelMaster, config.MinimumGain)
 
 	// Cancel context to stop background goroutines
@@ -180,12 +181,12 @@ func (m *StereoMixer) Close() {
 }
 
 // GetBufferCapacity returns the configured buffer length duration in samples.
-func (m *StereoMixer) GetBufferCapacity() int {
+func (m *ChannelMixer) GetBufferCapacity() int {
 	return int(m.bufferLength.Seconds() * float64(m.sampleRateHz))
 }
 
 // AddChannel adds a new channel to the mixer with the specified name and initial gain.
-func (m *StereoMixer) AddChannel(name string, initialGain float64) error {
+func (m *ChannelMixer) AddChannel(name string, initialGain float64) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -202,7 +203,7 @@ func (m *StereoMixer) AddChannel(name string, initialGain float64) error {
 }
 
 // OutputChannelName returns the precomputed channel name for output channel ch.
-func (m *StereoMixer) OutputChannelName(ch int) string {
+func (m *ChannelMixer) OutputChannelName(ch int) string {
 	return m.outputChannelNames[ch]
 }
 
@@ -233,7 +234,7 @@ func (m *MixerChannel) WriteScaled(samples []float64, magnitude float64, offset 
 // WriteChannel writes the provided sample data to the specified channel buffer
 // at the given offset. It does not mutate the caller's slice, so callers may
 // hand in shared or cached buffers (e.g. effect samples) safely.
-func (m *StereoMixer) WriteChannel(name string, samples []float64, magnitude float64, offset int, overwrite bool) error {
+func (m *ChannelMixer) WriteChannel(name string, samples []float64, magnitude float64, offset int, overwrite bool) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -249,7 +250,7 @@ func (m *StereoMixer) WriteChannel(name string, samples []float64, magnitude flo
 // ChannelDepth reports the unread buffered depth of a channel in samples. The
 // engine channel uses it to refill its small cushion each tick (top up to a
 // target depth) instead of accumulating latency.
-func (m *StereoMixer) ChannelDepth(name string) int {
+func (m *ChannelMixer) ChannelDepth(name string) int {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -267,7 +268,7 @@ func (m *StereoMixer) ChannelDepth(name string) int {
 // zero dst and report len(dst); a missing channel reports 0. On an underrun
 // fewer than len(dst) samples are written (see Buffer.Read) — callers must zero
 // or ignore the unwritten tail themselves.
-func (m *StereoMixer) ReadChannel(name string, dst []float64) int {
+func (m *ChannelMixer) ReadChannel(name string, dst []float64) int {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -291,7 +292,7 @@ func (m *StereoMixer) ReadChannel(name string, dst []float64) int {
 }
 
 // InspectChannelBuffer returns a copy of the specified channel buffer for inspection.
-func (m *StereoMixer) InspectChannelBuffer(name string, length int, offset int) []float64 {
+func (m *ChannelMixer) InspectChannelBuffer(name string, length int, offset int) []float64 {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -303,7 +304,7 @@ func (m *StereoMixer) InspectChannelBuffer(name string, length int, offset int) 
 }
 
 // GetChannelBufferLength returns the current length of samples in the specified channel's buffer.
-func (m *StereoMixer) GetChannelBufferLength(name string) int {
+func (m *ChannelMixer) GetChannelBufferLength(name string) int {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -315,7 +316,7 @@ func (m *StereoMixer) GetChannelBufferLength(name string) int {
 }
 
 // GetChannelNames returns a list of all channel names configured in the mixer.
-func (m *StereoMixer) GetChannelNames() []string {
+func (m *ChannelMixer) GetChannelNames() []string {
 	names := []string{}
 
 	m.mu.RLock()
@@ -334,7 +335,7 @@ func (m *StereoMixer) GetChannelNames() []string {
 }
 
 // GetChannelGain returns the current gain of the specified channel.
-func (m *StereoMixer) GetChannelGain(name string) (float64, error) {
+func (m *ChannelMixer) GetChannelGain(name string) (float64, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -347,7 +348,7 @@ func (m *StereoMixer) GetChannelGain(name string) (float64, error) {
 }
 
 // SetChannelGain sets the gain of the specified channel.
-func (m *StereoMixer) SetChannelGain(name string, gain float64) error {
+func (m *ChannelMixer) SetChannelGain(name string, gain float64) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -367,7 +368,7 @@ func (m *StereoMixer) SetChannelGain(name string, gain float64) error {
 }
 
 // GetChannelPowerRatio returns the current power ratio of the specified channel.
-func (m *StereoMixer) GetChannelPowerRatio(name string) (float64, error) {
+func (m *ChannelMixer) GetChannelPowerRatio(name string) (float64, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -380,7 +381,7 @@ func (m *StereoMixer) GetChannelPowerRatio(name string) (float64, error) {
 }
 
 // GetChannelAmplitudeRatio returns the current amplitude ratio of the specified channel.
-func (m *StereoMixer) GetChannelAmplitudeRatio(name string) (float64, error) {
+func (m *ChannelMixer) GetChannelAmplitudeRatio(name string) (float64, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -393,7 +394,7 @@ func (m *StereoMixer) GetChannelAmplitudeRatio(name string) (float64, error) {
 }
 
 // fadeInRunning reports whether a fade-in goroutine is active, under the lock.
-func (m *StereoMixer) fadeInRunning() bool {
+func (m *ChannelMixer) fadeInRunning() bool {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -401,14 +402,14 @@ func (m *StereoMixer) fadeInRunning() bool {
 }
 
 // setFadeInActive sets the fade-in-active flag under the lock.
-func (m *StereoMixer) setFadeInActive(active bool) {
+func (m *ChannelMixer) setFadeInActive(active bool) {
 	m.mu.Lock()
 	m.fadeInActive = active
 	m.mu.Unlock()
 }
 
 // getFaderGain reads the fader gain under the lock.
-func (m *StereoMixer) getFaderGain() float64 {
+func (m *ChannelMixer) getFaderGain() float64 {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -416,21 +417,21 @@ func (m *StereoMixer) getFaderGain() float64 {
 }
 
 // setFaderGain writes the fader gain under the lock.
-func (m *StereoMixer) setFaderGain(gain float64) {
+func (m *ChannelMixer) setFaderGain(gain float64) {
 	m.mu.Lock()
 	m.faderGain = gain
 	m.mu.Unlock()
 }
 
 // SetFader sets the fader gain, which controls the overall output level.
-func (m *StereoMixer) SetFader(gain float64) {
+func (m *ChannelMixer) SetFader(gain float64) {
 	m.setFaderGain(gain)
 
 	_ = m.SetChannelGain(ChannelMaster, gain)
 }
 
 // FadeIn gradually increases the master gain from minimum to the configured level over the specified period.
-func (m *StereoMixer) FadeIn(period time.Duration) {
+func (m *ChannelMixer) FadeIn(period time.Duration) {
 	m.mu.RLock()
 	masterGain := m.channels[ChannelMaster].activeGain
 	m.mu.RUnlock()
@@ -558,11 +559,11 @@ func (v *channelValues) zero() {
 // MixToMaster mixes all active channels into the master channel buffer using an alternative algorithm.
 //
 // MixToMaster must never run concurrently with itself: it reuses the
-// callback-thread-only scratch fields on StereoMixer (mixOutSamples,
+// callback-thread-only scratch fields on ChannelMixer (mixOutSamples,
 // mixChannelSamples, mixPeaks, mixReadScratch, and—via the helpers it
 // calls—engineWorkScratch and calibratorEqAmplitudes). This holds today because
 // it runs only from the single audio callback.
-func (m *StereoMixer) MixToMaster(length int) {
+func (m *ChannelMixer) MixToMaster(length int) {
 	// Reusable callback-thread-only scratch (grown on demand). See struct doc.
 	m.mixOutSamples.grow(length)
 	outSamples := m.mixOutSamples
@@ -661,7 +662,7 @@ func (m *StereoMixer) MixToMaster(length int) {
 }
 
 // ClearBuffers clears all channel buffers in the mixer.
-func (m *StereoMixer) ClearBuffers() {
+func (m *ChannelMixer) ClearBuffers() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -671,7 +672,7 @@ func (m *StereoMixer) ClearBuffers() {
 }
 
 // ClearChannelBuffer clears a specific channel's buffer.
-func (m *StereoMixer) ClearChannelBuffer(name string) {
+func (m *ChannelMixer) ClearChannelBuffer(name string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -681,7 +682,7 @@ func (m *StereoMixer) ClearChannelBuffer(name string) {
 }
 
 // ResetSineWavePhase resets the sine wave phase to zero for the calibrator.
-func (m *StereoMixer) ResetSineWavePhase() {
+func (m *ChannelMixer) ResetSineWavePhase() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -690,7 +691,7 @@ func (m *StereoMixer) ResetSineWavePhase() {
 }
 
 // checkBufferHealth monitors buffer health and logs issues at appropriate levels.
-func (m *StereoMixer) checkBufferHealth() {
+func (m *ChannelMixer) checkBufferHealth() {
 	now := time.Now()
 	if now.Sub(m.lastHealthCheck) < m.healthCheckInterval {
 		return
@@ -708,7 +709,7 @@ func (m *StereoMixer) checkBufferHealth() {
 }
 
 // logChannelHealth inspects a single channel buffer and logs any health issues.
-func (m *StereoMixer) logChannelHealth(name string, channel *MixerChannel) {
+func (m *ChannelMixer) logChannelHealth(name string, channel *MixerChannel) {
 	adaptiveBuffer, ok := channel.buffer.(*AdaptiveBuffer)
 	if !ok {
 		return
@@ -728,7 +729,7 @@ func (m *StereoMixer) logChannelHealth(name string, channel *MixerChannel) {
 }
 
 // logBufferIssue logs a warning when overflows or underruns are detected.
-func (m *StereoMixer) logBufferIssue(name string, detail BufferHealth) {
+func (m *ChannelMixer) logBufferIssue(name string, detail BufferHealth) {
 	logEntry := m.log.Debug().
 		Str("channel", name).
 		Int("overflows", detail.Overflows).
@@ -747,7 +748,7 @@ func (m *StereoMixer) logBufferIssue(name string, detail BufferHealth) {
 }
 
 // logFillRatioWarning logs an info message when fill ratio is outside normal range.
-func (m *StereoMixer) logFillRatioWarning(name string, detail BufferHealth) {
+func (m *ChannelMixer) logFillRatioWarning(name string, detail BufferHealth) {
 	m.log.Debug().
 		Str("channel", name).
 		Float64("fillRatio", detail.FillRatio).
@@ -757,7 +758,7 @@ func (m *StereoMixer) logFillRatioWarning(name string, detail BufferHealth) {
 }
 
 // Diagnostics returns a snapshot of mixer channel buffer health for all channels.
-func (m *StereoMixer) Diagnostics() MixerDiagnostics {
+func (m *ChannelMixer) Diagnostics() MixerDiagnostics {
 	return m.DiagnosticsInto(nil)
 }
 
@@ -765,7 +766,7 @@ func (m *StereoMixer) Diagnostics() MixerDiagnostics {
 // channels, appending into channels[:0] rather than allocating a new slice.
 // Callers can retain the returned MixerDiagnostics.Channels backing array and
 // pass it back in on the next call to avoid per-call heap allocation.
-func (m *StereoMixer) DiagnosticsInto(channels []ChannelDiagnostic) MixerDiagnostics {
+func (m *ChannelMixer) DiagnosticsInto(channels []ChannelDiagnostic) MixerDiagnostics {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -822,7 +823,7 @@ func (m *StereoMixer) DiagnosticsInto(channels []ChannelDiagnostic) MixerDiagnos
 }
 
 // watchForConfigChanges monitors configuration changes and applies them to the mixer channels.
-func (m *StereoMixer) watchForConfigChanges() {
+func (m *ChannelMixer) watchForConfigChanges() {
 	m.log.Debug().Str("event", "start").Msg("config watch")
 
 	// Track previous mute states to detect changes
@@ -921,17 +922,17 @@ func (m *StereoMixer) watchForConfigChanges() {
 }
 
 // GetChannelMute returns the mute state for the specified channel index.
-func (m *StereoMixer) GetChannelMute(channel int) bool {
+func (m *ChannelMixer) GetChannelMute(channel int) bool {
 	return m.config.GetSynthChannelMute(channel)
 }
 
 // GetMasterMute returns the master mute state.
-func (m *StereoMixer) GetMasterMute() bool {
+func (m *ChannelMixer) GetMasterMute() bool {
 	return m.config.GetSynthMasterMute()
 }
 
 // SetSilenced sets the silenced state of the mixer.
-func (m *StereoMixer) SetSilenced(silenced bool) {
+func (m *ChannelMixer) SetSilenced(silenced bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -939,7 +940,7 @@ func (m *StereoMixer) SetSilenced(silenced bool) {
 }
 
 // IsSilenced reports whether the mixer is currently silenced (telemetry inactive).
-func (m *StereoMixer) IsSilenced() bool {
+func (m *ChannelMixer) IsSilenced() bool {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -949,7 +950,7 @@ func (m *StereoMixer) IsSilenced() bool {
 // mixCalibratorOutput handles output generation when the calibrator is active or stopping.
 // It must be called with m.mu.RLock held; it releases the lock before returning.
 // Returns true if calibration output was generated (caller must return immediately).
-func (m *StereoMixer) mixCalibratorOutput(outSamples []float64) bool { //nolint:gocognit,cyclop // calibration algorithm; complexity is inherent, not incidental
+func (m *ChannelMixer) mixCalibratorOutput(outSamples []float64) bool { //nolint:gocognit,cyclop // calibration algorithm; complexity is inherent, not incidental
 	if m.calibrator == nil || (!m.calibrator.IsEnabled() && !m.calibrator.IsStopping()) {
 		return false
 	}
@@ -1048,7 +1049,7 @@ func (m *StereoMixer) mixCalibratorOutput(outSamples []float64) bool { //nolint:
 }
 
 // mixEngineChannelMulti mixes the engine channel into all output samples with lower priority.
-func (m *StereoMixer) mixEngineChannelMulti(outSamples deviceBuffer) {
+func (m *ChannelMixer) mixEngineChannelMulti(outSamples deviceBuffer) {
 	channel, ok := m.channels[ChannelEngine]
 	if !ok {
 		m.log.Error().Str("channel", ChannelEngine).Msg("channel not found in mixer")
@@ -1073,7 +1074,7 @@ func (m *StereoMixer) mixEngineChannelMulti(outSamples deviceBuffer) {
 }
 
 // processEngineSamplesMulti processes and mixes engine samples into all output channels.
-func (m *StereoMixer) processEngineSamplesMulti(outSamples deviceBuffer, engineSamples []float64) {
+func (m *ChannelMixer) processEngineSamplesMulti(outSamples deviceBuffer, engineSamples []float64) {
 	// Reusable callback-thread-only work buffers, grown on demand. outSamples is
 	// the caller's per-channel scratch (numOutputChannels x length), so the
 	// dimensions match. Clear before use: on a short engine read (underrun

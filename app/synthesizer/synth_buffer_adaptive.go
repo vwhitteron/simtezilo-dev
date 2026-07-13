@@ -78,10 +78,7 @@ func NewAdaptiveBufferCushion(length time.Duration, sampleRateHz, cushionMs int)
 		readDelay = maxReadDelay
 	}
 
-	declickLen := (sampleRateHz / 1000) * declickRampMs
-	if declickLen < 1 {
-		declickLen = 1
-	}
+	declickLen := max((sampleRateHz/1000)*declickRampMs, 1)
 
 	buffer := &AdaptiveBuffer{
 		buffer:     make([]float64, capacity),

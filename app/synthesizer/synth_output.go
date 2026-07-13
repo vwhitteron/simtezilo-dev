@@ -3,7 +3,6 @@ package synthesizer
 import (
 	"github.com/gopxl/beep"
 	"github.com/rs/zerolog"
-
 	"github.com/vwhitteron/simtezilo-dev/app/signal"
 )
 
