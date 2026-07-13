@@ -55,7 +55,7 @@ func TestSynthRoutingMigration(t *testing.T) {
 }
 
 // TestSynthRoutingResize verifies routing rows grow to match an increased channel
-// count, with newly added cells defaulting to enabled and existing cells preserved.
+// count, with newly added cells defaulting to disabled and existing cells preserved.
 func TestSynthRoutingResize(t *testing.T) {
 	t.Parallel()
 
@@ -80,9 +80,9 @@ func TestSynthRoutingResize(t *testing.T) {
 
 	// Preserved existing cell.
 	assert.False(t, cfg.GetSynthRouteEnabled(RoutingSourceTransmission, 1))
-	// Newly added cells default to enabled.
-	assert.True(t, cfg.GetSynthRouteEnabled(RoutingSourceTransmission, 2))
-	assert.True(t, cfg.GetSynthRouteEnabled(RoutingSourceTransmission, 3))
+	// Newly added cells default to disabled.
+	assert.False(t, cfg.GetSynthRouteEnabled(RoutingSourceTransmission, 2))
+	assert.False(t, cfg.GetSynthRouteEnabled(RoutingSourceTransmission, 3))
 }
 
 // TestSynthRoutingShrink verifies routing rows shrink when the channel count is

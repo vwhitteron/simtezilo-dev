@@ -163,7 +163,7 @@ func defaultConfig() *viperConfig {
 				RoutingSourceTransmission: {true, true},
 			},
 			EqBands: [][]EQBand{
-				{ // Channel 0 (Left)
+				{ // Channel 0
 					{Frequency: 8, Gain: 0.0, Q: 2.0},
 					{Frequency: 10, Gain: 0.0, Q: 2.0},
 					{Frequency: 13, Gain: 0.0, Q: 2.0},
@@ -173,7 +173,7 @@ func defaultConfig() *viperConfig {
 					{Frequency: 40, Gain: 0.0, Q: 2.0},
 					{Frequency: 50, Gain: 0.0, Q: 2.0},
 				},
-				{ // Channel 1 (Right)
+				{ // Channel 1
 					{Frequency: 8, Gain: 0.0, Q: 2.0},
 					{Frequency: 10, Gain: 0.0, Q: 2.0},
 					{Frequency: 13, Gain: 0.0, Q: 2.0},

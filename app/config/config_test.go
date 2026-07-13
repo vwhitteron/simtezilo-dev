@@ -1280,7 +1280,7 @@ func testHapticsEnginePulseScaleIncreaseDecrease(t *testing.T) {
 	assert.InDelta(t, 0.75, result, 0.001)
 }
 
-func TestHapticsPulseAndEngineProfile(t *testing.T) { //nolint:dupl // Test runners have similar structure by design
+func TestHapticsPulseAndEngineProfile(t *testing.T) {
 	t.Parallel()
 
 	t.Run("testHapticsPulseMinHz", testHapticsPulseMinHz)

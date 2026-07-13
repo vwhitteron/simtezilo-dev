@@ -2794,9 +2794,11 @@ func (c *Config) DecreaseSynthChannelGain(channel int) float64 {
 }
 
 // normaliseRouting ensures the routing matrix has exactly the three known source
-// rows, each of length numChannels. Missing rows and newly added cells default to
-// enabled (true), preserving the historical "all sources to all channels" behaviour.
-// Unknown source rows are dropped. The caller must hold c.mu.
+// rows, each of length numChannels. A source with no existing row is seeded with
+// the default output routing: the primary stereo pair (channels 0 and 1, or just
+// channel 0 on a mono device) enabled and any further channels disabled. Existing
+// rows are preserved, with newly added channels defaulting to disabled. Unknown
+// source rows are dropped. The caller must hold c.mu.
 func (c *Config) normaliseRouting(numChannels int) {
 	if c.viper.Synthesizer.Routing == nil {
 		c.viper.Synthesizer.Routing = make(map[string][]bool, len(routingSources))
@@ -2809,11 +2811,16 @@ func (c *Config) normaliseRouting(numChannels int) {
 		}
 
 		newRow := make([]bool, numChannels)
-		for i := range newRow {
-			if i < len(row) {
-				newRow[i] = row[i]
-			} else {
+		if len(row) == 0 {
+			// Unconfigured source: enable the primary stereo pair (channel 0
+			// on a mono device) and leave any additional channels disabled.
+			for i := 0; i < numChannels && i < 2; i++ {
 				newRow[i] = true
+			}
+		} else {
+			// Preserve existing assignments; newly added channels default off.
+			for i := 0; i < numChannels && i < len(row); i++ {
+				newRow[i] = row[i]
 			}
 		}
 
@@ -3412,12 +3419,20 @@ func (c *Config) GetAudioHapticsChannels() int {
 // SetAudioHapticsChannels sets the number of haptic output channels.
 func (c *Config) SetAudioHapticsChannels(value int) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	c.viper.Haptics.Output.Channels = value
+	c.mu.Unlock()
+
+	// Resize the per-channel synth arrays (gain, mute, EQ bands/enable, routing)
+	// to the new channel count so channels added live are immediately addressable
+	// with sane defaults, rather than reading max gain / stale EQ until the next
+	// config reload. finalise manages its own locking (see the load path).
+	c.finalise()
+	c.rebuildSnapshot()
 
 	// Applied live (the haptic stream is rebuilt on change); no restart required.
+	c.mu.Lock()
 	c.registerUpdate(false)
+	c.mu.Unlock()
 }
 
 // defaultHapticsOutputSampleRateHz is the last-resort output rate used when the
@@ -3719,32 +3734,78 @@ func (c *Config) GetConfigFilePath() string {
 // Private Helper methods.
 // ****************************************************************************
 
+// defaultChannelGain seeds newly added output channels (dB). Matches the
+// per-channel default in the shipped default config.
+const defaultChannelGain = -30.0
+
+// resizeBoolChannels returns a slice of length n, preserving existing values and
+// filling any newly added channels with fill.
+func resizeBoolChannels(s []bool, n int, fill bool) []bool {
+	resized := make([]bool, n)
+	for i := range n {
+		if i < len(s) {
+			resized[i] = s[i]
+		} else {
+			resized[i] = fill
+		}
+	}
+
+	return resized
+}
+
+// resizeGainChannels returns a slice of length n, preserving existing values and
+// seeding any newly added channels with fill.
+func resizeGainChannels(s []float64, n int, fill float64) []float64 {
+	resized := make([]float64, n)
+	for i := range n {
+		if i < len(s) {
+			resized[i] = s[i]
+		} else {
+			resized[i] = fill
+		}
+	}
+
+	return resized
+}
+
 // finalise performs validation of the config and updates any derived configuration values.
 func (c *Config) finalise() {
 	c.mu.Lock()
 
-	// Ensure we have exactly 2 channels of EQ bands
-	numChannels := 2
+	// All per-channel synth arrays are sized to the configured output channel
+	// count so that any channel index the pipeline addresses is valid.
+	numChannels := c.viper.Haptics.Output.Channels
+	if numChannels < 1 {
+		numChannels = 2
+	}
+
+	defaultBands := []EQBand{
+		{Frequency: 12, Gain: 0.0, Q: 2.0},
+		{Frequency: 16, Gain: 0.0, Q: 2.0},
+		{Frequency: 20, Gain: 0.0, Q: 2.0},
+		{Frequency: 25, Gain: 0.0, Q: 2.0},
+		{Frequency: 30, Gain: 0.0, Q: 2.0},
+		{Frequency: 38, Gain: 0.0, Q: 2.0},
+		{Frequency: 48, Gain: 0.0, Q: 2.0},
+		{Frequency: 58, Gain: 0.0, Q: 2.0},
+	}
+
+	// Size EQ bands to the channel count, preserving existing per-channel bands
+	// and seeding any newly added channels with the default curve.
 	if len(c.viper.Synthesizer.EqBands) != numChannels {
-		log.Warn().Int("length", len(c.viper.Synthesizer.EqBands)).Msg("invalid synthesizer EQ bands length, initializing defaults")
+		log.Debug().Int("length", len(c.viper.Synthesizer.EqBands)).Int("channels", numChannels).Msg("resizing synthesizer EQ bands to channel count")
 
-		// Initialize with default bands for each channel
-		defaultBands := []EQBand{
-			{Frequency: 12, Gain: 0.0, Q: 2.0},
-			{Frequency: 16, Gain: 0.0, Q: 2.0},
-			{Frequency: 20, Gain: 0.0, Q: 2.0},
-			{Frequency: 25, Gain: 0.0, Q: 2.0},
-			{Frequency: 30, Gain: 0.0, Q: 2.0},
-			{Frequency: 38, Gain: 0.0, Q: 2.0},
-			{Frequency: 48, Gain: 0.0, Q: 2.0},
-			{Frequency: 58, Gain: 0.0, Q: 2.0},
-		}
-
-		c.viper.Synthesizer.EqBands = make([][]EQBand, numChannels)
+		resized := make([][]EQBand, numChannels)
 		for ch := range numChannels {
-			c.viper.Synthesizer.EqBands[ch] = make([]EQBand, len(defaultBands))
-			copy(c.viper.Synthesizer.EqBands[ch], defaultBands)
+			if ch < len(c.viper.Synthesizer.EqBands) && c.viper.Synthesizer.EqBands[ch] != nil {
+				resized[ch] = c.viper.Synthesizer.EqBands[ch]
+			} else {
+				resized[ch] = make([]EQBand, len(defaultBands))
+				copy(resized[ch], defaultBands)
+			}
 		}
+
+		c.viper.Synthesizer.EqBands = resized
 	}
 
 	// Validate each channel has 8 bands
@@ -3752,31 +3813,18 @@ func (c *Config) finalise() {
 		if len(c.viper.Synthesizer.EqBands[ch]) != 8 {
 			log.Warn().Int("channel", ch).Int("length", len(c.viper.Synthesizer.EqBands[ch])).Msg("invalid EQ bands length for channel, initializing defaults")
 
-			c.viper.Synthesizer.EqBands[ch] = []EQBand{
-				{Frequency: 12, Gain: 0.0, Q: 2.0},
-				{Frequency: 16, Gain: 0.0, Q: 2.0},
-				{Frequency: 20, Gain: 0.0, Q: 2.0},
-				{Frequency: 25, Gain: 0.0, Q: 2.0},
-				{Frequency: 30, Gain: 0.0, Q: 2.0},
-				{Frequency: 38, Gain: 0.0, Q: 2.0},
-				{Frequency: 48, Gain: 0.0, Q: 2.0},
-				{Frequency: 58, Gain: 0.0, Q: 2.0},
-			}
+			c.viper.Synthesizer.EqBands[ch] = make([]EQBand, len(defaultBands))
+			copy(c.viper.Synthesizer.EqBands[ch], defaultBands)
 		}
 	}
 
-	// Ensure we have 2 channels of EQ enabled flags
-	if len(c.viper.Synthesizer.EnableEq) < numChannels {
-		c.viper.Synthesizer.EnableEq = make([]bool, numChannels)
-	}
+	// Size the remaining per-channel synth arrays to the channel count,
+	// preserving existing values and seeding new channels with sane defaults.
+	c.viper.Synthesizer.EnableEq = resizeBoolChannels(c.viper.Synthesizer.EnableEq, numChannels, false)
+	c.viper.Synthesizer.ChannelMute = resizeBoolChannels(c.viper.Synthesizer.ChannelMute, numChannels, false)
+	c.viper.Synthesizer.ChannelGain = resizeGainChannels(c.viper.Synthesizer.ChannelGain, numChannels, defaultChannelGain)
 
-	// Normalise the output routing matrix to the configured channel count.
-	numOutputChannels := c.viper.Haptics.Output.Channels
-	if numOutputChannels < 1 {
-		numOutputChannels = 2
-	}
-
-	c.normaliseRouting(numOutputChannels)
+	c.normaliseRouting(numChannels)
 
 	// Compute the EQ curve for each channel
 	for ch := range c.viper.Synthesizer.EqBands {
