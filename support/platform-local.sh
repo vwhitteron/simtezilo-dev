@@ -20,9 +20,10 @@ SSHENABLED='true'
 BT_ADAPTER='"adapter":{"present":true,"powered":true,"discovering":false,"address":"00:00:00:00:00:01"}'
 BT_PAIRED_SPEAKER='{"address":"00:11:22:33:44:01","name":"Inbuilt Speakers","type":"speaker","paired":true,"trusted":true,"connected":true,"rssi":-45}'
 BT_PAIRED_HEADPHONES='{"address":"00:11:22:33:44:02","name":"Wireless Headphones","type":"headphones","paired":true,"trusted":true,"connected":false,"rssi":-62}'
+BT_PAIRED_FANCTLR='{"address":"00:11:22:33:44:03","name":"Fan Controller","type":"fan","paired":true,"trusted":true,"connected":true,"rssi":-69}'
 BT_SCAN_SPEAKER='{"address":"00:11:22:33:44:10","name":"Portable Speaker","type":"speaker","paired":false,"trusted":false,"connected":false,"rssi":-74}'
 BT_SCAN_HEADSET='{"address":"00:11:22:33:44:11","name":"Wireless Headset","type":"headset","paired":false,"trusted":false,"connected":false,"rssi":-83}'
-BT_SCAN_FANCTLR='{"address":"00:11:22:33:44:03","name":"Wind Simulator","type":"fan","paired":false,"trusted":false,"connected":false,"rssi":-62}'
+BT_SCAN_FANCTLR='{"address":"00:11:22:33:44:12","name":"Wind Simulator","type":"fan","paired":false,"trusted":false,"connected":false,"rssi":-71}'
 
 
 
@@ -81,11 +82,11 @@ function handle_bt_status() {
 }
 
 function handle_bt_list() {
-    echo '{"result":"success",'${BT_ADAPTER}',"btDevices":['$BT_PAIRED_SPEAKER','$BT_PAIRED_HEADPHONES']}'
+    echo '{"result":"success",'${BT_ADAPTER}',"btDevices":['$BT_PAIRED_SPEAKER','$BT_PAIRED_HEADPHONES','$BT_PAIRED_FANCTLR']}'
 }
 
 function handle_bt_scan() {
-    BT_PAIRED=''${BT_PAIRED_SPEAKER}','${BT_PAIRED_HEADPHONES}''
+    BT_PAIRED=''${BT_PAIRED_SPEAKER}','${BT_PAIRED_HEADPHONES}','${BT_PAIRED_FANCTLR}''
     BT_DISCOVERED=''${BT_SCAN_SPEAKER}','${BT_SCAN_HEADSET}','${BT_SCAN_FANCTLR}''
     echo '{"result":"success",'${BT_ADAPTER}',"btDevices":['${BT_PAIRED}','${BT_DISCOVERED}']}'
 }
