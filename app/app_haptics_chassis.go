@@ -8,6 +8,31 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/synthesizer"
 )
 
+// channelValueAt returns values[index], or 0 when index is out of range.
+// Per-channel telemetry slices may be empty (e.g. chassis muted, so the write
+// path never sized them).
+func channelValueAt(values []float64, index int) float64 {
+	if index < 0 || index >= len(values) {
+		return 0
+	}
+
+	return values[index]
+}
+
+// ensureChannelLen returns a slice of length count, preserving existing values
+// and reusing the backing array when its capacity already suffices. It grows the
+// slice on demand as the configured output channel count changes.
+func ensureChannelLen(values []float64, count int) []float64 {
+	if cap(values) >= count {
+		return values[:count]
+	}
+
+	grown := make([]float64, count)
+	copy(grown, values)
+
+	return grown
+}
+
 func (a *App) generateChassisHaptic() {
 	if a.config.GetSynthChassisMute() {
 		return
@@ -22,8 +47,16 @@ func (a *App) generateChassisHaptic() {
 	sampleRate := float64(a.config.GetSynthInternalSampleRateHz())
 	minSamplesPerFrame := int(sampleRate / hapticFrameRate)
 
+	numChannels := a.synth.NumOutputChannels()
+
+	// Size the per-channel telemetry slices to the configured channel count.
+	// Channels the chassis is not routed to keep their previous value, matching
+	// the prior fixed-array behaviour.
+	a.kinematics.Current.SynthChannelAmplitude = ensureChannelLen(a.kinematics.Current.SynthChannelAmplitude, numChannels)
+	a.kinematics.Current.SynthChannelFrequency = ensureChannelLen(a.kinematics.Current.SynthChannelFrequency, numChannels)
+
 	// Generate pulse buffers for each channel
-	for channel := range a.synth.NumOutputChannels() {
+	for channel := range numChannels {
 		// Skip channels the chassis source is not routed to; no point generating
 		// a per-channel buffer the mixer will not consume.
 		if !a.config.GetSynthRouteEnabled(synthesizer.ChannelChassis, channel) {

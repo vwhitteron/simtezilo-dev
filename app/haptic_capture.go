@@ -320,8 +320,8 @@ func (a *App) runCaptureLoop(next pullFunc, opts HapticCaptureOptions) *HapticCa
 					Delta:     delta,
 					Jerk:      a.kinematics.Current.SixDOFTranslationCalc.Jerk,
 					Snap:      a.kinematics.Current.SixDOFTranslationCalc.Snap,
-					Amplitude: a.kinematics.Current.SynthChannelAmplitude[0],
-					FreqHz:    a.kinematics.Current.SynthChannelFrequency[0],
+					Amplitude: channelValueAt(a.kinematics.Current.SynthChannelAmplitude, 0),
+					FreqHz:    channelValueAt(a.kinematics.Current.SynthChannelFrequency, 0),
 				})
 
 				chassisLastSeq = seq

@@ -80,8 +80,11 @@ type Kinematics struct {
 	ResolvedRotJerk   float64
 	ResolvedRotSnap   float64
 
-	SynthChannelAmplitude [2]float64
-	SynthChannelFrequency [2]float64
+	// Per-output-channel synth amplitude/frequency for telemetry charting. Sized
+	// to the configured output channel count by the haptic write path; readers
+	// must length-check before indexing.
+	SynthChannelAmplitude []float64
+	SynthChannelFrequency []float64
 }
 
 // State tracks the current and previous kinematic states of the vehicle.
@@ -122,8 +125,8 @@ func newKinematics() Kinematics {
 		TransmissionGear:      -100,
 		GroundSpeed:           0,
 		SurgeCalculated:       0,
-		SynthChannelAmplitude: [2]float64{},
-		SynthChannelFrequency: [2]float64{},
+		SynthChannelAmplitude: nil,
+		SynthChannelFrequency: nil,
 		Format:                "A",
 	}
 }

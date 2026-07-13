@@ -64,6 +64,21 @@ func (a *App) sendTelemetryChartData() {
 
 	tyreTemp := a.gtClient.Telemetry.TyreTemperatureCelsius()
 
+	// Per-channel synth amplitude/frequency and chassis mixer fill for the web
+	// charts. These slices are sent across the buffered telemetry feed to the
+	// broadcaster goroutine, so they must be freshly allocated per frame rather
+	// than reused (a shared backing array would corrupt queued frames).
+	numChannels := a.synth.NumOutputChannels()
+	synthChannelAmplitude := make([]float32, numChannels)
+	synthChannelFrequency := make([]float32, numChannels)
+	mixerChassisFill := make([]float32, numChannels)
+
+	for ch := range numChannels {
+		synthChannelAmplitude[ch] = float32(channelValueAt(a.kinematics.Current.SynthChannelAmplitude, ch))
+		synthChannelFrequency[ch] = float32(channelValueAt(a.kinematics.Current.SynthChannelFrequency, ch))
+		mixerChassisFill[ch] = channelFill(diag, synthesizer.ChassisChannelName(ch))
+	}
+
 	frame := webui.TelemetryFrame{
 		ComputeTime:                 float32(a.kinematics.Last.ComputeTime.Microseconds()),
 		Seq:                         float32(a.state.current.sequenceNumber),
@@ -97,17 +112,15 @@ func (a *App) sendTelemetryChartData() {
 		SixDOFRotationalAccelX:      float32(a.kinematics.Current.SixDOFRotationCalc.Acceleration.X),
 		SixDOFRotationalAccelY:      float32(a.kinematics.Current.SixDOFRotationCalc.Acceleration.Y),
 		SixDOFRotationalAccelZ:      float32(a.kinematics.Current.SixDOFRotationCalc.Acceleration.Z),
-		SynthChannelAmplitudeL:      float32(a.kinematics.Current.SynthChannelAmplitude[0]),
-		SynthChannelFrequencyL:      float32(a.kinematics.Current.SynthChannelFrequency[0]),
-		SynthChannelAmplitudeR:      float32(a.kinematics.Current.SynthChannelAmplitude[1]),
-		SynthChannelFrequencyR:      float32(a.kinematics.Current.SynthChannelFrequency[1]),
+		SynthChannelAmplitude:       synthChannelAmplitude,
+		SynthChannelFrequency:       synthChannelFrequency,
 		EngineVibrationEnabled:      engineVibrationEnabled,
 		// Audio pipeline health metrics
 		AsyncBufferFill:    float32(health.FillRatio),
 		AsyncUnderruns:     float32(health.Underruns),
 		AsyncProducerWaits: float32(health.ProducerWaits),
 		MixerEngineFill:    channelFill(diag, "engine"),
-		MixerChassis0Fill:  channelFill(diag, "chassis_0"),
+		MixerChassisFill:   mixerChassisFill,
 		// Haptic latency/drift monitor (milliseconds)
 		EngineLatencyMs:  float32(latency.EngineLatencyMs),
 		ChassisLatencyMs: float32(latency.ChassisLatencyMs),
