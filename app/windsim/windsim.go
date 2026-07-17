@@ -387,7 +387,7 @@ func (c *Controller) applyFanCommand(client fanClient, cmd fanCommand, state *fa
 		state.controlHeld = true
 
 		// The app now drives the fan; recolour the mode icon to its host-control
-		// colour (indigo for "open", deep purple for "all").
+		// colour (indigo for "auto", deep purple for "all").
 		c.requestFanModeDisplay(state, true)
 	}
 
@@ -599,7 +599,7 @@ func fanModeIconImage(name string, foreground color.Color) (fanModeIconData, err
 
 // fanModeIconColor picks the mode icon's foreground colour. When the device holds
 // control (hostControl false) every mode is grey. When the app drives the fan,
-// "open" turns indigo and "all" turns deep purple to signal active host control;
+// "auto" turns indigo and "all" turns deep purple to signal active host control;
 // "manual" never drives, so it stays grey.
 func fanModeIconColor(mode string, hostControl bool) color.Color {
 	grey := gui.MaterialGrey()
@@ -609,7 +609,7 @@ func fanModeIconColor(mode string, hostControl bool) color.Color {
 	}
 
 	switch mode {
-	case "open":
+	case "auto":
 		return gui.MaterialIndigo()
 	case "all":
 		return gui.MaterialDeepPurple()
@@ -619,16 +619,16 @@ func fanModeIconColor(mode string, hostControl bool) color.Color {
 }
 
 // fanModeIcon maps a fan mode to the SVG icon name shown on the device screen:
-// "manual" → a fan symbol, "open" → the wind glyph with auto badge, "all" →
+// "manual" → a fan symbol, "auto" → the wind glyph with auto badge, "all" →
 // the wind glyph with an infinity badge.
 func fanModeIcon(mode string) string {
 	switch mode {
-	case "open":
+	case "auto":
 		return "wind-auto"
 	case "all":
 		return "wind-all"
 	default:
-		return "fan2"
+		return "fan"
 	}
 }
 
@@ -725,7 +725,7 @@ func (c *Controller) shouldSimulateWindForCurrentVehicle() bool {
 	switch c.config.GetFanMode() {
 	case "all":
 		return true
-	case "open":
+	case "auto":
 		return c.telemetry().VehicleHasOpenCockpit()
 	default:
 		return false

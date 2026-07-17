@@ -1,19 +1,17 @@
 // audio-settings.js — dynamic behaviour for the audio device controls, which
-// live across the System (backend), Haptics (haptics output) and Pit Radio
-// (local audio output) settings panels.
+// live across the Haptics (haptics output) and Pit Radio (local audio output)
+// settings panels.
 //
 // Static fields bind to config via their data-config attributes (handled by
 // settings.js). This module adds the dynamic parts: populating device
-// dropdowns from /api/audio/devices, reflecting which backends are compiled in,
-// and wiring the per-device test-tone buttons to /api/audio/test.
+// dropdowns from /api/audio/devices and wiring the per-device test-tone buttons
+// to /api/audio/test.
 (function () {
     'use strict';
 
     // Cached audio config (from /api/config) used to restore saved device
     // selections after their option lists are (re)built.
     let audioConfig = {
-        backend: 'beep',
-        availableBackends: ['beep'],
         haptics: { device: '', deviceName: '', channels: 2 },
         pitRadio: { device: '', deviceName: '' },
     };
@@ -58,13 +56,9 @@
 
             const config = await response.json();
             if (config) {
-                const hardware = config.hardware || {};
                 const hapticsOutput = (config.haptics && config.haptics.output) || {};
                 const pitRadioAudio = (config.pitRadio && config.pitRadio.audio) || {};
 
-                audioConfig.backend = hardware.audioBackend || audioConfig.backend;
-                audioConfig.availableBackends =
-                    hardware.availableBackends || audioConfig.availableBackends;
                 audioConfig.haptics = {
                     device: hapticsOutput.device || '',
                     deviceName: hapticsOutput.deviceName || '',
@@ -102,43 +96,6 @@
         }, 700);
     }
 
-    function selectedBackend() {
-        const select = el('audio-backend');
-        return (select && select.value) || audioConfig.backend || 'beep';
-    }
-
-    // Disable backend options that are not compiled into this binary.
-    function applyBackendAvailability() {
-        const select = el('audio-backend');
-        if (!select) {
-            return;
-        }
-
-        const available = audioConfig.availableBackends || ['beep'];
-
-        Array.from(select.options).forEach(option => {
-            const ok = available.includes(option.value);
-            option.disabled = !ok;
-            option.textContent = ok ? option.value : option.value + ' (not built)';
-        });
-    }
-
-    // Enable test buttons only for backends that own an independent device.
-    function applyTestButtonState() {
-        const disabled = selectedBackend() === 'beep';
-        const title = disabled
-            ? 'Test tones require the portaudio backend'
-            : '';
-
-        ['audio-haptics-test', 'audio-pitradio-test'].forEach(id => {
-            const button = el(id);
-            if (button) {
-                button.disabled = disabled;
-                button.title = title;
-            }
-        });
-    }
-
     // Mirror the selected option's device name into the companion hidden field
     // (data-config="…deviceName") so it is persisted alongside the device ID. The
     // name is the stable, backend-agnostic selection key; the ID is a tiebreaker.
@@ -167,18 +124,20 @@
     }
 
     // Rebuild a device <select>, restoring the saved selection by name first
-    // (stable across backend switches and portaudio index reshuffles) and the
-    // saved ID as a tiebreaker. Keeps the companion hidden name field in sync.
+    // (stable across portaudio index reshuffles) and the saved ID as a
+    // tiebreaker. Keeps the companion hidden name field in sync.
     //
-    // Devices are grouped into <optgroup>s by semantic type. excludeName hides
-    // the device chosen for the other output role (mutual exclusion) — voice to
-    // a haptic transducer (or vice-versa) is pointless, and it also stops the two
-    // streams contending over one exclusive device — but this select's own saved
-    // selection is never hidden. excludeBluetooth drops all Bluetooth outputs:
-    // their A2DP link adds 100-200 ms of latency, which is unusable for haptics
-    // (the feedback would lag the on-screen event), so they are never offered
-    // for the haptic role.
-    function populateDeviceSelect(select, hiddenId, devices, saved, excludeName, excludeBluetooth, showChannels) {
+    // Devices are grouped into <optgroup>s by semantic type. excludeName greys
+    // out (disables) the device chosen for the other output role (mutual
+    // exclusion) — voice to a haptic transducer (or vice-versa) is pointless, and
+    // it also stops the two streams contending over one exclusive device — but the
+    // device still appears in the list, just unselectable and suffixed with the
+    // claiming role (excludeLabel, e.g. "MacBook Pro Speakers [haptics]"), and
+    // this select's own saved selection is never disabled. excludeBluetooth drops
+    // all Bluetooth outputs: their A2DP link adds 100-200 ms of latency, which is
+    // unusable for haptics (the feedback would lag the on-screen event), so they
+    // are never offered for the haptic role.
+    function populateDeviceSelect(select, hiddenId, devices, saved, excludeName, excludeLabel, excludeBluetooth, showChannels) {
         if (!select) {
             return;
         }
@@ -195,7 +154,6 @@
         select.appendChild(defaultOption);
 
         const list = (devices || []).filter(device =>
-            (!excludeName || device.Name !== excludeName || device.Name === savedName) &&
             (!excludeBluetooth || device.Type !== 'bluetooth' || device.Name === savedName));
 
         // Bucket devices by type, then emit groups in a fixed, sensible order.
@@ -219,6 +177,14 @@
                 option.value = device.ID;
                 option.textContent = deviceLabel(device, showChannels);
                 option.dataset.name = device.Name;
+                // Grey out (but still show) the device claimed by the other role,
+                // annotating which role holds it.
+                if (excludeName && device.Name === excludeName && device.Name !== savedName) {
+                    option.disabled = true;
+                    if (excludeLabel) {
+                        option.textContent += ' [' + excludeLabel + ']';
+                    }
+                }
                 group.appendChild(option);
             });
             select.appendChild(group);
@@ -257,19 +223,9 @@
     }
 
     async function refreshDevices() {
-        const backend = selectedBackend();
-
-        applyBackendAvailability();
-        applyTestButtonState();
-
         try {
-            const response = await fetch('/api/audio/devices?backend=' + encodeURIComponent(backend));
+            const response = await fetch('/api/audio/devices');
             const data = await response.json();
-
-            if (data && Array.isArray(data.availableBackends)) {
-                audioConfig.availableBackends = data.availableBackends;
-                applyBackendAvailability();
-            }
 
             lastDevices = (data && data.status === 'success') ? (data.devices || []) : [];
             repopulateDevices();
@@ -282,20 +238,12 @@
     // other's current selection so a device can't be picked for both roles.
     function repopulateDevices() {
         populateDeviceSelect(el('audio-haptics-device'), 'audio-haptics-devicename',
-            lastDevices, audioConfig.haptics, audioConfig.pitRadio.deviceName || '', true, true);
+            lastDevices, audioConfig.haptics, audioConfig.pitRadio.deviceName || '', 'pit radio', true, true);
         populateDeviceSelect(el('audio-pitradio-device'), 'audio-pitradio-devicename',
-            lastDevices, audioConfig.pitRadio, audioConfig.haptics.deviceName || '', false, false);
+            lastDevices, audioConfig.pitRadio, audioConfig.haptics.deviceName || '', 'haptics', false, false);
     }
 
     async function playTest(kind, button, statusEl) {
-        const backend = selectedBackend();
-        // The haptics tone plays through the live synthesizer pipeline (calibrator),
-        // so it works on any backend. The pit-radio tone opens its own sink, which
-        // conflicts with beep's single shared device, so it stays portaudio-only.
-        if (backend === 'beep' && kind !== 'haptics') {
-            return;
-        }
-
         let device = '';
         let channel = -1;
         let channels = 2;
@@ -331,7 +279,6 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     target: kind === 'haptics' ? 'haptics' : 'pitradio',
-                    backend: backend,
                     device: device,
                     channel: channel,
                     channels: channels,
@@ -364,11 +311,6 @@
     }
 
     function wireEvents() {
-        const backendSelect = el('audio-backend');
-        if (backendSelect) {
-            backendSelect.addEventListener('change', refreshDevices);
-        }
-
         // The Bluetooth panel pairs/forgets/connects devices, which changes the
         // available output list. Re-read the config first (a forgotten device may
         // have had its saved pit-radio selection cleared server-side), then rebuild
@@ -420,19 +362,12 @@
 
     async function init() {
         // Only run on pages that contain the audio panel.
-        if (!el('audio-backend')) {
+        if (!el('audio-haptics-device')) {
             return;
         }
 
         wireEvents();
         await fetchAudioConfig();
-
-        // Reflect the saved backend before listing devices for it.
-        const backendSelect = el('audio-backend');
-        if (backendSelect && audioConfig.backend) {
-            backendSelect.value = audioConfig.backend;
-        }
-
         await refreshDevices();
     }
 

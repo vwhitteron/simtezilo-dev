@@ -692,8 +692,8 @@ func (a *App) handleFanModeSetting(action string) string {
 
 func (a *App) fanModeDisplay(mode string) string {
 	switch mode {
-	case "open":
-		return a.i18n.GetString(languagedb.UIMenuFanModeOpenCockpit)
+	case "auto":
+		return a.i18n.GetString(languagedb.UIMenuFanModeAuto)
 	case "all":
 		return a.i18n.GetString(languagedb.UIMenuFanModeAll)
 	default:

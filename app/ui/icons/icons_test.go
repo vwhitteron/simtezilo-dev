@@ -13,7 +13,7 @@ import (
 func TestRenderFitFanModeIcons(t *testing.T) {
 	t.Parallel()
 
-	for _, name := range []string{"fan2", "wind-auto", "wind-all"} {
+	for _, name := range []string{"fan", "wind-auto", "wind-all"} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 

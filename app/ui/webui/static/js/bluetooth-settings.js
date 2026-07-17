@@ -18,9 +18,21 @@
     // (which lists paired/connected devices only) doesn't drop them from view
     // before the user has had a chance to pair them.
     let discovered = [];
+    // Last rendered data, kept so the view can be re-drawn with fresh
+    // translations when the language changes without re-hitting the API.
+    let lastDevices = null;
+    let lastAdapter;
 
     function el(id) {
         return document.getElementById(id);
+    }
+
+    // Translate key, falling back to the English text. The fallback covers both
+    // a missing translation and the brief window before i18n has loaded (t()
+    // returns '' until then), so labels are never blank.
+    function tr(key, fallback) {
+        const value = (typeof t === 'function') ? t(key) : '';
+        return value || fallback;
     }
 
     // Semantic device type → embedded SVG icon name (/images/icons/NAME.svg).
@@ -32,6 +44,8 @@
                 return 'headset';
             case 'headphones':
                 return 'headphones';
+            case 'fan':
+                return 'fan';
             default:
                 return 'bluetooth-b';
         }
@@ -39,12 +53,15 @@
 
     function statusBadge(device) {
         if (device.connected) {
-            return '<span class="badge bg-success">Connected</span>';
+            return '<span class="badge bg-success">' +
+                escapeHtml(tr('runmode.settings.bluetooth.state.connected', 'Connected')) + '</span>';
         }
         if (device.paired) {
-            return '<span class="badge bg-secondary">Paired</span>';
+            return '<span class="badge bg-secondary">' +
+                escapeHtml(tr('runmode.settings.bluetooth.state.paired', 'Paired')) + '</span>';
         }
-        return '<span class="badge bg-light text-dark">Available</span>';
+        return '<span class="badge bg-light text-dark">' +
+            escapeHtml(tr('runmode.settings.bluetooth.state.available', 'Available')) + '</span>';
     }
 
     // Build the action buttons appropriate to a device's state.
@@ -53,11 +70,14 @@
         const buttons = [];
 
         if (device.connected) {
-            buttons.push(btn('disconnect', addr, 'btn-outline-secondary', 'Disconnect'));
+            buttons.push(btn('disconnect', addr, 'btn-outline-secondary',
+                tr('runmode.settings.bluetooth.action.disconnect', 'Disconnect')));
         } else if (device.paired) {
-            buttons.push(btn('connect', addr, 'btn-outline-primary', 'Connect'));
+            buttons.push(btn('connect', addr, 'btn-outline-primary',
+                tr('runmode.settings.bluetooth.action.connect', 'Connect')));
         } else {
-            buttons.push(btn('pair', addr, 'btn-outline-primary', 'Pair'));
+            buttons.push(btn('pair', addr, 'btn-outline-primary',
+                tr('runmode.settings.bluetooth.action.pair', 'Pair')));
         }
 
         // Forget removes a known device from BlueZ. Gate on "known to BlueZ"
@@ -67,7 +87,8 @@
         // A fresh scan-only "Available" device (all flags false) has nothing to
         // forget, so it still gets only Pair.
         if (device.paired || device.connected || device.trusted) {
-            buttons.push(btn('remove', addr, 'btn-outline-danger', 'Forget'));
+            buttons.push(btn('remove', addr, 'btn-outline-danger',
+                tr('runmode.settings.bluetooth.action.forget', 'Forget')));
         }
 
         return buttons.join(' ');
@@ -76,7 +97,7 @@
     function btn(action, address, cls, label) {
         return '<button type="button" class="btn btn-sm ' + cls +
             ' bluetooth-action" data-action="' + action +
-            '" data-address="' + escapeAttr(address) + '">' + label + '</button>';
+            '" data-address="' + escapeAttr(address) + '">' + escapeHtml(label) + '</button>';
     }
 
     function escapeHtml(s) {
@@ -97,6 +118,7 @@
         }
 
         devices = devices || [];
+        lastDevices = devices;
 
         if (!devices.length) {
             tbody.innerHTML = '';
@@ -146,21 +168,33 @@
     }
 
     function updateAdapterStatus(adapter) {
+        lastAdapter = adapter;
         const statusEl = el('bluetooth-adapter-status');
         if (!statusEl) {
             return;
         }
 
+        const label = tr('runmode.settings.bluetooth.adapter', 'Adapter') + ': ';
+
+        // state renders the status word in a coloured span (green = on, red = off/
+        // unavailable) alongside the plain-text label.
+        const state = (text, cls) =>
+            '<span class="' + cls + '">' + escapeHtml(text) + '</span>';
+
         if (!adapter || !adapter.present) {
-            statusEl.textContent = 'Adapter: not present';
+            statusEl.innerHTML = label +
+                state(tr('runmode.settings.bluetooth.adapter.notpresent', 'not present'), 'text-danger');
             return;
         }
 
-        let text = 'Adapter: ' + (adapter.powered ? 'on' : 'off');
+        let html = label + (adapter.powered
+            ? state(tr('runmode.settings.bluetooth.adapter.on', 'on'), 'text-success')
+            : state(tr('runmode.settings.bluetooth.adapter.off', 'off'), 'text-danger'));
         if (adapter.discovering) {
-            text += ' (scanning)';
+            html += ' <span class="text-muted">(' +
+                escapeHtml(tr('runmode.settings.bluetooth.adapter.scanning', 'scanning')) + ')</span>';
         }
-        statusEl.textContent = text;
+        statusEl.innerHTML = html;
     }
 
     async function fetchDevices(scan) {
@@ -206,11 +240,12 @@
         return listed.concat(discovered.filter(d => !seen.has(d.address)));
     }
 
-    // Show or hide the Bluetooth nav item depending on adapter availability.
+    // Show or hide the Bluetooth panel (in the System section) depending on
+    // adapter availability.
     function applyAvailability() {
-        const navItem = el('bluetooth-nav-item');
-        if (navItem) {
-            navItem.style.display = available ? '' : 'none';
+        const panel = el('bluetooth-settings');
+        if (panel) {
+            panel.style.display = available ? '' : 'none';
         }
     }
 
@@ -226,7 +261,7 @@
             button.disabled = true;
         }
         if (status) {
-            status.textContent = 'Scanning…';
+            status.textContent = tr('runmode.settings.bluetooth.scanning', 'Scanning…');
         }
 
         try {
@@ -272,13 +307,13 @@
             if (data && data.status === 'success') {
                 succeeded = true;
             } else {
-                const detail = (data && data.message) ? data.message : 'request failed';
+                const detail = (data && data.message) ? data.message : tr('runmode.settings.bluetooth.requestfailed', 'request failed');
                 console.error('bluetooth-settings: action failed', data);
-                showActionStatus('error', capitalize(action) + ' failed: ' + detail);
+                showActionStatus('error', tr('runmode.settings.bluetooth.actionfailed', 'Action failed') + ': ' + detail);
             }
         } catch (err) {
             console.error('bluetooth-settings: action error', err);
-            showActionStatus('error', capitalize(action) + ' failed: ' + err.message);
+            showActionStatus('error', tr('runmode.settings.bluetooth.actionfailed', 'Action failed') + ': ' + err.message);
         }
 
         await refresh(false);
@@ -292,8 +327,16 @@
         }
     }
 
-    function capitalize(s) {
-        return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+    // Redraw the device list and adapter status from cached data so a language
+    // change (or i18n finishing its initial load after the first render) takes
+    // effect without another API round-trip.
+    function rerender() {
+        if (lastDevices !== null) {
+            renderDevices(lastDevices);
+        }
+        if (lastAdapter !== undefined) {
+            updateAdapterStatus(lastAdapter);
+        }
     }
 
     function wireActionButtons() {
@@ -310,7 +353,7 @@
     // Poll only while the Bluetooth section is the active one, to avoid
     // shelling out to the helper when the user isn't looking at it.
     function isSectionActive() {
-        const card = document.querySelector('[data-section-content="bluetooth"]');
+        const card = document.querySelector('[data-section-content="system"]');
         return card && card.classList.contains('active');
     }
 
@@ -331,8 +374,9 @@
             scanButton.addEventListener('click', doScan);
         }
 
-        // Refresh immediately when the user opens the Bluetooth section.
-        document.querySelectorAll('.settings-nav-link[data-section="bluetooth"]').forEach(link => {
+        // Refresh immediately when the user opens the System section (which now
+        // hosts the Bluetooth panel).
+        document.querySelectorAll('.settings-nav-link[data-section="system"]').forEach(link => {
             link.addEventListener('click', () => refresh(false));
         });
     }
@@ -344,6 +388,11 @@
         }
 
         wireEvents();
+        // Re-render with the right language once translations arrive and whenever
+        // the user switches language, since rows are built in JS (not via
+        // data-i18n, which only the static markup carries).
+        window.addEventListener('i18nLoaded', rerender);
+        window.addEventListener('i18nLanguageChanged', rerender);
         await refresh(false);
         startPolling();
     }

@@ -33,8 +33,8 @@ func TestFanModeIconColor(t *testing.T) {
 	}{
 		{"manual is grey under manual control", "manual", false, grey},
 		{"manual is grey under host control", "manual", true, grey},
-		{"open is grey under manual control", "open", false, grey},
-		{"open is indigo under host control", "open", true, indigo},
+		{"auto is grey under manual control", "auto", false, grey},
+		{"auto is indigo under host control", "auto", true, indigo},
 		{"all is grey under manual control", "all", false, grey},
 		{"all is deep purple under host control", "all", true, deepPurple},
 	}
@@ -273,7 +273,7 @@ func TestFanDisplayUploaderUploads(t *testing.T) {
 	jobs := make(chan fanDisplayJob, 1)
 	go ctrl.runFanDisplayUploader(ctx, fake, jobs)
 
-	jobs <- fanDisplayJob{name: "fan2", foreground: color.White}
+	jobs <- fanDisplayJob{name: "fan", foreground: color.White}
 
 	require.Eventually(t, func() bool {
 		fake.mu.Lock()
@@ -300,7 +300,7 @@ func TestFanDisplayUploaderPreemptsInflight(t *testing.T) {
 	jobs := make(chan fanDisplayJob, 1)
 	go ctrl.runFanDisplayUploader(ctx, fake, jobs)
 
-	jobs <- fanDisplayJob{name: "fan2", foreground: color.White}
+	jobs <- fanDisplayJob{name: "fan", foreground: color.White}
 
 	require.Eventually(t, func() bool {
 		fake.mu.Lock()

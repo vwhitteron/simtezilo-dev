@@ -1,3 +1,14 @@
+// Shared channel label formatter ("name (n)"); guard-defined so it is shared
+// with channel-gains.js / routing-matrix.js regardless of script load order.
+window.channelDisplayLabel = window.channelDisplayLabel || function (ch, names) {
+    let name = Array.isArray(names) && typeof names[ch] === 'string' ? names[ch].trim() : '';
+    if (!name) {
+        name = 'Channel';
+    }
+
+    return name + ' (' + (ch + 1) + ')';
+};
+
 // Settings page JavaScript functionality
 class ConfigManager {
     constructor() {
@@ -981,28 +992,14 @@ class ConfigManager {
             }
         }
 
-        // Hide/show the SSH Access section in System Advanced settings
-        const sshAccessSection = document.getElementById('ssh-access-settings');
-        if (sshAccessSection) {
-            sshAccessSection.style.display = devToolsEnabled ? 'block' : 'none';
-        }
-
-        // Hide the entire advanced settings expander for System when dev tools is disabled
-        // (since SSH is currently the only content in System advanced settings)
-        const advancedToggle = document.querySelector('[data-bs-target="#advancedSettingsSystem"]');
-        if (advancedToggle) {
-            if (devToolsEnabled) {
-                // Show the toggle - restore d-flex class and clear display
-                if (!advancedToggle.classList.contains('d-flex')) {
-                    advancedToggle.classList.add('d-flex');
-                }
-                advancedToggle.style.display = '';
-            } else {
-                // Hide the toggle - remove d-flex and set display none with !important
-                advancedToggle.classList.remove('d-flex');
-                advancedToggle.style.setProperty('display', 'none', 'important');
-            }
-        }
+        // Show/hide every dev-tools-only block as a group: the SSH Access section
+        // and the Synth/Haptics "Advanced Settings" sections. Each is marked in the
+        // HTML with the `devtools-only` class and defaults to hidden, so they only
+        // appear once developer tools are enabled. Clearing the inline display (rather
+        // than forcing "block") restores each element's natural layout.
+        document.querySelectorAll('.devtools-only').forEach((el) => {
+            el.style.display = devToolsEnabled ? '' : 'none';
+        });
 
         // Store the dev tools state globally so navigation can access it
         window.devToolsEnabled = devToolsEnabled;
@@ -1120,16 +1117,16 @@ class ConfigManager {
                 if (svg) {
                     button.innerHTML = svg;
                 }
-                button.classList.remove('btn-outline-primary');
+                button.classList.remove('btn-outline-primary', 'btn-outline-success');
                 button.classList.add('btn-outline-danger');
             } else {
-                // Unmuted state - show volume icon and secondary outline
+                // Unmuted state - show volume icon and green outline
                 const svg = await IconHelper.loadIcon('fa-volume-high');
                 if (svg) {
                     button.innerHTML = svg;
                 }
-                button.classList.remove('btn-outline-danger');
-                button.classList.add('btn-outline-primary');
+                button.classList.remove('btn-outline-danger', 'btn-outline-primary');
+                button.classList.add('btn-outline-success');
             }
         }
     }
@@ -1139,14 +1136,14 @@ class ConfigManager {
         const muteButtons = document.querySelectorAll('button[data-mute-checkbox]');
         for (const button of muteButtons) {
             if (typeof IconHelper !== 'undefined') {
-                // Default to volume-high (unmuted) icon and primary outline
+                // Default to volume-high (unmuted) icon and green outline
                 const svg = await IconHelper.loadIcon('fa-volume-high');
                 if (svg) {
                     button.innerHTML = svg;
                 }
                 // Ensure button has the correct unmuted styling
-                button.classList.remove('btn-outline-secondary', 'btn-outline-danger');
-                button.classList.add('btn-outline-primary');
+                button.classList.remove('btn-outline-secondary', 'btn-outline-danger', 'btn-outline-primary');
+                button.classList.add('btn-outline-success');
             }
         }
     }
@@ -1969,14 +1966,17 @@ class ConfigManager {
             this.config.haptics.output.channels) || 2;
         this.numEqChannels = numChannels;
 
-        // Populate the channel select dropdown (Ch0..ChN-1) since the HTML no
+        // Populate the channel select dropdown ("name (n)") since the HTML no
         // longer ships static Left/Right options.
         if (channelSelect) {
+            const names = Array.isArray(this.config.synthesizer.channelName)
+                ? this.config.synthesizer.channelName
+                : [];
             channelSelect.innerHTML = '';
             for (let ch = 0; ch < numChannels; ch++) {
                 const option = document.createElement('option');
                 option.value = String(ch);
-                option.textContent = 'Ch' + ch;
+                option.textContent = window.channelDisplayLabel(ch, names);
                 channelSelect.appendChild(option);
             }
             channelSelect.value = '0';
@@ -2514,10 +2514,10 @@ class ConfigManager {
 
         const value = headroom[this.currentChannel];
         if (value === 0.0) {
-            const noneText = t('runmode.settings.synth.equalizer.drx.headroom.none');
+            const noneText = t('runmode.settings.haptics.general.equalizer.drx.headroom.none');
             display.textContent = noneText || 'DRX boost: none';
         } else {
-            const tmpl = t('runmode.settings.synth.equalizer.drx.headroom');
+            const tmpl = t('runmode.settings.haptics.general.equalizer.drx.headroom');
             const formatted = '+' + Math.abs(value).toFixed(1);
             if (tmpl) {
                 display.textContent = tmpl.replace('{{value}}', formatted);
@@ -2670,4 +2670,26 @@ document.addEventListener('DOMContentLoaded', () => {
             element.title = tooltip;
         }
     });
+});
+
+// Relabel the EQ channel select live when channel names are edited elsewhere on
+// the page (channel-gains.js), without waiting for a full config reload. Keep
+// the in-memory config in sync so a later re-render of the EQ uses the new names.
+document.addEventListener('channelnameschanged', (event) => {
+    if (!Array.isArray(event.detail)) {
+        return;
+    }
+
+    const names = event.detail;
+    if (window.configManager && window.configManager.config &&
+        window.configManager.config.synthesizer) {
+        window.configManager.config.synthesizer.channelName = names.slice();
+    }
+
+    const channelSelect = document.getElementById('eq-channel-select');
+    if (channelSelect) {
+        Array.from(channelSelect.options).forEach((option, ch) => {
+            option.textContent = window.channelDisplayLabel(ch, names);
+        });
+    }
 });

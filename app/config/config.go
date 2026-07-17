@@ -24,7 +24,7 @@ import (
 
 const (
 	fanModeManual = "manual"
-	fanModeOpen   = "open"
+	fanModeAuto   = "auto"
 	fanModeAll    = "all"
 )
 
@@ -861,7 +861,7 @@ func (c *Config) GetFanMode() string {
 	mode := strings.ToLower(strings.TrimSpace(c.viper.Fan.Mode))
 
 	switch mode {
-	case fanModeManual, fanModeOpen, fanModeAll:
+	case fanModeManual, fanModeAuto, fanModeAll:
 		return mode
 	default:
 		return fanModeManual
@@ -880,7 +880,7 @@ func (c *Config) IsFanModeValid() bool {
 	mode := strings.ToLower(strings.TrimSpace(c.viper.Fan.Mode))
 
 	switch mode {
-	case "", fanModeManual, fanModeOpen, fanModeAll:
+	case "", fanModeManual, fanModeAuto, fanModeAll:
 		return true
 	default:
 		return false
@@ -1004,7 +1004,7 @@ func (c *Config) SetFanMaxSpeedKPH(value int) {
 // CycleFanMode cycles the fan mode forward or backward.
 // The order is: off -> open -> all -> off.
 func (c *Config) CycleFanMode(forward bool) string {
-	modes := []string{fanModeManual, fanModeOpen, fanModeAll}
+	modes := []string{fanModeManual, fanModeAuto, fanModeAll}
 
 	c.mu.Lock()
 	defer c.mu.Unlock()

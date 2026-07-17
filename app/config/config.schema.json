@@ -134,7 +134,7 @@
                     "description": "Fan operating mode",
                     "enum": [
                         "manual",
-                        "open",
+                        "auto",
                         "all"
                     ],
                     "default": "manual"

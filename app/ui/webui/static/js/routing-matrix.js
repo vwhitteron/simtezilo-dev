@@ -1,27 +1,39 @@
-// routing-matrix.js — output routing control for the synthesizer. Mirrors the
-// EQ panel idiom: a channel <select> picks one output channel, and three
-// form-switch toggles (Engine / Chassis / Transmission) reflect and edit the
-// routing for that channel. Reads synthesizer.routing and haptics.output.channels
-// from /api/config and saves per-source rows back via POST, mirroring the pattern
-// used by settings.js / audio-settings.js.
+// routing-matrix.js — per-source output channel routing for the synthesizer.
+// Each haptics source (Engine / Chassis / Transmission) owns a pill-style
+// multi-select under its Output Level row: enabled output channels are shown as
+// removable pills, and clicking the field pops up a list of the channels that
+// aren't yet routed. Reads synthesizer.routing and haptics.output.channels from
+// /api/config and saves per-source rows back via POST, mirroring the pattern
+// used by settings.js / channel-gains.js.
 (function () {
     'use strict';
 
-    // Ordered list of sources mapped to their switch element ids. Keys must match
+    // Shared channel label formatter ("name (n)"); guard-defined so a single
+    // canonical implementation is shared with channel-gains.js / settings.js.
+    window.channelDisplayLabel = window.channelDisplayLabel || function (ch, names) {
+        let name = Array.isArray(names) && typeof names[ch] === 'string' ? names[ch].trim() : '';
+        if (!name) {
+            name = 'Channel';
+        }
+
+        return name + ' (' + (ch + 1) + ')';
+    };
+
+    // Ordered list of sources mapped to their DOM element ids. Keys must match
     // the backend constants: config.RoutingSourceEngine / Chassis / Transmission.
     const SOURCES = [
-        { key: 'engine',       toggleId: 'routing-engine' },
-        { key: 'chassis',      toggleId: 'routing-chassis' },
-        { key: 'transmission', toggleId: 'routing-transmission' },
+        { key: 'engine',       pillsId: 'routing-engine-pills',       menuId: 'routing-engine-menu',       placeholderId: 'routing-engine-placeholder' },
+        { key: 'chassis',      pillsId: 'routing-chassis-pills',      menuId: 'routing-chassis-menu',      placeholderId: 'routing-chassis-placeholder' },
+        { key: 'transmission', pillsId: 'routing-transmission-pills', menuId: 'routing-transmission-menu', placeholderId: 'routing-transmission-placeholder' },
     ];
 
     // In-memory copy of the routing state, keyed by source name.
     // { engine: [true, true, ...], chassis: [...], transmission: [...] }
     let routing = {};
     let numChannels = 2;
-    let selectedChannel = 0;
+    let channelNames = [];
 
-    // Debounce handles: one per source, so rapid toggles within a channel are
+    // Debounce handles: one per source, so rapid edits within a source are
     // coalesced into a single POST rather than firing per change.
     const saveTimeouts = {};
 
@@ -29,81 +41,129 @@
         return document.getElementById(id);
     }
 
-    // Populate the channel dropdown with Ch0..ChN-1, preserving the current
-    // selection when still valid (clamped if the channel count shrank).
-    function renderChannelOptions() {
-        const select = el('routing-channel-select');
-        if (!select) {
-            return;
-        }
-
-        if (selectedChannel >= numChannels) {
-            selectedChannel = numChannels - 1;
-        }
-        if (selectedChannel < 0) {
-            selectedChannel = 0;
-        }
-
-        select.innerHTML = '';
-        for (let ch = 0; ch < numChannels; ch++) {
-            const option = document.createElement('option');
-            option.value = String(ch);
-            option.textContent = 'Ch' + ch;
-            select.appendChild(option);
-        }
-        select.value = String(selectedChannel);
+    // The field wrapper for a source (carries data-routing-source + .open state).
+    function fieldEl(source) {
+        return document.querySelector('.channel-pill-select[data-routing-source="' + source.key + '"]');
     }
 
-    // Reflect the routing of the selected channel onto the three switches.
-    function updateSwitches() {
-        SOURCES.forEach(function (source) {
-            const toggle = el(source.toggleId);
-            if (!toggle) {
-                return;
+    // Render the pills, the add-menu items and the placeholder for one source.
+    function renderSource(source) {
+        const row = routing[source.key] || [];
+
+        const list = el(source.pillsId);
+        if (list) {
+            list.innerHTML = '';
+            for (let ch = 0; ch < numChannels; ch++) {
+                if (row[ch] === false) {
+                    continue;
+                }
+                list.appendChild(buildPill(source, ch));
             }
-            const row = routing[source.key] || [];
-            toggle.checked = row[selectedChannel] !== false;
-            updateButtonIcon(source);
+        }
+
+        const available = [];
+        for (let ch = 0; ch < numChannels; ch++) {
+            if (row[ch] === false) {
+                available.push(ch);
+            }
+        }
+
+        const menu = el(source.menuId);
+        if (menu) {
+            menu.innerHTML = '';
+            available.forEach(function (ch) {
+                menu.appendChild(buildMenuItem(source, ch));
+            });
+        }
+
+        // Placeholder hint is shown only while there's still a channel to add.
+        const placeholder = el(source.placeholderId);
+        if (placeholder) {
+            placeholder.style.display = available.length ? '' : 'none';
+        }
+
+        // If the open menu just ran out of options, close it.
+        if (!available.length) {
+            closeMenu(source);
+        }
+    }
+
+    // Build a removable pill element for one channel of one source.
+    function buildPill(source, ch) {
+        const pill = document.createElement('span');
+        pill.className = 'channel-pill';
+
+        const label = document.createElement('span');
+        label.className = 'channel-pill-label';
+        label.textContent = window.channelDisplayLabel(ch, channelNames);
+        pill.appendChild(label);
+
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'channel-pill-remove';
+        remove.setAttribute('aria-label', window.channelDisplayLabel(ch, channelNames));
+        remove.innerHTML = '&times;';
+        remove.addEventListener('click', function (event) {
+            // Don't let the field's click handler treat this as an open request.
+            event.stopPropagation();
+            setChannel(source, ch, false);
         });
+        pill.appendChild(remove);
+
+        return pill;
     }
 
-    // Swap the button icon to reflect selected (circle-check) / unselected
-    // (circle-xmark) state, mirroring the mute-button icon pattern in settings.js.
-    async function updateButtonIcon(source) {
-        const toggle = el(source.toggleId);
-        if (!toggle || typeof IconHelper === 'undefined') {
-            return;
-        }
+    // Build one clickable "add this channel" row for the popup menu.
+    function buildMenuItem(source, ch) {
+        const item = document.createElement('button');
+        item.type = 'button';
+        item.className = 'channel-pill-menu-item';
+        item.textContent = window.channelDisplayLabel(ch, channelNames);
+        item.addEventListener('click', function (event) {
+            // Keep the menu open across adds so multiple channels can be picked.
+            event.stopPropagation();
+            setChannel(source, ch, true);
+        });
+        return item;
+    }
 
-        const label = document.querySelector('label[for="' + source.toggleId + '"]');
-        const iconSpan = label && label.querySelector('.routing-icon');
-        if (!iconSpan) {
-            return;
-        }
-
-        const svg = await IconHelper.loadIcon(toggle.checked ? 'fa-circle-check' : 'fa-circle-xmark');
-        if (svg) {
-            iconSpan.innerHTML = svg;
+    // Open the popup for one source, closing any other that's open.
+    function openMenu(source) {
+        SOURCES.forEach(function (other) {
+            if (other !== source) {
+                closeMenu(other);
+            }
+        });
+        const field = fieldEl(source);
+        if (field) {
+            field.classList.add('open');
         }
     }
 
-    // Called when a source switch is toggled for the selected channel.
-    function onSwitchChange(source) {
-        const toggle = el(source.toggleId);
-        if (!toggle) {
-            return;
+    function closeMenu(source) {
+        const field = fieldEl(source);
+        if (field) {
+            field.classList.remove('open');
         }
+    }
 
+    function isOpen(source) {
+        const field = fieldEl(source);
+        return !!(field && field.classList.contains('open'));
+    }
+
+    // Enable or disable one channel for one source, then re-render and save.
+    function setChannel(source, ch, enabled) {
         if (!routing[source.key]) {
             routing[source.key] = new Array(numChannels).fill(true);
         }
-        routing[source.key][selectedChannel] = toggle.checked;
+        routing[source.key][ch] = enabled;
 
-        updateButtonIcon(source);
+        renderSource(source);
         scheduleSave(source.key);
     }
 
-    // Debounce saves per source so rapid toggles collapse into one POST.
+    // Debounce saves per source so rapid edits collapse into one POST.
     function scheduleSave(source) {
         clearTimeout(saveTimeouts[source]);
         saveTimeouts[source] = setTimeout(function () {
@@ -137,26 +197,15 @@
         }
     }
 
-    // Resize every routing row to the given channel count, defaulting new slots to
-    // true (matching backend normalisation in config.normaliseRouting).
-    function resizeRows(n) {
-        SOURCES.forEach(function (source) {
-            const current = routing[source.key] || [];
-            const next = [];
-            for (let ch = 0; ch < n; ch++) {
-                next.push(current[ch] !== false);
-            }
-            routing[source.key] = next;
-        });
-        numChannels = n;
-    }
-
     // Ingest a fresh config payload (from /api/config) into local state and
-    // refresh the control.
+    // refresh every source control.
     function applyConfig(config) {
         const hapticsOutput = (config.haptics && config.haptics.output) || {};
         const newChannels = (hapticsOutput.channels && parseInt(hapticsOutput.channels, 10)) || 2;
         const synthRouting = (config.synthesizer && config.synthesizer.routing) || {};
+        channelNames = (config.synthesizer && Array.isArray(config.synthesizer.channelName))
+            ? config.synthesizer.channelName
+            : [];
 
         const newRouting = {};
         SOURCES.forEach(function (source) {
@@ -171,49 +220,56 @@
         routing = newRouting;
         numChannels = newChannels;
 
-        renderChannelOptions();
-        updateSwitches();
+        SOURCES.forEach(renderSource);
     }
 
-    // Wire the channel dropdown and the three source switches.
+    // Wire the click-to-open popup for each source, plus a document handler that
+    // closes any open popup on an outside click.
     function wireControls() {
-        const select = el('routing-channel-select');
-        if (select) {
-            select.addEventListener('change', function () {
-                const n = parseInt(select.value, 10);
-                selectedChannel = isNaN(n) ? 0 : n;
-                updateSwitches();
-            });
-        }
-
         SOURCES.forEach(function (source) {
-            const toggle = el(source.toggleId);
-            if (toggle) {
-                toggle.addEventListener('change', function () {
-                    onSwitchChange(source);
+            const field = fieldEl(source);
+            if (field) {
+                field.addEventListener('click', function () {
+                    if (isOpen(source)) {
+                        closeMenu(source);
+                    } else if (el(source.menuId) && el(source.menuId).children.length) {
+                        openMenu(source);
+                    }
                 });
             }
         });
+
+        document.addEventListener('click', function (event) {
+            SOURCES.forEach(function (source) {
+                const field = fieldEl(source);
+                if (field && !field.contains(event.target)) {
+                    closeMenu(source);
+                }
+            });
+        });
     }
 
-    async function init() {
-        // Only run on pages that contain the routing control.
-        if (!el('routing-channel-select')) {
+    function init() {
+        // Only run on pages that contain the routing controls.
+        if (!el('routing-engine-pills')) {
             return;
         }
 
         wireControls();
 
         // Load the current config and render.
-        try {
-            const response = await fetch('/api/config?t=' + Date.now());
-            if (response.ok) {
-                const config = await response.json();
-                applyConfig(config);
-            }
-        } catch (err) {
-            console.error('routing-matrix: failed to load config', err);
-        }
+        fetch('/api/config?t=' + Date.now())
+            .then(function (response) {
+                return response.ok ? response.json() : null;
+            })
+            .then(function (config) {
+                if (config) {
+                    applyConfig(config);
+                }
+            })
+            .catch(function (err) {
+                console.error('routing-matrix: failed to load config', err);
+            });
     }
 
     // Expose applyConfig so settings.js can notify us when a config reload
@@ -221,6 +277,15 @@
     document.addEventListener('configloaded', function (event) {
         if (event.detail) {
             applyConfig(event.detail);
+        }
+    });
+
+    // Relabel the pills/menus live when channel names are edited elsewhere on
+    // the page (channel-gains.js), without waiting for a full config reload.
+    document.addEventListener('channelnameschanged', function (event) {
+        if (Array.isArray(event.detail)) {
+            channelNames = event.detail;
+            SOURCES.forEach(renderSource);
         }
     });
 
