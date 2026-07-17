@@ -10,9 +10,7 @@ const IconHelper = {
         }
 
         try {
-            // Strip 'fa-' prefix from the filename if present
-            const filename = name.startsWith('fa-') ? name.substring(3) : name;
-            const response = await fetch(`/images/icons/${filename}.svg?v=${Date.now()}`);
+            const response = await fetch(`/images/icons/${name}.svg?v=${Date.now()}`);
             if (!response.ok) {
                 console.error(`Failed to load icon: ${name}`);
                 return null;

@@ -91,6 +91,15 @@ function createNavigation(currentPage) {
     navHTML += `
                     <div class="d-flex align-items-center me-3">`;
 
+    // Add server-unavailable indicator. Shown by the health monitor when the
+    // backend stops responding, so the user knows the page is stale rather than
+    // silently seeing frozen data.
+    navHTML += `
+                        <div id="server-unavailable-indicator" class="server-unavailable-indicator" role="status" aria-live="polite" style="display: none; margin-right: 1rem;">
+                            <span id="server-unavailable-icon" class="icon" aria-hidden="true"></span>
+                            <span data-i18n="runmode.status.serverunavailable">No connection</span>
+                        </div>`;
+
     // Add restart required indicator
     navHTML += `
                         <button type="button" id="restart-required-indicator" class="btn btn-outline-danger btn-sm" style="font-weight: 600; white-space: nowrap; display: none; margin-right: 1rem;">
@@ -446,20 +455,78 @@ function initializeNavigation() {
 
         // Initialize navigation icons
         if (typeof IconHelper !== 'undefined') {
-            IconHelper.loadIcon('fa-circle-check').then(svg => {
+            IconHelper.loadIcon('circle-check').then(svg => {
                 const successIcon = document.getElementById('nav-success-icon');
                 if (successIcon && svg) {
                     successIcon.innerHTML = svg;
                 }
             });
-            IconHelper.loadIcon('fa-circle-xmark').then(svg => {
+            IconHelper.loadIcon('circle-xmark').then(svg => {
                 const errorIcon = document.getElementById('nav-error-icon');
                 if (errorIcon && svg) {
                     errorIcon.innerHTML = svg;
                 }
             });
+            IconHelper.loadIcon('triangle-exclamation').then(svg => {
+                const offlineIcon = document.getElementById('server-unavailable-icon');
+                if (offlineIcon && svg) {
+                    offlineIcon.innerHTML = svg;
+                }
+            });
         }
+
+        // Begin polling backend health so the offline indicator reflects reality.
+        startServerHealthMonitor();
     }
+}
+
+// Poll the backend health endpoint and toggle the top-right "Server Unavailable"
+// indicator. This runs on every page (navigation is shared), giving a single,
+// consistent signal when the server goes away. It is deliberately independent of
+// the WebSocket connection state, which is only active on telemetry pages.
+let serverHealthMonitorStarted = false;
+function startServerHealthMonitor() {
+    if (serverHealthMonitorStarted) {
+        return;
+    }
+    serverHealthMonitorStarted = true;
+
+    const pollIntervalMs = 5000;
+    const requestTimeoutMs = 4000;
+
+    const setUnavailable = (unavailable) => {
+        const indicator = document.getElementById('server-unavailable-indicator');
+        if (!indicator) {
+            return;
+        }
+        // Never surface the indicator while a deliberate restart overlay is up;
+        // that flow owns the messaging and the server is expected to be down.
+        const overlay = document.getElementById('restart-overlay');
+        const restarting = overlay && overlay.style.display !== 'none';
+        indicator.style.display = unavailable && !restarting ? 'inline-flex' : 'none';
+    };
+
+    const poll = async () => {
+        let ok = false;
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
+        try {
+            const response = await fetch('/api/system/health', {
+                method: 'GET',
+                cache: 'no-cache',
+                signal: controller.signal
+            });
+            ok = response.ok;
+        } catch (error) {
+            ok = false;
+        } finally {
+            clearTimeout(timeout);
+        }
+        setUnavailable(!ok);
+    };
+
+    poll();
+    setInterval(poll, pollIntervalMs);
 }
 
 // Track popover visibility state

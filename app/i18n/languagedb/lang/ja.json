@@ -399,6 +399,7 @@
         "runmode.settings.system.sshaccess.publickey.tooltip": "デバイスにログインするには、SSH公開鍵が必要です。",
         "runmode.settings.system.sshaccess.title": "SSHアクセス",
         "runmode.settings.system.title": "システム",
+        "runmode.status.serverunavailable": "接続なし",
         "runmode.telemetry.adjusthint": "（横スクロールで調整）",
         "runmode.telemetry.chart.audiohealth": "オーディオパイプラインの状態",
         "runmode.telemetry.chart.channeloutputleft": "チャンネル 0",

@@ -1120,7 +1120,7 @@ class ConfigManager {
         if (button && typeof IconHelper !== 'undefined') {
             if (checkbox.checked) {
                 // Muted state - show xmark icon and red outline
-                const svg = await IconHelper.loadIcon('fa-volume-xmark');
+                const svg = await IconHelper.loadIcon('volume-xmark');
                 if (svg) {
                     button.innerHTML = svg;
                 }
@@ -1128,7 +1128,7 @@ class ConfigManager {
                 button.classList.add('btn-outline-danger');
             } else {
                 // Unmuted state - show volume icon and green outline
-                const svg = await IconHelper.loadIcon('fa-volume-high');
+                const svg = await IconHelper.loadIcon('volume-high');
                 if (svg) {
                     button.innerHTML = svg;
                 }
@@ -1144,7 +1144,7 @@ class ConfigManager {
         for (const button of muteButtons) {
             if (typeof IconHelper !== 'undefined') {
                 // Default to volume-high (unmuted) icon and green outline
-                const svg = await IconHelper.loadIcon('fa-volume-high');
+                const svg = await IconHelper.loadIcon('volume-high');
                 if (svg) {
                     button.innerHTML = svg;
                 }

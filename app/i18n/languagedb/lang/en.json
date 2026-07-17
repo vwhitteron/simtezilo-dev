@@ -399,6 +399,7 @@
         "runmode.settings.system.sshaccess.publickey.tooltip": "An SSH public key is required to be able to login to the device over.",
         "runmode.settings.system.sshaccess.title": "SSH Access",
         "runmode.settings.system.title": "System",
+        "runmode.status.serverunavailable": "No connection",
         "runmode.telemetry.adjusthint": "(Use horizontal scroll to adjust)",
         "runmode.telemetry.chart.audiohealth": "Audio Pipeline Health",
         "runmode.telemetry.chart.channeloutputleft": "Channel 0",
