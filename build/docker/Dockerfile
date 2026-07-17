@@ -1,15 +1,11 @@
 # syntax=docker/dockerfile:1
 #
-# Audio backend selection (multichannel / device selection):
-#   The default build uses the pure beep backend (single stereo device).
-#   To enable the portaudio backend, pass the GOTAGS build arg, e.g.:
-#     --build-arg GOTAGS=portaudio
-#   The per-arch portaudio19-dev package is already installed in each base-*
-#   stage, so the cgo build links cleanly. GOTAGS is empty by default, producing
-#   the original beep-only binary. The Makefile sets it for any PORTAUDIO state
-#   except off (i.e. on/auto -> portaudio; PORTAUDIO=off make <target> -> beep).
-#   NB: a portaudio-enabled binary dynamically links libportaudio2 — the target
-#   device must have libportaudio2 (+ libasound2) installed at runtime.
+# Audio output (portaudio):
+#   The build uses the portaudio backend (multichannel / device selection). The
+#   per-arch portaudio19-dev package is installed in each base-* stage, so the
+#   cgo build links cleanly.
+#   NB: the binary dynamically links libportaudio2 — the target device must have
+#   libportaudio2 (+ libasound2) installed at runtime.
 ARG GOVERSION=1.25.0
 
 FROM golang:${GOVERSION}-trixie AS base

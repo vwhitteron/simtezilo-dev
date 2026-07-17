@@ -1,5 +1,3 @@
-// //go:build portaudio
-
 package audio
 
 import (
@@ -11,17 +9,17 @@ import (
 	"github.com/rs/zerolog"
 )
 
-func init() {
-	registerBackend(BackendPortAudio, func(log zerolog.Logger) (Backend, error) {
-		err := portaudio.Initialize()
-		if err != nil {
-			return nil, fmt.Errorf("portaudio: initialize: %w", err)
-		}
+// New initialises PortAudio and returns the output backend. Each successful New
+// must be paired with a Close, which terminates PortAudio.
+func New(log zerolog.Logger) (Backend, error) {
+	err := portaudio.Initialize()
+	if err != nil {
+		return nil, fmt.Errorf("portaudio: initialize: %w", err)
+	}
 
-		return &portAudioBackend{
-			log: log.With().Str("backend", BackendPortAudio).Logger(),
-		}, nil
-	})
+	return &portAudioBackend{
+		log: log.With().Str("backend", BackendPortAudio).Logger(),
+	}, nil
 }
 
 // portAudioBackend implements Backend using github.com/gordonklaus/portaudio.

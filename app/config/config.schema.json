@@ -80,12 +80,6 @@
             "type": "object",
             "description": "Hardware configuration",
             "properties": {
-                "audioBackend": {
-                    "type": "string",
-                    "description": "Audio output backend",
-                    "enum": ["beep", "portaudio"],
-                    "default": "beep"
-                },
                 "model": {
                     "type": "string",
                     "enum": [

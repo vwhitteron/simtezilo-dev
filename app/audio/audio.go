@@ -1,25 +1,16 @@
 // Package audio provides a backend-agnostic abstraction over audio output
-// devices. Concrete backends (beep, portaudio) implement the Backend
-// interface, decoupling the synthesizer and pit-radio consumers from any
-// particular audio library or platform.
+// devices. The portaudio backend implements the Backend interface, decoupling
+// the synthesizer and pit-radio consumers from any particular audio library or
+// platform.
 //
 // All sample data crossing the abstraction boundary is interleaved float32
 // (portaudio's native format): for an N-channel frame the layout is
-// [c0, c1, ... cN-1, c0, c1, ...]. The beep backend adapts this to beep's
-// [][2]float64 representation internally.
+// [c0, c1, ... cN-1, c0, c1, ...].
 package audio
 
-import "errors"
-
-// Backend names recognised by New.
-const (
-	BackendBeep      = "beep"
-	BackendPortAudio = "portaudio"
-)
-
-// ErrBackendUnavailable is returned when a backend is selected by name but the
-// binary was not built with support for it (build tag missing).
-var ErrBackendUnavailable = errors.New("audio backend not available in this build")
+// BackendPortAudio is the backend identifier reported by Backend.Name and used
+// in logs.
+const BackendPortAudio = "portaudio"
 
 // Device describes an output device exposed by a backend.
 //
@@ -79,7 +70,7 @@ type Sink interface {
 	Channels() int
 }
 
-// Backend is a concrete audio implementation (beep, portaudio).
+// Backend is a concrete audio implementation (portaudio).
 type Backend interface {
 	// Name returns the backend identifier (one of the Backend* constants).
 	Name() string

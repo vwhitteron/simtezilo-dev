@@ -30,19 +30,25 @@ func TestCalibrationModeOutputsSignal(t *testing.T) {
 	})
 
 	streamer := synthesizer.NewStreamer(synth)
-	samples := make([][2]float64, 100)
+
+	const (
+		frames   = 100
+		channels = 2
+	)
+
+	buf := make([]float32, frames*channels)
 
 	// Act
-	n, ok := streamer.Stream(samples)
+	n, ok := streamer.ReadInterleaved(buf, channels)
 
 	// Assert
-	assert.True(t, ok, "Stream() should succeed")
-	assert.Equal(t, len(samples), n, "Stream() should return expected number of samples")
+	assert.True(t, ok, "ReadInterleaved() should succeed")
+	assert.Equal(t, frames, n, "ReadInterleaved() should return expected number of frames")
 
 	anyNonZero := false
 
-	for _, s := range samples {
-		if math.Abs(s[0]) > 1e-6 || math.Abs(s[1]) > 1e-6 {
+	for _, s := range buf {
+		if math.Abs(float64(s)) > 1e-6 {
 			anyNonZero = true
 
 			break

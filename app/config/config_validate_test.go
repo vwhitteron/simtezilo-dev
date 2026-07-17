@@ -603,7 +603,6 @@ func TestConfig_Validate_Integration(t *testing.T) {
 				WebUIPort: 8080,
 			},
 			Hardware: &hardware{
-				AudioBackend:       "beep",
 				Model:              "console",
 				DisplayOrientation: 90,
 			},

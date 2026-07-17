@@ -91,7 +91,7 @@ type App struct {
 	synth      *synthesizer.Synthesizer  // Audio synthesizer for haptic feedback
 	calibrator *calibrator.ToneGenerator // Calibration mode manager
 
-	audioBackend   audio.Backend      // Audio output backend (beep/portaudio)
+	audioBackend   audio.Backend      // Audio output backend (portaudio)
 	hapticSink     audio.Sink         // Active haptic output stream
 	hapticSource   *audio.AsyncSource // Background producer feeding the haptic sink
 	audioMu        sync.Mutex         // Guards audio output state during start/restart
@@ -1005,27 +1005,15 @@ func (a *App) initializePitRadio(opts Options) {
 }
 
 // initialiseLocalPitRadioOutput sets the primary pit-radio output to a local
-// audio device, used when the pit-radio output mode is "audio". The beep backend
-// drives a single global stereo device shared with haptics, so local pit-radio
-// output requires the portaudio backend. It returns false (leaving
-// a.pitRadio unset) when the device cannot be opened.
+// audio device, used when the pit-radio output mode is "audio". It returns false
+// (leaving a.pitRadio unset) when the device cannot be opened.
 func (a *App) initialiseLocalPitRadioOutput() bool {
-	backendName := a.config.GetAudioBackend()
-	if backendName == audio.BackendBeep {
-		a.log.Warn().
-			Str("component", "pit radio local").
-			Str("backend", backendName).
-			Msg("local pit-radio output requires the portaudio backend; disabling")
-
-		return false
-	}
-
-	backend, err := audio.New(backendName, a.log)
+	backend, err := audio.New(a.log)
 	if err != nil {
 		a.log.Warn().
 			Err(err).
 			Str("component", "pit radio local").
-			Str("backend", backendName).
+			Str("backend", audio.BackendPortAudio).
 			Msg("audio backend unavailable; disabling local pit-radio output")
 
 		return false
@@ -1232,28 +1220,16 @@ func (a *App) startAudioOutput() {
 	a.audioMu.Lock()
 	defer a.audioMu.Unlock()
 
-	backendName := a.config.GetAudioBackend()
-
-	backend, err := audio.New(backendName, a.log)
+	backend, err := audio.New(a.log)
 	if err != nil {
-		// Fall back to the beep backend when the configured backend is not
-		// available in this build (e.g. portaudio not compiled in).
-		a.log.Warn().
+		a.log.Error().
 			Err(err).
-			Str("backend", backendName).
-			Msg("audio backend unavailable, falling back to beep")
+			Str("component", "audio output device").
+			Str("result", "failure").
+			Msg("init")
+		_ = a.ui.Screen.RenderErrorScreen("Audio output init")
 
-		backend, err = audio.New(audio.BackendBeep, a.log)
-		if err != nil {
-			a.log.Error().
-				Err(err).
-				Str("component", "audio output device").
-				Str("result", "failure").
-				Msg("init")
-			_ = a.ui.Screen.RenderErrorScreen("Audio output init")
-
-			return
-		}
+		return
 	}
 
 	a.audioBackend = backend
@@ -1410,7 +1386,7 @@ func (a *App) restartAudioOutput() {
 	defer a.audioRestartMu.Unlock()
 
 	a.log.Info().
-		Str("backend", a.config.GetAudioBackend()).
+		Str("backend", audio.BackendPortAudio).
 		Str("action", "restart").
 		Msg("Audio output")
 

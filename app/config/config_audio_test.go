@@ -45,10 +45,9 @@ func TestAudioSettersDoNotRequireRestart(t *testing.T) {
 	}
 }
 
-// TestRestartRequiredAudioSettings is the contrast case: the backend selection
-// changes the whole audio stack and cushionMs is not applied live, so both must
-// raise the restart-required flag. It also ensures the flag mechanism itself
-// works (so the live-setter test above is meaningful).
+// TestRestartRequiredAudioSettings is the contrast case: cushionMs is not
+// applied live, so it must raise the restart-required flag. It also ensures the
+// flag mechanism itself works (so the live-setter test above is meaningful).
 func TestRestartRequiredAudioSettings(t *testing.T) {
 	t.Parallel()
 
@@ -56,7 +55,6 @@ func TestRestartRequiredAudioSettings(t *testing.T) {
 		name  string
 		apply func(*Config)
 	}{
-		{"audio backend", func(c *Config) { c.SetAudioBackend("portaudio") }},
 		{"haptics cushion", func(c *Config) { c.SetAudioHapticsCushionMs(40) }},
 	}
 

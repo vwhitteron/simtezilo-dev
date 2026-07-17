@@ -274,7 +274,8 @@ simtezilo-dev/
 * **viper** - Configuration management
 * **zerolog** - Structured logging
 * **testify** - Test assertions
-* **beep** - Audio playback
+* **portaudio** - Audio playback (output device)
+* **go-mp3** - MP3 decoding (codec)
 * **discordgo** - Discord bot integration (using fork for voice fixes)
 
 ### Working with Local Dependencies

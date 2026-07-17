@@ -2,9 +2,14 @@ package codec
 
 import (
 	"fmt"
-
-	"github.com/gopxl/beep"
 )
+
+// sampleStreamer is the minimal streaming interface the resampler consumes. It
+// mirrors the pull contract (Stream/Err) that sliceStreamer implements.
+type sampleStreamer interface {
+	Stream(samples [][2]float64) (n int, ok bool)
+	Err() error
+}
 
 // PCMFloat64 represents PCM audio samples in float64 format.
 type PCMFloat64 struct {
@@ -48,25 +53,25 @@ func (p *PCMFloat64) Resample(toSampleRate int) PCMFloat64 {
 		return *p
 	}
 
-	// Convert float64 samples to beep format (stereo float64 pairs)
-	// Since we're dealing with mono samples, duplicate to both channels
-	beepSamples := make([][2]float64, len(p.samples))
+	// The resampler operates on stereo float64 pairs, so duplicate each mono
+	// sample into both channels.
+	stereoSamples := make([][2]float64, len(p.samples))
 	for i, sample := range p.samples {
-		beepSamples[i][0] = sample // Left channel
-		beepSamples[i][1] = sample // Right channel (duplicate for mono)
+		stereoSamples[i][0] = sample // Left channel
+		stereoSamples[i][1] = sample // Right channel (duplicate for mono)
 	}
 
 	// Create a slice streamer from the samples
 	streamer := &sliceStreamer{
-		samples: beepSamples,
+		samples: stereoSamples,
 		pos:     0,
 	}
 
 	// Create resampler
 	resampler := newResampleStreamer(
 		streamer,
-		beep.SampleRate(p.sampleRate),
-		beep.SampleRate(toSampleRate),
+		p.sampleRate,
+		toSampleRate,
 	)
 
 	// Calculate expected output length
@@ -168,7 +173,7 @@ func (s *sliceStreamer) Err() error {
 
 // resampleStreamer performs simple linear interpolation resampling.
 type resampleStreamer struct {
-	streamer   beep.Streamer
+	streamer   sampleStreamer
 	ratio      float64
 	buffer     [][2]float64
 	bufferPos  float64
@@ -176,7 +181,7 @@ type resampleStreamer struct {
 }
 
 // newResampleStreamer creates a new resampleStreamer to convert from oldRate to newRate.
-func newResampleStreamer(streamer beep.Streamer, oldRate, newRate beep.SampleRate) *resampleStreamer {
+func newResampleStreamer(streamer sampleStreamer, oldRate, newRate int) *resampleStreamer {
 	return &resampleStreamer{
 		streamer: streamer,
 		ratio:    float64(oldRate) / float64(newRate),

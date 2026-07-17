@@ -380,7 +380,6 @@ type SinkCaptureOptions struct {
 	DurSeconds  float64 // wall-clock seconds to capture (this runs in real time)
 	Engine      bool
 	Chassis     bool
-	Backend     string // audio backend name (e.g. "beep"); empty selects the default
 
 	// Tuning overrides for the underrun experiment. Zero values fall back to the
 	// app's configured values, so a default run reproduces the live app exactly.
@@ -465,9 +464,9 @@ func CaptureHapticsThroughSink(opts SinkCaptureOptions) (*SinkCapture, error) {
 func (a *App) captureThroughSink(next pullFunc, opts SinkCaptureOptions) (*SinkCapture, error) {
 	logger := zerolog.New(io.Discard)
 
-	backend, err := audio.New(opts.Backend, logger)
+	backend, err := audio.New(logger)
 	if err != nil {
-		return nil, fmt.Errorf("open backend %q: %w", opts.Backend, err)
+		return nil, fmt.Errorf("open audio backend: %w", err)
 	}
 
 	defer func() { _ = backend.Close() }()

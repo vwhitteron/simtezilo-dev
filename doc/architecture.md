@@ -174,10 +174,10 @@ graph TD
     - discord.go: Discord notifications`"]
 
     %% External Audio Library
-    AudioLib["`**Beep Audio Library**
+    AudioLib["`**PortAudio Library**
     External Dependency
     - Audio output
-    - Speaker management`"]
+    - Device management`"]
 
     %% Codec Support
     Codec["`**app/codec/**

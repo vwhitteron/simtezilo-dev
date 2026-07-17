@@ -96,7 +96,6 @@ type haptics struct {
 }
 
 type hardware struct {
-	AudioBackend       string `json:"audioBackend"` // beep | portaudio
 	Model              string `json:"model"`
 	DisplayOrientation int    `json:"displayOrientation"`
 }
@@ -144,13 +143,13 @@ type HapticsOutput struct {
 }
 
 // PitRadioAudio configures local playback of pit-radio audio on a dedicated
-// device, used when the pit-radio output mode is "audio". The beep backend
-// drives a single shared stereo device and cannot be used for this output.
+// device, used when the pit-radio output mode is "audio". It opens its own
+// output sink, separate from the main audio device.
 type PitRadioAudio struct {
 	Device     string `json:"device"`     // backend device ID ("" selects the default)
 	DeviceName string `json:"deviceName"` // human-readable device name; the stable, backend-agnostic selection key (Device is a tiebreaker)
 	SampleRate int    `json:"sampleRate"` // output sample rate in Hz
-	Volume     int    `json:"volume"`     // playback volume as a percentage (0-100); scales the pit-radio audio level linearly
+	Volume     int    `json:"volume"`     // playback volume as a percentage (0-100); mapped onto a logarithmic (perceptual) dB taper, 0 dB at 100% down to a floor near 0%
 }
 
 // EQBand represents a parametric equalizer band with center frequency, gain, and Q factor.
@@ -3331,39 +3330,13 @@ func (c *Config) SetTelemetryUpdateURL(value string) {
 }
 
 // ****************************************************************************
-// Audio backend and device routing accessors.
+// Audio device routing accessors.
 //
-// Audio settings select the output backend (beep/portaudio) and route the
-// haptic and pit-radio streams to specific devices. The backend selection
-// changes the entire audio stack, so it is applied on restart (the setter marks
-// the config restart-required). Device/channel/sample-rate/latency changes are
-// applied live (the haptic stream is rebuilt and pit-radio resolves per message)
-// and do not require a restart. The cushion is the other restart-required value.
+// Audio settings route the haptic and pit-radio streams to specific devices.
+// Device/channel/sample-rate/latency changes are applied live (the haptic
+// stream is rebuilt and pit-radio resolves per message) and do not require a
+// restart. The cushion is a restart-required value.
 // ****************************************************************************
-
-// GetAudioBackend returns the configured audio backend (beep, portaudio).
-func (c *Config) GetAudioBackend() string {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	if c.viper.Hardware.AudioBackend == "" {
-		return "beep"
-	}
-
-	return c.viper.Hardware.AudioBackend
-}
-
-// SetAudioBackend sets the audio backend.
-func (c *Config) SetAudioBackend(value string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	c.viper.Hardware.AudioBackend = value
-
-	// Switching backend rebuilds the entire audio stack; apply it on restart
-	// rather than swapping live (which was fragile).
-	c.registerUpdate(true)
-}
 
 // GetAudioHapticsDevice returns the haptics output device ID ("" = default).
 func (c *Config) GetAudioHapticsDevice() string {

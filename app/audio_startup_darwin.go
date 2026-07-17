@@ -2,7 +2,11 @@
 
 package app
 
-import "time"
+import (
+	"time"
+
+	"github.com/vwhitteron/simtezilo-dev/app/audio"
+)
 
 const (
 	audioStartupWarmup = 1000 * time.Millisecond // how long to run the first stream before re-opening
@@ -18,7 +22,7 @@ func (a *App) primeAudioOutput() {
 
 	a.log.Info().
 		Str("action", "prime").
-		Str("backend", a.config.GetAudioBackend()).
+		Str("backend", audio.BackendPortAudio).
 		Str("reason", "fix MacOS first stream artefacts").
 		Msg("Audio output")
 

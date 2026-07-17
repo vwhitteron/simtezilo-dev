@@ -104,8 +104,8 @@ graph TD
         producer goroutine + realtime consumer
         async.go`"]
         Sink["`Backend Sink
-        portaudio (callback) / beep (oto)
-        backend_*.go`"]
+        portaudio (callback)
+        backend_portaudio.go`"]
     end
 
     Tel --> Tick
@@ -126,7 +126,7 @@ graph TD
 | Streamer | `synth_output.go` | 8 kHz | mix-on-demand, × master gain, interleaved f32 |
 | Resampler | `resample.go` | 8 k→dev | band-limited up-sample |
 | Async ring | `async.go` | dev | decouple synthesis from callback |
-| Sink | `backend_portaudio.go` / `backend_beep.go` | dev | realtime device output |
+| Sink | `backend_portaudio.go` | dev | realtime device output |
 
 ---
 

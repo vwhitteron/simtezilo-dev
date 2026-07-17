@@ -57,16 +57,16 @@ func (h *configHandler) applyHapticsOutputConfig(config map[string]any) []string
 	return errors
 }
 
-// deriveHapticsChannels resolves the configured haptics output device on the
+// realDeriveHapticsChannels resolves the configured haptics output device on the
 // active backend and returns its usable output channel count. The channel count
 // is a property of the device, not a user setting. It falls back to stereo when
 // the backend cannot be opened, no concrete device resolves (e.g. the System
 // default selection), or the reported count is out of range, and caps the
 // result at maxHapticsChannels.
-func (h *configHandler) deriveHapticsChannels() int {
+func (h *configHandler) realDeriveHapticsChannels() int {
 	const fallback = 2
 
-	backend, err := audio.New(h.config.GetAudioBackend(), h.log)
+	backend, err := audio.New(h.log)
 	if err != nil {
 		return fallback
 	}
@@ -146,9 +146,7 @@ func (h *configHandler) applyPitRadioAudioConfig(config map[string]any) []string
 	return errors
 }
 
-// handleAudioDevices enumerates the output devices for a backend. The backend
-// may be given as a "backend" query parameter; otherwise the configured backend
-// is used.
+// handleAudioDevices enumerates the portaudio output devices.
 func (h *configHandler) handleAudioDevices(response http.ResponseWriter, request *http.Request) {
 	if request.Method != http.MethodGet {
 		response.WriteHeader(http.StatusMethodNotAllowed)
@@ -158,18 +156,12 @@ func (h *configHandler) handleAudioDevices(response http.ResponseWriter, request
 
 	response.Header().Set("Content-Type", "application/json")
 
-	backendName := request.URL.Query().Get("backend")
-	if backendName == "" {
-		backendName = h.config.GetAudioBackend()
-	}
-
-	backend, err := audio.New(backendName, h.log)
+	backend, err := audio.New(h.log)
 	if err != nil {
 		response.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(response).Encode(map[string]any{ //nolint:errchkjson // simple encoding
-			"status":            "error",
-			"message":           err.Error(),
-			"availableBackends": audio.AvailableBackends(),
+			"status":  "error",
+			"message": err.Error(),
 		})
 
 		return
@@ -192,10 +184,9 @@ func (h *configHandler) handleAudioDevices(response http.ResponseWriter, request
 	devices = h.injectPairedBluetoothDevices(request.Context(), devices)
 
 	_ = json.NewEncoder(response).Encode(map[string]any{ //nolint:errchkjson // simple encoding
-		"status":            "success",
-		"backend":           backendName,
-		"availableBackends": audio.AvailableBackends(),
-		"devices":           devices,
+		"status":  "success",
+		"backend": audio.BackendPortAudio,
+		"devices": devices,
 	})
 }
 
@@ -365,8 +356,7 @@ func bridgeIDAndNonBluetooth(devices []audio.Device) (string, []audio.Device) {
 }
 
 // handleAudioTest plays a short test tone on a device/channel so the user can
-// verify wiring. The beep backend drives a single global device shared with the
-// haptic output, so test tones require the portaudio backend.
+// verify wiring.
 func (h *configHandler) handleAudioTest(response http.ResponseWriter, request *http.Request) {
 	if request.Method != http.MethodPost {
 		response.WriteHeader(http.StatusMethodNotAllowed)
@@ -378,7 +368,6 @@ func (h *configHandler) handleAudioTest(response http.ResponseWriter, request *h
 
 	var reqData struct {
 		Target     string  `json:"target"`
-		Backend    string  `json:"backend"`
 		Device     string  `json:"device"`
 		Channel    int     `json:"channel"`
 		Channels   int     `json:"channels"`

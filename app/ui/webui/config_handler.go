@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
-	"github.com/vwhitteron/simtezilo-dev/app/audio"
 	"github.com/vwhitteron/simtezilo-dev/app/calibrator"
 	appconfig "github.com/vwhitteron/simtezilo-dev/app/config"
 	"github.com/vwhitteron/simtezilo-dev/app/haptics"
@@ -44,6 +43,10 @@ type configHandler struct {
 	// output, used by the audio settings "Test" button to verify the pit-radio
 	// audio device. Wired from the app; nil when no pit-radio output is active.
 	sendPitRadioTest func() error
+	// deriveHapticsChannels resolves the selected haptics device's output channel
+	// count. Injectable so tests avoid opening a real audio backend; defaults to
+	// the PortAudio-backed implementation (realDeriveHapticsChannels).
+	deriveHapticsChannels func() int
 }
 
 func newConfigHandler(
@@ -57,7 +60,7 @@ func newConfigHandler(
 	btDevices func(context.Context) []platform.CmdBTDevice,
 	sendPitRadioTest func() error,
 ) *configHandler {
-	return &configHandler{
+	h := &configHandler{
 		log:                    log,
 		config:                 config,
 		calibrator:             cal,
@@ -68,6 +71,9 @@ func newConfigHandler(
 		btDevices:              btDevices,
 		sendPitRadioTest:       sendPitRadioTest,
 	}
+	h.deriveHapticsChannels = h.realDeriveHapticsChannels
+
+	return h
 }
 
 // handleConfigAPI handles GET and POST requests for configuration management.
@@ -111,8 +117,6 @@ func (h *configHandler) handleGetConfig(response http.ResponseWriter, _ *http.Re
 		"hardware": map[string]any{
 			"model":              h.config.GetHardwareModel(),
 			"displayOrientation": h.config.GetDisplayOrientation(),
-			"audioBackend":       h.config.GetAudioBackend(),
-			"availableBackends":  audio.AvailableBackends(),
 		},
 		"bluetooth": map[string]any{
 			"available": h.bluetoothAvailable != nil && h.bluetoothAvailable(),
@@ -834,17 +838,6 @@ func (h *configHandler) applyFuelConfig(config map[string]any) []string {
 // applyHardwareConfig applies hardware configuration changes.
 func (h *configHandler) applyHardwareConfig(config map[string]any) []string {
 	var errors []string
-
-	if backend, ok := config["audioBackend"]; ok {
-		if backendStr, ok := backend.(string); ok {
-			// Switching backend rebuilds the entire audio stack; the setter marks
-			// the config restart-required so the user applies it via a restart
-			// rather than swapping live (which was fragile).
-			h.config.SetAudioBackend(backendStr)
-		} else {
-			errors = append(errors, "invalid audio backend value")
-		}
-	}
 
 	if model, ok := config["model"]; ok {
 		if modelStr, ok := model.(string); ok {

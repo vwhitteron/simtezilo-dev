@@ -1,43 +1,5 @@
 package audio
 
-import (
-	"fmt"
-	"sort"
-
-	"github.com/rs/zerolog"
-)
-
-// backendFactory constructs a Backend. Backends register a factory under their
-// name via registerBackend in an init function; the tag-gated portaudio backend
-// only registers when compiled in.
-type backendFactory func(zerolog.Logger) (Backend, error)
-
-var backendRegistry = map[string]backendFactory{} //nolint:gochecknoglobals // registry pattern; populated by init() in backend files
-
-func registerBackend(name string, f backendFactory) {
-	backendRegistry[name] = f
-}
-
-// New constructs the named backend. An empty name selects the beep backend.
-// If the portaudio backend is requested but was not compiled into the binary,
-// ErrBackendUnavailable is returned so callers can fall back.
-func New(name string, log zerolog.Logger) (Backend, error) {
-	if name == "" {
-		name = BackendBeep
-	}
-
-	factory, ok := backendRegistry[name]
-	if !ok {
-		if name == BackendPortAudio {
-			return nil, fmt.Errorf("%q: %w", name, ErrBackendUnavailable)
-		}
-
-		return nil, fmt.Errorf("unknown audio backend %q", name)
-	}
-
-	return factory(log)
-}
-
 // ResolveOutputDevice picks the native device ID to open for a saved selection,
 // keying off the human-readable device Name — the only identifier common to all
 // backends and stable across both a backend switch and portaudio's positional
@@ -153,17 +115,4 @@ func FindOutputDevice(b Backend, name, savedID string) (Device, bool) {
 
 		return named[0], true
 	}
-}
-
-// AvailableBackends returns the sorted names of backends compiled into this
-// binary.
-func AvailableBackends() []string {
-	names := make([]string, 0, len(backendRegistry))
-	for name := range backendRegistry {
-		names = append(names, name)
-	}
-
-	sort.Strings(names)
-
-	return names
 }

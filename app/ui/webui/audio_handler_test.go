@@ -16,8 +16,9 @@ import (
 // live-reconfiguration hooks.
 func newAudioTestHandler() *configHandler {
 	return &configHandler{
-		log:    zerolog.Nop(),
-		config: appconfig.NewFromJSON([]byte("{}"), zerolog.Nop()),
+		log:                   zerolog.Nop(),
+		config:                appconfig.NewFromJSON([]byte("{}"), zerolog.Nop()),
+		deriveHapticsChannels: func() int { return 2 },
 	}
 }
 
@@ -75,23 +76,6 @@ func TestApplyHapticsOutputConfig_NoChangeNoRestart(t *testing.T) {
 
 	assert.Empty(t, errs)
 	assert.False(t, called, "saving unchanged output values must not trigger a restart")
-}
-
-// TestApplyHardwareConfig_BackendChangeRequiresRestart verifies that changing the
-// audio backend persists the new value and marks the config restart-required
-// (backend changes are applied on restart, not live).
-func TestApplyHardwareConfig_BackendChangeRequiresRestart(t *testing.T) {
-	t.Parallel()
-
-	handler := newAudioTestHandler()
-	assert.False(t, handler.config.IsRestartRequired(), "fresh config should not require a restart")
-
-	errs := handler.applyHardwareConfig(map[string]any{"audioBackend": "portaudio"})
-
-	assert.Empty(t, errs)
-	assert.Equal(t, "portaudio", handler.config.GetAudioBackend())
-	assert.True(t, handler.config.IsRestartRequired(),
-		"changing the audio backend should require a restart")
 }
 
 // TestApplyAudioConfig_PersistsDeviceName guards the device + deviceName wiring

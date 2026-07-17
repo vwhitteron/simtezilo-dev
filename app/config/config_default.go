@@ -34,7 +34,6 @@ func defaultConfig() *viperConfig {
 			MaxSpeedKPH:      300,
 		},
 		Hardware: &hardware{
-			AudioBackend:       "beep",
 			Model:              "none",
 			DisplayOrientation: 0,
 		},

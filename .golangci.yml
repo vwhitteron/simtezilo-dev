@@ -39,10 +39,10 @@ linters:
             - github.com/bwmarrin/discordgo
             - github.com/godbus/dbus/v5
             - github.com/golang/freetype
-            - github.com/gopxl/beep
             - github.com/gordonklaus/portaudio
             - github.com/gorilla/websocket
             - github.com/grafana/pyroscope-go
+            - github.com/hajimehoshi/go-mp3
             - github.com/kennygrant/sanitize
             - github.com/rs/zerolog
             - github.com/santhosh-tekuri/jsonschema/v5
