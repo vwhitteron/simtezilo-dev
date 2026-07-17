@@ -18,7 +18,7 @@ SSHENABLED='true'
 
 # Mock Bluetooth devices
 BT_ADAPTER='"adapter":{"present":true,"powered":true,"discovering":false,"address":"00:00:00:00:00:01"}'
-BT_PAIRED_SPEAKER='{"address":"00:11:22:33:44:01","name":"Inbuilt Speakers","type":"speaker","paired":true,"trusted":true,"connected":true,"rssi":-45}'
+BT_PAIRED_SPEAKER='{"address":"00:11:22:33:44:01","name":"Bluetooth Stereo","type":"speaker","paired":true,"trusted":true,"connected":true,"rssi":-45}'
 BT_PAIRED_HEADPHONES='{"address":"00:11:22:33:44:02","name":"Wireless Headphones","type":"headphones","paired":true,"trusted":true,"connected":false,"rssi":-62}'
 BT_PAIRED_FANCTLR='{"address":"00:11:22:33:44:03","name":"Fan Controller","type":"fan","paired":true,"trusted":true,"connected":true,"rssi":-69}'
 BT_SCAN_SPEAKER='{"address":"00:11:22:33:44:10","name":"Portable Speaker","type":"speaker","paired":false,"trusted":false,"connected":false,"rssi":-74}'

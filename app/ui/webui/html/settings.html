@@ -1037,7 +1037,8 @@
                                                         <span data-i18n="runmode.settings.app.update.checkinterval">
                                                             every</span>
                                                     </span>
-                                                    <input type="number" id="updates-check-interval" data-i18n-aria-label="runmode.settings.app.update.checkinterval.aria"
+                                                    <input type="number" id="updates-check-interval"
+                                                        data-i18n-aria-label="runmode.settings.app.update.checkinterval.aria"
                                                         class="form-control text-center no-spinner"
                                                         data-config="app.updates.checkIntervalMinutes"
                                                         data-type="number" min="5" max="1440" step="5" value="60">
@@ -1089,7 +1090,8 @@
                                                         class="d-flex justify-content-between align-items-center gap-3">
                                                         <span class="text-muted"
                                                             data-i18n="runmode.settings.app.update.channel">Channel</span>
-                                                        <select id="update-channel" data-i18n-aria-label="runmode.settings.app.update.channel"
+                                                        <select id="update-channel"
+                                                            data-i18n-aria-label="runmode.settings.app.update.channel"
                                                             class="form-select form-select-sm text-center"
                                                             style="width: auto; min-width: 120px;"
                                                             data-config="app.updates.channel">
@@ -1109,7 +1111,9 @@
                                                     now</span>
                                             </button>
                                             <div class="w-100 d-none" id="upload-update-container">
-                                                <input type="file" id="upload-update-input" data-i18n-aria-label="runmode.settings.app.update.upload" class="d-none"
+                                                <input type="file" id="upload-update-input"
+                                                    data-i18n-aria-label="runmode.settings.app.update.upload"
+                                                    class="d-none"
                                                     accept=".zip,.tar.gz,.tgz,application/gzip,application/x-gzip,application/x-tar,application/zip">
                                                 <button type="button" class="btn btn-outline-primary btn-sm w-100"
                                                     id="upload-update-btn">
@@ -1318,7 +1322,7 @@
                                     </div>
 
                                     <!-- Advanced Settings Toggle -->
-                                    <div class="mt-5 devtools-only" style="display: none;">
+                                    <div class="mt-4 devtools-only" style="display: none;">
                                         <div class="d-flex align-items-center mb-3" data-bs-toggle="collapse"
                                             data-bs-target="#advancedSettingsSystem" aria-expanded="false"
                                             aria-controls="advancedSettingsSystem" style="cursor: pointer;">
@@ -1640,7 +1644,7 @@
                                             </div>
                                         </div>
                                     </div>
-                                    <div class="d-flex align-items-center gap-3 mb-4">
+                                    <div class="d-flex align-items-center gap-3 mb-5">
                                         <div class="d-flex align-items-center gap-1">
                                             <span id="haptics-mode-label"
                                                 data-i18n="runmode.settings.haptics.general.outputmode">Mode</span>
@@ -1661,14 +1665,14 @@
                                     </div>
 
                                     <!-- Channels -->
-                                    <h5 class="mb-3"><span class="icon" data-icon="sliders"></span><span
+                                    <h5 class="mt-5 mb-3"><span class="icon" data-icon="sliders"></span><span
                                             data-i18n="runmode.settings.haptics.channels.title">Channels</span></h5>
                                     <div class="mb-4">
                                         <div class="d-flex align-items-start flex-wrap gap-5 mb-2">
                                             <div class="d-flex flex-column gap-1">
                                                 <label for="routing-channel-select" class="form-label mb-1"
                                                     data-i18n="runmode.settings.haptics.general.equalizer.channel">Channel</label>
-                                                <select id="routing-channel-select" class="form-select form-select-sm"
+                                                <select id="routing-channel-select" class="form-select"
                                                     style="width: auto;">
                                                     <!-- Options populated by JavaScript -->
                                                 </select>
@@ -1681,7 +1685,7 @@
                                                         data-i18n-tooltip="runmode.settings.haptics.channels.name.tooltip"></i>
                                                 </label>
                                                 <input type="text" id="synth-channel-name"
-                                                    class="form-control form-control-sm" style="width: 160px;"
+                                                    class="form-control" style="width: 160px;"
                                                     maxlength="32" placeholder="Channel">
                                             </div>
                                             <div class="d-flex flex-column gap-1">
@@ -1724,7 +1728,7 @@
                                     </div>
 
                                     <!-- Calibration Toggle -->
-                                    <div class="mt-5">
+                                    <div class="mt-5 mb-3">
                                         <div class="d-flex align-items-center mb-3" data-bs-toggle="collapse"
                                             data-bs-target="#calibrationSettingsHaptics" aria-expanded="false"
                                             aria-controls="calibrationSettingsHaptics" style="cursor: pointer;">
@@ -1881,8 +1885,9 @@
                                                         data-i18n="runmode.settings.haptics.general.equalizer.channel">Channel</span>
                                                 </h6>
                                                 <div class="d-flex align-items-center gap-2">
-                                                    <select id="eq-channel-select" data-i18n-aria-label="runmode.settings.haptics.general.equalizer.channel" class="form-select"
-                                                        style="width: auto;">
+                                                    <select id="eq-channel-select"
+                                                        data-i18n-aria-label="runmode.settings.haptics.general.equalizer.channel"
+                                                        class="form-select" style="width: auto;">
                                                         <!-- Options populated by JavaScript -->
                                                     </select>
                                                     <div class="form-check form-switch ms-3 mb-0">
@@ -1906,8 +1911,9 @@
                                             <!-- EQ Band Selection and Reset -->
                                             <div class="mb-3 d-flex justify-content-between align-items-center">
                                                 <div class="d-flex align-items-center gap-2">
-                                                    <select id="eq-band-select" data-i18n-aria-label="runmode.settings.haptics.general.equalizer.band" class="form-select"
-                                                        style="width: auto; display: inline-block;">
+                                                    <select id="eq-band-select"
+                                                        data-i18n-aria-label="runmode.settings.haptics.general.equalizer.band"
+                                                        class="form-select" style="width: auto; display: inline-block;">
                                                         <!-- Options populated by JavaScript -->
                                                     </select>
                                                     <i class="fa-solid fa-circle-question tooltip-trigger text-muted"
@@ -1950,7 +1956,7 @@
                                                 </div>
                                                 <!-- Q Factor Slider -->
                                                 <div
-                                                    class="mb-3 d-flex flex-column flex-md-row align-items-md-center gap-2 gap-md-3">
+                                                    class="mb-5 d-flex flex-column flex-md-row align-items-md-center gap-2 gap-md-3">
                                                     <label for="eq-q-slider" class="form-label mb-0"
                                                         style="min-width: 180px; padding-left: 24px;">
                                                         <span
@@ -2053,14 +2059,12 @@
                                             </div>
                                         </div>
                                     </div>
-                                    <div class="row g-3 mb-4">
+                                    <div class="row g-3 mb-5">
                                         <div class="col-md-8 col-lg-6">
                                             <label class="form-label" for="routing-engine-add"
-                                                data-i18n="runmode.settings.haptics.channels.routing">Output
-                                                Channels</label>
+                                                data-i18n="runmode.settings.haptics.channels.routing">Channels</label>
                                             <div class="channel-pill-select form-control" data-routing-source="engine"
-                                                role="button" tabindex="0" aria-haspopup="listbox"
-                                                aria-expanded="false"
+                                                role="button" tabindex="0" aria-haspopup="listbox" aria-expanded="false"
                                                 data-i18n-aria-label="runmode.settings.routing.engine.aria">
                                                 <div class="channel-pill-list" id="routing-engine-pills"></div>
                                                 <span class="channel-pill-placeholder" id="routing-engine-placeholder"
@@ -2072,7 +2076,7 @@
                                     </div>
 
                                     <!-- Advanced Settings Toggle -->
-                                    <div class="mt-5 devtools-only" style="display: none;">
+                                    <div class="mt-4 devtools-only" style="display: none;">
                                         <div class="d-flex align-items-center mb-3" data-bs-toggle="collapse"
                                             data-bs-target="#advancedSettingsHaptics" aria-expanded="false"
                                             aria-controls="advancedSettingsHaptics" style="cursor: pointer;">
@@ -2097,7 +2101,8 @@
                                                     </h5>
                                                     <div class="row g-3 mb-3">
                                                         <div class="col-md-6 col-lg-6">
-                                                            <select id="engine-profile-select" data-i18n-aria-label="runmode.settings.haptics.engineprofiles.title"
+                                                            <select id="engine-profile-select"
+                                                                data-i18n-aria-label="runmode.settings.haptics.engineprofiles.title"
                                                                 class="form-select text-center">
                                                                 <option value="" disabled selected>Loading...</option>
                                                             </select>
@@ -2204,8 +2209,7 @@
                                                 data-i18n="runmode.settings.haptics.channels.routing">Output
                                                 Channels</label>
                                             <div class="channel-pill-select form-control" data-routing-source="chassis"
-                                                role="button" tabindex="0" aria-haspopup="listbox"
-                                                aria-expanded="false"
+                                                role="button" tabindex="0" aria-haspopup="listbox" aria-expanded="false"
                                                 data-i18n-aria-label="runmode.settings.routing.chassis.aria">
                                                 <div class="channel-pill-list" id="routing-chassis-pills"></div>
                                                 <span class="channel-pill-placeholder" id="routing-chassis-placeholder"
@@ -2215,7 +2219,7 @@
                                             </div>
                                         </div>
                                     </div>
-                                    <h5 class="mb-3"><span class="icon" data-icon="sliders"></span><span
+                                    <h5 class="mt-5 mb-3"><span class="icon" data-icon="sliders"></span><span
                                             data-i18n="runmode.settings.haptics.tuning.title">Tuning</span></h5>
                                     <div class="row g-3 mb-4">
                                         <div class="col-md-6 col-lg-3">
@@ -2291,8 +2295,7 @@
                                         <div class="col-md-6 col-lg-3">
                                             <label for="haptics-pulseminfreq" class="form-label">
                                                 <span data-i18n="runmode.settings.haptics.chassis.pulseminfreq">Pulse
-                                                    Min
-                                                    Frequency</span>
+                                                    Min Frequency</span>
                                                 <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
                                                     role="button" tabindex="0" aria-expanded="false"
                                                     data-i18n-tooltip="runmode.settings.haptics.chassis.pulseminfreq.tooltip"></i>
@@ -2308,8 +2311,7 @@
                                         <div class="col-md-6 col-lg-3">
                                             <label for="haptics-pulsemaxfreq" class="form-label">
                                                 <span data-i18n="runmode.settings.haptics.chassis.pulsemaxfreq">Pulse
-                                                    Max
-                                                    Frequency</span>
+                                                    Max Frequency</span>
                                                 <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
                                                     role="button" tabindex="0" aria-expanded="false"
                                                     data-i18n-tooltip="runmode.settings.haptics.chassis.pulsemaxfreq.tooltip"></i>
@@ -2411,7 +2413,7 @@
                                             </div>
                                         </div>
                                     </div>
-                                    <h5 class="mb-3"><span class="icon" data-icon="sliders"></span><span
+                                    <h5 class="mt-5 mb-3"><span class="icon" data-icon="sliders"></span><span
                                             data-i18n="runmode.settings.haptics.tuning.title">Tuning</span></h5>
                                     <div class="row g-3 mb-4">
                                         <div class="col-md-6">
@@ -2524,7 +2526,7 @@
                                         </div>
                                     </div>
 
-                                    <h5 class="mb-3"><span class="icon" data-icon="wind"></span><span
+                                    <h5 class="mt-5 mb-3"><span class="icon" data-icon="wind"></span><span
                                             data-i18n="runmode.settings.fan.windsim.title">Wind Simulation</span></h5>
 
                                     <div class="row g-3 mb-4">
@@ -2910,14 +2912,16 @@
                                                 Safety Margin</label>
                                             <div class="d-flex gap-2">
                                                 <div class="input-with-suffix">
-                                                    <input type="number" id="fuel-safetymarginlaps" data-i18n-aria-label="runmode.settings.pitradio.notifications.fuel.safetymargin.laps"
+                                                    <input type="number" id="fuel-safetymarginlaps"
+                                                        data-i18n-aria-label="runmode.settings.pitradio.notifications.fuel.safetymargin.laps"
                                                         class="form-control text-center"
                                                         data-config="pitRadio.fuelMonitoring.rangeSafetyMarginLaps"
                                                         min="0" max="2" step="0.05">
                                                     <span class="input-suffix">laps</span>
                                                 </div>
                                                 <div class="input-with-suffix">
-                                                    <input type="number" id="fuel-safetymarginmetres" data-i18n-aria-label="runmode.settings.pitradio.notifications.fuel.safetymargin.metres"
+                                                    <input type="number" id="fuel-safetymarginmetres"
+                                                        data-i18n-aria-label="runmode.settings.pitradio.notifications.fuel.safetymargin.metres"
                                                         class="form-control text-center"
                                                         data-config="pitRadio.fuelMonitoring.rangeSafetyMarginMetres"
                                                         min="0" max="2000" step="50">
@@ -3038,7 +3042,8 @@
                     <p data-i18n-html="runmode.settings.modal.confirmtext">To confirm, type <strong>reset</strong>
                         below
                         and click Continue:</p>
-                    <input type="text" id="factory-reset-confirm-input" data-i18n-aria-label="runmode.settings.modal.placeholder" class="form-control"
+                    <input type="text" id="factory-reset-confirm-input"
+                        data-i18n-aria-label="runmode.settings.modal.placeholder" class="form-control"
                         data-i18n-placeholder="runmode.settings.modal.placeholder" placeholder="Type 'reset' to confirm"
                         autocomplete="off">
                 </div>

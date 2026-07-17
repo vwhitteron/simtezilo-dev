@@ -201,6 +201,16 @@ func (w *WebUI) htmlRouterHandlerFunc() func(http.ResponseWriter, *http.Request)
 			return
 		}
 
+		// Paths with a file extension (e.g. /apple-touch-icon.png requested
+		// automatically by clients) are not HTML pages. Reject them here rather
+		// than appending ".html" and logging a misleading "HTML file not found".
+		if path != "/" && filepath.Ext(path) != "" {
+			response.WriteHeader(http.StatusNotFound)
+			w.log.Debug().Str("path", path).Msg("non-HTML file not found")
+
+			return
+		}
+
 		var filename string
 		if path == "/" {
 			filename = "index.html"
