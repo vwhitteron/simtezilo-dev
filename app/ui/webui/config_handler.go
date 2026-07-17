@@ -207,6 +207,16 @@ func (h *configHandler) handleGetConfig(response http.ResponseWriter, _ *http.Re
 
 				return vals
 			}(),
+			"channelName": func() []string {
+				n := h.config.GetAudioHapticsChannels()
+
+				vals := make([]string, n)
+				for i := range n {
+					vals[i] = h.config.GetSynthChannelName(i)
+				}
+
+				return vals
+			}(),
 			"chassisMute":               h.config.GetSynthChassisMute(),
 			"chassisGain":               h.config.GetSynthChassisGain(),
 			"transmissionMute":          h.config.GetSynthTransmissionMute(),
@@ -568,6 +578,21 @@ func (h *configHandler) applyChannelGainMute(config map[string]any) []string {
 					h.config.SetSynthChannelMute(channel, mute)
 				} else {
 					errors = append(errors, fmt.Sprintf("invalid mute value for channel %d", channel))
+				}
+			}
+		}
+	}
+
+	if names, found := config["channelName"]; found {
+		nameArray, valid := names.([]any)
+		if !valid {
+			errors = append(errors, "invalid channelName value (expected array)")
+		} else {
+			for channel, val := range nameArray {
+				if name, ok := val.(string); ok {
+					h.config.SetSynthChannelName(channel, name)
+				} else {
+					errors = append(errors, fmt.Sprintf("invalid name value for channel %d", channel))
 				}
 			}
 		}

@@ -167,6 +167,7 @@ type Synthesizer struct {
 	MasterGain                float64   `json:"masterGain"`
 	ChannelMute               []bool    `json:"channelMute"`
 	ChannelGain               []float64 `json:"channelGain"`
+	ChannelName               []string  `json:"channelName"`
 	ChassisMute               bool      `json:"chassisMute"`
 	ChassisGain               float64   `json:"chassisGain"`
 	TransmissionMute          bool      `json:"transmissionMute"`
@@ -235,6 +236,7 @@ type Snapshot struct {
 	MasterGain                float64
 	ChannelMute               []bool
 	ChannelGain               []float64
+	ChannelName               []string
 	ChassisMute               bool
 	ChassisGain               float64
 	TransmissionMute          bool
@@ -2748,6 +2750,33 @@ func (c *Config) SetSynthChannelMute(channel int, mute bool) {
 	c.registerUpdate(false)
 }
 
+// GetSynthChannelName returns the user-assigned display name for a specific
+// channel. An empty string means the channel has no custom name and callers
+// should fall back to a default label.
+func (c *Config) GetSynthChannelName(channel int) string {
+	snap := c.snapshot.Load()
+	if channel >= 0 && channel < len(snap.ChannelName) {
+		return snap.ChannelName[channel]
+	}
+
+	return ""
+}
+
+// SetSynthChannelName sets the user-assigned display name for a specific channel.
+func (c *Config) SetSynthChannelName(channel int, name string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if channel < 0 || channel >= len(c.viper.Synthesizer.ChannelName) {
+		return
+	}
+
+	c.viper.Synthesizer.ChannelName[channel] = name
+
+	c.rebuildSnapshot()
+	c.registerUpdate(false)
+}
+
 // IncreaseSynthChannelGain increases the gain for a specific channel by the configured gain increment.
 func (c *Config) IncreaseSynthChannelGain(channel int) float64 {
 	c.mu.Lock()
@@ -3741,6 +3770,21 @@ func resizeGainChannels(s []float64, n int, fill float64) []float64 {
 	return resized
 }
 
+// resizeStringChannels returns a slice of length n, preserving existing values
+// and filling any newly added channels with fill.
+func resizeStringChannels(s []string, n int, fill string) []string {
+	resized := make([]string, n)
+	for i := range n {
+		if i < len(s) {
+			resized[i] = s[i]
+		} else {
+			resized[i] = fill
+		}
+	}
+
+	return resized
+}
+
 // finalise performs validation of the config and updates any derived configuration values.
 func (c *Config) finalise() {
 	c.mu.Lock()
@@ -3796,6 +3840,7 @@ func (c *Config) finalise() {
 	c.viper.Synthesizer.EnableEq = resizeBoolChannels(c.viper.Synthesizer.EnableEq, numChannels, false)
 	c.viper.Synthesizer.ChannelMute = resizeBoolChannels(c.viper.Synthesizer.ChannelMute, numChannels, false)
 	c.viper.Synthesizer.ChannelGain = resizeGainChannels(c.viper.Synthesizer.ChannelGain, numChannels, defaultChannelGain)
+	c.viper.Synthesizer.ChannelName = resizeStringChannels(c.viper.Synthesizer.ChannelName, numChannels, "")
 
 	c.normaliseRouting(numChannels)
 
@@ -3948,11 +3993,15 @@ func (c *Config) rebuildSnapshot() {
 	channelGain := make([]float64, len(c.viper.Synthesizer.ChannelGain))
 	copy(channelGain, c.viper.Synthesizer.ChannelGain)
 
+	channelName := make([]string, len(c.viper.Synthesizer.ChannelName))
+	copy(channelName, c.viper.Synthesizer.ChannelName)
+
 	newSnap := &Snapshot{
 		MasterMute:                c.viper.Synthesizer.MasterMute,
 		MasterGain:                c.viper.Synthesizer.MasterGain,
 		ChannelMute:               channelMute,
 		ChannelGain:               channelGain,
+		ChannelName:               channelName,
 		ChassisMute:               c.viper.Synthesizer.ChassisMute,
 		ChassisGain:               c.viper.Synthesizer.ChassisGain,
 		TransmissionMute:          c.viper.Synthesizer.TransmissionMute,

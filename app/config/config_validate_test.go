@@ -637,6 +637,7 @@ func TestConfig_Validate_Integration(t *testing.T) {
 				GainIncrement:             0.25,
 				ChannelGain:               []float64{-5.5, -5.5},
 				ChannelMute:               []bool{false, false},
+				ChannelName:               []string{"", ""},
 				EnableEq:                  []bool{false, false},
 			},
 		},

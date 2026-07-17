@@ -1,15 +1,31 @@
 // channel-gains.js — per-channel output gain/mute control for the synthesizer.
-// Mirrors the routing-matrix idiom: a channel <select> picks one output
-// channel, and a gain input + mute toggle reflect and edit the gain/mute for
-// that channel. Reads synthesizer.channelGain / channelMute and
-// haptics.output.channels from /api/config and saves the full arrays back via
-// POST, mirroring the pattern used by routing-matrix.js / settings.js.
+// Owns the Haptics > Channels channel <select> (routing-channel-select): it
+// populates the Ch0..ChN options and uses the selection to pick one output
+// channel, whose gain input + mute toggle reflect and edit that channel. Reads
+// synthesizer.channelGain / channelMute and haptics.output.channels from
+// /api/config and saves the full arrays back via POST, mirroring the pattern
+// used by routing-matrix.js / settings.js.
 (function () {
     'use strict';
 
-    // In-memory copy of the per-channel gain (dB) and mute state.
+    // Shared label formatter used by every channel <select>/pill across the
+    // settings page: renders a channel as "name (n)", falling back to the
+    // default "Channel" label when the channel has no user-assigned name.
+    // Defined with a guard so whichever module parses first owns the single
+    // canonical implementation.
+    window.channelDisplayLabel = window.channelDisplayLabel || function (ch, names) {
+        let name = Array.isArray(names) && typeof names[ch] === 'string' ? names[ch].trim() : '';
+        if (!name) {
+            name = 'Channel';
+        }
+
+        return name + ' (' + (ch + 1) + ')';
+    };
+
+    // In-memory copy of the per-channel gain (dB), mute and name state.
     let channelGain = [];
     let channelMute = [];
+    let channelName = [];
     let numChannels = 2;
     let selectedChannel = 0;
 
@@ -21,10 +37,29 @@
         return document.getElementById(id);
     }
 
+    // Sync the selected channel from the channel dropdown (routing-channel-select),
+    // clamping to the current channel count.
+    function syncSelectedChannel() {
+        if (selectedChannel >= numChannels) {
+            selectedChannel = numChannels - 1;
+        }
+        if (selectedChannel < 0) {
+            selectedChannel = 0;
+        }
+
+        const select = el('routing-channel-select');
+        if (select && select.value !== '') {
+            const n = parseInt(select.value, 10);
+            if (!isNaN(n)) {
+                selectedChannel = Math.min(Math.max(n, 0), numChannels - 1);
+            }
+        }
+    }
+
     // Populate the channel dropdown with Ch0..ChN-1, preserving the current
     // selection when still valid (clamped if the channel count shrank).
     function renderChannelOptions() {
-        const select = el('synth-channel-gain-select');
+        const select = el('routing-channel-select');
         if (!select) {
             return;
         }
@@ -40,7 +75,7 @@
         for (let ch = 0; ch < numChannels; ch++) {
             const option = document.createElement('option');
             option.value = String(ch);
-            option.textContent = 'Ch' + ch;
+            option.textContent = window.channelDisplayLabel(ch, channelName);
             select.appendChild(option);
         }
         select.value = String(selectedChannel);
@@ -65,6 +100,13 @@
                 window.configManager.updateMuteIconForCheckbox(muteCheckbox);
             }
         }
+
+        const nameInput = el('synth-channel-name');
+        if (nameInput && document.activeElement !== nameInput) {
+            nameInput.value = typeof channelName[selectedChannel] === 'string'
+                ? channelName[selectedChannel]
+                : '';
+        }
     }
 
     // Called when the gain input changes for the selected channel.
@@ -88,6 +130,30 @@
         scheduleSave('channelGain');
     }
 
+    // Called when the channel name input changes for the selected channel.
+    // Updates local state, refreshes the dropdown labels so the change is
+    // visible immediately, and broadcasts so the routing/EQ selects relabel too.
+    function onNameChange() {
+        const nameInput = el('synth-channel-name');
+        if (!nameInput) {
+            return;
+        }
+
+        channelName[selectedChannel] = nameInput.value.trim();
+
+        renderChannelOptions();
+        broadcastNames();
+        scheduleSave('channelName');
+    }
+
+    // Notify the other settings modules (routing matrix, EQ) that channel names
+    // changed so they can relabel their own controls without a full config reload.
+    function broadcastNames() {
+        document.dispatchEvent(new CustomEvent('channelnameschanged', {
+            detail: channelName.slice(),
+        }));
+    }
+
     // Called when the mute checkbox changes for the selected channel.
     function onMuteChange() {
         const muteCheckbox = el('synth-channel-mute');
@@ -109,7 +175,14 @@
 
     // POST the current array for one field to /api/config.
     async function saveField(field) {
-        const value = field === 'channelGain' ? channelGain.slice() : channelMute.slice();
+        let value;
+        if (field === 'channelGain') {
+            value = channelGain.slice();
+        } else if (field === 'channelName') {
+            value = channelName.slice();
+        } else {
+            value = channelMute.slice();
+        }
 
         if (typeof window.showNavbarStatus === 'function') {
             window.showNavbarStatus('saving');
@@ -151,12 +224,15 @@
     function resizeRows(n) {
         const nextGain = [];
         const nextMute = [];
+        const nextName = [];
         for (let ch = 0; ch < n; ch++) {
             nextGain.push(typeof channelGain[ch] === 'number' ? channelGain[ch] : -30);
             nextMute.push(channelMute[ch] === true);
+            nextName.push(typeof channelName[ch] === 'string' ? channelName[ch] : '');
         }
         channelGain = nextGain;
         channelMute = nextMute;
+        channelName = nextName;
         numChannels = n;
     }
 
@@ -168,25 +244,30 @@
         const synth = config.synthesizer || {};
         const backendGain = Array.isArray(synth.channelGain) ? synth.channelGain : [];
         const backendMute = Array.isArray(synth.channelMute) ? synth.channelMute : [];
+        const backendName = Array.isArray(synth.channelName) ? synth.channelName : [];
 
         const newGain = [];
         const newMute = [];
+        const newName = [];
         for (let ch = 0; ch < newChannels; ch++) {
             newGain.push(typeof backendGain[ch] === 'number' ? backendGain[ch] : -30);
             newMute.push(backendMute[ch] === true);
+            newName.push(typeof backendName[ch] === 'string' ? backendName[ch] : '');
         }
 
         channelGain = newGain;
         channelMute = newMute;
+        channelName = newName;
         numChannels = newChannels;
 
         renderChannelOptions();
+        syncSelectedChannel();
         updateControls();
     }
 
-    // Wire the channel dropdown and the gain/mute controls.
+    // Wire the shared channel dropdown and the gain/mute controls.
     function wireControls() {
-        const select = el('synth-channel-gain-select');
+        const select = el('routing-channel-select');
         if (select) {
             select.addEventListener('change', function () {
                 const n = parseInt(select.value, 10);
@@ -204,11 +285,16 @@
         if (muteCheckbox) {
             muteCheckbox.addEventListener('change', onMuteChange);
         }
+
+        const nameInput = el('synth-channel-name');
+        if (nameInput) {
+            nameInput.addEventListener('change', onNameChange);
+        }
     }
 
     async function init() {
         // Only run on pages that contain the channel gain control.
-        if (!el('synth-channel-gain-select')) {
+        if (!el('synth-channel-gain')) {
             return;
         }
 

@@ -145,6 +145,7 @@ func defaultConfig() *viperConfig {
 			MasterGain:                0.00,
 			ChannelMute:               []bool{false, false},
 			ChannelGain:               []float64{-30.00, -30.00},
+			ChannelName:               []string{"", ""},
 			GainIncrement:             0.25,
 			ChassisMute:               false,
 			ChassisGain:               0.00,

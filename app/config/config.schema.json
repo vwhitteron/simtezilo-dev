@@ -204,6 +204,16 @@
                     "maxItems": 2,
                     "default": [-5.5, -5.5]
                 },
+                "channelName": {
+                    "type": "array",
+                    "description": "Per-channel user-assigned display names; empty string means use the default label",
+                    "items": {
+                        "type": "string"
+                    },
+                    "minItems": 2,
+                    "maxItems": 2,
+                    "default": ["", ""]
+                },
                 "chassisMute": {
                     "type": "boolean",
                     "description": "Mute chassis audio",
