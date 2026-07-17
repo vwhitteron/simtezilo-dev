@@ -88,6 +88,16 @@ function applyTranslations() {
             element.setAttribute('data-tooltip', translation);
         }
     });
+
+    // Find all elements with data-i18n-aria-label attribute
+    document.querySelectorAll('[data-i18n-aria-label]').forEach(element => {
+        const key = element.getAttribute('data-i18n-aria-label');
+        const translation = t(key);
+
+        if (translation) {
+            element.setAttribute('aria-label', translation);
+        }
+    });
 }
 
 // Initialize i18n when DOM is loaded

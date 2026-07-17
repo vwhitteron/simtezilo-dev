@@ -864,7 +864,7 @@
         <div class="row">
             <!-- Mobile Dropdown Navigation -->
             <div class="col-12 mb-3 d-lg-none">
-                <select id="sectionSelect" class="form-select">
+                <select id="sectionSelect" data-i18n-aria-label="runmode.settings.section" class="form-select">
                     <option value="application" selected>Application</option>
                     <option value="system">System</option>
                     <option value="haptics">Haptics</option>
@@ -878,25 +878,25 @@
                     <div class="card-body p-2">
                         <ul class="settings-nav">
                             <li class="settings-nav-item">
-                                <a class="settings-nav-link active" data-section="application">
+                                <a class="settings-nav-link active" data-section="application" href="#application">
                                     <span class="icon" data-icon="box-open"></span>
                                     <span data-i18n="runmode.settings.app.title">Application</span>
                                 </a>
                             </li>
                             <li class="settings-nav-item">
-                                <a class="settings-nav-link" data-section="system">
+                                <a class="settings-nav-link" data-section="system" href="#system">
                                     <span class="icon" data-icon="layer-group"></span>
                                     <span data-i18n="runmode.settings.system.title">System</span>
                                 </a>
                             </li>
                             <li class="settings-nav-item">
-                                <a class="settings-nav-link" data-section="haptics">
+                                <a class="settings-nav-link" data-section="haptics" href="#haptics">
                                     <span class="icon" data-icon="wave-square"></span>
                                     <span data-i18n="runmode.settings.haptics.title">Haptics</span>
                                 </a>
                             </li>
                             <li class="settings-nav-item">
-                                <a class="settings-nav-link" data-section="pitradio">
+                                <a class="settings-nav-link" data-section="pitradio" href="#pitradio">
                                     <span class="icon" data-icon="walkie-talkie"></span>
                                     <span data-i18n="runmode.settings.pitradio.title">Pit Radio</span>
                                 </a>
@@ -910,7 +910,7 @@
             <div class="col-lg-9 col-xl-8 col-xxl-7" style="max-width: 1000px;">
 
                 <!-- Application Section -->
-                <div class="settings-section-card active" data-section-content="application">
+                <div class="settings-section-card active" data-section-content="application" tabindex="-1">
                     <div class="card">
                         <div class="card-body">
 
@@ -931,7 +931,7 @@
                                     <label for="app-accent" class="form-label">
                                         <span data-i18n="runmode.settings.app.general.accent">Accent</span>
                                         <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
-                                            role="button"
+                                            role="button" tabindex="0" aria-expanded="false"
                                             data-i18n-tooltip="runmode.settings.app.general.accent.tooltip"></i>
                                     </label>
                                     <input type="text" id="app-accent" class="form-control text-center"
@@ -961,7 +961,7 @@
                                         <span data-i18n="runmode.settings.app.general.telemetry.source">Telemetry
                                             Source</span>
                                         <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
-                                            role="button"
+                                            role="button" tabindex="0" aria-expanded="false"
                                             data-i18n-tooltip="runmode.settings.app.general.telemetry.source.tooltip"></i>
                                     </label>
                                     <div class="input-group mb-3">
@@ -1037,7 +1037,7 @@
                                                         <span data-i18n="runmode.settings.app.update.checkinterval">
                                                             every</span>
                                                     </span>
-                                                    <input type="number" id="updates-check-interval"
+                                                    <input type="number" id="updates-check-interval" data-i18n-aria-label="runmode.settings.app.update.checkinterval.aria"
                                                         class="form-control text-center no-spinner"
                                                         data-config="app.updates.checkIntervalMinutes"
                                                         data-type="number" min="5" max="1440" step="5" value="60">
@@ -1057,7 +1057,7 @@
                                                             data-i18n="runmode.settings.app.update.autoinstall">Automatically
                                                             install updates</span>
                                                         <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
-                                                            role="button"
+                                                            role="button" tabindex="0" aria-expanded="false"
                                                             data-i18n-tooltip="runmode.settings.app.update.autoinstall.tooltip">When
                                                             enabled any downloaded updates will be automatically
                                                             installed
@@ -1089,7 +1089,7 @@
                                                         class="d-flex justify-content-between align-items-center gap-3">
                                                         <span class="text-muted"
                                                             data-i18n="runmode.settings.app.update.channel">Channel</span>
-                                                        <select id="update-channel"
+                                                        <select id="update-channel" data-i18n-aria-label="runmode.settings.app.update.channel"
                                                             class="form-select form-select-sm text-center"
                                                             style="width: auto; min-width: 120px;"
                                                             data-config="app.updates.channel">
@@ -1109,7 +1109,7 @@
                                                     now</span>
                                             </button>
                                             <div class="w-100 d-none" id="upload-update-container">
-                                                <input type="file" id="upload-update-input" class="d-none"
+                                                <input type="file" id="upload-update-input" data-i18n-aria-label="runmode.settings.app.update.upload" class="d-none"
                                                     accept=".zip,.tar.gz,.tgz,application/gzip,application/x-gzip,application/x-tar,application/zip">
                                                 <button type="button" class="btn btn-outline-primary btn-sm w-100"
                                                     id="upload-update-btn">
@@ -1300,7 +1300,7 @@
                                             <span data-i18n="runmode.settings.app.advanced.enabledevtools">Enable
                                                 Developer Tools</span>
                                             <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
-                                                role="button"
+                                                role="button" tabindex="0" aria-expanded="false"
                                                 data-i18n-tooltip="runmode.settings.app.advanced.enabledevtools.tooltip"></i>
                                         </label>
                                     </div>
@@ -1312,7 +1312,7 @@
                                             <span data-i18n="runmode.settings.app.advanced.enableexperimental">Enable
                                                 Experimental Features</span>
                                             <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
-                                                role="button"
+                                                role="button" tabindex="0" aria-expanded="false"
                                                 data-i18n-tooltip="runmode.settings.app.advanced.enableexperimental.tooltip"></i>
                                         </label>
                                     </div>
@@ -1350,7 +1350,7 @@
                                                             <span
                                                                 data-i18n="runmode.settings.system.sshaccess.enable">Enable</span>
                                                             <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
-                                                                role="button"
+                                                                role="button" tabindex="0" aria-expanded="false"
                                                                 data-i18n-tooltip="runmode.settings.system.sshaccess.enable.tooltip"></i>
                                                         </label>
                                                     </div>
@@ -1363,7 +1363,7 @@
                                                                     data-i18n="runmode.settings.system.sshaccess.publickey">Public
                                                                     Key</span>
                                                                 <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
-                                                                    role="button"
+                                                                    role="button" tabindex="0" aria-expanded="false"
                                                                     data-i18n-tooltip="runmode.settings.system.sshaccess.publickey.tooltip"></i>
                                                             </label>
                                                             <textarea class="form-control font-monospace"
@@ -1428,7 +1428,7 @@
                 </div>
 
                 <!-- System Section -->
-                <div class="settings-section-card" data-section-content="system">
+                <div class="settings-section-card" data-section-content="system" tabindex="-1">
                     <div class="card">
                         <div class="card-body">
 
@@ -1474,7 +1474,8 @@
                                             data-i18n="runmode.settings.bluetooth.adapter.unknown">Adapter:
                                             unknown</span>
                                         <i class="fa-solid fa-circle-question ms-2 tooltip-trigger text-muted"
-                                            role="button" data-i18n-tooltip="runmode.settings.bluetooth.tooltip"></i>
+                                            role="button" tabindex="0" aria-expanded="false"
+                                            data-i18n-tooltip="runmode.settings.bluetooth.tooltip"></i>
                                     </div>
                                     <div class="col-auto ms-auto">
                                         <button type="button" id="bluetooth-scan" class="btn btn-outline-primary">
@@ -1512,7 +1513,7 @@
                     </div>
                 </div>
                 <!-- Haptics Section -->
-                <div class="settings-section-card" data-section-content="haptics">
+                <div class="settings-section-card" data-section-content="haptics" tabindex="-1">
                     <div class="card">
                         <div class="card-body">
 
@@ -1602,13 +1603,14 @@
                                                 <span data-i18n="runmode.settings.haptics.general.masterlevel">Master
                                                     Level</span>
                                                 <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
-                                                    role="button"
+                                                    role="button" tabindex="0" aria-expanded="false"
                                                     data-i18n-tooltip="runmode.settings.haptics.general.masterlevel.tooltip"></i>
                                             </label>
                                             <div class="input-group">
                                                 <button type="button" class="btn btn-outline-success mute-toggle-btn"
                                                     data-gain-input="synth-mastergain"
-                                                    data-mute-checkbox="synth-mastermute">
+                                                    data-mute-checkbox="synth-mastermute"
+                                                    data-i18n-aria-label="runmode.settings.haptics.general.masterlevel.mute">
                                                 </button>
                                                 <div class="input-with-suffix" style="flex: 1;">
                                                     <input type="number" id="synth-mastergain"
@@ -1626,7 +1628,7 @@
                                                 <span data-i18n="runmode.settings.haptics.general.increment">Level
                                                     Increment</span>
                                                 <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
-                                                    role="button"
+                                                    role="button" tabindex="0" aria-expanded="false"
                                                     data-i18n-tooltip="runmode.settings.haptics.general.increment.tooltip"></i>
                                             </label>
                                             <div class="input-with-suffix" style="flex: 1;">
@@ -1640,9 +1642,10 @@
                                     </div>
                                     <div class="d-flex align-items-center gap-3 mb-4">
                                         <div class="d-flex align-items-center gap-1">
-                                            <span data-i18n="runmode.settings.haptics.general.outputmode">Mode</span>
+                                            <span id="haptics-mode-label"
+                                                data-i18n="runmode.settings.haptics.general.outputmode">Mode</span>
                                         </div>
-                                        <div class="btn-group" role="group">
+                                        <div class="btn-group" role="radiogroup" aria-labelledby="haptics-mode-label">
                                             <input type="radio" class="btn-check" name="replay-mode"
                                                 id="replay-live-radio" data-config="haptics.enableReplay"
                                                 data-radio-value="false" autocomplete="off" checked>
@@ -1674,7 +1677,7 @@
                                                 <label for="synth-channel-name" class="form-label mb-1">
                                                     <span data-i18n="runmode.settings.haptics.channels.name">Name</span>
                                                     <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
-                                                        role="button"
+                                                        role="button" tabindex="0" aria-expanded="false"
                                                         data-i18n-tooltip="runmode.settings.haptics.channels.name.tooltip"></i>
                                                 </label>
                                                 <input type="text" id="synth-channel-name"
@@ -1685,14 +1688,15 @@
                                                 <label for="synth-channel-gain" class="form-label mb-1">
                                                     <span data-i18n="runmode.settings.haptics.channels.gain">Gain</span>
                                                     <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
-                                                        role="button"
+                                                        role="button" tabindex="0" aria-expanded="false"
                                                         data-i18n-tooltip="runmode.settings.haptics.channels.gain.tooltip"></i>
                                                 </label>
                                                 <div class="input-group flex-nowrap" style="width: 160px;">
                                                     <button type="button"
                                                         class="btn btn-outline-success mute-toggle-btn"
                                                         data-gain-input="synth-channel-gain"
-                                                        data-mute-checkbox="synth-channel-mute">
+                                                        data-mute-checkbox="synth-channel-mute"
+                                                        data-i18n-aria-label="runmode.settings.haptics.channels.gain.mute">
                                                     </button>
                                                     <div class="input-with-suffix" style="flex: 1; min-width: 0;">
                                                         <input type="number" id="synth-channel-gain"
@@ -1740,7 +1744,7 @@
                                                     <span
                                                         data-i18n="runmode.settings.haptics.general.calibration.enable">Enable</span>
                                                     <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
-                                                        role="button"
+                                                        role="button" tabindex="0" aria-expanded="false"
                                                         data-i18n-tooltip="runmode.settings.haptics.general.calibration.enable.tooltip"></i>
                                                 </label>
                                             </div>
@@ -1753,7 +1757,7 @@
                                                             <span
                                                                 data-i18n="runmode.settings.haptics.general.calibration.frequency">Frequency</span>
                                                             <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
-                                                                role="button"
+                                                                role="button" tabindex="0" aria-expanded="false"
                                                                 data-i18n-tooltip="runmode.settings.haptics.general.calibration.frequency.tooltip"></i>
                                                         </label>
                                                         <div class="input-group">
@@ -1859,7 +1863,7 @@
                                                     <span
                                                         data-i18n="runmode.settings.haptics.general.equalizer.drx">DRX</span>
                                                     <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
-                                                        role="button"
+                                                        role="button" tabindex="0" aria-expanded="false"
                                                         data-i18n-tooltip="runmode.settings.haptics.general.equalizer.drx.tooltip"></i>
                                                 </h6>
                                                 <div class="form-check form-switch">
@@ -1877,7 +1881,7 @@
                                                         data-i18n="runmode.settings.haptics.general.equalizer.channel">Channel</span>
                                                 </h6>
                                                 <div class="d-flex align-items-center gap-2">
-                                                    <select id="eq-channel-select" class="form-select"
+                                                    <select id="eq-channel-select" data-i18n-aria-label="runmode.settings.haptics.general.equalizer.channel" class="form-select"
                                                         style="width: auto;">
                                                         <!-- Options populated by JavaScript -->
                                                     </select>
@@ -1895,18 +1899,19 @@
                                             </div>
                                             <!-- EQ Curve Visualization -->
                                             <div class="mb-3">
-                                                <canvas id="eq-curve-canvas" width="800" height="150"
+                                                <canvas id="eq-curve-canvas" width="800" height="150" role="img"
+                                                    data-i18n-aria-label="runmode.settings.haptics.general.equalizer.canvas.aria"
                                                     style="width: 100%; height: 150px; background: rgba(0,0,0,0.2); border-radius: 4px;"></canvas>
                                             </div>
                                             <!-- EQ Band Selection and Reset -->
                                             <div class="mb-3 d-flex justify-content-between align-items-center">
                                                 <div class="d-flex align-items-center gap-2">
-                                                    <select id="eq-band-select" class="form-select"
+                                                    <select id="eq-band-select" data-i18n-aria-label="runmode.settings.haptics.general.equalizer.band" class="form-select"
                                                         style="width: auto; display: inline-block;">
                                                         <!-- Options populated by JavaScript -->
                                                     </select>
                                                     <i class="fa-solid fa-circle-question tooltip-trigger text-muted"
-                                                        role="button"
+                                                        role="button" tabindex="0" aria-expanded="false"
                                                         data-i18n-tooltip="runmode.settings.haptics.general.equalizer.tooltip"></i>
                                                 </div>
                                                 <button type="button" class="btn btn-sm btn-secondary"
@@ -1983,7 +1988,7 @@
                                                             data-i18n="runmode.settings.haptics.general.advanced.samplerate.title">Sample
                                                             Rate</span>
                                                         <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
-                                                            role="button"
+                                                            role="button" tabindex="0" aria-expanded="false"
                                                             data-i18n-tooltip="runmode.settings.haptics.general.advanced.samplerate.tooltip"></i>
                                                     </label>
                                                     <select id="synth-internalsamplerate"
@@ -2003,7 +2008,7 @@
                                                         <span
                                                             data-i18n="runmode.settings.haptics.general.advanced.latency.title">Latency</span>
                                                         <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
-                                                            role="button"
+                                                            role="button" tabindex="0" aria-expanded="false"
                                                             data-i18n-tooltip="runmode.settings.haptics.general.advanced.latency.tooltip"></i>
                                                     </label>
                                                     <div class="input-with-suffix">
@@ -2027,13 +2032,14 @@
                                                 <span
                                                     data-i18n="runmode.settings.haptics.engine.outputlevel">Level</span>
                                                 <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
-                                                    role="button"
+                                                    role="button" tabindex="0" aria-expanded="false"
                                                     data-i18n-tooltip="runmode.settings.haptics.engine.outputlevel.tooltip"></i>
                                             </label>
                                             <div class="input-group">
                                                 <button type="button" class="btn btn-outline-success mute-toggle-btn"
                                                     data-gain-input="synth-enginegain"
-                                                    data-mute-checkbox="synth-enginemute">
+                                                    data-mute-checkbox="synth-enginemute"
+                                                    data-i18n-aria-label="runmode.settings.haptics.engine.outputlevel.mute">
                                                 </button>
                                                 <div class="input-with-suffix" style="flex: 1;">
                                                     <input type="number" id="synth-enginegain"
@@ -2052,7 +2058,10 @@
                                             <label class="form-label" for="routing-engine-add"
                                                 data-i18n="runmode.settings.haptics.channels.routing">Output
                                                 Channels</label>
-                                            <div class="channel-pill-select form-control" data-routing-source="engine">
+                                            <div class="channel-pill-select form-control" data-routing-source="engine"
+                                                role="button" tabindex="0" aria-haspopup="listbox"
+                                                aria-expanded="false"
+                                                data-i18n-aria-label="runmode.settings.routing.engine.aria">
                                                 <div class="channel-pill-list" id="routing-engine-pills"></div>
                                                 <span class="channel-pill-placeholder" id="routing-engine-placeholder"
                                                     data-i18n="runmode.settings.haptics.channels.routing.add">Add
@@ -2088,7 +2097,7 @@
                                                     </h5>
                                                     <div class="row g-3 mb-3">
                                                         <div class="col-md-6 col-lg-6">
-                                                            <select id="engine-profile-select"
+                                                            <select id="engine-profile-select" data-i18n-aria-label="runmode.settings.haptics.engineprofiles.title"
                                                                 class="form-select text-center">
                                                                 <option value="" disabled selected>Loading...</option>
                                                             </select>
@@ -2102,7 +2111,7 @@
                                                                         data-i18n="runmode.settings.haptics.engineprofiles.primarybalance">Primary
                                                                         Balance</span>
                                                                     <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
-                                                                        role="button"
+                                                                        role="button" tabindex="0" aria-expanded="false"
                                                                         data-i18n-tooltip="runmode.settings.haptics.engineprofiles.primarybalance.tooltip"></i>
                                                                 </label>
                                                                 <input type="number" id="engine-primarybalance"
@@ -2115,7 +2124,7 @@
                                                                         data-i18n="runmode.settings.haptics.engineprofiles.secondarybalance">Secondary
                                                                         Balance</span>
                                                                     <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
-                                                                        role="button"
+                                                                        role="button" tabindex="0" aria-expanded="false"
                                                                         data-i18n-tooltip="runmode.settings.haptics.engineprofiles.secondarybalance.tooltip"></i>
                                                                 </label>
                                                                 <input type="number" id="engine-secondarybalance"
@@ -2127,7 +2136,7 @@
                                                                     <span
                                                                         data-i18n="runmode.settings.haptics.engineprofiles.gain">Gain</span>
                                                                     <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
-                                                                        role="button"
+                                                                        role="button" tabindex="0" aria-expanded="false"
                                                                         data-i18n-tooltip="runmode.settings.haptics.engineprofiles.gain.tooltip"></i>
                                                                 </label>
                                                                 <div class="input-with-suffix">
@@ -2143,7 +2152,7 @@
                                                                         data-i18n="runmode.settings.haptics.engineprofiles.pulsescale">Pulse
                                                                         Scale</span>
                                                                     <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
-                                                                        role="button"
+                                                                        role="button" tabindex="0" aria-expanded="false"
                                                                         data-i18n-tooltip="runmode.settings.haptics.engineprofiles.pulsescale.tooltip"></i>
                                                                 </label>
                                                                 <input type="number" id="engine-pulsescale"
@@ -2168,13 +2177,14 @@
                                                 <span
                                                     data-i18n="runmode.settings.haptics.chassis.outputlevel">Level</span>
                                                 <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
-                                                    role="button"
+                                                    role="button" tabindex="0" aria-expanded="false"
                                                     data-i18n-tooltip="runmode.settings.haptics.chassis.outputlevel.tooltip"></i>
                                             </label>
                                             <div class="input-group">
                                                 <button type="button" class="btn btn-outline-success mute-toggle-btn"
                                                     data-gain-input="synth-chassisgain"
-                                                    data-mute-checkbox="synth-chassismute">
+                                                    data-mute-checkbox="synth-chassismute"
+                                                    data-i18n-aria-label="runmode.settings.haptics.chassis.outputlevel.mute">
                                                 </button>
                                                 <div class="input-with-suffix" style="flex: 1;">
                                                     <input type="number" id="synth-chassisgain"
@@ -2193,7 +2203,10 @@
                                             <label class="form-label" for="routing-chassis-add"
                                                 data-i18n="runmode.settings.haptics.channels.routing">Output
                                                 Channels</label>
-                                            <div class="channel-pill-select form-control" data-routing-source="chassis">
+                                            <div class="channel-pill-select form-control" data-routing-source="chassis"
+                                                role="button" tabindex="0" aria-haspopup="listbox"
+                                                aria-expanded="false"
+                                                data-i18n-aria-label="runmode.settings.routing.chassis.aria">
                                                 <div class="channel-pill-list" id="routing-chassis-pills"></div>
                                                 <span class="channel-pill-placeholder" id="routing-chassis-placeholder"
                                                     data-i18n="runmode.settings.haptics.channels.routing.add">Add
@@ -2210,7 +2223,7 @@
                                                 <span data-i18n="runmode.settings.haptics.chassis.jerkcurve">Jerk
                                                     Curve</span>
                                                 <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
-                                                    role="button"
+                                                    role="button" tabindex="0" aria-expanded="false"
                                                     data-i18n-tooltip="runmode.settings.haptics.chassis.jerkcurve.tooltip"></i>
                                             </label>
                                             <input type="number" id="haptics-jerkcurve"
@@ -2221,7 +2234,7 @@
                                             <label for="haptics-jerkmax" class="form-label">
                                                 <span data-i18n="runmode.settings.haptics.jerkmax">Jerk Max</span>
                                                 <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
-                                                    role="button"
+                                                    role="button" tabindex="0" aria-expanded="false"
                                                     data-i18n-tooltip="runmode.settings.haptics.chassis.jerkmax.tooltip"></i>
                                             </label>
                                             <div class="input-with-suffix">
@@ -2236,7 +2249,7 @@
                                                 <span data-i18n="runmode.settings.haptics.chassis.snapcurve">Snap
                                                     Curve</span>
                                                 <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
-                                                    role="button"
+                                                    role="button" tabindex="0" aria-expanded="false"
                                                     data-i18n-tooltip="runmode.settings.haptics.chassis.snapcurve.tooltip"></i>
                                             </label>
                                             <input type="number" id="haptics-snapcurve"
@@ -2248,7 +2261,7 @@
                                                 <span data-i18n="runmode.settings.haptics.chassis.snapmax">Snap
                                                     Max</span>
                                                 <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
-                                                    role="button"
+                                                    role="button" tabindex="0" aria-expanded="false"
                                                     data-i18n-tooltip="runmode.settings.haptics.chassis.snapmax.tooltip"></i>
                                             </label>
                                             <div class="input-with-suffix">
@@ -2267,7 +2280,7 @@
                                                     data-i18n="runmode.settings.haptics.chassis.pulsemaxamplitude">Pulse
                                                     Max Amplitude</span>
                                                 <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
-                                                    role="button"
+                                                    role="button" tabindex="0" aria-expanded="false"
                                                     data-i18n-tooltip="runmode.settings.haptics.chassis.pulsemaxamplitude.tooltip"></i>
                                             </label>
                                             <input type="number" id="haptics-pulseamplitude"
@@ -2281,7 +2294,7 @@
                                                     Min
                                                     Frequency</span>
                                                 <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
-                                                    role="button"
+                                                    role="button" tabindex="0" aria-expanded="false"
                                                     data-i18n-tooltip="runmode.settings.haptics.chassis.pulseminfreq.tooltip"></i>
                                             </label>
                                             <div class="input-with-suffix">
@@ -2298,7 +2311,7 @@
                                                     Max
                                                     Frequency</span>
                                                 <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
-                                                    role="button"
+                                                    role="button" tabindex="0" aria-expanded="false"
                                                     data-i18n-tooltip="runmode.settings.haptics.chassis.pulsemaxfreq.tooltip"></i>
                                             </label>
                                             <div class="input-with-suffix">
@@ -2323,13 +2336,14 @@
                                                     data-i18n="runmode.settings.haptics.transmission.outputlevel">Output
                                                     Level</span>
                                                 <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
-                                                    role="button"
+                                                    role="button" tabindex="0" aria-expanded="false"
                                                     data-i18n-tooltip="runmode.settings.haptics.transmission.outputlevel.tooltip"></i>
                                             </label>
                                             <div class="input-group">
                                                 <button type="button" class="btn btn-outline-success mute-toggle-btn"
                                                     data-gain-input="synth-transmissiongain"
-                                                    data-mute-checkbox="synth-transmissionmute">
+                                                    data-mute-checkbox="synth-transmissionmute"
+                                                    data-i18n-aria-label="runmode.settings.haptics.transmission.outputlevel.mute">
                                                 </button>
                                                 <div class="input-with-suffix" style="flex: 1;">
                                                     <input type="number" id="synth-transmissiongain"
@@ -2347,7 +2361,7 @@
                                                 <span data-i18n="runmode.settings.haptics.transmission.minrace">Race Min
                                                     Level</span>
                                                 <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
-                                                    role="button"
+                                                    role="button" tabindex="0" aria-expanded="false"
                                                     data-i18n-tooltip="runmode.settings.haptics.transmission.minrace.tooltip"></i>
                                             </label>
                                             <div class="input-with-suffix" style="flex: 1;">
@@ -2365,7 +2379,7 @@
                                                 <span data-i18n="runmode.settings.haptics.transmission.minstreet">Street
                                                     Min Level</span>
                                                 <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
-                                                    role="button"
+                                                    role="button" tabindex="0" aria-expanded="false"
                                                     data-i18n-tooltip="runmode.settings.haptics.transmission.minstreet.tooltip"></i>
                                             </label>
                                             <div class="input-with-suffix" style="flex: 1;">
@@ -2385,7 +2399,9 @@
                                                 data-i18n="runmode.settings.haptics.channels.routing">Output
                                                 Channels</label>
                                             <div class="channel-pill-select form-control"
-                                                data-routing-source="transmission">
+                                                data-routing-source="transmission" role="button" tabindex="0"
+                                                aria-haspopup="listbox" aria-expanded="false"
+                                                data-i18n-aria-label="runmode.settings.routing.transmission.aria">
                                                 <div class="channel-pill-list" id="routing-transmission-pills"></div>
                                                 <span class="channel-pill-placeholder"
                                                     id="routing-transmission-placeholder"
@@ -2401,14 +2417,15 @@
                                         <div class="col-md-6">
                                             <div class="d-flex align-items-center gap-3">
                                                 <div class="d-flex align-items-center gap-1">
-                                                    <span
+                                                    <span id="transmission-mode-label"
                                                         data-i18n="runmode.settings.haptics.transmission.feedbackstrength">Feedback
                                                         strength</span>
                                                     <i class="fa-solid fa-circle-question tooltip-trigger text-muted"
-                                                        role="button"
+                                                        role="button" tabindex="0" aria-expanded="false"
                                                         data-i18n-tooltip="runmode.settings.haptics.transmission.feedbackstrength.tooltip"></i>
                                                 </div>
-                                                <div class="btn-group" role="group">
+                                                <div class="btn-group" role="radiogroup"
+                                                    aria-labelledby="transmission-mode-label">
                                                     <input type="radio" class="btn-check" name="transmission-mode"
                                                         id="transmission-fixed-radio" autocomplete="off" checked>
                                                     <label class="btn btn-sm btn-outline-primary"
@@ -2434,7 +2451,7 @@
                                                     data-i18n="runmode.settings.haptics.transmission.curve">Transmission
                                                     Curve</span>
                                                 <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
-                                                    role="button"
+                                                    role="button" tabindex="0" aria-expanded="false"
                                                     data-i18n-tooltip="runmode.settings.haptics.transmission.curve.tooltip"></i>
                                             </label>
                                             <input type="number" id="haptics-transmissioncurve"
@@ -2449,7 +2466,7 @@
                                                     data-i18n="runmode.settings.haptics.transmission.gforcemax">G-Force
                                                     Max</span>
                                                 <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
-                                                    role="button"
+                                                    role="button" tabindex="0" aria-expanded="false"
                                                     data-i18n-tooltip="runmode.settings.haptics.transmission.gforcemax.tooltip"></i>
                                             </label>
                                             <div class="input-with-suffix">
@@ -2546,7 +2563,7 @@
                 </div>
 
                 <!-- Pit Radio Section -->
-                <div class="settings-section-card" data-section-content="pitradio">
+                <div class="settings-section-card" data-section-content="pitradio" tabindex="-1">
                     <div class="card">
                         <div class="card-body">
 
@@ -2740,7 +2757,7 @@
                                                 Times</span></h6>
                                         <div class="row g-3 align-items-end">
                                             <div class="col-md-6 col-lg-3">
-                                                <label class="form-label"
+                                                <label class="form-label" for="notify-laptimes-enabled"
                                                     data-i18n="runmode.settings.pitradio.notifications.laptimes.enable">Enable</label>
                                                 <div class="form-check form-switch">
                                                     <input type="checkbox" class="form-check-input"
@@ -2771,7 +2788,7 @@
                                                 Laps</span></h6>
                                         <div class="row g-3 align-items-end">
                                             <div class="col-md-6 col-lg-3">
-                                                <label class="form-label"
+                                                <label class="form-label" for="notify-racelaps-enabled"
                                                     data-i18n="runmode.settings.pitradio.notifications.racelaps.enable">Enable</label>
                                                 <div class="form-check form-switch">
                                                     <input type="checkbox" class="form-check-input"
@@ -2812,7 +2829,7 @@
                                                 Progress</span></h6>
                                         <div class="row g-3 align-items-end">
                                             <div class="col-md-6 col-lg-3">
-                                                <label class="form-label"
+                                                <label class="form-label" for="notify-raceprogress-enabled"
                                                     data-i18n="runmode.settings.pitradio.notifications.raceprogress.enable">Enable</label>
                                                 <div class="form-check form-switch">
                                                     <input type="checkbox" class="form-check-input"
@@ -2893,14 +2910,14 @@
                                                 Safety Margin</label>
                                             <div class="d-flex gap-2">
                                                 <div class="input-with-suffix">
-                                                    <input type="number" id="fuel-safetymarginlaps"
+                                                    <input type="number" id="fuel-safetymarginlaps" data-i18n-aria-label="runmode.settings.pitradio.notifications.fuel.safetymargin.laps"
                                                         class="form-control text-center"
                                                         data-config="pitRadio.fuelMonitoring.rangeSafetyMarginLaps"
                                                         min="0" max="2" step="0.05">
                                                     <span class="input-suffix">laps</span>
                                                 </div>
                                                 <div class="input-with-suffix">
-                                                    <input type="number" id="fuel-safetymarginmetres"
+                                                    <input type="number" id="fuel-safetymarginmetres" data-i18n-aria-label="runmode.settings.pitradio.notifications.fuel.safetymargin.metres"
                                                         class="form-control text-center"
                                                         data-config="pitRadio.fuelMonitoring.rangeSafetyMarginMetres"
                                                         min="0" max="2000" step="50">
@@ -2974,7 +2991,7 @@
                                                 Matching</span></h6>
                                         <div class="row g-3 align-items-end">
                                             <div class="col-md-6 col-lg-3">
-                                                <label class="form-label"
+                                                <label class="form-label" for="notify-circuitmatching-enabled"
                                                     data-i18n="runmode.settings.pitradio.notifications.circuitmatching.enable">Enable</label>
                                                 <div class="form-check form-switch">
                                                     <input type="checkbox" class="form-check-input"
@@ -3021,7 +3038,7 @@
                     <p data-i18n-html="runmode.settings.modal.confirmtext">To confirm, type <strong>reset</strong>
                         below
                         and click Continue:</p>
-                    <input type="text" id="factory-reset-confirm-input" class="form-control"
+                    <input type="text" id="factory-reset-confirm-input" data-i18n-aria-label="runmode.settings.modal.placeholder" class="form-control"
                         data-i18n-placeholder="runmode.settings.modal.placeholder" placeholder="Type 'reset' to confirm"
                         autocomplete="off">
                 </div>
@@ -3035,7 +3052,7 @@
         </div>
     </div>
 
-    <div id="custom-tooltip" class="custom-tooltip"></div>
+    <div id="custom-tooltip" class="custom-tooltip" role="tooltip"></div>
 
     <script>
         // Show an edge fade only on the side of a scrollable tab strip that has
@@ -3070,6 +3087,124 @@
             const tooltip = document.getElementById('custom-tooltip');
             let currentTrigger = null;
 
+            // Initialize triggers as collapsed for assistive tech
+            document.querySelectorAll('.tooltip-trigger').forEach(t => {
+                t.setAttribute('aria-expanded', 'false');
+            });
+
+            // Compose accessible names for help tooltips and their fields. Each
+            // help trigger is an interactive element living inside the field's
+            // <label>, which invalidates the native label→control association —
+            // so the control would otherwise announce its value with no field
+            // name, and the trigger itself would carry only a generic "Help".
+            // We derive the field name from the label text and apply it to both,
+            // recomputing on language change so the localised name stays current.
+            function tooltipFieldName(trigger) {
+                const container = trigger.closest('label') || trigger.parentElement;
+                if (!container) return '';
+                const clone = container.cloneNode(true);
+                clone.querySelectorAll('.tooltip-trigger').forEach(n => n.remove());
+                return clone.textContent.replace(/\s+/g, ' ').trim();
+            }
+
+            function refreshTooltipAccessibleNames() {
+                const helpWord = (window.t && window.t('runmode.settings.help')) || 'Help';
+                document.querySelectorAll('.tooltip-trigger').forEach(trigger => {
+                    const name = tooltipFieldName(trigger);
+                    trigger.setAttribute('aria-label', name ? helpWord + ': ' + name : helpWord);
+
+                    // Restore the field's accessible name lost to the in-label trigger.
+                    const label = trigger.closest('label');
+                    if (!label || !name) return;
+                    const forId = label.getAttribute('for');
+                    const control = forId
+                        ? document.getElementById(forId)
+                        : label.querySelector('input, select, textarea');
+                    if (control) {
+                        control.setAttribute('aria-label', name);
+                    }
+                });
+            }
+
+            refreshTooltipAccessibleNames();
+            window.addEventListener('i18nLoaded', refreshTooltipAccessibleNames);
+            window.addEventListener('i18nLanguageChanged', refreshTooltipAccessibleNames);
+
+            // Wrap each settings subsection's fields in a labelled group so
+            // assistive tech announces the subsection (e.g. "Output, group")
+            // when a user arrows into its controls — giving context without
+            // lengthening any individual field's name. The heading stays in
+            // place and names the group via aria-labelledby; only the field
+            // rows that follow it are wrapped. The tab strip and nested tab
+            // content are left intact (tab panels already announce their tab).
+            // Idempotent, and language-agnostic since aria-labelledby resolves
+            // the heading's live text.
+            function groupSettingsSubsections() {
+                let gid = 0;
+                document.querySelectorAll('.settings-section-card').forEach(card => {
+                    card.querySelectorAll('h4, h5, h6').forEach(heading => {
+                        if (heading.dataset.ariaGrouped) return;
+                        const level = Number(heading.tagName[1]);
+                        const members = [];
+                        let node = heading.nextElementSibling;
+                        while (node) {
+                            const tag = node.tagName;
+                            if (/^H[1-6]$/.test(tag) && Number(tag[1]) <= level) break;
+                            // Don't swallow the tab strip or blocks that carry
+                            // their own headings (i.e. nested tab content).
+                            if (node.classList && (node.classList.contains('nav-tabs') || node.classList.contains('tab-content'))) break;
+                            if (node.querySelector && node.querySelector('h1, h2, h3, h4, h5, h6')) break;
+                            members.push(node);
+                            node = node.nextElementSibling;
+                        }
+                        if (!members.length) return;
+                        const hasControl = members.some(m => m.querySelector && m.querySelector('input, select, textarea, button'));
+                        if (!hasControl) return;
+                        if (!heading.id) heading.id = 'settings-group-h-' + (gid++);
+                        const group = document.createElement('div');
+                        group.setAttribute('role', 'group');
+                        group.setAttribute('aria-labelledby', heading.id);
+                        heading.parentNode.insertBefore(group, members[0]);
+                        members.forEach(m => group.appendChild(m));
+                        heading.dataset.ariaGrouped = 'true';
+                    });
+                });
+            }
+
+            groupSettingsSubsections();
+
+            function closeTooltip() {
+                tooltip.classList.remove('show');
+                if (currentTrigger) {
+                    currentTrigger.setAttribute('aria-expanded', 'false');
+                    currentTrigger.removeAttribute('aria-describedby');
+                }
+                currentTrigger = null;
+            }
+
+            function toggleTooltip(trigger) {
+                if (currentTrigger === trigger && tooltip.classList.contains('show')) {
+                    closeTooltip();
+                } else {
+                    if (currentTrigger) {
+                        currentTrigger.setAttribute('aria-expanded', 'false');
+                        currentTrigger.removeAttribute('aria-describedby');
+                    }
+
+                    const content = trigger.getAttribute('data-tooltip');
+                    tooltip.innerHTML = content;
+
+                    const rect = trigger.getBoundingClientRect();
+                    tooltip.style.left = (rect.left + window.scrollX) + 'px';
+                    tooltip.style.top = (rect.bottom + window.scrollY + 5) + 'px';
+
+                    tooltip.classList.add('show');
+                    currentTrigger = trigger;
+                    trigger.setAttribute('aria-expanded', 'true');
+                    trigger.setAttribute('aria-describedby', 'custom-tooltip');
+                }
+            }
+
             // Use event delegation on document for tooltips
             document.addEventListener('click', function (e) {
                 const trigger = e.target.closest('.tooltip-trigger');
@@ -3077,27 +3212,26 @@
                 if (trigger) {
                     e.preventDefault();
                     e.stopPropagation();
-
-                    if (currentTrigger === trigger && tooltip.classList.contains('show')) {
-                        tooltip.classList.remove('show');
-                        currentTrigger = null;
-                    } else {
-                        const content = trigger.getAttribute('data-tooltip');
-                        tooltip.innerHTML = content;
-
-                        const rect = trigger.getBoundingClientRect();
-                        tooltip.style.left = (rect.left + window.scrollX) + 'px';
-                        tooltip.style.top = (rect.bottom + window.scrollY + 5) + 'px';
-
-                        tooltip.classList.add('show');
-                        currentTrigger = trigger;
-                    }
+                    toggleTooltip(trigger);
                 } else if (!e.target.closest('#custom-tooltip')) {
                     // Only hide if clicking outside both trigger and tooltip
-                    tooltip.classList.remove('show');
-                    currentTrigger = null;
+                    closeTooltip();
                 }
             }, true); // Use capture phase to intercept before label click
+
+            // Keyboard support: Enter/Space toggles the tooltip, Escape closes it
+            document.addEventListener('keydown', function (e) {
+                const trigger = e.target.closest('.tooltip-trigger');
+
+                if (trigger && (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar')) {
+                    e.preventDefault();
+                    toggleTooltip(trigger);
+                } else if (e.key === 'Escape' && currentTrigger) {
+                    const triggerToFocus = currentTrigger;
+                    closeTooltip();
+                    triggerToFocus.focus();
+                }
+            });
 
             // Sidebar navigation
             const navLinks = document.querySelectorAll('.settings-nav-link');
@@ -3106,7 +3240,10 @@
 
             // Function to switch sections. Pass updateHash=false when the switch
             // is itself driven by the URL hash, to avoid redundant history churn.
-            function switchSection(sectionName, updateHash = true) {
+            // Pass focusSection=true when the switch is user-activated (e.g. a
+            // sidebar click) so keyboard/screen-reader users land on the new
+            // content; leave it false for load/hash-restore so focus isn't stolen.
+            function switchSection(sectionName, updateHash = true, focusSection = false) {
                 // Ignore unknown sections so a bad hash can't blank the page
                 const targetCard = document.querySelector(`[data-section-content="${sectionName}"]`);
                 if (!targetCard) {
@@ -3114,12 +3251,16 @@
                 }
 
                 // Remove active class from all links
-                navLinks.forEach(l => l.classList.remove('active'));
+                navLinks.forEach(l => {
+                    l.classList.remove('active');
+                    l.removeAttribute('aria-current');
+                });
 
                 // Add active class to corresponding link
                 const activeLink = document.querySelector(`.settings-nav-link[data-section="${sectionName}"]`);
                 if (activeLink) {
                     activeLink.classList.add('active');
+                    activeLink.setAttribute('aria-current', 'page');
                 }
 
                 // Update dropdown value
@@ -3134,6 +3275,10 @@
                 targetCard.classList.add('active');
                 // Scroll to top of content area
                 window.scrollTo({ top: 0, behavior: 'smooth' });
+
+                if (focusSection) {
+                    targetCard.focus({ preventScroll: true });
+                }
 
                 // Reflect the active section in the URL so it survives a refresh
                 // and can be linked to directly.
@@ -3281,14 +3426,14 @@
                 link.addEventListener('click', function (e) {
                     e.preventDefault();
                     const sectionName = this.getAttribute('data-section');
-                    switchSection(sectionName);
+                    switchSection(sectionName, true, true);
                 });
             });
 
             // Mobile dropdown change handler
             if (sectionSelect) {
                 sectionSelect.addEventListener('change', function () {
-                    switchSection(this.value);
+                    switchSection(this.value, true, true);
                 });
             }
 

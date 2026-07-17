@@ -35,6 +35,10 @@
             padding: 0 8px;
             font-size: 0.875rem;
             transition: all 0.2s;
+            background: none;
+            border: none;
+            font: inherit;
+            color: inherit;
         }
 
         .page-number:hover:not(.active):not(.ellipsis) {
@@ -51,6 +55,15 @@
         .page-number.ellipsis {
             cursor: default;
             user-select: none;
+        }
+
+        .log-expand-btn {
+            background: none;
+            border: none;
+            padding: 0;
+            color: inherit;
+            cursor: pointer;
+            font: inherit;
         }
     </style>
     <script>
@@ -114,10 +127,14 @@
         function toggleLogDetails(index) {
             const detailsElement = document.getElementById(`log-details-${index}`);
             const icon = document.getElementById(`log-icon-${index}`);
+            const expandBtn = icon ? icon.closest('.log-expand-btn') : null;
 
             if (detailsElement.style.display === 'none') {
                 detailsElement.style.display = 'block';
                 expandedLogs.add(index); // Track expanded state
+                if (expandBtn) {
+                    expandBtn.setAttribute('aria-expanded', 'true');
+                }
                 if (typeof IconHelper !== 'undefined') {
                     IconHelper.replaceIcon(icon, 'fa-chevron-down');
                 } else {
@@ -127,6 +144,9 @@
             } else {
                 detailsElement.style.display = 'none';
                 expandedLogs.delete(index); // Remove from expanded state
+                if (expandBtn) {
+                    expandBtn.setAttribute('aria-expanded', 'false');
+                }
                 if (typeof IconHelper !== 'undefined') {
                     IconHelper.replaceIcon(icon, 'fa-chevron-right');
                 } else {
@@ -167,9 +187,9 @@
                 <div class="card p-10" style="margin-bottom: 2px; font-size: 0.7rem;">
                     <div class="d-flex align-items-start">
                         ${hasAdditionalFields(log) ? `
-                        <div class="text-center" style="width: 2ch; flex-shrink: 0; cursor: pointer;" onclick="toggleLogDetails(${index})" title="Expand/collapse details">
+                        <button type="button" class="log-expand-btn text-center" style="width: 2ch; flex-shrink: 0;" onclick="toggleLogDetails(${index})" title="Expand/collapse details" aria-expanded="${isExpanded ? 'true' : 'false'}" aria-controls="log-details-${index}" data-i18n-aria-label="runmode.logs.expand">
                             <i id="log-icon-${index}" class="fa-solid ${isExpanded ? 'fa-chevron-down' : 'fa-chevron-right'} text-muted" style="font-size: 0.6rem;"></i>
-                        </div>
+                        </button>
                         ` : '<div style="width: 2ch; flex-shrink: 0;"></div>'}
                         <div class="font-monospace" style="width: 23ch; flex-shrink: 0; margin-left: 0.5em;">
                             <span class="text-muted">${escapeHtml(formatTimestamp(log.timestamp || log.time))}</span>
@@ -248,10 +268,10 @@
                 const pageNumbers = generatePageNumbers(currentPage, totalPages);
                 numbersContainer.innerHTML = pageNumbers.map(page => {
                     if (page === '...') {
-                        return `<span class="page-number ellipsis">...</span>`;
+                        return `<span class="page-number ellipsis" aria-hidden="true">...</span>`;
                     }
                     const isActive = page === currentPage;
-                    return `<span class="page-number ${isActive ? 'active' : ''}" data-page="${page}">${page}</span>`;
+                    return `<button type="button" class="page-number ${isActive ? 'active' : ''}" data-page="${page}"${isActive ? ' aria-current="page"' : ''}>${page}</button>`;
                 }).join('');
 
                 // Add click handlers to page numbers
@@ -404,6 +424,8 @@
             autoRefresh = !autoRefresh;
             const button = document.getElementById('auto-refresh-btn');
 
+            button.setAttribute('aria-pressed', autoRefresh ? 'true' : 'false');
+
             if (autoRefresh) {
                 button.classList.remove('btn-secondary');
                 button.classList.add('btn-primary');
@@ -538,7 +560,7 @@
                     <div class="d-flex align-items-center gap-10">
                         <span class="text-muted" style="font-size: 0.85rem;" id="pagination-info">Loading...</span>
                         <select id="page-size" class="form-select form-select-sm w-auto"
-                            onchange="changePageSize(this.value)">
+                            onchange="changePageSize(this.value)" data-i18n-aria-label="runmode.logs.perpage.aria">
                             <option value="20" data-i18n-template="runmode.logs.perpage">20 per page</option>
                             <option value="50" data-i18n-template="runmode.logs.perpage">50 per page</option>
                             <option value="100" selected data-i18n-template="runmode.logs.perpage">100 per page</option>
@@ -602,7 +624,7 @@
                             </ul>
                         </div>
                         <button id="auto-refresh-btn" class="btn btn-sm btn-secondary"
-                            title="Toggle auto-refresh (every 2 seconds)">
+                            title="Toggle auto-refresh (every 2 seconds)" aria-pressed="false">
                             <i class="fa-solid fa-arrows-rotate"></i>
                         </button>
                     </div>
@@ -614,14 +636,17 @@
                 </div>
 
                 <!-- Pagination Controls -->
-                <div class="d-flex align-items-center justify-content-center mt-15 mb-15" style="gap: 10px;">
-                    <button id="prev-page" class="btn btn-sm btn-secondary" disabled title="Previous page">
+                <div class="d-flex align-items-center justify-content-center mt-15 mb-15" style="gap: 10px;"
+                    role="navigation" data-i18n-aria-label="runmode.logs.pages">
+                    <button id="prev-page" class="btn btn-sm btn-secondary" disabled title="Previous page"
+                        aria-label="Previous page">
                         <i class="fa-solid fa-chevron-left"></i>
                     </button>
                     <div id="pagination-numbers" class="pagination-numbers">
                         <!-- Page numbers will be populated by JavaScript -->
                     </div>
-                    <button id="next-page" class="btn btn-sm btn-secondary" disabled title="Next page">
+                    <button id="next-page" class="btn btn-sm btn-secondary" disabled title="Next page"
+                        aria-label="Next page">
                         <i class="fa-solid fa-chevron-right"></i>
                     </button>
                 </div>

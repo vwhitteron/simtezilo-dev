@@ -36,7 +36,7 @@
               <i class="fa-solid fa-arrows-left-right-to-line"></i>
             </span>
             <input type="text" id="window-size-display" class="form-control text-center fw-bold" value="--"
-              placeholder="e.g. 10s, 2m">
+              placeholder="e.g. 10s, 2m" data-i18n-aria-label="runmode.telemetry.windowsize.aria">
           </div>
         </div>
       </div>
@@ -45,21 +45,25 @@
       <div class="row g-1">
         <div class="col-md-6">
           <h5 class="mb-2 text-center" data-i18n="runmode.telemetry.chart.rpmspeed">RPM / Speed</h5>
-          <div id="scichart-root-1" style="height: 300px;"></div>
+          <div id="scichart-root-1" style="height: 300px;" role="img"
+            data-i18n-aria-label="runmode.telemetry.chart.rpmspeed"></div>
         </div>
         <div class="col-md-6">
           <h5 class="mb-2 text-center" data-i18n="runmode.telemetry.chart.throttlebrake">Throttle / Brake</h5>
-          <div id="scichart-root-2" style="height: 300px;"></div>
+          <div id="scichart-root-2" style="height: 300px;" role="img"
+            data-i18n-aria-label="runmode.telemetry.chart.throttlebrake"></div>
         </div>
       </div>
       <div class="row g-1 mt-4">
         <div class="col-md-6">
           <h5 class="mb-2 text-center" data-i18n="runmode.telemetry.chart.tyretemperature">Tyre Temperature</h5>
-          <div id="scichart-root-3" style="height: 300px;"></div>
+          <div id="scichart-root-3" style="height: 300px;" role="img"
+            data-i18n-aria-label="runmode.telemetry.chart.tyretemperature"></div>
         </div>
         <div class="col-md-6">
           <h5 class="mb-2 text-center" data-i18n="runmode.telemetry.chart.fuelrange">Fuel Range / Consumption</h5>
-          <div id="scichart-root-4" style="height: 300px;"></div>
+          <div id="scichart-root-4" style="height: 300px;" role="img"
+            data-i18n-aria-label="runmode.telemetry.chart.fuelrange"></div>
         </div>
       </div>
     </div>

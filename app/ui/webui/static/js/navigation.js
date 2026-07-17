@@ -81,7 +81,7 @@ function createNavigation(currentPage) {
     // Add Info nav item with popover
     navHTML += `
                         <li class="nav-item">
-                            <a class="nav-link" href="#" id="info-nav-link" data-i18n="runmode.nav.info">Info</a>
+                            <a class="nav-link" href="#" id="info-nav-link" role="button" aria-haspopup="dialog" aria-expanded="false" data-i18n="runmode.nav.info">Info</a>
                         </li>`;
 
     navHTML += `
@@ -369,6 +369,10 @@ function initializeNavigation() {
             popover.id = 'info-popover';
             popover.className = 'card shadow-lg';
             popover.style.cssText = 'position: absolute; display: none; z-index: 9999; min-width: 280px;';
+            popover.setAttribute('role', 'dialog');
+            popover.setAttribute('aria-modal', 'false');
+            popover.setAttribute('tabindex', '-1');
+            popover.setAttribute('data-i18n-aria-label', 'runmode.nav.info');
             popover.innerHTML = `
                 <div class="card-body">
                     <div class="mb-2">
@@ -475,8 +479,7 @@ function setupInfoPopover() {
             e.preventDefault();
 
             if (popoverVisible) {
-                popover.style.display = 'none';
-                popoverVisible = false;
+                closeInfoPopover();
             } else {
                 // Position popover below the nav link
                 const rect = newInfoLink.getBoundingClientRect();
@@ -484,6 +487,10 @@ function setupInfoPopover() {
                 popover.style.top = (rect.bottom + 5) + 'px';
                 popover.style.display = 'block';
                 popoverVisible = true;
+                newInfoLink.setAttribute('aria-expanded', 'true');
+
+                // Move focus into the popover for keyboard/assistive tech users
+                popover.focus();
 
                 // Fetch and populate system info
                 fetch('/api/system/info')
@@ -498,7 +505,30 @@ function setupInfoPopover() {
                     .catch(error => console.error('Failed to fetch system info:', error));
             }
         });
+
+        // Close the popover on Escape and return focus to the trigger button
+        popover.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                closeInfoPopover();
+                newInfoLink.focus();
+            }
+        });
     }
+}
+
+// Close the info popover, if open, and update trigger state.
+function closeInfoPopover() {
+    const popover = document.getElementById('info-popover');
+    const infoLink = document.getElementById('info-nav-link');
+
+    if (popover) {
+        popover.style.display = 'none';
+    }
+    if (infoLink) {
+        infoLink.setAttribute('aria-expanded', 'false');
+    }
+    popoverVisible = false;
 }
 
 // Close popover when clicking outside (only set up once)
@@ -507,7 +537,6 @@ document.addEventListener('click', function (e) {
     const infoLink = document.getElementById('info-nav-link');
 
     if (popoverVisible && popover && infoLink && !popover.contains(e.target) && e.target !== infoLink) {
-        popover.style.display = 'none';
-        popoverVisible = false;
+        closeInfoPopover();
     }
 });

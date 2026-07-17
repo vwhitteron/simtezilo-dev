@@ -101,7 +101,8 @@
         const remove = document.createElement('button');
         remove.type = 'button';
         remove.className = 'channel-pill-remove';
-        remove.setAttribute('aria-label', window.channelDisplayLabel(ch, channelNames));
+        const removeLabel = window.t ? window.t('runmode.settings.routing.remove') : 'Remove';
+        remove.setAttribute('aria-label', removeLabel + ' ' + window.channelDisplayLabel(ch, channelNames));
         remove.innerHTML = '&times;';
         remove.addEventListener('click', function (event) {
             // Don't let the field's click handler treat this as an open request.
@@ -137,6 +138,7 @@
         const field = fieldEl(source);
         if (field) {
             field.classList.add('open');
+            field.setAttribute('aria-expanded', 'true');
         }
     }
 
@@ -144,6 +146,7 @@
         const field = fieldEl(source);
         if (field) {
             field.classList.remove('open');
+            field.setAttribute('aria-expanded', 'false');
         }
     }
 
@@ -234,6 +237,20 @@
                         closeMenu(source);
                     } else if (el(source.menuId) && el(source.menuId).children.length) {
                         openMenu(source);
+                    }
+                });
+
+                field.addEventListener('keydown', function (event) {
+                    if (event.key === 'Enter' || event.key === ' ' || event.key === 'Spacebar') {
+                        event.preventDefault();
+                        if (isOpen(source)) {
+                            closeMenu(source);
+                        } else if (el(source.menuId) && el(source.menuId).children.length) {
+                            openMenu(source);
+                        }
+                    } else if (event.key === 'Escape') {
+                        closeMenu(source);
+                        field.focus();
                     }
                 });
             }

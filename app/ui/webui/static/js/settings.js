@@ -1088,9 +1088,11 @@ class ConfigManager {
             if (currentMin === hapticMin && currentMax === hapticMax) {
                 sweepPresetHaptic.classList.remove('btn-outline-secondary');
                 sweepPresetHaptic.classList.add('btn-outline-primary');
+                sweepPresetHaptic.setAttribute('aria-pressed', 'true');
             } else {
                 sweepPresetHaptic.classList.remove('btn-outline-primary');
                 sweepPresetHaptic.classList.add('btn-outline-secondary');
+                sweepPresetHaptic.setAttribute('aria-pressed', 'false');
             }
         }
 
@@ -1099,9 +1101,11 @@ class ConfigManager {
             if (currentMin === fullMin && currentMax === fullMax) {
                 sweepPresetFull.classList.remove('btn-outline-secondary');
                 sweepPresetFull.classList.add('btn-outline-primary');
+                sweepPresetFull.setAttribute('aria-pressed', 'true');
             } else {
                 sweepPresetFull.classList.remove('btn-outline-primary');
                 sweepPresetFull.classList.add('btn-outline-secondary');
+                sweepPresetFull.setAttribute('aria-pressed', 'false');
             }
         }
     }
@@ -1110,6 +1114,9 @@ class ConfigManager {
     async updateMuteIconForCheckbox(checkbox) {
         // Find the button associated with this checkbox
         const button = document.querySelector(`button[data-mute-checkbox="${checkbox.id}"]`);
+        if (button) {
+            button.setAttribute('aria-pressed', checkbox.checked ? 'true' : 'false');
+        }
         if (button && typeof IconHelper !== 'undefined') {
             if (checkbox.checked) {
                 // Muted state - show xmark icon and red outline
