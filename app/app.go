@@ -146,7 +146,10 @@ type App struct {
 	jerkPeakHold         float64                         //nolint:unused // peak-hold for planned inverse-jerk detection; deliberately kept
 	jerkPeakHoldTime     time.Time                       //nolint:unused // peak-hold for planned inverse-jerk detection; deliberately kept
 	jerkPeakHoldDuration time.Duration                   // Duration to hold peak based on pulse length
+	chassisFreqSmoothed  float64                         // Asymmetric follower state for the chassis pulse frequency; main-loop goroutine only
 	chassisPulseScratch  []float64                       // Reusable per-tick pulse buffer for generateChassisHaptic; main-loop goroutine only
+	textureState         []textureChannelState           // Per-channel noise/filter state for the road-texture layer; main-loop goroutine only
+	textureScratch       []float64                       // Reusable per-tick sample buffer for generateChassisTexture; main-loop goroutine only
 	enginePulseScratch   []float64                       // Reusable per-tick pulse buffer for generateEngineHaptic; main-loop goroutine only
 	diagScratch          []synthesizer.ChannelDiagnostic // Reusable synth diagnostics buffer for sendTelemetryChartData; main-loop goroutine only
 
@@ -1881,6 +1884,11 @@ func (a *App) resetAppState() {
 
 	// Reset engine haptic state to prevent polarity misalignment
 	a.state.engine = engineState{}
+
+	// Reset the chassis pulse-frequency follower so a new session does not inherit a
+	// stale glide value, and clear the texture noise/filter state.
+	a.chassisFreqSmoothed = 0
+	a.resetTextureState()
 
 	a.state.sessionEnded = false
 	a.state.mainMenuFrameCount = 0

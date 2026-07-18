@@ -85,6 +85,17 @@ type Kinematics struct {
 	// must length-check before indexing.
 	SynthChannelAmplitude []float64
 	SynthChannelFrequency []float64
+
+	// Raw per-corner suspension height (metres) for this frame, as provided by
+	// telemetry. Zeroed CornerSet on formats that do not carry suspension data.
+	SuspensionHeight models.CornerSet
+
+	// SurfaceType is the per-corner road surface classification for this frame, as
+	// provided by telemetry (tarmac, concrete, grass, dirt, sand, snow, or unknown).
+	// It drives the road-texture layer's loudness and grain: the render layer maps
+	// each corner's surface to a rumble level and coarseness. Zeroed (all Unknown) on
+	// formats that do not carry surface data.
+	SurfaceType models.CornerSetGeneric[models.SurfaceType]
 }
 
 // State tracks the current and previous kinematic states of the vehicle.
@@ -179,6 +190,9 @@ func (k *State) Update(windowSeconds float64, vehicleDimensions vehicle.Dimensio
 	k.Current.GroundSpeed = float64(gtclient.Telemetry.GroundSpeedMetresPerSecond())
 	k.Current.TransmissionGear = gtclient.Telemetry.CurrentGear()
 	k.Current.SurgeCalculated = signal.Abs(float64(k.Current.SixDOFRotationCalc.Acceleration.X))
+
+	k.Current.SuspensionHeight = gtclient.Telemetry.SuspensionHeightMetres()
+	k.Current.SurfaceType = gtclient.Telemetry.SurfaceType()
 
 	k.resolveDerivatives()
 }

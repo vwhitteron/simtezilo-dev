@@ -442,6 +442,46 @@ func TestValidateHapticsCustom_FrequencyRelationship(t *testing.T) {
 			hap := &haptics{
 				PulseMinFrequencyHz: testCase.minFreq,
 				PulseMaxFrequencyHz: testCase.maxFreq,
+				// Valid texture band so this case isolates the pulse-band relationship.
+				TextureMinFrequencyHz: 25.0,
+				TextureMaxFrequencyHz: 45.0,
+			}
+			validateHapticsCustom(hap, result)
+
+			if testCase.expectError {
+				assert.NotEmpty(t, result.Errors)
+			} else {
+				assert.Empty(t, result.Errors)
+			}
+		})
+	}
+}
+
+func TestValidateHapticsCustom_TextureFrequencyRelationship(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		minFreq     float64
+		maxFreq     float64
+		expectError bool
+	}{
+		{"valid: min < max", 25.0, 45.0, false},
+		{"invalid: min == max", 40.0, 40.0, true},
+		{"invalid: min > max", 45.0, 25.0, true},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := &ValidationResult{Valid: true, Errors: []ValidationError{}}
+			hap := &haptics{
+				// Valid pulse band so this case isolates the texture-band relationship.
+				PulseMinFrequencyHz:   16.0,
+				PulseMaxFrequencyHz:   60.0,
+				TextureMinFrequencyHz: testCase.minFreq,
+				TextureMaxFrequencyHz: testCase.maxFreq,
 			}
 			validateHapticsCustom(hap, result)
 
@@ -623,6 +663,8 @@ func TestConfig_Validate_Integration(t *testing.T) {
 				PulseMinFrequencyHz:          10,
 				PulseMaxFrequencyHz:          60,
 				PulseMaxAmplitude:            1.0,
+				TextureMinFrequencyHz:        25,
+				TextureMaxFrequencyHz:        45,
 				DynamicTransmissionCurve:     150,
 				DynamicTransmissionGforceMax: 2.0,
 			},

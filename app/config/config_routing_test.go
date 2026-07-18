@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestSynthRoutingDefaults verifies the default routing matrix has all three
+// TestSynthRoutingDefaults verifies the default routing matrix has all
 // sources enabled on every channel, preserving the historical broadcast/1:1
 // behaviour.
 func TestSynthRoutingDefaults(t *testing.T) {
@@ -17,7 +17,7 @@ func TestSynthRoutingDefaults(t *testing.T) {
 
 	routing := cfg.GetSynthRouting()
 
-	for _, source := range []string{RoutingSourceEngine, RoutingSourceChassis, RoutingSourceTransmission} {
+	for _, source := range []string{RoutingSourceEngine, RoutingSourceChassis, RoutingSourceTexture, RoutingSourceTransmission} {
 		row, ok := routing[source]
 		require.Truef(t, ok, "missing routing row for %q", source)
 		require.Len(t, row, 2, "default routing row %q should match default channel count", source)
@@ -44,7 +44,7 @@ func TestSynthRoutingMigration(t *testing.T) {
 	cfg.rebuildSnapshot()
 
 	routing := cfg.GetSynthRouting()
-	require.Len(t, routing, 3)
+	require.Len(t, routing, len(routingSources))
 
 	for _, source := range routingSources {
 		row, ok := routing[source]

@@ -24,6 +24,7 @@
     const SOURCES = [
         { key: 'engine',       pillsId: 'routing-engine-pills',       menuId: 'routing-engine-menu',       placeholderId: 'routing-engine-placeholder' },
         { key: 'chassis',      pillsId: 'routing-chassis-pills',      menuId: 'routing-chassis-menu',      placeholderId: 'routing-chassis-placeholder' },
+        { key: 'texture',      pillsId: 'routing-texture-pills',      menuId: 'routing-texture-menu',      placeholderId: 'routing-texture-placeholder' },
         { key: 'transmission', pillsId: 'routing-transmission-pills', menuId: 'routing-transmission-menu', placeholderId: 'routing-transmission-placeholder' },
     ];
 

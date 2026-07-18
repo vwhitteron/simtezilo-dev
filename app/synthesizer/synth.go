@@ -27,12 +27,19 @@ const (
 	// channels those per-channel chassis generators are mixed into.
 	ChannelChassis = "chassis"
 
+	// ChannelTexture is the user-facing routing source key for the continuous
+	// road-texture layer. Like chassis it has per-output-channel internal buffers
+	// named with the "texture_" prefix (see TextureChannelName); routing controls
+	// which output channels those per-channel texture generators are mixed into.
+	ChannelTexture = "texture"
+
 	// DefaultOutputChannels is the fallback output channel count (stereo) used
 	// when no explicit channel count is configured.
 	DefaultOutputChannels = 2
 
 	// Channel name prefixes for pattern matching.
 	chassisChannelPrefix = "chassis_"
+	textureChannelPrefix = "texture_"
 	outputChannelPrefix  = "_output_"
 )
 
@@ -51,6 +58,7 @@ const cachedNameCount = 16
 var (
 	cachedOutputChannelNames  = buildChannelNames(outputChannelPrefix, cachedNameCount)
 	cachedChassisChannelNames = buildChannelNames(chassisChannelPrefix, cachedNameCount)
+	cachedTextureChannelNames = buildChannelNames(textureChannelPrefix, cachedNameCount)
 )
 
 // OutputChannelName returns the channel name for output channel n (e.g., "_output_0").
@@ -71,6 +79,15 @@ func ChassisChannelName(n int) string {
 	return chassisChannelPrefix + strconv.Itoa(n)
 }
 
+// TextureChannelName returns the channel name for texture channel n (e.g., "texture_0").
+func TextureChannelName(n int) string {
+	if n >= 0 && n < len(cachedTextureChannelNames) {
+		return cachedTextureChannelNames[n]
+	}
+
+	return textureChannelPrefix + strconv.Itoa(n)
+}
+
 // buildChannelNames returns a list of precomputed channel names for the given
 // prefix and channel count.
 func buildChannelNames(prefix string, count int) []string {
@@ -87,6 +104,11 @@ func IsChassisChannel(name string) bool {
 	return len(name) > len(chassisChannelPrefix) && name[:len(chassisChannelPrefix)] == chassisChannelPrefix
 }
 
+// IsTextureChannel returns true if the channel name is a texture channel.
+func IsTextureChannel(name string) bool {
+	return len(name) > len(textureChannelPrefix) && name[:len(textureChannelPrefix)] == textureChannelPrefix
+}
+
 // channelMuted reports whether the named channel is muted, using lock-free
 // config reads. The calibrator channel and any unrecognised name are never
 // muted.
@@ -96,6 +118,8 @@ func channelMuted(cfg *config.Config, name string) bool {
 		return cfg.GetSynthMasterMute()
 	case IsChassisChannel(name):
 		return cfg.GetSynthChassisMute()
+	case IsTextureChannel(name):
+		return cfg.GetSynthTextureMute()
 	case name == ChannelTransmission:
 		return cfg.GetSynthTransmissionMute()
 	case name == ChannelEngine:
@@ -198,9 +222,10 @@ func New(opts *SynthOpts) (*Synthesizer, error) {
 		_ = synthesizer.mixer.AddChannel(ChannelEngine, opts.Config.EngineGain)
 		_ = synthesizer.mixer.AddChannel(ChannelCalibrator, 0)
 
-		// Add per-channel chassis buffers for per-channel EQ support
+		// Add per-channel chassis and texture buffers for per-channel EQ support
 		for ch := range numOutputChannels {
 			_ = synthesizer.mixer.AddChannel(ChassisChannelName(ch), opts.Config.ChassisGain)
+			_ = synthesizer.mixer.AddChannel(TextureChannelName(ch), opts.Config.TextureGain)
 		}
 	}
 
@@ -383,6 +408,7 @@ func (s *Synthesizer) startCalibrator() {
 	// Clear all haptic channel buffers first to prevent volume spike
 	for ch := range s.numOutputChannels {
 		s.mixer.ClearChannelBuffer(ChassisChannelName(ch))
+		s.mixer.ClearChannelBuffer(TextureChannelName(ch))
 	}
 
 	s.mixer.ClearChannelBuffer(ChannelEngine)
@@ -437,6 +463,7 @@ func (s *Synthesizer) stopCalibrator() {
 	// Clear all haptic channel buffers to ensure clean start
 	for ch := range s.numOutputChannels {
 		s.mixer.ClearChannelBuffer(ChassisChannelName(ch))
+		s.mixer.ClearChannelBuffer(TextureChannelName(ch))
 	}
 
 	s.mixer.ClearChannelBuffer(ChannelEngine)

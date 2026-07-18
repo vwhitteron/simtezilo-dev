@@ -313,6 +313,7 @@ func (a *App) runCaptureLoop(next pullFunc, opts HapticCaptureOptions) *HapticCa
 
 				a.kinematics.Update(float64(delta)/float64(telemetryFrameRate), a.vehicle.Dimensions, a.gtClient)
 				a.generateChassisHaptic()
+				a.generateChassisTexture()
 
 				out.ChassisFrames = append(out.ChassisFrames, ChassisFrame{
 					OutCursor: cursor,
@@ -569,6 +570,7 @@ func (a *App) driveHapticsRealtime(next pullFunc, opts SinkCaptureOptions) {
 				delta := uint32(int64(seq) - int64(chassisLastSeq))
 				a.kinematics.Update(float64(delta)/float64(telemetryFrameRate), a.vehicle.Dimensions, a.gtClient)
 				a.generateChassisHaptic()
+				a.generateChassisTexture()
 
 				chassisLastSeq = seq
 			}

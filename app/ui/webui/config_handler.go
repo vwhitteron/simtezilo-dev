@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"os"
 	"strings"
@@ -140,6 +141,8 @@ func (h *configHandler) handleGetConfig(response http.ResponseWriter, _ *http.Re
 			"pulseMaxAmplitude":            h.config.GetHapticsPulseMaxAmplitude(),
 			"pulseMaxFrequencyHz":          h.config.GetHapticsPulseMaxHz(),
 			"pulseMinFrequencyHz":          h.config.GetHapticsPulseMinHz(),
+			"textureMinFrequencyHz":        h.config.GetHapticsTextureMinHz(),
+			"textureMaxFrequencyHz":        h.config.GetHapticsTextureMaxHz(),
 		},
 		"pitRadio": map[string]any{
 			"enabled":               h.config.PitRadioEnabled(),
@@ -219,6 +222,8 @@ func (h *configHandler) handleGetConfig(response http.ResponseWriter, _ *http.Re
 			}(),
 			"chassisMute":               h.config.GetSynthChassisMute(),
 			"chassisGain":               h.config.GetSynthChassisGain(),
+			"textureMute":               h.config.GetSynthTextureMute(),
+			"textureGain":               h.config.GetSynthTextureGain(),
 			"transmissionMute":          h.config.GetSynthTransmissionMute(),
 			"transmissionGain":          h.config.GetSynthTransmissionGain(),
 			"transmissionGainMinRace":   h.config.GetSynthTransmissionGainMinRace(),
@@ -507,6 +512,8 @@ func (h *configHandler) applySynthGainMuteFields(config map[string]any) []string
 	errors = append(errors, h.applyChannelGainMute(config)...)
 	errors = appendErr(errors, applyField(config, "chassisGain", "invalid chassis gain value", h.config.SetSynthChassisGain))
 	errors = appendErr(errors, applyField(config, "chassisMute", "invalid chassis gain mute value", h.config.SetSynthChassisMute))
+	errors = appendErr(errors, applyField(config, "textureGain", "invalid texture gain value", h.config.SetSynthTextureGain))
+	errors = appendErr(errors, applyField(config, "textureMute", "invalid texture gain mute value", h.config.SetSynthTextureMute))
 	errors = appendErr(errors, applyField(config, "transmissionGain", "invalid transmission gain value", h.config.SetSynthTransmissionGain))
 	errors = appendErr(errors, applyField(config, "transmissionMute", "invalid transmission gain mute value", h.config.SetSynthTransmissionMute))
 	errors = appendErr(errors, applyField(config, "transmissionGainMinRace", "invalid transmission gain min race value", h.config.SetSynthTransmissionGainMinRace))
@@ -746,24 +753,26 @@ func (h *configHandler) applyHapticsConfig(config map[string]any) []string {
 
 	errors = appendErr(errors, applyField(config, "dynamicTransmissionFeedback", "invalid dynamic transmission feedback value", h.config.SetHapticsDynamicTransFeedbackEnabled))
 	errors = appendErr(errors, applyField(config, "jerkCurve", "invalid jerk curve value", func(f float64) {
-		h.config.SetHapticsJerkCurve(int(f * 1000.0))
+		h.config.SetHapticsJerkCurve(int(math.Round(f * 1000.0)))
 	}))
 	errors = appendErr(errors, applyField(config, "jerkMax", "invalid jerk max value", func(f float64) {
 		h.config.SetHapticsJerkMax(int(f))
 	}))
 	errors = appendErr(errors, applyField(config, "snapCurve", "invalid snap curve value", func(f float64) {
-		h.config.SetHapticsSnapCurve(int(f * 1000.0))
+		h.config.SetHapticsSnapCurve(int(math.Round(f * 1000.0)))
 	}))
 	errors = appendErr(errors, applyField(config, "snapMax", "invalid snap max value", func(f float64) {
 		h.config.SetHapticsSnapMax(int(f))
 	}))
 	errors = appendErr(errors, applyField(config, "dynamicTransmissionCurve", "invalid transmission curve value", func(f float64) {
-		h.config.SetHapticsTransmissionCurve(int(f * 1000.0))
+		h.config.SetHapticsTransmissionCurve(int(math.Round(f * 1000.0)))
 	}))
 	errors = appendErr(errors, applyField(config, "dynamicTransmissionGforceMax", "invalid transmission G-force max value", h.config.SetHapticsTransmissionGforceMax))
 	errors = appendErr(errors, applyField(config, "pulseMaxAmplitude", "invalid pulse max amplitude value", h.config.SetHapticsPulseMaxAmplitude))
 	errors = appendErr(errors, applyField(config, "pulseMaxFrequencyHz", "invalid pulse max frequency value", h.config.SetHapticsPulseMaxFrequencyHz))
 	errors = appendErr(errors, applyField(config, "pulseMinFrequencyHz", "invalid pulse min frequency value", h.config.SetHapticsPulseMinFrequencyHz))
+	errors = appendErr(errors, applyField(config, "textureMinFrequencyHz", "invalid texture min frequency value", h.config.SetHapticsTextureMinFrequencyHz))
+	errors = appendErr(errors, applyField(config, "textureMaxFrequencyHz", "invalid texture max frequency value", h.config.SetHapticsTextureMaxFrequencyHz))
 	errors = appendErr(errors, applyField(config, "enableReplay", "invalid enable replay value", h.config.SetHapticsEnableReplay))
 	errors = append(errors, applySubMap(config, "output", "invalid haptics output configuration structure", h.applyHapticsOutputConfig)...)
 

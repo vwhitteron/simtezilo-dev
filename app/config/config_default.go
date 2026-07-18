@@ -58,6 +58,8 @@ func defaultConfig() *viperConfig {
 			PulseMinFrequencyHz:          16,
 			_pulseWidthMax:               0.5,
 			_pulseWidthMin:               0.1,
+			TextureMinFrequencyHz:        90,
+			TextureMaxFrequencyHz:        150,
 			EngineProfiles: map[string]appHaptics.EngineProfile{
 				"s1":                  {PrimaryBalance: 0.15, SecondaryBalance: 0.250, Gain: +0.00, PulseScale: 1.00}, // Racing Kart 125 Shifter
 				"i2":                  {PrimaryBalance: 0.65, SecondaryBalance: 0.850, Gain: -0.75, PulseScale: 1.00}, // Fiat 500 F '68
@@ -149,6 +151,8 @@ func defaultConfig() *viperConfig {
 			GainIncrement:             0.25,
 			ChassisMute:               false,
 			ChassisGain:               0.00,
+			TextureMute:               true,
+			TextureGain:               -3.00,
 			TransmissionMute:          false,
 			TransmissionGain:          0.00,
 			TransmissionGainMinRace:   -3.00,
@@ -160,6 +164,7 @@ func defaultConfig() *viperConfig {
 			Routing: map[string][]bool{
 				RoutingSourceEngine:       {true, true},
 				RoutingSourceChassis:      {true, true},
+				RoutingSourceTexture:      {true, true},
 				RoutingSourceTransmission: {true, true},
 			},
 			EqBands: [][]EQBand{

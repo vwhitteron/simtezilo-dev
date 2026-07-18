@@ -632,7 +632,6 @@ func testHapticsSnapCurveGetSet(t *testing.T) {
 
 	// Act - set new value
 	cfg.SetHapticsSnapCurve(400)
-	cfg.rebuildSnapshot() // Required as SetHapticsSnapCurve doesn't rebuild snapshot
 
 	// Assert
 	assert.InDelta(t, 400, cfg.GetHapticsSnapCurve(), 0.001)
@@ -646,14 +645,12 @@ func testHapticsSnapCurveClamping(t *testing.T) {
 
 	// Act - set value below minimum (5)
 	cfg.SetHapticsSnapCurve(1)
-	cfg.rebuildSnapshot() // Required as SetHapticsSnapCurve doesn't rebuild snapshot
 
 	// Assert - should be clamped to 5
 	assert.InDelta(t, 5, cfg.GetHapticsSnapCurve(), 0.001)
 
 	// Act - set value above maximum (955)
 	cfg.SetHapticsSnapCurve(1000)
-	cfg.rebuildSnapshot()
 
 	// Assert - should be clamped to 955
 	assert.InDelta(t, 955, cfg.GetHapticsSnapCurve(), 0.001)
@@ -692,7 +689,6 @@ func testHapticsSnapMaxGetSet(t *testing.T) {
 
 	// Act - set new value
 	cfg.SetHapticsSnapMax(100)
-	cfg.rebuildSnapshot() // Required as SetHapticsSnapMax doesn't rebuild snapshot
 
 	// Assert
 	assert.InDelta(t, 100, cfg.GetHapticsSnapMax(), 0.001)
@@ -706,14 +702,12 @@ func testHapticsSnapMaxClamping(t *testing.T) {
 
 	// Act - set value below minimum (1)
 	cfg.SetHapticsSnapMax(0)
-	cfg.rebuildSnapshot() // Required as SetHapticsSnapMax doesn't rebuild snapshot
 
 	// Assert - should be clamped to 1
 	assert.InDelta(t, 1, cfg.GetHapticsSnapMax(), 0.001)
 
 	// Act - set value above maximum (200)
 	cfg.SetHapticsSnapMax(300)
-	cfg.rebuildSnapshot()
 
 	// Assert - should be clamped to 200
 	assert.InDelta(t, 200, cfg.GetHapticsSnapMax(), 0.001)
@@ -820,7 +814,6 @@ func testHapticsTransmissionGforceMaxGetSet(t *testing.T) {
 
 	// Act - set new value
 	cfg.SetHapticsTransmissionGforceMax(3.5)
-	cfg.rebuildSnapshot() // Required as SetHapticsTransmissionGforceMax doesn't rebuild snapshot
 
 	// Assert
 	assert.InDelta(t, 3.5, cfg.GetHapticsTransmissionGforceMax(), 0.001)
@@ -834,14 +827,12 @@ func testHapticsTransmissionGforceMaxClamping(t *testing.T) {
 
 	// Act - set value below minimum (0)
 	cfg.SetHapticsTransmissionGforceMax(-1.0)
-	cfg.rebuildSnapshot() // Required as SetHapticsTransmissionGforceMax doesn't rebuild snapshot
 
 	// Assert - should be clamped to 0
 	assert.InDelta(t, 0.0, cfg.GetHapticsTransmissionGforceMax(), 0.001)
 
 	// Act - set value above maximum (10)
 	cfg.SetHapticsTransmissionGforceMax(15.0)
-	cfg.rebuildSnapshot()
 
 	// Assert - should be clamped to 10
 	assert.InDelta(t, 10.0, cfg.GetHapticsTransmissionGforceMax(), 0.001)
@@ -985,6 +976,20 @@ func testHapticsPulseMaxHz(t *testing.T) {
 
 	// Act & Assert - default is 60
 	assert.InDelta(t, 60, cfg.GetHapticsPulseMaxHz(), 0.001)
+}
+
+func testHapticsTextureDefaults(t *testing.T) {
+	t.Parallel()
+
+	// Arrange
+	cfg := newTestConfig()
+
+	// Act & Assert - road-texture layer defaults. The on/off control is the synth
+	// texture mute (default muted); these shape the signal.
+	assert.True(t, cfg.GetSynthTextureMute())
+	assert.InDelta(t, -3.00, cfg.GetSynthTextureGain(), 0.001)
+	assert.InDelta(t, 90, cfg.GetHapticsTextureMinHz(), 0.001)
+	assert.InDelta(t, 150, cfg.GetHapticsTextureMaxHz(), 0.001)
 }
 
 func testHapticsPulseMaxHzIncreaseDecrease(t *testing.T) {
@@ -1294,6 +1299,7 @@ func TestHapticsPulseAndEngineProfile(t *testing.T) {
 	t.Run("testHapticsPulseMaxAmplitudeIncreaseDecrease", testHapticsPulseMaxAmplitudeIncreaseDecrease)
 	t.Run("testHapticsPulseMaxAmplitudeClamping", testHapticsPulseMaxAmplitudeClamping)
 	t.Run("testHapticsPulseWidthMinMax", testHapticsPulseWidthMinMax)
+	t.Run("testHapticsTextureDefaults", testHapticsTextureDefaults)
 	t.Run("testHapticsEngineProfile", testHapticsEngineProfile)
 	t.Run("testHapticsEngineProfileNotFound", testHapticsEngineProfileNotFound)
 	t.Run("testHapticsEnginePrimaryBalanceNoProfile", testHapticsEnginePrimaryBalanceNoProfile)

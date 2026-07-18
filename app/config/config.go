@@ -34,6 +34,7 @@ const (
 const (
 	RoutingSourceEngine       = "engine"
 	RoutingSourceChassis      = "chassis"
+	RoutingSourceTexture      = "texture"
 	RoutingSourceTransmission = "transmission"
 )
 
@@ -41,6 +42,7 @@ const (
 var routingSources = []string{
 	RoutingSourceEngine,
 	RoutingSourceChassis,
+	RoutingSourceTexture,
 	RoutingSourceTransmission,
 }
 
@@ -90,6 +92,8 @@ type haptics struct {
 	PulseMinFrequencyHz          float64                             `json:"pulseMinFrequencyHz"`
 	_pulseWidthMax               float64                             `json:"-"`
 	_pulseWidthMin               float64                             `json:"-"`
+	TextureMinFrequencyHz        float64                             `json:"textureMinFrequencyHz"` // lower edge of the road-texture noise band (low-speed brightness)
+	TextureMaxFrequencyHz        float64                             `json:"textureMaxFrequencyHz"` // upper edge of the road-texture noise band (high-speed brightness)
 	EngineProfiles               map[string]appHaptics.EngineProfile `json:"engineProfiles,omitempty"`
 	_engineProfile               *appHaptics.EngineProfile           `json:"-"`
 	_engineProfileName           string                              `json:"-"`
@@ -170,6 +174,8 @@ type Synthesizer struct {
 	ChannelName               []string  `json:"channelName"`
 	ChassisMute               bool      `json:"chassisMute"`
 	ChassisGain               float64   `json:"chassisGain"`
+	TextureMute               bool      `json:"textureMute"`
+	TextureGain               float64   `json:"textureGain"`
 	TransmissionMute          bool      `json:"transmissionMute"`
 	TransmissionGain          float64   `json:"transmissionGain"`
 	TransmissionGainMinRace   float64   `json:"transmissionGainMinRace"`
@@ -239,6 +245,8 @@ type Snapshot struct {
 	ChannelName               []string
 	ChassisMute               bool
 	ChassisGain               float64
+	TextureMute               bool
+	TextureGain               float64
 	TransmissionMute          bool
 	TransmissionGain          float64
 	TransmissionGainMinRace   float64
@@ -264,6 +272,12 @@ type Snapshot struct {
 	PulseMinFrequencyHz float64
 	PulseWidthMin       float64
 	PulseWidthMax       float64
+
+	// Haptics road-texture settings (continuous suspension-roughness layer). The
+	// on/off control is the synthesizer texture mute and loudness is the texture
+	// channel gain; these shape the signal.
+	TextureMinFrequencyHz float64
+	TextureMaxFrequencyHz float64
 
 	// DRX (Dynamic Range Extension) setting
 	DRXEnabled bool
@@ -1152,6 +1166,7 @@ func (c *Config) SetHapticsDynamicTransFeedbackEnabled(value bool) {
 
 	c.viper.Haptics.DynamicTransmissionFeedback = value
 
+	c.rebuildSnapshot()
 	c.registerUpdate(false)
 }
 
@@ -1272,15 +1287,14 @@ func (c *Config) GetHapticsSnapCurve() float64 {
 // Values closer to 0 produce a more linear response.
 // Values closer to 1 produce a more exponential response.
 func (c *Config) SetHapticsSnapCurve(value int) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	value = min(value, 955)
 	value = max(value, 5)
 
+	c.mu.Lock()
 	c.viper.Haptics.SnapCurve = value
+	c.mu.Unlock()
 
-	c.registerUpdate(false)
+	c.updateSnapScale()
 }
 
 // IncreaseHapticsSnapCurve increases the snap curve value in increments of 5.
@@ -1331,15 +1345,14 @@ func (c *Config) GetHapticsSnapMax() int {
 // Any snap values above this value are clamped to this maximum.
 // Allowed range is 1 to 200.
 func (c *Config) SetHapticsSnapMax(value int) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	value = min(value, 200)
 	value = max(value, 1)
 
+	c.mu.Lock()
 	c.viper.Haptics.SnapMax = value
+	c.mu.Unlock()
 
-	c.registerUpdate(false)
+	c.updateSnapScale()
 }
 
 // IncreaseHapticsSnapMax increases the maximum snap value in increments of 1.
@@ -1426,15 +1439,14 @@ func (c *Config) GetHapticsTransmissionGforceMax() float64 {
 // SetHapticsTransmissionGforceMax sets the maximum transmission G-force value.
 // Any longitudinal g-force values above this are clamped to this maximum.
 func (c *Config) SetHapticsTransmissionGforceMax(value float64) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	value = math.Min(10, value)
 	value = math.Max(0, value)
 
+	c.mu.Lock()
 	c.viper.Haptics.DynamicTransmissionGforceMax = value
-
+	c.rebuildSnapshot()
 	c.registerUpdate(false)
+	c.mu.Unlock()
 }
 
 // IncreaseHapticsTransmissionGforceMax increases the maximum g-force for dynamic transmission feedback in increments of 0.1g.
@@ -1446,11 +1458,13 @@ func (c *Config) IncreaseHapticsTransmissionGforceMax() float64 {
 		c.viper.Haptics.DynamicTransmissionGforceMax+0.1,
 	)
 
-	c.mu.Unlock()
-
+	c.rebuildSnapshot()
 	c.registerUpdate(false)
 
-	return c.viper.Haptics.DynamicTransmissionGforceMax
+	result := c.viper.Haptics.DynamicTransmissionGforceMax
+	c.mu.Unlock()
+
+	return result
 }
 
 // DecreasehapticsTransmissionGforceMax decreases the maximum g-force for dynamic transmission feedback in increments of 0.1g.
@@ -1462,11 +1476,13 @@ func (c *Config) DecreasehapticsTransmissionGforceMax() float64 {
 		c.viper.Haptics.DynamicTransmissionGforceMax-0.1,
 	)
 
-	c.mu.Unlock()
-
+	c.rebuildSnapshot()
 	c.registerUpdate(false)
 
-	return c.viper.Haptics.DynamicTransmissionGforceMax
+	result := c.viper.Haptics.DynamicTransmissionGforceMax
+	c.mu.Unlock()
+
+	return result
 }
 
 // GetHapticsPulseMinHz returns the configured minimum pulse frequency in Hz.
@@ -1773,6 +1789,36 @@ func (c *Config) GetHapticePulseFrequencyHzRange() float64 {
 	snap := c.snapshot.Load()
 
 	return snap.PulseMaxFrequencyHz - snap.PulseMinFrequencyHz
+}
+
+// GetHapticsTextureMinHz returns the lower edge of the road-texture noise band.
+func (c *Config) GetHapticsTextureMinHz() float64 {
+	return c.snapshot.Load().TextureMinFrequencyHz
+}
+
+// GetHapticsTextureMaxHz returns the upper edge of the road-texture noise band.
+func (c *Config) GetHapticsTextureMaxHz() float64 {
+	return c.snapshot.Load().TextureMaxFrequencyHz
+}
+
+// SetHapticsTextureMinFrequencyHz sets the texture tone frequency used at low speed,
+// clamped to 5..400 Hz.
+func (c *Config) SetHapticsTextureMinFrequencyHz(value float64) {
+	c.mu.Lock()
+	c.viper.Haptics.TextureMinFrequencyHz = max(5, min(400, value))
+	c.rebuildSnapshot()
+	c.registerUpdate(false)
+	c.mu.Unlock()
+}
+
+// SetHapticsTextureMaxFrequencyHz sets the texture tone frequency approached at high
+// speed, clamped to 5..400 Hz.
+func (c *Config) SetHapticsTextureMaxFrequencyHz(value float64) {
+	c.mu.Lock()
+	c.viper.Haptics.TextureMaxFrequencyHz = max(5, min(400, value))
+	c.rebuildSnapshot()
+	c.registerUpdate(false)
+	c.mu.Unlock()
 }
 
 // GetHapticsPulseWidthMin returns the minimum pulse width in samples based on the current max frequency.
@@ -2859,6 +2905,7 @@ func (c *Config) normaliseRouting(numChannels int) {
 	for source := range c.viper.Synthesizer.Routing {
 		if source != RoutingSourceEngine &&
 			source != RoutingSourceChassis &&
+			source != RoutingSourceTexture &&
 			source != RoutingSourceTransmission {
 			delete(c.viper.Synthesizer.Routing, source)
 		}
@@ -2963,6 +3010,67 @@ func (c *Config) DecreaseSynthChassisGain() float64 {
 	c.rebuildSnapshot()
 	c.registerUpdate(false)
 	result := c.viper.Synthesizer.ChassisGain
+	c.mu.Unlock()
+
+	return result
+}
+
+// GetSynthTextureGain returns the texture gain of the synthesizer (i.e. the volume
+// level for the continuous road-texture layer).
+// 0.0 is maximum gain and -60.0 will mute texture output.
+func (c *Config) GetSynthTextureGain() float64 {
+	return c.snapshot.Load().TextureGain
+}
+
+// GetSynthTextureMute returns whether the texture gain is muted.
+func (c *Config) GetSynthTextureMute() bool {
+	return c.snapshot.Load().TextureMute
+}
+
+// SetSynthTextureMute sets whether the texture gain is muted.
+func (c *Config) SetSynthTextureMute(mute bool) {
+	c.mu.Lock()
+	c.viper.Synthesizer.TextureMute = mute
+	c.rebuildSnapshot()
+	c.registerUpdate(false)
+	c.mu.Unlock()
+}
+
+// SetSynthTextureGain sets the texture gain of the synthesizer.
+// 0.0 is maximum gain and -60.0 will mute texture output.
+func (c *Config) SetSynthTextureGain(value float64) {
+	c.mu.Lock()
+	c.viper.Synthesizer.TextureGain = max(MinimumGain, min(MaximumGain, value))
+	c.rebuildSnapshot()
+	c.registerUpdate(false)
+	c.mu.Unlock()
+}
+
+// IncreaseSynthTextureGain increases the texture gain by the configured gain increment.
+func (c *Config) IncreaseSynthTextureGain() float64 {
+	c.mu.Lock()
+	c.viper.Synthesizer.TextureGain = min(
+		MaximumGain,
+		c.viper.Synthesizer.TextureGain+c.viper.Synthesizer.GainIncrement,
+	)
+	c.rebuildSnapshot()
+	c.registerUpdate(false)
+	result := c.viper.Synthesizer.TextureGain
+	c.mu.Unlock()
+
+	return result
+}
+
+// DecreaseSynthTextureGain decreases the texture gain by the configured gain increment.
+func (c *Config) DecreaseSynthTextureGain() float64 {
+	c.mu.Lock()
+	c.viper.Synthesizer.TextureGain = max(
+		MinimumGain,
+		c.viper.Synthesizer.TextureGain-c.viper.Synthesizer.GainIncrement,
+	)
+	c.rebuildSnapshot()
+	c.registerUpdate(false)
+	result := c.viper.Synthesizer.TextureGain
 	c.mu.Unlock()
 
 	return result
@@ -4004,6 +4112,8 @@ func (c *Config) rebuildSnapshot() {
 		ChannelName:               channelName,
 		ChassisMute:               c.viper.Synthesizer.ChassisMute,
 		ChassisGain:               c.viper.Synthesizer.ChassisGain,
+		TextureMute:               c.viper.Synthesizer.TextureMute,
+		TextureGain:               c.viper.Synthesizer.TextureGain,
 		TransmissionMute:          c.viper.Synthesizer.TransmissionMute,
 		TransmissionGain:          c.viper.Synthesizer.TransmissionGain,
 		TransmissionGainMinRace:   c.viper.Synthesizer.TransmissionGainMinRace,
@@ -4026,6 +4136,9 @@ func (c *Config) rebuildSnapshot() {
 		PulseMinFrequencyHz: c.viper.Haptics.PulseMinFrequencyHz,
 		PulseWidthMin:       c.viper.Haptics._pulseWidthMin,
 		PulseWidthMax:       c.viper.Haptics._pulseWidthMax,
+
+		TextureMinFrequencyHz: c.viper.Haptics.TextureMinFrequencyHz,
+		TextureMaxFrequencyHz: c.viper.Haptics.TextureMaxFrequencyHz,
 
 		DRXEnabled: c.viper.Synthesizer.EnableDRX,
 

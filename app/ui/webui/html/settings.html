@@ -1573,6 +1573,14 @@
                                     </button>
                                 </li>
                                 <li class="nav-item" role="presentation">
+                                    <button class="nav-link" id="haptics-texture-tab" data-bs-toggle="tab"
+                                        data-bs-target="#haptics-texture-pane" type="button" role="tab"
+                                        aria-controls="haptics-texture-pane" aria-selected="false">
+                                        <span class="icon me-1" data-icon="circle-dot"></span><span
+                                            data-i18n="runmode.settings.haptics.texture.title">Road Texture</span>
+                                    </button>
+                                </li>
+                                <li class="nav-item" role="presentation">
                                     <button class="nav-link" id="haptics-transmission-tab" data-bs-toggle="tab"
                                         data-bs-target="#haptics-transmission-pane" type="button" role="tab"
                                         aria-controls="haptics-transmission-pane" aria-selected="false">
@@ -1677,9 +1685,8 @@
                                                         role="button" tabindex="0" aria-expanded="false"
                                                         data-i18n-tooltip="runmode.settings.haptics.channels.name.tooltip"></i>
                                                 </label>
-                                                <input type="text" id="synth-channel-name"
-                                                    class="form-control" style="width: 160px;"
-                                                    maxlength="32" placeholder="Channel">
+                                                <input type="text" id="synth-channel-name" class="form-control"
+                                                    style="width: 160px;" maxlength="32" placeholder="Channel">
                                             </div>
                                             <div class="d-flex flex-column gap-1">
                                                 <label for="synth-channel-gain" class="form-label mb-1">
@@ -2319,6 +2326,90 @@
                                         </div>
                                     </div>
 
+                                </div>
+                                <div class="tab-pane fade" id="haptics-texture-pane" role="tabpanel"
+                                    aria-labelledby="haptics-texture-tab" tabindex="0">
+                                    <h5 class="mb-3"><span class="icon" data-icon="volume-high"></span><span
+                                            data-i18n="runmode.settings.haptics.output.title">Output</span></h5>
+                                    <div class="row g-3 mb-4">
+                                        <div class="col-md-6 col-lg-4">
+                                            <label for="synth-texturegain" class="form-label">
+                                                <span
+                                                    data-i18n="runmode.settings.haptics.texture.outputlevel">Level</span>
+                                                <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
+                                                    role="button" tabindex="0" aria-expanded="false"
+                                                    data-i18n-tooltip="runmode.settings.haptics.texture.outputlevel.tooltip"></i>
+                                            </label>
+                                            <div class="input-group">
+                                                <button type="button" class="btn btn-outline-success mute-toggle-btn"
+                                                    data-gain-input="synth-texturegain"
+                                                    data-mute-checkbox="synth-texturemute"
+                                                    data-i18n-aria-label="runmode.settings.haptics.texture.outputlevel.mute">
+                                                </button>
+                                                <div class="input-with-suffix" style="flex: 1;">
+                                                    <input type="number" id="synth-texturegain"
+                                                        class="form-control text-center gain-input"
+                                                        data-config="synthesizer.textureGain" min="-60" max="0"
+                                                        step="0.25">
+                                                    <span class="input-suffix">dB</span>
+                                                </div>
+                                                <input type="checkbox" id="synth-texturemute"
+                                                    data-config="synthesizer.textureMute" style="display: none;">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="row g-3 mb-4">
+                                        <div class="col-md-8 col-lg-6">
+                                            <label class="form-label" for="routing-texture-add"
+                                                data-i18n="runmode.settings.haptics.channels.routing">Output
+                                                Channels</label>
+                                            <div class="channel-pill-select form-control" data-routing-source="texture"
+                                                role="button" tabindex="0" aria-haspopup="listbox" aria-expanded="false"
+                                                data-i18n-aria-label="runmode.settings.routing.texture.aria">
+                                                <div class="channel-pill-list" id="routing-texture-pills"></div>
+                                                <span class="channel-pill-placeholder" id="routing-texture-placeholder"
+                                                    data-i18n="runmode.settings.haptics.channels.routing.add">Add
+                                                    channel…</span>
+                                                <div class="channel-pill-menu" id="routing-texture-menu"></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <h5 class="mt-5 mb-3"><span class="icon" data-icon="sliders"></span><span
+                                            data-i18n="runmode.settings.haptics.tuning.title">Tuning</span></h5>
+                                    <div class="row g-3 mb-4">
+                                        <div class="col-md-6 col-lg-3">
+                                            <label for="haptics-textureminfreq" class="form-label">
+                                                <span data-i18n="runmode.settings.haptics.texture.minfreq">Min
+                                                    Frequency</span>
+                                                <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
+                                                    role="button" tabindex="0" aria-expanded="false"
+                                                    data-i18n-tooltip="runmode.settings.haptics.texture.minfreq.tooltip"></i>
+                                            </label>
+                                            <div class="input-with-suffix">
+                                                <input type="number" id="haptics-textureminfreq"
+                                                    class="form-control text-center"
+                                                    data-config="haptics.textureMinFrequencyHz" min="5" max="400"
+                                                    step="1">
+                                                <span class="input-suffix">Hz</span>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6 col-lg-3">
+                                            <label for="haptics-texturemaxfreq" class="form-label">
+                                                <span data-i18n="runmode.settings.haptics.texture.maxfreq">Max
+                                                    Frequency</span>
+                                                <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
+                                                    role="button" tabindex="0" aria-expanded="false"
+                                                    data-i18n-tooltip="runmode.settings.haptics.texture.maxfreq.tooltip"></i>
+                                            </label>
+                                            <div class="input-with-suffix">
+                                                <input type="number" id="haptics-texturemaxfreq"
+                                                    class="form-control text-center"
+                                                    data-config="haptics.textureMaxFrequencyHz" min="5" max="400"
+                                                    step="1">
+                                                <span class="input-suffix">Hz</span>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                                 <div class="tab-pane fade" id="haptics-transmission-pane" role="tabpanel"
                                     aria-labelledby="haptics-transmission-tab" tabindex="0">

@@ -226,6 +226,18 @@
                     "maximum": 0.0,
                     "default": 0.0
                 },
+                "textureMute": {
+                    "type": "boolean",
+                    "description": "Mute the continuous road-texture layer",
+                    "default": true
+                },
+                "textureGain": {
+                    "type": "number",
+                    "description": "Road-texture audio gain in dB",
+                    "minimum": -60.0,
+                    "maximum": 0.0,
+                    "default": 0.0
+                },
                 "engineMute": {
                     "type": "boolean",
                     "description": "Mute engine audio",
@@ -329,6 +341,11 @@
                         "chassis": {
                             "type": "array",
                             "description": "Per-output-channel enable mask for the chassis source",
+                            "items": { "type": "boolean" }
+                        },
+                        "texture": {
+                            "type": "array",
+                            "description": "Per-output-channel enable mask for the road-texture source",
                             "items": { "type": "boolean" }
                         },
                         "transmission": {
@@ -441,6 +458,20 @@
                     "minimum": 20.0,
                     "maximum": 200.0,
                     "default": 60.0
+                },
+                "textureMinFrequencyHz": {
+                    "type": "number",
+                    "description": "Lower edge of the road-texture noise band in Hz (brightness at low speed)",
+                    "minimum": 5.0,
+                    "maximum": 200.0,
+                    "default": 25.0
+                },
+                "textureMaxFrequencyHz": {
+                    "type": "number",
+                    "description": "Upper edge of the road-texture noise band in Hz (brightness at high speed)",
+                    "minimum": 5.0,
+                    "maximum": 200.0,
+                    "default": 45.0
                 },
                 "dynamicTransmissionFeedback": {
                     "type": "boolean",

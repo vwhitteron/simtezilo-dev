@@ -48,6 +48,7 @@ type ChannelMixer struct {
 	numOutputChannels   int
 	outputChannelNames  []string
 	chassisChannelNames []string
+	textureChannelNames []string
 
 	// Reusable scratch for the mix path, AUDIO-CALLBACK-THREAD ONLY (see
 	// MixToMaster). Grown on demand to avoid per-frame heap allocations.
@@ -63,6 +64,7 @@ type ChannelMixer struct {
 	// routing edits apply live without locking or allocating on the hot path.
 	routeEngine       []bool
 	routeChassis      []bool
+	routeTexture      []bool
 	routeTransmission []bool
 
 	log          zerolog.Logger
@@ -124,9 +126,11 @@ func NewChannelMixer(mixerConfig ChannelMixerConfig) (*ChannelMixer, error) {
 
 		outputChannelNames:  buildChannelNames(outputChannelPrefix, numOutputChannels),
 		chassisChannelNames: buildChannelNames(chassisChannelPrefix, numOutputChannels),
+		textureChannelNames: buildChannelNames(textureChannelPrefix, numOutputChannels),
 
 		routeEngine:       make([]bool, numOutputChannels),
 		routeChassis:      make([]bool, numOutputChannels),
+		routeTexture:      make([]bool, numOutputChannels),
 		routeTransmission: make([]bool, numOutputChannels),
 
 		channels:       map[string]*MixerChannel{},
@@ -568,9 +572,9 @@ func (m *ChannelMixer) MixToMaster(length int) {
 	m.mixOutSamples.grow(length)
 	outSamples := m.mixOutSamples
 
-	// Shared read scratch for the per-channel chassis/transmission/engine reads
-	// below. Each read fully consumes it before the next, so a single buffer is
-	// safe.
+	// Shared read scratch for the per-channel chassis/texture/transmission/engine
+	// reads below. Each read fully consumes it before the next, so a single buffer
+	// is safe.
 	m.mixReadScratch.grow(length)
 
 	// Refresh the per-channel routing masks from the lock-free config snapshot.
@@ -578,6 +582,7 @@ func (m *ChannelMixer) MixToMaster(length int) {
 	for ch := range m.numOutputChannels {
 		m.routeEngine[ch] = m.config.GetSynthRouteEnabled(ChannelEngine, ch)
 		m.routeChassis[ch] = m.config.GetSynthRouteEnabled(ChannelChassis, ch)
+		m.routeTexture[ch] = m.config.GetSynthRouteEnabled(ChannelTexture, ch)
 		m.routeTransmission[ch] = m.config.GetSynthRouteEnabled(ChannelTransmission, ch)
 	}
 
@@ -612,6 +617,27 @@ func (m *ChannelMixer) MixToMaster(length int) {
 			if chassisCh, ok := m.channels[m.chassisChannelNames[ch]]; ok {
 				n := chassisCh.Read(m.mixReadScratch)
 				if !m.routeChassis[ch] {
+					continue
+				}
+
+				for i, sample := range m.mixReadScratch[:n] {
+					channelSamples[ch][i] = mixSampleSum(channelSamples[ch][i], sample, &peaks[ch])
+				}
+			}
+		}
+	}
+
+	// Mix per-channel texture (the continuous road-texture layer) the same way as
+	// chassis: the internal texture_ch buffer maps 1:1 to output ch, gated by the
+	// texture routing mask, and always drained so a route toggled off leaves no
+	// stale samples. It shares the chassis peak accumulator so the combined chassis
+	// + texture level is peak-limited together.
+	textureMuted := m.config.GetSynthTextureMute()
+	if !textureMuted {
+		for ch := range m.numOutputChannels {
+			if textureCh, ok := m.channels[m.textureChannelNames[ch]]; ok {
+				n := textureCh.Read(m.mixReadScratch)
+				if !m.routeTexture[ch] {
 					continue
 				}
 
@@ -791,6 +817,8 @@ func (m *ChannelMixer) DiagnosticsInto(channels []ChannelDiagnostic) MixerDiagno
 			isMuted = m.config.GetSynthMasterMute()
 		case IsChassisChannel(name):
 			isMuted = m.config.GetSynthChassisMute()
+		case IsTextureChannel(name):
+			isMuted = m.config.GetSynthTextureMute()
 		case name == ChannelTransmission:
 			isMuted = m.config.GetSynthTransmissionMute()
 		case name == ChannelEngine:
@@ -865,6 +893,9 @@ func (m *ChannelMixer) watchForConfigChanges() {
 			case IsChassisChannel(name):
 				configGain = m.config.GetSynthChassisGain()
 				configMute = m.config.GetSynthChassisMute()
+			case IsTextureChannel(name):
+				configGain = m.config.GetSynthTextureGain()
+				configMute = m.config.GetSynthTextureMute()
 			case name == ChannelTransmission:
 				configGain = m.config.GetSynthTransmissionGain()
 				configMute = m.config.GetSynthTransmissionMute()
