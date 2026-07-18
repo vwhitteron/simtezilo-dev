@@ -137,17 +137,16 @@ func (a *App) shouldGenerateEngineHaptic() bool {
 		return false
 	}
 
-	// Engine haptics are silenced
+	if !a.state.hapticsEnabled {
+		return false
+	}
+
 	if a.config.GetSynthEngineMute() {
 		return false
 	}
 
 	// No engine haptics configured
 	if a.vehicle.Engine.FiringFrequency == 0 {
-		return false
-	}
-
-	if !a.state.telemetryActive {
 		return false
 	}
 

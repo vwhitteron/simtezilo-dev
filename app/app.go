@@ -1567,16 +1567,11 @@ func (a *App) handleGeneralTick() {
 	a.sendTelemetryChartData()
 }
 
-// handleEngineHapticsTick processes engine haptics updates.
+// handleEngineHapticsTick processes engine haptics updates. This is a separate
+// ticker/handler to allow engine haptics to be produced even if telemetry
+// packets are dropped for a short period of time.
 func (a *App) handleEngineHapticsTick() {
-	// Skip if no telemetry available
-	if !a.gtClient.Telemetry.TelemetryStarted() {
-		return
-	}
-
-	if a.gtClient.Telemetry.IsOnCircuit() {
-		a.generateEngineHaptic()
-	}
+	a.generateEngineHaptic()
 }
 
 // handleDisplayTick processes display updates.
