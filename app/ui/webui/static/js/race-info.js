@@ -17,22 +17,18 @@ function updateConnectionStatus(connected) {
 }
 
 function updateRaceInfo(data) {
-    // Update time of day
     if (data.timeofday) {
         document.getElementById('raceTimeOfDay').textContent = data.timeofday;
     }
 
-    // Update lap as "current / total"
     if (data.currentlap && data.racelaps) {
         document.getElementById('raceLap').textContent = `${data.currentlap} / ${data.racelaps}`;
     }
 
-    // Update position as "position / gridsize"
     if (data.position && data.gridsize) {
         document.getElementById('racePosition').textContent = `${data.position} / ${data.gridsize}`;
     }
 
-    // Update lap events table
     if (data.lapevents && Array.isArray(data.lapevents)) {
         updateLapEvents(data.lapevents);
     }
@@ -122,7 +118,6 @@ function clearRaceInfo() {
     document.getElementById('raceLap').textContent = '';
     document.getElementById('racePosition').textContent = '';
 
-    // Clear lap events table
     const tbody = document.getElementById('lapEventsBody');
     const waitingText = document.querySelector('[data-i18n="runmode.home.race.waiting"]')?.textContent || 'In progress...';
     tbody.innerHTML = `<tr><td colspan="4" class="lap-events-empty">${waitingText}</td></tr>`;
@@ -131,13 +126,10 @@ function clearRaceInfo() {
 // Initialize when SharedWebSocket is available
 function initRaceInfo() {
     if (window.SharedWebSocket) {
-        // Subscribe to race messages
         window.SharedWebSocket.subscribe('race', updateRaceInfo);
 
-        // Listen for connection status changes
         window.SharedWebSocket.addConnectionListener(updateConnectionStatus);
 
-        // Set initial connection status
         updateConnectionStatus(window.SharedWebSocket.isConnected);
 
         console.log('Race info subscribed to SharedWebSocket');

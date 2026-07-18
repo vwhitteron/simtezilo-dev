@@ -22,7 +22,6 @@
     }
 
     function updateVehicleInfo(data) {
-        // Update stored values
         if (data.manufacturer !== undefined) {
             currentManufacturer = data.manufacturer;
         }
@@ -72,14 +71,11 @@
     // Initialize when SharedWebSocket is available
     function initVehicleInfo() {
         if (window.SharedWebSocket) {
-            // Subscribe to vehicle and gameState messages
             window.SharedWebSocket.subscribe('vehicle', updateVehicleInfo);
             window.SharedWebSocket.subscribe('gameState', handleGameState);
 
-            // Listen for connection status changes
             window.SharedWebSocket.addConnectionListener(updateConnectionStatus);
 
-            // Dispatch initial connection status
             window.dispatchEvent(new CustomEvent('vehicleConnectionChange', {
                 detail: { connected: window.SharedWebSocket.isConnected }
             }));

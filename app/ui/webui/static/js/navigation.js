@@ -78,7 +78,6 @@ function createNavigation(currentPage) {
                         </li>`;
     }
 
-    // Add Info nav item with popover
     navHTML += `
                         <li class="nav-item">
                             <a class="nav-link" href="#" id="info-nav-link" role="button" aria-haspopup="dialog" aria-expanded="false" data-i18n="runmode.nav.info">Info</a>
@@ -100,7 +99,6 @@ function createNavigation(currentPage) {
                             <span data-i18n="runmode.status.serverunavailable">No connection</span>
                         </div>`;
 
-    // Add restart required indicator
     navHTML += `
                         <button type="button" id="restart-required-indicator" class="btn btn-outline-danger btn-sm" style="font-weight: 600; white-space: nowrap; display: none; margin-right: 1rem;">
                             <span data-i18n="runmode.settings.restart.required">Restart Required</span>
@@ -134,12 +132,10 @@ window.showNavbarStatus = function (type) {
 
     if (!indicator) return;
 
-    // Hide all indicators first
     spinner.style.display = 'none';
     successIcon.style.display = 'none';
     errorIcon.style.display = 'none';
 
-    // Show the container (make visible)
     indicator.style.visibility = 'visible';
 
     // Show appropriate indicator
@@ -149,12 +145,10 @@ window.showNavbarStatus = function (type) {
             break;
         case 'success':
             successIcon.style.display = 'block';
-            // Auto-hide after 3 seconds
             setTimeout(() => window.hideNavbarStatus(), 3000);
             break;
         case 'error':
             errorIcon.style.display = 'block';
-            // Auto-hide after 3 seconds
             setTimeout(() => window.hideNavbarStatus(), 3000);
             break;
     }

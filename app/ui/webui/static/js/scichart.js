@@ -16,18 +16,14 @@ function updateWindowSizeDisplay(windowSize) {
 
         let displayText;
         if (windowSizeInSeconds < 1) {
-            // Less than 1 second - show milliseconds
             displayText = `${(windowSizeInSeconds * 1000).toFixed(0)}ms`;
         } else if (windowSizeInSeconds < 60) {
-            // Less than 60 seconds - show seconds
             displayText = `${windowSizeInSeconds.toFixed(1)}s`;
         } else if (windowSizeInSeconds < 3600) {
-            // Less than 60 minutes - show minutes and seconds
             const minutes = Math.floor(windowSizeInSeconds / 60);
             const seconds = Math.floor(windowSizeInSeconds % 60);
             displayText = `${minutes}m ${seconds}s`;
         } else {
-            // 60 minutes or more - show hours and minutes
             const hours = Math.floor(windowSizeInSeconds / 3600);
             const minutes = Math.floor((windowSizeInSeconds % 3600) / 60);
             displayText = `${hours}h ${minutes}m`;
@@ -209,7 +205,6 @@ const CHART_CONFIGURATIONS = {
 
 // Function to get chart configuration from script tag data attribute
 function getChartRegistry() {
-    // Find the current script tag
     const currentScript = document.currentScript ||
         document.querySelector('script[src*="scichart.js"]') ||
         document.querySelector('script[data-chart-config]');
@@ -226,7 +221,6 @@ function getChartRegistry() {
     return CHART_CONFIGURATIONS.default;
 }
 
-// Get the appropriate chart registry based on script tag parameter
 const CHART_REGISTRY = getChartRegistry();
 
 // Global variables for WebSocket management
@@ -247,7 +241,6 @@ function getClientSessionId() {
 
 // WebSocket connection management
 function createWebSocketConnection() {
-    // Close existing connection if any
     if (globalWebSocket) {
         globalWebSocket.onclose = null; // Prevent reconnection logic
         globalWebSocket.onerror = null;
@@ -291,7 +284,6 @@ function createWebSocketConnection() {
         }));
         console.log('Sent telemetry subscription request');
 
-        // Attach message handler if available
         if (globalHandleWebSocketMessage) {
             ws.addEventListener('message', globalHandleWebSocketMessage);
         }
@@ -1339,7 +1331,6 @@ async function initSciChart() {
 
                 charts[chartConfig.id] = chartInstance;
 
-                // Merge data series from this chart into the global collection
                 Object.assign(allDataSeries, chartInstance.dataSeries);
 
                 console.log(`Successfully created chart: ${chartConfig.id}`);
@@ -1351,7 +1342,6 @@ async function initSciChart() {
         return { charts, allDataSeries };
     };
 
-    // Create all charts and get references
     const { charts, allDataSeries } = await createCharts();
 
     // Initialize follow mode for all charts and attach pan detection
@@ -1367,7 +1357,6 @@ async function initSciChart() {
 
         // Listen for single click to disable follow mode
         getEventElement(chart.surface).addEventListener('click', (event) => {
-            // Disable follow mode for all charts on single click
             Object.keys(charts).forEach(otherChartId => {
                 chartFollowModes[otherChartId] = false;
             });
@@ -1469,7 +1458,6 @@ async function initSciChart() {
 
             const currentTime = data.seq;
 
-            // Create mapping between incoming data and data series
             const dataFieldMappings = {};
 
             // Build the mapping dynamically based on enabled charts
@@ -1523,7 +1511,6 @@ async function initSciChart() {
                 });
             });
 
-            // Append data to all active series
             Object.entries(dataFieldMappings).forEach(([seriesKey, value]) => {
                 if (allDataSeries[seriesKey] && value !== undefined) {
                     allDataSeries[seriesKey].appendRange([currentTime], [value]);
@@ -1581,7 +1568,6 @@ async function initSciChart() {
     globalAllDataSeries = allDataSeries;
     globalHandleWebSocketMessage = handleWebSocketMessage;
 
-    // Initialize WebSocket connection
     globalWebSocket = createWebSocketConnection();
     globalWebSocket.addEventListener('message', handleWebSocketMessage);
 
@@ -1605,7 +1591,6 @@ async function initSciChart() {
                 globalWebSocket.onclose = null; // Prevent reconnection attempts
                 globalWebSocket.onerror = null;
                 globalWebSocket.onmessage = null;
-                // Send close frame synchronously
                 globalWebSocket.close(1000, 'Page unload');
                 globalWebSocket = null;
             } catch (e) {
@@ -1624,18 +1609,15 @@ async function initSciChart() {
             }
         });
 
-        // Clear global references
         globalCharts = {};
         globalAllDataSeries = {};
         globalHandleWebSocketMessage = null;
     };
 
-    // Track if page is being unloaded
     let isPageUnloading = false;
 
     // Use visibility change to detect tab closing/navigation - more reliable than beforeunload
     document.addEventListener('visibilitychange', () => {
-        // Only cleanup if page is becoming hidden AND we have an active WebSocket
         if (document.visibilityState === 'hidden' && globalWebSocket) {
             isPageUnloading = true;
             cleanup();
@@ -1662,7 +1644,6 @@ async function initSciChart() {
 let isInitialized = false;
 
 async function initializeWithi18n() {
-    // Prevent multiple initializations
     if (isInitialized) {
         console.log('SciChart already initialized, skipping...');
         return;

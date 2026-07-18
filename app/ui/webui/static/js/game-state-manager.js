@@ -53,6 +53,5 @@
         updateGameState(event.detail.state);
     });
 
-    // Initial state
     updateGameState('unknown');
 })();

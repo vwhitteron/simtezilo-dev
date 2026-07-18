@@ -13,7 +13,6 @@
         const totalCount = data.totalCount || 0;
         const totalPagesFromStats = data.totalPages || 1;
 
-        // Update global variables if they exist in window scope
         if (typeof window.totalLogs !== 'undefined') {
             window.totalLogs = totalCount;
         }
@@ -21,13 +20,11 @@
             window.totalPages = totalPagesFromStats;
         }
 
-        // Update total entries
         const totalElement = document.getElementById('total-entries');
         if (totalElement) {
             totalElement.textContent = totalCount;
         }
 
-        // Update individual level counts
         const errorElement = document.getElementById('error-count');
         if (errorElement) {
             errorElement.textContent = stats.error || 0;
@@ -53,13 +50,11 @@
             traceElement.textContent = stats.trace || 0;
         }
 
-        // Update pagination info
         updatePaginationDisplay(totalCount, totalPagesFromStats);
     }
 
     // Update pagination display elements
     function updatePaginationDisplay(totalCount, totalPagesValue) {
-        // Helper function to get translation or fallback
         const t = window.t || function (key) { return null; };
 
         // Update "Showing x-y of z" text
@@ -90,7 +85,6 @@
             }
         }
 
-        // Update pagination button states
         const prevBtn = document.getElementById('prev-page');
         const nextBtn = document.getElementById('next-page');
         const currentPage = window.currentPage || 1;

@@ -98,7 +98,6 @@
             );
         }
 
-        // If no mapping found, return empty string (no flag)
         return '';
     }
 
@@ -110,10 +109,8 @@
     }
 
     function updateCircuitInfo(data) {
-        // Mark that we've received data from the WebSocket
         hasReceivedData = true;
 
-        // Update stored values
         if (data.name !== undefined) {
             currentName = data.name;
         }
@@ -167,13 +164,10 @@
     // Initialize when SharedWebSocket is available
     function initCircuitInfo() {
         if (window.SharedWebSocket) {
-            // Subscribe to circuit messages
             window.SharedWebSocket.subscribe('circuit', updateCircuitInfo);
 
-            // Listen for connection status changes
             window.SharedWebSocket.addConnectionListener(updateConnectionStatus);
 
-            // Dispatch initial connection status
             window.dispatchEvent(new CustomEvent('circuitConnectionChange', {
                 detail: { connected: window.SharedWebSocket.isConnected }
             }));

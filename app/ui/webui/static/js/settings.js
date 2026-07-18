@@ -122,7 +122,6 @@ class ConfigManager {
 
     // Show status in navbar for a specific input
     showInputStatus(input, type) {
-        // Show in navbar if available
         if (typeof window.showNavbarStatus === 'function') {
             window.showNavbarStatus(type);
         }
@@ -168,10 +167,8 @@ class ConfigManager {
 
             const languageSelect = document.getElementById('app-language');
             if (languageSelect) {
-                // Clear existing options
                 languageSelect.innerHTML = '';
 
-                // Sort languages alphabetically by name
                 languages.sort((a, b) => a.name.localeCompare(b.name));
 
                 // Populate language select with fetched languages and store metadata
@@ -181,7 +178,6 @@ class ConfigManager {
                     option.textContent = lang.name;
                     languageSelect.appendChild(option);
 
-                    // Store language metadata including default country
                     this.languageMetadata[lang.code] = {
                         name: lang.name,
                         defaultCountry: lang.defaultCountry
@@ -195,17 +191,14 @@ class ConfigManager {
     }
 
     setupEventListeners() {
-        // Export button
         document.getElementById('export-config').addEventListener('click', () => {
             this.exportConfiguration();
         });
 
-        // Import button
         document.getElementById('import-config').addEventListener('click', () => {
             document.getElementById('import-file-input').click();
         });
 
-        // File input change handler
         document.getElementById('import-file-input').addEventListener('change', (event) => {
             const file = event.target.files[0];
             if (file) {
@@ -215,22 +208,18 @@ class ConfigManager {
             event.target.value = '';
         });
 
-        // Reset button
         document.getElementById('reset-config').addEventListener('click', () => {
             this.resetConfiguration();
         });
 
-        // Restart app button
         document.getElementById('restart-app').addEventListener('click', () => {
             this.restartApp();
         });
 
-        // Setup mode button
         document.getElementById('setup-mode').addEventListener('click', () => {
             this.enterSetupMode();
         });
 
-        // Factory reset button
         document.getElementById('factory-reset').addEventListener('click', () => {
             this.factoryReset();
         });
@@ -261,7 +250,6 @@ class ConfigManager {
             });
         }
 
-        // SSH enable/disable toggle
         const sshEnabledToggle = document.getElementById('ssh-enabled');
         if (sshEnabledToggle) {
             sshEnabledToggle.addEventListener('change', () => {
@@ -269,7 +257,6 @@ class ConfigManager {
             });
         }
 
-        // SSH provision button
         const provisionSSHBtn = document.getElementById('provision-ssh-btn');
         if (provisionSSHBtn) {
             provisionSSHBtn.addEventListener('click', () => {
@@ -277,7 +264,6 @@ class ConfigManager {
             });
         }
 
-        // Calibration frequency buttons
         const calibrationFrequencyUp = document.getElementById('calibration-frequency-up');
         const calibrationFrequencyDown = document.getElementById('calibration-frequency-down');
         const calibrationFrequencyInput = document.getElementById('calibration-frequency');
@@ -300,7 +286,6 @@ class ConfigManager {
             });
         }
 
-        // Calibration volume buttons
         const calibrationVolumeUp = document.getElementById('calibration-volume-up');
         const calibrationVolumeDown = document.getElementById('calibration-volume-down');
         const calibrationVolumeInput = document.getElementById('calibration-volume');
@@ -323,7 +308,6 @@ class ConfigManager {
             });
         }
 
-        // Calibration sweep button
         const calibrationSweepBtn = document.getElementById('calibration-sweep-btn');
 
         if (calibrationSweepBtn && calibrationFrequencyInput) {
@@ -385,7 +369,6 @@ class ConfigManager {
                             calibrationSweepBtn.classList.add('btn-outline-primary');
                             calibrationSweepBtn.title = 'Frequency Sweep';
 
-                            // Stop polling frequency
                             if (sweepInterval) {
                                 clearInterval(sweepInterval);
                                 sweepInterval = null;
@@ -395,7 +378,6 @@ class ConfigManager {
                         console.error('Failed to stop sweep:', error);
                     }
                 } else {
-                    // Check if calibration mode is enabled
                     const calibrationEnabled = document.getElementById('calibration-enabled');
                     if (!calibrationEnabled || !calibrationEnabled.checked) {
                         console.log('Calibration mode must be enabled to start sweep');
@@ -418,7 +400,6 @@ class ConfigManager {
                             calibrationSweepBtn.classList.add('btn-primary');
                             calibrationSweepBtn.title = 'Stop Sweep';
 
-                            // Start polling for current frequency
                             this.startSweepPolling();
                         }
                     } catch (error) {
@@ -437,7 +418,6 @@ class ConfigManager {
                         calibrationSweepBtn.classList.add('btn-outline-primary');
                         calibrationSweepBtn.title = 'Frequency Sweep';
 
-                        // Stop polling frequency
                         if (sweepInterval) {
                             clearInterval(sweepInterval);
                             sweepInterval = null;
@@ -446,11 +426,9 @@ class ConfigManager {
                 });
             }
 
-            // Initialize on page load
             setTimeout(initSweepState, 500);
         }
 
-        // Sweep range preset buttons
         const sweepPresetHaptic = document.getElementById('sweep-preset-haptic');
         const sweepPresetFull = document.getElementById('sweep-preset-full');
         const sweepMinInput = document.getElementById('calibration-sweep-min');
@@ -458,18 +436,15 @@ class ConfigManager {
 
         if (sweepPresetHaptic && sweepMinInput && sweepMaxInput) {
             sweepPresetHaptic.addEventListener('click', () => {
-                // Get haptic pulse min/max frequency from config
                 const pulseMinFreq = this.config?.haptics?.pulseMinFrequencyHz || 20;
                 const pulseMaxFreq = this.config?.haptics?.pulseMaxFrequencyHz || 80;
 
                 sweepMinInput.value = pulseMinFreq;
                 sweepMaxInput.value = pulseMaxFreq;
 
-                // Trigger save for both inputs
                 sweepMinInput.dispatchEvent(new Event('change', { bubbles: true }));
                 sweepMaxInput.dispatchEvent(new Event('change', { bubbles: true }));
 
-                // Update highlighting
                 this.updateSweepPresetHighlights();
             });
         }
@@ -479,16 +454,13 @@ class ConfigManager {
                 sweepMinInput.value = 5;
                 sweepMaxInput.value = 160;
 
-                // Trigger save for both inputs
                 sweepMinInput.dispatchEvent(new Event('change', { bubbles: true }));
                 sweepMaxInput.dispatchEvent(new Event('change', { bubbles: true }));
 
-                // Update highlighting
                 this.updateSweepPresetHighlights();
             });
         }
 
-        // Update highlighting when min/max values change
         if (sweepMinInput) {
             sweepMinInput.addEventListener('input', () => this.updateSweepPresetHighlights());
         }
@@ -496,16 +468,13 @@ class ConfigManager {
             sweepMaxInput.addEventListener('input', () => this.updateSweepPresetHighlights());
         }
 
-        // Mute toggle button click handlers
         const muteToggleButtons = document.querySelectorAll('button[data-mute-checkbox]');
         muteToggleButtons.forEach(button => {
             button.addEventListener('click', () => {
                 const checkboxId = button.dataset.muteCheckbox;
                 const checkbox = document.getElementById(checkboxId);
                 if (checkbox) {
-                    // Toggle the checkbox
                     checkbox.checked = !checkbox.checked;
-                    // Update icon and button styling
                     this.updateMuteIconForCheckbox(checkbox);
                     // Trigger the change event to save the setting
                     checkbox.dispatchEvent(new Event('change', { bubbles: true }));
@@ -530,9 +499,7 @@ class ConfigManager {
                     localAudioSection.style.display = pitRadioOutput.value === 'audio' ? 'block' : 'none';
                 }
             };
-            // Update on change
             pitRadioOutput.addEventListener('change', updateOutputVisibility);
-            // Update on initial load
             updateOutputVisibility();
         }
 
@@ -557,7 +524,6 @@ class ConfigManager {
                         this.handleLanguageChange(input.value);
                     } else {
                         this.saveInputConfiguration(input);
-                        // Update transmission disabled state when transmission mode changes
                         if (input.name === 'transmission-mode') {
                             this.updateTransmissionDisabledState();
                         }
@@ -571,11 +537,9 @@ class ConfigManager {
                     } else {
                         this.saveInputConfiguration(input);
                     }
-                    // Format gain inputs after editing
                     if (input.classList.contains('gain-input')) {
                         input.value = this.formatGainValue(input.value);
                     }
-                    // Format decimal inputs after editing
                     if (input.classList.contains('decimal-input')) {
                         input.value = this.formatDecimalValue(input.value);
                     }
@@ -597,11 +561,9 @@ class ConfigManager {
                     configPath.startsWith('calibration.')) {
                     input.addEventListener('change', () => {
                         this.saveInputConfiguration(input);
-                        // Format gain inputs after change
                         if (input.classList.contains('gain-input')) {
                             input.value = this.formatGainValue(input.value);
                         }
-                        // Format decimal inputs after change
                         if (input.classList.contains('decimal-input')) {
                             input.value = this.formatDecimalValue(input.value);
                         }
@@ -616,10 +578,8 @@ class ConfigManager {
         const inputId = input.id || input.dataset.config;
         const configPath = input.dataset.config;
 
-        // Clear existing timeout for this input
         clearTimeout(this.inputSaveTimeouts.get(inputId));
 
-        // Set new timeout
         this.inputSaveTimeouts.set(inputId, setTimeout(async () => {
             await this.saveInputConfiguration(input);
         }, 1000));
@@ -662,7 +622,6 @@ class ConfigManager {
             newValue = input.value;
         }
 
-        // Store the attempted value
         const attemptedValue = newValue;
         const previousValue = this.previousValues.get(configPath);
 
@@ -691,7 +650,6 @@ class ConfigManager {
                 clearTimeout(timeoutId);
 
                 if (!updateResponse.ok) {
-                    // Try to parse error details
                     try {
                         const errorData = await updateResponse.json();
                         throw new Error(`HTTP error! status: ${updateResponse.status}, details: ${JSON.stringify(errorData)}`);
@@ -700,7 +658,6 @@ class ConfigManager {
                     }
                 }
 
-                // Update successful
                 this.showInputStatus(input, 'success');
             } catch (fetchError) {
                 if (fetchError.name === 'AbortError') {
@@ -711,7 +668,6 @@ class ConfigManager {
             }
             this.previousValues.set(configPath, attemptedValue);
 
-            // Update local config
             this.setNestedValue(this.config, configPath, newValue);
 
             // If gain increment was changed, update step attribute on all gain inputs
@@ -745,13 +701,11 @@ class ConfigManager {
         const accentInput = document.getElementById('app-accent');
 
         try {
-            // Show saving indicator
             this.showInputStatus(languageInput, 'saving');
 
             // Get the default country for the selected language
             const defaultCountry = this.languageMetadata[newLanguage]?.defaultCountry || '';
 
-            // Build the config update with language and accent changes
             const formData = {};
             this.setNestedValue(formData, 'app.language', newLanguage);
             this.setNestedValue(formData, 'app.accent', defaultCountry);
@@ -797,7 +751,6 @@ class ConfigManager {
             this.previousValues.set('app.language', newLanguage);
             this.previousValues.set('app.accent', defaultCountry);
 
-            // Reload after small delay
             setTimeout(() => {
                 window.location.reload(true);
             }, 250);
@@ -900,27 +853,21 @@ class ConfigManager {
                         input.dispatchEvent(new Event('input', { bubbles: true }));
                     }
                 }
-                // Update previous values
                 this.previousValues.set(configPath, value);
             }
         });
 
-        // After populating all inputs, update all mute icons based on checkbox states
         this.updateAllMuteIcons();
 
-        // Update transmission disabled state based on radio selection
         this.updateTransmissionDisabledState();
 
-        // Update sweep preset button highlighting based on current values
         this.updateSweepPresetHighlights();
 
-        // Update visibility of dev-only elements
         this.updateDevToolsVisibility();
 
         // Update visibility of experimental-only elements (e.g. the Fan section)
         this.updateExperimentalVisibility();
 
-        // Update step attribute on all gain inputs based on gainIncrement config
         this.updateGainInputSteps();
 
         // Notify UpdateManager to sync its state with the channel dropdown
@@ -984,7 +931,6 @@ class ConfigManager {
                     // If dev channel is currently selected, switch to stable first
                     if (updateChannelSelect.value === 'dev') {
                         updateChannelSelect.value = 'stable';
-                        // Save the new value
                         this.saveInputConfiguration(updateChannelSelect);
                     }
                     devChannelOption.remove();
@@ -1112,7 +1058,6 @@ class ConfigManager {
 
     // Helper to update mute icon and button styling based on checkbox state
     async updateMuteIconForCheckbox(checkbox) {
-        // Find the button associated with this checkbox
         const button = document.querySelector(`button[data-mute-checkbox="${checkbox.id}"]`);
         if (button) {
             button.setAttribute('aria-pressed', checkbox.checked ? 'true' : 'false');
@@ -1164,7 +1109,6 @@ class ConfigManager {
             let value;
 
             if (input.type === 'radio') {
-                // Only process checked radio button
                 if (!input.checked) {
                     return;
                 }
@@ -1231,17 +1175,14 @@ class ConfigManager {
                 const saveResult = await saveResponse.json();
             }
 
-            // Show success indicator
             if (typeof window.showNavbarStatus === 'function') {
                 window.showNavbarStatus('success');
             }
 
-            // Update local config with server response
             this.config = { ...this.config, ...formData };
 
         } catch (error) {
             console.error('Failed to save configuration:', error);
-            // Show error indicator
             if (typeof window.showNavbarStatus === 'function') {
                 window.showNavbarStatus('error');
             }
@@ -1272,7 +1213,6 @@ class ConfigManager {
             this.config = await response.json();
             this.populateForm();
 
-            // Show success indicator for reset operation
             if (typeof window.showNavbarStatus === 'function') {
                 window.showNavbarStatus('success');
             }
@@ -1280,7 +1220,6 @@ class ConfigManager {
             resetBtn.disabled = false;
         } catch (error) {
             console.error('Failed to reset configuration:', error);
-            // Show error indicator for reset operation
             if (typeof window.showNavbarStatus === 'function') {
                 window.showNavbarStatus('error');
             }
@@ -1295,7 +1234,6 @@ class ConfigManager {
             link.href = '/api/config/export';
             link.download = ''; // Let server decide filename
 
-            // Trigger download
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
@@ -1309,16 +1247,13 @@ class ConfigManager {
         const importBtn = document.getElementById('import-config');
 
         try {
-            // Validate file extension
             if (!file.name.endsWith('.conf') && !file.name.endsWith('.json')) {
                 throw new Error('Invalid file type. Please select a .conf or .json file.');
             }
 
-            // Create FormData to send file
             const formData = new FormData();
             formData.append('config', file);
 
-            // Show loading state
             importBtn.disabled = true;
             if (typeof window.showNavbarStatus === 'function') {
                 window.showNavbarStatus('saving');
@@ -1344,33 +1279,26 @@ class ConfigManager {
                 throw new Error(result.error || 'Failed to import configuration');
             }
 
-            // Show success indicator
             if (typeof window.showNavbarStatus === 'function') {
                 window.showNavbarStatus('success');
             }
 
-            // Show restart required indicator
             this.showRestartRequired();
 
-            // Show success message
             alert(result.message + (result.backup ? '\n\nBackup created at: ' + result.backup : ''));
 
-            // Reload the configuration
             await this.loadConfiguration();
 
-            // Re-enable button
             importBtn.disabled = false;
         } catch (error) {
             console.error('Failed to import configuration:', error);
 
-            // Show error indicator
             if (typeof window.showNavbarStatus === 'function') {
                 window.showNavbarStatus('error');
             }
 
             alert(t('runmode.settings.error.importfailed') + error.message);
 
-            // Re-enable button
             importBtn.disabled = false;
         }
     }
@@ -1407,7 +1335,6 @@ class ConfigManager {
             if (response.ok) {
                 const result = await response.json();
                 if (result.setupModeAvailable) {
-                    // Show setup mode and factory reset buttons
                     const setupBtn = document.getElementById('setup-mode');
                     const resetBtn = document.getElementById('factory-reset');
                     if (setupBtn) {
@@ -1417,7 +1344,6 @@ class ConfigManager {
                         resetBtn.style.display = 'inline-block';
                     }
 
-                    // Set SSH toggle state from the API response
                     const sshToggle = document.getElementById('ssh-enabled');
                     if (sshToggle && typeof result.sshEnabled === 'boolean') {
                         sshToggle.checked = result.sshEnabled;
@@ -1456,7 +1382,6 @@ class ConfigManager {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
 
-            // Show success indicator
             if (typeof window.showNavbarStatus === 'function') {
                 window.showNavbarStatus('success');
             }
@@ -1489,7 +1414,6 @@ class ConfigManager {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
 
-            // Show success indicator
             if (typeof window.showNavbarStatus === 'function') {
                 window.showNavbarStatus('success');
             }
@@ -1500,7 +1424,6 @@ class ConfigManager {
                 window.showNavbarStatus('error');
             }
             alert(`Failed to ${action} SSH: ${error.message}`);
-            // Revert toggle state on error
             toggle.checked = !enabled;
         } finally {
             toggle.disabled = false;
@@ -1536,14 +1459,12 @@ class ConfigManager {
                 throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
             }
 
-            // Show success indicator
             if (typeof window.showNavbarStatus === 'function') {
                 window.showNavbarStatus('success');
             }
 
             alert(t('runmode.settings.success.sshprovisioned') || 'SSH key provisioned successfully');
 
-            // Clear the input field
             publicKeyInput.value = '';
 
         } catch (error) {
@@ -1590,13 +1511,11 @@ class ConfigManager {
                 return;
             }
 
-            // Close modal
             modal.style.display = 'none';
             input.removeEventListener('input', checkInput);
             cancelBtn.removeEventListener('click', handleCancel);
             confirmBtn.removeEventListener('click', handleConfirm);
 
-            // Disable the factory reset button
             const factoryResetBtn = document.getElementById('factory-reset');
             factoryResetBtn.disabled = true;
 
@@ -1613,7 +1532,6 @@ class ConfigManager {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
 
-                // Show success indicator
                 if (typeof window.showNavbarStatus === 'function') {
                     window.showNavbarStatus('success');
                 }
@@ -1873,12 +1791,10 @@ class ConfigManager {
         };
 
         try {
-            // Show saving indicator
             if (typeof window.showNavbarStatus === 'function') {
                 window.showNavbarStatus('saving');
             }
 
-            // Update local config
             if (!this.config.synthesizer.engineProfiles) {
                 this.config.synthesizer.engineProfiles = {};
             }
@@ -1905,13 +1821,11 @@ class ConfigManager {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
 
-            // Show success indicator
             if (typeof window.showNavbarStatus === 'function') {
                 window.showNavbarStatus('success');
             }
         } catch (error) {
             console.error('Failed to save engine profile:', error);
-            // Show error indicator
             if (typeof window.showNavbarStatus === 'function') {
                 window.showNavbarStatus('error');
             }
@@ -1965,7 +1879,6 @@ class ConfigManager {
         frequencySlider.min = this.getEqMinFreq();
         frequencySlider.max = this.getEqMaxFreq();
 
-        // Initialize current channel
         this.currentChannel = 0;
 
         // Number of output channels (variable, driven by haptics.output.channels)
@@ -2017,7 +1930,6 @@ class ConfigManager {
         }
         eqBandsAll.length = numChannels;
 
-        // Store all channel bands
         this.eqBandsAll = eqBandsAll;
         // Set current working bands (for current channel)
         this.eqBands = this.eqBandsAll[this.currentChannel];
@@ -2064,13 +1976,10 @@ class ConfigManager {
             });
         }
 
-        // Populate band select dropdown
         this.updateBandSelect();
 
-        // Load initial band values
         this.loadBandValues(0);
 
-        // Display DRX headroom for current channel
         this.updateDrxHeadroomDisplay();
 
         // Band select change event
@@ -2109,7 +2018,6 @@ class ConfigManager {
             this.debounceEqSave();
         });
 
-        // Draw initial curve
         this.drawEqCurve();
 
         // Add mouse handlers to canvas for selecting and dragging bands
@@ -2147,7 +2055,6 @@ class ConfigManager {
                     { frequency: 48, gain: 0.0, q: 2.0 },
                     { frequency: 58, gain: 0.0, q: 2.0 }
                 ];
-                // Reset current channel's bands
                 this.eqBandsAll[this.currentChannel] = JSON.parse(JSON.stringify(defaultBands));
                 this.eqBands = this.eqBandsAll[this.currentChannel];
                 this.updateBandSelect();
@@ -2280,13 +2187,11 @@ class ConfigManager {
                 this.draggedBandIndex = index;
                 this.currentBandIndex = index;
 
-                // Update dropdown
                 const bandSelect = document.getElementById('eq-band-select');
                 if (bandSelect) {
                     bandSelect.value = index;
                 }
 
-                // Update sliders
                 this.loadBandValues(index);
                 this.updateFrequencyConstraints();
 
@@ -2346,7 +2251,6 @@ class ConfigManager {
         gain = Math.max(-12, Math.min(6, gain));
         gain = Math.round(gain * 2) / 2; // Round to nearest 0.5
 
-        // Update band values
         this.eqBands[index].frequency = frequency;
         this.eqBands[index].gain = gain;
 
@@ -2366,11 +2270,9 @@ class ConfigManager {
             gainValue.textContent = `${gain > 0 ? '+' : ''}${gain.toFixed(1)} dB`;
         }
 
-        // Update dropdown and constraints
         this.updateBandSelect();
         this.updateFrequencyConstraints();
 
-        // Redraw curve
         this.drawEqCurve();
     }
 
@@ -2385,7 +2287,6 @@ class ConfigManager {
                 canvas.style.cursor = 'pointer';
             }
 
-            // Save changes
             this.debounceEqSave();
         }
     }
@@ -2409,7 +2310,6 @@ class ConfigManager {
         const minFreq = this.config.eqCurve.minFreq || 10;
         const resolution = this.config.eqCurve.resolution || 0.5;
 
-        // Clear canvas
         ctx.clearRect(0, 0, width, height);
 
         // Draw background grid
@@ -2425,7 +2325,6 @@ class ConfigManager {
             ctx.lineTo(width, y);
             ctx.stroke();
 
-            // Label
             ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
             ctx.font = '10px sans-serif';
             ctx.fillText(`${db > 0 ? '+' : ''}${db}dB`, 5, y - 3);
@@ -2476,7 +2375,6 @@ class ConfigManager {
                 const x = ((freq - eqMinFreq) / eqFreqRange) * width;
                 const y = height / 2 - (gain / 18) * height / 2;
 
-                // Draw dot
                 ctx.beginPath();
                 ctx.arc(x, y, 5, 0, 2 * Math.PI);
 
@@ -2493,7 +2391,6 @@ class ConfigManager {
         // Draw frequency markers dynamically based on range
         ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
         ctx.font = '10px sans-serif';
-        // Generate markers at reasonable intervals
         const markerStep = eqFreqRange <= 60 ? 10 : (eqFreqRange <= 120 ? 20 : 40);
         const startMarker = Math.ceil(eqMinFreq / markerStep) * markerStep;
         for (let freq = startMarker; freq <= eqMaxFreq; freq += markerStep) {
@@ -2559,7 +2456,6 @@ class ConfigManager {
         }
 
         try {
-            // Show saving indicator
             if (typeof window.showNavbarStatus === 'function') {
                 window.showNavbarStatus('saving');
             }
@@ -2589,7 +2485,6 @@ class ConfigManager {
                 enableDrx = drxEnabledCheckbox.checked;
             }
 
-            // Update local config
             this.config.synthesizer.eq = normalizedBandsAll;
             this.config.synthesizer.enableEQ = enableEQArray;
             this.config.synthesizer.enableDrx = enableDrx;
@@ -2629,13 +2524,11 @@ class ConfigManager {
                 this.updateDrxHeadroomDisplay();
             }
 
-            // Show success indicator
             if (typeof window.showNavbarStatus === 'function') {
                 window.showNavbarStatus('success');
             }
         } catch (error) {
             console.error('Failed to save equalizer:', error);
-            // Show error indicator
             if (typeof window.showNavbarStatus === 'function') {
                 window.showNavbarStatus('error');
             }

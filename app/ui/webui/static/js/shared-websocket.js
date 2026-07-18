@@ -65,7 +65,6 @@
                         }
                     });
 
-                    // Send subscription request
                     this.socket.send(JSON.stringify({
                         type: 'subscribe',
                         subscriptions: subscriptions
@@ -73,7 +72,6 @@
 
                     console.log('Sent subscription request:', subscriptions);
 
-                    // Notify connection listeners
                     this.notifyConnectionListeners(true);
                 };
 
@@ -131,7 +129,6 @@
             }
             this.subscribers.get(messageType).push(handler);
 
-            // If already connected, update subscriptions
             if (this.isConnected && this.socket) {
                 const subscriptions = {};
                 subscriptions[messageType] = true;
@@ -153,7 +150,6 @@
                     handlers.splice(index, 1);
                 }
 
-                // If no more handlers for this type and connected, unsubscribe
                 if (handlers.length === 0 && this.isConnected && this.socket) {
                     const subscriptions = {};
                     subscriptions[messageType] = false;
@@ -201,7 +197,6 @@
         }
     };
 
-    // Expose to global scope
     window.SharedWebSocket = SharedWebSocket;
 
     // Auto-initialize when DOM is ready

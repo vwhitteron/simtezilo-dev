@@ -17,11 +17,9 @@ async function loadI18n(lang = null) {
         i18nLoaded = true;
         applyTranslations();
 
-        // Dispatch custom event to notify that translations are loaded
         if (!wasLoaded) {
             window.dispatchEvent(new CustomEvent('i18nLoaded'));
         } else {
-            // Language changed, dispatch language changed event
             window.dispatchEvent(new CustomEvent('i18nLanguageChanged'));
         }
         return true;
@@ -43,7 +41,6 @@ function t(key) {
 function applyTranslations() {
     if (!i18n) return;
 
-    // Find all elements with data-i18n attribute
     document.querySelectorAll('[data-i18n]').forEach(element => {
         const key = element.getAttribute('data-i18n');
         const translation = t(key);
@@ -59,7 +56,6 @@ function applyTranslations() {
         }
     });
 
-    // Find all elements with data-i18n-html attribute (for HTML content)
     document.querySelectorAll('[data-i18n-html]').forEach(element => {
         const key = element.getAttribute('data-i18n-html');
         const translation = t(key);
@@ -69,7 +65,6 @@ function applyTranslations() {
         }
     });
 
-    // Find all elements with data-i18n-placeholder attribute
     document.querySelectorAll('[data-i18n-placeholder]').forEach(element => {
         const key = element.getAttribute('data-i18n-placeholder');
         const translation = t(key);
@@ -79,7 +74,6 @@ function applyTranslations() {
         }
     });
 
-    // Find all elements with data-i18n-tooltip attribute
     document.querySelectorAll('[data-i18n-tooltip]').forEach(element => {
         const key = element.getAttribute('data-i18n-tooltip');
         const translation = t(key);
@@ -89,7 +83,6 @@ function applyTranslations() {
         }
     });
 
-    // Find all elements with data-i18n-aria-label attribute
     document.querySelectorAll('[data-i18n-aria-label]').forEach(element => {
         const key = element.getAttribute('data-i18n-aria-label');
         const translation = t(key);

@@ -37,12 +37,10 @@
     border-color: var(--bs-sable-300);
 }
 
-/* Muted — red icon */
 .input-group .mute-toggle-btn.btn-outline-danger {
     color: var(--bs-danger);
 }
 
-/* Unmuted — green icon */
 .input-group .mute-toggle-btn.btn-outline-success {
     color: var(--bs-success);
 }
