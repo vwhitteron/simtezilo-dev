@@ -109,6 +109,15 @@ type State struct {
 	// resolveDerivatives.
 	contiguousFrames int
 
+	// Per-domain detectors for the fs/2 telemetry cadence artefact. The GT motion
+	// fields refresh on alternate frames (a big step then a near-repeat), which the
+	// undamped accel->jerk->snap differences amplify into a 30 Hz buzz. Each gate
+	// smooths its velocity only while that sustained every-frame alternation is
+	// present, so one-shot impacts and sub-Nyquist motion pass through unfiltered.
+	// See nyquistGate.
+	transNyquist nyquistGate
+	rotNyquist   nyquistGate
+
 	// Diagnostic counters for the resolveDerivatives gap gate. GapResets counts how
 	// many Update calls saw a non-contiguous sequence (delta != 1) and re-warmed;
 	// LastGapDelta records the sequence delta of the most recent such reset. These
@@ -160,7 +169,9 @@ func (k *State) Update(windowSeconds float64, vehicleDimensions vehicle.Dimensio
 	k.Current.SixDOFTranslation.Snap = (k.Current.SixDOFTranslation.Jerk - k.Last.SixDOFTranslation.Jerk) / windowSeconds
 
 	// 6DOF translational envelope - calculated from velocity vector
-	k.Current.SixDOFTranslationCalc.Velocity = gtclient.Telemetry.VelocityVector()
+	k.Current.SixDOFTranslationCalc.Velocity = k.transNyquist.filter(
+		gtclient.Telemetry.VelocityVector(), float64(accelFactor),
+	)
 	translationCalcVelocityDelta := vector.Delta(k.Current.SixDOFTranslationCalc.Velocity, k.Last.SixDOFTranslationCalc.Velocity)
 	k.Current.SixDOFTranslationCalc.Acceleration = vector.Scale(translationCalcVelocityDelta, accelFactor, accelFactor, accelFactor)
 	k.Current.SixDOFTranslationCalc.AccelMag = vector.Magnitude(k.Current.SixDOFTranslationCalc.Acceleration)
@@ -175,11 +186,14 @@ func (k *State) Update(windowSeconds float64, vehicleDimensions vehicle.Dimensio
 
 	// 6DOF rotational envelope - calculated angular velocity vector
 	// Convert from radians to metres at the wheels using vehicle dimensions
-	k.Current.SixDOFRotationCalc.Velocity = vector.Scale(
-		k.Current.SixDOFRotation.Velocity,
-		vehicleDimensions.LongitudinalRadius,
-		vehicleDimensions.LongitudinalRadius,
-		vehicleDimensions.TransverseRadius,
+	k.Current.SixDOFRotationCalc.Velocity = k.rotNyquist.filter(
+		vector.Scale(
+			k.Current.SixDOFRotation.Velocity,
+			vehicleDimensions.LongitudinalRadius,
+			vehicleDimensions.LongitudinalRadius,
+			vehicleDimensions.TransverseRadius,
+		),
+		float64(accelFactor),
 	)
 	rotationVelocityDelta := vector.Delta(k.Current.SixDOFRotationCalc.Velocity, k.Last.SixDOFRotationCalc.Velocity)
 	k.Current.SixDOFRotationCalc.Acceleration = vector.Scale(rotationVelocityDelta, accelFactor, accelFactor, accelFactor)
@@ -265,6 +279,104 @@ func (k *State) resolveDerivatives() {
 // used by GetSurgeGforce.
 func formatSupportsNativeEnvelope(format string) bool {
 	return format == "~" || format == "B"
+}
+
+const (
+	// nyquistGateEngageFrames is the alternation run length at which the gate treats
+	// the signal as the fs/2 cadence artefact and starts smoothing. Each frame whose
+	// accel-magnitude jerk flips sign adds one to the run; each non-alternating frame
+	// decays it by one (hysteresis). Reaching three (four alternating frames, ~67 ms
+	// at 60 Hz) clears one-shot impacts and single rebounds, which flip at most twice.
+	nyquistGateEngageFrames = 3
+
+	// nyquistGateMaxRun caps the alternation run so a sustained non-alternating event
+	// (a real impact holding one sign) decays back below the engage threshold within
+	// a few frames and releases the gate, while brief single-frame breaks in an
+	// ongoing ripple do not drop it.
+	nyquistGateMaxRun = nyquistGateEngageFrames + 3
+
+	// nyquistGateJerkDeadzone is the minimum per-frame change in acceleration
+	// magnitude (m/s^2) that counts as a jerk sign flip. Below it the frame is
+	// treated as non-alternating so numerical noise near steady motion cannot engage
+	// the gate.
+	nyquistGateJerkDeadzone = 0.25
+)
+
+// nyquistGate detects and suppresses the fs/2 telemetry cadence artefact on a
+// single velocity signal. The artefact makes the calculated acceleration
+// magnitude alternate high/low every frame, so its jerk flips sign every frame;
+// the gate counts that run and, once it is clearly sustained, replaces the
+// velocity with a two-tap average whose frequency response has a null exactly at
+// fs/2. Detection runs on the raw (unsmoothed) velocity it is handed, so the gate
+// does not chase its own output and toggle. A genuine impact or rebound is a
+// one-shot excursion rather than a sustained alternation, so it never reaches the
+// engage threshold and passes through unfiltered.
+type nyquistGate struct {
+	lastVel      models.Vector
+	lastAccelMag float64
+	lastJerkSign float64
+	altRun       int
+	haveVel      bool
+	haveAccel    bool
+}
+
+// filter returns the velocity the derivative chain should consume for this frame:
+// the raw velocity, or a two-tap average of it with the previous frame while the
+// fs/2 cadence artefact is present. accelFactor is 1/windowSeconds and only scales
+// the detector's magnitudes uniformly, so it does not affect the sign logic.
+func (g *nyquistGate) filter(rawVel models.Vector, accelFactor float64) models.Vector {
+	if !g.haveVel {
+		g.lastVel = rawVel
+		g.haveVel = true
+
+		return rawVel
+	}
+
+	scale := float32(accelFactor)
+	accel := vector.Scale(vector.Delta(rawVel, g.lastVel), scale, scale, scale)
+	accelMag := vector.Magnitude(accel)
+
+	engaged := false
+
+	if g.haveAccel {
+		jerk := accelMag - g.lastAccelMag
+
+		sign := 0.0
+		if signal.Abs(jerk) > nyquistGateJerkDeadzone {
+			sign = signal.Polarity(jerk)
+		}
+
+		switch {
+		case sign != 0 && g.lastJerkSign != 0 && sign != g.lastJerkSign:
+			if g.altRun < nyquistGateMaxRun {
+				g.altRun++
+			}
+		case g.altRun > 0:
+			g.altRun--
+		}
+
+		if sign != 0 {
+			g.lastJerkSign = sign
+		}
+
+		engaged = g.altRun >= nyquistGateEngageFrames
+	}
+
+	g.lastAccelMag = accelMag
+	g.haveAccel = true
+
+	out := rawVel
+	if engaged {
+		out = models.Vector{
+			X: (rawVel.X + g.lastVel.X) / 2,
+			Y: (rawVel.Y + g.lastVel.Y) / 2,
+			Z: (rawVel.Z + g.lastVel.Z) / 2,
+		}
+	}
+
+	g.lastVel = rawVel
+
+	return out
 }
 
 // GetSurgeGforce calculates and returns the translational envelope surge G-force based on the current kinematic state.
