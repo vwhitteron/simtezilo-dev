@@ -11,12 +11,12 @@ import (
 // State.Update passes the gate.
 const frameFactor = 60.0
 
-// feed runs a sequence of raw velocities through one gate and returns the
-// per-frame outputs.
-func feed(g *nyquistGate, vels []models.Vector) []models.Vector {
+// feed runs a sequence of raw velocities through one gate at the given ground speed
+// and returns the per-frame outputs.
+func feed(g *nyquistGate, vels []models.Vector, speedMps float64) []models.Vector {
 	outs := make([]models.Vector, len(vels))
 	for i, v := range vels {
-		outs[i] = g.filter(v, frameFactor)
+		outs[i] = g.filter(v, frameFactor, speedMps)
 	}
 
 	return outs
@@ -46,7 +46,7 @@ func TestNyquistGateEngagesAndSuppressesRipple(t *testing.T) {
 
 	g := &nyquistGate{}
 	vels := rippleVelocities(16)
-	outs := feed(g, vels)
+	outs := feed(g, vels, 0) // low speed: gate fully active
 
 	// Early frames, before the alternation run reaches the engage threshold, pass
 	// the raw velocity through untouched.
@@ -84,12 +84,40 @@ func TestNyquistGatePassesOneShotImpact(t *testing.T) {
 	// A single large step — a wall impact — arrives on the next frame.
 	vels = append(vels, models.Vector{Z: z + 0.5})
 
-	outs := feed(g, vels)
+	outs := feed(g, vels, 0) // low speed: gate fully active
 
 	// The smooth run leaves the gate disengaged...
 	require.Equal(t, vels[4], outs[4], "steady acceleration must not engage the gate")
 	// ...so the impact frame is delivered at full magnitude, not halved by averaging.
 	require.Equal(t, vels[len(vels)-1], outs[len(outs)-1], "a one-shot impact must pass through unfiltered")
+}
+
+func TestNyquistGateDisabledAtRacingSpeed(t *testing.T) {
+	t.Parallel()
+
+	// The same sustained fs/2 ripple that the gate suppresses at low speed must pass
+	// through untouched at racing speed: above nyquistGateZeroSpeedMps the detector
+	// would only trip intermittently and chatter into jerk/snap spikes, so the gate
+	// is disabled and the raw velocity (and its dynamic range) is preserved.
+	g := &nyquistGate{}
+	vels := rippleVelocities(16)
+	outs := feed(g, vels, nyquistGateZeroSpeedMps+5)
+
+	for i, v := range vels {
+		require.Equal(t, v, outs[i], "gate must pass raw velocity at racing speed (frame %d)", i)
+	}
+}
+
+func TestNyquistGateSpeedInfluenceRamp(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, 1.0, nyquistGateSpeedInfluence(0), "full influence at a standstill")
+	require.Equal(t, 1.0, nyquistGateSpeedInfluence(nyquistGateFullSpeedMps), "full influence up to the low threshold")
+	require.Equal(t, 0.0, nyquistGateSpeedInfluence(nyquistGateZeroSpeedMps), "no influence at the high threshold")
+	require.Equal(t, 0.0, nyquistGateSpeedInfluence(200), "no influence at racing speed")
+
+	mid := (nyquistGateFullSpeedMps + nyquistGateZeroSpeedMps) / 2
+	require.InDelta(t, 0.5, nyquistGateSpeedInfluence(mid), 1e-9, "half influence midway through the ramp")
 }
 
 // jerkOf returns the magnitude of the last per-frame change in acceleration

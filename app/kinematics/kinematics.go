@@ -162,6 +162,10 @@ func (k *State) Update(windowSeconds float64, vehicleDimensions vehicle.Dimensio
 
 	accelFactor := float32(1.0 / windowSeconds)
 
+	// Ground speed gates the fs/2 nyquist filter (below), so read it before the
+	// calculated derivative chains that consume the gated velocity.
+	k.Current.GroundSpeed = float64(gtclient.Telemetry.GroundSpeedMetresPerSecond())
+
 	// 6DOF translational envelope - provided by telemetry
 	k.Current.SixDOFTranslation.Acceleration = gtclient.Telemetry.TranslationEnvelope()
 	k.Current.SixDOFTranslation.AccelMag = translationalenvelope.Magnitude(k.Current.SixDOFTranslation.Acceleration)
@@ -170,7 +174,7 @@ func (k *State) Update(windowSeconds float64, vehicleDimensions vehicle.Dimensio
 
 	// 6DOF translational envelope - calculated from velocity vector
 	k.Current.SixDOFTranslationCalc.Velocity = k.transNyquist.filter(
-		gtclient.Telemetry.VelocityVector(), float64(accelFactor),
+		gtclient.Telemetry.VelocityVector(), float64(accelFactor), k.Current.GroundSpeed,
 	)
 	translationCalcVelocityDelta := vector.Delta(k.Current.SixDOFTranslationCalc.Velocity, k.Last.SixDOFTranslationCalc.Velocity)
 	k.Current.SixDOFTranslationCalc.Acceleration = vector.Scale(translationCalcVelocityDelta, accelFactor, accelFactor, accelFactor)
@@ -193,7 +197,7 @@ func (k *State) Update(windowSeconds float64, vehicleDimensions vehicle.Dimensio
 			vehicleDimensions.LongitudinalRadius,
 			vehicleDimensions.TransverseRadius,
 		),
-		float64(accelFactor),
+		float64(accelFactor), k.Current.GroundSpeed,
 	)
 	rotationVelocityDelta := vector.Delta(k.Current.SixDOFRotationCalc.Velocity, k.Last.SixDOFRotationCalc.Velocity)
 	k.Current.SixDOFRotationCalc.Acceleration = vector.Scale(rotationVelocityDelta, accelFactor, accelFactor, accelFactor)
@@ -201,7 +205,6 @@ func (k *State) Update(windowSeconds float64, vehicleDimensions vehicle.Dimensio
 	k.Current.SixDOFRotationCalc.Jerk = (k.Current.SixDOFRotationCalc.AccelMag - k.Last.SixDOFRotationCalc.AccelMag) / windowSeconds
 	k.Current.SixDOFRotationCalc.Snap = (k.Current.SixDOFRotationCalc.Jerk - k.Last.SixDOFRotationCalc.Jerk) / windowSeconds
 
-	k.Current.GroundSpeed = float64(gtclient.Telemetry.GroundSpeedMetresPerSecond())
 	k.Current.TransmissionGear = gtclient.Telemetry.CurrentGear()
 	k.Current.SurgeCalculated = signal.Abs(float64(k.Current.SixDOFRotationCalc.Acceleration.X))
 
@@ -300,7 +303,38 @@ const (
 	// treated as non-alternating so numerical noise near steady motion cannot engage
 	// the gate.
 	nyquistGateJerkDeadzone = 0.25
+
+	// nyquistGateFullSpeedMps is the ground speed (m/s) at/below which the gate is
+	// fully active. The fs/2 cadence artefact dominates the (small) real road signal
+	// only at low speed, where its alternation is sustained so the gate stays engaged
+	// and smoothly averages — reducing the coming-to-a-stop judder it exists to fix.
+	nyquistGateFullSpeedMps = 5.0
+
+	// nyquistGateZeroSpeedMps is the ground speed (m/s) at/above which the gate is
+	// fully disabled (raw passthrough). Above it real broadband road content dominates
+	// and only intermittently trips the fs/2 detector, so engaging would chatter
+	// on/off and inject large jerk/snap spikes ("heavy impacts down straights"). The
+	// influence ramps linearly between the two thresholds so the transition never
+	// steps.
+	nyquistGateZeroSpeedMps = 12.0
 )
+
+// nyquistGateSpeedInfluence returns how much of the two-tap average to apply at the
+// given ground speed: 1 at/below nyquistGateFullSpeedMps, 0 at/above
+// nyquistGateZeroSpeedMps, and a linear ramp between. Blending (rather than a hard
+// speed cutoff) means the gate fades out smoothly, so neither engagement nor the
+// speed boundary itself introduces a discontinuity the derivative chain would
+// amplify.
+func nyquistGateSpeedInfluence(speedMps float64) float64 {
+	switch {
+	case speedMps <= nyquistGateFullSpeedMps:
+		return 1
+	case speedMps >= nyquistGateZeroSpeedMps:
+		return 0
+	default:
+		return (nyquistGateZeroSpeedMps - speedMps) / (nyquistGateZeroSpeedMps - nyquistGateFullSpeedMps)
+	}
+}
 
 // nyquistGate detects and suppresses the fs/2 telemetry cadence artefact on a
 // single velocity signal. The artefact makes the calculated acceleration
@@ -324,7 +358,13 @@ type nyquistGate struct {
 // the raw velocity, or a two-tap average of it with the previous frame while the
 // fs/2 cadence artefact is present. accelFactor is 1/windowSeconds and only scales
 // the detector's magnitudes uniformly, so it does not affect the sign logic.
-func (g *nyquistGate) filter(rawVel models.Vector, accelFactor float64) models.Vector {
+//
+// speedMps gates the correction: the averaging is applied in full only at low ground
+// speed (where the cadence artefact dominates and the gate stays engaged), fades out
+// by nyquistGateZeroSpeedMps, and is off at racing speed — where the detector would
+// only trip intermittently and chatter into jerk/snap spikes. Detection state is kept
+// warm at all speeds so the gate is ready the moment speed drops back into range.
+func (g *nyquistGate) filter(rawVel models.Vector, accelFactor, speedMps float64) models.Vector {
 	if !g.haveVel {
 		g.lastVel = rawVel
 		g.haveVel = true
@@ -366,11 +406,17 @@ func (g *nyquistGate) filter(rawVel models.Vector, accelFactor float64) models.V
 	g.haveAccel = true
 
 	out := rawVel
+
 	if engaged {
-		out = models.Vector{
-			X: (rawVel.X + g.lastVel.X) / 2,
-			Y: (rawVel.Y + g.lastVel.Y) / 2,
-			Z: (rawVel.Z + g.lastVel.Z) / 2,
+		if influence := float32(nyquistGateSpeedInfluence(speedMps)); influence > 0 {
+			// Blend the fs/2 two-tap average toward raw by the speed influence: full
+			// average at low speed, none at racing speed. influence == 1 reproduces the
+			// original (raw+lastVel)/2.
+			out = models.Vector{
+				X: rawVel.X + influence*((rawVel.X+g.lastVel.X)/2-rawVel.X),
+				Y: rawVel.Y + influence*((rawVel.Y+g.lastVel.Y)/2-rawVel.Y),
+				Z: rawVel.Z + influence*((rawVel.Z+g.lastVel.Z)/2-rawVel.Z),
+			}
 		}
 	}
 
