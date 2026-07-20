@@ -247,7 +247,7 @@ func isMutatorMethodName(name string) bool {
 func TestAllMutatorsAreCovered(t *testing.T) {
 	t.Parallel()
 
-	typ := reflect.TypeOf(&Config{})
+	typ := reflect.TypeFor[*Config]()
 	for i := range typ.NumMethod() {
 		name := typ.Method(i).Name
 
