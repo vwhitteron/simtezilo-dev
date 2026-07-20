@@ -29,14 +29,17 @@
 
         .lap-row {
             display: flex;
+            flex-wrap: wrap;
             justify-content: flex-start;
             align-items: center;
-            gap: 10px;
+            gap: 10px 28px;
             margin-bottom: 16px;
         }
 
         .lap-row .lap-group {
-            margin-left: 28px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
 
         .lap-row label {
@@ -59,82 +62,53 @@
             border-color: #e94560;
         }
 
-        .range-row {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            margin-bottom: 10px;
-        }
-
-        .range-label {
-            font-size: 0.78em;
-            color: #888;
-            min-width: 54px;
-            text-align: center;
-        }
-
-        .range-track {
+        .toggle-switch {
             position: relative;
-            flex: 1;
-            height: 20px;
-        }
-
-        .range-fill {
-            position: absolute;
-            top: 50%;
-            left: 0;
-            right: 0;
-            height: 4px;
-            transform: translateY(-50%);
-            border-radius: 2px;
-            pointer-events: none;
-        }
-
-        .range-track input[type=range] {
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            top: 0;
-            left: 0;
-            margin: 0;
-            pointer-events: none;
-            -webkit-appearance: none;
-            appearance: none;
-            background: transparent;
-            outline: none;
-        }
-
-        .range-track input[type=range]::-webkit-slider-runnable-track {
-            background: transparent;
-            height: 4px;
-        }
-
-        .range-track input[type=range]::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            pointer-events: all;
-            width: 14px;
-            height: 14px;
-            border-radius: 50%;
-            background: #e94560;
+            display: inline-block;
+            width: 40px;
+            height: 22px;
             cursor: pointer;
-            border: 2px solid #1a1a2e;
-            margin-top: -5px;
         }
 
-        .range-track input[type=range]::-moz-range-track {
-            background: transparent;
-            height: 4px;
+        .toggle-switch input {
+            position: absolute;
+            opacity: 0;
+            width: 0;
+            height: 0;
         }
 
-        .range-track input[type=range]::-moz-range-thumb {
-            pointer-events: all;
-            width: 12px;
-            height: 12px;
+        .toggle-switch .slider {
+            position: absolute;
+            inset: 0;
+            background: #16213e;
+            border: 1px solid #0f3460;
+            border-radius: 22px;
+            transition: background 0.15s, border-color 0.15s;
+        }
+
+        .toggle-switch .slider::before {
+            content: "";
+            position: absolute;
+            width: 16px;
+            height: 16px;
+            left: 2px;
+            top: 2px;
+            background: #e0e0e0;
             border-radius: 50%;
-            background: #e94560;
-            cursor: pointer;
-            border: 2px solid #1a1a2e;
-            box-sizing: border-box;
+            transition: transform 0.15s;
+        }
+
+        .toggle-switch input:checked + .slider {
+            background: #2ecc71;
+            border-color: #2ecc71;
+        }
+
+        .toggle-switch input:checked + .slider::before {
+            transform: translateX(18px);
+        }
+
+        .toggle-switch input:focus-visible + .slider {
+            border-color: #e94560;
         }
 
         .chart-container {
@@ -150,11 +124,22 @@
             transition: width 0.3s ease, height 0.3s ease;
         }
 
-        .stats {
+        .speed-panel {
+            margin-top: 16px;
+        }
+
+        .speed-panel h3 {
             text-align: center;
-            margin-top: 12px;
-            font-size: 0.85em;
+            font-size: 0.72em;
             color: #888;
+            margin-bottom: 6px;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+        }
+
+        .speed-container {
+            position: relative;
+            height: 150px;
         }
 
         .content-row {
@@ -240,29 +225,57 @@
 <body>
     <h1>Snap vs Jerk &mdash; Telemetry Scatter Chart</h1>
     <div class="lap-row">
-        <label for="replay-select">Replay:</label>
-        <select id="replay-select"></select>
-        <label class="lap-group" for="lap-select">Lap:</label>
-        <select id="lap-select"></select>
+        <div class="lap-group">
+            <label for="replay-select">Replay:</label>
+            <select id="replay-select"></select>
+        </div>
+        <div class="lap-group">
+            <label for="lap-select">Lap:</label>
+            <select id="lap-select"></select>
+        </div>
+        <div class="lap-group">
+            <label for="filter-toggle">Filter:</label>
+            <label class="toggle-switch">
+                <input type="checkbox" id="filter-toggle" checked>
+                <span class="slider"></span>
+            </label>
+        </div>
+        <div class="lap-group">
+            <label for="highlight-count">Highlight:</label>
+            <select id="highlight-count">
+            <option value="15">250 ms</option>
+            <option value="30">500 ms</option>
+            <option value="60">1 s</option>
+            <option value="120">2 s</option>
+            <option value="240">4 s</option>
+            </select>
+        </div>
     </div>
     <div class="content-row">
         <div class="chart-container">
-            <div class="range-row">
-                <span class="range-label" id="range-start-label">0%</span>
-                <div class="range-track">
-                    <div class="range-fill" id="range-fill"></div>
-                    <input type="range" id="range-start" min="0" max="100" value="0">
-                    <input type="range" id="range-end" min="0" max="100" value="100">
-                </div>
-                <span class="range-label" id="range-end-label">100%</span>
-            </div>
             <canvas id="chart"></canvas>
-            <div class="stats" id="stats"></div>
+            <div class="speed-panel">
+                <h3>Speed</h3>
+                <div class="speed-container">
+                    <canvas id="speed-chart"></canvas>
+                </div>
+            </div>
         </div>
         <div class="sidebar">
             <div class="map-widget">
                 <h3 id="map-title">Circuit Map</h3>
                 <canvas id="map-canvas" width="220" height="220"></canvas>
+            </div>
+            <div class="info-widget" id="selection-widget">
+                <h3>Info</h3>
+                <dl>
+                    <dt>POI</dt>
+                    <dd id="sel-poi">—</dd>
+                    <dt>Zoom</dt>
+                    <dd id="sel-zoom">—</dd>
+                    <dt>Points</dt>
+                    <dd id="sel-points">—</dd>
+                </dl>
             </div>
             <div class="info-widget" id="vehicle-widget">
                 <h3>Vehicle</h3>
@@ -286,7 +299,7 @@
         const surfaceColors = {
             tarmac: { bg: 'rgba(54, 162, 235, 0.5)', border: 'rgba(54, 162, 235, 1)' },
             concrete: { bg: 'rgba(153, 102, 255, 0.5)', border: 'rgba(153, 102, 255, 1)' },
-            grass: { bg: 'rgba(75, 192, 75, 0.5)', border: 'rgba(75, 192, 75, 1)' },
+            grass: { bg: 'rgba(90, 235, 90, 0.55)', border: 'rgba(90, 235, 90, 1)' },
             dirt: { bg: 'rgba(205, 133, 63, 0.5)', border: 'rgba(205, 133, 63, 1)' },
             sand: { bg: 'rgba(244, 208, 63, 0.5)', border: 'rgba(244, 208, 63, 1)' },
             unknown: { bg: 'rgba(160, 160, 160, 0.5)', border: 'rgba(160, 160, 160, 1)' },
@@ -296,9 +309,31 @@
         let mapData = {};
         let allData = [];
         let chart = null;
+        let speedChart = null;
+        let speeds = [];            // per-frame ground speed (km/h) from telemetry
         let rangeStart = 0;
         let rangeEnd = 100;
+        // When the visible track section straddles the start/finish line, the speed chart
+        // plots the trailing (high-distance) part shifted back by one lap length so the
+        // section reads as one continuous trace instead of two pieces at opposite ends of
+        // the distance axis. This threshold is the distance at/above which that shift
+        // applies (null when no wrap). speedDisplayX() maps a true distance to the plotted
+        // x, and is shared by the trace and the hover/POI markers so they stay aligned.
+        let speedWrapThreshold = null;
+        let poiDist = 0;            // point-of-interest distance along lap (metres)
+        let highlightCount = 15;    // number of plotted points to emphasise near the POI
+        let useRaw = false;         // false = processed (device) jerk/snap, true = raw (ungated)
+
+        // Active jerk/snap accessors: switch the whole plot between the processed
+        // (live-path) fields and the raw (ungated) fields the backend ships alongside.
+        const jerkOf = (d) => useRaw ? d.jerkRaw : d.jerk;
+        const snapOf = (d) => useRaw ? d.snapRaw : d.snap;
         let currentLapKey = null;
+        let pendingLap = null;      // lap key from the URL, applied once on the initial replay load
+        let pendingView = null;     // {zoom,panx,pany,poi} from the URL, applied once with the initial lap
+        const HIGHLIGHT_LABEL = 'point of interest';             // scatter dataset label (hidden from legend)
+        const HIGHLIGHT_RING = '#ffffff';                        // white outline on the emphasised points
+        let highlightSource = [];                                // {x,y,dist,frame,surface} of POI-nearest points
         let cumulativeDists = [];
         let totalDist = 0;
         let mapZoom = 1;
@@ -306,7 +341,6 @@
         let mapPanY = 0;
         let mapZoomedToRange = false;
         let hoveredFrame = null;
-        let hoveredColor = null;
 
         let fadeRaf = null;
         let fadeStartTime = null;
@@ -323,7 +357,53 @@
             return colorStr.replace(/,([\s\d.]+)\)$/, (_, a) => `,${parseFloat(a) * t})`);
         }
 
+        // Reflect the current control + map state into the URL query string so a refresh
+        // (or a shared link) restores the same replay/lap/filter/highlight/viewport/POI.
+        function updateUrl() {
+            const params = new URLSearchParams();
+            const replay = document.getElementById('replay-select').value;
+            const lap = document.getElementById('lap-select').value;
+            const highlight = document.getElementById('highlight-count').value;
+            const filter = document.getElementById('filter-toggle').checked;
+            if (replay) params.set('replay', replay);
+            if (lap) params.set('lap', lap);
+            if (highlight) params.set('highlight', highlight);
+            params.set('filter', filter ? '1' : '0');
+            // Map viewport + point of interest. Only emit zoom/pan once the map is actually
+            // zoomed in (default full-circuit view needs no restoring).
+            if (mapZoom !== 1 || mapPanX !== 0 || mapPanY !== 0) {
+                params.set('zoom', mapZoom.toFixed(4));
+                params.set('panx', mapPanX.toFixed(1));
+                params.set('pany', mapPanY.toFixed(1));
+            }
+            if (poiDist > 0) params.set('poi', String(Math.round(poiDist)));
+            history.replaceState(null, '', '?' + params.toString());
+        }
+
+        // Map pan/zoom fire on every drag and wheel tick; debounce the URL rewrite so we
+        // don't hammer history.replaceState during a continuous gesture.
+        let urlUpdateTimer = null;
+        function scheduleUrlUpdate() {
+            clearTimeout(urlUpdateTimer);
+            urlUpdateTimer = setTimeout(updateUrl, 200);
+        }
+
+        // Restore a saved map viewport / POI onto the current lap, then re-derive the range
+        // and redraw. Used once on initial load for the lap named in the URL.
+        function applyView(v) {
+            if (Number.isFinite(v.zoom)) mapZoom = Math.max(1, Math.min(v.zoom, 20));
+            if (Number.isFinite(v.panx)) mapPanX = v.panx;
+            if (Number.isFinite(v.pany)) mapPanY = v.pany;
+            mapZoomedToRange = false;
+            if (Number.isFinite(v.poi)) poiDist = Math.max(0, Math.min(v.poi, totalDist));
+            syncRangeToViewport();   // re-derive selection from the restored viewport (also redraws the chart)
+            drawMap(currentLapKey);
+            updateUrl();             // keep the URL in step with the values we actually clamped to
+        }
+
         async function init() {
+            const params = new URLSearchParams(location.search);
+
             const replaysResp = await fetch('/replays');
             const replaysJson = await replaysResp.json();
             const replayFiles = replaysJson.replays || [];
@@ -336,32 +416,56 @@
                 replaySelectEl.appendChild(opt);
             });
 
+            // Restore filter/highlight from the URL before the first chart draw.
+            const filterEl = document.getElementById('filter-toggle');
+            const filterParam = params.get('filter');
+            if (filterParam !== null) {
+                filterEl.checked = filterParam !== '0';
+                useRaw = !filterEl.checked;
+            }
+
+            const highlightEl = document.getElementById('highlight-count');
+            const highlightParam = params.get('highlight');
+            if (highlightParam !== null && [...highlightEl.options].some(o => o.value === highlightParam)) {
+                highlightEl.value = highlightParam;
+                highlightCount = parseInt(highlightParam);
+            }
+
+            pendingLap = params.get('lap');
+            if (params.has('zoom') || params.has('poi')) {
+                pendingView = {
+                    zoom: parseFloat(params.get('zoom')),
+                    panx: parseFloat(params.get('panx')),
+                    pany: parseFloat(params.get('pany')),
+                    poi: parseFloat(params.get('poi')),
+                };
+            }
+
             replaySelectEl.addEventListener('change', () => loadReplay(replaySelectEl.value));
 
             document.getElementById('lap-select').addEventListener('change', (e) => selectLap(e.target.value));
 
-            const startInput = document.getElementById('range-start');
-            const endInput = document.getElementById('range-end');
-
-            startInput.addEventListener('input', () => {
-                rangeStart = Math.min(parseInt(startInput.value), rangeEnd - 50);
-                startInput.value = rangeStart;
-                updateRangeFill();
+            highlightEl.addEventListener('change', (e) => {
+                highlightCount = parseInt(e.target.value);
+                updateUrl();
                 updateChart();
-                drawMap(currentLapKey);
             });
-            endInput.addEventListener('input', () => {
-                rangeEnd = Math.max(parseInt(endInput.value), rangeStart + 50);
-                endInput.value = rangeEnd;
-                updateRangeFill();
+
+            filterEl.addEventListener('change', (e) => {
+                useRaw = !e.target.checked;
+                updateUrl();
                 updateChart();
-                drawMap(currentLapKey);
             });
 
             initMapInteraction();
 
             if (replayFiles.length > 0) {
-                await loadReplay(replayFiles[0]);
+                const replayParam = params.get('replay');
+                const initialReplay = replayParam && replayFiles.includes(replayParam)
+                    ? replayParam
+                    : replayFiles[0];
+                replaySelectEl.value = initialReplay;
+                await loadReplay(initialReplay);
             }
         }
 
@@ -395,7 +499,18 @@
             });
 
             if (json.laps.length > 0) {
-                selectLap(String(json.laps[0]));
+                const lapKeys = json.laps.map(String);
+                const urlLapMatched = pendingLap !== null && lapKeys.includes(pendingLap);
+                const targetLap = urlLapMatched ? pendingLap : lapKeys[0];
+                pendingLap = null;  // consumed; later replay switches default to the first lap
+                selectLap(targetLap);
+
+                // Restore the saved viewport/POI once, only onto the lap named in the URL
+                // (selectLap has just reset both to defaults).
+                if (urlLapMatched && pendingView) {
+                    applyView(pendingView);
+                }
+                pendingView = null;
             }
 
             replaySelectEl.disabled = false;
@@ -404,31 +519,38 @@
         function selectLap(lapKey) {
             currentLapKey = lapKey;
             allData = lapData[lapKey] || [];
+            document.getElementById('lap-select').value = lapKey;
+            updateUrl();
 
             const coords = mapData[lapKey] || [];
             cumulativeDists = [0];
+            // Ground speed comes straight from telemetry (m/s), converted to km/h — not derived
+            // from position deltas, which amplified glitches into impossible spikes.
+            speeds = coords.map(c => (c.speed ?? 0) * 3.6);
             for (let i = 1; i < coords.length; i++) {
                 const dx = coords[i].x - coords[i - 1].x;
                 const dz = coords[i].z - coords[i - 1].z;
                 cumulativeDists.push(cumulativeDists[i - 1] + Math.sqrt(dx * dx + dz * dz));
             }
             totalDist = cumulativeDists.length > 0 ? cumulativeDists[cumulativeDists.length - 1] : 0;
-            const sliderMax = Math.ceil(totalDist / 50) * 50;
 
             mapZoom = 1;
             mapPanX = 0;
             mapPanY = 0;
             mapZoomedToRange = false;
 
+            // Full lap selected by default; POI at the start. Both are driven by the map
+            // (zoom/pan sets the range, dragging the marker sets the POI).
             rangeStart = 0;
-            rangeEnd = sliderMax;
-            const startInput = document.getElementById('range-start');
-            const endInput = document.getElementById('range-end');
-            startInput.min = 0; startInput.max = sliderMax; startInput.step = 50; startInput.value = 0;
-            endInput.min = 0; endInput.max = sliderMax; endInput.step = 50; endInput.value = sliderMax;
-            updateRangeFill();
+            rangeEnd = totalDist;
+            poiDist = 0;
+            updateSelectionInfo();
+
             if (!chart) {
                 createChart();
+            }
+            if (!speedChart) {
+                createSpeedChart();
             }
             // Reset scale chase so new lap snaps to correct bounds immediately
             if (scaleChaseRaf) { cancelAnimationFrame(scaleChaseRaf); scaleChaseRaf = null; }
@@ -461,13 +583,10 @@
                 : Math.round(meters) + '\u202fm';
         }
 
-        function updateRangeFill() {
-            const startPct = totalDist > 0 ? rangeStart / totalDist * 100 : 0;
-            const endPct = totalDist > 0 ? rangeEnd / totalDist * 100 : 100;
-            document.getElementById('range-fill').style.background =
-                `linear-gradient(to right, #0f3460 ${startPct}%, rgba(255,180,0,0.7) ${startPct}%, rgba(255,180,0,0.7) ${endPct}%, #0f3460 ${endPct}%)`;
-            document.getElementById('range-start-label').textContent = totalDist > 0 ? formatDist(rangeStart) : '—';
-            document.getElementById('range-end-label').textContent = totalDist > 0 ? formatDist(rangeEnd) : '—';
+        // Refresh the read-only Selection panel below the map.
+        function updateSelectionInfo() {
+            document.getElementById('sel-poi').textContent = totalDist > 0 ? formatDist(poiDist) : '—';
+            document.getElementById('sel-zoom').textContent = totalDist > 0 ? mapZoom.toFixed(2) + '×' : '—';
         }
 
         // Compute pan/zoom so the selected range fills the map canvas with a margin.
@@ -532,12 +651,164 @@
             mapPanY = zoom * (H / 2 - selCY);
         }
 
+        // Set the start/finish range to the lap-distance span of the track currently visible in
+        // the map viewport. Projects each coord through the same base mapping as drawMap and then
+        // the pan/zoom transform, keeping points that land inside the canvas bounds.
+        function syncRangeToViewport() {
+            const coords = mapData[currentLapKey] || [];
+            if (coords.length < 2 || totalDist <= 0) return;
+
+            const canvas = document.getElementById('map-canvas');
+            const W = canvas.width;
+            const H = canvas.height;
+
+            let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+            coords.forEach(c => {
+                if (c.x < minX) minX = c.x;
+                if (c.x > maxX) maxX = c.x;
+                if (c.z < minZ) minZ = c.z;
+                if (c.z > maxZ) maxZ = c.z;
+            });
+
+            const pad = 12;
+            const rangeX = maxX - minX || 1;
+            const rangeZ = maxZ - minZ || 1;
+            const scale = Math.min((W - pad * 2) / rangeX, (H - pad * 2) / rangeZ);
+            const offsetX = pad + ((W - pad * 2) - rangeX * scale) / 2;
+            const offsetZ = pad + ((H - pad * 2) - rangeZ * scale) / 2;
+
+            let visMin = Infinity, visMax = -Infinity;
+            for (let i = 0; i < coords.length; i++) {
+                const cx = offsetX + (coords[i].x - minX) * scale;
+                const cy = offsetZ + (coords[i].z - minZ) * scale;
+                // Same transform drawMap applies: translate(centre+pan), scale(zoom), translate(-centre)
+                const sx = mapZoom * (cx - W / 2) + W / 2 + mapPanX;
+                const sy = mapZoom * (cy - H / 2) + H / 2 + mapPanY;
+                if (sx >= 0 && sx <= W && sy >= 0 && sy <= H) {
+                    const d = cumulativeDists[i] ?? 0;
+                    if (d < visMin) visMin = d;
+                    if (d > visMax) visMax = d;
+                }
+            }
+            if (!isFinite(visMin)) return; // nothing on-screen
+
+            // Use the exact visible extent so the selection matches the track rendered in the map
+            // (no rounding out to a coarse step, which would over-include distance either side).
+            let start = Math.max(0, Math.round(visMin));
+            let end = Math.min(totalDist, Math.round(visMax));
+            if (end <= start) end = Math.min(totalDist, start + 1);
+
+            rangeStart = start;
+            rangeEnd = end;
+
+            // Only move the point of interest if it has fallen outside the visible range;
+            // otherwise leave it where it is. When moved, recentre it in the range.
+            if (poiDist < start || poiDist > end) {
+                poiDist = Math.round((start + end) / 2);
+            }
+
+            updateSelectionInfo();
+            updateChart();
+        }
+
+        // Base (identity-transform) coordinate mapping used by the map, matching drawMap.
+        function mapMapping(coords, W, H) {
+            let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+            for (const c of coords) {
+                if (c.x < minX) minX = c.x;
+                if (c.x > maxX) maxX = c.x;
+                if (c.z < minZ) minZ = c.z;
+                if (c.z > maxZ) maxZ = c.z;
+            }
+            const pad = 12;
+            const rangeX = maxX - minX || 1;
+            const rangeZ = maxZ - minZ || 1;
+            const scale = Math.min((W - pad * 2) / rangeX, (H - pad * 2) / rangeZ);
+            return {
+                minX, minZ, scale,
+                offsetX: pad + ((W - pad * 2) - rangeX * scale) / 2,
+                offsetZ: pad + ((H - pad * 2) - rangeZ * scale) / 2,
+            };
+        }
+
+        // World coord -> on-screen canvas position, applying the current pan/zoom transform.
+        function worldToScreen(x, z, m, W, H) {
+            const cx = m.offsetX + (x - m.minX) * m.scale;
+            const cy = m.offsetZ + (z - m.minZ) * m.scale;
+            return { sx: mapZoom * (cx - W / 2) + W / 2 + mapPanX, sy: mapZoom * (cy - H / 2) + H / 2 + mapPanY };
+        }
+
+        // Boolean mask (by coord index) of which track points currently fall inside the map
+        // viewport — i.e. the portion of the line actually rendered on screen.
+        function computeVisibleMask(coords, W, H) {
+            const m = mapMapping(coords, W, H);
+            const mask = new Uint8Array(coords.length);
+            for (let i = 0; i < coords.length; i++) {
+                const p = worldToScreen(coords[i].x, coords[i].z, m, W, H);
+                if (p.sx >= 0 && p.sx <= W && p.sy >= 0 && p.sy <= H) mask[i] = 1;
+            }
+            return mask;
+        }
+
+        // Index of the track coord whose screen position is closest to (mx, my).
+        function nearestFrameToScreen(mx, my, coords, W, H) {
+            const m = mapMapping(coords, W, H);
+            let best = -1, bestD = Infinity;
+            for (let i = 0; i < coords.length; i++) {
+                const p = worldToScreen(coords[i].x, coords[i].z, m, W, H);
+                const d = (mx - p.sx) ** 2 + (my - p.sy) ** 2;
+                if (d < bestD) { bestD = d; best = i; }
+            }
+            return best;
+        }
+
+        // Screen position of the POI marker for the current poiDist.
+        function poiScreenPos(coords, W, H) {
+            const poiFrame = Math.max(0, Math.min(distToFrame(poiDist), coords.length - 1));
+            return worldToScreen(coords[poiFrame].x, coords[poiFrame].z, mapMapping(coords, W, H), W, H);
+        }
+
         function initMapInteraction() {
             const canvas = document.getElementById('map-canvas');
             let isDragging = false;
+            let isDraggingPoi = false;
             let dragLastX = 0, dragLastY = 0;
+            const POI_HIT_R = 10; // px hit radius for grabbing the POI marker
+
+            function canvasMouse(e) {
+                const rect = canvas.getBoundingClientRect();
+                return {
+                    mx: (e.clientX - rect.left) * (canvas.width / rect.width),
+                    my: (e.clientY - rect.top) * (canvas.height / rect.height),
+                };
+            }
+
+            function movePoiTo(mx, my) {
+                const coords = mapData[currentLapKey] || [];
+                if (coords.length < 1) return;
+                const best = nearestFrameToScreen(mx, my, coords, canvas.width, canvas.height);
+                if (best < 0) return;
+                // Move only the POI; the map stays put (no edge-panning while dragging).
+                poiDist = Math.round(cumulativeDists[best] ?? 0);
+                updateSelectionInfo();
+                updateChart();
+                drawMap(currentLapKey);
+                scheduleUrlUpdate();
+            }
 
             canvas.addEventListener('mousedown', (e) => {
+                const { mx, my } = canvasMouse(e);
+                const coords = mapData[currentLapKey] || [];
+                // Grab the POI marker if the click landed on it; otherwise pan the map.
+                if (coords.length > 1 && totalDist > 0) {
+                    const p = poiScreenPos(coords, canvas.width, canvas.height);
+                    if (Math.hypot(mx - p.sx, my - p.sy) <= POI_HIT_R) {
+                        isDraggingPoi = true;
+                        canvas.style.cursor = 'grabbing';
+                        e.preventDefault();
+                        return;
+                    }
+                }
                 isDragging = true;
                 dragLastX = e.clientX;
                 dragLastY = e.clientY;
@@ -545,17 +816,41 @@
                 e.preventDefault();
             });
 
+            // Pointer cursor when hovering the POI marker so it reads as draggable.
+            canvas.addEventListener('mousemove', (e) => {
+                if (isDragging || isDraggingPoi) return;
+                const coords = mapData[currentLapKey] || [];
+                let overPoi = false;
+                if (coords.length > 1 && totalDist > 0) {
+                    const { mx, my } = canvasMouse(e);
+                    const p = poiScreenPos(coords, canvas.width, canvas.height);
+                    overPoi = Math.hypot(mx - p.sx, my - p.sy) <= POI_HIT_R;
+                }
+                canvas.style.cursor = overPoi ? 'pointer' : '';
+            });
+
             window.addEventListener('mousemove', (e) => {
+                if (isDraggingPoi) {
+                    const { mx, my } = canvasMouse(e);
+                    movePoiTo(mx, my);
+                    return;
+                }
                 if (!isDragging) return;
                 mapPanX += e.clientX - dragLastX;
                 mapPanY += e.clientY - dragLastY;
                 dragLastX = e.clientX;
                 dragLastY = e.clientY;
                 mapZoomedToRange = false;
+                syncRangeToViewport();
                 drawMap(currentLapKey);
+                scheduleUrlUpdate();
             });
 
             window.addEventListener('mouseup', () => {
+                if (isDraggingPoi) {
+                    isDraggingPoi = false;
+                    canvas.style.cursor = '';
+                }
                 if (isDragging) {
                     isDragging = false;
                     canvas.classList.remove('dragging');
@@ -573,12 +868,18 @@
                 const cxCenter = canvas.width / 2;
                 const cyCenter = canvas.height / 2;
                 const f = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+                // Clamp zoom first, then pan by the factor actually applied. At a zoom limit the
+                // effective factor is 1, so the map doesn't drift once zoom stops changing.
+                const newZoom = Math.max(1, Math.min(mapZoom * f, 20));
+                const ef = newZoom / mapZoom;
                 // Zoom around cursor: keep the world point under the cursor fixed
-                mapPanX = mx - cxCenter + f * (mapPanX - mx + cxCenter);
-                mapPanY = my - cyCenter + f * (mapPanY - my + cyCenter);
-                mapZoom = Math.max(0.5, Math.min(mapZoom * f, 20));
+                mapPanX = mx - cxCenter + ef * (mapPanX - mx + cxCenter);
+                mapPanY = my - cyCenter + ef * (mapPanY - my + cyCenter);
+                mapZoom = newZoom;
                 mapZoomedToRange = false;
+                syncRangeToViewport();
                 drawMap(currentLapKey);
+                scheduleUrlUpdate();
             }, { passive: false });
 
             canvas.addEventListener('dblclick', () => {
@@ -593,7 +894,12 @@
                     zoomMapToSelection();
                     mapZoomedToRange = true;
                 }
+                // Re-derive the visible range from the new viewport so the scatter and
+                // speed views follow the map (matches the wheel-zoom handler). This also
+                // refreshes the selection info and both charts.
+                syncRangeToViewport();
                 drawMap(currentLapKey);
+                scheduleUrlUpdate();
             });
         }
 
@@ -651,17 +957,18 @@
             }
             ctx.stroke();
 
-            // Selected range (highlighted, coloured by surface type)
-            const { startFrame, endFrame } = getFrameRange(coords.length);
-            const selStart = Math.max(0, Math.min(startFrame, coords.length - 1));
-            const selEnd = Math.max(0, Math.min(endFrame, coords.length - 1));
-            if (selEnd > selStart) {
+            // Highlight the track that is actually inside the viewport, tested per point.
+            // Using the on-screen mask (rather than a single contiguous distance range)
+            // means a section straddling the start/finish line — one physical piece that
+            // maps to non-contiguous frames — is highlighted correctly.
+            const visMask = computeVisibleMask(coords, W, H);
+            {
                 ctx.lineWidth = 2 * lwScale;
                 ctx.lineJoin = 'round';
 
                 // When hovering, gray out all segments and then redraw just the hovered point on top.
                 // Otherwise draw each segment in its surface colour.
-                const isHovering = hoveredFrame !== null && hoveredFrame >= selStart && hoveredFrame <= selEnd;
+                const isHovering = hoveredFrame !== null && !!visMask[hoveredFrame];
 
                 // Build set of surface types that are currently hidden in the chart legend
                 const hiddenSurfaces = new Set();
@@ -671,12 +978,16 @@
                     });
                 }
 
-                // Group consecutive frames with the same surface into one path per group
-                let segStart = selStart;
-                for (let idx = selStart + 1; idx <= selEnd + 1; idx++) {
-                    const atEnd = idx > selEnd;
-                    const surfaceChanged = atEnd || coords[idx].surface !== coords[segStart].surface;
-                    if (surfaceChanged) {
+                // Walk the track drawing each maximal run of consecutive on-screen frames
+                // that share a surface as one path. A run ends when the point leaves the
+                // viewport or the surface changes; a surface change keeps the boundary
+                // point in both segments so the colours stay visually joined.
+                let segStart = -1;
+                for (let idx = 0; idx <= coords.length; idx++) {
+                    const onScreen = idx < coords.length && !!visMask[idx];
+                    const surfaceChanged = segStart >= 0 && onScreen && coords[idx].surface !== coords[segStart].surface;
+
+                    if (segStart >= 0 && (!onScreen || surfaceChanged)) {
                         const surface = coords[segStart].surface || 'tarmac';
                         const c = surfaceColors[surface] || surfaceColors.unknown;
                         const dimmed = isHovering || hiddenSurfaces.has(surface);
@@ -684,12 +995,14 @@
                         ctx.beginPath();
                         const segFirst = toCanvas(coords[segStart].x, coords[segStart].z);
                         ctx.moveTo(segFirst.cx, segFirst.cy);
-                        const segEnd = Math.min(idx, selEnd);
+                        const segEnd = surfaceChanged ? idx : idx - 1; // include boundary on surface change
                         for (let jdx = segStart + 1; jdx <= segEnd; jdx++) {
                             const pt = toCanvas(coords[jdx].x, coords[jdx].z);
                             ctx.lineTo(pt.cx, pt.cy);
                         }
                         ctx.stroke();
+                        segStart = surfaceChanged ? idx : -1;
+                    } else if (onScreen && segStart < 0) {
                         segStart = idx;
                     }
                 }
@@ -730,6 +1043,21 @@
             ctx.lineTo(startPt.cx + perpX * halfLen, startPt.cy + perpY * halfLen);
             ctx.stroke();
 
+            // Point-of-interest marker: filled with its surface colour, white ring (matches the
+            // emphasised scatter points).
+            if (totalDist > 0) {
+                const poiFrame = Math.max(0, Math.min(distToFrame(poiDist), coords.length - 1));
+                const pp = toCanvas(coords[poiFrame].x, coords[poiFrame].z);
+                const c = surfaceColors[coords[poiFrame].surface] || surfaceColors.unknown;
+                ctx.beginPath();
+                ctx.arc(pp.cx, pp.cy, 5 * lwScale, 0, Math.PI * 2);
+                ctx.fillStyle = c.border;
+                ctx.fill();
+                ctx.lineWidth = 1.5 * lwScale;
+                ctx.strokeStyle = HIGHLIGHT_RING;
+                ctx.stroke();
+            }
+
             ctx.restore();
         }
 
@@ -747,22 +1075,33 @@
                         const frame = elements.length > 0
                             ? (chart.data.datasets[elements[0].datasetIndex].data[elements[0].index].frame ?? null)
                             : null;
-                        const color = elements.length > 0
-                            ? chart.data.datasets[elements[0].datasetIndex].borderColor
-                            : null;
-                        if (frame !== hoveredFrame) {
-                            hoveredFrame = frame !== undefined ? frame : null;
-                            hoveredColor = color;
-                            drawMap(currentLapKey);
-                        }
+                        // Hovering the scatter also marks the map track point and speed-chart point.
+                        setHovered(frame ?? null, 'scatter');
+                    },
+                    onClick: (_event, elements) => {
+                        // Clicking a scatter point moves the POI to that point's lap position.
+                        if (elements.length === 0) return;
+                        const pt = chart.data.datasets[elements[0].datasetIndex].data[elements[0].index];
+                        if (!pt || pt.frame == null) return;
+                        poiDist = Math.round(cumulativeDists[pt.frame] ?? pt.dist ?? 0);
+                        updateSelectionInfo();
+                        updateChart();
+                        drawMap(currentLapKey);
+                        scheduleUrlUpdate();
                     },
                     plugins: {
                         legend: {
                             display: true,
-                            labels: { color: '#ccc', usePointStyle: true, pointStyle: 'circle' },
+                            labels: {
+                                color: '#ccc', usePointStyle: true, pointStyle: 'circle',
+                                filter: (item) => item.text !== HIGHLIGHT_LABEL
+                            },
                             onClick(e, legendItem, legend) {
                                 // Run the default toggle
                                 Chart.defaults.plugins.legend.onClick.call(this, e, legendItem, legend);
+                                // Drop highlight points belonging to any now-hidden surface
+                                syncHighlight();
+                                chart.update('none');
                                 // Recompute bounds from visible datasets only
                                 const visibleDatasets = chart.data.datasets.filter((_, i) => chart.isDatasetVisible(i));
                                 const niceBounds = computeNiceBounds(visibleDatasets);
@@ -808,6 +1147,259 @@
                     }
                 }
             });
+        }
+
+        // Draws the POI as a dashed vertical line on the speed chart, with a dot and label
+        // showing the speed at that point. Colour matches the map's POI marker (surface colour).
+        // Shared hover state across the scatter chart, speed chart and map. Highlights the same
+        // frame in all three: map track point, scatter point, and a speed-chart marker.
+        // `source` is the chart the hover came from, so we don't fight its own native highlight.
+        function setHovered(frame, source) {
+            if (frame === hoveredFrame) return;
+            hoveredFrame = frame;
+            drawMap(currentLapKey);
+            if (source !== 'scatter') highlightScatterFrame(frame); // scatter highlights itself natively
+            if (speedChart) speedChart.render();
+        }
+
+        // Programmatically put a scatter point into its hover state (and tooltip) by frame.
+        function highlightScatterFrame(frame) {
+            if (!chart) return;
+            let el = null;
+            if (frame != null) {
+                for (let di = 0; di < chart.data.datasets.length && !el; di++) {
+                    const idx = chart.data.datasets[di].data.findIndex(p => p.frame === frame);
+                    if (idx >= 0) el = { datasetIndex: di, index: idx };
+                }
+            }
+            chart.setActiveElements(el ? [el] : []);
+            if (chart.tooltip) {
+                const meta = el && chart.getDatasetMeta(el.datasetIndex).data[el.index];
+                chart.tooltip.setActiveElements(el ? [el] : [], meta ? { x: meta.x, y: meta.y } : { x: 0, y: 0 });
+            }
+            chart.render();
+        }
+
+        // Vertical marker + dot + speed label at the hovered frame (distinct from the POI marker).
+        const hoverSpeedMarker = {
+            id: 'hoverSpeedMarker',
+            afterDatasetsDraw(chart) {
+                if (hoveredFrame == null || speeds.length === 0) return;
+                const dist = cumulativeDists[hoveredFrame];
+                if (dist == null) return;
+                const dx = speedDisplayX(dist);
+                const xScale = chart.scales.x, yScale = chart.scales.y;
+                if (dx < xScale.min || dx > xScale.max) return;
+
+                const x = xScale.getPixelForValue(dx);
+                const spd = speeds[hoveredFrame] ?? 0;
+                const y = yScale.getPixelForValue(spd);
+                const { top, bottom, right } = chart.chartArea;
+                const ctx = chart.ctx;
+
+                ctx.save();
+                ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(x, top);
+                ctx.lineTo(x, bottom);
+                ctx.stroke();
+
+                ctx.beginPath();
+                ctx.arc(x, y, 3, 0, Math.PI * 2);
+                ctx.fillStyle = '#ffffff';
+                ctx.fill();
+
+                const label = `${Math.round(spd)} km/h`;
+                ctx.font = '11px system-ui, sans-serif';
+                ctx.textBaseline = 'bottom';
+                const tw = ctx.measureText(label).width;
+                const tx = (x + 6 + tw > right) ? x - 6 - tw : x + 6;
+                ctx.fillStyle = '#ffffff';
+                ctx.fillText(label, tx, Math.max(top + 12, y - 6));
+                ctx.restore();
+            },
+        };
+
+        const poiSpeedMarker = {
+            id: 'poiSpeedMarker',
+            afterDatasetsDraw(chart) {
+                if (totalDist <= 0 || speeds.length === 0) return;
+                const xScale = chart.scales.x, yScale = chart.scales.y;
+                const dx = speedDisplayX(poiDist);
+                if (dx < xScale.min || dx > xScale.max) return; // POI not in view
+
+                const x = xScale.getPixelForValue(dx);
+                const poiFrame = Math.max(0, Math.min(distToFrame(poiDist), speeds.length - 1));
+                const spd = speeds[poiFrame] ?? 0;
+                const y = yScale.getPixelForValue(spd);
+                const coords = mapData[currentLapKey] || [];
+                const c = surfaceColors[coords[poiFrame] && coords[poiFrame].surface] || surfaceColors.unknown;
+                const { top, bottom, right } = chart.chartArea;
+                const ctx = chart.ctx;
+
+                ctx.save();
+                ctx.beginPath();
+                ctx.moveTo(x, top);
+                ctx.lineTo(x, bottom);
+                ctx.strokeStyle = c.border;
+                ctx.lineWidth = 1;
+                ctx.setLineDash([4, 3]);
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                // Dot at the speed value, matching the map marker (surface fill, white ring)
+                ctx.beginPath();
+                ctx.arc(x, y, 3.5, 0, Math.PI * 2);
+                ctx.fillStyle = c.border;
+                ctx.fill();
+                ctx.lineWidth = 1.5;
+                ctx.strokeStyle = HIGHLIGHT_RING;
+                ctx.stroke();
+
+                // Speed label, flipped to the left if it would overflow the right edge
+                const label = `${Math.round(spd)} km/h`;
+                ctx.font = '11px system-ui, sans-serif';
+                ctx.textBaseline = 'top';
+                const tw = ctx.measureText(label).width;
+                const tx = (x + 6 + tw > right) ? x - 6 - tw : x + 6;
+                ctx.fillStyle = '#e0e0e0';
+                ctx.fillText(label, tx, top + 2);
+                ctx.restore();
+            },
+        };
+
+        function createSpeedChart() {
+            const ctx = document.getElementById('speed-chart').getContext('2d');
+            speedChart = new Chart(ctx, {
+                type: 'line',
+                data: { datasets: [] },
+                plugins: [poiSpeedMarker, hoverSpeedMarker],
+                options: {
+                    animation: false,
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    spanGaps: false, // null y-values break the line between disconnected sections
+                    interaction: { mode: 'nearest', intersect: false, axis: 'x' },
+                    onHover: (_event, elements) => {
+                        let frame = null;
+                        if (elements.length > 0) {
+                            const d = speedChart.data.datasets[elements[0].datasetIndex].data[elements[0].index];
+                            if (d && d.frame != null) frame = d.frame;
+                        }
+                        setHovered(frame, 'speed');
+                    },
+                    plugins: { legend: { display: false }, tooltip: { enabled: false } },
+                    scales: {
+                        x: {
+                            type: 'linear',
+                            title: { display: true, text: 'Distance', color: '#aaa', font: { size: 12 } },
+                            ticks: {
+                                color: '#888',
+                                callback: (v) => v >= 1000 ? (v / 1000).toFixed(1) + ' km' : Math.round(v) + ' m',
+                            },
+                            grid: { color: 'rgba(255,255,255,0.06)' },
+                        },
+                        y: {
+                            title: { display: true, text: 'Speed (km/h)', color: '#aaa', font: { size: 12 } },
+                            ticks: { color: '#888' },
+                            grid: { color: 'rgba(255,255,255,0.06)' },
+                            beginAtZero: true,
+                        },
+                    },
+                },
+            });
+        }
+
+        // Maps a true lap distance to its plotted x on the speed chart. When the visible
+        // section wraps the start/finish line, the trailing (high-distance) part is shifted
+        // back by one lap so it sits just before the leading part. Identity when no wrap.
+        function speedDisplayX(dist) {
+            if (speedWrapThreshold != null && dist >= speedWrapThreshold) return dist - totalDist;
+            return dist;
+        }
+
+        // Plot speed vs distance for the visible track only. Visible frames form runs of
+        // consecutive indices; a run leaving and re-entering the viewport is drawn as
+        // separate segments (null break). A section that straddles the start/finish line
+        // shows up as a run ending at the last frame plus a run starting at the first — one
+        // physical piece — so it is unwrapped and drawn as a single continuous trace.
+        function updateSpeedChart(coords, mask) {
+            if (!speedChart) return;
+            const n = coords.length;
+
+            // Maximal runs of consecutive on-screen frames.
+            const runs = [];
+            let s = -1;
+            for (let i = 0; i < n; i++) {
+                const on = !mask || !!mask[i];
+                if (on && s < 0) s = i;
+                if (!on && s >= 0) { runs.push([s, i - 1]); s = -1; }
+            }
+            if (s >= 0) runs.push([s, n - 1]);
+
+            // Detect a start/finish straddle: a run touching the first frame and one
+            // touching the last frame. The trailing run is unwrapped (shifted -totalDist)
+            // and plotted first, ahead of the leading run.
+            const wrap = runs.length >= 2 && runs[0][0] === 0 &&
+                runs[runs.length - 1][1] === n - 1 && totalDist > 0;
+            speedWrapThreshold = wrap ? cumulativeDists[runs[runs.length - 1][0]] : null;
+            const order = wrap ? [runs[runs.length - 1], ...runs.slice(0, runs.length - 1)] : runs;
+
+            const pts = [];
+            let firstX = null, lastX = null;
+            for (let r = 0; r < order.length; r++) {
+                const [a, b] = order[r];
+                if (r > 0) {
+                    // Break the line unless this run is physically adjacent to the previous
+                    // one in cyclic frame order (the unwrap join is; a real gap is not).
+                    const prevEnd = order[r - 1][1];
+                    const adjacent = (prevEnd + 1) % n === a;
+                    if (!adjacent) {
+                        pts.push({ x: (lastX + speedDisplayX(cumulativeDists[a])) / 2, y: null });
+                    }
+                }
+                for (let i = a; i <= b; i++) {
+                    const x = speedDisplayX(cumulativeDists[i] ?? 0);
+                    pts.push({ x, y: speeds[i] ?? 0, t: coords[i].throttle ?? 0, b: coords[i].brake ?? 0, frame: i });
+                    if (firstX === null) firstX = x;
+                    lastX = x;
+                }
+            }
+            // Bind the x-axis to the visible extent so the trace fills the axis and the x zoom
+            // tracks the visible range, rather than the chart re-fitting/snapping to the data.
+            speedChart.options.scales.x.min = firstX;
+            speedChart.options.scales.x.max = lastX;
+            speedChart.data.datasets = [{
+                data: pts,
+                borderColor: '#888',
+                borderWidth: 1.5,
+                pointRadius: 0,
+                tension: 0.15,
+                // Colour each segment by driver input: green on throttle, red on brake.
+                segment: {
+                    borderColor: (ctx) => {
+                        const d = ctx.chart.data.datasets[ctx.datasetIndex].data[ctx.p1DataIndex];
+                        return d && d.y != null ? throttleBrakeColor(d.t, d.b) : undefined;
+                    },
+                },
+            }];
+            speedChart.update('none');
+        }
+
+        // Segment colour from throttle/brake percentages (0-100): green for throttle, red for
+        // brake (brighter with more input), neutral grey when coasting.
+        function throttleBrakeColor(t, b) {
+            t = t || 0; b = b || 0;
+            if (t < 3 && b < 3) return '#8a8a8a';
+            if (b >= t) {
+                const k = Math.min(1, b / 100);
+                const c = Math.round(70 * (1 - k));
+                return `rgb(${Math.round(150 + 105 * k)}, ${c}, ${c})`;
+            }
+            const k = Math.min(1, t / 100);
+            const c = Math.round(70 * (1 - k));
+            return `rgb(${c}, ${Math.round(150 + 105 * k)}, ${c})`;
         }
 
         function lerp(a, b, t) { return a + (b - a) * t; }
@@ -899,17 +1491,60 @@
             return { xMin: xNice.min, xMax: xNice.max, yMin: yNice.min, yMax: yNice.max };
         }
 
+        // Rebuild the "point of interest" overlay dataset from highlightSource, excluding any
+        // surfaces currently hidden via the legend. Given a low `order` so it draws on top
+        // (Chart.js paints datasets in reverse order). Each point keeps its surface colour with
+        // a white ring. Call after any change to selection or surface visibility.
+        function syncHighlight() {
+            if (!chart) return;
+
+            chart.data.datasets = chart.data.datasets.filter(ds => ds.label !== HIGHLIGHT_LABEL);
+
+            const hidden = new Set();
+            chart.data.datasets.forEach((ds, i) => {
+                if (chart.getDatasetMeta(i).hidden) hidden.add(ds.label);
+            });
+
+            const pts = highlightSource.filter(p => !hidden.has(p.surface));
+            if (pts.length === 0) return;
+
+            chart.data.datasets.push({
+                label: HIGHLIGHT_LABEL,
+                data: pts,
+                backgroundColor: pts.map(p => (surfaceColors[p.surface] || surfaceColors.unknown).border),
+                borderColor: HIGHLIGHT_RING,
+                borderWidth: 1.5,
+                pointRadius: 3.5,
+                pointHoverRadius: 6,
+                order: -1,
+            });
+        }
+
         function updateChart() {
             const coords = mapData[currentLapKey] || [];
-            const n = coords.length || allData.length;
-            const { startFrame, endFrame } = getFrameRange(n);
             const grouped = {};
-            let shown = 0;
-            allData.forEach(d => {
-                if (d.frame < startFrame || d.frame > endFrame) return;
-                shown++;
+
+            // Plot the points whose track position is actually rendered in the map viewport.
+            // Falls back to all points when there is no map geometry to test against.
+            const canvas = document.getElementById('map-canvas');
+            const mask = coords.length >= 2 ? computeVisibleMask(coords, canvas.width, canvas.height) : null;
+            const shownPoints = mask ? allData.filter(d => mask[d.frame]) : allData.slice();
+            const shown = shownPoints.length;
+
+            // Emphasise the `highlightCount` plotted points nearest the point of interest.
+            const poiFrame = distToFrame(poiDist);
+            const selected = new Set(
+                [...shownPoints]
+                    .sort((a, b) => Math.abs(a.frame - poiFrame) - Math.abs(b.frame - poiFrame))
+                    .slice(0, highlightCount)
+            );
+
+            highlightSource = [...selected].map(d => ({
+                x: jerkOf(d), y: snapOf(d), dist: cumulativeDists[d.frame] ?? 0, frame: d.frame, surface: d.surface,
+            }));
+            shownPoints.forEach(d => {
                 if (!grouped[d.surface]) grouped[d.surface] = [];
-                grouped[d.surface].push({ x: d.jerk, y: d.snap, dist: cumulativeDists[d.frame] ?? 0, frame: d.frame });
+                grouped[d.surface].push({ x: jerkOf(d), y: snapOf(d), dist: cumulativeDists[d.frame] ?? 0, frame: d.frame });
             });
 
             const existing = new Map(chart.data.datasets.map(ds => [ds.label, ds]));
@@ -938,6 +1573,9 @@
                 newDatasets.push(ds);
                 return ds;
             });
+
+            // Emphasise the POI-nearest points on top, honouring surface-legend visibility.
+            syncHighlight();
 
             // Compute nice target bounds directly from data — no extra renders
             const niceBounds = computeNiceBounds(chart.data.datasets);
@@ -973,7 +1611,9 @@
                 fadeRaf = requestAnimationFrame(fadeStep);
             }
 
-            document.getElementById('stats').textContent = `Showing ${shown} of ${allData.length} data points`;
+            document.getElementById('sel-points').textContent = `${shown} / ${allData.length}`;
+
+            updateSpeedChart(coords, mask);
         }
 
         init();

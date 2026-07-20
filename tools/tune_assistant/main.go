@@ -7,7 +7,6 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"math"
 	"net"
 	"net/http"
 	"os"
@@ -20,7 +19,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/vwhitteron/simtezilo-dev/app/kinematics"
+	"github.com/vwhitteron/simtezilo-dev/app/kinematics/vector"
 	"github.com/vwhitteron/simtezilo-dev/app/signal"
+	"github.com/vwhitteron/simtezilo-dev/app/vehicle"
 	gttelemetry "github.com/zetetos/gt-telemetry/v2"
 	gtmodels "github.com/zetetos/gt-telemetry/v2/pkg/models"
 )
@@ -79,16 +81,65 @@ func classifySurfaces(s gtmodels.CornerSetGeneric[gtmodels.SurfaceType]) []strin
 }
 
 type dataPoint struct {
-	Frame   int     `json:"frame"`
+	Frame int `json:"frame"`
+	// Jerk/Snap are the processed (live-path) values: the recovery-aware Resolved
+	// derivatives, i.e. what the device actually receives. JerkRaw/SnapRaw are the
+	// ungated calculated chain with no nyquist gate or gap resolution — the honest
+	// underlying signal. The web UI toggles which pair the scatter plots.
 	Jerk    float64 `json:"jerk"`
 	Snap    float64 `json:"snap"`
+	JerkRaw float64 `json:"jerkRaw"`
+	SnapRaw float64 `json:"snapRaw"`
 	Surface string  `json:"surface"`
 }
 
+// derivTracker computes the ungated ("raw") calculated jerk/snap chain for a single
+// velocity signal, mirroring the kinematics SixDOF*Calc math but without the nyquist
+// gate or gap resolution the live path applies. It is tool-only — the app never
+// constructs one — so it adds nothing to the real-time haptic loop.
+type derivTracker struct {
+	lastVel      gtmodels.Vector
+	lastAccelMag float64
+	lastJerk     float64
+	samples      int
+}
+
+// update advances the chain by one frame and returns the current raw jerk and snap.
+// windowSeconds is the frame period. The returned values read zero until enough
+// samples have accumulated (jerk needs 3, snap needs 4) so the second derivative is
+// real rather than an artefact of differencing against the zero-initialised history;
+// the internal chain always uses the true values.
+func (d *derivTracker) update(vel gtmodels.Vector, windowSeconds float64) (jerk, snap float64) {
+	accelFactor := float32(1.0 / windowSeconds)
+	accel := vector.Scale(vector.Delta(vel, d.lastVel), accelFactor, accelFactor, accelFactor)
+	accelMag := vector.Magnitude(accel)
+
+	jerk = (accelMag - d.lastAccelMag) / windowSeconds
+	snap = (jerk - d.lastJerk) / windowSeconds
+
+	d.lastVel = vel
+	d.lastAccelMag = accelMag
+	d.lastJerk = jerk
+	d.samples++
+
+	if d.samples < 3 {
+		jerk = 0
+	}
+
+	if d.samples < 4 {
+		snap = 0
+	}
+
+	return jerk, snap
+}
+
 type mapCoord struct {
-	X       float32 `json:"x"`
-	Z       float32 `json:"z"`
-	Surface string  `json:"surface"`
+	X        float32 `json:"x"`
+	Z        float32 `json:"z"`
+	Surface  string  `json:"surface"`
+	Speed    float32 `json:"speed"`    // ground speed in m/s from telemetry
+	Throttle float32 `json:"throttle"` // throttle input, percent 0-100
+	Brake    float32 `json:"brake"`    // brake input, percent 0-100
 }
 
 type metadata struct {
@@ -102,7 +153,7 @@ type metadata struct {
 }
 
 func main() {
-	source := flag.String("source", "", "Path to directory of replay files (.gtz/.gtr)")
+	source := flag.String("source", "./data/replays", "Path to directory of replay files (default: ./data/replays)")
 	addr := flag.String("addr", ":0", "HTTP listen address (default: random port)")
 	noBrowser := flag.Bool("no-browser", false, "Do not open the browser automatically")
 
@@ -149,10 +200,8 @@ func main() {
 }
 
 type lapAccumulator struct {
-	translationVelocities []gtmodels.Vector
-	angularVelocities     []gtmodels.Vector
-	surfaces              [][]string
-	mapCoords             []mapCoord
+	points    []dataPoint
+	mapCoords []mapCoord
 }
 
 func collectAllLaps(source string) (map[int16][]dataPoint, map[int16][]mapCoord, metadata, error) {
@@ -174,9 +223,19 @@ func collectAllLaps(source string) (map[int16][]dataPoint, map[int16][]mapCoord,
 	vehicleCaptured := false
 	meta := metadata{}
 
-	var longitudinalRadius float64
+	var dims vehicle.Dimensions
 
-	var transverseRadius float64
+	// Drive the real app kinematics pipeline. State is stateful and sequential, so
+	// a single instance is advanced frame-by-frame across the whole replay (never
+	// reset at lap boundaries, matching the live app). This gives us the fs/2
+	// nyquist gate and the gap-aware Resolved* derivatives for free rather than
+	// reproducing the accel->jerk->snap chain here.
+	state := kinematics.NewKinematicsState()
+
+	// Raw (ungated) reference chains, advanced in lockstep with state so both series
+	// share the same frame indices. Translation and rotation are tracked separately,
+	// exactly as the processed path splits them.
+	var rawTrans, rawRot derivTracker
 
 	for frame, frameErr := range client.Scan(ctx) {
 		if frameErr != nil {
@@ -215,13 +274,22 @@ func collectAllLaps(source string) (map[int16][]dataPoint, map[int16][]mapCoord,
 				trackWidthMetres = (float64(frame.VehicleWidthMillimetres()) / 1000) * 0.85
 			}
 
-			longitudinalRadius = wheelbaseMetres / 2
-			transverseRadius = trackWidthMetres / 2
+			dims = vehicle.Dimensions{
+				WheelbaseMetres:    float32(wheelbaseMetres),
+				TrackWidthMetres:   float32(trackWidthMetres),
+				LongitudinalRadius: float32(wheelbaseMetres / 2),
+				TransverseRadius:   float32(trackWidthMetres / 2),
+			}
 
 			vehicleCaptured = true
 		}
 
 		lastCoord = frame.PositionalMapCoordinates()
+
+		// Advance the kinematics state for this frame. Scan yields client.Telemetry
+		// (the same *Transformer Update reads), so the client is already positioned
+		// on the current frame.
+		state.Update(framePeriod, dims, client)
 
 		lap := frame.CurrentLap()
 
@@ -241,10 +309,47 @@ func collectAllLaps(source string) (map[int16][]dataPoint, map[int16][]mapCoord,
 			primarySurface = surfLabels[0]
 		}
 
-		acc.translationVelocities = append(acc.translationVelocities, frame.VelocityVector())
-		acc.angularVelocities = append(acc.angularVelocities, frame.AngularVelocityVector())
-		acc.surfaces = append(acc.surfaces, surfLabels)
-		acc.mapCoords = append(acc.mapCoords, mapCoord{X: pos.X, Z: pos.Z, Surface: primarySurface})
+		// Frame index is the position within this lap's map-coords slice; the web UI
+		// uses it to cross-reference scatter points against the map/speed tracks.
+		frameIdx := len(acc.mapCoords)
+
+		acc.mapCoords = append(acc.mapCoords, mapCoord{
+			X: pos.X, Z: pos.Z, Surface: primarySurface,
+			Speed:    frame.GroundSpeedMetresPerSecond(),
+			Throttle: frame.ThrottleInputPercent(),
+			Brake:    frame.BrakeInputPercent(),
+		})
+
+		// Processed: match calculateChassisHapticPulseAmplitude/Frequency — the larger
+		// of the translation and rotation Resolved values (recovery-aware; zeroed
+		// during warm-up and across telemetry gaps).
+		jerkMag := signal.Abs(signal.LargestMagnitude(
+			state.Current.ResolvedTransJerk, state.Current.ResolvedRotJerk))
+		snapMag := signal.Abs(signal.LargestMagnitude(
+			state.Current.ResolvedTransSnap, state.Current.ResolvedRotSnap))
+
+		// Raw: the same larger-of-trans/rot rule over the ungated chains. Rotation is
+		// scaled to metres at the wheels first, as the processed path does.
+		rawTransJerk, rawTransSnap := rawTrans.update(frame.VelocityVector(), framePeriod)
+		scaledAngVel := vector.Scale(
+			frame.AngularVelocityVector(),
+			dims.LongitudinalRadius, dims.LongitudinalRadius, dims.TransverseRadius,
+		)
+		rawRotJerk, rawRotSnap := rawRot.update(scaledAngVel, framePeriod)
+
+		jerkRawMag := signal.Abs(signal.LargestMagnitude(rawTransJerk, rawRotJerk))
+		snapRawMag := signal.Abs(signal.LargestMagnitude(rawTransSnap, rawRotSnap))
+
+		for _, label := range surfLabels {
+			acc.points = append(acc.points, dataPoint{
+				Frame:   frameIdx,
+				Jerk:    jerkMag,
+				Snap:    snapMag,
+				JerkRaw: jerkRawMag,
+				SnapRaw: snapRawMag,
+				Surface: label,
+			})
+		}
 	}
 
 	// Resolve circuit from the last known coordinate
@@ -261,98 +366,11 @@ func collectAllLaps(source string) (map[int16][]dataPoint, map[int16][]mapCoord,
 	mapResult := make(map[int16][]mapCoord, len(accumulators))
 
 	for lap, acc := range accumulators {
-		result[lap] = computeSnapJerk(acc.translationVelocities, acc.angularVelocities, longitudinalRadius, transverseRadius, acc.surfaces)
+		result[lap] = acc.points
 		mapResult[lap] = acc.mapCoords
 	}
 
 	return result, mapResult, meta, nil
-}
-
-// computeAccelMagnitudes computes per-frame acceleration magnitudes from a velocity series.
-// Each element is the magnitude of the velocity delta scaled by framePeriod.
-func computeAccelMagnitudes(velocities []gtmodels.Vector) []float64 {
-	mags := make([]float64, len(velocities)-1)
-
-	for idx := range len(velocities) - 1 {
-		dx := float64(velocities[idx+1].X-velocities[idx].X) / framePeriod
-		dy := float64(velocities[idx+1].Y-velocities[idx].Y) / framePeriod
-		dz := float64(velocities[idx+1].Z-velocities[idx].Z) / framePeriod
-		mags[idx] = math.Sqrt(dx*dx + dy*dy + dz*dz)
-	}
-
-	return mags
-}
-
-// differentiate returns the first derivative of a magnitude series, scaled by framePeriod.
-func differentiate(mags []float64) []float64 {
-	derivs := make([]float64, len(mags)-1)
-
-	for idx := range len(mags) - 1 {
-		derivs[idx] = (mags[idx+1] - mags[idx]) / framePeriod
-	}
-
-	return derivs
-}
-
-func computeSnapJerk(translationVelocities, angularVelocities []gtmodels.Vector, longitudinalRadius, transverseRadius float64, surfaces [][]string) []dataPoint {
-	frameCount := len(translationVelocities)
-	if frameCount < 4 {
-		return nil
-	}
-
-	// Translation pipeline: matches kinematics SixDOFTranslationCalc.
-	transJerks := differentiate(computeAccelMagnitudes(translationVelocities))
-	transSnaps := differentiate(transJerks)
-
-	// Rotation pipeline: matches kinematics SixDOFRotationCalc.
-	// Angular velocity is scaled by vehicle dimensions (wheelbase/2 for X/Y, track/2 for Z)
-	// before the same magnitude-based differentiation chain.
-	scaledAngVel := make([]gtmodels.Vector, frameCount)
-
-	for idx := range frameCount {
-		scaledAngVel[idx] = gtmodels.Vector{
-			X: angularVelocities[idx].X * float32(longitudinalRadius),
-			Y: angularVelocities[idx].Y * float32(longitudinalRadius),
-			Z: angularVelocities[idx].Z * float32(transverseRadius),
-		}
-	}
-
-	rotJerks := differentiate(computeAccelMagnitudes(scaledAngVel))
-	rotSnaps := differentiate(rotJerks)
-
-	var points []dataPoint
-
-	for idx := range transSnaps {
-		surfIdx := idx + 3
-		if surfIdx >= len(surfaces) {
-			surfIdx = len(surfaces) - 1
-		}
-
-		// Match calculateChassisHapticPulseAmplitude: use the larger of translation and rotation
-		jerkMag := signal.Abs(largestMagnitude(transJerks[idx+1], rotJerks[idx+1]))
-		snapMag := signal.Abs(largestMagnitude(transSnaps[idx], rotSnaps[idx]))
-
-		for _, label := range surfaces[surfIdx] {
-			points = append(points, dataPoint{
-				Frame:   idx + 3,
-				Jerk:    jerkMag,
-				Snap:    snapMag,
-				Surface: label,
-			})
-		}
-	}
-
-	return points
-}
-
-// largestMagnitude returns whichever of a or b has the greater absolute value, preserving sign.
-// This mirrors signal.LargestMagnitude used by calculateChassisHapticPulseAmplitude.
-func largestMagnitude(a, b float64) float64 {
-	if math.Abs(a) >= math.Abs(b) {
-		return a
-	}
-
-	return b
 }
 
 type lapResponse struct {
