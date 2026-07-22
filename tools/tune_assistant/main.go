@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/vwhitteron/simtezilo-dev/app/haptics"
 	"github.com/vwhitteron/simtezilo-dev/app/kinematics"
 	"github.com/vwhitteron/simtezilo-dev/app/kinematics/vector"
 	"github.com/vwhitteron/simtezilo-dev/app/signal"
@@ -140,6 +141,7 @@ type mapCoord struct {
 	Speed    float32 `json:"speed"`    // ground speed in m/s from telemetry
 	Throttle float32 `json:"throttle"` // throttle input, percent 0-100
 	Brake    float32 `json:"brake"`    // brake input, percent 0-100
+	Seq      uint32  `json:"seq"`      // telemetry sequence ID (drop-aware frame offset)
 }
 
 type metadata struct {
@@ -318,6 +320,7 @@ func collectAllLaps(source string) (map[int16][]dataPoint, map[int16][]mapCoord,
 			Speed:    frame.GroundSpeedMetresPerSecond(),
 			Throttle: frame.ThrottleInputPercent(),
 			Brake:    frame.BrakeInputPercent(),
+			Seq:      frame.SequenceID(),
 		})
 
 		// Processed: match calculateChassisHapticPulseAmplitude/Frequency — the larger
@@ -496,11 +499,26 @@ func serveChart(dir string, replays []string, addr string, noBrowser bool) {
 	}
 
 	lapCache := &replayCache{dir: dir, cache: make(map[string][]byte)}
+	audioCache := newAudioCache(dir)
+
+	defaults := haptics.DefaultTuning()
+
+	defaultsJSON, err := json.Marshal(map[string]int{
+		"jerkCurve": defaults.JerkCurve,
+		"jerkMax":   defaults.JerkMax,
+		"snapCurve": defaults.SnapCurve,
+		"snapMax":   defaults.SnapMax,
+	})
+	if err != nil {
+		log.Fatalf("Failed to marshal tuning defaults: %v", err)
+	}
 
 	mux := http.NewServeMux()
 	mux.Handle("/", rootHandler())
 	mux.Handle("/replays", replaysHandler(replaysJSON))
 	mux.Handle("/data", dataHandler(replays, lapCache.build))
+	mux.Handle("/audio", audioHandler(replays, audioCache))
+	mux.Handle("/tuning-defaults", replaysHandler(defaultsJSON))
 
 	ctx := context.Background()
 
@@ -515,7 +533,7 @@ func serveChart(dir string, replays []string, addr string, noBrowser bool) {
 	}
 
 	listenURL := fmt.Sprintf("http://localhost:%d", tcpAddr.Port)
-	log.Printf("Serving scatter chart at %s", listenURL)
+	log.Printf("Serving app at %s", listenURL)
 
 	if !noBrowser {
 		openBrowser(listenURL)

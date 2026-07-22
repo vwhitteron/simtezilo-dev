@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Snap vs Jerk - Telemetry Scatter Chart</title>
+    <title>Haptics Tuning Assistant</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
     <style>
         * {
@@ -98,16 +98,16 @@
             transition: transform 0.15s;
         }
 
-        .toggle-switch input:checked + .slider {
+        .toggle-switch input:checked+.slider {
             background: #2ecc71;
             border-color: #2ecc71;
         }
 
-        .toggle-switch input:checked + .slider::before {
+        .toggle-switch input:checked+.slider::before {
             transform: translateX(18px);
         }
 
-        .toggle-switch input:focus-visible + .slider {
+        .toggle-switch input:focus-visible+.slider {
             border-color: #e94560;
         }
 
@@ -180,18 +180,18 @@
 
 
         .info-widget {
-            flex: 0 0 220px;
+            flex: 0 0 auto;
             background: #16213e;
             border: 1px solid #0f3460;
             border-radius: 8px;
-            padding: 8px 12px 10px;
+            padding: 5px 12px 6px;
         }
 
         .info-widget h3 {
             text-align: center;
             font-size: 0.72em;
             color: #888;
-            margin-bottom: 8px;
+            margin-bottom: 4px;
             letter-spacing: 0.05em;
             text-transform: uppercase;
         }
@@ -199,8 +199,8 @@
         .info-widget dl {
             display: grid;
             grid-template-columns: auto 1fr;
-            gap: 3px 8px;
-            font-size: 0.78em;
+            gap: 1px 8px;
+            font-size: 0.75em;
         }
 
         .info-widget dt {
@@ -219,11 +219,173 @@
             flex-direction: column;
             gap: 12px;
         }
+
+        .chassis-panel {
+            margin-top: 16px;
+        }
+
+        .chassis-panel h3 {
+            text-align: center;
+            font-size: 0.72em;
+            color: #888;
+            margin-bottom: 6px;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+        }
+
+        .chassis-transport {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 8px;
+        }
+
+        .chassis-transport button {
+            background: #0f3460;
+            color: #e0e0e0;
+            border: 1px solid #1f4e8c;
+            border-radius: 6px;
+            width: 34px;
+            height: 30px;
+            font-size: 0.9em;
+            cursor: pointer;
+            transition: background 0.15s ease;
+        }
+
+        .chassis-transport button:hover {
+            background: #1f4e8c;
+        }
+
+        .wave-time {
+            font-size: 0.75em;
+            color: #aaa;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .wave-status {
+            font-size: 0.72em;
+            color: #e94560;
+            margin-left: auto;
+        }
+
+        .wave-container {
+            position: relative;
+            height: 110px;
+        }
+
+        #wave-canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            cursor: text;
+        }
+
+        .tune-widget h3 {
+            margin-bottom: 14px;
+        }
+
+        .tune-widget .tune-row {
+            display: grid;
+            grid-template-columns: 68px 1fr 34px;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 12px;
+        }
+
+        .tune-widget .tune-row label {
+            font-size: 0.72em;
+            color: #888;
+            text-align: right;
+        }
+
+        .tune-widget .tune-row input[type="range"] {
+            width: 100%;
+            height: 14px;
+            margin: 0;
+            background: transparent;
+            cursor: pointer;
+            -webkit-appearance: none;
+            appearance: none;
+        }
+
+        /* Slim track */
+        .tune-widget .tune-row input[type="range"]::-webkit-slider-runnable-track {
+            height: 3px;
+            border-radius: 2px;
+            background: #0f3460;
+        }
+
+        .tune-widget .tune-row input[type="range"]::-moz-range-track {
+            height: 3px;
+            border-radius: 2px;
+            background: #0f3460;
+        }
+
+        /* Small thumb (offset to centre on the 3px track) */
+        .tune-widget .tune-row input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 11px;
+            height: 11px;
+            margin-top: -4px;
+            border-radius: 50%;
+            background: #e94560;
+            border: none;
+            transition: transform 0.1s ease;
+        }
+
+        .tune-widget .tune-row input[type="range"]::-moz-range-thumb {
+            width: 11px;
+            height: 11px;
+            border-radius: 50%;
+            background: #e94560;
+            border: none;
+        }
+
+        .tune-widget .tune-row input[type="range"]:hover::-webkit-slider-thumb {
+            transform: scale(1.2);
+        }
+
+        .tune-widget .tune-row input[type="range"]:focus-visible {
+            outline: none;
+        }
+
+        .tune-widget .tune-row input[type="range"]:focus-visible::-webkit-slider-thumb {
+            box-shadow: 0 0 0 3px rgba(233, 69, 96, 0.35);
+        }
+
+        .tune-widget .tune-row input[type="range"]:focus-visible::-moz-range-thumb {
+            box-shadow: 0 0 0 3px rgba(233, 69, 96, 0.35);
+        }
+
+        .tune-widget .tune-row output {
+            font-size: 0.74em;
+            color: #e0e0e0;
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .tune-widget .tune-reset {
+            display: block;
+            width: 60%;
+            margin: 24px auto 0;
+            background: #0f3460;
+            color: #e0e0e0;
+            border: 1px solid #1f4e8c;
+            border-radius: 6px;
+            padding: 4px 0;
+            font-size: 0.74em;
+            cursor: pointer;
+        }
+
+        .tune-widget .tune-reset:hover {
+            background: #1f4e8c;
+        }
     </style>
 </head>
 
 <body>
-    <h1>Snap vs Jerk &mdash; Telemetry Scatter Chart</h1>
+    <h1>Haptics Tuning Assistant</h1>
     <div class="lap-row">
         <div class="lap-group">
             <label for="replay-select">Replay:</label>
@@ -243,11 +405,11 @@
         <div class="lap-group">
             <label for="highlight-count">Highlight:</label>
             <select id="highlight-count">
-            <option value="15">250 ms</option>
-            <option value="30">500 ms</option>
-            <option value="60">1 s</option>
-            <option value="120">2 s</option>
-            <option value="240">4 s</option>
+                <option value="15">250 ms</option>
+                <option value="30">500 ms</option>
+                <option value="60">1 s</option>
+                <option value="120">2 s</option>
+                <option value="240">4 s</option>
             </select>
         </div>
     </div>
@@ -258,6 +420,17 @@
                 <h3>Speed</h3>
                 <div class="speed-container">
                     <canvas id="speed-chart"></canvas>
+                </div>
+            </div>
+            <div class="chassis-panel">
+                <h3>Chassis Haptic Waveform</h3>
+                <div class="wave-container">
+                    <canvas id="wave-canvas"></canvas>
+                </div>
+                <div class="chassis-transport">
+                    <button id="wave-play" type="button" title="Play / pause">&#9654;</button>
+                    <span class="wave-time" id="wave-time">0.00 / 0.00 s</span>
+                    <span class="wave-status" id="wave-status"></span>
                 </div>
             </div>
         </div>
@@ -271,6 +444,10 @@
                 <dl>
                     <dt>POI</dt>
                     <dd id="sel-poi">—</dd>
+                    <dt>POI offset</dt>
+                    <dd id="sel-poi-offset">—</dd>
+                    <dt>Hover offset</dt>
+                    <dd id="sel-hover-offset">—</dd>
                     <dt>Zoom</dt>
                     <dd id="sel-zoom">—</dd>
                     <dt>Points</dt>
@@ -291,6 +468,30 @@
                     <dt>Drivetrain</dt>
                     <dd id="v-drivetrain">—</dd>
                 </dl>
+            </div>
+            <div class="info-widget tune-widget" id="tune-widget">
+                <h3>Chassis Haptics</h3>
+                <div class="tune-row">
+                    <label for="tune-jerkCurve">Jerk curve</label>
+                    <input type="range" id="tune-jerkCurve" min="5" max="955" step="5">
+                    <output id="out-jerkCurve">—</output>
+                </div>
+                <div class="tune-row">
+                    <label for="tune-jerkMax">Jerk max</label>
+                    <input type="range" id="tune-jerkMax" min="1" max="200" step="1">
+                    <output id="out-jerkMax">—</output>
+                </div>
+                <div class="tune-row">
+                    <label for="tune-snapCurve">Snap curve</label>
+                    <input type="range" id="tune-snapCurve" min="5" max="955" step="5">
+                    <output id="out-snapCurve">—</output>
+                </div>
+                <div class="tune-row">
+                    <label for="tune-snapMax">Snap max</label>
+                    <input type="range" id="tune-snapMax" min="1" max="200" step="1">
+                    <output id="out-snapMax">—</output>
+                </div>
+                <button type="button" class="tune-reset" id="tune-reset">Reset</button>
             </div>
         </div>
     </div>
@@ -336,6 +537,7 @@
         let highlightSource = [];                                // {x,y,dist,frame,surface} of POI-nearest points
         let cumulativeDists = [];
         let totalDist = 0;
+        const MAX_ZOOM = 50;        // maximum map zoom factor
         let mapZoom = 1;
         let mapPanX = 0;
         let mapPanY = 0;
@@ -391,7 +593,7 @@
         // Restore a saved map viewport / POI onto the current lap, then re-derive the range
         // and redraw. Used once on initial load for the lap named in the URL.
         function applyView(v) {
-            if (Number.isFinite(v.zoom)) mapZoom = Math.max(1, Math.min(v.zoom, 20));
+            if (Number.isFinite(v.zoom)) mapZoom = Math.max(1, Math.min(v.zoom, MAX_ZOOM));
             if (Number.isFinite(v.panx)) mapPanX = v.panx;
             if (Number.isFinite(v.pany)) mapPanY = v.pany;
             mapZoomedToRange = false;
@@ -455,6 +657,7 @@
                 useRaw = !e.target.checked;
                 updateUrl();
                 updateChart();
+                scheduleAudioRefresh();
             });
 
             initMapInteraction();
@@ -558,6 +761,7 @@
             targetScales = null;
             updateChart();
             drawMap(lapKey);
+            scheduleAudioRefresh();
         }
 
         function distToFrame(dist) {
@@ -583,9 +787,21 @@
                 : Math.round(meters) + '\u202fm';
         }
 
+        // Telemetry-sequence offset of a frame from the lap's first frame. This counts
+        // dropped packets (seq gaps), so it is the true elapsed-packet offset rather than
+        // the array index. Returns null when unavailable.
+        function frameOffset(frame) {
+            const coords = mapData[currentLapKey] || [];
+            if (!coords.length || frame == null || frame < 0 || frame >= coords.length) return null;
+            const base = coords[0].seq ?? 0;
+            return (coords[frame].seq ?? 0) - base;
+        }
+
         // Refresh the read-only Selection panel below the map.
         function updateSelectionInfo() {
             document.getElementById('sel-poi').textContent = totalDist > 0 ? formatDist(poiDist) : '—';
+            const poiOff = totalDist > 0 ? frameOffset(distToFrame(poiDist)) : null;
+            document.getElementById('sel-poi-offset').textContent = poiOff != null ? String(poiOff) : '—';
             document.getElementById('sel-zoom').textContent = totalDist > 0 ? mapZoom.toFixed(2) + '×' : '—';
         }
 
@@ -709,6 +925,7 @@
 
             updateSelectionInfo();
             updateChart();
+            scheduleAudioRefresh();
         }
 
         // Base (identity-transform) coordinate mapping used by the map, matching drawMap.
@@ -870,7 +1087,7 @@
                 const f = e.deltaY < 0 ? 1.15 : 1 / 1.15;
                 // Clamp zoom first, then pan by the factor actually applied. At a zoom limit the
                 // effective factor is 1, so the map doesn't drift once zoom stops changing.
-                const newZoom = Math.max(1, Math.min(mapZoom * f, 20));
+                const newZoom = Math.max(1, Math.min(mapZoom * f, MAX_ZOOM));
                 const ef = newZoom / mapZoom;
                 // Zoom around cursor: keep the world point under the cursor fixed
                 mapPanX = mx - cxCenter + ef * (mapPanX - mx + cxCenter);
@@ -1070,7 +1287,7 @@
                     animation: false,
                     responsive: true,
                     maintainAspectRatio: true,
-                    aspectRatio: 1.4,
+                    aspectRatio: 1.83,
                     onHover: (_event, elements) => {
                         const frame = elements.length > 0
                             ? (chart.data.datasets[elements[0].datasetIndex].data[elements[0].index].frame ?? null)
@@ -1157,9 +1374,12 @@
         function setHovered(frame, source) {
             if (frame === hoveredFrame) return;
             hoveredFrame = frame;
+            const hOff = frameOffset(frame);
+            document.getElementById('sel-hover-offset').textContent = hOff != null ? String(hOff) : '—';
             drawMap(currentLapKey);
             if (source !== 'scatter') highlightScatterFrame(frame); // scatter highlights itself natively
             if (speedChart) speedChart.render();
+            if (waveBuffer) drawWave();
         }
 
         // Programmatically put a scatter point into its hover state (and tooltip) by frame.
@@ -1288,6 +1508,19 @@
                             if (d && d.frame != null) frame = d.frame;
                         }
                         setHovered(frame, 'speed');
+                    },
+                    onClick: (_event, elements) => {
+                        // Clicking the speed chart repositions the POI to that frame.
+                        if (elements.length > 0) {
+                            const d = speedChart.data.datasets[elements[0].datasetIndex].data[elements[0].index];
+                            if (d && d.frame != null && cumulativeDists.length) {
+                                poiDist = Math.round(cumulativeDists[d.frame] ?? 0);
+                                updateSelectionInfo();
+                                updateChart();
+                                drawMap(currentLapKey);
+                                scheduleUrlUpdate();
+                            }
+                        }
                     },
                     plugins: { legend: { display: false }, tooltip: { enabled: false } },
                     scales: {
@@ -1614,8 +1847,418 @@
             document.getElementById('sel-points').textContent = `${shown} / ${allData.length}`;
 
             updateSpeedChart(coords, mask);
+
+            // Keep the waveform's highlight box in step with the POI/highlight, which can
+            // change without re-fetching audio (e.g. dragging the POI within the section).
+            if (waveBuffer) drawWave();
         }
 
+        // ---------------------------------------------------------------------
+        // Chassis haptic audio: fetch the rendered WAV for the visible track
+        // section (and current tuning) from /audio, draw its waveform, and offer
+        // playback with scrubbing. The audio is produced by the real app haptic
+        // generators server-side (app/hapticcapture) — nothing is synthesized here.
+        // ---------------------------------------------------------------------
+        let audioCtx = null;
+        let waveBuffer = null;        // decoded AudioBuffer for the current section
+        let waveSource = null;        // active AudioBufferSourceNode while playing
+        let wavePlaying = false;
+        let wavePlayOffset = 0;       // seconds into the buffer the playhead sits at
+        let wavePlayStartCtx = 0;     // audioCtx.currentTime when the current source started
+        let waveRaf = null;
+        let wavePeaks = null;         // { min:[], max:[] } envelope, one pair per canvas column
+        let waveLastKey = '';
+        let audioReqSeq = 0;          // guards against out-of-order fetch responses
+        const tuneDefaults = { jerkCurve: 190, jerkMax: 37, snapCurve: 310, snapMax: 90 };
+        const tuneValues = { ...tuneDefaults };
+        const TUNE_KEYS = ['jerkCurve', 'jerkMax', 'snapCurve', 'snapMax'];
+
+        function ensureAudioCtx() {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            return audioCtx;
+        }
+
+        function setWaveStatus(text) {
+            document.getElementById('wave-status').textContent = text;
+        }
+
+        function setPlayIcon() {
+            document.getElementById('wave-play').innerHTML = wavePlaying ? '&#10073;&#10073;' : '&#9654;';
+        }
+
+        function playheadSeconds() {
+            if (!waveBuffer) return 0;
+            let t = wavePlayOffset;
+            if (wavePlaying) t += audioCtx.currentTime - wavePlayStartCtx;
+            return Math.max(0, Math.min(t, waveBuffer.duration));
+        }
+
+        function updateWaveTime() {
+            const dur = waveBuffer ? waveBuffer.duration : 0;
+            document.getElementById('wave-time').textContent =
+                playheadSeconds().toFixed(2) + ' / ' + dur.toFixed(2) + ' s';
+        }
+
+        function currentAudioKey() {
+            const replay = document.getElementById('replay-select').value;
+            const { startFrame, endFrame } = getFrameRange();
+            return [replay, currentLapKey, startFrame, endFrame,
+                tuneValues.jerkCurve, tuneValues.jerkMax, tuneValues.snapCurve, tuneValues.snapMax,
+                useRaw ? 'raw' : 'filt'].join('|');
+        }
+
+        let audioRefreshTimer = null;
+        function scheduleAudioRefresh() {
+            clearTimeout(audioRefreshTimer);
+            audioRefreshTimer = setTimeout(refreshAudio, 250);
+        }
+
+        async function refreshAudio() {
+            if (!currentLapKey) return;
+
+            const key = currentAudioKey();
+            if (key === waveLastKey && waveBuffer) return;
+            waveLastKey = key;
+
+            const replay = document.getElementById('replay-select').value;
+            const { startFrame, endFrame } = getFrameRange();
+            const params = new URLSearchParams({
+                replay, lap: String(currentLapKey),
+                from: String(startFrame), to: String(endFrame),
+                jerkCurve: String(tuneValues.jerkCurve), jerkMax: String(tuneValues.jerkMax),
+                snapCurve: String(tuneValues.snapCurve), snapMax: String(tuneValues.snapMax),
+                raw: useRaw ? '1' : '0',
+            });
+
+            const seq = ++audioReqSeq;
+            setWaveStatus('rendering…');
+
+            try {
+                const resp = await fetch('/audio?' + params.toString());
+                if (!resp.ok) { if (seq === audioReqSeq) setWaveStatus('no audio'); return; }
+                const raw = await resp.arrayBuffer();
+                const decoded = await ensureAudioCtx().decodeAudioData(raw);
+                if (seq !== audioReqSeq) return; // a newer request has superseded this one
+
+                stopPlayback();
+                waveBuffer = decoded;
+                wavePlayOffset = 0;
+                computeWavePeaks();
+                drawWave();
+                updateWaveTime();
+                setWaveStatus('');
+            } catch (e) {
+                if (seq === audioReqSeq) setWaveStatus('error');
+            }
+        }
+
+        // Downsample the mono buffer to a per-column min/max envelope for drawing.
+        function computeWavePeaks() {
+            const canvas = document.getElementById('wave-canvas');
+            const cols = Math.max(1, canvas.clientWidth);
+            const data = waveBuffer.getChannelData(0);
+            const per = data.length / cols;
+            const mn = new Float32Array(cols);
+            const mx = new Float32Array(cols);
+            for (let c = 0; c < cols; c++) {
+                const s = Math.floor(c * per);
+                const e = Math.min(data.length, Math.floor((c + 1) * per));
+                let lo = 1, hi = -1;
+                for (let i = s; i < e; i++) {
+                    const v = data[i];
+                    if (v < lo) lo = v;
+                    if (v > hi) hi = v;
+                }
+                if (e <= s) { lo = 0; hi = 0; }
+                mn[c] = lo; mx[c] = hi;
+            }
+            wavePeaks = { min: mn, max: mx, cols };
+        }
+
+        function drawWave() {
+            const canvas = document.getElementById('wave-canvas');
+            const dpr = window.devicePixelRatio || 1;
+            const w = canvas.clientWidth, h = canvas.clientHeight;
+            if (canvas.width !== w * dpr || canvas.height !== h * dpr) {
+                canvas.width = w * dpr; canvas.height = h * dpr;
+            }
+            const ctx = canvas.getContext('2d');
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            ctx.clearRect(0, 0, w, h);
+
+            // Backdrop
+            ctx.fillStyle = '#16213e';
+            ctx.fillRect(0, 0, w, h);
+
+            const mid = h / 2;
+
+            // Zero line
+            ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+            ctx.beginPath(); ctx.moveTo(0, mid); ctx.lineTo(w, mid); ctx.stroke();
+
+            if (wavePeaks) {
+                ctx.strokeStyle = 'rgba(233,69,96,0.9)';
+                ctx.beginPath();
+                const cols = wavePeaks.cols;
+                for (let c = 0; c < cols; c++) {
+                    const x = (c / cols) * w + 0.5;
+                    ctx.moveTo(x, mid - wavePeaks.max[c] * mid);
+                    ctx.lineTo(x, mid - wavePeaks.min[c] * mid);
+                }
+                ctx.stroke();
+            }
+
+            // Highlight box: the span of the emphasised scatter points (highlightCount
+            // frames around the POI) mapped onto this section's frame range, so the audio
+            // under the highlighted points is boxed off (e.g. 15 points ≈ 250 ms).
+            if (waveBuffer && highlightSource && highlightSource.length) {
+                const { startFrame, endFrame } = getFrameRange();
+                const span = Math.max(1, endFrame - startFrame);
+                let lo = Infinity, hi = -Infinity;
+                for (const p of highlightSource) {
+                    if (p.frame < lo) lo = p.frame;
+                    if (p.frame > hi) hi = p.frame;
+                }
+                const xL = Math.max(0, Math.min(w, ((lo - startFrame) / span) * w));
+                const xR = Math.max(0, Math.min(w, ((hi - startFrame) / span) * w));
+                if (xR > xL) {
+                    // Colour the box by the surface at the POI, matching the map/speed markers.
+                    const coords = mapData[currentLapKey] || [];
+                    const pf = Math.max(0, Math.min(distToFrame(poiDist), coords.length - 1));
+                    const sc = surfaceColors[(coords[pf] && coords[pf].surface)] || surfaceColors.unknown;
+                    ctx.fillStyle = alphaScale(sc.bg, 0.4);
+                    ctx.fillRect(xL, 0, xR - xL, h);
+                    ctx.strokeStyle = sc.border;
+                    ctx.lineWidth = 1;
+                    ctx.strokeRect(xL + 0.5, 0.5, (xR - xL) - 1, h - 1);
+                }
+            }
+
+            // Hover marker: a secondary box tracking the frame hovered on the speed graph
+            // / scatter plot, so the audio at the hovered point is located on the waveform.
+            if (waveBuffer && hoveredFrame != null) {
+                const { startFrame, endFrame } = getFrameRange();
+                if (hoveredFrame >= startFrame && hoveredFrame <= endFrame) {
+                    const span = Math.max(1, endFrame - startFrame);
+                    const hx = ((hoveredFrame - startFrame) / span) * w;
+                    const boxW = Math.max(4, w / span);
+                    const bx = Math.max(0, Math.min(w - boxW, hx - boxW / 2));
+                    ctx.fillStyle = 'rgba(255,255,255,0.22)';
+                    ctx.fillRect(bx, 0, boxW, h);
+                }
+            }
+
+            // Playhead
+            if (waveBuffer) {
+                const frac = waveBuffer.duration > 0 ? playheadSeconds() / waveBuffer.duration : 0;
+                const px = frac * w;
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 1;
+                ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, h); ctx.stroke();
+            }
+        }
+
+        function tickPlayhead() {
+            if (!wavePlaying) return;
+            if (playheadSeconds() >= waveBuffer.duration - 1e-3) {
+                stopPlayback();
+                wavePlayOffset = 0;
+                drawWave(); updateWaveTime();
+                return;
+            }
+            drawWave(); updateWaveTime();
+            waveRaf = requestAnimationFrame(tickPlayhead);
+        }
+
+        function startPlayback() {
+            if (!waveBuffer) return;
+            const ctx = ensureAudioCtx();
+            if (ctx.state === 'suspended') ctx.resume();
+            waveSource = ctx.createBufferSource();
+            waveSource.buffer = waveBuffer;
+            waveSource.connect(ctx.destination);
+            wavePlayStartCtx = ctx.currentTime;
+            waveSource.start(0, wavePlayOffset);
+            wavePlaying = true;
+            setPlayIcon();
+            cancelAnimationFrame(waveRaf);
+            waveRaf = requestAnimationFrame(tickPlayhead);
+        }
+
+        // Pause: freeze the playhead at its current position.
+        function pausePlayback() {
+            if (waveSource) {
+                wavePlayOffset = playheadSeconds();
+                try { waveSource.onended = null; waveSource.stop(); } catch (e) { }
+                waveSource = null;
+            }
+            wavePlaying = false;
+            setPlayIcon();
+            cancelAnimationFrame(waveRaf);
+            drawWave(); updateWaveTime();
+        }
+
+        // Stop: silence without moving the stored offset (used before reload/seek).
+        function stopPlayback() {
+            if (waveSource) {
+                try { waveSource.onended = null; waveSource.stop(); } catch (e) { }
+                waveSource = null;
+            }
+            wavePlaying = false;
+            setPlayIcon();
+            cancelAnimationFrame(waveRaf);
+        }
+
+        function togglePlay() {
+            if (!waveBuffer) return;
+            if (wavePlaying) pausePlayback(); else startPlayback();
+        }
+
+        // Map a pointer x within the waveform to a lap frame index in the visible section.
+        function frameAtPointer(clientX) {
+            if (!currentLapKey) return null;
+            const canvas = document.getElementById('wave-canvas');
+            const rect = canvas.getBoundingClientRect();
+            if (rect.width <= 0) return null;
+            const frac = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+            const { startFrame, endFrame } = getFrameRange();
+            return Math.max(startFrame, Math.min(endFrame, Math.round(startFrame + frac * (endFrame - startFrame))));
+        }
+
+        // Move the playhead to a lap frame's position within the visible section.
+        function seekToFrame(frame) {
+            if (!waveBuffer) return;
+            const { startFrame, endFrame } = getFrameRange();
+            const span = Math.max(1, endFrame - startFrame);
+            const frac = Math.max(0, Math.min(1, (frame - startFrame) / span));
+            const wasPlaying = wavePlaying;
+            stopPlayback();
+            wavePlayOffset = frac * waveBuffer.duration;
+            if (wasPlaying) startPlayback(); else { drawWave(); updateWaveTime(); }
+        }
+
+        // Leftmost frame of the current primary highlight box (null if none).
+        function boxLeftFrame() {
+            if (!highlightSource || !highlightSource.length) return null;
+            let lo = Infinity;
+            for (const p of highlightSource) if (p.frame < lo) lo = p.frame;
+            return lo === Infinity ? null : lo;
+        }
+
+        // Park the playhead at the left edge of the primary highlight box.
+        function seekToBoxLeft() {
+            const lo = boxLeftFrame();
+            if (waveBuffer && lo != null) seekToFrame(lo);
+        }
+
+        // Reposition the POI so the highlight box's LEFT edge lands on targetLeft. The box
+        // is centred on the POI, so we measure its half-span (centred on the target) then
+        // shift the POI right by that much. Used on drag-release so the box starts where
+        // the playhead was dropped.
+        function setPoiSoBoxLeftAt(targetLeft) {
+            if (!cumulativeDists.length) return;
+            const maxF = cumulativeDists.length - 1;
+            const clampF = (f) => Math.max(0, Math.min(maxF, f));
+
+            poiDist = Math.round(cumulativeDists[clampF(targetLeft)] ?? 0);
+            updateChart(); // recompute the box centred on the target to read its half-span
+            const lo = boxLeftFrame();
+            const half = lo != null ? Math.max(0, distToFrame(poiDist) - lo) : 0;
+
+            poiDist = Math.round(cumulativeDists[clampF(targetLeft + half)] ?? 0);
+            updateSelectionInfo();
+            updateChart();
+            drawMap(currentLapKey);
+            scheduleUrlUpdate();
+        }
+
+        // Scrub: set the playhead from a pointer x within the waveform canvas.
+        function seekToPointer(clientX) {
+            if (!waveBuffer) return;
+            const canvas = document.getElementById('wave-canvas');
+            const rect = canvas.getBoundingClientRect();
+            const frac = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+            const wasPlaying = wavePlaying;
+            stopPlayback();
+            wavePlayOffset = frac * waveBuffer.duration;
+            if (wasPlaying) startPlayback(); else { drawWave(); updateWaveTime(); }
+        }
+
+        function setupAudioUI() {
+            document.getElementById('wave-play').addEventListener('click', togglePlay);
+
+            const canvas = document.getElementById('wave-canvas');
+            let scrubbing = false;
+            let didDrag = false;
+            canvas.addEventListener('pointerdown', (e) => {
+                scrubbing = true; didDrag = false; canvas.setPointerCapture(e.pointerId);
+                seekToPointer(e.clientX); // move the playhead to the press point
+            });
+            canvas.addEventListener('pointermove', (e) => {
+                if (scrubbing) { didDrag = true; seekToPointer(e.clientX); return; }
+                // Act as a hover source: sync the hovered frame to the speed/scatter/map.
+                const f = frameAtPointer(e.clientX);
+                if (f != null) setHovered(f, 'wave');
+            });
+            canvas.addEventListener('pointerup', (e) => {
+                if (scrubbing) {
+                    const f = frameAtPointer(e.clientX);
+                    if (didDrag) {
+                        // Drag-release: box's left edge lands where the playhead was dropped.
+                        if (f != null) { setPoiSoBoxLeftAt(f); seekToBoxLeft(); }
+                    } else if (f != null && cumulativeDists.length) {
+                        // Click: POI at the clicked frame; playhead parks at the box's left edge.
+                        poiDist = Math.round(cumulativeDists[f] ?? 0);
+                        updateSelectionInfo();
+                        updateChart();
+                        drawMap(currentLapKey);
+                        scheduleUrlUpdate();
+                        seekToBoxLeft();
+                    }
+                }
+                scrubbing = false;
+            });
+            canvas.addEventListener('pointercancel', () => { scrubbing = false; didDrag = false; });
+            canvas.addEventListener('pointerleave', () => { if (!scrubbing) setHovered(null, 'wave'); });
+
+            TUNE_KEYS.forEach(k => {
+                const input = document.getElementById('tune-' + k);
+                input.addEventListener('input', () => {
+                    tuneValues[k] = parseInt(input.value, 10);
+                    document.getElementById('out-' + k).textContent = tuneValues[k];
+                    scheduleAudioRefresh();
+                });
+            });
+
+            document.getElementById('tune-reset').addEventListener('click', () => {
+                TUNE_KEYS.forEach(k => {
+                    tuneValues[k] = tuneDefaults[k];
+                    document.getElementById('tune-' + k).value = tuneDefaults[k];
+                    document.getElementById('out-' + k).textContent = tuneDefaults[k];
+                });
+                scheduleAudioRefresh();
+            });
+
+            // Re-render the waveform envelope on resize (canvas column count changes).
+            window.addEventListener('resize', () => { if (waveBuffer) { computeWavePeaks(); drawWave(); } });
+
+            applyTuneToControls();
+
+            // Load the shipped defaults so the sliders start where the live app does.
+            fetch('/tuning-defaults').then(r => r.json()).then(d => {
+                TUNE_KEYS.forEach(k => { if (Number.isFinite(d[k])) { tuneDefaults[k] = d[k]; tuneValues[k] = d[k]; } });
+                applyTuneToControls();
+            }).catch(() => { });
+        }
+
+        function applyTuneToControls() {
+            TUNE_KEYS.forEach(k => {
+                document.getElementById('tune-' + k).value = tuneValues[k];
+                document.getElementById('out-' + k).textContent = tuneValues[k];
+            });
+        }
+
+        setupAudioUI();
         init();
     </script>
 </body>
