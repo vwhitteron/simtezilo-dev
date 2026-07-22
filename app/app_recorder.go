@@ -8,6 +8,7 @@ import (
 
 	"github.com/kennygrant/sanitize"
 	"github.com/vwhitteron/simtezilo-dev/app/codec"
+	"github.com/vwhitteron/simtezilo-dev/app/codec/dca"
 	"github.com/vwhitteron/simtezilo-dev/app/pitradio"
 )
 
@@ -267,7 +268,7 @@ func (a *App) notifyRecordingEvent(event string) {
 
 	effectSample := a.synth.EffectSampleBank().GetSample(sample, codec.OpusSampleRate)
 
-	dcaData, err := effectSample.ToDCA()
+	dcaData, err := dca.FromFloat64(effectSample)
 	if err != nil {
 		a.log.Error().
 			Err(err).

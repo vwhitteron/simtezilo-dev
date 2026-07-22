@@ -20,20 +20,8 @@ func NewMP3(data []byte) *MP3 {
 	return &MP3{data: data}
 }
 
-// ToDCA converts MP3 audio data to Discord audio format (DCA).
-func (m *MP3) ToDCA() ([]byte, error) {
-	pcmInt16, err := m.ToPCMInt16()
-	if err != nil {
-		return []byte{}, fmt.Errorf("convert MP3 to int16: %w", err)
-	}
-
-	dcaData, err := pcmInt16.ToDCA()
-	if err != nil {
-		return []byte{}, fmt.Errorf("MP3 -> int16 -> DCA: %w", err)
-	}
-
-	return dcaData, nil
-}
+// DCA encoding lives in app/codec/dca (it needs the CGO Opus library); use
+// dca.FromMP3(m) to encode this MP3 to Discord audio format.
 
 // ToPCMInt16 decodes MP3 data to PCM int16 format.
 func (m *MP3) ToPCMInt16() (PCMInt16, error) {

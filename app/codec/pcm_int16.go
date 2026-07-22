@@ -1,9 +1,5 @@
 package codec
 
-import (
-	"fmt"
-)
-
 // PCMInt16 represents PCM audio samples in int16 format.
 type PCMInt16 struct {
 	samples    []int16
@@ -93,16 +89,5 @@ func (p *PCMInt16) ToStereo() PCMInt16 {
 	}
 }
 
-// ToDCA encodes PCM int16 audio samples to Discord audio format (DCA).
-func (p *PCMInt16) ToDCA() ([]byte, error) {
-	pcmInt16 := p.Resample(OpusSampleRate)
-
-	pcmInt16 = pcmInt16.ToStereo()
-
-	dcaData, err := encodeDCA(pcmInt16)
-	if err != nil {
-		return nil, fmt.Errorf("int16 -> DCA: %w", err)
-	}
-
-	return dcaData, nil
-}
+// DCA encoding lives in app/codec/dca (it needs the CGO Opus library); use
+// dca.FromInt16(p) to encode this PCM to Discord audio format.

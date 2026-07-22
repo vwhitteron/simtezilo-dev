@@ -16,6 +16,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/vwhitteron/simtezilo-dev/app/cache"
 	"github.com/vwhitteron/simtezilo-dev/app/codec"
+	"github.com/vwhitteron/simtezilo-dev/app/codec/dca"
 	"github.com/vwhitteron/simtezilo-dev/app/pitradio"
 	"github.com/vwhitteron/simtezilo-dev/app/pitradio/tts"
 	"github.com/vwhitteron/simtezilo-dev/app/synthesizer"
@@ -257,7 +258,7 @@ func (d *Discord) handleReconnection() {
 func (d *Discord) sendTalkPermitTone() {
 	effectSample := d.sampleBank.GetSample("talkPermitTone", codec.OpusSampleRate/2)
 
-	dcaData, err := effectSample.ToDCA()
+	dcaData, err := dca.FromFloat64(effectSample)
 	if err != nil {
 		d.log.Error().
 			Err(err).
@@ -576,7 +577,7 @@ func (d *Discord) messageToDCA(message pitradio.Message) (dcaData []byte, err er
 		}
 
 		// dcaData, err = TranscodeMP3toDCA(mpegData)
-		dcaData, err = mp3Data.ToDCA()
+		dcaData, err = dca.FromMP3(&mp3Data)
 		if err != nil {
 			return []byte{}, fmt.Errorf("transcode MP3 to DCA: %w", err)
 		}

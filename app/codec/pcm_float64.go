@@ -1,9 +1,5 @@
 package codec
 
-import (
-	"fmt"
-)
-
 // sampleStreamer is the minimal streaming interface the resampler consumes. It
 // mirrors the pull contract (Stream/Err) that sliceStreamer implements.
 type sampleStreamer interface {
@@ -123,17 +119,8 @@ func (p *PCMFloat64) ToStereo() PCMFloat64 {
 	}
 }
 
-// ToDCA converts Float64 PCM samples to Discord audio format (DCA).
-func (p *PCMFloat64) ToDCA() ([]byte, error) {
-	pcmInt16 := p.ToInt16()
-
-	dcaData, err := pcmInt16.ToDCA()
-	if err != nil {
-		return []byte{}, fmt.Errorf("float64 -> int16 -> DCA: %w", err)
-	}
-
-	return dcaData, nil
-}
+// DCA encoding lives in app/codec/dca (it needs the CGO Opus library); use
+// dca.FromFloat64(p) to encode this PCM to Discord audio format.
 
 // ToInt16 converts Float64 PCM samples to int16 format.
 func (p *PCMFloat64) ToInt16() PCMInt16 {
