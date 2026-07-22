@@ -1,4 +1,4 @@
-package app
+package haptics
 
 import (
 	"math"
@@ -125,40 +125,40 @@ type textureChannelState struct {
 	prevAmp float64
 }
 
-// generateChassisTexture renders the continuous road-texture layer: low-level,
-// band-limited noise per routed texture channel whose amplitude tracks the
-// suspension-activity envelope and whose brightness (low-pass cutoff) rises with
-// speed. Texture is its own synth source (independent mute/gain/routing); each block
-// is appended at the channel write cursor and the filter state persists across blocks,
-// so successive blocks join without a click.
-func (a *App) generateChassisTexture() {
-	if a.config.GetSynthTextureMute() {
+// Texture renders the continuous road-texture layer: low-level, band-limited noise
+// per routed texture channel whose amplitude tracks the suspension-activity envelope
+// and whose brightness (low-pass cutoff) rises with speed. Texture is its own synth
+// source (independent mute/gain/routing); each block is appended at the channel write
+// cursor and the filter state persists across blocks, so successive blocks join
+// without a click.
+func (g *Generator) Texture() {
+	if g.cfg.GetSynthTextureMute() {
 		return
 	}
 
-	speed := a.kinematics.Current.GroundSpeed
-	surfaceLevel, surfaceCoarseness := aggregateSurface(a.kinematics.Current.SurfaceType)
+	speed := g.kin.Current.GroundSpeed
+	surfaceLevel, surfaceCoarseness := aggregateSurface(g.kin.Current.SurfaceType)
 
 	amplitude := surfaceLevel * textureSpeedAmplitude(speed)
 	amplitude = min(amplitude, textureMaxAmplitude)
 
 	cutoffHz := textureCutoffHz(
 		speed,
-		a.config.GetHapticsTextureMinHz(),
-		a.config.GetHapticsTextureMaxHz(),
+		g.cfg.GetHapticsTextureMinHz(),
+		g.cfg.GetHapticsTextureMaxHz(),
 	) * surfaceCoarseness
 
 	// Clamp to just under the transducer roll-off so a bright surface (coarseness > 1) or a
 	// high configured band cannot push the cutoff into the device stopband.
 	cutoffHz = min(cutoffHz, textureDeviceCeilingHz)
 
-	sampleRate := float64(a.config.GetSynthInternalSampleRateHz())
+	sampleRate := float64(g.cfg.GetSynthInternalSampleRateHz())
 	if sampleRate <= 0 || cutoffHz <= 0 {
 		return
 	}
 
-	numChannels := a.synth.NumOutputChannels()
-	a.textureState = ensureTextureStateLen(a.textureState, numChannels)
+	numChannels := g.synth.NumOutputChannels()
+	g.textureState = ensureTextureStateLen(g.textureState, numChannels)
 
 	// Per-channel EQ correction: reuse the pulse path's frequency-bucket lookup by
 	// expressing the noise cutoff as an equivalent pulse width.
@@ -175,26 +175,26 @@ func (a *App) generateChassisTexture() {
 	hpAlpha := 1 - math.Exp(-2*math.Pi*hpHz/sampleRate)
 
 	for channel := range numChannels {
-		if !a.config.GetSynthRouteEnabled(synthesizer.ChannelTexture, channel) {
+		if !g.cfg.GetSynthRouteEnabled(synthesizer.ChannelTexture, channel) {
 			continue
 		}
 
-		need := a.textureRefillSamples(channel, sampleRate)
+		need := g.textureRefillSamples(channel, sampleRate)
 		if need <= 0 {
 			continue
 		}
 
-		targetAmp := signal.Equalize(amplitude, pulseWidth, channel, a.config)
+		targetAmp := signal.Equalize(amplitude, pulseWidth, channel, g.cfg)
 
-		if cap(a.textureScratch) < need {
-			a.textureScratch = make([]float64, need)
+		if cap(g.textureScratch) < need {
+			g.textureScratch = make([]float64, need)
 		} else {
-			a.textureScratch = a.textureScratch[:need]
+			g.textureScratch = g.textureScratch[:need]
 		}
 
-		buffer := a.textureScratch
+		buffer := g.textureScratch
 
-		state := &a.textureState[channel]
+		state := &g.textureState[channel]
 		if state.rng == 0 {
 			state.rng = textureSeed(channel)
 			state.meanSq = 0.02 // seed so the first samples are not divided by ~0
@@ -243,20 +243,20 @@ func (a *App) generateChassisTexture() {
 		// Append at the channel write cursor (offset 0, overwrite): the block joins the
 		// previous one seamlessly. The mixer sums the texture source into the same
 		// outputs as chassis, so no cross-source mixing is needed here.
-		a.synth.OverwriteBuffer(synthesizer.TextureChannelName(channel), buffer, 0)
+		g.synth.OverwriteBuffer(synthesizer.TextureChannelName(channel), buffer, 0)
 	}
 }
 
 // textureRefillSamples returns how many carrier samples to append to a texture
 // channel this frame to restore it to the texture cushion depth, clamped to at most
 // two telemetry frames so a stall cannot produce an oversized block.
-func (a *App) textureRefillSamples(channel int, sampleRate float64) int {
+func (g *Generator) textureRefillSamples(channel int, sampleRate float64) int {
 	samplesPerFrame := int(sampleRate) / telemetryFrameRate
 	if samplesPerFrame <= 0 {
 		return 0
 	}
 
-	depth := a.synth.ChannelDepth(synthesizer.TextureChannelName(channel))
+	depth := g.synth.ChannelDepth(synthesizer.TextureChannelName(channel))
 	need := max(samplesPerFrame*textureCushionFrames-depth, 0)
 
 	if maxBlock := samplesPerFrame * 2; need > maxBlock {
@@ -367,14 +367,6 @@ func textureNextRand(s uint64) uint64 {
 // textureSeed returns a distinct, nonzero PRNG seed per channel so channels decorrelate.
 func textureSeed(channel int) uint64 {
 	return 0x9E3779B97F4A7C15*uint64(channel+1) | 1
-}
-
-// resetTextureState clears the per-channel noise/filter state so a new session starts
-// the texture layer from silence rather than inheriting a stale filter/envelope.
-func (a *App) resetTextureState() {
-	for i := range a.textureState {
-		a.textureState[i] = textureChannelState{}
-	}
 }
 
 // ensureTextureStateLen returns a per-channel state slice of length count, preserving

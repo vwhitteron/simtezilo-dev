@@ -14,7 +14,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/vwhitteron/simtezilo-dev/app/calibrator"
 	appconfig "github.com/vwhitteron/simtezilo-dev/app/config"
-	"github.com/vwhitteron/simtezilo-dev/app/haptics"
+	"github.com/vwhitteron/simtezilo-dev/app/haptics/profiles"
 	"github.com/vwhitteron/simtezilo-dev/app/platform"
 	"github.com/vwhitteron/simtezilo-dev/app/updater"
 )
@@ -529,7 +529,7 @@ func (h *configHandler) applySynthGainMuteFields(config map[string]any) []string
 func (h *configHandler) applyEngineProfiles(profilesMap map[string]any) []string {
 	for name, profileData := range profilesMap {
 		if profileMap, ok := profileData.(map[string]any); ok {
-			profile := haptics.EngineProfile{}
+			profile := profiles.EngineProfile{}
 
 			if pb, ok := profileMap["primaryBalance"].(float64); ok {
 				profile.PrimaryBalance = pb

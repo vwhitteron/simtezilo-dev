@@ -21,8 +21,7 @@ func (a *App) disableHaptics(reason string) {
 	// speaker.Suspend()
 	a.synth.Silence()
 	a.state.hapticsEnabled = false
-	a.chassisFreqSmoothed = 0
-	a.resetTextureState()
+	a.chassisGen.Reset()
 
 	a.log.Debug().Bool("haptics enabled", a.state.hapticsEnabled).Str("reason", reason).Msg("haptics state change")
 }
@@ -84,8 +83,8 @@ func (a *App) generateForceHaptics() {
 		a.playGearShiftHaptic()
 	}
 
-	a.generateChassisHaptic()
-	a.generateChassisTexture()
+	a.chassisGen.Chassis()
+	a.chassisGen.Texture()
 
 	a.kinematics.Current.ComputeTime = time.Since(startTime)
 	a.kinematics.Last = a.kinematics.Current

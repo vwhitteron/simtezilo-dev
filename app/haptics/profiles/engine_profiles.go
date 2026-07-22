@@ -1,5 +1,5 @@
-// Package haptics provides definitions and profiles for simulating engine haptic feedback.
-package haptics
+// Package profiles provides definitions and profiles for simulating engine haptic feedback.
+package profiles
 
 // Profile names are structured as follows:
 // <Layout><Chambers>.B<Bank angle>.C<Crank Plane angle>

@@ -38,6 +38,7 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/audio"
 	"github.com/vwhitteron/simtezilo-dev/app/calibrator"
 	"github.com/vwhitteron/simtezilo-dev/app/config"
+	"github.com/vwhitteron/simtezilo-dev/app/haptics"
 	"github.com/vwhitteron/simtezilo-dev/app/synthesizer"
 	"github.com/vwhitteron/simtezilo-dev/app/vehicle"
 	gttelemetry "github.com/zetetos/gt-telemetry/v2"
@@ -153,6 +154,8 @@ func newCaptureApp(source string) (*App, *gttelemetry.Client, error) {
 	if err != nil {
 		return nil, nil, fmt.Errorf("synth: %w", err)
 	}
+
+	app.chassisGen = haptics.NewGenerator(app.config, app.synth, &app.kinematics, logger)
 
 	client, err := gttelemetry.New(gttelemetry.Options{Source: source, Logger: &logger})
 	if err != nil {
@@ -312,8 +315,8 @@ func (a *App) runCaptureLoop(next pullFunc, opts HapticCaptureOptions) *HapticCa
 				}
 
 				a.kinematics.Update(float64(delta)/float64(telemetryFrameRate), a.vehicle.Dimensions, a.gtClient)
-				a.generateChassisHaptic()
-				a.generateChassisTexture()
+				a.chassisGen.Chassis()
+				a.chassisGen.Texture()
 
 				out.ChassisFrames = append(out.ChassisFrames, ChassisFrame{
 					OutCursor: cursor,
@@ -569,8 +572,8 @@ func (a *App) driveHapticsRealtime(next pullFunc, opts SinkCaptureOptions) {
 			if opts.Chassis && int64(seq) > int64(chassisLastSeq) {
 				delta := uint32(int64(seq) - int64(chassisLastSeq))
 				a.kinematics.Update(float64(delta)/float64(telemetryFrameRate), a.vehicle.Dimensions, a.gtClient)
-				a.generateChassisHaptic()
-				a.generateChassisTexture()
+				a.chassisGen.Chassis()
+				a.chassisGen.Texture()
 
 				chassisLastSeq = seq
 			}

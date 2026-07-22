@@ -1,7 +1,7 @@
 package vehicle
 
 import (
-	"github.com/vwhitteron/simtezilo-dev/app/haptics"
+	"github.com/vwhitteron/simtezilo-dev/app/haptics/profiles"
 )
 
 type TypeName string
@@ -20,7 +20,7 @@ type EngineCharacteristics struct {
 	RevLimit        uint16
 	FiringFrequency float64
 	PulseOverlap    float64 // Calculated overlap factor based on cylinder/crank alignment
-	Haptics         *haptics.EngineProfile
+	Haptics         *profiles.EngineProfile
 }
 
 type Dimensions struct {

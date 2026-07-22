@@ -6,7 +6,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	appHaptics "github.com/vwhitteron/simtezilo-dev/app/haptics"
+	profiles "github.com/vwhitteron/simtezilo-dev/app/haptics/profiles"
 )
 
 // newTestConfig creates a new Config instance with default values for testing.
@@ -3061,7 +3061,7 @@ func testSetSynthEngineProfile(t *testing.T) {
 
 	// Arrange
 	cfg := newTestConfig()
-	newProfile := appHaptics.EngineProfile{
+	newProfile := profiles.EngineProfile{
 		PrimaryBalance:   0.85,
 		SecondaryBalance: 0.90,
 		Gain:             -5.0,

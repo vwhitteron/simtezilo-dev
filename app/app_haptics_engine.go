@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/vwhitteron/simtezilo-dev/app/config"
-	"github.com/vwhitteron/simtezilo-dev/app/haptics"
+	"github.com/vwhitteron/simtezilo-dev/app/haptics/profiles"
 	"github.com/vwhitteron/simtezilo-dev/app/signal"
 	"github.com/vwhitteron/simtezilo-dev/app/synthesizer"
 	"github.com/vwhitteron/simtezilo-dev/app/vehicle"
@@ -183,7 +183,7 @@ func (a *App) getEngineCharacteristics(
 ) (vehicle.EngineCharacteristics, error) {
 	if engineLayout == "" {
 		return vehicle.EngineCharacteristics{
-			Haptics: &haptics.EngineProfile{},
+			Haptics: &profiles.EngineProfile{},
 		}, errors.New("engine layout not provided")
 	}
 
@@ -202,7 +202,7 @@ func (a *App) getEngineCharacteristics(
 		RevLimit:        revLimit,
 		FiringFrequency: getEngineFiringFrequency(geometryCode, chambers),
 		PulseOverlap:    0.5 - calculatePulseOverlap(cylinderAngle, crankPlaneAngle, chambers, geometryCode),
-		Haptics: &haptics.EngineProfile{
+		Haptics: &profiles.EngineProfile{
 			PrimaryBalance:   1.0,
 			SecondaryBalance: 1.0,
 			Gain:             config.MinimumGain,
@@ -573,7 +573,7 @@ func (a *App) calculatePulseAmplitude(throttlePercent, engineRoughness, rpmPerce
 
 // generatePulswWankel creates a single pulse value for a Wankel engine based on a given phase value
 // and engine geometry.
-func generatePulseWankel(phase float64, engine *haptics.EngineProfile) (pulse float64) {
+func generatePulseWankel(phase float64, engine *profiles.EngineProfile) (pulse float64) {
 	if phase < 0.3 {
 		// Quick attack (30% of pulse width)
 		// Adjust attack characteristics based on engine balance
@@ -607,7 +607,7 @@ func generatePulseWankel(phase float64, engine *haptics.EngineProfile) (pulse fl
 
 // generatePulswTwoStroke creates a single pulse value for a 2-strok engine based on a given phase value
 // and engine geometry.
-func generatePulseTwoStroke(phase float64, engine *haptics.EngineProfile) (pulse float64) {
+func generatePulseTwoStroke(phase float64, engine *profiles.EngineProfile) (pulse float64) {
 	if phase < 0.3 {
 		// Quick attack (30% of pulse width)
 		// Adjust attack characteristics based on engine balance
@@ -652,7 +652,7 @@ func generatePulseTwoStroke(phase float64, engine *haptics.EngineProfile) (pulse
 
 // generatePulswFourStroke creates a single pulse value for a 4-stroke engine based on a given phase value
 // and engine geometry.
-func generatePulseFourStroke(phase float64, engine *haptics.EngineProfile) (pulse float64) {
+func generatePulseFourStroke(phase float64, engine *profiles.EngineProfile) (pulse float64) {
 	if phase < 0.3 {
 		// Quick attack (30% of pulse width)
 		// Adjust attack characteristics based on engine balance

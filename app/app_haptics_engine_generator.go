@@ -3,7 +3,7 @@ package app
 import (
 	"math"
 
-	"github.com/vwhitteron/simtezilo-dev/app/haptics"
+	"github.com/vwhitteron/simtezilo-dev/app/haptics/profiles"
 	"github.com/vwhitteron/simtezilo-dev/app/signal"
 )
 
@@ -28,7 +28,7 @@ type engineGenParams struct {
 type engineWaveformGenerator struct {
 	sampleRate float64
 	geometry   string
-	engine     *haptics.EngineProfile
+	engine     *profiles.EngineProfile
 
 	pulsePhase    float64 // accumulated pulse cycles (fractional)
 	pulsePolarity bool    // current pulse polarity; flips at each pulse boundary
@@ -42,7 +42,7 @@ type engineWaveformGenerator struct {
 // newEngineWaveformGenerator returns a generator for the given output sample rate,
 // engine geometry code ("K" Wankel, "S" two-stroke, anything else four-stroke)
 // and engine profile.
-func newEngineWaveformGenerator(sampleRate int, geometry string, engine *haptics.EngineProfile) *engineWaveformGenerator {
+func newEngineWaveformGenerator(sampleRate int, geometry string, engine *profiles.EngineProfile) *engineWaveformGenerator {
 	return &engineWaveformGenerator{
 		sampleRate: float64(sampleRate),
 		geometry:   geometry,
@@ -136,7 +136,7 @@ func (g *engineWaveformGenerator) applyRoughness(value float64, params engineGen
 // pulseShapeByGeometry selects the per-pulse shape for the engine geometry. It is
 // the free-function form of the old Apparams.generatePulseValueByGeometry, reusing the
 // same per-geometry pulse functions.
-func pulseShapeByGeometry(geometry string, phaseNormalized float64, engine *haptics.EngineProfile) float64 {
+func pulseShapeByGeometry(geometry string, phaseNormalized float64, engine *profiles.EngineProfile) float64 {
 	switch geometry {
 	case "K":
 		return generatePulseWankel(phaseNormalized, engine)

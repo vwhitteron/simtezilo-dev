@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	appHaptics "github.com/vwhitteron/simtezilo-dev/app/haptics"
+	profiles "github.com/vwhitteron/simtezilo-dev/app/haptics/profiles"
 )
 
 // snapshotMutators maps every Config method that mutates persisted configuration
@@ -131,7 +131,7 @@ var snapshotMutators = map[string]func(cfg *Config){
 	"IncreaseSynthEngineGain":                func(cfg *Config) { cfg.IncreaseSynthEngineGain() },
 	"DecreaseSynthEngineGain":                func(cfg *Config) { cfg.DecreaseSynthEngineGain() },
 	"SetSynthEngineProfile": func(cfg *Config) {
-		cfg.SetSynthEngineProfile("test-profile", appHaptics.EngineProfile{
+		cfg.SetSynthEngineProfile("test-profile", profiles.EngineProfile{
 			PrimaryBalance:   0.5,
 			SecondaryBalance: 0.5,
 			Gain:             0.1,

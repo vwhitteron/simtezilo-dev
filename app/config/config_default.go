@@ -2,7 +2,7 @@
 
 package config
 
-import appHaptics "github.com/vwhitteron/simtezilo-dev/app/haptics"
+import profiles "github.com/vwhitteron/simtezilo-dev/app/haptics/profiles"
 
 func defaultConfig() *viperConfig {
 	return &viperConfig{
@@ -60,7 +60,7 @@ func defaultConfig() *viperConfig {
 			_pulseWidthMin:               0.1,
 			TextureMinFrequencyHz:        90,
 			TextureMaxFrequencyHz:        150,
-			EngineProfiles: map[string]appHaptics.EngineProfile{
+			EngineProfiles: map[string]profiles.EngineProfile{
 				"s1":                  {PrimaryBalance: 0.15, SecondaryBalance: 0.250, Gain: +0.00, PulseScale: 1.00}, // Racing Kart 125 Shifter
 				"i2":                  {PrimaryBalance: 0.65, SecondaryBalance: 0.850, Gain: -0.75, PulseScale: 1.00}, // Fiat 500 F '68
 				"i3":                  {PrimaryBalance: 0.95, SecondaryBalance: 0.850, Gain: -1.50, PulseScale: 1.00}, // Daihatsu COPEN RJ VGT

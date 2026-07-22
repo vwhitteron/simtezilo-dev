@@ -14,7 +14,7 @@ import (
 
 	"github.com/vwhitteron/simtezilo-dev/app/audio"
 	"github.com/vwhitteron/simtezilo-dev/app/audio/audioqa"
-	"github.com/vwhitteron/simtezilo-dev/app/haptics"
+	"github.com/vwhitteron/simtezilo-dev/app/haptics/profiles"
 	"github.com/vwhitteron/simtezilo-dev/app/synthesizer"
 )
 
@@ -26,8 +26,8 @@ const (
 	genFiring   = 0.0333333 // 4-cylinder 4-stroke firing frequency (fires/rev)
 )
 
-func testEngineProfile() *haptics.EngineProfile {
-	return &haptics.EngineProfile{
+func testEngineProfile() *profiles.EngineProfile {
+	return &profiles.EngineProfile{
 		PrimaryBalance:   0.85,
 		SecondaryBalance: 0.85,
 		Gain:             0.0,

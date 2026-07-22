@@ -18,7 +18,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
-	appHaptics "github.com/vwhitteron/simtezilo-dev/app/haptics"
+	"github.com/vwhitteron/simtezilo-dev/app/haptics/profiles"
 	"github.com/vwhitteron/simtezilo-dev/app/i18n"
 )
 
@@ -76,27 +76,27 @@ type fuelMonitoring struct {
 }
 
 type haptics struct {
-	Output                       HapticsOutput                       `json:"output"` // haptic feedback output stream
-	EnableReplay                 bool                                `json:"enableReplay"`
-	DynamicTransmissionFeedback  bool                                `json:"dynamicTransmissionFeedback"`
-	DynamicTransmissionCurve     int                                 `json:"dynamicTransmissionCurve"`
-	DynamicTransmissionGforceMax float64                             `json:"dynamicTransmissionGforceMax"`
-	JerkCurve                    int                                 `json:"jerkCurve"`
-	JerkMax                      int                                 `json:"jerkMax"`
-	_jerkScale                   float64                             `json:"-"`
-	SnapCurve                    int                                 `json:"snapCurve"`
-	SnapMax                      int                                 `json:"snapMax"`
-	_snapScale                   float64                             `json:"-"`
-	PulseMaxAmplitude            float64                             `json:"pulseMaxAmplitude"`
-	PulseMaxFrequencyHz          float64                             `json:"pulseMaxFrequencyHz"`
-	PulseMinFrequencyHz          float64                             `json:"pulseMinFrequencyHz"`
-	_pulseWidthMax               float64                             `json:"-"`
-	_pulseWidthMin               float64                             `json:"-"`
-	TextureMinFrequencyHz        float64                             `json:"textureMinFrequencyHz"` // lower edge of the road-texture noise band (low-speed brightness)
-	TextureMaxFrequencyHz        float64                             `json:"textureMaxFrequencyHz"` // upper edge of the road-texture noise band (high-speed brightness)
-	EngineProfiles               map[string]appHaptics.EngineProfile `json:"engineProfiles,omitempty"`
-	_engineProfile               *appHaptics.EngineProfile           `json:"-"`
-	_engineProfileName           string                              `json:"-"`
+	Output                       HapticsOutput                     `json:"output"` // haptic feedback output stream
+	EnableReplay                 bool                              `json:"enableReplay"`
+	DynamicTransmissionFeedback  bool                              `json:"dynamicTransmissionFeedback"`
+	DynamicTransmissionCurve     int                               `json:"dynamicTransmissionCurve"`
+	DynamicTransmissionGforceMax float64                           `json:"dynamicTransmissionGforceMax"`
+	JerkCurve                    int                               `json:"jerkCurve"`
+	JerkMax                      int                               `json:"jerkMax"`
+	_jerkScale                   float64                           `json:"-"`
+	SnapCurve                    int                               `json:"snapCurve"`
+	SnapMax                      int                               `json:"snapMax"`
+	_snapScale                   float64                           `json:"-"`
+	PulseMaxAmplitude            float64                           `json:"pulseMaxAmplitude"`
+	PulseMaxFrequencyHz          float64                           `json:"pulseMaxFrequencyHz"`
+	PulseMinFrequencyHz          float64                           `json:"pulseMinFrequencyHz"`
+	_pulseWidthMax               float64                           `json:"-"`
+	_pulseWidthMin               float64                           `json:"-"`
+	TextureMinFrequencyHz        float64                           `json:"textureMinFrequencyHz"` // lower edge of the road-texture noise band (low-speed brightness)
+	TextureMaxFrequencyHz        float64                           `json:"textureMaxFrequencyHz"` // upper edge of the road-texture noise band (high-speed brightness)
+	EngineProfiles               map[string]profiles.EngineProfile `json:"engineProfiles,omitempty"`
+	_engineProfile               *profiles.EngineProfile           `json:"-"`
+	_engineProfileName           string                            `json:"-"`
 }
 
 type hardware struct {
@@ -1493,7 +1493,7 @@ func (c *Config) GetHapticsPulseMinHz() float64 {
 
 // GetHapticsEngineProfile returns the currently selected engine profile.
 // If no profile is selected, it returns nil.
-func (c *Config) GetHapticsEngineProfile(name string) *appHaptics.EngineProfile {
+func (c *Config) GetHapticsEngineProfile(name string) *profiles.EngineProfile {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -3284,7 +3284,7 @@ func (c *Config) GetSynthOutputFile() string {
 }
 
 // GetSynthEngineProfiles returns all engine profiles as a map.
-func (c *Config) GetSynthEngineProfiles() map[string]appHaptics.EngineProfile {
+func (c *Config) GetSynthEngineProfiles() map[string]profiles.EngineProfile {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
@@ -3292,7 +3292,7 @@ func (c *Config) GetSynthEngineProfiles() map[string]appHaptics.EngineProfile {
 }
 
 // SetSynthEngineProfile updates or creates an engine profile.
-func (c *Config) SetSynthEngineProfile(name string, profile appHaptics.EngineProfile) {
+func (c *Config) SetSynthEngineProfile(name string, profile profiles.EngineProfile) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
