@@ -118,6 +118,12 @@ type State struct {
 	transNyquist nyquistGate
 	rotNyquist   nyquistGate
 
+	// DisableNyquistGate bypasses both fs/2 cadence gates, so the calculated
+	// velocity chains consume the raw telemetry velocity unchanged. It exists for
+	// offline analysis (the tune_assistant "raw" audio render) that auditions the
+	// ungated signal; the live app leaves it false and always gates.
+	DisableNyquistGate bool
+
 	// Diagnostic counters for the resolveDerivatives gap gate. GapResets counts how
 	// many Update calls saw a non-contiguous sequence (delta != 1) and re-warmed;
 	// LastGapDelta records the sequence delta of the most recent such reset. These
@@ -173,9 +179,11 @@ func (k *State) Update(windowSeconds float64, vehicleDimensions vehicle.Dimensio
 	k.Current.SixDOFTranslation.Snap = (k.Current.SixDOFTranslation.Jerk - k.Last.SixDOFTranslation.Jerk) / windowSeconds
 
 	// 6DOF translational envelope - calculated from velocity vector
-	k.Current.SixDOFTranslationCalc.Velocity = k.transNyquist.filter(
-		gtclient.Telemetry.VelocityVector(), float64(accelFactor), k.Current.GroundSpeed,
-	)
+	transCalcVel := gtclient.Telemetry.VelocityVector()
+	if !k.DisableNyquistGate {
+		transCalcVel = k.transNyquist.filter(transCalcVel, float64(accelFactor), k.Current.GroundSpeed)
+	}
+	k.Current.SixDOFTranslationCalc.Velocity = transCalcVel
 	translationCalcVelocityDelta := vector.Delta(k.Current.SixDOFTranslationCalc.Velocity, k.Last.SixDOFTranslationCalc.Velocity)
 	k.Current.SixDOFTranslationCalc.Acceleration = vector.Scale(translationCalcVelocityDelta, accelFactor, accelFactor, accelFactor)
 	k.Current.SixDOFTranslationCalc.AccelMag = vector.Magnitude(k.Current.SixDOFTranslationCalc.Acceleration)
@@ -190,15 +198,16 @@ func (k *State) Update(windowSeconds float64, vehicleDimensions vehicle.Dimensio
 
 	// 6DOF rotational envelope - calculated angular velocity vector
 	// Convert from radians to metres at the wheels using vehicle dimensions
-	k.Current.SixDOFRotationCalc.Velocity = k.rotNyquist.filter(
-		vector.Scale(
-			k.Current.SixDOFRotation.Velocity,
-			vehicleDimensions.LongitudinalRadius,
-			vehicleDimensions.LongitudinalRadius,
-			vehicleDimensions.TransverseRadius,
-		),
-		float64(accelFactor), k.Current.GroundSpeed,
+	rotCalcVel := vector.Scale(
+		k.Current.SixDOFRotation.Velocity,
+		vehicleDimensions.LongitudinalRadius,
+		vehicleDimensions.LongitudinalRadius,
+		vehicleDimensions.TransverseRadius,
 	)
+	if !k.DisableNyquistGate {
+		rotCalcVel = k.rotNyquist.filter(rotCalcVel, float64(accelFactor), k.Current.GroundSpeed)
+	}
+	k.Current.SixDOFRotationCalc.Velocity = rotCalcVel
 	rotationVelocityDelta := vector.Delta(k.Current.SixDOFRotationCalc.Velocity, k.Last.SixDOFRotationCalc.Velocity)
 	k.Current.SixDOFRotationCalc.Acceleration = vector.Scale(rotationVelocityDelta, accelFactor, accelFactor, accelFactor)
 	k.Current.SixDOFRotationCalc.AccelMag = vector.Magnitude(k.Current.SixDOFRotationCalc.Acceleration)
