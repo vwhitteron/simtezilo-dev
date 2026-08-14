@@ -132,8 +132,8 @@ func (h *configHandler) handleGetConfig(response http.ResponseWriter, _ *http.Re
 				"latencyMs":  h.config.GetAudioHapticsLatencyMs(),
 			},
 			"dynamicTransmissionFeedback":  h.config.GethapticsDynamicTransFeedbackEnabled(),
-			"dynamicTransmissionCurve":     h.config.GetHapticsTransmissionCurve(),
-			"dynamicTransmissionGforceMax": h.config.GetHapticsTransmissionGforceMax(),
+			"dynamicTransmissionJerkCurve": h.config.GetHapticsTransmissionJerkCurve(),
+			"dynamicTransmissionStepBlend": h.config.GetHapticsTransmissionStepBlend(),
 			"jerkCurve":                    h.config.GethapticsJerkCurve(),
 			"jerkPivot":                    h.config.GetHapticsJerkPivot(),
 			"jerkPivotGain":                h.config.GetHapticsJerkPivotGain(),
@@ -766,10 +766,10 @@ func (h *configHandler) applyHapticsConfig(config map[string]any) []string {
 	errors = appendErr(errors, applyField(config, "snapMax", "invalid snap max value", func(f float64) {
 		h.config.SetHapticsSnapMax(int(f))
 	}))
-	errors = appendErr(errors, applyField(config, "dynamicTransmissionCurve", "invalid transmission curve value", func(f float64) {
-		h.config.SetHapticsTransmissionCurve(int(math.Round(f * 1000.0)))
+	errors = appendErr(errors, applyField(config, "dynamicTransmissionJerkCurve", "invalid transmission jerk curve value", func(f float64) {
+		h.config.SetHapticsTransmissionJerkCurve(int(math.Round(f * 1000.0)))
 	}))
-	errors = appendErr(errors, applyField(config, "dynamicTransmissionGforceMax", "invalid transmission G-force max value", h.config.SetHapticsTransmissionGforceMax))
+	errors = appendErr(errors, applyField(config, "dynamicTransmissionStepBlend", "invalid transmission step blend value", h.config.SetHapticsTransmissionStepBlend))
 	errors = appendErr(errors, applyField(config, "pulseMaxAmplitude", "invalid pulse max amplitude value", h.config.SetHapticsPulseMaxAmplitude))
 	errors = appendErr(errors, applyField(config, "pulseMaxFrequencyHz", "invalid pulse max frequency value", h.config.SetHapticsPulseMaxFrequencyHz))
 	errors = appendErr(errors, applyField(config, "pulseMinFrequencyHz", "invalid pulse min frequency value", h.config.SetHapticsPulseMinFrequencyHz))

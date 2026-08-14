@@ -56,6 +56,11 @@ var routingSources = []string{
 	RoutingSourceTransmission,
 }
 
+// defaultTransmissionJerkCurve is the shipped jerk response curve, in thousandths.
+// It also backfills configs written before the key existed, which would otherwise
+// read zero and collapse the mapping to full scale.
+const defaultTransmissionJerkCurve = 750.0
+
 type app struct {
 	Language       string  `json:"language"`
 	Accent         string  `json:"accent"`
@@ -86,14 +91,25 @@ type fuelMonitoring struct {
 }
 
 type haptics struct {
-	Output                       HapticsOutput `json:"output"` // haptic feedback output stream
-	EnableReplay                 bool          `json:"enableReplay"`
-	DynamicTransmissionFeedback  bool          `json:"dynamicTransmissionFeedback"`
-	DynamicTransmissionCurve     int           `json:"dynamicTransmissionCurve"`
-	DynamicTransmissionGforceMax float64       `json:"dynamicTransmissionGforceMax"`
-	JerkCurve                    int           `json:"jerkCurve"`
-	JerkPivot                    int           `json:"jerkPivot"`
-	JerkPivotGain                float64       `json:"jerkPivotGain"`
+	Output                      HapticsOutput `json:"output"` // haptic feedback output stream
+	EnableReplay                bool          `json:"enableReplay"`
+	DynamicTransmissionFeedback bool          `json:"dynamicTransmissionFeedback"`
+	// DynamicTransmissionJerkCurve is the driveline response curve, in thousandths,
+	// applied to the normalised drive magnitude before it is clamped to the
+	// vehicle's gain floor.
+	DynamicTransmissionJerkCurve int `json:"dynamicTransmissionJerkCurve"`
+	// DynamicTransmissionStepBlend is the depth to which this shift's driveline
+	// step multiplies the learned per-vehicle character:
+	// drive = character * (1 - blend + blend*event). At 0 a shift plays the
+	// vehicle's character flat; at 1 a typical (gearShiftStepMax) shift plays that
+	// character unchanged while smaller and larger steps scale it down and up in
+	// proportion. Multiplying (rather than adding) the event keeps vehicles
+	// ranked by their gearbox character instead of letting a soft gearbox borrow
+	// loudness from a wide ratio jump it cannot actually deliver.
+	DynamicTransmissionStepBlend float64 `json:"dynamicTransmissionStepBlend"`
+	JerkCurve                    int     `json:"jerkCurve"`
+	JerkPivot                    int     `json:"jerkPivot"`
+	JerkPivotGain                float64 `json:"jerkPivotGain"`
 	// JerkMax is deprecated: it was replaced by JerkPivot/JerkPivotGain. A
 	// non-zero value is converted on load and then zeroed, so omitempty drops it
 	// from the file on the next write and the migration runs at most once.
@@ -308,8 +324,8 @@ type Snapshot struct {
 
 	// Dynamic transmission settings
 	DynamicTransmissionFeedback  bool
-	DynamicTransmissionCurve     int
-	DynamicTransmissionGforceMax float64
+	DynamicTransmissionJerkCurve int
+	DynamicTransmissionStepBlend float64
 
 	// EQ settings (per channel)
 	EqEnabled []bool
@@ -1469,99 +1485,106 @@ func (c *Config) DecreaseHapticsSnapMax() int {
 	return c.viper.Haptics.SnapMax
 }
 
-// GetHapticsTransmissionCurve returns the transmission curve value.
-// This curve is applied to the dynamic transmission feedback bsaed on the longitudinal vehicle g-force.
-func (c *Config) GetHapticsTransmissionCurve() float64 {
-	return float64(c.snapshot.Load().DynamicTransmissionCurve)
+// GetHapticsTransmissionJerkCurve returns the driveline response curve for the
+// gear-shift magnitude. Falls back to the shipped default when unset, so configs
+// written before the key existed do not silently run at an exponent of zero.
+func (c *Config) GetHapticsTransmissionJerkCurve() float64 {
+	curve := c.snapshot.Load().DynamicTransmissionJerkCurve
+	if curve <= 0 {
+		return defaultTransmissionJerkCurve
+	}
+
+	return float64(curve)
 }
 
-// SetHapticsTransmissionCurve sets the transmission curve value.
-// This curve is applied to the dynamic transmission feedback bsaed on the longitudinal vehicle g-force.
-func (c *Config) SetHapticsTransmissionCurve(value int) {
+// SetHapticsTransmissionJerkCurve sets the response curve for the jerk source.
+func (c *Config) SetHapticsTransmissionJerkCurve(value int) {
 	c.mu.Lock()
 
-	value = min(value, 955)
+	value = min(value, 995)
 	value = max(value, 5)
-	c.viper.Haptics.DynamicTransmissionCurve = value
+	c.viper.Haptics.DynamicTransmissionJerkCurve = value
 	c.rebuildSnapshot()
 	c.registerUpdate(false)
 	c.mu.Unlock()
 }
 
-// IncreaseHapticsTransmissionCurve increases the transmission curve value in increments of 5.
-func (c *Config) IncreaseHapticsTransmissionCurve() int {
+// IncreaseHapticsTransmissionJerkCurve increases the jerk curve value in increments of 5.
+func (c *Config) IncreaseHapticsTransmissionJerkCurve() int {
 	c.mu.Lock()
-	c.viper.Haptics.DynamicTransmissionCurve = min(955, c.viper.Haptics.DynamicTransmissionCurve+5)
+	c.viper.Haptics.DynamicTransmissionJerkCurve = min(995, c.viper.Haptics.DynamicTransmissionJerkCurve+5)
 	c.rebuildSnapshot()
 	c.registerUpdate(false)
-	result := c.viper.Haptics.DynamicTransmissionCurve
-	c.mu.Unlock()
-
-	return result
-}
-
-// DecreaseHapticsTransmissionCurve decreases the transmission curve value in increments of 5.
-func (c *Config) DecreaseHapticsTransmissionCurve() int {
-	c.mu.Lock()
-	c.viper.Haptics.DynamicTransmissionCurve = max(5, c.viper.Haptics.DynamicTransmissionCurve-5)
-	c.rebuildSnapshot()
-	c.registerUpdate(false)
-	result := c.viper.Haptics.DynamicTransmissionCurve
+	result := c.viper.Haptics.DynamicTransmissionJerkCurve
 	c.mu.Unlock()
 
 	return result
 }
 
-// GetHapticsTransmissionGforceMax returns the maximum g-force for dynamic transmission feedback.
-// Any longitudinal g-force values above this are clamped to this maximum.
-func (c *Config) GetHapticsTransmissionGforceMax() float64 {
-	return c.snapshot.Load().DynamicTransmissionGforceMax
+// DecreaseHapticsTransmissionJerkCurve decreases the jerk curve value in increments of 5.
+func (c *Config) DecreaseHapticsTransmissionJerkCurve() int {
+	c.mu.Lock()
+	c.viper.Haptics.DynamicTransmissionJerkCurve = max(5, c.viper.Haptics.DynamicTransmissionJerkCurve-5)
+	c.rebuildSnapshot()
+	c.registerUpdate(false)
+	result := c.viper.Haptics.DynamicTransmissionJerkCurve
+	c.mu.Unlock()
+
+	return result
 }
 
-// SetHapticsTransmissionGforceMax sets the maximum transmission G-force value.
-// Any longitudinal g-force values above this are clamped to this maximum.
-func (c *Config) SetHapticsTransmissionGforceMax(value float64) {
-	value = math.Min(10, value)
-	value = math.Max(0, value)
+// GetHapticsTransmissionStepBlend returns the depth to which this shift's
+// driveline step multiplies the learned per-vehicle character: at 0 a shift
+// plays the vehicle's character flat, at 1 a typical shift plays that
+// character unchanged while smaller and larger steps scale it down and up.
+func (c *Config) GetHapticsTransmissionStepBlend() float64 {
+	return c.snapshot.Load().DynamicTransmissionStepBlend
+}
+
+// SetHapticsTransmissionStepBlend sets the character-to-step multiplier depth
+// for the driveline transmission source.
+func (c *Config) SetHapticsTransmissionStepBlend(value float64) {
+	value = math.Min(1.0, value)
+	value = math.Max(0.0, value)
 
 	c.mu.Lock()
-	c.viper.Haptics.DynamicTransmissionGforceMax = value
+	c.viper.Haptics.DynamicTransmissionStepBlend = value
 	c.rebuildSnapshot()
 	c.registerUpdate(false)
 	c.mu.Unlock()
 }
 
-// IncreaseHapticsTransmissionGforceMax increases the maximum g-force for dynamic transmission feedback in increments of 0.1g.
-func (c *Config) IncreaseHapticsTransmissionGforceMax() float64 {
+// IncreaseHapticsTransmissionStepBlend increases the step blend in increments of 0.05.
+func (c *Config) IncreaseHapticsTransmissionStepBlend() float64 {
 	c.mu.Lock()
 
-	c.viper.Haptics.DynamicTransmissionGforceMax = min(
-		5.0,
-		c.viper.Haptics.DynamicTransmissionGforceMax+0.1,
+	c.viper.Haptics.DynamicTransmissionStepBlend = min(
+		1.0,
+		c.viper.Haptics.DynamicTransmissionStepBlend+0.05,
 	)
 
 	c.rebuildSnapshot()
 	c.registerUpdate(false)
 
-	result := c.viper.Haptics.DynamicTransmissionGforceMax
+	result := c.viper.Haptics.DynamicTransmissionStepBlend
 	c.mu.Unlock()
 
 	return result
 }
 
-// DecreasehapticsTransmissionGforceMax decreases the maximum g-force for dynamic transmission feedback in increments of 0.1g.
-func (c *Config) DecreasehapticsTransmissionGforceMax() float64 {
+// DecreaseHapticsTransmissionStepBlend decreases the step blend in increments of 0.05.
+func (c *Config) DecreaseHapticsTransmissionStepBlend() float64 {
 	c.mu.Lock()
 
-	c.viper.Haptics.DynamicTransmissionGforceMax = max(
-		0.1,
-		c.viper.Haptics.DynamicTransmissionGforceMax-0.1,
+	c.viper.Haptics.DynamicTransmissionStepBlend = max(
+		0.0,
+		c.viper.Haptics.DynamicTransmissionStepBlend-0.05,
 	)
 
 	c.rebuildSnapshot()
 	c.registerUpdate(false)
 
-	result := c.viper.Haptics.DynamicTransmissionGforceMax
+	result := c.viper.Haptics.DynamicTransmissionStepBlend
 	c.mu.Unlock()
 
 	return result
@@ -4273,8 +4296,8 @@ func (c *Config) rebuildSnapshot() {
 		DRXEnabled: c.viper.Synthesizer.EnableDRX,
 
 		DynamicTransmissionFeedback:  c.viper.Haptics.DynamicTransmissionFeedback,
-		DynamicTransmissionCurve:     c.viper.Haptics.DynamicTransmissionCurve,
-		DynamicTransmissionGforceMax: c.viper.Haptics.DynamicTransmissionGforceMax,
+		DynamicTransmissionJerkCurve: c.viper.Haptics.DynamicTransmissionJerkCurve,
+		DynamicTransmissionStepBlend: c.viper.Haptics.DynamicTransmissionStepBlend,
 
 		EqEnabled: func() []bool {
 			eqEnabled := make([]bool, len(c.viper.Synthesizer.EnableEq))

@@ -365,6 +365,12 @@ func (s *Synthesizer) GetEffectSample(name string, sampleRate int) codec.PCMFloa
 	return effectSample
 }
 
+// SetGearShiftPulse re-renders the gear shift effect at a new frequency and length,
+// so the waveform can carry the current vehicle's gearbox character.
+func (s *Synthesizer) SetGearShiftPulse(pulseHz float64, lengthSeconds float64) {
+	s.effects.SetGearShiftPulse(pulseHz, lengthSeconds)
+}
+
 // PlayEffect plays an effect at a given magnitude on a given channel.
 func (s *Synthesizer) PlayEffect(name string, magnitude float64, channel string) {
 	channelMagnitude, err := s.mixer.GetChannelPowerRatio(channel)

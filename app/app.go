@@ -106,7 +106,8 @@ type App struct {
 	predictiveLap *predictivelap.PredictiveLap // Predictive lap-time delta tracker
 	lapClock      *predictivelap.LapClock      // Synthesized lap timer (Addendum3 CurrentLaptime fallback)
 
-	transmissionGainMin float64 // Minimum transmission gain based on vehicle type
+	transmissionGainMin float64          // Minimum transmission gain based on vehicle type
+	gearShift           gearShiftProfile // Learned per-vehicle gear-shift harshness
 
 	state                 gameState               // Application state tracker
 	telemetryFormatLogged bool                    // Whether the first-telemetry format log has been emitted
@@ -2144,19 +2145,27 @@ func (a *App) normalizeRevLimit(revLimit uint16) uint16 {
 	return revLimit
 }
 
-// setTransmissionGain sets the transmission gain based on vehicle type.
+// setTransmissionGain sets the transmission gain floor based on vehicle type, and
+// seeds the learned gear-shift harshness for the same vehicle.
+//
+// The floor is relative to the transmission channel, not absolute. The channel gain
+// is applied by Synthesizer.PlayEffect, so folding it in here as well would move the
+// floor with any trim the user applies to the channel.
 func (a *App) setTransmissionGain(vehicleType vehicle.TypeName) {
 	switch vehicleType {
 	case vehicle.TypeRace:
-		a.transmissionGainMin = a.config.GetSynthTransmissionGain() + a.config.GetSynthTransmissionGainMinRace()
+		a.transmissionGainMin = a.config.GetSynthTransmissionGainMinRace()
 	case vehicle.TypeTuned:
-		minGain := (a.config.GetSynthTransmissionGainMinStreet() + a.config.GetSynthTransmissionGainMinRace()) / 2
-		a.transmissionGainMin = a.config.GetSynthTransmissionGain() + minGain
+		a.transmissionGainMin = (a.config.GetSynthTransmissionGainMinStreet() +
+			a.config.GetSynthTransmissionGainMinRace()) / 2
 	case vehicle.TypeStreet:
 		fallthrough
 	default:
-		a.transmissionGainMin = a.config.GetSynthTransmissionGain() + a.config.GetSynthTransmissionGainMinStreet()
+		a.transmissionGainMin = a.config.GetSynthTransmissionGainMinStreet()
 	}
+
+	// Seeded from the floor just set above, so it must follow the switch.
+	a.seedGearShiftProfile()
 }
 
 // resetVehicleState resets vehicle-related state.

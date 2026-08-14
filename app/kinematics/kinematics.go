@@ -71,6 +71,13 @@ type Kinematics struct {
 	GroundSpeed     float64
 	SurgeCalculated float64
 
+	// SurgeJerk is the rate of change of the surge (longitudinal) acceleration for
+	// this frame, in m/s^3. Unlike the SixDOF jerk fields it differentiates the
+	// surge axis alone rather than the three-axis acceleration magnitude, so road
+	// bumps in heave/sway do not contaminate it. The transmission haptic uses it to
+	// gauge how violently drive torque is cut and re-applied across a gear change.
+	SurgeJerk float64
+
 	// Resolved jerk/snap are the recovery-aware values the haptic path should
 	// consume. After a sequence gap the calculated chain is still re-warming, so
 	// these fall back to the telemetry-native envelope (translational only, and
@@ -151,6 +158,7 @@ func newKinematics() Kinematics {
 		TransmissionGear:      -100,
 		GroundSpeed:           0,
 		SurgeCalculated:       0,
+		SurgeJerk:             0,
 		SynthChannelAmplitude: nil,
 		SynthChannelFrequency: nil,
 		Format:                "A",
@@ -183,6 +191,7 @@ func (k *State) Update(windowSeconds float64, vehicleDimensions vehicle.Dimensio
 	if !k.DisableNyquistGate {
 		transCalcVel = k.transNyquist.filter(transCalcVel, float64(accelFactor), k.Current.GroundSpeed)
 	}
+
 	k.Current.SixDOFTranslationCalc.Velocity = transCalcVel
 	translationCalcVelocityDelta := vector.Delta(k.Current.SixDOFTranslationCalc.Velocity, k.Last.SixDOFTranslationCalc.Velocity)
 	k.Current.SixDOFTranslationCalc.Acceleration = vector.Scale(translationCalcVelocityDelta, accelFactor, accelFactor, accelFactor)
@@ -207,6 +216,7 @@ func (k *State) Update(windowSeconds float64, vehicleDimensions vehicle.Dimensio
 	if !k.DisableNyquistGate {
 		rotCalcVel = k.rotNyquist.filter(rotCalcVel, float64(accelFactor), k.Current.GroundSpeed)
 	}
+
 	k.Current.SixDOFRotationCalc.Velocity = rotCalcVel
 	rotationVelocityDelta := vector.Delta(k.Current.SixDOFRotationCalc.Velocity, k.Last.SixDOFRotationCalc.Velocity)
 	k.Current.SixDOFRotationCalc.Acceleration = vector.Scale(rotationVelocityDelta, accelFactor, accelFactor, accelFactor)
@@ -216,6 +226,10 @@ func (k *State) Update(windowSeconds float64, vehicleDimensions vehicle.Dimensio
 
 	k.Current.TransmissionGear = gtclient.Telemetry.CurrentGear()
 	k.Current.SurgeCalculated = signal.Abs(float64(k.Current.SixDOFRotationCalc.Acceleration.X))
+
+	// Differentiate the surge axis alone. SurgeCalculated is set immediately above,
+	// so both frames' surge sources are populated by this point.
+	k.Current.SurgeJerk = (surgeAccel(k.Current) - surgeAccel(k.Last)) / windowSeconds
 
 	k.Current.SuspensionHeight = gtclient.Telemetry.SuspensionHeightMetres()
 	k.Current.SurfaceType = gtclient.Telemetry.SurfaceType()
@@ -434,18 +448,30 @@ func (g *nyquistGate) filter(rawVel models.Vector, accelFactor, speedMps float64
 	return out
 }
 
-// GetSurgeGforce calculates and returns the translational envelope surge G-force based on the current kinematic state.
-func (k *State) GetSurgeGforce() float64 {
-	var surge float64
-	if k.Current.Format == "~" || k.Current.Format == "B" {
-		surge = float64(k.Current.SixDOFTranslation.Acceleration.Surge)
-	} else {
-		surge = float64(k.Current.SurgeCalculated)
+// surgeAccel returns the signed surge (longitudinal) acceleration in m/s^2 for a
+// frame, preferring the telemetry-native envelope on the formats that carry a
+// trustworthy one and falling back to the calculated surge otherwise.
+func surgeAccel(k Kinematics) float64 {
+	if formatSupportsNativeEnvelope(k.Format) {
+		return float64(k.SixDOFTranslation.Acceleration.Surge)
 	}
 
-	gForce := signal.Abs(surge / GravityConstant)
+	return float64(k.SurgeCalculated)
+}
+
+// GetSurgeGforce calculates and returns the translational envelope surge G-force based on the current kinematic state.
+func (k *State) GetSurgeGforce() float64 {
+	gForce := signal.Abs(surgeAccel(k.Current) / GravityConstant)
 
 	return gForce
+}
+
+// GetSurgeJerk returns the magnitude of the current surge jerk in m/s^3, i.e. how
+// fast the longitudinal acceleration is changing. The transmission haptic uses it
+// to distinguish a race car's near-instant torque cut and re-application from a
+// street car's gradual clutch and throttle ramp.
+func (k *State) GetSurgeJerk() float64 {
+	return signal.Abs(k.Current.SurgeJerk)
 }
 
 // getTelemetryFormat determines the telemetry format based on the telemetry client's raw telemetry data.

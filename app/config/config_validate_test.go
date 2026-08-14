@@ -246,7 +246,6 @@ func TestValidateJSONSchema_HapticsOutOfRange(t *testing.T) {
 		{"snapMax too high", "snapMax", `"snapMax": 201`},
 		{"pulseMaxAmplitude too high", "pulseMaxAmplitude", `"pulseMaxAmplitude": 1.5`},
 		{"pulseMaxAmplitude negative", "pulseMaxAmplitude", `"pulseMaxAmplitude": -0.1`},
-		{"dynamicTransmissionCurve too low", "dynamicTransmissionCurve", `"dynamicTransmissionCurve": 3`},
 	}
 
 	for _, testCase := range tests {
@@ -669,8 +668,8 @@ func TestConfig_Validate_Integration(t *testing.T) {
 				PulseMaxAmplitude:            1.0,
 				TextureMinFrequencyHz:        25,
 				TextureMaxFrequencyHz:        45,
-				DynamicTransmissionCurve:     150,
-				DynamicTransmissionGforceMax: 2.0,
+				DynamicTransmissionJerkCurve: 750,
+				DynamicTransmissionStepBlend: 0.6,
 			},
 			Synthesizer: &Synthesizer{
 				InternalSampleRateHz:      8000,

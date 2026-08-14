@@ -9,6 +9,28 @@ window.channelDisplayLabel = window.channelDisplayLabel || function (ch, names) 
     return name + ' (' + (ch + 1) + ')';
 };
 
+// Haptics fields whose box holds a different unit from the config's stored form.
+// The curve exponents are shown as the raw thousandths the backend stores (5-995)
+// while the config keeps a float (0.005-0.995), so they are divided on the way in.
+// Everything else is sent as displayed.
+//
+// This lives in one place because there are two save paths (per-input auto-save and
+// the bulk Save button); when only one of them scaled, typing 310 into Snap Curve
+// stored 310000.
+const CONFIG_FIELDS_SCALED_BY_1000 = new Set([
+    'haptics.jerkCurve',
+    'haptics.snapCurve',
+    'haptics.dynamicTransmissionJerkCurve',
+]);
+
+function toConfigValue(configPath, value) {
+    if (typeof value !== 'number' || !CONFIG_FIELDS_SCALED_BY_1000.has(configPath)) {
+        return value;
+    }
+
+    return value / 1000.0;
+}
+
 // Settings page JavaScript functionality
 class ConfigManager {
     constructor() {
@@ -611,13 +633,7 @@ class ConfigManager {
                 newValue = 0;
             }
 
-            // Haptics curve values need to be divided by 1000 before sending to backend
-            // The UI shows integers (5-955) but backend expects floats (0.005-0.955)
-            if (configPath === 'haptics.jerkCurve' ||
-                configPath === 'haptics.snapCurve' ||
-                configPath === 'haptics.dynamicTransmissionCurve') {
-                newValue = newValue / 1000.0;
-            }
+            newValue = toConfigValue(configPath, newValue);
         } else {
             newValue = input.value;
         }
@@ -996,16 +1012,25 @@ class ConfigManager {
         window.experimentalEnabled = experimentalEnabled;
     }
 
-    // Update transmission curve and g-force inputs disabled state based on mode
+    // Update transmission driveline inputs disabled state based on mode. There is
+    // only one source now, so these groups are always visible when dynamic mode is
+    // selected; the mode only gates whether the inputs are editable.
     updateTransmissionDisabledState() {
         const dynamicRadio = document.getElementById('transmission-dynamic-radio');
-        const transmissionCurveInput = document.getElementById('haptics-transmissioncurve');
-        const gForceMaxInput = document.getElementById('haptics-gforcemax');
+        const jerkCurveInput = document.getElementById('haptics-transmissionjerkcurve');
+        const stepBlendInput = document.getElementById('haptics-transmissionstepblend');
 
-        if (dynamicRadio && transmissionCurveInput && gForceMaxInput) {
-            const isDynamic = dynamicRadio.checked;
-            transmissionCurveInput.disabled = !isDynamic;
-            gForceMaxInput.disabled = !isDynamic;
+        if (!dynamicRadio) {
+            return;
+        }
+
+        const isDynamic = dynamicRadio.checked;
+
+        if (jerkCurveInput) {
+            jerkCurveInput.disabled = !isDynamic;
+        }
+        if (stepBlendInput) {
+            stepBlendInput.disabled = !isDynamic;
         }
     }
 
@@ -1131,7 +1156,7 @@ class ConfigManager {
                 value = input.value;
             }
 
-            this.setNestedValue(formData, configPath, value);
+            this.setNestedValue(formData, configPath, toConfigValue(configPath, value));
         });
 
         return formData;

@@ -68,8 +68,8 @@ func (a *App) settingAction(setting languagedb.Key, action string) string {
 		languagedb.UIMenuHapticsPulseMinFreq:            a.handlePulseMinFreqSetting,
 		languagedb.UIMenuHapticsPulseMaxFreq:            a.handlePulseMaxFreqSetting,
 		languagedb.UIMenuHapticsTransmissionFFBStrength: a.handletransmissionFFBStrengthSetting,
-		languagedb.UIMenuHapticsTransmissionCurve:       a.handleTransmissionCurveSetting,
-		languagedb.UIMenuHapticsTransmissionGforceMax:   a.handleTransmissionGforceMaxSetting,
+		languagedb.UIMenuHapticsTransmissionJerkCurve:   a.handleTransmissionJerkCurveSetting,
+		languagedb.UIMenuHapticsTransmissionStepBlend:   a.handleTransmissionStepBlendSetting,
 		languagedb.UIMenuHapticsEnginePrimaryBalance:    a.handleEnginePrimaryBalanceSetting,
 		languagedb.UIMenuHapticsEngineSecondaryBalance:  a.handleEngineSecondaryBalanceSetting,
 		languagedb.UIMenuHapticsEnginePulseGain:         a.handleEnginePulseGainSetting,
@@ -306,21 +306,6 @@ func (a *App) handleLanguageSetting(action string) string {
 	default:
 		return *a.config.GetAppLanguage()
 	}
-}
-
-func (a *App) handleTransmissionCurveSetting(action string) string {
-	var value int
-
-	switch action {
-	case "increase":
-		value = a.config.IncreaseHapticsTransmissionCurve()
-	case "decrease":
-		value = a.config.DecreaseHapticsTransmissionCurve()
-	default:
-		value = int(a.config.GetHapticsTransmissionCurve())
-	}
-
-	return strconv.Itoa(value)
 }
 
 func (a *App) handleTransmissionGainSetting(action string) string {
@@ -1212,19 +1197,34 @@ func (a *App) handletransmissionFFBStrengthSetting(action string) string {
 	return "Fixed"
 }
 
-func (a *App) handleTransmissionGforceMaxSetting(action string) string {
+func (a *App) handleTransmissionJerkCurveSetting(action string) string {
+	var value int
+
+	switch action {
+	case "increase":
+		value = a.config.IncreaseHapticsTransmissionJerkCurve()
+	case "decrease":
+		value = a.config.DecreaseHapticsTransmissionJerkCurve()
+	default:
+		value = int(a.config.GetHapticsTransmissionJerkCurve())
+	}
+
+	return strconv.Itoa(value)
+}
+
+func (a *App) handleTransmissionStepBlendSetting(action string) string {
 	var value float64
 
 	switch action {
 	case "increase":
-		value = a.config.IncreaseHapticsTransmissionGforceMax()
+		value = a.config.IncreaseHapticsTransmissionStepBlend()
 	case "decrease":
-		value = a.config.DecreasehapticsTransmissionGforceMax()
+		value = a.config.DecreaseHapticsTransmissionStepBlend()
 	default:
-		value = a.config.GetHapticsTransmissionGforceMax()
+		value = a.config.GetHapticsTransmissionStepBlend()
 	}
 
-	return strconv.FormatFloat(value, 'f', 1, 64) + "G"
+	return strconv.FormatFloat(value, 'f', 2, 64)
 }
 
 // handleRoutingLeafSetting parses a dynamic routing leaf key of the form

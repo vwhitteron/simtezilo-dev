@@ -2,6 +2,7 @@ package synthesizer
 
 import (
 	"math"
+	"sync"
 	"time"
 
 	"github.com/vwhitteron/simtezilo-dev/app/codec"
@@ -9,6 +10,17 @@ import (
 
 const (
 	effectsSampleRateHz = 32000 // Base sample rate at which sound effects are rendered
+
+	// GearShiftEffectName is the effect the transmission channel plays on a gear
+	// change, and the one whose waveform is replaced per vehicle.
+	GearShiftEffectName = "gearShift"
+
+	// DefaultGearShiftPulseHz and DefaultGearShiftLengthSeconds are the waveform a
+	// vehicle plays before its gearbox has been measured. They sit mid-range between
+	// the sharp and heavy ends so an unmeasured car is never badly wrong in either
+	// direction.
+	DefaultGearShiftPulseHz       = 30.0
+	DefaultGearShiftLengthSeconds = 0.1
 )
 
 // EffectSample represents a pre-generated audio sample for a sound effect.
@@ -19,6 +31,10 @@ type EffectSample struct {
 
 // EffectsSampleBank holds pre-generated audio samples for various sound effects.
 type EffectsSampleBank struct {
+	// mu guards samples, which is written by GetSample's lazy per-rate resample cache
+	// as well as by SetGearShiftPulse. Both the app main loop and the pit radio's
+	// background goroutine call GetSample, so the map is genuinely shared.
+	mu      sync.RWMutex
 	samples map[string]EffectSample
 }
 
@@ -26,10 +42,11 @@ type EffectsSampleBank struct {
 func NewEffectsSampleBank() *EffectsSampleBank {
 	return &EffectsSampleBank{
 		samples: map[string]EffectSample{
-			"gearShift": {
-				Name: "gearShift",
+			GearShiftEffectName: {
+				Name: GearShiftEffectName,
 				Sample: map[int]codec.PCMFloat64{
-					effectsSampleRateHz: generateGearShiftSample(),
+					effectsSampleRateHz: generateGearShiftSample(
+						DefaultGearShiftPulseHz, DefaultGearShiftLengthSeconds),
 				},
 			},
 			"talkPermitTone": {
@@ -64,6 +81,9 @@ func NewEffectsSampleBank() *EffectsSampleBank {
 // If the sample does not exist, it returns an empty slice.
 // The effect is resampled to the requested sample rate if necessary.
 func (s *EffectsSampleBank) GetSample(name string, sampleRate int) codec.PCMFloat64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	if _, ok := s.samples[name]; !ok {
 		return codec.PCMFloat64{}
 	}
@@ -96,18 +116,82 @@ func (s *EffectsSampleBank) GetSample(name string, sampleRate int) codec.PCMFloa
 	return sample
 }
 
-// generateGearShiftSample creates a sample for the gear shift sound effect.
-func generateGearShiftSample() codec.PCMFloat64 {
-	sampleLengthSeconds := 0.1
-	pulseAmplitude := 2.0
-	pulseHz := 30
-	decayRate := 1 - (5 / (float64(effectsSampleRateHz) * sampleLengthSeconds))
+// SetGearShiftPulse re-renders the gear shift effect at a new frequency and length,
+// which is how a vehicle's gearbox character is applied.
+//
+// It replaces the whole per-rate map rather than just the base entry, because the
+// lazily resampled copies GetSample caches are renderings of the *previous* waveform
+// and would otherwise outlive it — the synthesizer runs at 8 kHz by default, so the
+// cached resample is the one actually played.
+//
+// Callers are on the app main loop, never the audio callback path, and a sample
+// already handed out stays valid: WriteScaled copies it into the ring buffer
+// synchronously before returning.
+func (s *EffectsSampleBank) SetGearShiftPulse(pulseHz float64, lengthSeconds float64) {
+	sample := generateGearShiftSample(pulseHz, lengthSeconds)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.samples[GearShiftEffectName] = EffectSample{
+		Name: GearShiftEffectName,
+		Sample: map[int]codec.PCMFloat64{
+			effectsSampleRateHz: sample,
+		},
+	}
+}
+
+// The frequency and length carry the gearbox's character, because level cannot: a
+// race car's whole magnitude range plays in compression, so every race car arrives at
+// the transducer within a fraction of a dB of every other one. A modern sequential
+// gets a short sharp crack and a manually operated box a longer, lower, heavier thud,
+// which reads as a different mechanism rather than a quieter one. See
+// GearShiftPulseHz in the app package for the mapping from measured shift duration.
+const (
+	// gearShiftPulseAmplitude is the peak of the rendered pulse. See the note on
+	// generateGearShiftSample: super-unity is load-bearing and must not be reduced.
+	gearShiftPulseAmplitude = 2.0
+
+	// gearShiftDecayEFolds is how many e-foldings the envelope decays over the length
+	// of the sample, so the envelope shape is length-relative and a longer pulse is
+	// simply a slower version of the same decay rather than a truncated one.
+	gearShiftDecayEFolds = 5.0
+)
+
+// generateGearShiftSample renders the gear shift pulse at the given frequency and
+// length.
+//
+// The peak deliberately exceeds unity, and reducing it is a mistake that has been
+// made once already. PlayEffect scales this sample by a magnitude in
+// [gain floor, 1.0] and the result is summed into the output buffer through
+// softKnee, which is transparent only below softKneeThreshold (0.7), so at a peak of
+// 2.0 a race car's whole magnitude range plays in compression: the knee is crossed
+// at a magnitude of 0.35, which is below the race gain floor. That does cost the
+// effect its dynamic range — a Porsche 963's 2.0 dB upshift-to-downshift contrast
+// reaches the transducer as 0.3 dB.
+//
+// Dropping the peak to 0.9 to recover that range was tried and was much worse. A
+// gear change has to read as a discrete event against whatever the chassis and road
+// channels are already putting in the buffer, and overdriving the knee is what buys
+// that: at 2.0 the pulse sets the operating point and everything else becomes the
+// locally-reduced slope softCombine leaves it, so the shift dominates by
+// construction. At 0.9 it merely joins the mix, and multiple Group 1 cars and a
+// Super Formula were reported as having essentially no shift feedback in either
+// direction — a far bigger loss than the 2.9 dB of peak level suggests, because
+// prominence against the background, not peak amplitude, is what makes the event
+// legible.
+//
+// So the compression here is load-bearing. Up/down contrast has to be found
+// somewhere that does not trade away prominence.
+func generateGearShiftSample(pulseHz float64, sampleLengthSeconds float64) codec.PCMFloat64 {
+	pulseAmplitude := gearShiftPulseAmplitude
+	decayRate := 1 - (gearShiftDecayEFolds / (float64(effectsSampleRateHz) * sampleLengthSeconds))
 
 	sampleCount := int(sampleLengthSeconds * float64(effectsSampleRateHz))
 
-	pulseWidth := effectsSampleRateHz / (2 * pulseHz)
-	waveSamplePeriod := math.Pi / float64(pulseWidth)
-	waveOffset := float64(pulseWidth)
+	pulseWidth := float64(effectsSampleRateHz) / (2 * pulseHz)
+	waveSamplePeriod := math.Pi / pulseWidth
+	waveOffset := pulseWidth
 
 	samples := make([]float64, sampleCount)
 

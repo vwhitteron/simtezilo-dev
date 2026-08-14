@@ -2579,37 +2579,35 @@
                                         </div>
                                     </div>
                                     <div class="row g-3 mb-4">
-                                        <div class="col-md-6 col-lg-3">
-                                            <label for="haptics-transmissioncurve" class="form-label">
-                                                <span
-                                                    data-i18n="runmode.settings.haptics.transmission.curve">Transmission
-                                                    Curve</span>
-                                                <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
-                                                    role="button" tabindex="0" aria-expanded="false"
-                                                    data-i18n-tooltip="runmode.settings.haptics.transmission.curve.tooltip"></i>
-                                            </label>
-                                            <input type="number" id="haptics-transmissioncurve"
-                                                class="form-control text-center no-spinner"
-                                                data-config="haptics.dynamicTransmissionCurve" min="5" max="955"
-                                                step="1">
-                                        </div>
-                                        <div class="col-md-6 col-lg-3">
-                                            <label for="haptics-gforcemax" class="form-label"
+                                        <div class="col-md-6" id="haptics-jerkcurve-group">
+                                            <label for="haptics-transmissionjerkcurve" class="form-label"
                                                 style="white-space: nowrap;">
                                                 <span
-                                                    data-i18n="runmode.settings.haptics.transmission.gforcemax">G-Force
-                                                    Max</span>
+                                                    data-i18n="runmode.settings.haptics.transmission.jerkcurve">Shift
+                                                    Compression Curve</span>
                                                 <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
                                                     role="button" tabindex="0" aria-expanded="false"
-                                                    data-i18n-tooltip="runmode.settings.haptics.transmission.gforcemax.tooltip"></i>
+                                                    data-i18n-tooltip="runmode.settings.haptics.transmission.jerkcurve.tooltip"></i>
                                             </label>
-                                            <div class="input-with-suffix">
-                                                <input type="number" id="haptics-gforcemax"
-                                                    class="form-control text-center no-spinner"
-                                                    data-config="haptics.dynamicTransmissionGforceMax" min="0.1"
-                                                    max="5.0" step="0.1">
-                                                <span class="input-suffix">G</span>
-                                            </div>
+                                            <input type="number" id="haptics-transmissionjerkcurve"
+                                                class="form-control text-center no-spinner"
+                                                data-config="haptics.dynamicTransmissionJerkCurve" min="5" max="995"
+                                                step="1">
+                                        </div>
+                                        <div class="col-md-6" id="haptics-stepblend-group">
+                                            <label for="haptics-transmissionstepblend" class="form-label"
+                                                style="white-space: nowrap;">
+                                                <span
+                                                    data-i18n="runmode.settings.haptics.transmission.stepblend">Shift
+                                                    Variation</span>
+                                                <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
+                                                    role="button" tabindex="0" aria-expanded="false"
+                                                    data-i18n-tooltip="runmode.settings.haptics.transmission.stepblend.tooltip"></i>
+                                            </label>
+                                            <input type="number" id="haptics-transmissionstepblend"
+                                                class="form-control text-center no-spinner decimal-input"
+                                                data-config="haptics.dynamicTransmissionStepBlend" min="0" max="1"
+                                                step="0.05">
                                         </div>
                                     </div>
                                 </div>
@@ -3589,9 +3587,6 @@
             const transmissionCheckbox = document.getElementById('haptics-dynamictransmission');
             const fixedRadio = document.getElementById('transmission-fixed-radio');
             const dynamicRadio = document.getElementById('transmission-dynamic-radio');
-            const transmissionCurveInput = document.getElementById('haptics-transmissioncurve');
-            const gForceMaxInput = document.getElementById('haptics-gforcemax');
-
             function updateTransmissionRadios(isDynamic) {
                 if (isDynamic) {
                     dynamicRadio.checked = true;
@@ -3599,12 +3594,10 @@
                     fixedRadio.checked = true;
                 }
 
-                // Disable/enable compression curve and g-force max based on mode
-                if (transmissionCurveInput) {
-                    transmissionCurveInput.disabled = !isDynamic;
-                }
-                if (gForceMaxInput) {
-                    gForceMaxInput.disabled = !isDynamic;
+                // Enabling/disabling the dependent knobs lives in settings.js so the
+                // two paths cannot drift apart as knobs are added.
+                if (window.configManager) {
+                    window.configManager.updateTransmissionDisabledState();
                 }
             }
 

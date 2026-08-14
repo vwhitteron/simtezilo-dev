@@ -878,120 +878,7 @@ func testHapticsSnapScale(t *testing.T) {
 	assert.Greater(t, scale, 0.0)
 }
 
-func testHapticsTransmissionCurveGetSet(t *testing.T) {
-	t.Parallel()
-
-	// Arrange
-	cfg := newTestConfig()
-
-	// Act & Assert - default is 150
-	assert.InDelta(t, 150, cfg.GetHapticsTransmissionCurve(), 0.001)
-
-	// Act - set new value
-	cfg.SetHapticsTransmissionCurve(200)
-
-	// Assert
-	assert.InDelta(t, 200, cfg.GetHapticsTransmissionCurve(), 0.001)
-}
-
-func testHapticsTransmissionCurveClamping(t *testing.T) {
-	t.Parallel()
-
-	// Arrange
-	cfg := newTestConfig()
-
-	// Act - set value below minimum (5)
-	cfg.SetHapticsTransmissionCurve(1)
-
-	// Assert - should be clamped to 5
-	assert.InDelta(t, 5, cfg.GetHapticsTransmissionCurve(), 0.001)
-
-	// Act - set value above maximum (955)
-	cfg.SetHapticsTransmissionCurve(1000)
-
-	// Assert - should be clamped to 955
-	assert.InDelta(t, 955, cfg.GetHapticsTransmissionCurve(), 0.001)
-}
-
-func testHapticsTransmissionCurveIncreaseDecrease(t *testing.T) {
-	t.Parallel()
-
-	// Arrange
-	cfg := newTestConfig()
-	cfg.SetHapticsTransmissionCurve(200)
-
-	// Act - increase
-	result := cfg.IncreaseHapticsTransmissionCurve()
-
-	// Assert
-	assert.InDelta(t, 205, result, 0.001)
-	assert.InDelta(t, 205, cfg.GetHapticsTransmissionCurve(), 0.001)
-
-	// Act - decrease
-	result = cfg.DecreaseHapticsTransmissionCurve()
-
-	// Assert
-	assert.InDelta(t, 200, result, 0.001)
-	assert.InDelta(t, 200, cfg.GetHapticsTransmissionCurve(), 0.001)
-}
-
-func testHapticsTransmissionGforceMaxGetSet(t *testing.T) {
-	t.Parallel()
-
-	// Arrange
-	cfg := newTestConfig()
-
-	// Act & Assert - default is 2.0
-	assert.InDelta(t, 2.0, cfg.GetHapticsTransmissionGforceMax(), 0.001)
-
-	// Act - set new value
-	cfg.SetHapticsTransmissionGforceMax(3.5)
-
-	// Assert
-	assert.InDelta(t, 3.5, cfg.GetHapticsTransmissionGforceMax(), 0.001)
-}
-
-func testHapticsTransmissionGforceMaxClamping(t *testing.T) {
-	t.Parallel()
-
-	// Arrange
-	cfg := newTestConfig()
-
-	// Act - set value below minimum (0)
-	cfg.SetHapticsTransmissionGforceMax(-1.0)
-
-	// Assert - should be clamped to 0
-	assert.InDelta(t, 0.0, cfg.GetHapticsTransmissionGforceMax(), 0.001)
-
-	// Act - set value above maximum (10)
-	cfg.SetHapticsTransmissionGforceMax(15.0)
-
-	// Assert - should be clamped to 10
-	assert.InDelta(t, 10.0, cfg.GetHapticsTransmissionGforceMax(), 0.001)
-}
-
-func testHapticsTransmissionGforceMaxIncreaseDecrease(t *testing.T) {
-	t.Parallel()
-
-	// Arrange
-	cfg := newTestConfig()
-	cfg.SetHapticsTransmissionGforceMax(2.0)
-	cfg.rebuildSnapshot()
-
-	// Act - increase
-	result := cfg.IncreaseHapticsTransmissionGforceMax()
-
-	// Assert
-	assert.InDelta(t, 2.1, result, 0.001)
-
-	// Act - decrease
-	result = cfg.DecreasehapticsTransmissionGforceMax()
-
-	// Assert
-	assert.InDelta(t, 2.0, result, 0.001)
-}
-
-func TestHapticsCoreSection(t *testing.T) { //nolint:dupl // Test runners have similar structure by design
+func TestHapticsCoreSection(t *testing.T) {
 	t.Parallel()
 
 	t.Run("testHapticsDynamicTransFeedbackEnabled", testHapticsDynamicTransFeedbackEnabled)
@@ -1004,6 +891,9 @@ func TestHapticsCoreSection(t *testing.T) { //nolint:dupl // Test runners have s
 	t.Run("testHapticsJerkPivotGainGetSet", testHapticsJerkPivotGainGetSet)
 	t.Run("testHapticsJerkPivotGainClamping", testHapticsJerkPivotGainClamping)
 	t.Run("testHapticsJerkPivotGainIncreaseDecrease", testHapticsJerkPivotGainIncreaseDecrease)
+	t.Run("testHapticsJerkScalePivotAnchor", testHapticsJerkScalePivotAnchor)
+	t.Run("testHapticsJerkMaxMigration", testHapticsJerkMaxMigration)
+	t.Run("testHapticsJerkMaxMigrationSkipped", testHapticsJerkMaxMigrationSkipped)
 	t.Run("testHapticsJerkScale", testHapticsJerkScale)
 	t.Run("testHapticsReplayEnabledGetSet", testHapticsReplayEnabledGetSet)
 	t.Run("testHapticsSnapCurveGetSet", testHapticsSnapCurveGetSet)
@@ -1013,12 +903,6 @@ func TestHapticsCoreSection(t *testing.T) { //nolint:dupl // Test runners have s
 	t.Run("testHapticsSnapMaxClamping", testHapticsSnapMaxClamping)
 	t.Run("testHapticsSnapMaxIncreaseDecrease", testHapticsSnapMaxIncreaseDecrease)
 	t.Run("testHapticsSnapScale", testHapticsSnapScale)
-	t.Run("testHapticsTransmissionCurveGetSet", testHapticsTransmissionCurveGetSet)
-	t.Run("testHapticsTransmissionCurveClamping", testHapticsTransmissionCurveClamping)
-	t.Run("testHapticsTransmissionCurveIncreaseDecrease", testHapticsTransmissionCurveIncreaseDecrease)
-	t.Run("testHapticsTransmissionGforceMaxGetSet", testHapticsTransmissionGforceMaxGetSet)
-	t.Run("testHapticsTransmissionGforceMaxClamping", testHapticsTransmissionGforceMaxClamping)
-	t.Run("testHapticsTransmissionGforceMaxIncreaseDecrease", testHapticsTransmissionGforceMaxIncreaseDecrease)
 	t.Run("testSynthDRXEnabledGetSet", testSynthDRXEnabledGetSet)
 }
 
@@ -2647,10 +2531,8 @@ func testSynthTransmissionGainMinRace(t *testing.T) {
 	// Arrange
 	cfg := newTestConfig()
 
-	// Act & Assert - default is -3.0
-	assert.InDelta(t, -3.0, cfg.GetSynthTransmissionGainMinRace(), 0.001)
-
-	// Act - set new value
+	// Act - set an explicit value rather than asserting the shipped default, so a
+	// retuned default cannot change what this test verifies.
 	cfg.SetSynthTransmissionGainMinRace(-5.0)
 
 	// Assert
@@ -2683,10 +2565,8 @@ func testSynthTransmissionGainMinStreet(t *testing.T) {
 	// Arrange
 	cfg := newTestConfig()
 
-	// Act & Assert - default is -6.0
-	assert.InDelta(t, -6.0, cfg.GetSynthTransmissionGainMinStreet(), 0.001)
-
-	// Act - set new value
+	// Act - set an explicit value rather than asserting the shipped default, so a
+	// retuned default cannot change what this test verifies.
 	cfg.SetSynthTransmissionGainMinStreet(-8.0)
 
 	// Assert

@@ -492,19 +492,19 @@
                     "description": "Enable dynamic transmission feedback",
                     "default": true
                 },
-                "dynamicTransmissionCurve": {
+                "dynamicTransmissionJerkCurve": {
                     "type": "integer",
-                    "description": "Dynamic transmission response curve",
+                    "description": "Response curve applied to the driveline-driven gear shift magnitude",
                     "minimum": 5,
-                    "maximum": 955,
-                    "default": 150
+                    "maximum": 995,
+                    "default": 750
                 },
-                "dynamicTransmissionGforceMax": {
+                "dynamicTransmissionStepBlend": {
                     "type": "number",
-                    "description": "Maximum G-force for dynamic transmission feedback",
-                    "exclusiveMinimum": 0.0,
-                    "maximum": 20.0,
-                    "default": 2.0
+                    "description": "How much a shift's ratio change varies its strength",
+                    "minimum": 0.0,
+                    "maximum": 1.0,
+                    "default": 0.5
                 },
                 "engineProfiles": {
                     "type": "object",
