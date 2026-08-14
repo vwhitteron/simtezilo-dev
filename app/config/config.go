@@ -328,39 +328,43 @@ func New(opts Options) *Config {
 		},
 	}
 
-	viper.SetEnvPrefix("SIMTEZILO")
-	viper.SetEnvKeyReplacer(strings.NewReplacer(`.`, `_`))
-	viper.AutomaticEnv()
-	viper.SetConfigType("json")
+	// Load through a private viper instance. The package-level viper is global
+	// state, so concurrent calls to New race on it.
+	vConf := viper.New()
+
+	vConf.SetEnvPrefix("SIMTEZILO")
+	vConf.SetEnvKeyReplacer(strings.NewReplacer(`.`, `_`))
+	vConf.AutomaticEnv()
+	vConf.SetConfigType("json")
 
 	if opts.ConfigFile != "" {
 		opts.Logger.Debug().Str("filename", opts.ConfigFile).Msg("Loading config file")
 
-		viper.SetConfigFile(opts.ConfigFile)
+		vConf.SetConfigFile(opts.ConfigFile)
 	} else {
 		opts.Logger.Debug().Msg("No config file specified, searching default locations")
 
-		viper.SetConfigName("simtezilo.conf")
-		viper.AddConfigPath("/boot/firmware/simtezilo/")
-		viper.AddConfigPath("/boot/simtezilo/")
-		viper.AddConfigPath("/opt/simtezilo/etc/")
-		viper.AddConfigPath("/opt/simtezilo/")
-		viper.AddConfigPath(".")
+		vConf.SetConfigName("simtezilo.conf")
+		vConf.AddConfigPath("/boot/firmware/simtezilo/")
+		vConf.AddConfigPath("/boot/simtezilo/")
+		vConf.AddConfigPath("/opt/simtezilo/etc/")
+		vConf.AddConfigPath("/opt/simtezilo/")
+		vConf.AddConfigPath(".")
 	}
 
-	err := viper.ReadInConfig()
+	err := vConf.ReadInConfig()
 	if err != nil {
 		log.Error().
-			Str("filename", viper.ConfigFileUsed()).
+			Str("filename", vConf.ConfigFileUsed()).
 			Err(err).
 			Msg("read config file")
 	} else {
-		err = viper.Unmarshal(config.viper)
+		err = vConf.Unmarshal(config.viper)
 		if err != nil {
 			log.Error().Err(err).Msg("unmarshal config")
 		}
 
-		config.configFile = viper.ConfigFileUsed()
+		config.configFile = vConf.ConfigFileUsed()
 		log.Debug().Str("source", config.configFile).Msg("config loaded")
 
 		// Initialize lastSavedConfig with current state to prevent false restart indicators
