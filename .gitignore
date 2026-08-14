@@ -3,8 +3,6 @@
 
 # Build files
 out/
-/platform-m1
-/tune_assistant
 
 # Distribution files
 dist/

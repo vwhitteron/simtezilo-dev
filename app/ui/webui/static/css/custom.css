@@ -205,3 +205,23 @@
         animation: none;
     }
 }
+/*
+ * Keep the shared navbar in view while the page scrolls. The nav is injected
+ * into #navigation by navigation.js on every page, so this lives here rather
+ * than being repeated per page. Sticky rather than fixed: the element keeps its
+ * place in normal flow, so no page needs a compensating body padding-top.
+ *
+ * The background is opaque so scrolled content passes behind it rather than
+ * showing through, and the z-index clears Bootstrap's dropdown layer (1000) so
+ * the Telemetry and Tools menus are not overlapped by page content.
+ *
+ * settings.html overrides this with its own position:fixed rule, which its
+ * fixed sidebar is measured against; its page <style> block is parsed after
+ * this file, so that override still wins.
+ */
+#navigation {
+    position: sticky;
+    top: 0;
+    z-index: 1030;
+    background: var(--bs-body-bg);
+}

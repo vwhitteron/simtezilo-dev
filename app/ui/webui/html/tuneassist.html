@@ -4,7 +4,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Haptics Tuning Assistant</title>
+    <link rel="stylesheet" href="/css/halfmoon.min.css">
+    <link rel="stylesheet" href="/css/icons.css?v=3">
+    <link rel="stylesheet" href="/css/custom.css?v=2">
+    <script>
+        const currentPageId = 'tuneassist';
+    </script>
+    <script src="/js/icons.js"></script>
+    <script src="/js/i18n.js"></script>
+    <script src="/js/navigation.js"></script>
+    <title>Simtezilo</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
     <style>
         * {
@@ -15,8 +24,11 @@
 
         body {
             font-family: system-ui, -apple-system, sans-serif;
-            background: #1a1a2e;
-            color: #e0e0e0;
+            background: var(--bs-body-bg);
+            color: var(--bs-body-color);
+        }
+
+        .tuneassist-content {
             padding: 20px;
         }
 
@@ -24,7 +36,7 @@
             text-align: center;
             margin-bottom: 16px;
             font-size: 1.4em;
-            color: #f0f0f0;
+            color: var(--bs-emphasis-color);
         }
 
         .lap-row {
@@ -44,13 +56,13 @@
 
         .lap-row label {
             font-size: 0.95em;
-            color: #ccc;
+            color: var(--bs-body-color);
         }
 
         .lap-row select {
-            background: #16213e;
-            color: #e0e0e0;
-            border: 1px solid #0f3460;
+            background: var(--bs-content-bg);
+            color: var(--bs-body-color);
+            border: 1px solid var(--bs-border-color);
             border-radius: 6px;
             padding: 6px 14px;
             font-size: 0.9em;
@@ -59,7 +71,7 @@
 
         .lap-row select:focus {
             outline: none;
-            border-color: #e94560;
+            border-color: var(--bs-primary);
         }
 
         .toggle-switch {
@@ -80,8 +92,8 @@
         .toggle-switch .slider {
             position: absolute;
             inset: 0;
-            background: #16213e;
-            border: 1px solid #0f3460;
+            background: var(--bs-content-bg);
+            border: 1px solid var(--bs-border-color);
             border-radius: 22px;
             transition: background 0.15s, border-color 0.15s;
         }
@@ -93,14 +105,14 @@
             height: 16px;
             left: 2px;
             top: 2px;
-            background: #e0e0e0;
+            background: var(--bs-emphasis-color);
             border-radius: 50%;
             transition: transform 0.15s;
         }
 
         .toggle-switch input:checked+.slider {
-            background: #2ecc71;
-            border-color: #2ecc71;
+            background: var(--bs-success);
+            border-color: var(--bs-success);
         }
 
         .toggle-switch input:checked+.slider::before {
@@ -108,7 +120,7 @@
         }
 
         .toggle-switch input:focus-visible+.slider {
-            border-color: #e94560;
+            border-color: var(--bs-primary);
         }
 
         .chart-container {
@@ -118,10 +130,69 @@
             transition: flex-basis 0.3s ease, width 0.3s ease;
         }
 
+        /* Matches the settings page's tab strips (#appSettingsTabs and friends):
+           borderless buttons that mark the active tab with the primary colour and
+           a heavier weight rather than a filled shape. No underline rail here —
+           the framed plot directly below already separates the strip from the
+           content Bootstrap's .nav-tabs rail would otherwise be dividing. */
+        .chart-tabs {
+            display: flex;
+            gap: 0;
+            margin-bottom: 6px;
+        }
+
+        .chart-tab {
+            background: transparent;
+            border: 0;
+            border-radius: 0;
+            color: var(--bs-body-color);
+            /* The theme's own type, not the page's: Halfmoon's base size is
+               0.875rem, so a literal 1rem here renders a size larger than the
+               settings tabs it is meant to match. A bare `inherit` is no good
+               either — this page's body sets its own font stack. */
+            font-family: var(--bs-body-font-family);
+            font-size: var(--bs-body-font-size);
+            line-height: var(--bs-body-line-height);
+            font-weight: 500;
+            padding: 8px 16px;
+            white-space: nowrap;
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+
+        .chart-tab:hover {
+            color: var(--bs-primary);
+        }
+
+        .chart-tab.active {
+            color: var(--bs-primary);
+            background: transparent;
+            font-weight: 700;
+        }
+
+        .chart-tab:focus-visible {
+            outline: 2px solid var(--bs-primary);
+            outline-offset: 2px;
+        }
+
+        /* Plot surfaces are framed like the web UI's cards.
+           Deliberately NOT the --bs-card-* variables: Bootstrap declares those
+           inside its own `.card` rule, so on a bare <canvas> they are undefined
+           and the whole shorthand is invalid at computed-value time, dropping the
+           border, fill and radius together. Only :root-scoped variables work
+           here. The colour matches how settings.html frames its tab-content. */
         canvas {
-            background: #16213e;
-            border-radius: 8px;
+            background: var(--bs-content-bg);
+            border: var(--bs-border-width) solid var(--bs-border-color);
+            border-radius: var(--bs-border-radius-lg);
             transition: width 0.3s ease, height 0.3s ease;
+        }
+
+        /* Chart.js writes an inline display:block onto its canvas, which beats the
+           hidden attribute's UA display:none — so the unselected plot needs a rule
+           that outranks the inline style. */
+        canvas[hidden] {
+            display: none !important;
         }
 
         .speed-panel {
@@ -131,7 +202,7 @@
         .speed-panel h3 {
             text-align: center;
             font-size: 0.72em;
-            color: #888;
+            color: var(--bs-secondary-color);
             margin-bottom: 6px;
             letter-spacing: 0.05em;
             text-transform: uppercase;
@@ -153,23 +224,28 @@
         }
 
         .map-widget {
-            background: #16213e;
-            border: 1px solid #0f3460;
-            border-radius: 8px;
+            background: var(--bs-content-bg);
+            border: var(--bs-border-width) solid var(--bs-border-color);
+            border-radius: var(--bs-border-radius-lg);
             padding: 8px 8px 6px;
         }
 
         .map-widget h3 {
             text-align: center;
             font-size: 0.72em;
-            color: #888;
+            color: var(--bs-secondary-color);
             margin-bottom: 6px;
             letter-spacing: 0.05em;
             text-transform: uppercase;
         }
 
+        /* The map canvas is already framed by .map-widget around it, so it opts
+           out of the card outline the other plot surfaces carry. */
         #map-canvas {
             display: block;
+            border: 0;
+            border-radius: 0;
+            background: transparent;
             cursor: grab;
         }
 
@@ -181,16 +257,16 @@
 
         .info-widget {
             flex: 0 0 auto;
-            background: #16213e;
-            border: 1px solid #0f3460;
-            border-radius: 8px;
+            background: var(--bs-content-bg);
+            border: var(--bs-border-width) solid var(--bs-border-color);
+            border-radius: var(--bs-border-radius-lg);
             padding: 5px 12px 6px;
         }
 
         .info-widget h3 {
             text-align: center;
             font-size: 0.72em;
-            color: #888;
+            color: var(--bs-secondary-color);
             margin-bottom: 4px;
             letter-spacing: 0.05em;
             text-transform: uppercase;
@@ -204,16 +280,23 @@
         }
 
         .info-widget dt {
-            color: #888;
+            color: var(--bs-secondary-color);
             text-align: right;
         }
 
         .info-widget dd {
-            color: #e0e0e0;
+            color: var(--bs-body-color);
             margin: 0;
         }
 
-        .sidebar {
+        /* Namespaced: halfmoon ships a `.sidebar` component that is position:fixed
+           top-left, which would rip this column out of the .content-row flex and
+           float it over the charts. */
+        .tuneassist-sidebar {
+            /* Leads the row: the map/info/vehicle column sits to the left of the
+               charts. Ordered rather than reordered in the markup so the charts stay
+               first in the document (and in the tab order). */
+            order: -1;
             flex: 0 0 220px;
             display: flex;
             flex-direction: column;
@@ -227,7 +310,7 @@
         .chassis-panel h3 {
             text-align: center;
             font-size: 0.72em;
-            color: #888;
+            color: var(--bs-secondary-color);
             margin-bottom: 6px;
             letter-spacing: 0.05em;
             text-transform: uppercase;
@@ -241,9 +324,9 @@
         }
 
         .chassis-transport button {
-            background: #0f3460;
-            color: #e0e0e0;
-            border: 1px solid #1f4e8c;
+            background: var(--bs-sable-500);
+            color: var(--bs-body-color);
+            border: 1px solid var(--bs-sable-500);
             border-radius: 6px;
             width: 34px;
             height: 30px;
@@ -253,30 +336,45 @@
         }
 
         .chassis-transport button:hover {
-            background: #1f4e8c;
+            background: var(--bs-sable-300);
         }
 
         .wave-time {
             font-size: 0.75em;
-            color: #aaa;
+            color: var(--bs-body-color);
             font-variant-numeric: tabular-nums;
         }
 
         .wave-status {
             font-size: 0.72em;
-            color: #e94560;
+            color: var(--bs-primary);
             margin-left: auto;
         }
 
+        /* The frame lives on the container, not the canvas, so the padding insets
+           the trace from the outline. Putting padding on the canvas instead would
+           not work: drawWave() sizes its bitmap from clientWidth/clientHeight,
+           which include padding, so the drawing would be scaled rather than inset.
+           The height carries the padding and borders on top of the 110px of trace
+           the panel had before. */
         .wave-container {
             position: relative;
-            height: 110px;
+            height: 128px;
+            padding: 8px;
+            background: var(--bs-content-bg);
+            border: var(--bs-border-width) solid var(--bs-border-color);
+            border-radius: var(--bs-border-radius-lg);
         }
 
+        /* Framed by .wave-container above, so it opts out of the card outline the
+           other plot surfaces carry. */
         #wave-canvas {
             display: block;
             width: 100%;
             height: 100%;
+            border: 0;
+            border-radius: 0;
+            background: transparent;
             cursor: text;
         }
 
@@ -286,7 +384,7 @@
 
         .tune-widget .tune-row {
             display: grid;
-            grid-template-columns: 68px 1fr 34px;
+            grid-template-columns: 68px 1fr 62px;
             align-items: center;
             gap: 6px;
             margin-bottom: 12px;
@@ -294,7 +392,7 @@
 
         .tune-widget .tune-row label {
             font-size: 0.72em;
-            color: #888;
+            color: var(--bs-secondary-color);
             text-align: right;
         }
 
@@ -312,13 +410,13 @@
         .tune-widget .tune-row input[type="range"]::-webkit-slider-runnable-track {
             height: 3px;
             border-radius: 2px;
-            background: #0f3460;
+            background: var(--bs-sable-500);
         }
 
         .tune-widget .tune-row input[type="range"]::-moz-range-track {
             height: 3px;
             border-radius: 2px;
-            background: #0f3460;
+            background: var(--bs-sable-500);
         }
 
         /* Small thumb (offset to centre on the 3px track) */
@@ -329,7 +427,7 @@
             height: 11px;
             margin-top: -4px;
             border-radius: 50%;
-            background: #e94560;
+            background: var(--bs-primary);
             border: none;
             transition: transform 0.1s ease;
         }
@@ -338,7 +436,7 @@
             width: 11px;
             height: 11px;
             border-radius: 50%;
-            background: #e94560;
+            background: var(--bs-primary);
             border: none;
         }
 
@@ -351,41 +449,77 @@
         }
 
         .tune-widget .tune-row input[type="range"]:focus-visible::-webkit-slider-thumb {
-            box-shadow: 0 0 0 3px rgba(233, 69, 96, 0.35);
+            box-shadow: 0 0 0 3px hsla(var(--bs-blue-hsl), 0.35);
         }
 
         .tune-widget .tune-row input[type="range"]:focus-visible::-moz-range-thumb {
-            box-shadow: 0 0 0 3px rgba(233, 69, 96, 0.35);
+            box-shadow: 0 0 0 3px hsla(var(--bs-blue-hsl), 0.35);
         }
 
-        .tune-widget .tune-row output {
+        .tune-widget .tune-row input.tune-value {
+            width: 100%;
             font-size: 0.74em;
-            color: #e0e0e0;
+            color: var(--bs-body-color);
             text-align: right;
             font-variant-numeric: tabular-nums;
+            background: var(--bs-sable-700);
+            border: 1px solid var(--bs-border-color);
+            border-radius: 3px;
+            padding: 2px 4px;
+            font-family: inherit;
+            /* Spinners steal width at this size and the slider already steps. */
+            -moz-appearance: textfield;
+            appearance: textfield;
         }
 
-        .tune-widget .tune-reset {
-            display: block;
-            width: 60%;
+        .tune-widget .tune-row input.tune-value::-webkit-outer-spin-button,
+        .tune-widget .tune-row input.tune-value::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+
+        .tune-widget .tune-row input.tune-value:focus {
+            outline: none;
+            border-color: var(--bs-primary);
+            background: var(--bs-sable-600);
+        }
+
+        .tune-widget .tune-actions {
+            display: flex;
+            gap: 8px;
             margin: 24px auto 0;
-            background: #0f3460;
-            color: #e0e0e0;
-            border: 1px solid #1f4e8c;
+            width: 90%;
+        }
+
+        .tune-widget .tune-actions button {
+            flex: 1 1 0;
+            background: var(--bs-sable-500);
+            color: var(--bs-body-color);
+            border: 1px solid var(--bs-sable-500);
             border-radius: 6px;
             padding: 4px 0;
             font-size: 0.74em;
             cursor: pointer;
         }
 
-        .tune-widget .tune-reset:hover {
-            background: #1f4e8c;
+        .tune-widget .tune-actions button:hover:not(:disabled) {
+            background: var(--bs-sable-300);
+        }
+
+        /* Held while the commit POST is in flight, so a double click cannot queue
+           a second write of the same values. */
+        .tune-widget .tune-actions button:disabled {
+            opacity: 0.6;
+            cursor: default;
         }
     </style>
 </head>
 
-<body>
-    <h1>Haptics Tuning Assistant</h1>
+<body data-bs-theme="dark">
+    <div id="navigation"></div>
+
+    <div class="tuneassist-content">
+        <h1>Haptics Tuning Assistant</h1>
     <div class="lap-row">
         <div class="lap-group">
             <label for="replay-select">Replay:</label>
@@ -415,7 +549,12 @@
     </div>
     <div class="content-row">
         <div class="chart-container">
+            <div class="chart-tabs" role="tablist">
+                <button type="button" class="chart-tab active" role="tab" data-plot="jerksnap">Jerk / Snap</button>
+                <button type="button" class="chart-tab" role="tab" data-plot="gainfreq">Gain / Frequency</button>
+            </div>
             <canvas id="chart"></canvas>
+            <canvas id="gain-chart" hidden></canvas>
             <div class="speed-panel">
                 <h3>Speed</h3>
                 <div class="speed-container">
@@ -434,7 +573,7 @@
                 </div>
             </div>
         </div>
-        <div class="sidebar">
+        <div class="tuneassist-sidebar">
             <div class="map-widget">
                 <h3 id="map-title">Circuit Map</h3>
                 <canvas id="map-canvas" width="220" height="220"></canvas>
@@ -473,25 +612,43 @@
                 <h3>Chassis Haptics</h3>
                 <div class="tune-row">
                     <label for="tune-jerkCurve">Jerk curve</label>
-                    <input type="range" id="tune-jerkCurve" min="5" max="955" step="5">
-                    <output id="out-jerkCurve">—</output>
+                    <input type="range" id="tune-jerkCurve" min="5" max="995" step="5">
+                    <input type="number" class="tune-value" id="out-jerkCurve" min="5" max="995" step="5"
+                        inputmode="numeric">
                 </div>
                 <div class="tune-row">
-                    <label for="tune-jerkMax">Jerk max</label>
-                    <input type="range" id="tune-jerkMax" min="1" max="200" step="1">
-                    <output id="out-jerkMax">—</output>
+                    <label for="tune-jerkPivot">Jerk pivot</label>
+                    <input type="range" id="tune-jerkPivot" min="0" max="1000" step="1">
+                    <!-- min must stay > 0: it is the `lo` of the geometric slider mapping, and a
+                         zero lower bound makes tuneValueAtPos/tunePosForValue NaN. It also has to
+                         be a multiple of step, because the spinner ladder is anchored at min —
+                         min="1" step="10" would spin 631, 641 rather than 640, 650. -->
+                    <input type="number" class="tune-value" id="out-jerkPivot" min="10" max="20000" step="10"
+                        inputmode="numeric">
+                </div>
+                <div class="tune-row">
+                    <label for="tune-jerkPivotGain">Jerk pivot gain</label>
+                    <input type="range" id="tune-jerkPivotGain" min="-12" max="0" step="0.1">
+                    <input type="number" class="tune-value" id="out-jerkPivotGain" min="-12" max="0" step="0.1"
+                        inputmode="decimal">
                 </div>
                 <div class="tune-row">
                     <label for="tune-snapCurve">Snap curve</label>
-                    <input type="range" id="tune-snapCurve" min="5" max="955" step="5">
-                    <output id="out-snapCurve">—</output>
+                    <input type="range" id="tune-snapCurve" min="5" max="995" step="5">
+                    <input type="number" class="tune-value" id="out-snapCurve" min="5" max="995" step="5"
+                        inputmode="numeric">
                 </div>
                 <div class="tune-row">
                     <label for="tune-snapMax">Snap max</label>
                     <input type="range" id="tune-snapMax" min="1" max="200" step="1">
-                    <output id="out-snapMax">—</output>
+                    <input type="number" class="tune-value" id="out-snapMax" min="1" max="200" step="1"
+                        inputmode="numeric">
                 </div>
-                <button type="button" class="tune-reset" id="tune-reset">Reset</button>
+                <div class="tune-actions">
+                    <button type="button" id="tune-reset">Reset</button>
+                    <button type="button" id="tune-commit"
+                        title="Write these values to the haptics section of the config file">Commit</button>
+                </div>
             </div>
         </div>
     </div>
@@ -510,6 +667,8 @@
         let mapData = {};
         let allData = [];
         let chart = null;
+        let gainChart = null;
+        let activePlot = 'jerksnap';
         let speedChart = null;
         let speeds = [];            // per-frame ground speed (km/h) from telemetry
         let rangeStart = 0;
@@ -535,6 +694,9 @@
         const HIGHLIGHT_LABEL = 'point of interest';             // scatter dataset label (hidden from legend)
         const HIGHLIGHT_RING = '#ffffff';                        // white outline on the emphasised points
         let highlightSource = [];                                // {x,y,dist,frame,surface} of POI-nearest points
+        let gainHighlightSource = [];                            // {x,y,frame,surface} of POI-nearest points, gain/frequency plot
+        let gainPlotPoints = [];                                 // last shownPoints from updateChart, for the no-arg updateGainChart() calls
+        let gainPlotSelected = new Set();                        // last selected set from updateChart, ditto
         let cumulativeDists = [];
         let totalDist = 0;
         const MAX_ZOOM = 50;        // maximum map zoom factor
@@ -606,7 +768,7 @@
         async function init() {
             const params = new URLSearchParams(location.search);
 
-            const replaysResp = await fetch('/replays');
+            const replaysResp = await fetch('/api/tuneassist/replays');
             const replaysJson = await replaysResp.json();
             const replayFiles = replaysJson.replays || [];
 
@@ -660,6 +822,27 @@
                 scheduleAudioRefresh();
             });
 
+            // Scatter panel tabs: swap the visible canvas, no URL state.
+            document.querySelectorAll('.chart-tab').forEach(tab => {
+                tab.addEventListener('click', () => {
+                    const plot = tab.dataset.plot;
+                    if (plot === activePlot) return;
+                    activePlot = plot;
+
+                    document.querySelectorAll('.chart-tab').forEach(t => t.classList.toggle('active', t === tab));
+
+                    const jerkSnapCanvas = document.getElementById('chart');
+                    const gainFreqCanvas = document.getElementById('gain-chart');
+                    jerkSnapCanvas.hidden = plot !== 'jerksnap';
+                    gainFreqCanvas.hidden = plot !== 'gainfreq';
+
+                    // Chart.js mis-sizes a canvas that was hidden when it was built —
+                    // resize it now that it is visible again, then redraw.
+                    const shown = plot === 'jerksnap' ? chart : gainChart;
+                    if (shown) { shown.resize(); shown.update('none'); }
+                });
+            });
+
             initMapInteraction();
 
             if (replayFiles.length > 0) {
@@ -676,7 +859,7 @@
             const replaySelectEl = document.getElementById('replay-select');
             replaySelectEl.disabled = true;
 
-            const resp = await fetch('/data?replay=' + encodeURIComponent(filename));
+            const resp = await fetch('/api/tuneassist/data?replay=' + encodeURIComponent(filename));
             const json = await resp.json();
 
             lapData = json.data;
@@ -751,6 +934,9 @@
 
             if (!chart) {
                 createChart();
+            }
+            if (!gainChart) {
+                createGainChart();
             }
             if (!speedChart) {
                 createSpeedChart();
@@ -1330,13 +1516,7 @@
                         },
                         tooltip: {
                             callbacks: {
-                                label: (ctx) => {
-                                    const dist = ctx.raw.dist ?? 0;
-                                    const distStr = dist >= 1000
-                                        ? `${(dist / 1000).toFixed(2)} km`
-                                        : `${dist.toFixed(0)} m`;
-                                    return `Jerk: ${ctx.parsed.x.toFixed(1)}, Snap: ${ctx.parsed.y.toFixed(1)}, Distance: ${distStr}`;
-                                }
+                                label: (ctx) => `Jerk: ${ctx.parsed.x.toFixed(1)}, Snap: ${ctx.parsed.y.toFixed(1)}`
                             }
                         }
                     },
@@ -1366,10 +1546,139 @@
             });
         }
 
+        // Draws a dashed horizontal line at the configured jerk pivot gain, so retuning
+        // JerkPivotGain visibly moves the reference line against the plotted points.
+        const pivotGainLine = {
+            id: 'pivotGainLine',
+            afterDatasetsDraw(c) {
+                const yScale = c.scales.y;
+                const y = yScale.getPixelForValue(tuneValues.jerkPivotGain);
+                const { top, bottom, right } = c.chartArea;
+                if (y < top || y > bottom) return;
+
+                const ctx = c.ctx;
+                ctx.save();
+                ctx.strokeStyle = 'rgba(233, 69, 96, 0.85)';
+                ctx.lineWidth = 1.5;
+                ctx.setLineDash([5, 4]);
+                ctx.beginPath();
+                ctx.moveTo(c.chartArea.left, y);
+                ctx.lineTo(right, y);
+                ctx.stroke();
+
+                ctx.setLineDash([]);
+                const label = `${tuneValues.jerkPivotGain.toFixed(1)} dB pivot`;
+                ctx.font = '11px system-ui, sans-serif';
+                ctx.textAlign = 'right';
+                ctx.textBaseline = 'bottom';
+                ctx.fillStyle = 'rgba(233, 69, 96, 0.85)';
+                ctx.fillText(label, right, y - 3);
+                ctx.restore();
+            },
+        };
+
+        function createGainChart() {
+            const ctx = document.getElementById('gain-chart').getContext('2d');
+            gainChart = new Chart(ctx, {
+                type: 'scatter',
+                data: { datasets: [] },
+                options: {
+                    animation: false,
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    aspectRatio: 1.83,
+                    onHover: (_event, elements) => {
+                        const frame = elements.length > 0
+                            ? (gainChart.data.datasets[elements[0].datasetIndex].data[elements[0].index].frame ?? null)
+                            : null;
+                        setHovered(frame ?? null, 'scatter');
+                    },
+                    onClick: (_event, elements) => {
+                        if (elements.length === 0) return;
+                        const pt = gainChart.data.datasets[elements[0].datasetIndex].data[elements[0].index];
+                        if (!pt || pt.frame == null) return;
+                        poiDist = Math.round(cumulativeDists[pt.frame] ?? 0);
+                        updateSelectionInfo();
+                        updateChart();
+                        drawMap(currentLapKey);
+                        scheduleUrlUpdate();
+                    },
+                    plugins: {
+                        legend: {
+                            display: true,
+                            labels: {
+                                color: '#ccc', usePointStyle: true, pointStyle: 'circle',
+                                filter: (item) => item.text !== HIGHLIGHT_LABEL
+                            },
+                            onClick(e, legendItem, legend) {
+                                // Run the default toggle
+                                Chart.defaults.plugins.legend.onClick.call(this, e, legendItem, legend);
+                                // Drop highlight points belonging to any now-hidden surface. No scale
+                                // chase here — the axes are fixed to the pulse limits.
+                                syncGainHighlight();
+                                applyGainYBounds();
+                                gainChart.update('none');
+                                drawMap(currentLapKey);
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: (ctx) => `Gain: ${ctx.parsed.y.toFixed(1)} dB, Freq: ${ctx.parsed.x.toFixed(1)} Hz`
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            title: { display: true, text: 'Pulse frequency (Hz)', color: '#aaa', font: { size: 14 } },
+                            min: pulseLimits.minFrequencyHz,
+                            max: pulseLimits.maxFrequencyHz,
+                            ticks: { color: '#888' },
+                            grid: { color: 'rgba(255,255,255,0.06)' }
+                        },
+                        y: {
+                            title: { display: true, text: 'Pulse gain (dB)', color: '#aaa', font: { size: 14 } },
+                            min: GAIN_FLOOR_DB,
+                            max: 0,
+                            ticks: { color: '#888' },
+                            grid: { color: 'rgba(255,255,255,0.06)' }
+                        }
+                    }
+                },
+                plugins: [pivotGainLine]
+            });
+        }
+
+        // Re-applies the pulse-frequency axis bounds from `pulseLimits`, for when the chart
+        // was built before the /tuning-defaults fetch landed.
+        function applyGainAxisBounds() {
+            if (!gainChart) return;
+            gainChart.options.scales.x.min = pulseLimits.minFrequencyHz;
+            gainChart.options.scales.x.max = pulseLimits.maxFrequencyHz;
+            gainChart.update('none');
+        }
+
+        // Fit the gain axis to the visible points. 0 dB stays the ceiling — it is the
+        // amplitude clamp, so no point can sit above it — and the floor never goes below
+        // GAIN_FLOOR_DB. The pivot gain is folded in so its dashed reference line stays on
+        // screen even when every plotted point is louder than it. Caller renders.
+        function applyGainYBounds() {
+            if (!gainChart) return;
+            let lo = Infinity;
+            gainChart.data.datasets.forEach((ds, i) => {
+                if (!gainChart.isDatasetVisible(i)) return;
+                ds.data.forEach(pt => { if (pt.y < lo) lo = pt.y; });
+            });
+            if (!isFinite(lo)) lo = GAIN_FLOOR_DB;
+            gainChart.options.scales.y.min = Math.max(GAIN_FLOOR_DB, niceMinMax(Math.min(lo, tuneValues.jerkPivotGain), 0).min);
+            gainChart.options.scales.y.max = 0;
+        }
+
         // Draws the POI as a dashed vertical line on the speed chart, with a dot and label
         // showing the speed at that point. Colour matches the map's POI marker (surface colour).
-        // Shared hover state across the scatter chart, speed chart and map. Highlights the same
-        // frame in all three: map track point, scatter point, and a speed-chart marker.
+        // Shared follower state across the scatter chart, speed chart and map. Highlights the
+        // same frame in all three: map track point, scatter point, and a speed-chart marker.
+        // Audio playback drives it too (source 'playback'), so the played position is marked
+        // by exactly the same follower the mouse moves.
         // `source` is the chart the hover came from, so we don't fight its own native highlight.
         function setHovered(frame, source) {
             if (frame === hoveredFrame) return;
@@ -1383,21 +1692,25 @@
         }
 
         // Programmatically put a scatter point into its hover state (and tooltip) by frame.
+        // Applies to both scatter charts (jerk/snap and gain/frequency) so whichever is on
+        // screen follows the map/speed/waveform hover.
         function highlightScatterFrame(frame) {
-            if (!chart) return;
-            let el = null;
-            if (frame != null) {
-                for (let di = 0; di < chart.data.datasets.length && !el; di++) {
-                    const idx = chart.data.datasets[di].data.findIndex(p => p.frame === frame);
-                    if (idx >= 0) el = { datasetIndex: di, index: idx };
+            [chart, gainChart].forEach(c => {
+                if (!c) return;
+                let el = null;
+                if (frame != null) {
+                    for (let di = 0; di < c.data.datasets.length && !el; di++) {
+                        const idx = c.data.datasets[di].data.findIndex(p => p.frame === frame);
+                        if (idx >= 0) el = { datasetIndex: di, index: idx };
+                    }
                 }
-            }
-            chart.setActiveElements(el ? [el] : []);
-            if (chart.tooltip) {
-                const meta = el && chart.getDatasetMeta(el.datasetIndex).data[el.index];
-                chart.tooltip.setActiveElements(el ? [el] : [], meta ? { x: meta.x, y: meta.y } : { x: 0, y: 0 });
-            }
-            chart.render();
+                c.setActiveElements(el ? [el] : []);
+                if (c.tooltip) {
+                    const meta = el && c.getDatasetMeta(el.datasetIndex).data[el.index];
+                    c.tooltip.setActiveElements(el ? [el] : [], meta ? { x: meta.x, y: meta.y } : { x: 0, y: 0 });
+                }
+                c.render();
+            });
         }
 
         // Vertical marker + dot + speed label at the hovered frame (distinct from the POI marker).
@@ -1635,6 +1948,40 @@
             return `rgb(${c}, ${Math.round(150 + 105 * k)}, ${c})`;
         }
 
+        // Mirror app/haptics/chassis.go calculateChassisHapticPulseAmplitude and
+        // calculateChassisHapticPulseFrequency (and the config's updateJerkScale/
+        // updateSnapScale), so the gain/frequency plot tracks the sliders without a
+        // server round-trip on every move.
+        const GAIN_FLOOR_DB = -60;   // plot floor; the curve runs to -inf as jerk -> 0
+        let pulseLimits = { minFrequencyHz: 16, maxFrequencyHz: 60, maxAmplitude: 1 };
+
+        function gainDbOf(jerk) {
+            const exponent = tuneValues.jerkCurve / 1000;
+            const jerkScale = Math.pow(10, tuneValues.jerkPivotGain / 20) / Math.pow(tuneValues.jerkPivot, exponent);
+            const amp = Math.min(Math.pow(Math.abs(jerk), exponent) * jerkScale, pulseLimits.maxAmplitude);
+            if (!(amp > 0)) return GAIN_FLOOR_DB;
+            const db = 20 * Math.log10(amp);
+            return Number.isFinite(db) ? Math.max(GAIN_FLOOR_DB, db) : GAIN_FLOOR_DB;
+        }
+
+        function freqHzOf(snap) {
+            const exponent = tuneValues.snapCurve / 1000;
+            const snapScale = 1 / Math.pow(1000 * tuneValues.snapMax, exponent);
+            const scaler = Math.pow(Math.abs(snap), exponent) * snapScale;
+            const hz = (pulseLimits.maxFrequencyHz - pulseLimits.minFrequencyHz) * scaler;
+            return Number.isFinite(hz)
+                ? Math.min(pulseLimits.maxFrequencyHz, Math.max(pulseLimits.minFrequencyHz, hz))
+                : pulseLimits.minFrequencyHz;
+        }
+
+        // Frames with essentially no jerk pile up in the bottom-left corner of the
+        // gain/frequency plot, since both axes clamp: the gain bottoms out at the plot
+        // floor and the frequency at the configured minimum. They carry no tuning
+        // information and swamp the points that do, so they are left off the plot.
+        function audible(pt) {
+            return pt.y > GAIN_FLOOR_DB;
+        }
+
         function lerp(a, b, t) { return a + (b - a) * t; }
 
         function scalesCloseEnough(a, b) {
@@ -1753,6 +2100,80 @@
             });
         }
 
+        // syncHighlight's sibling for the gain/frequency chart.
+        function syncGainHighlight() {
+            if (!gainChart) return;
+
+            gainChart.data.datasets = gainChart.data.datasets.filter(ds => ds.label !== HIGHLIGHT_LABEL);
+
+            const hidden = new Set();
+            gainChart.data.datasets.forEach((ds, i) => {
+                if (gainChart.getDatasetMeta(i).hidden) hidden.add(ds.label);
+            });
+
+            const pts = gainHighlightSource.filter(p => !hidden.has(p.surface));
+            if (pts.length === 0) return;
+
+            gainChart.data.datasets.push({
+                label: HIGHLIGHT_LABEL,
+                data: pts,
+                backgroundColor: pts.map(p => (surfaceColors[p.surface] || surfaceColors.unknown).border),
+                borderColor: HIGHLIGHT_RING,
+                borderWidth: 1.5,
+                pointRadius: 3.5,
+                pointHoverRadius: 6,
+                order: -1,
+            });
+        }
+
+        // Rebuilds the gain/frequency scatter from the same shownPoints/selected updateChart
+        // just computed. Both parameters are optional: retuning (commit()/reset) has neither
+        // in scope, so it falls back to the values updateChart last stashed at module level.
+        function updateGainChart(shownPoints, selected) {
+            if (!gainChart) return;
+            if (shownPoints === undefined) shownPoints = gainPlotPoints;
+            if (selected === undefined) selected = gainPlotSelected;
+
+            const grouped = {};
+            gainHighlightSource = [...selected]
+                .map(d => ({
+                    x: freqHzOf(snapOf(d)), y: gainDbOf(jerkOf(d)), frame: d.frame, surface: d.surface,
+                }))
+                .filter(audible);
+            shownPoints.forEach(d => {
+                const pt = { x: freqHzOf(snapOf(d)), y: gainDbOf(jerkOf(d)), frame: d.frame };
+                if (!audible(pt)) return;
+                if (!grouped[d.surface]) grouped[d.surface] = [];
+                grouped[d.surface].push(pt);
+            });
+
+            const existing = new Map(gainChart.data.datasets.map(ds => [ds.label, ds]));
+
+            gainChart.data.datasets = Object.entries(grouped).map(([surface, data]) => {
+                const c = surfaceColors[surface] || surfaceColors.unknown;
+                if (existing.has(surface)) {
+                    const ds = existing.get(surface);
+                    ds.data = data;
+                    ds.backgroundColor = c.bg;
+                    ds.borderColor = c.border;
+                    return ds;
+                }
+                return {
+                    label: surface,
+                    data,
+                    backgroundColor: c.bg,
+                    borderColor: c.border,
+                    borderWidth: 1,
+                    pointRadius: 2.5,
+                    pointHoverRadius: 5,
+                };
+            });
+
+            syncGainHighlight();
+            applyGainYBounds();
+            gainChart.update('none');
+        }
+
         function updateChart() {
             const coords = mapData[currentLapKey] || [];
             const grouped = {};
@@ -1809,6 +2230,11 @@
 
             // Emphasise the POI-nearest points on top, honouring surface-legend visibility.
             syncHighlight();
+
+            // Stash for the no-arg updateGainChart() calls (retuning has neither in scope).
+            gainPlotPoints = shownPoints;
+            gainPlotSelected = selected;
+            updateGainChart(shownPoints, selected);
 
             // Compute nice target bounds directly from data — no extra renders
             const niceBounds = computeNiceBounds(chart.data.datasets);
@@ -1869,9 +2295,43 @@
         let wavePeaks = null;         // { min:[], max:[] } envelope, one pair per canvas column
         let waveLastKey = '';
         let audioReqSeq = 0;          // guards against out-of-order fetch responses
-        const tuneDefaults = { jerkCurve: 190, jerkMax: 37, snapCurve: 310, snapMax: 90 };
+        const tuneDefaults = {
+            jerkCurve: 190, jerkPivot: 601, jerkPivotGain: -3.0, snapCurve: 310, snapMax: 90,
+        };
         const tuneValues = { ...tuneDefaults };
-        const TUNE_KEYS = ['jerkCurve', 'jerkMax', 'snapCurve', 'snapMax'];
+        const TUNE_KEYS = ['jerkCurve', 'jerkPivot', 'jerkPivotGain', 'snapCurve', 'snapMax'];
+
+        // Controls whose slider travel is geometric rather than linear. For these keys
+        // the range input carries a 0..TUNE_SLIDER_STEPS position and the number box
+        // keeps the real stored value; every other key uses both directly. jerkPivot
+        // spans 1..20000 m/s^3, so a linear thumb would bury the useful region near 600
+        // in the first few percent of travel.
+        const TUNE_LOG_KEYS = new Set(['jerkPivot']);
+
+        // Keys stored as a real number rather than an integer. jerkPivotGain is a
+        // plain dB figure like every other gain, so it commits to a tenth of a dB
+        // instead of being rounded to whole units like the rest.
+        const TUNE_DECIMAL_KEYS = new Set(['jerkPivotGain']);
+
+        // roundTuneValue snaps a committed value to the precision its key stores.
+        function roundTuneValue(key, value) {
+            return TUNE_DECIMAL_KEYS.has(key) ? Math.round(value * 10) / 10 : Math.round(value);
+        }
+        const TUNE_SLIDER_STEPS = 1000;
+
+        function tuneValueAtPos(key, pos, lo, hi) {
+            if (!TUNE_LOG_KEYS.has(key)) return pos;
+
+            return lo * Math.pow(hi / lo, pos / TUNE_SLIDER_STEPS);
+        }
+
+        function tunePosForValue(key, value, lo, hi) {
+            if (!TUNE_LOG_KEYS.has(key)) return value;
+
+            const clamped = Math.min(hi, Math.max(lo, value));
+
+            return Math.round(TUNE_SLIDER_STEPS * Math.log(clamped / lo) / Math.log(hi / lo));
+        }
 
         function ensureAudioCtx() {
             if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -1893,6 +2353,25 @@
             return Math.max(0, Math.min(t, waveBuffer.duration));
         }
 
+        // Map the audio playhead back to a lap frame and hand it to the shared hover
+        // follower, so playback moves the same map point, scatter point and speed marker
+        // the mouse does. This is the inverse of seekToFrame: the section's frames are
+        // laid out linearly across the rendered buffer.
+        //
+        // setHovered already returns early when the frame has not changed, which is what
+        // keeps this cheap — the playhead advances every animation frame, but one
+        // telemetry frame spans several of them and a map redraw walks the whole lap.
+        function followPlayhead() {
+            if (!waveBuffer || waveBuffer.duration <= 0 || !currentLapKey) return;
+
+            const { startFrame, endFrame } = getFrameRange();
+            const frac = playheadSeconds() / waveBuffer.duration;
+            const frame = Math.max(startFrame, Math.min(endFrame,
+                Math.round(startFrame + frac * (endFrame - startFrame))));
+
+            setHovered(frame, 'playback');
+        }
+
         function updateWaveTime() {
             const dur = waveBuffer ? waveBuffer.duration : 0;
             document.getElementById('wave-time').textContent =
@@ -1903,7 +2382,7 @@
             const replay = document.getElementById('replay-select').value;
             const { startFrame, endFrame } = getFrameRange();
             return [replay, currentLapKey, startFrame, endFrame,
-                tuneValues.jerkCurve, tuneValues.jerkMax, tuneValues.snapCurve, tuneValues.snapMax,
+                ...TUNE_KEYS.map(k => tuneValues[k]),
                 useRaw ? 'raw' : 'filt'].join('|');
         }
 
@@ -1925,16 +2404,15 @@
             const params = new URLSearchParams({
                 replay, lap: String(currentLapKey),
                 from: String(startFrame), to: String(endFrame),
-                jerkCurve: String(tuneValues.jerkCurve), jerkMax: String(tuneValues.jerkMax),
-                snapCurve: String(tuneValues.snapCurve), snapMax: String(tuneValues.snapMax),
                 raw: useRaw ? '1' : '0',
             });
+            TUNE_KEYS.forEach(k => params.set(k, String(tuneValues[k])));
 
             const seq = ++audioReqSeq;
             setWaveStatus('rendering…');
 
             try {
-                const resp = await fetch('/audio?' + params.toString());
+                const resp = await fetch('/api/tuneassist/audio?' + params.toString());
                 if (!resp.ok) { if (seq === audioReqSeq) setWaveStatus('no audio'); return; }
                 const raw = await resp.arrayBuffer();
                 const decoded = await ensureAudioCtx().decodeAudioData(raw);
@@ -1946,6 +2424,7 @@
                 computeWavePeaks();
                 drawWave();
                 updateWaveTime();
+                followPlayhead();
                 setWaveStatus('');
             } catch (e) {
                 if (seq === audioReqSeq) setWaveStatus('error');
@@ -1984,11 +2463,10 @@
             }
             const ctx = canvas.getContext('2d');
             ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            // Backdrop. clearRect leaves the canvas transparent so the themed
+            // `canvas { background: var(--bs-content-bg) }` rule shows through;
+            // painting a backdrop here would pin it to a fixed colour instead.
             ctx.clearRect(0, 0, w, h);
-
-            // Backdrop
-            ctx.fillStyle = '#16213e';
-            ctx.fillRect(0, 0, w, h);
 
             const mid = h / 2;
 
@@ -2063,10 +2541,10 @@
             if (playheadSeconds() >= waveBuffer.duration - 1e-3) {
                 stopPlayback();
                 wavePlayOffset = 0;
-                drawWave(); updateWaveTime();
+                drawWave(); updateWaveTime(); followPlayhead();
                 return;
             }
-            drawWave(); updateWaveTime();
+            drawWave(); updateWaveTime(); followPlayhead();
             waveRaf = requestAnimationFrame(tickPlayhead);
         }
 
@@ -2081,6 +2559,7 @@
             waveSource.start(0, wavePlayOffset);
             wavePlaying = true;
             setPlayIcon();
+            followPlayhead();
             cancelAnimationFrame(waveRaf);
             waveRaf = requestAnimationFrame(tickPlayhead);
         }
@@ -2095,7 +2574,7 @@
             wavePlaying = false;
             setPlayIcon();
             cancelAnimationFrame(waveRaf);
-            drawWave(); updateWaveTime();
+            drawWave(); updateWaveTime(); followPlayhead();
         }
 
         // Stop: silence without moving the stored offset (used before reload/seek).
@@ -2134,7 +2613,7 @@
             const wasPlaying = wavePlaying;
             stopPlayback();
             wavePlayOffset = frac * waveBuffer.duration;
-            if (wasPlaying) startPlayback(); else { drawWave(); updateWaveTime(); }
+            if (wasPlaying) startPlayback(); else { drawWave(); updateWaveTime(); followPlayhead(); }
         }
 
         // Leftmost frame of the current primary highlight box (null if none).
@@ -2181,7 +2660,7 @@
             const wasPlaying = wavePlaying;
             stopPlayback();
             wavePlayOffset = frac * waveBuffer.duration;
-            if (wasPlaying) startPlayback(); else { drawWave(); updateWaveTime(); }
+            if (wasPlaying) startPlayback(); else { drawWave(); updateWaveTime(); followPlayhead(); }
         }
 
         function setupAudioUI() {
@@ -2222,22 +2701,57 @@
             canvas.addEventListener('pointerleave', () => { if (!scrubbing) setHovered(null, 'wave'); });
 
             TUNE_KEYS.forEach(k => {
-                const input = document.getElementById('tune-' + k);
-                input.addEventListener('input', () => {
-                    tuneValues[k] = parseInt(input.value, 10);
-                    document.getElementById('out-' + k).textContent = tuneValues[k];
+                const slider = document.getElementById('tune-' + k);
+                const box = document.getElementById('out-' + k);
+                // The bounds always come from the number box, which is in real stored
+                // units for every key — the range input may be carrying a position.
+                const lo = Number(box.min), hi = Number(box.max);
+
+                // syncBox is false while the user is typing, so a partially entered
+                // number is not rewritten under the cursor. syncSlider is false while the
+                // user is dragging, so rounding the value does not snap the thumb out
+                // from under them: on a geometric scale many positions share one value.
+                const commit = (raw, { syncBox = true, syncSlider = true } = {}) => {
+                    let v = roundTuneValue(k, Number(raw));
+                    if (!Number.isFinite(v)) return;
+                    v = Math.min(hi, Math.max(lo, v));
+                    tuneValues[k] = v;
+                    if (syncSlider) slider.value = tunePosForValue(k, v, lo, hi);
+                    if (syncBox) box.value = v;
                     scheduleAudioRefresh();
+                    updateGainChart();
+                };
+
+                slider.addEventListener('input', () => commit(
+                    tuneValueAtPos(k, Number(slider.value), lo, hi), { syncSlider: false },
+                ));
+
+                box.addEventListener('input', () => {
+                    const v = Number(box.value);
+                    if (box.value !== '' && Number.isFinite(v) && v >= lo && v <= hi) {
+                        commit(v, { syncBox: false });
+                    }
+                });
+
+                // Enter or blur clamps whatever was typed and normalises the box.
+                box.addEventListener('change', () => {
+                    commit(box.value === '' ? tuneValues[k] : box.value);
+                });
+                box.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') box.blur();
                 });
             });
 
             document.getElementById('tune-reset').addEventListener('click', () => {
                 TUNE_KEYS.forEach(k => {
                     tuneValues[k] = tuneDefaults[k];
-                    document.getElementById('tune-' + k).value = tuneDefaults[k];
-                    document.getElementById('out-' + k).textContent = tuneDefaults[k];
                 });
+                applyTuneToControls();
                 scheduleAudioRefresh();
+                updateGainChart();
             });
+
+            document.getElementById('tune-commit').addEventListener('click', commitTuning);
 
             // Re-render the waveform envelope on resize (canvas column count changes).
             window.addEventListener('resize', () => { if (waveBuffer) { computeWavePeaks(); drawWave(); } });
@@ -2245,22 +2759,80 @@
             applyTuneToControls();
 
             // Load the shipped defaults so the sliders start where the live app does.
-            fetch('/tuning-defaults').then(r => r.json()).then(d => {
+            fetch('/api/tuneassist/tuning-defaults').then(r => r.json()).then(d => {
                 TUNE_KEYS.forEach(k => { if (Number.isFinite(d[k])) { tuneDefaults[k] = d[k]; tuneValues[k] = d[k]; } });
                 applyTuneToControls();
+                if (d.pulseLimits) pulseLimits = { ...pulseLimits, ...d.pulseLimits };
+                if (gainChart) { applyGainAxisBounds(); updateGainChart(); }
             }).catch(() => { });
+        }
+
+        // The curve exponents are held here as the raw thousandths the sliders show
+        // (jerkCurve 190, snapCurve 310), but POST /api/config takes them as the
+        // fraction and multiplies by 1000 on the way in. Everything else is sent as
+        // it stands. Getting this wrong is silent — the value simply lands a factor
+        // of 1000 out — so the scaling is listed per key rather than applied broadly.
+        function tuningToConfigPayload() {
+            return {
+                jerkCurve: tuneValues.jerkCurve / 1000,
+                jerkPivot: tuneValues.jerkPivot,
+                jerkPivotGain: tuneValues.jerkPivotGain,
+                snapCurve: tuneValues.snapCurve / 1000,
+                snapMax: tuneValues.snapMax,
+            };
+        }
+
+        // Write the current knob positions into the haptics section of the config
+        // file. The endpoint applies them to the running app and persists them in one
+        // step, so this is the same path the settings page saves through — including
+        // the shared navbar spinner/tick, rather than a status line of its own.
+        async function commitTuning() {
+            const button = document.getElementById('tune-commit');
+            const status = document.getElementById('wave-status');
+
+            button.disabled = true;
+            if (typeof window.showNavbarStatus === 'function') window.showNavbarStatus('saving');
+
+            try {
+                const response = await fetch('/api/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ haptics: tuningToConfigPayload() }),
+                });
+
+                const result = await response.json().catch(() => null);
+                if (!response.ok || (result && result.status !== 'success')) {
+                    throw new Error((result && (result.message || (result.errors || []).join('; '))) || ('HTTP ' + response.status));
+                }
+
+                if (typeof window.showNavbarStatus === 'function') window.showNavbarStatus('success');
+                status.textContent = 'Committed to config';
+                setTimeout(() => {
+                    if (status.textContent === 'Committed to config') status.textContent = '';
+                }, 3000);
+            } catch (error) {
+                console.error('Failed to commit tuning:', error);
+                if (typeof window.showNavbarStatus === 'function') window.showNavbarStatus('error');
+                status.textContent = 'Commit failed: ' + error.message;
+            } finally {
+                button.disabled = false;
+            }
         }
 
         function applyTuneToControls() {
             TUNE_KEYS.forEach(k => {
-                document.getElementById('tune-' + k).value = tuneValues[k];
-                document.getElementById('out-' + k).textContent = tuneValues[k];
+                const box = document.getElementById('out-' + k);
+                const lo = Number(box.min), hi = Number(box.max);
+                document.getElementById('tune-' + k).value = tunePosForValue(k, tuneValues[k], lo, hi);
+                box.value = tuneValues[k];
             });
         }
 
         setupAudioUI();
         init();
     </script>
+    </div>
+    <script src="/js/bootstrap.bundle.min.js"></script>
 </body>
 
 </html>

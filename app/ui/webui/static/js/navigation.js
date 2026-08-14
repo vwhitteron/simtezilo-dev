@@ -11,17 +11,22 @@ function createNavigation(currentPage) {
     }
 
     const pages = [
-        { path: '/settings', nameKey: 'runmode.nav.settings', fallback: 'Settings', id: 'settings' },
+        { path: '/settings', nameKey: 'runmode.nav.settings', fallback: 'Settings', id: 'settings' }
+    ];
+
+    // "Tools" dropdown. Logs is always available; the developer tools below it are
+    // only listed when dev tools is enabled.
+    const toolsDropdown = [
         { path: '/logs', nameKey: 'runmode.nav.logs', fallback: 'Logs', id: 'logs' }
     ];
 
-    // Developer-only "Dev" dropdown (only shown when dev tools is enabled)
-    const devDropdown = [
-        { path: '/hardware', nameKey: 'runmode.nav.hardware', fallback: 'Hardware', id: 'hardware' }
-    ];
+    if (window.devToolsEnabled) {
+        toolsDropdown.push({ path: '/tuneassist', nameKey: 'runmode.nav.tuneassist', fallback: 'Tune Assist', id: 'tuneassist' });
+        toolsDropdown.push({ path: '/hardware', nameKey: 'runmode.nav.hardware', fallback: 'Hardware', id: 'hardware' });
+    }
 
     const telemetryActive = telemetryDropdown.some(item => item.id === currentPage);
-    const devActive = devDropdown.some(item => item.id === currentPage);
+    const toolsActive = toolsDropdown.some(item => item.id === currentPage);
 
     let navHTML = `
         <nav class="navbar navbar-expand-lg" style="background-color: var(--bs-content-bg); border-bottom: var(--bs-border-width) solid var(--bs-content-border-color);">
@@ -58,25 +63,23 @@ function createNavigation(currentPage) {
                         </li>`;
     });
 
-    // Add Dev dropdown (only when dev tools is enabled)
-    if (window.devToolsEnabled) {
-        navHTML += `
+    // Add Tools dropdown
+    navHTML += `
                         <li class="nav-item dropdown">
-                            <a class="nav-link dropdown-toggle${devActive ? ' active' : ''}"${devActive ? ' aria-current="page"' : ''} href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false" data-i18n="runmode.nav.dev">
-                                Dev
+                            <a class="nav-link dropdown-toggle${toolsActive ? ' active' : ''}"${toolsActive ? ' aria-current="page"' : ''} href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false" data-i18n="runmode.nav.tools">
+                                Tools
                             </a>
                             <ul class="dropdown-menu mt-lg-2 rounded-top-0">`;
 
-        devDropdown.forEach(item => {
-            const isActive = item.id === currentPage;
-            navHTML += `
-                                <li><a class="dropdown-item${isActive ? ' active' : ''}" href="${item.path}" data-i18n="${item.nameKey}">${item.fallback}</a></li>`;
-        });
-
+    toolsDropdown.forEach(item => {
+        const isActive = item.id === currentPage;
         navHTML += `
+                                <li><a class="dropdown-item${isActive ? ' active' : ''}" href="${item.path}" data-i18n="${item.nameKey}">${item.fallback}</a></li>`;
+    });
+
+    navHTML += `
                             </ul>
                         </li>`;
-    }
 
     navHTML += `
                         <li class="nav-item">

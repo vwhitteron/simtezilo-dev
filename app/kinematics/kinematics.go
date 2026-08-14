@@ -127,7 +127,7 @@ type State struct {
 
 	// DisableNyquistGate bypasses both fs/2 cadence gates, so the calculated
 	// velocity chains consume the raw telemetry velocity unchanged. It exists for
-	// offline analysis (the tune_assistant "raw" audio render) that auditions the
+	// offline analysis (the in-app tuning assistant's "raw" audio render) that auditions the
 	// ungated signal; the live app leaves it false and always gates.
 	DisableNyquistGate bool
 

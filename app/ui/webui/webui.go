@@ -3,10 +3,12 @@ package webui
 
 import (
 	"embed"
+	"encoding/json"
 	"image"
 	"mime"
 	"net/http"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/rs/zerolog"
@@ -15,10 +17,15 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/exitcode"
 	"github.com/vwhitteron/simtezilo-dev/app/logstore"
 	"github.com/vwhitteron/simtezilo-dev/app/setupmode"
+	"github.com/vwhitteron/simtezilo-dev/app/tuneassist"
 	"github.com/vwhitteron/simtezilo-dev/app/ui/icons"
 	"github.com/vwhitteron/simtezilo-dev/app/ui/webui/webcommon"
 	"github.com/vwhitteron/simtezilo-dev/app/updater"
 )
+
+// devOnlyPages lists the HTML pages that are only served when developer tools are
+// enabled.
+var devOnlyPages = []string{"dev.html", "hardware.html", "tuneassist.html"} //nolint:gochecknoglobals // small fixed lookup table for htmlRouterHandlerFunc
 
 // Options holds constructor parameters for WebUI.
 // (Renamed from Config to avoid the self-referential Config.Config field collision.)
@@ -66,6 +73,7 @@ type WebUI struct {
 	cfgHandler  *configHandler
 	sysHandler  *systemHandler
 	updHandler  *updateHandler
+	tuneAssist  *tuneassist.Service
 }
 
 // New creates a new WebUI instance and starts the WebSocket broadcaster.
@@ -111,6 +119,12 @@ func New(opts Options) *WebUI {
 			updater:      opts.Updater,
 			buildVersion: opts.BuildVersion,
 			shutdownChan: opts.ShutdownChan,
+		}),
+		tuneAssist: tuneassist.New(tuneassist.Options{
+			Log: log,
+			ReplayDir: func() string {
+				return filepath.Join(opts.Config.GetAppBaseDir(), "data", "replays")
+			},
 		}),
 	}
 
@@ -162,6 +176,12 @@ func (w *WebUI) GetHTTPHandler() http.Handler {
 	mux.HandleFunc("/api/updates/upload", w.updHandler.handleUpdatesUpload)
 	mux.HandleFunc("/api/updates/install", w.updHandler.handleUpdatesInstall)
 	mux.HandleFunc("/api/updates/rollback", w.updHandler.handleUpdatesRollback)
+
+	// Tune assistant API (developer tools)
+	mux.HandleFunc("/api/tuneassist/replays", w.devToolsGate(w.tuneAssist.HandleReplays))
+	mux.HandleFunc("/api/tuneassist/data", w.devToolsGate(w.tuneAssist.HandleData))
+	mux.HandleFunc("/api/tuneassist/audio", w.devToolsGate(w.tuneAssist.HandleAudio))
+	mux.HandleFunc("/api/tuneassist/tuning-defaults", w.devToolsGate(w.tuneAssist.HandleTuningDefaults))
 
 	if w.sysHandler.setupMode != nil && w.sysHandler.setupMode.IsAvailable() {
 		mux.HandleFunc("/api/system/factory-reset", w.sysHandler.handleFactoryReset)
@@ -218,7 +238,7 @@ func (w *WebUI) htmlRouterHandlerFunc() func(http.ResponseWriter, *http.Request)
 			filename = path[1:] + ".html"
 		}
 
-		if (filename == "dev.html" || filename == "hardware.html") && !w.config.GetDevToolsEnabled() {
+		if slices.Contains(devOnlyPages, filename) && !w.config.GetDevToolsEnabled() {
 			response.WriteHeader(http.StatusForbidden)
 			w.log.Debug().Str("path", path).Msg("access to developer page denied - dev tools not enabled")
 
@@ -243,6 +263,23 @@ func (w *WebUI) htmlRouterHandlerFunc() func(http.ResponseWriter, *http.Request)
 		}
 
 		w.log.Debug().Str("file", filename).Str("path", path).Int("bytes_written", length).Msg("served HTML page")
+	}
+}
+
+// devToolsGate wraps next so it only runs when developer tools are enabled,
+// otherwise responding 403 with the same JSON error shape used elsewhere in the
+// web UI (see systemHandler.handleHardwareInput).
+func (w *WebUI) devToolsGate(next http.HandlerFunc) http.HandlerFunc {
+	return func(response http.ResponseWriter, request *http.Request) {
+		if !w.config.GetDevToolsEnabled() {
+			response.Header().Set("Content-Type", "application/json")
+			response.WriteHeader(http.StatusForbidden)
+			_ = json.NewEncoder(response).Encode(map[string]string{"error": "developer tools not enabled"})
+
+			return
+		}
+
+		next(response, request)
 	}
 }
 

@@ -1,6 +1,7 @@
 package haptics
 
 import (
+	"context"
 	"os"
 	"testing"
 )
@@ -14,24 +15,24 @@ func TestChassisSmoke(t *testing.T) {
 		t.Skip("set HAPTICCAPTURE_REPLAY to a file:// replay URL to run")
 	}
 
-	cap, err := CaptureChassis(CaptureOptions{Source: src})
+	capture, err := CaptureChassis(context.Background(), CaptureOptions{Source: src})
 	if err != nil {
 		t.Fatalf("CaptureChassis: %v", err)
 	}
 
-	if len(cap.Samples) == 0 {
+	if len(capture.Samples) == 0 {
 		t.Fatal("no samples produced")
 	}
 
-	if len(cap.Frames) == 0 {
+	if len(capture.Frames) == 0 {
 		t.Fatal("no frames produced")
 	}
 
-	last := cap.Frames[len(cap.Frames)-1]
-	if last.OutCursor >= len(cap.Samples) {
-		t.Fatalf("last frame cursor %d beyond samples %d", last.OutCursor, len(cap.Samples))
+	last := capture.Frames[len(capture.Frames)-1]
+	if last.OutCursor >= len(capture.Samples) {
+		t.Fatalf("last frame cursor %d beyond samples %d", last.OutCursor, len(capture.Samples))
 	}
 
 	t.Logf("rate=%d samples=%d frames=%d firstLap=%d lastLap=%d",
-		cap.InternalRate, len(cap.Samples), len(cap.Frames), cap.Frames[0].Lap, last.Lap)
+		capture.InternalRate, len(capture.Samples), len(capture.Frames), capture.Frames[0].Lap, last.Lap)
 }
