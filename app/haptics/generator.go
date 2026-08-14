@@ -38,8 +38,8 @@ type Generator struct {
 	log   zerolog.Logger
 
 	// Chassis impact-pulse state.
-	jerkPeakHold         float64       //nolint:unused // peak-hold for planned inverse-jerk detection; deliberately kept
-	jerkPeakHoldTime     time.Time     //nolint:unused // peak-hold for planned inverse-jerk detection; deliberately kept
+	jerkPeakHold         float64
+	jerkPeakHoldTime     time.Time
 	jerkPeakHoldDuration time.Duration // Duration to hold peak based on pulse length
 	chassisFreqSmoothed  float64       // Asymmetric follower state for the chassis pulse frequency
 	chassisPulseScratch  []float64     // Reusable per-tick pulse buffer for Chassis

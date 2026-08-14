@@ -22,8 +22,9 @@ func ensureChannelLen(values []float64, count int) []float64 {
 	return grown
 }
 
-// Chassis generates the chassis impact pulse for every routed output channel from
-// the current kinematics jerk/snap, writing each channel's pulse into the synth.
+// Chassis generates the chassis impact pulse for every routed output channel,
+// writing each channel's pulse into the synth. Jerk sets the amplitude, snap the
+// frequency, and ground speed the ring-down length.
 func (g *Generator) Chassis() {
 	if g.cfg.GetSynthChassisMute() {
 		return
@@ -68,36 +69,7 @@ func (g *Generator) Chassis() {
 		g.kin.Current.SynthChannelAmplitude[channel] = signal.Abs(channelAmplitude)
 		g.kin.Current.SynthChannelFrequency[channel] = channelFreqHz
 
-		channelPulseLength := int(channelPulseWidth * 2)
-		bufferSize := max(channelPulseLength, minSamplesPerFrame)
-
-		waveOffset := channelPulseWidth / 2
-		waveSamplePeriod := math.Pi / channelPulseWidth
-
-		// Reuse the scratch buffer across ticks, growing it on demand. The generation
-		// loop below breaks early once index > channelPulseLength, leaving a tail
-		// that must be zero-filled since it is no longer guaranteed by make.
-		if cap(g.chassisPulseScratch) < bufferSize {
-			g.chassisPulseScratch = make([]float64, bufferSize)
-		} else {
-			g.chassisPulseScratch = g.chassisPulseScratch[:bufferSize]
-		}
-
-		pulseBuffer := g.chassisPulseScratch
-
-		for index := range pulseBuffer {
-			pulseBuffer[index] = 0
-		}
-
-		// Generate the complete pulse waveform
-		for index := range bufferSize {
-			if index > channelPulseLength {
-				break
-			}
-
-			phase := waveSamplePeriod * (float64(index) - waveOffset)
-			pulseBuffer[index] = ((channelAmplitude * math.Sin(phase)) + channelAmplitude) / 2
-		}
+		pulseBuffer := g.pulseWaveform(channelAmplitude, channelPulseWidth, minSamplesPerFrame)
 
 		// Write to the channel-specific chassis buffer
 		g.synth.WriteBuffer(synthesizer.ChassisChannelName(channel), pulseBuffer, 0)
@@ -122,6 +94,45 @@ func (g *Generator) Chassis() {
 			Float64("pulseWidth", pulseWidth).
 			Msg("Bump outputs")
 	}
+}
+
+// chassisScratch returns the reusable per-tick pulse buffer sized to length,
+// zero-filled. The generation loops below write only a prefix of it, so the tail
+// must be cleared explicitly rather than relying on a fresh allocation.
+func (g *Generator) chassisScratch(length int) []float64 {
+	if cap(g.chassisPulseScratch) < length {
+		g.chassisPulseScratch = make([]float64, length)
+	} else {
+		g.chassisPulseScratch = g.chassisPulseScratch[:length]
+	}
+
+	for index := range g.chassisPulseScratch {
+		g.chassisPulseScratch[index] = 0
+	}
+
+	return g.chassisPulseScratch
+}
+
+// pulseWaveform builds the chassis waveform: a single unipolar raised sine
+// spanning one period of the pulse frequency, with no ring-down. Note that it
+// is mostly DC by energy — the offset is two thirds of the pulse's power.
+func (g *Generator) pulseWaveform(amplitude, pulseWidth float64, minSamplesPerFrame int) []float64 {
+	pulseLength := int(pulseWidth * 2)
+	buffer := g.chassisScratch(max(pulseLength, minSamplesPerFrame))
+
+	waveOffset := pulseWidth / 2
+	waveSamplePeriod := math.Pi / pulseWidth
+
+	for index := range buffer {
+		if index > pulseLength {
+			break
+		}
+
+		phase := waveSamplePeriod * (float64(index) - waveOffset)
+		buffer[index] = ((amplitude * math.Sin(phase)) + amplitude) / 2
+	}
+
+	return buffer
 }
 
 // applyDRX checks for DRX activation on the given channel, shifting frequency into
@@ -155,13 +166,22 @@ func (g *Generator) applyDRX(
 	return drxFreq, drxAmp, true
 }
 
-func (g *Generator) calculateChassisHapticPulseAmplitude() (pulseAmplitude float64, unclampedAmplitude float64) {
+// calculateChassisHapticPulseAmplitude returns the clamped pulse amplitude and the
+// unclamped amplitude DRX uses to decide whether to exploit device resonance.
+func (g *Generator) calculateChassisHapticPulseAmplitude() (
+	pulseAmplitude float64, unclampedAmplitude float64,
+) {
 	jerk := signal.LargestMagnitude(
 		g.kin.Current.ResolvedTransJerk,
 		g.kin.Current.ResolvedRotJerk,
 	)
 
-	// Process the signal normally first
+	// The amplitude keeps the jerk's sign. Both waveforms lead with the same unipolar
+	// bump, so the alternating polarity is what stops a train of them accumulating a
+	// large DC offset — driving them from the magnitude instead makes every bump push
+	// the same way and buries the output under DC. The sign costs some sustained
+	// energy where overlapping bumps of opposite polarity subtract, but that is the
+	// cheaper trade: the bump's low-frequency weight is what gives the pulse its body.
 	pulseAmplitude = signal.Exponent(jerk, g.cfg.GethapticsJerkCurve()/1000)
 	pulseAmplitude = signal.Scale(pulseAmplitude, g.cfg.GetHapticsJerkScale())
 
