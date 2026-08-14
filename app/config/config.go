@@ -28,6 +28,16 @@ const (
 	fanModeAll    = "all"
 )
 
+// Bounds for the jerk pivot pair. The pivot is a plain jerk in m/s^3 and the gain
+// a plain dB figure like every other gain in the config, with zero placing the
+// pivot at full scale.
+const (
+	hapticsJerkPivotMin     = 1
+	hapticsJerkPivotMax     = 20000
+	hapticsJerkPivotGainMin = -12.0
+	hapticsJerkPivotGainMax = 0.0
+)
+
 // Routing source keys identify the user-facing haptic sources that can be routed
 // to output channels. The chassis row gates the internal per-channel chassis
 // generators; engine and transmission are single mono buses.
@@ -76,27 +86,32 @@ type fuelMonitoring struct {
 }
 
 type haptics struct {
-	Output                       HapticsOutput                     `json:"output"` // haptic feedback output stream
-	EnableReplay                 bool                              `json:"enableReplay"`
-	DynamicTransmissionFeedback  bool                              `json:"dynamicTransmissionFeedback"`
-	DynamicTransmissionCurve     int                               `json:"dynamicTransmissionCurve"`
-	DynamicTransmissionGforceMax float64                           `json:"dynamicTransmissionGforceMax"`
-	JerkCurve                    int                               `json:"jerkCurve"`
-	JerkMax                      int                               `json:"jerkMax"`
-	_jerkScale                   float64                           `json:"-"`
-	SnapCurve                    int                               `json:"snapCurve"`
-	SnapMax                      int                               `json:"snapMax"`
-	_snapScale                   float64                           `json:"-"`
-	PulseMaxAmplitude            float64                           `json:"pulseMaxAmplitude"`
-	PulseMaxFrequencyHz          float64                           `json:"pulseMaxFrequencyHz"`
-	PulseMinFrequencyHz          float64                           `json:"pulseMinFrequencyHz"`
-	_pulseWidthMax               float64                           `json:"-"`
-	_pulseWidthMin               float64                           `json:"-"`
-	TextureMinFrequencyHz        float64                           `json:"textureMinFrequencyHz"` // lower edge of the road-texture noise band (low-speed brightness)
-	TextureMaxFrequencyHz        float64                           `json:"textureMaxFrequencyHz"` // upper edge of the road-texture noise band (high-speed brightness)
-	EngineProfiles               map[string]profiles.EngineProfile `json:"engineProfiles,omitempty"`
-	_engineProfile               *profiles.EngineProfile           `json:"-"`
-	_engineProfileName           string                            `json:"-"`
+	Output                       HapticsOutput `json:"output"` // haptic feedback output stream
+	EnableReplay                 bool          `json:"enableReplay"`
+	DynamicTransmissionFeedback  bool          `json:"dynamicTransmissionFeedback"`
+	DynamicTransmissionCurve     int           `json:"dynamicTransmissionCurve"`
+	DynamicTransmissionGforceMax float64       `json:"dynamicTransmissionGforceMax"`
+	JerkCurve                    int           `json:"jerkCurve"`
+	JerkPivot                    int           `json:"jerkPivot"`
+	JerkPivotGain                float64       `json:"jerkPivotGain"`
+	// JerkMax is deprecated: it was replaced by JerkPivot/JerkPivotGain. A
+	// non-zero value is converted on load and then zeroed, so omitempty drops it
+	// from the file on the next write and the migration runs at most once.
+	JerkMax               int                               `json:"jerkMax,omitempty"`
+	_jerkScale            float64                           `json:"-"`
+	SnapCurve             int                               `json:"snapCurve"`
+	SnapMax               int                               `json:"snapMax"`
+	_snapScale            float64                           `json:"-"`
+	PulseMaxAmplitude     float64                           `json:"pulseMaxAmplitude"`
+	PulseMaxFrequencyHz   float64                           `json:"pulseMaxFrequencyHz"`
+	PulseMinFrequencyHz   float64                           `json:"pulseMinFrequencyHz"`
+	_pulseWidthMax        float64                           `json:"-"`
+	_pulseWidthMin        float64                           `json:"-"`
+	TextureMinFrequencyHz float64                           `json:"textureMinFrequencyHz"` // lower edge of the road-texture noise band (low-speed brightness)
+	TextureMaxFrequencyHz float64                           `json:"textureMaxFrequencyHz"` // upper edge of the road-texture noise band (high-speed brightness)
+	EngineProfiles        map[string]profiles.EngineProfile `json:"engineProfiles,omitempty"`
+	_engineProfile        *profiles.EngineProfile           `json:"-"`
+	_engineProfileName    string                            `json:"-"`
 }
 
 type hardware struct {
@@ -256,10 +271,19 @@ type Snapshot struct {
 	GainIncrement             float64
 	InternalSampleRateHz      int
 
-	// Haptics jerk settings (chassis amplitude)
-	JerkCurve float64
-	JerkMax   int
-	JerkScale float64
+	// Haptics jerk settings (chassis amplitude). The response is
+	//
+	//	amplitude(jerk) = JerkScale * jerk^(JerkCurve/1000)
+	//
+	// anchored so that a jerk of JerkPivot m/s^3 lands JerkPivotGain dB below full
+	// scale. JerkCurve is the shaping knob; the pivot pair is calibration,
+	// fixing which event counts as the reference and how strong it should feel.
+	// Changing the curve rotates the response about that pivot rather than about
+	// the ceiling, so the reference event holds its level as the shape changes.
+	JerkCurve     float64
+	JerkPivot     int
+	JerkPivotGain float64
+	JerkScale     float64
 
 	// Haptics snap settings (chassis frequency)
 	SnapCurve float64
@@ -1185,7 +1209,7 @@ func (c *Config) GethapticsJerkCurve() float64 {
 // Values closer to 0 produce a more linear response.
 // Values closer to 1 produce a more exponential response.
 func (c *Config) SetHapticsJerkCurve(value int) {
-	value = min(value, 955)
+	value = min(value, 995)
 	value = max(value, 5)
 
 	c.mu.Lock()
@@ -1197,7 +1221,7 @@ func (c *Config) SetHapticsJerkCurve(value int) {
 // IncreaseHapticsJerkCurve increases the jerk curve value in increments of 5.
 func (c *Config) IncreaseHapticsJerkCurve() int {
 	c.mu.Lock()
-	c.viper.Haptics.JerkCurve = min(955, c.viper.Haptics.JerkCurve+5)
+	c.viper.Haptics.JerkCurve = min(995, c.viper.Haptics.JerkCurve+5)
 	result := c.viper.Haptics.JerkCurve
 	c.mu.Unlock()
 	c.updateJerkScale()
@@ -1221,46 +1245,100 @@ func (c *Config) GetHapticsJerkScale() float64 {
 	return c.snapshot.Load().JerkScale
 }
 
-// GetHapticsJerkMax returns the maximum jerk value.
-// The jerk curve is applied over the range from 0 to this maximum value.
-// Any jerk vakues above this value are clamped to this maximum.
-func (c *Config) GetHapticsJerkMax() int {
-	return c.snapshot.Load().JerkMax
+// GetHapticsJerkPivot returns the pivot jerk value, in m/s^3.
+// This is the reference event: the jerk whose amplitude is held at
+// GetHapticsJerkPivotGain regardless of how the jerk curve is shaped.
+func (c *Config) GetHapticsJerkPivot() int {
+	return c.snapshot.Load().JerkPivot
 }
 
-// SetHapticsJerkMax sets the maximum jerk value.
-// The jerk curve is applied over the range from 0 to this maximum value.
-// Any jerk vakues above this value are clamped to this maximum.
-func (c *Config) SetHapticsJerkMax(value int) {
-	value = min(value, 200)
-	value = max(value, 1)
+// SetHapticsJerkPivot sets the pivot jerk value, in m/s^3.
+func (c *Config) SetHapticsJerkPivot(value int) {
+	value = min(value, hapticsJerkPivotMax)
+	value = max(value, hapticsJerkPivotMin)
 
 	c.mu.Lock()
-	c.viper.Haptics.JerkMax = value
+	c.viper.Haptics.JerkPivot = value
 	c.mu.Unlock()
 	c.updateJerkScale()
 }
 
-// IncreaseHapticsJerkMax increases the maximum jerk value in increments of 1.
-func (c *Config) IncreaseHapticsJerkMax() int {
+// IncreaseHapticsJerkPivot increases the pivot jerk value in increments of 1.
+func (c *Config) IncreaseHapticsJerkPivot() int {
 	c.mu.Lock()
-	c.viper.Haptics.JerkMax = min(100, c.viper.Haptics.JerkMax+1)
-	result := c.viper.Haptics.JerkMax
+	c.viper.Haptics.JerkPivot = min(hapticsJerkPivotMax, c.viper.Haptics.JerkPivot+1)
+	result := c.viper.Haptics.JerkPivot
+	c.mu.Unlock()
+	c.updateJerkScale()
+
+	return result
+}
+
+// DecreaseHapticsJerkPivot decreases the pivot jerk value in increments of 1.
+func (c *Config) DecreaseHapticsJerkPivot() int {
+	c.mu.Lock()
+	c.viper.Haptics.JerkPivot = max(hapticsJerkPivotMin, c.viper.Haptics.JerkPivot-1)
+	result := c.viper.Haptics.JerkPivot
 	c.mu.Unlock()
 	c.updateJerkScale()
 
 	return result
 }
 
-// DecreaseHapticsJerkMax decreases the maximum jerk value in increments of 1.
-func (c *Config) DecreaseHapticsJerkMax() int {
+// GetHapticsJerkPivotGain returns the amplitude at the pivot jerk, in dB below
+// full scale. Zero puts the pivot at full scale, reproducing the behaviour of the
+// jerkMax knob this pair replaced.
+func (c *Config) GetHapticsJerkPivotGain() float64 {
+	return c.snapshot.Load().JerkPivotGain
+}
+
+// SetHapticsJerkPivotGain sets the amplitude at the pivot jerk, in dB below full
+// scale.
+func (c *Config) SetHapticsJerkPivotGain(value float64) {
+	value = min(value, hapticsJerkPivotGainMax)
+	value = max(value, hapticsJerkPivotGainMin)
+
 	c.mu.Lock()
-	c.viper.Haptics.JerkMax = max(1, c.viper.Haptics.JerkMax-1)
-	result := c.viper.Haptics.JerkMax
+	c.viper.Haptics.JerkPivotGain = value
+	c.mu.Unlock()
+	c.updateJerkScale()
+}
+
+// IncreaseHapticsJerkPivotGain increases the pivot gain by the configured gain
+// increment, matching the other gain controls.
+func (c *Config) IncreaseHapticsJerkPivotGain() float64 {
+	c.mu.Lock()
+	c.viper.Haptics.JerkPivotGain = min(
+		hapticsJerkPivotGainMax,
+		roundGainDB(c.viper.Haptics.JerkPivotGain+c.viper.Synthesizer.GainIncrement),
+	)
+	result := c.viper.Haptics.JerkPivotGain
 	c.mu.Unlock()
 	c.updateJerkScale()
 
 	return result
+}
+
+// DecreaseHapticsJerkPivotGain decreases the pivot gain by the configured gain
+// increment, matching the other gain controls.
+func (c *Config) DecreaseHapticsJerkPivotGain() float64 {
+	c.mu.Lock()
+	c.viper.Haptics.JerkPivotGain = max(
+		hapticsJerkPivotGainMin,
+		roundGainDB(c.viper.Haptics.JerkPivotGain-c.viper.Synthesizer.GainIncrement),
+	)
+	result := c.viper.Haptics.JerkPivotGain
+	c.mu.Unlock()
+	c.updateJerkScale()
+
+	return result
+}
+
+// roundGainDB snaps a gain to a hundredth of a dB — the precision the UI displays
+// — so stepping the value repeatedly does not accumulate binary floating point
+// error into the stored figure.
+func roundGainDB(value float64) float64 {
+	return math.Round(value*100) / 100
 }
 
 // GetHapticsReplayEnabled returns true if replay mode is enabled.
@@ -1291,7 +1369,7 @@ func (c *Config) GetHapticsSnapCurve() float64 {
 // Values closer to 0 produce a more linear response.
 // Values closer to 1 produce a more exponential response.
 func (c *Config) SetHapticsSnapCurve(value int) {
-	value = min(value, 955)
+	value = min(value, 995)
 	value = max(value, 5)
 
 	c.mu.Lock()
@@ -1306,7 +1384,7 @@ func (c *Config) IncreaseHapticsSnapCurve() int {
 	c.mu.Lock()
 
 	c.viper.Haptics.SnapCurve = min(
-		955,
+		995,
 		c.viper.Haptics.SnapCurve+5,
 	)
 
@@ -3901,6 +3979,10 @@ func resizeStringChannels(s []string, n int, fill string) []string {
 func (c *Config) finalise() {
 	c.mu.Lock()
 
+	// Fold any deprecated jerkMax value into the pivot before the derived scale
+	// is computed from it below.
+	c.migrateJerkMax()
+
 	// All per-channel synth arrays are sized to the configured output channel
 	// count so that any channel index the pipeline addresses is valid.
 	numChannels := c.viper.Haptics.Output.Channels
@@ -3973,15 +4055,58 @@ func (c *Config) finalise() {
 	c.updateSnapScale()
 }
 
-// updateJerkScale recalculates the jerk scale factor based on the current jerk curve, scale and maximum.
+// updateJerkScale recalculates the jerk scale factor from the current jerk curve
+// and pivot pair.
+//
+// The response is amplitude(jerk) = scale * jerk^exponent, anchored so the pivot
+// jerk sits pivotGain dB below full scale:
+//
+//	scale = 10^(pivotGain/20) / pivot^exponent
+//
+// The full-scale jerk is then implied rather than configured, at
+// pivot * 10^(-pivotGain/(20*exponent)) — it recedes as the curve flattens, which
+// is the point: the reference event holds its level while the shape changes
+// around it.
 func (c *Config) updateJerkScale() {
 	c.mu.Lock()
 	exponent := float64(c.viper.Haptics.JerkCurve) / 1000.0
-	jerkMax := 100 * float64(c.viper.Haptics.JerkMax)
-	c.viper.Haptics._jerkScale = 1 / math.Pow(jerkMax, exponent)
+	pivot := float64(c.viper.Haptics.JerkPivot)
+	pivotGain := math.Pow(10, c.viper.Haptics.JerkPivotGain/20)
+	c.viper.Haptics._jerkScale = pivotGain / math.Pow(pivot, exponent)
 	c.rebuildSnapshot()
 	c.registerUpdate(false)
 	c.mu.Unlock()
+}
+
+// migrateJerkMax converts a surviving jerkMax value into the equivalent pivot and
+// then clears it, so the conversion runs at most once and omitempty drops the key
+// on the next write.
+//
+// jerkMax named the full-scale jerk directly, so the pivot that reproduces the
+// same curve is the jerk at which that curve has fallen to the pivot gain:
+//
+//	pivot = jerkMax * 10^(pivotGain/(20*exponent))
+//
+// Caller must hold c.mu.
+func (c *Config) migrateJerkMax() {
+	if c.viper.Haptics.JerkMax <= 0 {
+		return
+	}
+
+	exponent := float64(c.viper.Haptics.JerkCurve) / 1000.0
+	if exponent <= 0 {
+		c.viper.Haptics.JerkMax = 0
+
+		return
+	}
+
+	// jerkMax counted in hundreds of m/s^3; the pivot is a plain m/s^3 figure.
+	jerkMax := 100 * float64(c.viper.Haptics.JerkMax)
+	pivotGain := c.viper.Haptics.JerkPivotGain / 20
+	pivot := jerkMax * math.Pow(10, pivotGain/exponent)
+
+	c.viper.Haptics.JerkPivot = min(hapticsJerkPivotMax, max(hapticsJerkPivotMin, int(math.Round(pivot))))
+	c.viper.Haptics.JerkMax = 0
 }
 
 // updateSnapScale recalculates the snap scale factor based on the current snap curve, scale and maximum.
@@ -4127,9 +4252,10 @@ func (c *Config) rebuildSnapshot() {
 		GainIncrement:             c.viper.Synthesizer.GainIncrement,
 		InternalSampleRateHz:      c.viper.Synthesizer.InternalSampleRateHz,
 
-		JerkCurve: float64(c.viper.Haptics.JerkCurve),
-		JerkMax:   c.viper.Haptics.JerkMax,
-		JerkScale: c.viper.Haptics._jerkScale,
+		JerkCurve:     float64(c.viper.Haptics.JerkCurve),
+		JerkPivot:     c.viper.Haptics.JerkPivot,
+		JerkPivotGain: c.viper.Haptics.JerkPivotGain,
+		JerkScale:     c.viper.Haptics._jerkScale,
 
 		SnapCurve: float64(c.viper.Haptics.SnapCurve),
 		SnapMax:   c.viper.Haptics.SnapMax,

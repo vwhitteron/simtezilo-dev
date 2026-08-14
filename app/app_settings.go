@@ -60,7 +60,8 @@ func (a *App) settingAction(setting languagedb.Key, action string) string {
 		// Haptics handlers
 		languagedb.UIMenuHapticsOutputMode:              a.handleOutputModeSetting,
 		languagedb.UIMenuHapticsJerkCurve:               a.handleJerkCurveSetting,
-		languagedb.UIMenuHapticsJerkMax:                 a.handleJerkMaxSetting,
+		languagedb.UIMenuHapticsJerkPivot:               a.handleJerkPivotSetting,
+		languagedb.UIMenuHapticsJerkPivotGain:           a.handleJerkPivotGainSetting,
 		languagedb.UIMenuHapticsSnapCurve:               a.handleSnapCurveSetting,
 		languagedb.UIMenuHapticsSnapMax:                 a.handleSnapMaxSetting,
 		languagedb.UIMenuHapticsPulseMaxAmplitude:       a.handlePulseMaxAmplitudeSetting,
@@ -1091,19 +1092,34 @@ func (a *App) handleJerkCurveSetting(action string) string {
 	return strconv.Itoa(value)
 }
 
-func (a *App) handleJerkMaxSetting(action string) string {
+func (a *App) handleJerkPivotSetting(action string) string {
 	var value int
 
 	switch action {
 	case "increase":
-		value = a.config.IncreaseHapticsJerkMax()
+		value = a.config.IncreaseHapticsJerkPivot()
 	case "decrease":
-		value = a.config.DecreaseHapticsJerkMax()
+		value = a.config.DecreaseHapticsJerkPivot()
 	default:
-		value = a.config.GetHapticsJerkMax()
+		value = a.config.GetHapticsJerkPivot()
 	}
 
 	return strconv.Itoa(value)
+}
+
+func (a *App) handleJerkPivotGainSetting(action string) string {
+	var value float64
+
+	switch action {
+	case "increase":
+		value = a.config.IncreaseHapticsJerkPivotGain()
+	case "decrease":
+		value = a.config.DecreaseHapticsJerkPivotGain()
+	default:
+		value = a.config.GetHapticsJerkPivotGain()
+	}
+
+	return strconv.FormatFloat(value, 'f', 2, 64)
 }
 
 func (a *App) handleSnapCurveSetting(action string) string {

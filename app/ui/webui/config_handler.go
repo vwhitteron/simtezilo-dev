@@ -135,7 +135,8 @@ func (h *configHandler) handleGetConfig(response http.ResponseWriter, _ *http.Re
 			"dynamicTransmissionCurve":     h.config.GetHapticsTransmissionCurve(),
 			"dynamicTransmissionGforceMax": h.config.GetHapticsTransmissionGforceMax(),
 			"jerkCurve":                    h.config.GethapticsJerkCurve(),
-			"jerkMax":                      h.config.GetHapticsJerkMax(),
+			"jerkPivot":                    h.config.GetHapticsJerkPivot(),
+			"jerkPivotGain":                h.config.GetHapticsJerkPivotGain(),
 			"snapCurve":                    h.config.GetHapticsSnapCurve(),
 			"snapMax":                      h.config.GetHapticsSnapMax(),
 			"pulseMaxAmplitude":            h.config.GetHapticsPulseMaxAmplitude(),
@@ -755,9 +756,10 @@ func (h *configHandler) applyHapticsConfig(config map[string]any) []string {
 	errors = appendErr(errors, applyField(config, "jerkCurve", "invalid jerk curve value", func(f float64) {
 		h.config.SetHapticsJerkCurve(int(math.Round(f * 1000.0)))
 	}))
-	errors = appendErr(errors, applyField(config, "jerkMax", "invalid jerk max value", func(f float64) {
-		h.config.SetHapticsJerkMax(int(f))
+	errors = appendErr(errors, applyField(config, "jerkPivot", "invalid jerk pivot value", func(f float64) {
+		h.config.SetHapticsJerkPivot(int(f))
 	}))
+	errors = appendErr(errors, applyField(config, "jerkPivotGain", "invalid jerk pivot gain value", h.config.SetHapticsJerkPivotGain))
 	errors = appendErr(errors, applyField(config, "snapCurve", "invalid snap curve value", func(f float64) {
 		h.config.SetHapticsSnapCurve(int(math.Round(f * 1000.0)))
 	}))

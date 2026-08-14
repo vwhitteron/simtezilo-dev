@@ -2232,21 +2232,7 @@
                                             </label>
                                             <input type="number" id="haptics-jerkcurve"
                                                 class="form-control text-center no-spinner"
-                                                data-config="haptics.jerkCurve" min="5" max="955" step="1">
-                                        </div>
-                                        <div class="col-md-6 col-lg-3">
-                                            <label for="haptics-jerkmax" class="form-label">
-                                                <span data-i18n="runmode.settings.haptics.jerkmax">Jerk Max</span>
-                                                <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
-                                                    role="button" tabindex="0" aria-expanded="false"
-                                                    data-i18n-tooltip="runmode.settings.haptics.chassis.jerkmax.tooltip"></i>
-                                            </label>
-                                            <div class="input-with-suffix">
-                                                <input type="number" id="haptics-jerkmax"
-                                                    class="form-control text-center no-spinner"
-                                                    data-config="haptics.jerkMax" min="5" max="955" step="1">
-                                                <span class="input-suffix">x100</span>
-                                            </div>
+                                                data-config="haptics.jerkCurve" min="5" max="995" step="1">
                                         </div>
                                         <div class="col-md-6 col-lg-3">
                                             <label for="haptics-snapcurve" class="form-label">
@@ -2258,70 +2244,132 @@
                                             </label>
                                             <input type="number" id="haptics-snapcurve"
                                                 class="form-control text-center no-spinner"
-                                                data-config="haptics.snapCurve" min="5" max="955" step="1">
-                                        </div>
-                                        <div class="col-md-6 col-lg-3">
-                                            <label for="haptics-snapmax" class="form-label">
-                                                <span data-i18n="runmode.settings.haptics.chassis.snapmax">Snap
-                                                    Max</span>
-                                                <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
-                                                    role="button" tabindex="0" aria-expanded="false"
-                                                    data-i18n-tooltip="runmode.settings.haptics.chassis.snapmax.tooltip"></i>
-                                            </label>
-                                            <div class="input-with-suffix">
-                                                <input type="number" id="haptics-snapmax"
-                                                    class="form-control text-center no-spinner"
-                                                    data-config="haptics.snapMax" min="10" max="100" step="1">
-                                                <span class="input-suffix">x1000</span>
-                                            </div>
+                                                data-config="haptics.snapCurve" min="5" max="995" step="1">
                                         </div>
                                     </div>
 
-                                    <div class="row g-3">
-                                        <div class="col-md-6 col-lg-3">
-                                            <label for="haptics-pulseamplitude" class="form-label">
-                                                <span
-                                                    data-i18n="runmode.settings.haptics.chassis.pulsemaxamplitude">Pulse
-                                                    Max Amplitude</span>
-                                                <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
-                                                    role="button" tabindex="0" aria-expanded="false"
-                                                    data-i18n-tooltip="runmode.settings.haptics.chassis.pulsemaxamplitude.tooltip"></i>
-                                            </label>
-                                            <input type="number" id="haptics-pulseamplitude"
-                                                class="form-control text-center no-spinner decimal-input"
-                                                data-config="haptics.pulseMaxAmplitude" min="0.05" max="1.0"
-                                                step="0.05">
+                                    <!-- Advanced Settings Toggle -->
+                                    <div class="mt-4 devtools-only" style="display: none;">
+                                        <div class="d-flex align-items-center mb-3" data-bs-toggle="collapse"
+                                            data-bs-target="#advancedSettingsChassis" aria-expanded="false"
+                                            aria-controls="advancedSettingsChassis" style="cursor: pointer;">
+                                            <h5 class="mb-0 me-3">
+                                                <span class="icon" data-icon="tools"></span><span
+                                                    data-i18n="runmode.settings.haptics.general.advanced.title">Advanced
+                                                    Settings</span>
+                                            </h5>
+                                            <i class="fa-solid fa-chevron-right" id="advanced-settings-chevron-chassis"
+                                                style="transition: transform 0.3s ease;"></i>
                                         </div>
-                                        <div class="col-md-6 col-lg-3">
-                                            <label for="haptics-pulseminfreq" class="form-label">
-                                                <span data-i18n="runmode.settings.haptics.chassis.pulseminfreq">Pulse
-                                                    Min Frequency</span>
-                                                <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
-                                                    role="button" tabindex="0" aria-expanded="false"
-                                                    data-i18n-tooltip="runmode.settings.haptics.chassis.pulseminfreq.tooltip"></i>
-                                            </label>
-                                            <div class="input-with-suffix">
-                                                <input type="number" id="haptics-pulseminfreq"
-                                                    class="form-control text-center"
-                                                    data-config="haptics.pulseMinFrequencyHz" min="5" max="150"
-                                                    step="1">
-                                                <span class="input-suffix">Hz</span>
-                                            </div>
-                                        </div>
-                                        <div class="col-md-6 col-lg-3">
-                                            <label for="haptics-pulsemaxfreq" class="form-label">
-                                                <span data-i18n="runmode.settings.haptics.chassis.pulsemaxfreq">Pulse
-                                                    Max Frequency</span>
-                                                <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
-                                                    role="button" tabindex="0" aria-expanded="false"
-                                                    data-i18n-tooltip="runmode.settings.haptics.chassis.pulsemaxfreq.tooltip"></i>
-                                            </label>
-                                            <div class="input-with-suffix">
-                                                <input type="number" id="haptics-pulsemaxfreq"
-                                                    class="form-control text-center"
-                                                    data-config="haptics.pulseMaxFrequencyHz" min="20" max="160"
-                                                    step="1">
-                                                <span class="input-suffix">Hz</span>
+
+                                        <div id="advancedSettingsChassis" class="collapse">
+                                            <div class="card mb-3">
+                                                <div class="card-body">
+                                                    <div class="row g-3 mb-3">
+                                                        <div class="col-md-6 col-lg-3">
+                                                            <label for="haptics-jerkpivot" class="form-label">
+                                                                <span
+                                                                    data-i18n="runmode.settings.haptics.general.advanced.jerkpivot">Jerk
+                                                                    Pivot</span>
+                                                                <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
+                                                                    role="button" tabindex="0" aria-expanded="false"
+                                                                    data-i18n-tooltip="runmode.settings.haptics.general.advanced.jerkpivot.tooltip"></i>
+                                                            </label>
+                                                            <div class="input-with-suffix">
+                                                                <input type="number" id="haptics-jerkpivot"
+                                                                    class="form-control text-center no-spinner"
+                                                                    data-config="haptics.jerkPivot" min="1" max="20000"
+                                                                    step="1">
+                                                                <span class="input-suffix">m/s³</span>
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-md-6 col-lg-3">
+                                                            <label for="haptics-jerkpivotgain" class="form-label">
+                                                                <span
+                                                                    data-i18n="runmode.settings.haptics.general.advanced.jerkpivotgain">Jerk
+                                                                    Pivot Gain</span>
+                                                                <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
+                                                                    role="button" tabindex="0" aria-expanded="false"
+                                                                    data-i18n-tooltip="runmode.settings.haptics.general.advanced.jerkpivotgain.tooltip"></i>
+                                                            </label>
+                                                            <div class="input-with-suffix">
+                                                                <input type="number" id="haptics-jerkpivotgain"
+                                                                    class="form-control text-center gain-input"
+                                                                    data-config="haptics.jerkPivotGain" min="-12"
+                                                                    max="0" step="0.25">
+                                                                <span class="input-suffix">dB</span>
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-md-6 col-lg-3">
+                                                            <label for="haptics-snapmax" class="form-label">
+                                                                <span
+                                                                    data-i18n="runmode.settings.haptics.chassis.snapmax">Snap
+                                                                    Max</span>
+                                                                <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
+                                                                    role="button" tabindex="0" aria-expanded="false"
+                                                                    data-i18n-tooltip="runmode.settings.haptics.chassis.snapmax.tooltip"></i>
+                                                            </label>
+                                                            <div class="input-with-suffix">
+                                                                <input type="number" id="haptics-snapmax"
+                                                                    class="form-control text-center no-spinner"
+                                                                    data-config="haptics.snapMax" min="1" max="200"
+                                                                    step="1">
+                                                                <span class="input-suffix">x1000</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <div class="row g-3">
+                                                        <div class="col-md-6 col-lg-3">
+                                                            <label for="haptics-pulseamplitude" class="form-label">
+                                                                <span
+                                                                    data-i18n="runmode.settings.haptics.chassis.pulsemaxamplitude">Pulse
+                                                                    Max Amplitude</span>
+                                                                <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
+                                                                    role="button" tabindex="0" aria-expanded="false"
+                                                                    data-i18n-tooltip="runmode.settings.haptics.chassis.pulsemaxamplitude.tooltip"></i>
+                                                            </label>
+                                                            <input type="number" id="haptics-pulseamplitude"
+                                                                class="form-control text-center no-spinner decimal-input"
+                                                                data-config="haptics.pulseMaxAmplitude" min="0.05"
+                                                                max="1.0" step="0.05">
+                                                        </div>
+                                                        <div class="col-md-6 col-lg-3">
+                                                            <label for="haptics-pulseminfreq" class="form-label">
+                                                                <span
+                                                                    data-i18n="runmode.settings.haptics.chassis.pulseminfreq">Pulse
+                                                                    Min Frequency</span>
+                                                                <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
+                                                                    role="button" tabindex="0" aria-expanded="false"
+                                                                    data-i18n-tooltip="runmode.settings.haptics.chassis.pulseminfreq.tooltip"></i>
+                                                            </label>
+                                                            <div class="input-with-suffix">
+                                                                <input type="number" id="haptics-pulseminfreq"
+                                                                    class="form-control text-center"
+                                                                    data-config="haptics.pulseMinFrequencyHz" min="5"
+                                                                    max="150" step="1">
+                                                                <span class="input-suffix">Hz</span>
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-md-6 col-lg-3">
+                                                            <label for="haptics-pulsemaxfreq" class="form-label">
+                                                                <span
+                                                                    data-i18n="runmode.settings.haptics.chassis.pulsemaxfreq">Pulse
+                                                                    Max Frequency</span>
+                                                                <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
+                                                                    role="button" tabindex="0" aria-expanded="false"
+                                                                    data-i18n-tooltip="runmode.settings.haptics.chassis.pulsemaxfreq.tooltip"></i>
+                                                            </label>
+                                                            <div class="input-with-suffix">
+                                                                <input type="number" id="haptics-pulsemaxfreq"
+                                                                    class="form-control text-center"
+                                                                    data-config="haptics.pulseMaxFrequencyHz" min="20"
+                                                                    max="160" step="1">
+                                                                <span class="input-suffix">Hz</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -3682,10 +3730,12 @@
         // Handle chevron rotation for Advanced Settings collapse
         const advancedSettingsSynth = document.getElementById('advancedSettingsSynth');
         const advancedSettingsHaptics = document.getElementById('advancedSettingsHaptics');
+        const advancedSettingsChassis = document.getElementById('advancedSettingsChassis');
         const advancedSettingsSystem = document.getElementById('advancedSettingsSystem');
         const calibrationSettingsHaptics = document.getElementById('calibrationSettingsHaptics');
         const chevronSynth = document.getElementById('advanced-settings-chevron-synth');
         const chevronHaptics = document.getElementById('advanced-settings-chevron-haptics');
+        const chevronChassis = document.getElementById('advanced-settings-chevron-chassis');
         const chevronSystem = document.getElementById('advanced-settings-chevron-system');
         const chevronCalibration = document.getElementById('calibration-settings-chevron');
 
@@ -3704,6 +3754,15 @@
             });
             advancedSettingsHaptics.addEventListener('hide.bs.collapse', function () {
                 IconHelper.replaceIcon(chevronHaptics, 'chevron-right');
+            });
+        }
+
+        if (advancedSettingsChassis && chevronChassis) {
+            advancedSettingsChassis.addEventListener('show.bs.collapse', function () {
+                IconHelper.replaceIcon(chevronChassis, 'chevron-down');
+            });
+            advancedSettingsChassis.addEventListener('hide.bs.collapse', function () {
+                IconHelper.replaceIcon(chevronChassis, 'chevron-right');
             });
         }
 

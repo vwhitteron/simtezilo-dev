@@ -35,15 +35,17 @@ import (
 // GT packet rate the live app refreshes the chassis haptic at (one bump
 // regeneration per delivered packet).
 
-// Tuning overrides the four jerk/snap generator knobs the web UI exposes. A zero
-// value for any field leaves the shipped default in place. Amplitude is driven by
-// the jerk pair (curve + max), frequency by the snap pair; the config derives the
-// internal jerk/snap scale factors from these on set, exactly as the live app does.
+// Tuning overrides the jerk/snap generator knobs the web UI exposes. A zero
+// value for most fields leaves the shipped default in place. Amplitude is driven by
+// the jerk trio (curve, pivot, pivot gain), frequency by the snap pair; the config
+// derives the internal jerk/snap scale factors from these on set, exactly as the
+// live app does.
 type Tuning struct {
-	JerkCurve int // GetHapticsJerkCurve — amplitude response curvature
-	JerkMax   int // GetHapticsJerkMax — amplitude scale ceiling
-	SnapCurve int // GetHapticsSnapCurve — frequency response curvature
-	SnapMax   int // GetHapticsSnapMax — frequency scale ceiling
+	JerkCurve     int     // GetHapticsJerkCurve — amplitude response curvature
+	JerkPivot     int     // GetHapticsJerkPivot — reference jerk, in m/s^3
+	JerkPivotGain float64 // GetHapticsJerkPivotGain — level of the reference jerk, in dB below full scale
+	SnapCurve     int     // GetHapticsSnapCurve — frequency response curvature
+	SnapMax       int     // GetHapticsSnapMax — frequency scale ceiling
 }
 
 // DefaultTuning returns the shipped default jerk/snap knob values, read from a fresh
@@ -53,10 +55,11 @@ func DefaultTuning() Tuning {
 	cfg := config.New(config.Options{Logger: zerolog.New(io.Discard)})
 
 	return Tuning{
-		JerkCurve: int(cfg.GethapticsJerkCurve()),
-		JerkMax:   cfg.GetHapticsJerkMax(),
-		SnapCurve: int(cfg.GetHapticsSnapCurve()),
-		SnapMax:   cfg.GetHapticsSnapMax(),
+		JerkCurve:     int(cfg.GethapticsJerkCurve()),
+		JerkPivot:     cfg.GetHapticsJerkPivot(),
+		JerkPivotGain: cfg.GetHapticsJerkPivotGain(),
+		SnapCurve:     int(cfg.GetHapticsSnapCurve()),
+		SnapMax:       cfg.GetHapticsSnapMax(),
 	}
 }
 
@@ -224,8 +227,15 @@ func applyTuning(cfg *config.Config, t Tuning) {
 		cfg.SetHapticsJerkCurve(t.JerkCurve)
 	}
 
-	if t.JerkMax > 0 {
-		cfg.SetHapticsJerkMax(t.JerkMax)
+	if t.JerkPivot > 0 {
+		cfg.SetHapticsJerkPivot(t.JerkPivot)
+	}
+
+	// JerkPivotGain's valid range (-12..0 dB) includes negative values and zero,
+	// so the usual ">0 means supplied" sentinel can't distinguish "not supplied"
+	// from a legitimate 0 dB gain. Use a bounds check instead.
+	if t.JerkPivotGain >= -12 && t.JerkPivotGain <= 0 {
+		cfg.SetHapticsJerkPivotGain(t.JerkPivotGain)
 	}
 
 	if t.SnapCurve > 0 {
