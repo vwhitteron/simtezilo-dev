@@ -23,6 +23,24 @@ const CONFIG_FIELDS_SCALED_BY_1000 = new Set([
     'haptics.dynamicTransmissionJerkCurve',
 ]);
 
+// A checkbox marked data-config-invert shows the logical negation of the value it
+// is bound to, so a switch can be phrased as "enable the new behaviour" while the
+// config it writes stores the opposite ("use the legacy behaviour"). The negation
+// has to happen on both the read and the write path or the switch fights itself.
+function checkboxIsInverted(input) {
+    return input.dataset.configInvert !== undefined;
+}
+
+// checkboxToConfig maps a checkbox's DOM state to the value to store.
+function checkboxToConfig(input) {
+    return checkboxIsInverted(input) ? !input.checked : input.checked;
+}
+
+// configToCheckbox maps a stored value to the checkbox's DOM state.
+function configToCheckbox(input, value) {
+    return checkboxIsInverted(input) ? !value : Boolean(value);
+}
+
 function toConfigValue(configPath, value) {
     if (typeof value !== 'number' || !CONFIG_FIELDS_SCALED_BY_1000.has(configPath)) {
         return value;
@@ -626,7 +644,7 @@ class ConfigManager {
                 input.dataset.radioValue === 'false' ? false :
                     input.dataset.radioValue;
         } else if (input.type === 'checkbox') {
-            newValue = input.checked;
+            newValue = checkboxToConfig(input);
         } else if (input.type === 'number' || input.dataset.type === 'number') {
             newValue = parseFloat(input.value);
             if (isNaN(newValue)) {
@@ -853,7 +871,7 @@ class ConfigManager {
                             input.dataset.radioValue;
                     input.checked = (value === radioValue);
                 } else if (input.type === 'checkbox') {
-                    input.checked = value;
+                    input.checked = configToCheckbox(input, value);
                 } else if (input.classList.contains('gain-input')) {
                     // Format gain inputs with 2 decimal places and minus prefix
                     input.value = this.formatGainValue(value);
@@ -973,40 +991,26 @@ class ConfigManager {
     updateExperimentalVisibility() {
         const experimentalEnabled = this.getNestedValue(this.config, 'app.enableExperimentalFeatures') === true;
 
-        // Sidebar nav link for the Fan section
-        const fanNavLink = document.querySelector('.settings-nav-link[data-section="fan"]');
-        if (fanNavLink) {
-            const navItem = fanNavLink.closest('.settings-nav-item') || fanNavLink;
-            navItem.style.display = experimentalEnabled ? '' : 'none';
-        }
-
-        // Mobile dropdown option for the Fan section
-        const sectionSelect = document.getElementById('sectionSelect');
-        if (sectionSelect) {
-            const fanOption = sectionSelect.querySelector('option[value="fan"]');
-            if (fanOption) {
-                fanOption.style.display = experimentalEnabled ? '' : 'none';
-                fanOption.disabled = !experimentalEnabled;
-            }
-            // If the Fan section is currently selected but no longer available,
-            // fall back to the Application section.
-            if (!experimentalEnabled && sectionSelect.value === 'fan') {
-                sectionSelect.value = 'application';
-                sectionSelect.dispatchEvent(new Event('change'));
+        // The Fan / wind simulator lives in a Haptics tab. Its nav item carries the
+        // `experimental-only` class handled below; all that is left to do here is
+        // move off the tab if it is the active one when experiments get disabled,
+        // otherwise hiding the button would leave the Haptics section blank.
+        const fanTab = document.getElementById('haptics-fan-tab');
+        if (fanTab && !experimentalEnabled && fanTab.classList.contains('active')) {
+            const generalTab = document.getElementById('haptics-general-tab');
+            if (generalTab) {
+                generalTab.click();
             }
         }
 
-        // The Fan section content card itself
-        const fanSection = document.querySelector('[data-section-content="fan"]');
-        if (fanSection && !experimentalEnabled) {
-            // If the fan section is the active one, switch away from it first.
-            if (fanSection.classList.contains('active')) {
-                const appNavLink = document.querySelector('.settings-nav-link[data-section="application"]');
-                if (appNavLink) {
-                    appNavLink.click();
-                }
-            }
-        }
+        // Show/hide every experiment-only block as a group. Each is marked in the
+        // HTML with the `experimental-only` class and defaults to hidden, so they
+        // only appear once experimental features are enabled. Clearing the inline
+        // display (rather than forcing "block") restores each element's natural
+        // layout, mirroring how `devtools-only` is handled.
+        document.querySelectorAll('.experimental-only').forEach((el) => {
+            el.style.display = experimentalEnabled ? '' : 'none';
+        });
 
         // Store the experimental state globally for any other consumers
         window.experimentalEnabled = experimentalEnabled;
@@ -1146,7 +1150,7 @@ class ConfigManager {
                     value = input.value;
                 }
             } else if (input.type === 'checkbox') {
-                value = input.checked;
+                value = checkboxToConfig(input);
             } else if (input.type === 'number' || input.dataset.type === 'number') {
                 value = parseFloat(input.value);
                 if (isNaN(value)) {

@@ -1588,7 +1588,10 @@
                                             data-i18n="runmode.settings.haptics.transmission.title">Transmission</span>
                                     </button>
                                 </li>
-                                <li class="nav-item" role="presentation">
+                                <!-- The fan / wind simulator is experimental; the tab is hidden unless
+                                     experimental features are enabled. -->
+                                <li class="nav-item experimental-only" role="presentation"
+                                    style="display: none;">
                                     <button class="nav-link" id="haptics-fan-tab" data-bs-toggle="tab"
                                         data-bs-target="#haptics-fan-pane" type="button" role="tab"
                                         aria-controls="haptics-fan-pane" aria-selected="false">
