@@ -123,6 +123,8 @@ func (u *UserInterface) handleMenuNavigation(key HIDInputEvent) (title string, v
 		return u.handleLeftKey()
 	case HIDInputRight:
 		return u.handleRightKey()
+	case HIDInputEnter:
+		return u.handleEnterKey()
 	default:
 		u.log.Debug().Msgf("HID Input: Unknown (%d)", key)
 
@@ -234,6 +236,38 @@ func (u *UserInterface) handleDownKey() (title string, value string) {
 		value = u.settingAction(menuPage, actionGet)
 	} else {
 		value = ""
+	}
+
+	return string(menuPage), value
+}
+
+// handleEnterKey handles the enter key, which activates whichever of the enter or
+// exit actions the current page offers: branches are entered, the Return item and
+// live views exit to the parent menu. On a regular leaf it does nothing, so a
+// value can never be changed by accident.
+func (u *UserInterface) handleEnterKey() (title string, value string) {
+	// Reset inactivity timer on any menu interaction
+	u.state.lastMenuActivity = u.now()
+
+	node, action := u.menuSystem.NavigateEnter()
+	menuPage := node.name
+
+	if action != actionNone {
+		u.log.Debug().
+			Str("key", "enter").
+			Str("action", action).
+			Str("type", "navigate").
+			Str("value", string(menuPage)).
+			Msg("HID event")
+	}
+
+	// Reset setupMode countdown if we navigated to setupMode
+	if string(menuPage) == menuPageSetupMode {
+		_ = u.menuSystem.ResetSetupModeCountdown()
+	}
+
+	if u.menuSystem.IsCurrentNodeLeaf() && !isLiveLeaf(menuPage) {
+		value = u.settingAction(menuPage, actionGet)
 	}
 
 	return string(menuPage), value

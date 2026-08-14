@@ -7,6 +7,7 @@ import (
 	"image/draw"
 	"strings"
 	"sync"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/golang/freetype/truetype"
@@ -208,28 +209,47 @@ func (r *Screen) RenderSettingScreen(layout Layout, content SettingContent) erro
 	}
 }
 
+// drawHeader draws the header at the top of a setting, info, or sub-menu screen.
+// All three layouts share one style so the header keeps the same size and colour
+// as the user moves between the branch items and leaves of a single menu.
+func (r *Screen) drawHeader(canvas *image.RGBA, title string) {
+	if title == "" {
+		return
+	}
+
+	headerFace := r.face(r.i18n.VariableFont().Font, r.i18n.VariableFont().Scale*fontSmall)
+	drawText(canvas, headerFace, MaterialGrey600(), title, anchorTop)
+}
+
+// containsDigit reports whether a setting value reads as a measurement rather
+// than a word, which decides whether it is drawn in the condensed value font.
+func containsDigit(value string) bool {
+	return strings.ContainsFunc(value, unicode.IsDigit)
+}
+
 // renderLeafNode renders a leaf node: parent menu at top, value in centre
 // (larger font), setting name at bottom.
 func (r *Screen) renderLeafNode(content SettingContent) error {
 	canvas := r.newBlankCanvas()
 
 	// Parent menu at top.
-	headerFace := r.face(r.i18n.VariableFont().Font, r.i18n.VariableFont().Scale*fontSmall)
-	drawText(canvas, headerFace, MaterialGrey600(), content.Title, anchorTop)
+	r.drawHeader(canvas, content.Title)
 
-	// Setting value in centre (larger font; the Info page uses a smaller font).
-	// Action leaves such as "Return" carry no setting name and render less
-	// prominently than a real setting value.
-	fontScale := fontLarge
-
-	switch {
-	case strings.ToLower(content.Title) == "info":
-		fontScale = fontSmall
-	case content.Name == "":
-		fontScale = fontMedium
+	// Setting value in centre (the Info page uses a smaller font). Numeric values
+	// use the condensed value font, which is drawn at full scale. Word values such
+	// as "Live+Replay" instead use the variable font at its own scale, matching the
+	// branch item labels they sit alongside so they don't tower over them.
+	valueFont := r.i18n.ValueFont()
+	if !containsDigit(content.Value) {
+		valueFont = r.i18n.VariableFont()
 	}
 
-	valueFace := r.face(r.i18n.ValueFont().Font, r.i18n.ValueFont().Scale*fontScale)
+	fontScale := fontLarge
+	if strings.ToLower(content.Title) == "info" {
+		fontScale = fontSmall
+	}
+
+	valueFace := r.face(valueFont.Font, valueFont.Scale*fontScale)
 	drawText(canvas, valueFace, MaterialGrey300(), content.Value, anchorMiddle)
 
 	// Setting name at bottom (if provided).
@@ -259,10 +279,7 @@ func (r *Screen) renderLayoutMenuSub(content SettingContent) error {
 	canvas := r.newBlankCanvas()
 
 	// Parent name at top (if provided).
-	if content.Title != "" {
-		titleFace := r.face(r.i18n.VariableFont().Font, r.i18n.VariableFont().Scale*fontMedium)
-		drawText(canvas, titleFace, MaterialGrey300(), content.Title, anchorTop)
-	}
+	r.drawHeader(canvas, content.Title)
 
 	switch {
 	case content.Icon == MenuIconExit:
@@ -305,8 +322,7 @@ func (r *Screen) renderLayoutInfo(content SettingContent) error {
 	canvas := r.newBlankCanvas()
 
 	// Title.
-	titleFace := r.face(r.i18n.VariableFont().Font, r.i18n.VariableFont().Scale*fontMedium)
-	drawText(canvas, titleFace, MaterialGrey300(), content.Title, anchorTop)
+	r.drawHeader(canvas, content.Title)
 
 	// Value - split into multiple lines.
 	fontFace := r.face(r.i18n.ValueFont().Font, r.i18n.RegularFont().Scale*fontSmall)

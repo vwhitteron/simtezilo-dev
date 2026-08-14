@@ -41,27 +41,35 @@ func (m *MenuSystem) NavigateRight() (*MenuNode, string) {
 	return m.nextSibling(), "navigate"
 }
 
-// NavigateDown enters a branch node or toggles adjust mode on leaf nodes.
-func (m *MenuSystem) NavigateDown() (*MenuNode, string) {
-	// Special case: on "return" node, navigate up to parent (same as up button)
+// NavigateEnter activates whichever of the enter or exit actions the current page
+// offers: a branch is entered, the Return item exits to the parent menu, and a
+// live view is exited. Regular leaves have no enter/exit action, so their value is
+// left alone — those are adjusted with up/down.
+func (m *MenuSystem) NavigateEnter() (*MenuNode, string) {
 	if m.currentNode.name == languagedb.UIMenuReturn {
-		if m.currentNode.parent != nil && m.currentNode.parent.name != menuNodeRoot {
-			m.currentNode = m.currentNode.parent
-
-			return m.currentNode, actionExit
-		}
+		return m.exitToParent()
 	}
 
 	if m.currentNode.nodeType == NodeTypeBranch {
-		// Enter the branch (move to first visible child)
-		if len(m.currentNode.children) > 0 {
-			firstVisible := m.getFirstVisibleChild(m.currentNode)
-			if firstVisible != nil {
-				m.currentNode = firstVisible
+		return m.enterBranch()
+	}
 
-				return m.currentNode, actionEnter
-			}
-		}
+	if m.currentNode.kind == KindLive {
+		return m.exitToParent()
+	}
+
+	return m.currentNode, actionNone
+}
+
+// NavigateDown enters a branch node or toggles adjust mode on leaf nodes.
+func (m *MenuSystem) NavigateDown() (*MenuNode, string) {
+	// The Return item is an exit page: leaving is Up only, so Down does nothing.
+	if m.currentNode.name == languagedb.UIMenuReturn {
+		return m.currentNode, actionNone
+	}
+
+	if node, action := m.enterBranch(); action == actionEnter {
+		return node, action
 	}
 
 	// For leaves, decrease value. Live leaves return to their parent; info leaves
@@ -87,22 +95,8 @@ func (m *MenuSystem) NavigateDown() (*MenuNode, string) {
 func (m *MenuSystem) NavigateUp() (*MenuNode, string) {
 	// Special case: on "return" node, navigate up to parent
 	if m.currentNode.name == languagedb.UIMenuReturn {
-		if m.currentNode.parent != nil && m.currentNode.parent.name != menuNodeRoot {
-			m.currentNode = m.currentNode.parent
-
-			return m.currentNode, actionExit
-		}
-	}
-
-	// Special case: on Live branch, enter the live view (same as down)
-	if m.currentNode.name == languagedb.UIMenuLive && m.currentNode.nodeType == NodeTypeBranch {
-		if len(m.currentNode.children) > 0 {
-			firstVisible := m.getFirstVisibleChild(m.currentNode)
-			if firstVisible != nil {
-				m.currentNode = firstVisible
-
-				return m.currentNode, actionEnter
-			}
+		if node, action := m.exitToParent(); action == actionExit {
+			return node, action
 		}
 	}
 
@@ -223,6 +217,36 @@ func (m *MenuSystem) SetExperimentalEnabledCallback(callback func() bool) {
 // Bluetooth menu branch should be shown.
 func (m *MenuSystem) SetBluetoothAvailableCallback(callback func() bool) {
 	m.bluetoothAvailable = callback
+}
+
+// enterBranch moves into the current branch's first visible child. It reports
+// actionNone, leaving the current node untouched, when the node is not a branch
+// or has nothing visible to enter.
+func (m *MenuSystem) enterBranch() (*MenuNode, string) {
+	if m.currentNode.nodeType != NodeTypeBranch {
+		return m.currentNode, actionNone
+	}
+
+	firstVisible := m.getFirstVisibleChild(m.currentNode)
+	if firstVisible == nil {
+		return m.currentNode, actionNone
+	}
+
+	m.currentNode = firstVisible
+
+	return m.currentNode, actionEnter
+}
+
+// exitToParent moves out to the parent menu. It reports actionNone, leaving the
+// current node untouched, when there is no parent menu to exit to.
+func (m *MenuSystem) exitToParent() (*MenuNode, string) {
+	if m.currentNode.parent == nil || m.currentNode.parent.name == menuNodeRoot {
+		return m.currentNode, actionNone
+	}
+
+	m.currentNode = m.currentNode.parent
+
+	return m.currentNode, actionExit
 }
 
 // previousSibling navigates to the previous visible sibling with wrapping.
