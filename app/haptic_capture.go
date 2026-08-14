@@ -106,6 +106,10 @@ func CaptureHaptics(opts HapticCaptureOptions) (*HapticCapture, error) {
 		return nil, err
 	}
 
+	// The mixer's background goroutines keep it and its channel buffers reachable
+	// until closed, so a repeated caller would accumulate a dead synth per capture.
+	defer func() { _ = app.synth.Close() }()
+
 	ctx := context.Background()
 	next, stop := iter.Pull2(client.Scan(ctx))
 
@@ -448,6 +452,10 @@ func CaptureHapticsThroughSink(opts SinkCaptureOptions) (*SinkCapture, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// See CaptureHaptics: the synth must be closed or its mixer goroutines keep the
+	// whole mixer alive past the capture.
+	defer func() { _ = app.synth.Close() }()
 
 	ctx := context.Background()
 	next, stop := iter.Pull2(client.Scan(ctx))
