@@ -304,6 +304,39 @@ is a tmpfs the marker clears at the next boot.
 
 No second service is needed, and nothing extra has to be enabled.
 
+### Confirming the tuning took effect
+
+Two states look alike from the outside and are not: fully provisioned, and
+isolated-but-not-excluded. In the second the core is reserved and then used by
+every thread anyway, which is worse than no isolation at all.
+
+Both the script and the application now report which one you are in.
+
+`rt-tune.sh` prints the CPUs the service may run on, and warns when an isolated
+core is not excluded:
+
+```
+Isolated CPUs: 3
+Service CPU affinity: 0-2
+```
+
+A `WARNING: CPU 3 is isolated, but this service may still run on it` line means
+step 2 above was skipped or has not taken effect.
+
+The application reports the producer's own pin at startup:
+
+```
+realtime scheduling  priority=10 pinned_cpu=3 result=success
+```
+
+Without `pinned_cpu`, a second line names the reason. That is the normal,
+harmless state on a machine that was never provisioned:
+
+```
+cpu pin not applied, producer runs on every core; see doc/realtime_tuning.md
+    reason="requested cpu is not isolated by the kernel"
+```
+
 ### How the pin works
 
 `CPUAffinity=` sets only the initial mask, and a thread may widen it later. The

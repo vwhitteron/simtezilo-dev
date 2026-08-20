@@ -53,16 +53,46 @@ fi
 
 echo "Isolated CPUs: ${isolated}"
 
+# expandCPUList prints every CPU in a kernel CPU list, one per line. The kernel
+# writes ranges such as "0-2,5", so a plain string match is not enough: matching
+# ",2," against ",2-3," fails and would treat an isolated CPU as shared.
+expandCPUList() {
+    for field in $(echo "$1" | tr ',' ' '); do
+        case "${field}" in
+            *-*)
+                low=${field%-*}
+                high=${field#*-}
+
+                while [ "${low}" -le "${high}" ]; do
+                    echo "${low}"
+                    low=$((low + 1))
+                done
+                ;;
+            *) echo "${field}" ;;
+        esac
+    done
+}
+
+# isCPUInList reports whether cpu appears in a kernel CPU list.
+isCPUInList() {
+    for entry in $(expandCPUList "$2"); do
+        if [ "${entry}" = "$1" ]; then
+            return 0
+        fi
+    done
+
+    return 1
+}
+
 # Build the complement: every CPU that interrupts may still use.
 cpuCount=$(nproc)
 shared=''
 cpu=0
 
 while [ "${cpu}" -lt "${cpuCount}" ]; do
-    case ",${isolated}," in
-        *",${cpu},"*) ;;
-        *) shared="${shared}${shared:+,}${cpu}" ;;
-    esac
+    if ! isCPUInList "${cpu}" "${isolated}"; then
+        shared="${shared}${shared:+,}${cpu}"
+    fi
 
     cpu=$((cpu + 1))
 done
@@ -94,6 +124,32 @@ moveInterrupts() {
     echo "Interrupt affinity: ${moved} moved, ${refused} refused (hardware pinned)"
 }
 
+# showServiceAffinity reports the CPUs this service may run on, and warns when a
+# core is isolated but not excluded. That half-provisioned state is the one that
+# looks tuned and is not: the core is reserved, and every thread still uses it.
+#
+# systemd applies CPUAffinity to every process it starts for the unit, this
+# script included, so the script's own allowed list is an accurate test.
+showServiceAffinity() {
+    allowed=$(awk '/^Cpus_allowed_list:/ { print $2 }' /proc/self/status 2>/dev/null || true)
+
+    if [ -z "${allowed}" ]; then
+        return 0
+    fi
+
+    echo "Service CPU affinity: ${allowed}"
+
+    for iso in $(expandCPUList "${isolated}"); do
+        if isCPUInList "${iso}" "${allowed}"; then
+            echo "WARNING: CPU ${iso} is isolated, but this service may still run on it."
+            echo "         The reserved core will be used by every thread anyway."
+            echo "         Set CPUAffinity to exclude it. See doc/realtime_tuning.md."
+
+            return 0
+        fi
+    done
+}
+
 # Report what is left so the effect is verifiable without a second command.
 showRemaining() {
     remaining=0
@@ -104,13 +160,16 @@ showRemaining() {
         mask=$(cat "${irqPath}" 2>/dev/null) || continue
         irq=$(echo "${irqPath}" | cut -d/ -f4)
 
-        for iso in $(echo "${isolated}" | tr ',' ' '); do
-            case ",${mask}," in
-                *",${iso},"*)
-                    echo "  irq ${irq}: ${mask}"
-                    remaining=$((remaining + 1))
-                    ;;
-            esac
+        # The mask is itself a range such as "0-3", so compare CPU by CPU. Stop
+        # at the first match, or an irq allowed on two isolated CPUs is counted
+        # twice and printed twice.
+        for iso in $(expandCPUList "${isolated}"); do
+            if isCPUInList "${iso}" "${mask}"; then
+                echo "  irq ${irq}: ${mask}"
+                remaining=$((remaining + 1))
+
+                break
+            fi
         done
     done
 
@@ -124,5 +183,8 @@ moveInterrupts
 echo ''
 echo 'Interrupts still allowed on an isolated CPU:'
 showRemaining
+
+echo ''
+showServiceAffinity
 
 touch "${markerPath}"

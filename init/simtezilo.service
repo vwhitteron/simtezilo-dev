@@ -27,5 +27,22 @@ RestartSec=5
 LimitRTPRIO=95
 LimitMEMLOCK=infinity
 
+# Keep the general threads off the core reserved for the haptic audio producer.
+# The producer widens its own affinity back to that core once it holds the
+# realtime policy, so only this unit's other threads are confined.
+#
+# Set the kernel boot parameters first, and reboot:
+#   isolcpus=3 nohz_full=3 rcu_nocbs=3
+# Without them the pin is refused and this line only costs a core: the producer
+# is confined with everything else and the reserved core is never used.
+#
+# The core number must match hapticRealtimeCPU in app/app_constants.go.
+#
+# On a deployed device prefer a drop-in, which survives an update of this file:
+#   /etc/systemd/system/simtezilo.service.d/10-realtime.conf
+#
+# See doc/realtime_tuning.md.
+#CPUAffinity=0,1,2
+
 [Install]
 WantedBy=multi-user.target
