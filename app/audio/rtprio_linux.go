@@ -3,6 +3,7 @@
 package audio
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -16,17 +17,36 @@ import (
 // the producer the use of every other core, so the pin is gated on this file.
 const isolatedCPUListPath = "/sys/devices/system/cpu/isolated"
 
+// errPriorityRange reports a priority the kernel would reject. It is a caller
+// mistake rather than a missing privilege, so it is reported, never quiet.
+var errPriorityRange = errors.New("realtime priority out of range")
+
+// The kernel accepts these SCHED_FIFO priorities. The bounds are checked before
+// the value reaches the unsigned attribute field.
+const (
+	minRealtimePriority = 1
+	maxRealtimePriority = 99
+)
+
 // applyRealtime puts the calling OS thread on the SCHED_FIFO policy at the given
 // priority. The caller must hold the thread with runtime.LockOSThread first,
 // because the policy belongs to the thread and not to the goroutine.
 func applyRealtime(priority int) error {
+	// Reject an out-of-range priority here rather than letting it wrap into the
+	// unsigned field, where a negative value would become a very high priority.
+	if priority < minRealtimePriority || priority > maxRealtimePriority {
+		return fmt.Errorf("priority %d outside the SCHED_FIFO range %d..%d: %w",
+			priority, minRealtimePriority, maxRealtimePriority, errPriorityRange)
+	}
+
 	attr := unix.SchedAttr{
 		Policy:   unix.SCHED_FIFO,
 		Priority: uint32(priority),
 	}
 
 	// A pid of 0 targets the calling thread.
-	if err := unix.SchedSetAttr(0, &attr, 0); err != nil {
+	err := unix.SchedSetAttr(0, &attr, 0)
+	if err != nil {
 		return fmt.Errorf("sched_setattr SCHED_FIFO priority %d: %w", priority, err)
 	}
 
@@ -50,7 +70,8 @@ func pinThread(cpu int) error {
 	set.Zero()
 	set.Set(cpu)
 
-	if err := unix.SchedSetaffinity(0, &set); err != nil {
+	err = unix.SchedSetaffinity(0, &set)
+	if err != nil {
 		return fmt.Errorf("sched_setaffinity cpu %d: %w", cpu, err)
 	}
 
