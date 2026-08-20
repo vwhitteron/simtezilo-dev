@@ -226,7 +226,7 @@ func (a *App) playGearShiftHaptic() {
 
 	a.armGearShiftMeasurement(surgeJerk, down)
 
-	a.log.Info().
+	a.log.Debug().
 		Int("sequence_id", int(a.state.current.sequenceNumber)).
 		Float64("magnitude", magnitude).
 		Float64("gforce", a.kinematics.GetSurgeGforce()).

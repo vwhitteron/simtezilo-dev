@@ -135,7 +135,7 @@ func (a *App) detectRecordingTrigger() {
 
 	a.state.recorder.addTriggerEvent(currentSequenceID)
 
-	a.log.Info().
+	a.log.Debug().
 		Int("toggle_count", a.state.recorder.getTriggerCount()).
 		Uint32("sequence_id", currentSequenceID).
 		Bool("high_beam_active", triggerState).
