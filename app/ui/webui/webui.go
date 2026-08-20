@@ -39,6 +39,7 @@ type Options struct {
 	GameStateFeed      chan string
 	LogStatsFeed       chan map[string]any
 	ScreenFrameFeed    chan *image.RGBA
+	OnScreenViewers    func(active bool)
 	SendHIDInput       func(key string) bool
 	Config             *appconfig.Config
 	Calibrator         *calibrator.ToneGenerator
@@ -89,6 +90,7 @@ func New(opts Options) *WebUI {
 		gameStateFeed:   opts.GameStateFeed,
 		logStatsFeed:    opts.LogStatsFeed,
 		screenFrameFeed: opts.ScreenFrameFeed,
+		onScreenViewers: opts.OnScreenViewers,
 	})
 
 	// Construct the system handler first: it owns the platform helper, so the
@@ -199,6 +201,11 @@ func (w *WebUI) GetHTTPHandler() http.Handler {
 // HasActiveClients returns true if there are active WebSocket clients connected.
 func (w *WebUI) HasActiveClients() bool {
 	return w.broadcaster.HasActiveClients()
+}
+
+// HasSubscribers reports whether any active client subscribes to msgType.
+func (w *WebUI) HasSubscribers(msgType string) bool {
+	return w.broadcaster.HasSubscribers(msgType)
 }
 
 // Close gracefully shuts down the WebUI.

@@ -10,6 +10,7 @@ import (
 	"maps"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -194,6 +195,7 @@ type broadcasterOptions struct {
 	gameStateFeed   chan string
 	logStatsFeed    chan map[string]any
 	screenFrameFeed chan *image.RGBA
+	onScreenViewers func(bool)
 }
 
 // Broadcaster owns all WebSocket client state and drives the message fan-out loop.
@@ -233,6 +235,8 @@ type Broadcaster struct {
 	unifiedUnsubChan   chan *wsClient
 	unifiedSessions    map[string]*wsClient // session ID → client
 	unifiedSessionsMux sync.Mutex
+	screenViewers      atomic.Bool // true while any client subscribes to "screen"
+	onScreenViewers    func(bool)  // notified when screenViewers changes; may be nil
 
 	// Lifecycle
 	done      chan struct{}
@@ -261,6 +265,7 @@ func newBroadcaster(opts broadcasterOptions) *Broadcaster {
 		unifiedClientsChan: make(chan *wsClient, 10),
 		unifiedUnsubChan:   make(chan *wsClient, 10),
 		unifiedSessions:    make(map[string]*wsClient),
+		onScreenViewers:    opts.onScreenViewers,
 		done:               make(chan struct{}),
 	}
 }
@@ -272,6 +277,28 @@ func (b *Broadcaster) HasActiveClients() bool {
 	b.unifiedClientsMux.RUnlock()
 
 	return hasUnified || b.webSocketClients > 0
+}
+
+// HasSubscribers reports whether any live client subscribes to msgType.
+func (b *Broadcaster) HasSubscribers(msgType string) bool {
+	b.unifiedClientsMux.RLock()
+	defer b.unifiedClientsMux.RUnlock()
+
+	for _, client := range b.unifiedClients {
+		if client.IsClosed() {
+			continue
+		}
+
+		client.subMu.RLock()
+		subscribed := client.subscriptions[msgType]
+		client.subMu.RUnlock()
+
+		if subscribed {
+			return true
+		}
+	}
+
+	return false
 }
 
 // Close signals the broadcaster to shut down and closes all clients.
@@ -293,6 +320,19 @@ func (b *Broadcaster) Close() {
 	})
 }
 
+// refreshScreenViewers recomputes the screen viewer state and notifies on a change.
+func (b *Broadcaster) refreshScreenViewers() {
+	active := b.HasSubscribers("screen")
+
+	if b.screenViewers.Swap(active) == active {
+		return
+	}
+
+	if b.onScreenViewers != nil {
+		b.onScreenViewers(active)
+	}
+}
+
 // broadcast sends a message to all connected clients, pruning closed ones.
 func (b *Broadcaster) broadcast(data []byte, msgType string) {
 	b.unifiedClientsMux.Lock()
@@ -305,11 +345,11 @@ func (b *Broadcaster) broadcast(data []byte, msgType string) {
 			continue
 		}
 
-		if client.Send(msgType, data, false) {
-			active = append(active, client)
-		} else {
-			b.log.Debug().Str("msgType", msgType).Msg("client unavailable, removing")
+		if !client.Send(msgType, data, false) {
+			b.log.Debug().Str("msgType", msgType).Msg("dropping message for slow client")
 		}
+
+		active = append(active, client)
 	}
 
 	b.unifiedClients = active
@@ -530,6 +570,7 @@ func (b *Broadcaster) handleSubscribeMessage(message []byte, client *wsClient) {
 	}
 
 	client.UpdateSubscriptions(subMsg.Subscriptions)
+	b.refreshScreenViewers()
 
 	b.log.Debug().
 		Interface("subscriptions", subMsg.Subscriptions).
@@ -598,9 +639,13 @@ func (b *Broadcaster) run() { //nolint:cyclop // simple enough to be clear
 func (b *Broadcaster) runAddClient(client *wsClient) {
 	b.unifiedClientsMux.Lock()
 	b.unifiedClients = append(b.unifiedClients, client)
+	// Read the count under the lock; broadcast() writes the slice concurrently.
+	count := len(b.unifiedClients)
 	b.unifiedClientsMux.Unlock()
 
-	b.log.Debug().Int("unified_clients", len(b.unifiedClients)).Msg("unified client subscribed")
+	b.refreshScreenViewers()
+
+	b.log.Debug().Int("unified_clients", count).Msg("unified client subscribed")
 }
 
 // runRemoveClient removes a client from the unified client list.
@@ -615,9 +660,14 @@ func (b *Broadcaster) runRemoveClient(client *wsClient) {
 		}
 	}
 
+	// Read the count under the lock; broadcast() writes the slice concurrently.
+	count := len(b.unifiedClients)
+
 	b.unifiedClientsMux.Unlock()
 
-	b.log.Debug().Int("unified_clients", len(b.unifiedClients)).Msg("unified client unsubscribed")
+	b.refreshScreenViewers()
+
+	b.log.Debug().Int("unified_clients", count).Msg("unified client unsubscribed")
 }
 
 // runAccumulateTelemetry deduplicates and accumulates a telemetry frame into the batch buffer.

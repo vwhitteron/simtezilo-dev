@@ -126,10 +126,13 @@ type App struct {
 	// captureScreenFrame is called from both the display tick and the HID event
 	// goroutine, so this must be updated atomically rather than as a plain field.
 	lastScreenFrameHash atomic.Uint32
-	hidEvents           chan ui.HIDInputEvent // HID input events (hardware buttons / web UI hardware view)
-	webUI               *webui.WebUI          // Web UI server and handler
-	webSequenceID       uint32                // Last sequence ID sent to the web UI
-	ipAddress           string                // Local IP address for web UI access
+	// screenMirrorActive is true while a web UI client watches the hardware screen.
+	// The producer is gated on it so an unwatched panel costs nothing.
+	screenMirrorActive atomic.Bool
+	hidEvents          chan ui.HIDInputEvent // HID input events (hardware buttons / web UI hardware view)
+	webUI              *webui.WebUI          // Web UI server and handler
+	webSequenceID      uint32                // Last sequence ID sent to the web UI
+	ipAddress          string                // Local IP address for web UI access
 
 	lapEvents      []lapEvent    // History of lap events
 	lapEventsMutex sync.Mutex    // Mutex for lap events slice
@@ -428,6 +431,7 @@ func (a *App) runAppMode() RunResult {
 			GameStateFeed:      a.gameStateFeed,
 			LogStatsFeed:       a.logStatsFeed,
 			ScreenFrameFeed:    a.screenFrameFeed,
+			OnScreenViewers:    a.setScreenMirrorActive,
 			SendHIDInput:       a.sendHIDInput,
 			Config:             a.config,
 			Calibrator:         a.calibrator,

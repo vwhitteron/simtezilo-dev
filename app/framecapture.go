@@ -36,6 +36,24 @@ func (a *App) wrapDisplayFrameTap(d hardware.Display) hardware.Display {
 	return &frameTapDisplay{Display: d, sink: a.captureScreenFrame}
 }
 
+// setScreenMirrorActive records whether a web UI client watches the hardware
+// screen. On activation it forces a redraw, because the render loop only writes
+// on change and no frame is captured while nobody watches.
+func (a *App) setScreenMirrorActive(active bool) {
+	a.screenMirrorActive.Store(active)
+
+	if !active {
+		return
+	}
+
+	// Clear the dedup hash so the next frame is always forwarded.
+	a.lastScreenFrameHash.Store(0)
+
+	if a.ui != nil {
+		a.ui.ForceRedraw()
+	}
+}
+
 // captureScreenFrame mirrors a rendered display frame to the web UI. It is called
 // from both the display tick and the HID event goroutine, so it must be safe to
 // call concurrently and must never lose the most recent frame: the menu screens
@@ -47,8 +65,13 @@ func (a *App) wrapDisplayFrameTap(d hardware.Display) hardware.Display {
 // hash, before the (comparatively expensive) clone and channel send, so a static
 // screen doesn't repeatedly allocate and enqueue copies of the same canvas. The
 // web UI broadcaster performs its own hash check as a second guard, e.g. for the
-// replay-to-new-client path.
+// replay-to-new-client path. Capture is gated on an active viewer, so an
+// unwatched panel costs nothing.
 func (a *App) captureScreenFrame(canvas *image.RGBA) {
+	if !a.screenMirrorActive.Load() {
+		return
+	}
+
 	if a.screenFrameFeed == nil {
 		return
 	}

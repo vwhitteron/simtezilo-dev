@@ -767,6 +767,102 @@ func (suite *IntegrationTestSuite) TestHasActiveClients_ReturnsTrueWithUnifiedCl
 	suite.True(webUI.HasActiveClients())
 }
 
+func (suite *IntegrationTestSuite) TestHasSubscribers_ScreenFalseByDefault() {
+	// Arrange
+	webUI := createTestWebUI()
+
+	time.Sleep(10 * time.Millisecond)
+
+	logger := zerolog.Nop()
+
+	client := newWSClient(nil, logger)
+	webUI.broadcaster.unifiedClientsChan <- client
+
+	time.Sleep(50 * time.Millisecond)
+
+	// Assert
+	suite.False(webUI.HasSubscribers("screen"))
+}
+
+func (suite *IntegrationTestSuite) TestHasSubscribers_ScreenTrueAfterSubscribing() {
+	// Arrange
+	webUI := createTestWebUI()
+
+	time.Sleep(10 * time.Millisecond)
+
+	logger := zerolog.Nop()
+
+	client := newWSClient(nil, logger)
+	webUI.broadcaster.unifiedClientsChan <- client
+
+	time.Sleep(50 * time.Millisecond)
+
+	client.UpdateSubscriptions(map[string]bool{"screen": true})
+
+	// Assert
+	suite.True(webUI.HasSubscribers("screen"))
+}
+
+func (suite *IntegrationTestSuite) TestHasSubscribers_TelemetryFalseByDefault() {
+	// Arrange
+	webUI := createTestWebUI()
+
+	time.Sleep(10 * time.Millisecond)
+
+	logger := zerolog.Nop()
+
+	client := newWSClient(nil, logger)
+	webUI.broadcaster.unifiedClientsChan <- client
+
+	time.Sleep(50 * time.Millisecond)
+
+	// Assert
+	suite.False(webUI.HasSubscribers("telemetry"))
+}
+
+func (suite *IntegrationTestSuite) TestHasSubscribers_TelemetryTrueAfterSubscribing() {
+	// Arrange
+	webUI := createTestWebUI()
+
+	time.Sleep(10 * time.Millisecond)
+
+	logger := zerolog.Nop()
+
+	client := newWSClient(nil, logger)
+	webUI.broadcaster.unifiedClientsChan <- client
+
+	time.Sleep(50 * time.Millisecond)
+
+	client.UpdateSubscriptions(map[string]bool{"telemetry": true})
+
+	// Assert
+	suite.True(webUI.HasSubscribers("telemetry"))
+}
+
+func (suite *IntegrationTestSuite) TestBroadcast_KeepsClientWithFullSendBuffer() {
+	// Arrange
+	webUI := createTestWebUI()
+
+	time.Sleep(10 * time.Millisecond)
+
+	logger := zerolog.Nop()
+
+	client := newWSClient(nil, logger)
+	webUI.broadcaster.unifiedClientsChan <- client
+
+	time.Sleep(50 * time.Millisecond)
+
+	// Fill the client's send buffer to capacity.
+	for range cap(client.send) {
+		client.send <- wsMessage{msgType: "vehicle", data: []byte("{}")}
+	}
+
+	webUI.broadcaster.broadcast([]byte("{}"), "vehicle")
+
+	// Assert
+	suite.True(webUI.HasActiveClients())
+}
+
 // =============================================================================
 // WebSocket Connection Tests (using httptest)
 // =============================================================================

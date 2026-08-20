@@ -23,7 +23,8 @@ func (a *App) sendTelemetryChartData() {
 		return
 	}
 
-	if !a.webUI.HasActiveClients() {
+	// Only build the frame when a chart client actually subscribes.
+	if !a.webUI.HasSubscribers("telemetry") {
 		return
 	}
 
