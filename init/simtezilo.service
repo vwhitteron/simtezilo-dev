@@ -5,10 +5,27 @@ Wants=local-fs.target network-online.target
 
 [Service]
 ExecStartPre=/opt/simtezilo/init/recover.sh
+# Move interrupts off the isolated audio core. Interrupt affinity resets at
+# every boot, so it cannot be done once at provisioning time.
+#
+# The "-" prefix is load bearing. This unit has Restart=always, so without it a
+# fault in the tuning script would block startup and turn an optional
+# optimisation into a five-second restart loop. With it, systemd records the
+# failure and starts the application anyway. The script is also a no-op on a
+# machine that was never provisioned with isolcpus.
+ExecStartPre=-/opt/simtezilo/init/rt-tune.sh
 ExecStart=/opt/simtezilo/bin/simtezilo -d /opt/simtezilo/data/crashlogs
 Type=simple
 Restart=always
 RestartSec=5
+
+# Permit SCHED_FIFO. Two threads need it: the haptic audio producer, which
+# requests it for itself, and the PortAudio ALSA callback thread, which requests
+# it inside the C library and falls back silently when rtprio is capped.
+# Without this line both run at normal priority and scheduler jitter reaches
+# the output. See doc/realtime_tuning.md.
+LimitRTPRIO=95
+LimitMEMLOCK=infinity
 
 [Install]
 WantedBy=multi-user.target

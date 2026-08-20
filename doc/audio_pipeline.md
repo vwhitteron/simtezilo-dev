@@ -149,6 +149,11 @@ Sizing (`hapticBufferFrames`, `app.go`): `period = rate·latencyMs/1000`,
 `block ≈ 10 ms`. **Lower `latencyMs` to reduce latency** (shrinks ring + device
 together); validate `asyncUnderruns == 0` under load.
 
+The ring headroom above `target` exists to absorb scheduler jitter. The producer
+thread requests a realtime scheduling policy to keep that headroom from being
+consumed — see [Realtime tuning](realtime_tuning.md) for the reasoning, the
+`asyncMinFill` margin metric, and the Raspberry Pi provisioning steps.
+
 ---
 
 ### 4. Sub-visual — AsyncSource ring (latency-critical)

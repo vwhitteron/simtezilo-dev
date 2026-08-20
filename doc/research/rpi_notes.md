@@ -75,6 +75,19 @@ apt-get update && apt-get install libopus0
 
    `sudo systemctl enable /opt/simtezilo/init/simtezilo.service`
 
+   The unit grants `LimitRTPRIO=95` so the haptic audio producer can take a
+   realtime scheduling policy. Nothing further is needed for that to work.
+
+2. Optional: reserve a CPU core for the audio producer
+
+   Do this only when the audio health chart shows underruns under load. See
+   [Realtime tuning](../realtime_tuning.md) for the measurement procedure first.
+
+   See [Realtime tuning](../realtime_tuning.md) for the three settings to apply
+   and the rollback steps. Once the core is isolated, the service applies the
+   per-boot interrupt affinity itself through an `ExecStartPre`, so there is no
+   second unit to enable.
+
 
 ## GPIO notes
 

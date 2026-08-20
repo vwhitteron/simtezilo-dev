@@ -185,6 +185,21 @@ Alternatively, use Docker Compose:
 docker-compose up -d pyroscope
 ```
 
+Block and mutex profiling are enabled, so contention on the audio ring shows up
+in the Pyroscope UI. See [Realtime tuning](realtime_tuning.md) for how to use
+those profiles when investigating haptic dropouts.
+
+---
+
+## Realtime audio scheduling
+
+The haptic audio producer thread requests a `SCHED_FIFO` policy on Linux. On a
+developer machine without the privilege it logs one warning and runs at normal
+priority, which is the expected path — no setup is required to build or run.
+
+See [Realtime tuning](realtime_tuning.md) for the measurement procedure, the
+systemd limits, and the Raspberry Pi core-isolation steps.
+
 ---
 
 ## Version Management
