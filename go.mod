@@ -12,17 +12,17 @@ require (
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0
 	github.com/gordonklaus/portaudio v0.0.0-20260203164431-765aa7dfa631
 	github.com/gorilla/websocket v1.5.3
-	github.com/grafana/pyroscope-go v1.4.1
+	github.com/grafana/pyroscope-go v1.4.2
 	github.com/hajimehoshi/go-mp3 v0.3.4
 	github.com/kennygrant/sanitize v1.2.4
 	github.com/rs/zerolog v1.35.1
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
 	github.com/spf13/viper v1.21.0
-	github.com/stretchr/testify v1.11.1
-	github.com/zetetos/gt-telemetry/v2 v2.0.4
-	golang.org/x/crypto v0.54.0
-	golang.org/x/image v0.44.0
+	github.com/stretchr/testify v1.12.1
+	github.com/zetetos/gt-telemetry/v2 v2.0.5
+	golang.org/x/crypto v0.55.0
+	golang.org/x/image v0.45.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	layeh.com/gopus v0.0.0-20210501142526-1ee02d434e32
 	periph.io/x/conn/v3 v3.7.3
@@ -39,7 +39,7 @@ require (
 	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
 	github.com/grafana/pyroscope-go/godeltaprof v0.1.11 // indirect
 	github.com/kaitai-io/kaitai_struct_go_runtime v0.11.0 // indirect
-	github.com/klauspost/compress v1.18.6 // indirect
+	github.com/klauspost/compress v1.18.7 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
@@ -57,12 +57,12 @@ require (
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/tinygo-org/cbgo v0.0.4 // indirect
 	github.com/tinygo-org/pio v0.3.0 // indirect
-	go.yaml.in/yaml/v3 v3.0.4 // indirect
+	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/exp v0.0.0-20241204233417-43b7b7cde48d // indirect
-	golang.org/x/net v0.56.0 // indirect
+	golang.org/x/net v0.57.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
-	golang.org/x/text v0.40.0 // indirect
+	golang.org/x/text v0.41.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
