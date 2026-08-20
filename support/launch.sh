@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 # Simtezilo launch script
 # TODO: delete when functionality internalised within app

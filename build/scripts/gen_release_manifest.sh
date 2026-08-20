@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 # gen_release_manifest.sh - Generate release manifest JSON for the update system
 #
 # Usage:
@@ -23,11 +23,11 @@
 # This script expects distribution archives to exist at:
 #   ${DIST_DIR}/<channel>/v<version>/simtezilo-v<version>-<platform>.tar.gz|.zip
 
-set -euo pipefail
+set -eu
 
 # Load version utilities
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "${SCRIPT_DIR}/lib/version.sh"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "${SCRIPT_DIR}/lib/version.sh"
 
 BASE_URL="${BASE_URL:-https://static.simtezilo.com/releases}"
 DIST_DIR="${DIST_DIR:-./dist/releases}"
@@ -37,7 +37,7 @@ CHANGELOG="${CHANGELOG:-}"
 # Generate changelog from git commits using git-cliff (Keep a Changelog format)
 generate_changelog() {
     # Check if git-cliff is available
-    if ! command -v git-cliff &> /dev/null; then
+    if ! command -v git-cliff > /dev/null 2>&1; then
         echo "Warning: git-cliff not found, changelog will be empty" >&2
         return
     fi
@@ -57,17 +57,17 @@ generate_changelog() {
     
     # Generate changelog using git-cliff, strip the header, and output just the release content
     # Use --strip header to remove the changelog header, keeping just the version section
+    local raw
     if [ -n "$range_arg" ]; then
-        git-cliff --config "${SCRIPT_DIR}/../../cliff.toml" --strip header "$range_arg" 2>/dev/null | \
-            sed '1{/^$/d;}' | \
-            sed '1{/^## /d;}' | \
-            awk 'NF {p=1} p'
+        raw=$(git-cliff --config "${SCRIPT_DIR}/../../cliff.toml" --strip header "$range_arg" 2>/dev/null)
     else
-        git-cliff --config "${SCRIPT_DIR}/../../cliff.toml" --strip header --unreleased 2>/dev/null | \
-            sed '1{/^$/d;}' | \
-            sed '1{/^## /d;}' | \
-            awk 'NF {p=1} p'
+        raw=$(git-cliff --config "${SCRIPT_DIR}/../../cliff.toml" --strip header --unreleased 2>/dev/null)
     fi
+
+    printf '%s\n' "$raw" | \
+        sed '1{/^$/d;}' | \
+        sed '1{/^## /d;}' | \
+        awk 'NF {p=1} p' 
 }
 
 # Auto-generate changelog if not provided via environment variable
@@ -97,20 +97,25 @@ get_archive_name() {
 # Function to compute SHA256 hash of a file
 get_sha256() {
     local file="$1"
-    if command -v sha256sum &> /dev/null; then
-        sha256sum "$file" | cut -d' ' -f1
-    elif command -v shasum &> /dev/null; then
-        shasum -a 256 "$file" | cut -d' ' -f1
+    local sum
+    # Capture first, then split. Under set -e a failure of the hashing command
+    # aborts here, which is what pipefail used to catch in the pipeline.
+    if command -v sha256sum > /dev/null 2>&1; then
+        sum=$(sha256sum "$file")
+    elif command -v shasum > /dev/null 2>&1; then
+        sum=$(shasum -a 256 "$file")
     else
         echo "Error: No sha256 command found" >&2
         exit 1
     fi
+
+    printf '%s\n' "$sum" | cut -d' ' -f1
 }
 
 get_file_size() {
     local file="$1"
 
-    if [[ "$(uname)" == "Darwin" ]]; then
+    if [ "$(uname)" = "Darwin" ]; then
         stat -f%z "$file"
     else
         stat -c%s "$file"
@@ -123,7 +128,7 @@ get_file_info() {
     local platform="$2"
     local archive_name="$3"
     
-    if [[ ! -f "$file" ]]; then
+    if [ ! -f "$file" ]; then
         echo "null"
         return
     fi
@@ -144,7 +149,7 @@ EOF
 }
 
 # Check archive directory exists
-if [[ ! -d "$ARCHIVE_DIR" ]]; then
+if [ ! -d "$ARCHIVE_DIR" ]; then
     echo "Error: Archive directory not found: ${ARCHIVE_DIR}"
     echo "Run 'make dist' first to generate distribution archives."
     exit 1
@@ -163,11 +168,11 @@ for platform in $PLATFORM_KEYS; do
     
     info=$(get_file_info "$file" "$platform" "$archive_name")
     
-    if [[ "$info" != "null" ]]; then
-        if [[ "$FIRST" != "true" ]]; then
-            PLATFORMS_JSON+=","
+    if [ "$info" != "null" ]; then
+        if [ "$FIRST" != "true" ]; then
+            PLATFORMS_JSON="${PLATFORMS_JSON},"
         fi
-        PLATFORMS_JSON+="
+        PLATFORMS_JSON="${PLATFORMS_JSON}
     \"${platform}\": ${info}"
         FIRST=false
         echo "✓ Found ${platform}: ${archive_name}"
@@ -178,14 +183,14 @@ done
 
 # Build minimum version field
 MIN_VERSION_JSON=""
-if [[ -n "$MIN_VERSION" ]]; then
+if [ -n "$MIN_VERSION" ]; then
     MIN_VERSION_JSON="
   \"minUpgradeVersion\": \"${MIN_VERSION}\","
 fi
 
 # Build changelog field as JSON array of lines
 CHANGELOG_JSON=""
-if [[ -n "$CHANGELOG" ]]; then
+if [ -n "$CHANGELOG" ]; then
     # Convert changelog to JSON array of strings (one per line)
     CHANGELOG_ARRAY=$(printf '%s\n' "$CHANGELOG" | \
         sed 's/\\/\\\\/g' | \

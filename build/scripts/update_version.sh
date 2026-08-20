@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 # Version management script for Simtezilo
 # https://www.conventionalcommits.org/
 
@@ -13,16 +13,16 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 error() {
-    echo -e "${RED}ERROR: $1${NC}" >&2
+    printf '%b\n' "${RED}ERROR: $1${NC}" >&2
     exit 1
 }
 
 success() {
-    echo -e "${GREEN}✓ $1${NC}"
+    printf '%b\n' "${GREEN}✓ $1${NC}"
 }
 
 info() {
-    echo -e "$1"
+    printf '%b\n' "$1"
 }
 
 # Validate VERSION file exists and has correct format
@@ -237,7 +237,9 @@ analyze_commits() {
             [ $bump_type -lt 1 ] && bump_type=1
             continue
         fi
-    done <<< "$commits"
+    done <<EOF
+$commits
+EOF
     
     # Determine the bump type string
     case $bump_type in

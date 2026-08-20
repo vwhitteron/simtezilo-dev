@@ -1,8 +1,8 @@
-#!/bin/bash
+#!/bin/sh
 # version.sh - Shared version utilities for build scripts
 #
 # Source this file in other scripts:
-#   source "$(dirname "$0")/lib/version.sh"
+#   . "$(dirname "$0")/lib/version.sh"
 #
 # Provides:
 #   VERSION_FILE    - Path to VERSION file
@@ -21,7 +21,7 @@
 #   version_channel - Derive channel from a version string
 
 # Prevent multiple sourcing
-if [[ -n "${_VERSION_LIB_LOADED:-}" ]]; then
+if [ -n "${_VERSION_LIB_LOADED:-}" ]; then
     return 0
 fi
 _VERSION_LIB_LOADED=1
@@ -36,16 +36,16 @@ _YELLOW='\033[1;33m'
 _NC='\033[0m'
 
 version_error() {
-    echo -e "${_RED}ERROR: $1${_NC}" >&2
+    printf '%b\n' "${_RED}ERROR: $1${_NC}" >&2
     exit 1
 }
 
 version_info() {
-    echo -e "$1"
+    printf '%b\n' "$1"
 }
 
 version_success() {
-    echo -e "${_GREEN}✓ $1${_NC}"
+    printf '%b\n' "${_GREEN}✓ $1${_NC}"
 }
 
 # Derive channel from version string
@@ -53,9 +53,13 @@ version_success() {
 # Returns: channel name via echo
 version_channel() {
     local ver="${1#v}"
-    
-    if [[ "$ver" =~ -([a-zA-Z]+) ]]; then
-        local label="${BASH_REMATCH[1]}"
+    local label
+
+    # Find the first "-<letters>" group, the same span bash's =~ captured.
+    label=$(printf '%s' "$ver" | grep -o -- '-[a-zA-Z][a-zA-Z]*' | head -1)
+    label="${label#-}"
+
+    if [ -n "$label" ]; then
         case "$label" in
             alpha|dev)
                 echo "dev"
@@ -75,12 +79,12 @@ version_channel() {
 # Load and parse version from VERSION file
 # Sets: VERSION_RAW, VERSION, VERSION_TAG, VERSION_CORE, VERSION_PRERELEASE, VERSION_CHANNEL
 version_load() {
-    if [[ ! -f "$VERSION_FILE" ]]; then
+    if [ ! -f "$VERSION_FILE" ]; then
         version_error "VERSION file not found: $VERSION_FILE"
     fi
     
     VERSION_RAW=$(cat "$VERSION_FILE" 2>/dev/null || echo "")
-    if [[ -z "$VERSION_RAW" ]]; then
+    if [ -z "$VERSION_RAW" ]; then
         version_error "VERSION file is empty"
     fi
     
@@ -97,11 +101,12 @@ version_load() {
     VERSION_CORE=$(echo "$VERSION" | sed -E 's/(-.*|\+.*)//')
     
     # Extract pre-release (between - and +, or after - if no +)
-    if [[ "$VERSION" =~ -([^+]+) ]]; then
-        VERSION_PRERELEASE="-${BASH_REMATCH[1]}"
-    else
-        VERSION_PRERELEASE=""
-    fi
+    _nobuild="${VERSION%%+*}"
+    case "$_nobuild" in
+        *-*) VERSION_PRERELEASE="-${_nobuild#*-}" ;;
+        *)   VERSION_PRERELEASE="" ;;
+    esac
+    unset _nobuild
     
     # Derive channel
     VERSION_CHANNEL=$(version_channel "$VERSION")
@@ -111,6 +116,6 @@ version_load() {
 }
 
 # Auto-load version if VERSION file exists in current directory
-if [[ -f "$VERSION_FILE" ]]; then
+if [ -f "$VERSION_FILE" ]; then
     version_load
 fi

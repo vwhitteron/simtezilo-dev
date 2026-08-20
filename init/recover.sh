@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 # recover.sh - Update installer and rescue/rollback script
 #
 # This script is called by systemd as ExecStartPre before the simtezilo service starts.
@@ -16,7 +16,7 @@
 # This script handles runtime failures (e.g., app panics after a successful update)
 # by rolling back to the previous version after repeated startup failures.
 
-set -euo pipefail
+set -eu
 
 # =============================================================================
 # Configuration
@@ -45,15 +45,15 @@ log() {
 
 # Read current startup failure count from counter file
 read_counter() {
-    if [[ -f "$COUNTER_FILE" ]]; then
+    if [ -f "$COUNTER_FILE" ]; then
         local count
         count=$(cat "$COUNTER_FILE" 2>/dev/null || echo "0")
-        # Validate it's a number
-        if [[ "$count" =~ ^[0-9]+$ ]]; then
-            echo "$count"
-        else
-            echo "0"
-        fi
+        # Validate it's a number. The case pattern rejects an empty string
+        # and any string holding a non-digit, which is what ^[0-9]+$ did.
+        case "$count" in
+            ''|*[!0-9]*) echo "0" ;;
+            *)           echo "$count" ;;
+        esac
     else
         echo "0"
     fi
@@ -78,7 +78,7 @@ reset_counter() {
 
 # Check if there's a pending update and apply it using the platform command
 apply_pending_update() {
-    if [[ ! -x "$PLATFORM_CMD" ]]; then
+    if [ ! -x "$PLATFORM_CMD" ]; then
         log "Platform command not found at $PLATFORM_CMD - skipping update check"
 
         return 0
@@ -109,7 +109,7 @@ apply_pending_update() {
 
 # Perform emergency rollback from archive
 perform_rollback() {
-    if [[ ! -f "$ROLLBACK_ARCHIVE" ]]; then
+    if [ ! -f "$ROLLBACK_ARCHIVE" ]; then
         log "ERROR: No rollback archive available at $ROLLBACK_ARCHIVE"
 
         return 1
@@ -150,7 +150,7 @@ main() {
     apply_pending_update || true
 
     # Check if rollback archive exists for failure recovery
-    if [[ ! -f "$ROLLBACK_ARCHIVE" ]]; then
+    if [ ! -f "$ROLLBACK_ARCHIVE" ]; then
         log "No rollback archive present - skipping failure recovery check"
 
         exit 0
@@ -164,7 +164,7 @@ main() {
 
     # Check if we've exceeded the failure threshold
     # This catches runtime failures (e.g., app panics) after a successful update
-    if [[ "$fail_count" -ge "$MAX_FAILURES" ]]; then
+    if [ "$fail_count" -ge "$MAX_FAILURES" ]; then
         log "ALERT: Failure threshold exceeded - triggering automatic rollback"
         
         if perform_rollback; then

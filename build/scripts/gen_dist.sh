@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 # gen_dist.sh - Generate distribution archives for all platforms
 #
 # Usage:
@@ -19,12 +19,12 @@
 #
 # The output directory structure is ready for direct upload to a web server.
 
-set -euo pipefail
+set -eu
 
 
 # Load version utilities
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "${SCRIPT_DIR}/lib/version.sh"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "${SCRIPT_DIR}/lib/version.sh"
 
 appname='simtezilo'
 
@@ -60,14 +60,19 @@ EOF
 # Compute SHA256 hash
 get_sha256() {
     local file="$1"
-    if command -v sha256sum &> /dev/null; then
-        sha256sum "$file" | cut -d' ' -f1
-    elif command -v shasum &> /dev/null; then
-        shasum -a 256 "$file" | cut -d' ' -f1
+    local sum
+    # Capture first, then split. Under set -e a failure of the hashing command
+    # aborts here, which is what pipefail used to catch in the pipeline.
+    if command -v sha256sum > /dev/null 2>&1; then
+        sum=$(sha256sum "$file")
+    elif command -v shasum > /dev/null 2>&1; then
+        sum=$(shasum -a 256 "$file")
     else
         echo "Error: No sha256 command found" >&2
         exit 1
     fi
+
+    printf '%s\n' "$sum" | cut -d' ' -f1
 }
 
 # Prepare common directory structure
@@ -92,9 +97,7 @@ gen_windows_amd64() {
    gen_manifest "windows" "amd64"
    cp "${out_dir}/simtezilo.exe" "${archive_dir}/bin/simtezilo.exe"
 
-   pushd "${work_dir}" > /dev/null
-   zip -rq "${absdistpath}" "${appname}"
-   popd > /dev/null
+   (cd "${work_dir}" && zip -rq "${absdistpath}" "${appname}")
 
    # Generate checksum
    get_sha256 "${absdistpath}" > "${absdistpath}.sha256"
@@ -133,6 +136,7 @@ gen_linux_arm64() {
    cp "${out_dir}/platform-m1-linux-arm64-8" "${archive_dir}/bin/platform"
    cp init/simtezilo.service "${archive_dir}/init/simtezilo.service"
    cp init/recover.sh "${archive_dir}/init/recover.sh"
+   cp init/rt-tune.sh "${archive_dir}/init/rt-tune.sh"
 
    tar -czf "${absdistpath}" -C "${work_dir}" "${appname}"
 
@@ -151,7 +155,7 @@ gen_linux_amd64() {
    local absdistpath="${release_dir}/${distname}"
 
    # Skip if binary doesn't exist
-   if [[ ! -f "${out_dir}/simtezilo-linux-amd64" ]]; then
+   if [ ! -f "${out_dir}/simtezilo-linux-amd64" ]; then
       echo "⚠ Skipped ${platform}: binary not found"
       return
    fi
@@ -160,6 +164,7 @@ gen_linux_amd64() {
    cp "${out_dir}/simtezilo-linux-amd64" "${archive_dir}/bin/simtezilo"
    cp init/simtezilo.service "${archive_dir}/init/simtezilo.service"
    cp init/recover.sh "${archive_dir}/init/recover.sh"
+   cp init/rt-tune.sh "${archive_dir}/init/rt-tune.sh"
 
    tar -czf "${absdistpath}" -C "${work_dir}" "${appname}"
 

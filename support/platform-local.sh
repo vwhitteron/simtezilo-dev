@@ -27,7 +27,7 @@ BT_SCAN_FANCTLR='{"address":"00:11:22:33:44:12","name":"Wind Simulator","type":"
 
 
 
-function handle_usage() {
+handle_usage() {
     echo 'Usage: /opt/simtezilo/bin/setup [options] <command>'
     echo 'Options:'
     echo '  -h              Show this help message'
@@ -73,41 +73,41 @@ function handle_usage() {
     exit 1
 }
 
-function return_success() {
+return_success() {
     echo '{"result":"success"}'
 }
 
-function handle_bt_status() {
+handle_bt_status() {
     echo '{"result":"success",'${BT_ADAPTER}'}'
 }
 
-function handle_bt_list() {
+handle_bt_list() {
     echo '{"result":"success",'${BT_ADAPTER}',"btDevices":['$BT_PAIRED_SPEAKER','$BT_PAIRED_HEADPHONES','$BT_PAIRED_FANCTLR']}'
 }
 
-function handle_bt_scan() {
+handle_bt_scan() {
     BT_PAIRED=''${BT_PAIRED_SPEAKER}','${BT_PAIRED_HEADPHONES}','${BT_PAIRED_FANCTLR}''
     BT_DISCOVERED=''${BT_SCAN_SPEAKER}','${BT_SCAN_HEADSET}','${BT_SCAN_FANCTLR}''
     echo '{"result":"success",'${BT_ADAPTER}',"btDevices":['${BT_PAIRED}','${BT_DISCOVERED}']}'
 }
 
-function handle_bt_action() {
+handle_bt_action() {
     # Connect/disconnect/pair/remove: drain any stdin payload, report success.
     cat > /dev/null 2>&1
     echo '{"result":"success",'${BT_ADAPTER}'}'
 }
 
-function handle_setup_enable() {
+handle_setup_enable() {
     touch ${SETUPMODEFLAG}
     return_success
 }
 
-function handle_setup_disable() {
+handle_setup_disable() {
     rm ${SETUPMODEFLAG}
     return_success
 }
 
-function handle_ssh_provision() {
+handle_ssh_provision() {
     # Read input JSON
     input=$(cat)
 
@@ -116,19 +116,19 @@ function handle_ssh_provision() {
     return_success
 }
 
-function handle_status() {
+handle_status() {
     echo '{"result":"'${RESULT}'","status":{"activeConn":"'${ACTIVECONN}'","available":'${AVAILABLE}',"flagEnabled":'${FLAGENABLED}',"ready":'${READY}',"runModePresent":'${RUNMODEPRESENT}',"setupModePresent":'${SETUPMODEPRESENT}',"setupRequired":'${SETUPREQUIRED}',"lcdPresent":'${LCDPRESENT}',"sshEnabled":'${SSHENABLED}'}}'
 }
 
-function handle_version() {
+handle_version() {
     echo "simtezilo-platform-local version ${VERSION}"
 }
 
-function handle_wifi_access() {
+handle_wifi_access() {
     echo '{"result":"success","wifi":{"ssid":"Simtezilo-00000000","psk":"5imtezil0","security":"wpa2"}}'
 }
 
-function handle_wifi_provision() {
+handle_wifi_provision() {
     # Read input JSON
     input=$(cat)
 
@@ -137,7 +137,7 @@ function handle_wifi_provision() {
     return_success
 }
 
-function handle_wifi_scan() {
+handle_wifi_scan() {
     echo '{"networks":[{"ssid":"yarn","psk":"","security":"wpa2"},{"ssid":"Firetooth","psk":"","security":"wpa3"}],"result":"success"}'
 }
 

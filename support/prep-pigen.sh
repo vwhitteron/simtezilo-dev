@@ -1,9 +1,9 @@
-#!/bin/bash
+#!/bin/sh
 
 PIGEN_BASEDIR="../../RPi-Distro/pi-gen/"
 PIGEN_FILESDIR="${PIGEN_BASEDIR}/stage2/05-simtezilo/files"
 
-function usage() {
+usage() {
     echo "Usage: $0 [-s suffix] [-r release] <channel>"
     exit 1
 }
@@ -34,7 +34,7 @@ if [ -n "$suffix" ]; then
 fi
 
 
-function setupPiGen() {
+setupPiGen() {
     # make release
 
     tarfile="./dist/releases/${channel}/${version}/simtezilo-${version}-linux-arm64.tar.gz"
@@ -63,7 +63,7 @@ EOD
 }
 
 
-function releaseImage() {
+releaseImage() {
     date=$(date -u +"%Y-%m-%d")
 
     imageFile="${PIGEN_BASEDIR}/deploy/image_${date}-simtezilo-${version}-rpi-arm64-image.zip"
