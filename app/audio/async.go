@@ -91,6 +91,11 @@ type AsyncSource struct {
 	rtApplied  atomic.Bool
 	rtPriority atomic.Int64
 	rtErr      atomic.Value // string; empty when applied or when disabled
+
+	// rtPinnedCPU is the CPU the producer pinned itself to, or -1 when it runs
+	// on every core. A refused pin is normal on an unprovisioned machine.
+	rtPinnedCPU atomic.Int64
+	rtPinNote   atomic.Value // string; why the pin was refused, empty otherwise
 }
 
 // fillBucketCount is the resolution of the ring fill histogram: eighths.
@@ -102,9 +107,10 @@ const fillBucketCount = 8
 var errRealtimeUnsupported = errors.New("realtime scheduling is only supported on linux")
 
 // errCPUNotIsolated reports that the kernel did not reserve the requested CPU.
-// This is the normal state on a machine without the isolcpus provisioning in
-// support/rt-tune.sh, so it is quiet like errRealtimeUnsupported. Pinning to a
-// shared core would cost the producer every other core and gain nothing.
+// This is the normal state on a machine without the isolcpus provisioning
+// documented in doc/realtime_tuning.md, so it is quiet like
+// errRealtimeUnsupported. Pinning to a shared core would cost the producer
+// every other core and gain nothing.
 var errCPUNotIsolated = errors.New("requested cpu is not isolated by the kernel")
 
 // HealthMetrics holds a snapshot of async source diagnostic counters.
@@ -133,6 +139,12 @@ type HealthMetrics struct {
 	RealtimeApplied  bool
 	RealtimePriority int
 	RealtimeError    string
+
+	// RealtimePinnedCPU is the CPU the producer is pinned to, or -1 when it is
+	// free to run on any core. RealtimePinNote says why a requested pin was
+	// refused, which is the normal state without isolcpus.
+	RealtimePinnedCPU int
+	RealtimePinNote   string
 }
 
 // RealtimeConfig requests operating-system scheduling privileges for the
@@ -196,6 +208,8 @@ func NewAsyncSource(
 	// Seed the low-water mark at capacity so the first callback can only lower it.
 	source.minFill.Store(int64(len(source.ring)))
 	source.rtErr.Store("")
+	source.rtPinnedCPU.Store(-1)
+	source.rtPinNote.Store("")
 
 	// Pre-fill the ring with `target` frames of silence (not the whole ring): the
 	// device callback has something to play immediately, and the producer is not
@@ -321,6 +335,7 @@ func (a *AsyncSource) Health() HealthMetrics {
 	}
 
 	rtErr, _ := a.rtErr.Load().(string)
+	rtPinNote, _ := a.rtPinNote.Load().(string)
 
 	return HealthMetrics{
 		Underruns:       a.underruns.Load(),
@@ -337,12 +352,14 @@ func (a *AsyncSource) Health() HealthMetrics {
 
 			return time.Unix(0, lastNS)
 		}(),
-		MinFill:          minFill,
-		MinFillRatio:     float64(minFill) / float64(capacity),
-		FillBuckets:      buckets,
-		RealtimeApplied:  a.rtApplied.Load(),
-		RealtimePriority: int(a.rtPriority.Load()),
-		RealtimeError:    rtErr,
+		MinFill:           minFill,
+		MinFillRatio:      float64(minFill) / float64(capacity),
+		FillBuckets:       buckets,
+		RealtimeApplied:   a.rtApplied.Load(),
+		RealtimePriority:  int(a.rtPriority.Load()),
+		RealtimeError:     rtErr,
+		RealtimePinnedCPU: int(a.rtPinnedCPU.Load()),
+		RealtimePinNote:   rtPinNote,
 	}
 }
 
@@ -457,8 +474,13 @@ func (a *AsyncSource) initRealtime() {
 	if a.rt.PinCPU > 0 {
 		err := pinThread(a.rt.PinCPU)
 		if err != nil {
+			a.rtPinNote.Store(err.Error())
 			a.recordRealtimeErr(err)
+
+			return
 		}
+
+		a.rtPinnedCPU.Store(int64(a.rt.PinCPU))
 	}
 }
 

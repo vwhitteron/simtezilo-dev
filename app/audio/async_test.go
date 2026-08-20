@@ -190,6 +190,52 @@ func TestAsyncSource_RealtimeFallback(t *testing.T) {
 	}
 }
 
+// TestAsyncSource_PinDefaultsUnpinned checks a fresh source with no realtime
+// request reports RealtimePinnedCPU as -1, not the zero value 0, which is a
+// valid CPU index.
+func TestAsyncSource_PinDefaultsUnpinned(t *testing.T) {
+	t.Parallel()
+
+	const channels = 2
+
+	src := &rampSource{channels: channels}
+
+	source := audio.NewAsyncSource(src, channels, 200, 128, 64, audio.RealtimeConfig{})
+	defer source.Close()
+
+	health := source.Health()
+	if health.RealtimePinnedCPU != -1 {
+		t.Fatalf("RealtimePinnedCPU = %d, want -1", health.RealtimePinnedCPU)
+	}
+
+	if health.RealtimePinNote != "" {
+		t.Fatalf("RealtimePinNote = %q, want empty", health.RealtimePinNote)
+	}
+}
+
+// TestAsyncSource_PinStaysUnsetWithoutRequest checks RealtimePinnedCPU stays
+// at -1 once the producer has actually run and completed its scheduling
+// request, not only on the freshly constructed source.
+func TestAsyncSource_PinStaysUnsetWithoutRequest(t *testing.T) {
+	t.Parallel()
+
+	const channels = 2
+
+	src := &rampSource{channels: channels}
+
+	source := audio.NewAsyncSource(src, channels, 200, 128, 64, audio.RealtimeConfig{})
+	defer source.Close()
+
+	if !source.AwaitRealtime(time.Second) {
+		t.Fatal("timed out waiting for the realtime scheduling result")
+	}
+
+	health := source.Health()
+	if health.RealtimePinnedCPU != -1 {
+		t.Fatalf("RealtimePinnedCPU = %d, want -1", health.RealtimePinnedCPU)
+	}
+}
+
 // waitForAudio drains the source until a non-silent sample appears, proving the
 // producer is running. It reports false if nothing arrives before the deadline.
 func waitForAudio(source *audio.AsyncSource, channels int) bool {

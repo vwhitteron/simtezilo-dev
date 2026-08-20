@@ -1858,11 +1858,7 @@ func (a *App) logHapticRealtime(source *audio.AsyncSource) {
 
 	switch {
 	case health.RealtimeApplied:
-		a.log.Info().
-			Str("component", "audio producer").
-			Int("priority", health.RealtimePriority).
-			Str("result", "success").
-			Msg("realtime scheduling")
+		a.logHapticPin(health)
 	case health.RealtimeError != "":
 		a.log.Warn().
 			Str("component", "audio producer").
@@ -1883,6 +1879,33 @@ func (a *App) logHapticRealtime(source *audio.AsyncSource) {
 			Str("component", "audio producer").
 			Str("result", "unavailable").
 			Msg("realtime scheduling not applied")
+	}
+}
+
+// logHapticPin reports the CPU pin outcome for a producer that already holds
+// the realtime policy. A refused pin is normal without isolcpus, so it is
+// logged at info level alongside the success line, never as a warning.
+func (a *App) logHapticPin(health audio.HealthMetrics) {
+	event := a.log.Info().
+		Str("component", "audio producer").
+		Int("priority", health.RealtimePriority).
+		Str("result", "success")
+
+	if health.RealtimePinnedCPU >= 0 {
+		event.Int("pinned_cpu", health.RealtimePinnedCPU).Msg("realtime scheduling")
+
+		return
+	}
+
+	event.Msg("realtime scheduling")
+
+	if health.RealtimePinNote != "" {
+		// The pin is optional tuning, not a requirement, so report it at info
+		// level. See doc/realtime_tuning.md for how to provision isolcpus.
+		a.log.Info().
+			Str("component", "audio producer").
+			Str("reason", health.RealtimePinNote).
+			Msg("cpu pin not applied, producer runs on every core; see doc/realtime_tuning.md")
 	}
 }
 
