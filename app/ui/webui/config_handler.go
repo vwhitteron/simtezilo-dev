@@ -105,6 +105,7 @@ func (h *configHandler) handleGetConfig(response http.ResponseWriter, _ *http.Re
 			"webUIPort":                  h.config.GetAppWebUIPort(),
 			"enableDevTools":             h.config.GetDevToolsEnabled(),
 			"enableExperimentalFeatures": h.config.GetExperimentalFeaturesEnabled(),
+			"realtimeScheduling":         h.config.GetAppRealtimeScheduling(),
 			"updates": map[string]any{
 				"channel": h.config.GetAppUpdateChannel(),
 			},
@@ -411,6 +412,7 @@ func (h *configHandler) applyAppConfig(config map[string]any) []string {
 	errors = appendErr(errors, applyField(config, "baseDir", "invalid base directory value", h.config.SetAppBaseDir))
 	errors = appendErr(errors, applyField(config, "enableDevTools", "invalid enableDevTools value", h.config.SetDevToolsEnabled))
 	errors = appendErr(errors, applyField(config, "enableExperimentalFeatures", "invalid enableExperimentalFeatures value", h.config.SetExperimentalFeaturesEnabled))
+	errors = appendErr(errors, applyField(config, "realtimeScheduling", "invalid realtimeScheduling value", h.config.SetAppRealtimeScheduling))
 
 	errors = append(errors, applySubMap(config, "updates", "invalid updates configuration", h.applyUpdatesConfig)...)
 

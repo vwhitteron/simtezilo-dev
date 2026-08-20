@@ -36,6 +36,7 @@ var snapshotMutators = map[string]func(cfg *Config){
 	"SetAppUpdateChannel":              func(cfg *Config) { cfg.SetAppUpdateChannel("beta") },
 	"SetDevToolsEnabled":               func(cfg *Config) { cfg.SetDevToolsEnabled(true) },
 	"SetExperimentalFeaturesEnabled":   func(cfg *Config) { cfg.SetExperimentalFeaturesEnabled(true) },
+	"SetAppRealtimeScheduling":         func(cfg *Config) { cfg.SetAppRealtimeScheduling(false) },
 
 	// Fan section
 	"SetFanEnabled":               func(cfg *Config) { cfg.SetFanEnabled(true) },

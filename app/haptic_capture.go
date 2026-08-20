@@ -519,7 +519,9 @@ func (a *App) captureThroughSink(next pullFunc, opts SinkCaptureOptions) (*SinkC
 		capacity = opts.RingCapacityFrames
 	}
 
-	async := audio.NewAsyncSource(source, channels, capacity, target, block)
+	// No realtime request: capture is an offline replay, so its output must stay
+	// bit-identical across machines and must not depend on scheduling privilege.
+	async := audio.NewAsyncSource(source, channels, capacity, target, block, audio.RealtimeConfig{})
 
 	defer async.Close()
 

@@ -117,6 +117,7 @@ func (a *App) sendTelemetryChartData() {
 		EngineVibrationEnabled:      engineVibrationEnabled,
 		// Audio pipeline health metrics
 		AsyncBufferFill:    float32(health.FillRatio),
+		AsyncMinFill:       float32(health.MinFillRatio),
 		AsyncUnderruns:     float32(health.Underruns),
 		AsyncProducerWaits: float32(health.ProducerWaits),
 		MixerEngineFill:    channelFill(diag, "engine"),

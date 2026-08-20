@@ -24,6 +24,10 @@ func defaultConfig() *viperConfig {
 			},
 			EnableDevTools:             false,
 			EnableExperimentalFeatures: false,
+
+			// Enabled by default. A machine without the privilege logs a
+			// warning and keeps playing at normal priority.
+			RealtimeScheduling: true,
 		},
 		Fan: &fan{
 			Enabled:          false,

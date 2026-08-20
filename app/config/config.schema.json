@@ -72,6 +72,11 @@
                     "type": "boolean",
                     "description": "Enable experimental features",
                     "default": false
+                },
+                "realtimeScheduling": {
+                    "type": "boolean",
+                    "description": "Request a realtime scheduling policy for the audio producer thread. Set to false to run the producer at normal priority and disable the CPU pin. Takes effect at the next restart.",
+                    "default": true
                 }
             },
             "additionalProperties": true

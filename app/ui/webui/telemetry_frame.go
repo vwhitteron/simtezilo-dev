@@ -45,6 +45,7 @@ type TelemetryFrame struct {
 	EngineVibrationEnabled      float32   `json:"engineVibrationEnabled"`
 	// Audio pipeline health metrics
 	AsyncBufferFill    float32   `json:"asyncBufferFill"`
+	AsyncMinFill       float32   `json:"asyncMinFill"`
 	AsyncUnderruns     float32   `json:"asyncUnderruns"`
 	AsyncProducerWaits float32   `json:"asyncProducerWaits"`
 	MixerEngineFill    float32   `json:"mixerEngineFill"`

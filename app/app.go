@@ -385,7 +385,7 @@ func (a *App) runSetupMode() RunResult {
 	select {
 	case exitCode := <-a.exitCodeChan:
 		if exitCode == exitcode.Success || exitCode == exitcode.SetupMode {
-			a.log.Info().Msg("Setup mode signaled switch to run mode")
+			a.log.Info().Msg("Run mode requested from setup mode")
 
 			return RunResultSwitchMode
 		}
@@ -1312,7 +1312,15 @@ func (a *App) startAudioOutput() {
 	// one-period target fill (the added latency) while the capacity keeps a second
 	// period of headroom to absorb scheduler/GC jitter without underrunning.
 	capacityFrames, targetFrames, blockFrames := hapticBufferFrames(outputRate, cfg.LatencyMs)
-	async := audio.NewAsyncSource(source, sink.Channels(), capacityFrames, targetFrames, blockFrames)
+
+	// The zero value asks for nothing, so a disabled switch leaves the producer
+	// at the default policy on every core.
+	var realtime audio.RealtimeConfig
+	if a.config.GetAppRealtimeScheduling() {
+		realtime = audio.RealtimeConfig{Priority: hapticRealtimePriority, PinCPU: hapticRealtimeCPU}
+	}
+
+	async := audio.NewAsyncSource(source, sink.Channels(), capacityFrames, targetFrames, blockFrames, realtime)
 
 	// Skip the mix+resample work while the synth is silenced (telemetry
 	// inactive): the producer emits silence into the ring instead, so an idle
@@ -1336,6 +1344,11 @@ func (a *App) startAudioOutput() {
 	a.hapticSink = sink
 	a.hapticSource = async
 	a.audioMon.SetOutputRate(outputRate)
+
+	// Report the producer's scheduling policy here rather than from a periodic
+	// tick: this runs on every audio start regardless of log level, telemetry
+	// state, or whether a session is in progress.
+	a.logHapticRealtime(async)
 
 	// The new ring's frame counter starts at zero, so re-establish the drift
 	// baseline against it on the next monitor sample.
@@ -1467,7 +1480,7 @@ func (a *App) signalStartupSuccess() {
 		return
 	}
 
-	a.log.Info().Msg("Successfully signaled startup to platform, failed start counter reset")
+	a.log.Info().Msg("Successfully signaled startup to platform, failed start counter reset to zero")
 }
 
 // tickerPeriod returns the exact tick period for a frame rate in Hz. Using
@@ -1804,7 +1817,9 @@ func (a *App) handleDebugTick() {
 		Msg("debug tyre temp")
 
 	if a.hapticSource != nil {
-		latency := a.audioMon.BuildReport(a.hapticSource.Health(), a.synth.Diagnostics(), a.state.current.sequenceNumber)
+		health := a.hapticSource.Health()
+
+		latency := a.audioMon.BuildReport(health, a.synth.Diagnostics(), a.state.current.sequenceNumber)
 		a.log.Debug().
 			Float64("engine_lat_ms", latency.EngineLatencyMs).
 			Float64("chassis_lat_ms", latency.ChassisLatencyMs).
@@ -1813,9 +1828,57 @@ func (a *App) handleDebugTick() {
 			Float64("seq_jitter_ms", latency.SeqJitterMs).
 			Int64("underruns", latency.Underruns).
 			Int64("producer_waits", latency.ProducerWaits).
+			Int("min_fill", health.MinFill).
+			Float64("min_fill_ratio", health.MinFillRatio).
 			Int("kin_gap_resets", a.kinematics.GapResets).
 			Int("kin_last_gap_delta", a.kinematics.LastGapDelta).
 			Msg("haptic latency monitor")
+	}
+}
+
+// logHapticRealtime reports the producer thread's scheduling policy once the
+// audio output is running. A failed request is a warning, not an error: the
+// audio still plays, only without the jitter protection.
+func (a *App) logHapticRealtime(source *audio.AsyncSource) {
+	// The producer applies the policy on its own thread, so give it a moment to
+	// get that far before reading the result.
+	if !source.AwaitRealtime(realtimeReportTimeout) {
+		a.log.Warn().
+			Str("component", "audio producer").
+			Msg("timed out waiting for the realtime scheduling result")
+
+		return
+	}
+
+	health := source.Health()
+
+	switch {
+	case health.RealtimeApplied:
+		a.log.Info().
+			Str("component", "audio producer").
+			Int("priority", health.RealtimePriority).
+			Str("result", "success").
+			Msg("realtime scheduling")
+	case health.RealtimeError != "":
+		a.log.Warn().
+			Str("component", "audio producer").
+			Str("error", health.RealtimeError).
+			Str("result", "failure").
+			Msg("realtime scheduling unavailable, running at normal priority")
+	case !a.config.GetAppRealtimeScheduling():
+		// An operator turned the switch off. Say so at info level, so the log
+		// explains the missing policy instead of leaving a silent gap.
+		a.log.Info().
+			Str("component", "audio producer").
+			Str("result", "disabled").
+			Msg("realtime scheduling disabled by configuration, running at normal priority")
+	default:
+		// A platform without SCHED_FIFO. Report it at debug level, because
+		// there is nothing an operator can do about it.
+		a.log.Debug().
+			Str("component", "audio producer").
+			Str("result", "unavailable").
+			Msg("realtime scheduling not applied")
 	}
 }
 

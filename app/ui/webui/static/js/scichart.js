@@ -1058,6 +1058,7 @@ async function initSciChart() {
                 sciChartSurface.yAxes.add(yAxisFill, yAxisEvents);
 
                 const asyncFillSeries = createDataSeries(wasmContext, "Async Buffer Fill");
+                const asyncMinFillSeries = createDataSeries(wasmContext, "Async Min Fill");
                 const engineFillSeries = createDataSeries(wasmContext, "Engine Fill");
                 const chassis0FillSeries = createDataSeries(wasmContext, "Chassis 0 Fill");
                 const underrunsSeries = createDataSeries(wasmContext, "Underruns");
@@ -1070,6 +1071,14 @@ async function initSciChart() {
                         yAxisId: "ID_Y_AXIS_FILL",
                         strokeThickness: 2,
                         stroke: "#50e06aff"
+                    }),
+                    new SciChart.FastLineRenderableSeries(wasmContext, {
+                        dataSeries: asyncMinFillSeries,
+                        dataSeriesName: "Async Min Fill",
+                        yAxisId: "ID_Y_AXIS_FILL",
+                        strokeThickness: 2,
+                        strokeDashArray: [4, 4],
+                        stroke: "#a0e050ff"
                     }),
                     new SciChart.FastLineRenderableSeries(wasmContext, {
                         dataSeries: engineFillSeries,
@@ -1106,13 +1115,16 @@ async function initSciChart() {
                     xAxis,
                     dataSeries: {
                         asyncBufferFill: asyncFillSeries,
+                        asyncMinFill: asyncMinFillSeries,
                         mixerEngineFill: engineFillSeries,
                         mixerChassis0Fill: chassis0FillSeries,
                         asyncUnderruns: underrunsSeries,
                         asyncProducerWaits: producerWaitsSeries
                     },
                     // mixerChassisFill is now a per-channel array; chart channel 0's fill only.
-                    dataFields: ['asyncBufferFill', 'mixerEngineFill', 'mixerChassisFill:0', 'asyncUnderruns', 'asyncProducerWaits']
+                    // asyncMinFill is the low-water mark: it shows the margin before an
+                    // underrun, and it moves on runs where no underrun occurs at all.
+                    dataFields: ['asyncBufferFill', 'asyncMinFill', 'mixerEngineFill', 'mixerChassisFill:0', 'asyncUnderruns', 'asyncProducerWaits']
                 };
             }
         },

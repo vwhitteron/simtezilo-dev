@@ -73,6 +73,12 @@ type app struct {
 	EnableDevTools bool    `json:"enableDevTools"`
 
 	EnableExperimentalFeatures bool `json:"enableExperimentalFeatures"`
+
+	// RealtimeScheduling asks the audio producer thread for a realtime
+	// scheduling policy. It defaults to true. Set it to false to run the
+	// producer at normal priority, which is the way to compare a tuned machine
+	// against an untuned one without a rebuild.
+	RealtimeScheduling bool `json:"realtimeScheduling"`
 }
 
 type discord struct {
@@ -875,6 +881,30 @@ func (c *Config) SetExperimentalFeaturesEnabled(enabled bool) {
 	c.viper.App.EnableExperimentalFeatures = enabled
 
 	c.registerUpdate(false)
+}
+
+// GetAppRealtimeScheduling reports whether the audio producer thread requests a
+// realtime scheduling policy. A false value also disables the CPU pin, because
+// the pin is only useful under that policy. The request still needs the
+// operating-system privilege; a refusal is a warning, never fatal.
+func (c *Config) GetAppRealtimeScheduling() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.App.RealtimeScheduling
+}
+
+// SetAppRealtimeScheduling enables or disables the realtime request for the
+// audio producer thread.
+func (c *Config) SetAppRealtimeScheduling(value bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.App.RealtimeScheduling = value
+
+	// The policy belongs to the producer thread, which is created once at audio
+	// startup, so a change takes effect at the next restart.
+	c.registerUpdate(true)
 }
 
 // ****************************************************************************
