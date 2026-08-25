@@ -6,7 +6,6 @@ package tuneassist
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"slices"
 	"strconv"
 
@@ -129,6 +128,11 @@ type mapCoord struct {
 	Throttle float32 `json:"throttle"` // throttle input, percent 0-100
 	Brake    float32 `json:"brake"`    // brake input, percent 0-100
 	Seq      uint32  `json:"seq"`      // telemetry sequence ID (drop-aware frame offset)
+	// VideoFrame is the sample's position in the whole recording, counted over every
+	// packet the scan delivered. For a video source it is the index of the matching
+	// sample in the embedded telemetry track, which is what places this point on the
+	// video timeline. Frame (above) is per-lap and cannot serve that purpose.
+	VideoFrame int `json:"videoFrame"`
 }
 
 type metadata struct {
@@ -139,6 +143,8 @@ type metadata struct {
 	VehicleModel      string `json:"vehicleModel"`
 	VehicleCategory   string `json:"vehicleCategory"`
 	VehicleDrivetrain string `json:"vehicleDrivetrain"`
+	// Video is set only when the analysis came from a video source.
+	Video *videoMeta `json:"video,omitempty"`
 }
 
 type lapAccumulator struct {
@@ -179,6 +185,11 @@ func collectAllLaps(ctx context.Context, source string) (map[int16][]dataPoint, 
 	// exactly as the processed path splits them.
 	var rawTrans, rawRot derivTracker
 
+	// Counts every packet the scan delivers, including those skipped below, so it
+	// stays aligned with the sample index of a video's telemetry track. Incrementing
+	// after the skip would silently shift the video by the length of the lead-in.
+	packetIndex := -1
+
 	for frame, frameErr := range client.Scan(ctx) {
 		if ctx.Err() != nil {
 			return nil, nil, metadata{}, ctx.Err()
@@ -187,6 +198,8 @@ func collectAllLaps(ctx context.Context, source string) (map[int16][]dataPoint, 
 		if frameErr != nil {
 			return nil, nil, metadata{}, fmt.Errorf("reading frame: %w", frameErr)
 		}
+
+		packetIndex++
 
 		if !frame.TelemetryStarted() {
 			continue
@@ -204,7 +217,7 @@ func collectAllLaps(ctx context.Context, source string) (map[int16][]dataPoint, 
 		// on the current frame.
 		state.Update(framePeriod, dims, client)
 
-		accumulateFrame(accumulators, frame, dims, &state, &rawTrans, &rawRot)
+		accumulateFrame(accumulators, frame, dims, &state, &rawTrans, &rawRot, packetIndex)
 	}
 
 	// Resolve circuit from the last known coordinate
@@ -281,6 +294,7 @@ func accumulateFrame(
 	dims vehicle.Dimensions,
 	state *kinematics.State,
 	rawTrans, rawRot *derivTracker,
+	packetIndex int,
 ) {
 	lap := frame.CurrentLap()
 
@@ -310,6 +324,8 @@ func accumulateFrame(
 		Throttle: frame.ThrottleInputPercent(),
 		Brake:    frame.BrakeInputPercent(),
 		Seq:      frame.SequenceID(),
+
+		VideoFrame: packetIndex,
 	})
 
 	// Processed: match calculateChassisHapticPulseAmplitude/Frequency — the larger
@@ -358,9 +374,7 @@ type lapResponse struct {
 // replay selection and switches laps client-side — so caching it would trade
 // permanent memory for a hit rate of roughly zero. The accumulated analysis lives
 // only until the response has been encoded.
-func buildLapResponse(ctx context.Context, dir, filename string) (lapResponse, error) {
-	source := "file://" + filepath.ToSlash(filepath.Join(dir, filename))
-
+func buildLapResponse(ctx context.Context, source string, video *videoMeta) (lapResponse, error) {
 	lapPoints, lapMaps, meta, err := collectAllLaps(ctx, source)
 	if err != nil {
 		return lapResponse{}, fmt.Errorf("loading replay: %w", err)
@@ -384,6 +398,8 @@ func buildLapResponse(ctx context.Context, dir, filename string) (lapResponse, e
 	for lap, coords := range lapMaps {
 		mapData[strconv.Itoa(int(lap))] = coords
 	}
+
+	meta.Video = video
 
 	return lapResponse{Laps: laps, Data: data, Map: mapData, Metadata: meta}, nil
 }

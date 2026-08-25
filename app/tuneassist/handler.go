@@ -20,21 +20,32 @@ type Options struct {
 	// per request rather than captured once, since the app's base directory can
 	// change at runtime.
 	ReplayDir func() string
+	// CacheDir returns the absolute path to the directory holding telemetry tracks
+	// extracted from videos. Evaluated per request, for the same reason as ReplayDir.
+	// Leaving it unset disables video sources rather than failing at construction.
+	CacheDir func() string
 }
 
 // Service serves the tuning assistant's HTTP API.
 type Service struct {
 	log       zerolog.Logger
 	replayDir func() string
+	cacheDir  func() string
 
 	tuningDefaults []byte
 }
 
 // New creates a Service ready to be wired into the web UI's HTTP mux.
 func New(opts Options) *Service {
+	cacheDir := opts.CacheDir
+	if cacheDir == nil {
+		cacheDir = func() string { return "" }
+	}
+
 	svc := &Service{
 		log:       opts.Log,
 		replayDir: opts.ReplayDir,
+		cacheDir:  cacheDir,
 	}
 
 	svc.tuningDefaults = buildTuningDefaults(opts.Log)
@@ -67,6 +78,10 @@ func buildTuningDefaults(log zerolog.Logger) []byte {
 
 	return defaultsJSON
 }
+
+// errNoCacheDir reports a video source requested without a cache directory to
+// extract its telemetry track into.
+var errNoCacheDir = errors.New("no cache directory configured for video sources")
 
 // validateReplayName rejects empty names, path traversal attempts, and names not
 // present in the freshly-scanned replay listing.
@@ -113,7 +128,15 @@ func (s *Service) HandleData(response http.ResponseWriter, request *http.Request
 		return
 	}
 
-	replayData, err := buildLapResponse(request.Context(), dir, filename)
+	source, video, err := s.resolveSource(dir, filename)
+	if err != nil {
+		s.log.Error().Err(err).Str("replay", filename).Msg("resolving replay source")
+		http.Error(response, err.Error(), http.StatusInternalServerError)
+
+		return
+	}
+
+	replayData, err := buildLapResponse(request.Context(), source, video)
 	if err != nil {
 		s.log.Error().Err(err).Str("replay", filename).Msg("building replay analysis")
 		http.Error(response, err.Error(), http.StatusInternalServerError)
@@ -168,7 +191,15 @@ func (s *Service) HandleAudio(response http.ResponseWriter, request *http.Reques
 
 	unfiltered := request.URL.Query().Get("raw") == "1"
 
-	wav, err := renderSectionWAV(request.Context(), dir, filename, tuning, unfiltered, lap, fromFrame, toFrame)
+	source, _, err := s.resolveSource(dir, filename)
+	if err != nil {
+		s.log.Error().Err(err).Str("replay", filename).Msg("resolving replay source")
+		http.Error(response, err.Error(), http.StatusInternalServerError)
+
+		return
+	}
+
+	wav, err := renderSectionWAV(request.Context(), source, tuning, unfiltered, lap, fromFrame, toFrame)
 	if err != nil {
 		if errors.Is(err, errNoAudio) {
 			http.Error(response, "no audio for requested lap/section", http.StatusNotFound)
@@ -194,9 +225,13 @@ func (s *Service) HandleTuningDefaults(response http.ResponseWriter, _ *http.Req
 	_, _ = response.Write(s.tuningDefaults)
 }
 
-// listReplays scans dir for .gtz/.gtr replay files, sorted by name. A missing or
-// unreadable directory yields an empty (not error) list, since the assistant should
-// simply show nothing rather than fail when no replays have been recorded yet.
+// listReplays scans dir for replay sources, sorted by name. A missing or unreadable
+// directory yields an empty (not error) list, since the assistant should simply show
+// nothing rather than fail when no replays have been recorded yet.
+//
+// Videos are listed alongside plain recordings because a video carries its own
+// telemetry track and so is a replay source in its own right, not an attachment to
+// one. Everything downstream reaches its telemetry through resolveSource.
 func (s *Service) listReplays(dir string) []string {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -213,7 +248,7 @@ func (s *Service) listReplays(dir string) []string {
 		}
 
 		name := e.Name()
-		if strings.HasSuffix(name, ".gtz") || strings.HasSuffix(name, ".gtr") {
+		if strings.HasSuffix(name, ".gtz") || strings.HasSuffix(name, ".gtr") || isVideoName(name) {
 			replays = append(replays, name)
 		}
 	}

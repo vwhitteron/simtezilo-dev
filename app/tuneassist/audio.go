@@ -7,7 +7,6 @@ import (
 	"errors"
 	"math"
 	"net/http"
-	"path/filepath"
 	"strconv"
 
 	"github.com/vwhitteron/simtezilo-dev/app/haptics"
@@ -36,9 +35,7 @@ const (
 // The buffer opens with header-sized padding and the PCM is written straight after
 // it, so the finished WAV is the buffer itself — the payload is never copied into a
 // second full-size slice just to prepend 44 bytes.
-func renderSectionWAV(ctx context.Context, dir, filename string, tuning haptics.Tuning, unfiltered bool, lap int16, fromFrame, toFrame int) ([]byte, error) {
-	source := "file://" + filepath.ToSlash(filepath.Join(dir, filename))
-
+func renderSectionWAV(ctx context.Context, source string, tuning haptics.Tuning, unfiltered bool, lap int16, fromFrame, toFrame int) ([]byte, error) {
 	var wav bytes.Buffer
 
 	wav.Grow(wavHeaderLen + estimatePCMLen(fromFrame, toFrame))

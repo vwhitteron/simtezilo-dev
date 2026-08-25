@@ -125,6 +125,9 @@ func New(opts Options) *WebUI {
 			ReplayDir: func() string {
 				return filepath.Join(opts.Config.GetAppBaseDir(), "data", "replays")
 			},
+			CacheDir: func() string {
+				return filepath.Join(opts.Config.GetAppBaseDir(), "data", "cache", "tuneassist")
+			},
 		}),
 	}
 
@@ -182,6 +185,7 @@ func (w *WebUI) GetHTTPHandler() http.Handler {
 	mux.HandleFunc("/api/tuneassist/data", w.devToolsGate(w.tuneAssist.HandleData))
 	mux.HandleFunc("/api/tuneassist/audio", w.devToolsGate(w.tuneAssist.HandleAudio))
 	mux.HandleFunc("/api/tuneassist/tuning-defaults", w.devToolsGate(w.tuneAssist.HandleTuningDefaults))
+	mux.HandleFunc("/api/tuneassist/video", w.devToolsGate(w.tuneAssist.HandleVideo))
 
 	if w.sysHandler.setupMode != nil && w.sysHandler.setupMode.IsAvailable() {
 		mux.HandleFunc("/api/system/factory-reset", w.sysHandler.handleFactoryReset)
