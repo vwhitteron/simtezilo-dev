@@ -91,20 +91,25 @@ func DefaultPulseLimits() PulseLimits {
 
 // CaptureWindow restricts which of the rendered samples are handed to a Sink: the
 // frames of Lap whose per-lap index falls in [FromFrame, ToFrame]. A negative
-// ToFrame runs to the end of the replay. The synthesizer is still driven over the
-// whole replay up to that point, since its state (and the kinematics chain) is
+// ToFrame runs to the end of Lap. The synthesizer is still driven over the whole
+// replay up to that point, since its state (and the kinematics chain) is
 // sequential — only the samples outside the window are discarded rather than kept.
+//
+// The window covers one lap and stops when that lap ends, so a caller auditioning a
+// lap hears that lap alone.
 type CaptureWindow struct {
 	Lap       int16
 	FromFrame int
 	ToFrame   int
 }
 
-// gate reports what the frame at lap/idx means for the window: opens is true once
-// the window has been entered (it never re-closes, so frames of other laps falling
-// between the bounds are emitted too), and closes is true for the first frame past
-// the window, whose samples are the exclusive end and must not be emitted. A nil
-// window opens immediately and never closes.
+// gate reports what the frame at lap/idx means for the window: opens is true while
+// the frame lies inside it, and closes is true for the first frame past the window,
+// whose samples are the exclusive end and must not be emitted. A nil window opens
+// immediately and never closes.
+//
+// Leaving the window's lap is handled by the caller, which knows whether the window
+// was ever entered.
 func (w *CaptureWindow) gate(lap int16, idx int) (opens, closes bool) {
 	if w == nil {
 		return true, false
@@ -348,6 +353,14 @@ type captureRouter struct {
 func (r *captureRouter) frame(lap int16, idx int, record Frame) (stop bool) {
 	opens, closes := r.window.gate(lap, idx)
 	if closes {
+		return true
+	}
+
+	// The lap the window covers has ended. gate cannot see this on its own: for a
+	// whole-lap selection ToFrame is the lap's final index, so idx never passes it and
+	// nothing would ever close the window. The render would then run to the end of the
+	// replay and a lap audition would carry every following lap with it.
+	if r.emitting && r.window != nil && lap != r.window.Lap {
 		return true
 	}
 
