@@ -19,3 +19,6 @@ data/persist/
 data/replays/
 data/tmp/
 data/cache/
+# replay_embed working media (hundreds of MB, not source)
+tools/replay_embed/*.mp4
+tools/replay_embed/*.mov
