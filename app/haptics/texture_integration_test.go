@@ -40,10 +40,6 @@ func buildTextureTestRig(t *testing.T, textureEnabled bool) *textureTestRig {
 		"schemaVersion": "1.0.0",
 		"synthesizer": {
 			"textureMute": ` + muted + `
-		},
-		"haptics": {
-			"textureMinFrequencyHz": 25,
-			"textureMaxFrequencyHz": 45
 		}
 	}`
 

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"math"
 	"os"
 	"path/filepath"
@@ -37,6 +38,15 @@ const (
 	hapticsJerkPivotGainMin = -12.0
 	hapticsJerkPivotGainMax = 0.0
 )
+
+// SurfaceRumble is one road surface's texture character. Level is the loudness,
+// which is approximately the output RMS at full speed before the amplitude cap.
+// Coarseness multiplies the speed-derived low-pass cutoff, so a value below 1
+// lowers the cutoff and gives a coarser grain.
+type SurfaceRumble struct {
+	Level      float64 `json:"level"`
+	Coarseness float64 `json:"coarseness"`
+}
 
 // Routing source keys identify the user-facing haptic sources that can be routed
 // to output channels. The chassis row gates the internal per-channel chassis
@@ -113,21 +123,20 @@ type haptics struct {
 	// JerkMax is deprecated: it was replaced by JerkPivot/JerkPivotGain. A
 	// non-zero value is converted on load and then zeroed, so omitempty drops it
 	// from the file on the next write and the migration runs at most once.
-	JerkMax               int                               `json:"jerkMax,omitempty"`
-	_jerkScale            float64                           `json:"-"`
-	SnapCurve             int                               `json:"snapCurve"`
-	SnapMax               int                               `json:"snapMax"`
-	_snapScale            float64                           `json:"-"`
-	PulseMaxAmplitude     float64                           `json:"pulseMaxAmplitude"`
-	PulseMaxFrequencyHz   float64                           `json:"pulseMaxFrequencyHz"`
-	PulseMinFrequencyHz   float64                           `json:"pulseMinFrequencyHz"`
-	_pulseWidthMax        float64                           `json:"-"`
-	_pulseWidthMin        float64                           `json:"-"`
-	TextureMinFrequencyHz float64                           `json:"textureMinFrequencyHz"` // lower edge of the road-texture noise band (low-speed brightness)
-	TextureMaxFrequencyHz float64                           `json:"textureMaxFrequencyHz"` // upper edge of the road-texture noise band (high-speed brightness)
-	EngineProfiles        map[string]profiles.EngineProfile `json:"engineProfiles,omitempty"`
-	_engineProfile        *profiles.EngineProfile           `json:"-"`
-	_engineProfileName    string                            `json:"-"`
+	JerkMax             int                               `json:"jerkMax,omitempty"`
+	_jerkScale          float64                           `json:"-"`
+	SnapCurve           int                               `json:"snapCurve"`
+	SnapMax             int                               `json:"snapMax"`
+	_snapScale          float64                           `json:"-"`
+	PulseMaxAmplitude   float64                           `json:"pulseMaxAmplitude"`
+	PulseMaxFrequencyHz float64                           `json:"pulseMaxFrequencyHz"`
+	PulseMinFrequencyHz float64                           `json:"pulseMinFrequencyHz"`
+	_pulseWidthMax      float64                           `json:"-"`
+	_pulseWidthMin      float64                           `json:"-"`
+	EngineProfiles      map[string]profiles.EngineProfile `json:"engineProfiles,omitempty"`
+	_engineProfile      *profiles.EngineProfile           `json:"-"`
+	_engineProfileName  string                            `json:"-"`
+	SurfaceRumble       map[string]SurfaceRumble          `json:"surfaceRumble,omitempty"`
 }
 
 type hardware struct {
@@ -313,12 +322,6 @@ type Snapshot struct {
 	PulseWidthMin       float64
 	PulseWidthMax       float64
 
-	// Haptics road-texture settings (continuous suspension-roughness layer). The
-	// on/off control is the synthesizer texture mute and loudness is the texture
-	// channel gain; these shape the signal.
-	TextureMinFrequencyHz float64
-	TextureMaxFrequencyHz float64
-
 	// DRX (Dynamic Range Extension) setting
 	DRXEnabled bool
 
@@ -332,6 +335,10 @@ type Snapshot struct {
 
 	// Output routing matrix: source -> per-output-channel enable mask
 	Routing map[string][]bool
+
+	// SurfaceRumble is the per-surface road-texture character, keyed by the
+	// lowercase surface name.
+	SurfaceRumble map[string]SurfaceRumble
 
 	// Monitoring flags
 	FuelMonitoringEnabled bool
@@ -1896,36 +1903,6 @@ func (c *Config) GetHapticePulseFrequencyHzRange() float64 {
 	return snap.PulseMaxFrequencyHz - snap.PulseMinFrequencyHz
 }
 
-// GetHapticsTextureMinHz returns the lower edge of the road-texture noise band.
-func (c *Config) GetHapticsTextureMinHz() float64 {
-	return c.snapshot.Load().TextureMinFrequencyHz
-}
-
-// GetHapticsTextureMaxHz returns the upper edge of the road-texture noise band.
-func (c *Config) GetHapticsTextureMaxHz() float64 {
-	return c.snapshot.Load().TextureMaxFrequencyHz
-}
-
-// SetHapticsTextureMinFrequencyHz sets the texture tone frequency used at low speed,
-// clamped to 5..400 Hz.
-func (c *Config) SetHapticsTextureMinFrequencyHz(value float64) {
-	c.mu.Lock()
-	c.viper.Haptics.TextureMinFrequencyHz = max(5, min(400, value))
-	c.rebuildSnapshot()
-	c.registerUpdate(false)
-	c.mu.Unlock()
-}
-
-// SetHapticsTextureMaxFrequencyHz sets the texture tone frequency approached at high
-// speed, clamped to 5..400 Hz.
-func (c *Config) SetHapticsTextureMaxFrequencyHz(value float64) {
-	c.mu.Lock()
-	c.viper.Haptics.TextureMaxFrequencyHz = max(5, min(400, value))
-	c.rebuildSnapshot()
-	c.registerUpdate(false)
-	c.mu.Unlock()
-}
-
 // GetHapticsPulseWidthMin returns the minimum pulse width in samples based on the current max frequency.
 func (c *Config) GetHapticsPulseWidthMin() float64 {
 	return c.snapshot.Load().PulseWidthMin
@@ -3407,6 +3384,42 @@ func (c *Config) SetSynthEngineProfile(name string, profile profiles.EngineProfi
 	c.registerUpdate(false)
 }
 
+// GetHapticsSurfaceRumbles returns every surface's rumble character, keyed by the
+// lowercase surface name. The returned map is a copy.
+func (c *Config) GetHapticsSurfaceRumbles() map[string]SurfaceRumble {
+	snap := c.snapshot.Load()
+
+	surfaceRumble := make(map[string]SurfaceRumble, len(snap.SurfaceRumble))
+	maps.Copy(surfaceRumble, snap.SurfaceRumble)
+
+	return surfaceRumble
+}
+
+// GetHapticsSurfaceRumble returns one surface's rumble character. The second
+// result is false when the surface has no entry.
+func (c *Config) GetHapticsSurfaceRumble(surface string) (SurfaceRumble, bool) {
+	rumble, ok := c.snapshot.Load().SurfaceRumble[strings.ToLower(surface)]
+
+	return rumble, ok
+}
+
+// SetHapticsSurfaceRumble sets one surface's rumble level and coarseness.
+func (c *Config) SetHapticsSurfaceRumble(surface string, value SurfaceRumble) {
+	value.Level = math.Min(2.0, math.Max(0.0, value.Level))
+	value.Coarseness = math.Min(2.0, math.Max(0.1, value.Coarseness))
+
+	c.mu.Lock()
+
+	if c.viper.Haptics.SurfaceRumble == nil {
+		c.viper.Haptics.SurfaceRumble = make(map[string]SurfaceRumble)
+	}
+
+	c.viper.Haptics.SurfaceRumble[strings.ToLower(surface)] = value
+	c.rebuildSnapshot()
+	c.registerUpdate(false)
+	c.mu.Unlock()
+}
+
 // GetSynthChannelEqEnabled returns whether the equalizer is enabled for a specific channel.
 func (c *Config) GetSynthChannelEqEnabled(channel int) bool {
 	snap := c.snapshot.Load()
@@ -4290,9 +4303,6 @@ func (c *Config) rebuildSnapshot() {
 		PulseWidthMin:       c.viper.Haptics._pulseWidthMin,
 		PulseWidthMax:       c.viper.Haptics._pulseWidthMax,
 
-		TextureMinFrequencyHz: c.viper.Haptics.TextureMinFrequencyHz,
-		TextureMaxFrequencyHz: c.viper.Haptics.TextureMaxFrequencyHz,
-
 		DRXEnabled: c.viper.Synthesizer.EnableDRX,
 
 		DynamicTransmissionFeedback:  c.viper.Haptics.DynamicTransmissionFeedback,
@@ -4315,6 +4325,13 @@ func (c *Config) rebuildSnapshot() {
 			}
 
 			return routing
+		}(),
+
+		SurfaceRumble: func() map[string]SurfaceRumble {
+			surfaceRumble := make(map[string]SurfaceRumble, len(c.viper.Haptics.SurfaceRumble))
+			maps.Copy(surfaceRumble, c.viper.Haptics.SurfaceRumble)
+
+			return surfaceRumble
 		}(),
 
 		FuelMonitoringEnabled: c.viper.PitRadio.FuelMonitoring.Enabled,

@@ -229,7 +229,7 @@
                 "textureMute": {
                     "type": "boolean",
                     "description": "Mute the continuous road-texture layer",
-                    "default": true
+                    "default": false
                 },
                 "textureGain": {
                     "type": "number",
@@ -473,20 +473,6 @@
                     "maximum": 200.0,
                     "default": 60.0
                 },
-                "textureMinFrequencyHz": {
-                    "type": "number",
-                    "description": "Lower edge of the road-texture noise band in Hz (brightness at low speed)",
-                    "minimum": 5.0,
-                    "maximum": 200.0,
-                    "default": 25.0
-                },
-                "textureMaxFrequencyHz": {
-                    "type": "number",
-                    "description": "Upper edge of the road-texture noise band in Hz (brightness at high speed)",
-                    "minimum": 5.0,
-                    "maximum": 200.0,
-                    "default": 45.0
-                },
                 "dynamicTransmissionFeedback": {
                     "type": "boolean",
                     "description": "Enable dynamic transmission feedback",
@@ -511,6 +497,27 @@
                     "description": "Engine haptic profiles keyed by engine type",
                     "additionalProperties": {
                         "$ref": "#/$defs/engineProfile"
+                    }
+                },
+                "surfaceRumble": {
+                    "type": "object",
+                    "description": "Road-texture character keyed by surface name",
+                    "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                            "level": {
+                                "type": "number",
+                                "description": "Loudness, approximately the output RMS at full speed before the amplitude cap",
+                                "minimum": 0,
+                                "maximum": 2
+                            },
+                            "coarseness": {
+                                "type": "number",
+                                "description": "Multiplier on the speed-derived low-pass cutoff; below 1 gives a coarser grain",
+                                "minimum": 0.1,
+                                "maximum": 2
+                            }
+                        }
                     }
                 }
             },

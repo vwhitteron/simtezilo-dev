@@ -1004,11 +1004,9 @@ func testHapticsTextureDefaults(t *testing.T) {
 	cfg := newTestConfig()
 
 	// Act & Assert - road-texture layer defaults. The on/off control is the synth
-	// texture mute (default muted); these shape the signal.
-	assert.True(t, cfg.GetSynthTextureMute())
+	// texture mute (default unmuted); these shape the signal.
+	assert.False(t, cfg.GetSynthTextureMute())
 	assert.InDelta(t, -3.00, cfg.GetSynthTextureGain(), 0.001)
-	assert.InDelta(t, 90, cfg.GetHapticsTextureMinHz(), 0.001)
-	assert.InDelta(t, 150, cfg.GetHapticsTextureMaxHz(), 0.001)
 }
 
 func testHapticsPulseMaxHzIncreaseDecrease(t *testing.T) {

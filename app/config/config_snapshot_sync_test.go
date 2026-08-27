@@ -89,13 +89,12 @@ var snapshotMutators = map[string]func(cfg *Config){
 	"DecreaseHapticsPulseMinHz":             func(cfg *Config) { cfg.DecreaseHapticsPulseMinHz() },
 	"IncreaseHapticsPulseMaxHz":             func(cfg *Config) { cfg.IncreaseHapticsPulseMaxHz() },
 	"DecreaseHapticsPulseMaxHz":             func(cfg *Config) { cfg.DecreaseHapticsPulseMaxHz() },
-	"SetHapticsTextureMinFrequencyHz":       func(cfg *Config) { cfg.SetHapticsTextureMinFrequencyHz(20) },
-	"SetHapticsTextureMaxFrequencyHz":       func(cfg *Config) { cfg.SetHapticsTextureMaxFrequencyHz(150) },
 	"SetHapticsPulseMaxAmplitude":           func(cfg *Config) { cfg.SetHapticsPulseMaxAmplitude(0.75) },
 	"IncreaseHapticsPulseMaxAmplitude":      func(cfg *Config) { cfg.IncreaseHapticsPulseMaxAmplitude() },
 	"DecreaseHapticsPulseMaxAmplitude":      func(cfg *Config) { cfg.DecreaseHapticsPulseMaxAmplitude() },
 	"SetHapticsPulseMaxFrequencyHz":         func(cfg *Config) { cfg.SetHapticsPulseMaxFrequencyHz(120) },
 	"SetHapticsPulseMinFrequencyHz":         func(cfg *Config) { cfg.SetHapticsPulseMinFrequencyHz(20) },
+	"SetHapticsSurfaceRumble":               func(cfg *Config) { cfg.SetHapticsSurfaceRumble("tarmac", SurfaceRumble{Level: 0.5, Coarseness: 0.9}) },
 
 	// Synth section
 	"SetSynthDRXEnabled":                     func(cfg *Config) { cfg.SetSynthDRXEnabled(true) },

@@ -1,9 +1,12 @@
 package haptics
 
 import (
+	"io"
 	"math"
 	"testing"
 
+	"github.com/rs/zerolog"
+	"github.com/vwhitteron/simtezilo-dev/app/config"
 	"github.com/zetetos/gt-telemetry/v2/pkg/models"
 )
 
@@ -43,8 +46,10 @@ func TestTextureSpeedAmplitude(t *testing.T) {
 func TestSurfaceRumbleOrdering(t *testing.T) {
 	t.Parallel()
 
-	tarmacLevel, tarmacCoarse := surfaceRumble(models.SurfaceTypeTarmac)
-	dirtLevel, dirtCoarse := surfaceRumble(models.SurfaceTypeDirt)
+	cfg := config.New(config.Options{Logger: zerolog.New(io.Discard)})
+
+	tarmacLevel, tarmacCoarse := surfaceRumble(cfg, models.SurfaceTypeTarmac)
+	dirtLevel, dirtCoarse := surfaceRumble(cfg, models.SurfaceTypeDirt)
 
 	if dirtLevel <= tarmacLevel {
 		t.Fatalf("dirt level %.2f should exceed tarmac %.2f", dirtLevel, tarmacLevel)
@@ -54,7 +59,7 @@ func TestSurfaceRumbleOrdering(t *testing.T) {
 		t.Fatalf("dirt coarseness %.2f should be lower (coarser) than tarmac %.2f", dirtCoarse, tarmacCoarse)
 	}
 
-	unknownLevel, unknownCoarse := surfaceRumble(models.SurfaceTypeUnknown)
+	unknownLevel, unknownCoarse := surfaceRumble(cfg, models.SurfaceTypeUnknown)
 	if unknownLevel != tarmacLevel || unknownCoarse != tarmacCoarse {
 		t.Fatalf("unknown %.2f/%.2f should match tarmac %.2f/%.2f",
 			unknownLevel, unknownCoarse, tarmacLevel, tarmacCoarse)
@@ -65,6 +70,8 @@ func TestSurfaceRumbleOrdering(t *testing.T) {
 // between all-tarmac and all-dirt, and all-same corners return that surface's values.
 func TestAggregateSurfaceAverages(t *testing.T) {
 	t.Parallel()
+
+	cfg := config.New(config.Options{Logger: zerolog.New(io.Discard)})
 
 	allTarmac := models.CornerSetGeneric[models.SurfaceType]{
 		FrontLeft: models.SurfaceTypeTarmac, FrontRight: models.SurfaceTypeTarmac,
@@ -79,11 +86,11 @@ func TestAggregateSurfaceAverages(t *testing.T) {
 		RearLeft: models.SurfaceTypeTarmac, RearRight: models.SurfaceTypeTarmac,
 	}
 
-	tarmacLevel, _ := aggregateSurface(allTarmac)
-	dirtLevel, _ := aggregateSurface(allDirt)
-	mixLevel, _ := aggregateSurface(twoDirt)
+	tarmacLevel, _ := aggregateSurface(cfg, allTarmac)
+	dirtLevel, _ := aggregateSurface(cfg, allDirt)
+	mixLevel, _ := aggregateSurface(cfg, twoDirt)
 
-	if want, _ := surfaceRumble(models.SurfaceTypeDirt); math.Abs(dirtLevel-want) > 1e-9 {
+	if want, _ := surfaceRumble(cfg, models.SurfaceTypeDirt); math.Abs(dirtLevel-want) > 1e-9 {
 		t.Fatalf("all-dirt level %.4f, want %.4f", dirtLevel, want)
 	}
 

@@ -59,8 +59,6 @@ func defaultConfig() *viperConfig {
 			PulseMinFrequencyHz:          16,
 			_pulseWidthMax:               0.5,
 			_pulseWidthMin:               0.1,
-			TextureMinFrequencyHz:        90,
-			TextureMaxFrequencyHz:        150,
 			EngineProfiles: map[string]profiles.EngineProfile{
 				"s1":                  {PrimaryBalance: 0.15, SecondaryBalance: 0.250, Gain: +0.00, PulseScale: 1.00}, // Racing Kart 125 Shifter
 				"i2":                  {PrimaryBalance: 0.65, SecondaryBalance: 0.850, Gain: -0.75, PulseScale: 1.00}, // Fiat 500 F '68
@@ -99,6 +97,14 @@ func defaultConfig() *viperConfig {
 				"h12":                 {PrimaryBalance: 0.98, SecondaryBalance: 0.990, Gain: -3.00, PulseScale: 0.25}, // Porsche 917K '70
 				"k2":                  {PrimaryBalance: 0.85, SecondaryBalance: 0.960, Gain: -0.75, PulseScale: 0.20}, // RE Amemiya FD3S RX-7
 				"k4":                  {PrimaryBalance: 0.75, SecondaryBalance: 0.800, Gain: +0.00, PulseScale: 0.10}, // Mazda 787B '91
+			},
+			SurfaceRumble: map[string]SurfaceRumble{
+				"tarmac":   {Level: 0.40, Coarseness: 1.00},
+				"concrete": {Level: 0.50, Coarseness: 0.95},
+				"grass":    {Level: 0.65, Coarseness: 0.85},
+				"dirt":     {Level: 0.85, Coarseness: 0.80},
+				"sand":     {Level: 0.30, Coarseness: 1.20},
+				"snow":     {Level: 0.60, Coarseness: 0.90},
 			},
 		},
 		PitRadio: &pitRadio{
@@ -152,7 +158,7 @@ func defaultConfig() *viperConfig {
 			GainIncrement:             0.25,
 			ChassisMute:               false,
 			ChassisGain:               0.00,
-			TextureMute:               true,
+			TextureMute:               false,
 			TextureGain:               -3.00,
 			TransmissionMute:          false,
 			TransmissionGain:          0.00,

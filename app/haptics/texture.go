@@ -3,6 +3,7 @@ package haptics
 import (
 	"math"
 
+	"github.com/vwhitteron/simtezilo-dev/app/config"
 	"github.com/vwhitteron/simtezilo-dev/app/signal"
 	"github.com/vwhitteron/simtezilo-dev/app/synthesizer"
 	"github.com/zetetos/gt-telemetry/v2/pkg/models"
@@ -78,6 +79,14 @@ const (
 	// ~160-300 Hz). The peaky low-frequency impacts are left to the chassis pulse layer.
 	textureHighpassHz = 65.0
 
+	// textureBandMinHz and textureBandMaxHz are the fixed lower and upper edges of the
+	// speed-swept noise band. Both were configurable and are now fixed. The band sets the
+	// cutoff only: the noise is normalised to unit RMS below, so the band moves the
+	// spectrum and leaves the output level to the surface and the speed. Anything above
+	// textureDeviceCeilingHz is clamped away as well, so the setting had no useful travel.
+	textureBandMinHz = 90.0
+	textureBandMaxHz = 150.0
+
 	// textureDeviceCeilingHz is the upper bound the speed-driven cutoff is clamped to,
 	// just under the 160 Hz roll-off of the physical haptic transducer (the same limit the
 	// engine waveform generators respect). Content above this is attenuated by the device
@@ -137,15 +146,15 @@ func (g *Generator) Texture() {
 	}
 
 	speed := g.kin.Current.GroundSpeed
-	surfaceLevel, surfaceCoarseness := aggregateSurface(g.kin.Current.SurfaceType)
+	surfaceLevel, surfaceCoarseness := aggregateSurface(g.cfg, g.kin.Current.SurfaceType)
 
 	amplitude := surfaceLevel * textureSpeedAmplitude(speed)
 	amplitude = min(amplitude, textureMaxAmplitude)
 
 	cutoffHz := textureCutoffHz(
 		speed,
-		g.cfg.GetHapticsTextureMinHz(),
-		g.cfg.GetHapticsTextureMaxHz(),
+		textureBandMinHz,
+		textureBandMaxHz,
 	) * surfaceCoarseness
 
 	// Clamp to just under the transducer roll-off so a bright surface (coarseness > 1) or a
@@ -291,12 +300,25 @@ func textureSpeedAmplitude(speedMps float64) float64 {
 // surfaceRumble maps a single surface classification to its rumble level (loudness,
 // ≈ output RMS at full speed, before the textureMaxAmplitude cap) and coarseness (a
 // multiplier on the speed-derived low-pass cutoff: <1 lowers the cutoff for a coarser
-// grain). Levels run near full scale so the rumble is loud at unity gain; loose
-// surfaces (grass, dirt) are louder and coarser than smooth tarmac, and the loudest
-// sit at/above 1.0 so they reach the amplitude cap. Unknown is treated as tarmac.
-// Values are starting points to be trimmed on-car; the user trims overall loudness
-// with the texture channel gain.
-func surfaceRumble(surface models.SurfaceType) (level, coarseness float64) {
+// grain). The values come from haptics.surfaceRumble in the config, keyed by the
+// surface's lowercase name; the switch below is the fallback for a surface missing
+// from the config. Levels run near full scale so the rumble is loud at unity gain;
+// loose surfaces (grass, dirt) are louder and coarser than smooth tarmac, and the
+// loudest sit at/above 1.0 so they reach the amplitude cap. Unknown is treated as
+// tarmac. The fallback values are starting points to be trimmed on-car; the user
+// trims overall loudness with the texture channel gain.
+func surfaceRumble(cfg *config.Config, surface models.SurfaceType) (level, coarseness float64) {
+	// Unknown has no entry of its own. It reads tarmac's, so a tuned tarmac carries
+	// the unclassified surface with it, as the shipped values always did.
+	lookup := surface
+	if lookup == models.SurfaceTypeUnknown {
+		lookup = models.SurfaceTypeTarmac
+	}
+
+	if rumble, ok := cfg.GetHapticsSurfaceRumble(lookup.String()); ok {
+		return rumble.Level, rumble.Coarseness
+	}
+
 	switch surface {
 	case models.SurfaceTypeConcrete:
 		return 0.50, 0.95
@@ -319,7 +341,7 @@ func surfaceRumble(surface models.SurfaceType) (level, coarseness float64) {
 // coarseness by averaging across the four corners. Averaging gives a partial rumble
 // when only some wheels drop onto a rough surface (e.g. two wheels on grass) and the
 // full rumble when all four are off-track.
-func aggregateSurface(surfaces models.CornerSetGeneric[models.SurfaceType]) (level, coarseness float64) {
+func aggregateSurface(cfg *config.Config, surfaces models.CornerSetGeneric[models.SurfaceType]) (level, coarseness float64) {
 	corners := [4]models.SurfaceType{
 		surfaces.FrontLeft,
 		surfaces.FrontRight,
@@ -330,7 +352,7 @@ func aggregateSurface(surfaces models.CornerSetGeneric[models.SurfaceType]) (lev
 	var sumLevel, sumCoarseness float64
 
 	for _, surface := range corners {
-		cornerLevel, cornerCoarseness := surfaceRumble(surface)
+		cornerLevel, cornerCoarseness := surfaceRumble(cfg, surface)
 		sumLevel += cornerLevel
 		sumCoarseness += cornerCoarseness
 	}

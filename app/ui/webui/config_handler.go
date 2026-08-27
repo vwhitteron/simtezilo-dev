@@ -142,8 +142,7 @@ func (h *configHandler) handleGetConfig(response http.ResponseWriter, _ *http.Re
 			"pulseMaxAmplitude":            h.config.GetHapticsPulseMaxAmplitude(),
 			"pulseMaxFrequencyHz":          h.config.GetHapticsPulseMaxHz(),
 			"pulseMinFrequencyHz":          h.config.GetHapticsPulseMinHz(),
-			"textureMinFrequencyHz":        h.config.GetHapticsTextureMinHz(),
-			"textureMaxFrequencyHz":        h.config.GetHapticsTextureMaxHz(),
+			"surfaceRumble":                h.config.GetHapticsSurfaceRumbles(),
 		},
 		"pitRadio": map[string]any{
 			"enabled":               h.config.PitRadioEnabled(),
@@ -773,10 +772,39 @@ func (h *configHandler) applyHapticsConfig(config map[string]any) []string {
 	errors = appendErr(errors, applyField(config, "pulseMaxAmplitude", "invalid pulse max amplitude value", h.config.SetHapticsPulseMaxAmplitude))
 	errors = appendErr(errors, applyField(config, "pulseMaxFrequencyHz", "invalid pulse max frequency value", h.config.SetHapticsPulseMaxFrequencyHz))
 	errors = appendErr(errors, applyField(config, "pulseMinFrequencyHz", "invalid pulse min frequency value", h.config.SetHapticsPulseMinFrequencyHz))
-	errors = appendErr(errors, applyField(config, "textureMinFrequencyHz", "invalid texture min frequency value", h.config.SetHapticsTextureMinFrequencyHz))
-	errors = appendErr(errors, applyField(config, "textureMaxFrequencyHz", "invalid texture max frequency value", h.config.SetHapticsTextureMaxFrequencyHz))
 	errors = appendErr(errors, applyField(config, "enableReplay", "invalid enable replay value", h.config.SetHapticsEnableReplay))
 	errors = append(errors, applySubMap(config, "output", "invalid haptics output configuration structure", h.applyHapticsOutputConfig)...)
+	errors = append(errors, applySubMap(config, "surfaceRumble", "invalid surface rumble configuration structure", h.applySurfaceRumble)...)
+
+	return errors
+}
+
+// applySurfaceRumble applies the per-surface road-texture overrides. Each key is a
+// surface name and each value is a map with level and coarseness. An entry with a
+// bad shape is reported and the other entries are still applied.
+func (h *configHandler) applySurfaceRumble(surfaces map[string]any) []string {
+	var errors []string
+
+	for surface, rumbleData := range surfaces {
+		rumbleMap, ok := rumbleData.(map[string]any)
+		if !ok {
+			errors = append(errors, "invalid surface rumble value for "+surface)
+
+			continue
+		}
+
+		rumble, _ := h.config.GetHapticsSurfaceRumble(surface)
+
+		if level, ok := rumbleMap["level"].(float64); ok {
+			rumble.Level = level
+		}
+
+		if coarseness, ok := rumbleMap["coarseness"].(float64); ok {
+			rumble.Coarseness = coarseness
+		}
+
+		h.config.SetHapticsSurfaceRumble(surface, rumble)
+	}
 
 	return errors
 }

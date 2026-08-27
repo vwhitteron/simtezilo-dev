@@ -272,15 +272,6 @@ func validateHapticsCustom(hap *haptics, result *ValidationResult) {
 	if hap.PulseMinFrequencyHz >= hap.PulseMaxFrequencyHz {
 		addError(result, "haptics.pulseMinFrequencyHz", "pulseMinFrequencyHz must be less than pulseMaxFrequencyHz")
 	}
-
-	// Validate min < max for the texture frequency band, but only when the band is
-	// actually specified. A config that omits the texture settings unmarshals to
-	// zeroes here and picks up defaults on load, so an unset (0/0) band is not an
-	// error; schema bounds catch a single out-of-range value.
-	if hap.TextureMinFrequencyHz > 0 && hap.TextureMaxFrequencyHz > 0 &&
-		hap.TextureMinFrequencyHz >= hap.TextureMaxFrequencyHz {
-		addError(result, "haptics.textureMinFrequencyHz", "textureMinFrequencyHz must be less than textureMaxFrequencyHz")
-	}
 }
 
 // validateDiscordCustom performs custom validation for Discord settings.
