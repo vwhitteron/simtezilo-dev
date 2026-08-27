@@ -169,10 +169,18 @@
         .plot-panel,
         .video-panel,
         .speed-panel,
-        .chassis-panel {
+        .chassis-panel,
+        .wave-lane-panel {
             display: grid;
             grid-template-rows: subgrid;
             grid-row: span 2;
+            /* The card outline is on the panel, not on the box below the heading,
+               so the heading sits inside the frame. This is how the sidebar widgets
+               are built (.map-widget, .info-widget). The boxes keep their own
+               padding, which insets the plot from this border. */
+            background: var(--bs-content-bg);
+            border: var(--bs-border-width) solid var(--bs-border-color);
+            border-radius: var(--bs-border-radius-lg);
         }
 
         /* display: grid above outranks the hidden attribute's UA display: none, so
@@ -186,9 +194,18 @@
             margin-top: 28px;
         }
 
-        /* The frame is on the container, not on the plot canvas: Chart.js owns the
-           canvas size, so a border on the canvas would draw an outline that tracks
-           whatever size Chart.js picked rather than the size of the column.
+        /* A row holding a single panel. auto-fit collapses the empty track, which would
+           stretch a lone waveform lane to double the width of the paired lanes above
+           it. The lanes are read against each other at the same instant, and a canvas
+           maps the section across its own width, so differing widths put the same
+           moment at different x positions. auto-fill keeps the empty track, so a lone
+           lane matches its neighbours; the responsive collapse to one column at narrow
+           widths is unchanged. */
+        .panel-row-keep-columns {
+            grid-template-columns: repeat(auto-fill, minmax(480px, 1fr));
+        }
+
+        /* The frame is on the panel above, so this box only reserves the space.
 
            aspect-ratio gives the shared grid row its height. A stretched grid item
            has a definite height, which overrides aspect-ratio, so the taller box
@@ -199,9 +216,6 @@
             position: relative;
             aspect-ratio: 1.83;
             padding: 8px;
-            background: var(--bs-content-bg);
-            border: var(--bs-border-width) solid var(--bs-border-color);
-            border-radius: var(--bs-border-radius-lg);
         }
 
         /* Grid children default to min-width:auto, which lets a wide canvas push
@@ -271,7 +285,7 @@
             transition: width 0.3s ease, height 0.3s ease;
         }
 
-        /* Framed by .plot-container above, so the plots opt out of the card outline
+        /* Framed by .plot-panel above, so the plots opt out of the card outline
            the bare canvases carry. Deliberately no width/height here: Chart.js owns
            the canvas size in responsive mode, and a CSS size on the canvas fights
            its resize pass.
@@ -314,9 +328,8 @@
             text-transform: uppercase;
         }
 
-        /* Framed like .wave-container, its partner on the same row, rather than
-           letting the bare canvas carry the outline. The frame has to move onto the
-           container so the canvas can go out of flow: an in-flow canvas with no CSS
+        /* The frame is on .speed-panel, so the bare canvas must not carry an outline
+           of its own. The canvas also goes out of flow: an in-flow canvas with no CSS
            size is sized only by Chart.js's inline width, which then feeds back into
            the container Chart.js measured, so the width hunts as the row resizes.
            The canvas rule above also gives it transition: none, which stops Chart.js
@@ -325,9 +338,6 @@
             position: relative;
             height: 150px;
             padding: 8px;
-            background: var(--bs-content-bg);
-            border: var(--bs-border-width) solid var(--bs-border-color);
-            border-radius: var(--bs-border-radius-lg);
         }
 
         .content-row {
@@ -435,7 +445,8 @@
             text-transform: uppercase;
         }
 
-        /* The frame and the 1.83 box come from the rule shared with .plot-container.
+        /* The frame comes from .video-panel and the 1.83 box from the rule shared
+           with .plot-container.
            The video is object-fit: contain, so it letterboxes inside the box.
 
            Taken out of flow for the same reason as .plot-container>canvas: an
@@ -462,7 +473,8 @@
             background: #000;
         }
 
-        .chassis-panel h3 {
+        .chassis-panel h3,
+        .wave-lane-panel h3 {
             display: flex;
             align-items: center;
             justify-content: center;
@@ -512,23 +524,38 @@
             margin-left: auto;
         }
 
-        /* The frame lives on the container, not the canvas, so the padding insets
-           the trace from the outline. Putting padding on the canvas instead would
-           not work: drawWave() sizes its bitmap from clientWidth/clientHeight,
-           which include padding, so the drawing would be scaled rather than inset.
-           The height carries the padding and borders on top of the 110px of trace
-           the panel had before. The height matches .speed-container so the two
-           panels on that row are the same size. */
+        /* The frame lives on the panel, and this padding insets the trace from that
+           outline. Putting the padding on the canvas instead would not work:
+           drawWave() sizes its bitmap from clientWidth/clientHeight, which include
+           padding, so the drawing would be scaled rather than inset. The height
+           carries that padding on top of the 110px of trace the panel had before,
+           and matches .speed-container so the two panels on that row are the same
+           size. */
         .wave-container {
             position: relative;
             height: 150px;
             padding: 8px;
-            background: var(--bs-content-bg);
-            border: var(--bs-border-width) solid var(--bs-border-color);
-            border-radius: var(--bs-border-radius-lg);
         }
 
-        /* Framed by .wave-container above, so it opts out of the card outline the
+        /* The read-only lanes are framed by .wave-lane-panel exactly like the chassis
+           lane, so they line up with it and with the speed panel. Every lane takes the
+           same pointer gestures, so every lane carries the same cursor. */
+        /* Only a zoomed lane can be panned, so only a zoomed lane offers the cursor. */
+        .wave-lane-canvas.zoomed,
+        #wave-canvas.zoomed {
+            cursor: grab;
+        }
+
+        .wave-lane-canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            border: 0;
+            border-radius: 0;
+            background: transparent;
+        }
+
+        /* Framed by .chassis-panel above, so it opts out of the card outline the
            other plot surfaces carry. */
         #wave-canvas {
             display: block;
@@ -537,11 +564,103 @@
             border: 0;
             border-radius: 0;
             background: transparent;
-            cursor: text;
         }
 
         .tune-widget h3 {
             margin-bottom: 14px;
+        }
+
+        /* The widget sits in the sidebar, not a .panel-row, so its tab strip reserves
+           no --panel-head-h: it needs only to stand where the <h3> used to. The strip
+           keeps the centring of .chart-tabs, so it reads like the widget's other
+           headings, which are centred too. */
+        .tune-widget .chart-tabs {
+            min-height: 0;
+            margin-bottom: 14px;
+            gap: 2px;
+            /* The sidebar is a fixed 220px and each label is nowrap, so a strip that
+               cannot fit its tabs on one line must drop one rather than overflow the
+               column. row-gap keeps the two lines apart. */
+            flex-wrap: wrap;
+            row-gap: 4px;
+        }
+
+        /* Even padding on both sides. An asymmetric inset would offset the centred
+           strip by half of it. */
+        .tune-widget .chart-tab {
+            padding: 0 4px;
+        }
+
+        /* Names the engine profile the replay resolved to. Typed like a .tune-row
+           label so it reads as part of the pane rather than a second heading. */
+        .tune-widget .tune-profile {
+            font-size: 0.7em;
+            color: var(--bs-secondary-color);
+            margin-bottom: 12px;
+            word-break: break-all;
+        }
+
+        /* Set while the replay's vehicle matches no profile entry: the shaping knobs
+           have nothing to edit and a commit has no profile key to write to. The gain row
+           and the actions stay live, because the layer's mix gain is committable with or
+           without a profile — see the .tune-gain-row rules below. */
+        .tune-widget .tune-pane.tune-pane-empty .tune-row {
+            opacity: 0.4;
+            pointer-events: none;
+        }
+
+        /* The output toggle sits outside .tune-row on purpose. A pane with no profile
+           greys its rows out, and the layer is still audible in that state. */
+        .tune-widget .tune-output {
+            margin-bottom: 12px;
+        }
+
+        .tune-widget .tune-output label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.72em;
+            color: var(--bs-secondary-color);
+            cursor: pointer;
+        }
+
+        .tune-widget .tune-output input {
+            accent-color: var(--bs-primary);
+            cursor: pointer;
+        }
+
+        /* One row per surface: name, level, coarseness. The column widths match
+           .tune-row, so the surface names line up with the labels in the other tabs. */
+        .tune-widget .surface-grid {
+            display: grid;
+            grid-template-columns: 68px 1fr 1fr;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 12px;
+        }
+
+        .tune-widget .surface-grid label {
+            font-size: 0.72em;
+            color: var(--bs-secondary-color);
+            text-align: right;
+        }
+
+        .tune-widget .surface-head {
+            font-size: 0.66em;
+            color: var(--bs-secondary-color);
+            text-align: center;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .tune-widget .tune-gain-row {
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--bs-border-color);
+        }
+
+        .tune-widget .tune-pane.tune-pane-empty .tune-gain-row {
+            opacity: 1;
+            pointer-events: auto;
         }
 
         .tune-widget .tune-row {
@@ -618,7 +737,7 @@
             box-shadow: 0 0 0 3px hsla(var(--bs-blue-hsl), 0.35);
         }
 
-        .tune-widget .tune-row input.tune-value {
+        .tune-widget input.tune-value {
             width: 100%;
             font-size: 0.74em;
             color: var(--bs-body-color);
@@ -629,18 +748,18 @@
             border-radius: 3px;
             padding: 2px 4px;
             font-family: inherit;
-            /* Spinners steal width at this size and the slider already steps. */
+            /* Spinners steal width at this size. The box steps with the arrow keys. */
             -moz-appearance: textfield;
             appearance: textfield;
         }
 
-        .tune-widget .tune-row input.tune-value::-webkit-outer-spin-button,
-        .tune-widget .tune-row input.tune-value::-webkit-inner-spin-button {
+        .tune-widget input.tune-value::-webkit-outer-spin-button,
+        .tune-widget input.tune-value::-webkit-inner-spin-button {
             -webkit-appearance: none;
             margin: 0;
         }
 
-        .tune-widget .tune-row input.tune-value:focus {
+        .tune-widget input.tune-value:focus {
             outline: none;
             border-color: var(--bs-primary);
             background: var(--bs-sable-600);
@@ -699,7 +818,7 @@
                 </label>
             </div>
             <div class="lap-group">
-                <label for="highlight-count">Highlight:</label>
+                <label for="highlight-count">Window:</label>
                 <select id="highlight-count">
                     <option value="15">250 ms</option>
                     <option value="30">500 ms</option>
@@ -707,6 +826,13 @@
                     <option value="120">2 s</option>
                     <option value="240">4 s</option>
                 </select>
+            </div>
+            <div class="lap-group">
+                <label for="wave-zoom-toggle">Zoom:</label>
+                <label class="toggle-switch" title="Show only the highlight window in every haptic waveform. They share one window, so the same moment stays at the same position in each lane.">
+                    <input type="checkbox" id="wave-zoom-toggle">
+                    <span class="slider"></span>
+                </label>
             </div>
             <div class="chassis-transport">
                 <button id="wave-play" type="button" title="Play / pause">&#9654;</button>
@@ -750,6 +876,34 @@
                         </div>
                     </div>
                 </div>
+                <!-- The other haptic layers get a row of their own rather than extra
+                     children of .chassis-panel: that panel subgrids onto exactly two
+                     rows, so a third child lands in an implicit row and overlaps the
+                     panel below. These lanes are read-only. They share the chassis
+                     lane's transport, playhead and highlight; only the chassis lane is
+                     audible and scrubbable. -->
+                <div class="panel-row">
+                    <div class="wave-lane-panel">
+                        <h3>Engine Haptic Waveform</h3>
+                        <div class="wave-container">
+                            <canvas id="wave-canvas-engine" class="wave-lane-canvas"></canvas>
+                        </div>
+                    </div>
+                    <div class="wave-lane-panel">
+                        <h3>Transmission Haptic Waveform</h3>
+                        <div class="wave-container">
+                            <canvas id="wave-canvas-transmission" class="wave-lane-canvas"></canvas>
+                        </div>
+                    </div>
+                </div>
+                <div class="panel-row panel-row-keep-columns">
+                    <div class="wave-lane-panel">
+                        <h3>Road Noise Haptic Waveform</h3>
+                        <div class="wave-container">
+                            <canvas id="wave-canvas-texture" class="wave-lane-canvas"></canvas>
+                        </div>
+                    </div>
+                </div>
             </div>
             <div class="tuneassist-sidebar">
                 <div class="map-widget">
@@ -787,45 +941,231 @@
                     </dl>
                 </div>
                 <div class="info-widget tune-widget" id="tune-widget">
-                    <h3>Chassis Haptics</h3>
-                    <div class="tune-row">
-                        <label for="tune-jerkCurve">Jerk curve</label>
-                        <input type="range" id="tune-jerkCurve" min="5" max="995" step="5">
-                        <input type="number" class="tune-value" id="out-jerkCurve" min="5" max="995" step="5"
-                            inputmode="numeric">
+                    <!-- Typed and toggled exactly like the plot panel's .chart-tabs above,
+                         rather than the settings page's Bootstrap nav-tabs: this page loads
+                         no Bootstrap tab JS. -->
+                    <div class="chart-tabs" role="tablist">
+                        <button type="button" class="chart-tab active" role="tab"
+                            data-tune-tab="chassis">Chassis</button>
+                        <button type="button" class="chart-tab" role="tab"
+                            data-tune-tab="engine">Engine</button>
+                        <button type="button" class="chart-tab" role="tab"
+                            data-tune-tab="transmission">Trans</button>
+                        <button type="button" class="chart-tab" role="tab"
+                            data-tune-tab="texture">Road</button>
                     </div>
-                    <div class="tune-row">
-                        <label for="tune-jerkPivot">Jerk pivot</label>
-                        <input type="range" id="tune-jerkPivot" min="0" max="1000" step="1">
-                        <!-- min must stay > 0: it is the `lo` of the geometric slider mapping, and a
-                         zero lower bound makes tuneValueAtPos/tunePosForValue NaN. It also has to
-                         be a multiple of step, because the spinner ladder is anchored at min —
-                         min="1" step="10" would spin 631, 641 rather than 640, 650. -->
-                        <input type="number" class="tune-value" id="out-jerkPivot" min="10" max="20000" step="10"
-                            inputmode="numeric">
+
+                    <div class="tune-pane" data-tune-pane="chassis">
+                        <div class="tune-output">
+                            <label>
+                                <input type="checkbox" class="tune-out-enable"
+                                    data-out-layer="chassis" checked>
+                                Audio output
+                            </label>
+                        </div>
+                        <div class="tune-row tune-gain-row">
+                            <label for="gain-chassis">Gain</label>
+                            <input type="range" id="gain-chassis" min="-60" max="0" step="0.5">
+                            <input type="number" class="tune-value" id="gainout-chassis" min="-60" max="0"
+                                step="0.5" inputmode="decimal">
+                        </div>
+                        <div class="tune-row">
+                            <label for="tune-jerkCurve">Jerk curve</label>
+                            <input type="range" id="tune-jerkCurve" min="5" max="995" step="5">
+                            <input type="number" class="tune-value" id="out-jerkCurve" min="5" max="995" step="5"
+                                inputmode="numeric">
+                        </div>
+                        <div class="tune-row">
+                            <label for="tune-jerkPivot">Jerk pivot</label>
+                            <input type="range" id="tune-jerkPivot" min="0" max="1000" step="1">
+                            <!-- min must stay > 0: it is the `lo` of the geometric slider mapping, and a
+                             zero lower bound makes tuneValueAtPos/tunePosForValue NaN. It also has to
+                             be a multiple of step, because the spinner ladder is anchored at min —
+                             min="1" step="10" would spin 631, 641 rather than 640, 650. -->
+                            <input type="number" class="tune-value" id="out-jerkPivot" min="10" max="20000" step="10"
+                                inputmode="numeric">
+                        </div>
+                        <div class="tune-row">
+                            <label for="tune-jerkPivotGain">Jerk pivot gain</label>
+                            <input type="range" id="tune-jerkPivotGain" min="-12" max="0" step="0.1">
+                            <input type="number" class="tune-value" id="out-jerkPivotGain" min="-12" max="0" step="0.1"
+                                inputmode="decimal">
+                        </div>
+                        <div class="tune-row">
+                            <label for="tune-snapCurve">Snap curve</label>
+                            <input type="range" id="tune-snapCurve" min="5" max="995" step="5">
+                            <input type="number" class="tune-value" id="out-snapCurve" min="5" max="995" step="5"
+                                inputmode="numeric">
+                        </div>
+                        <div class="tune-row">
+                            <label for="tune-snapMax">Snap max</label>
+                            <input type="range" id="tune-snapMax" min="1" max="200" step="1">
+                            <input type="number" class="tune-value" id="out-snapMax" min="1" max="200" step="1"
+                                inputmode="numeric">
+                        </div>
+                        <div class="tune-actions">
+                            <button type="button" class="tune-reset" data-tune-tab="chassis">Reset</button>
+                            <button type="button" class="tune-commit" data-tune-tab="chassis"
+                                title="Write these values to the haptics section of the config file">Commit</button>
+                        </div>
                     </div>
-                    <div class="tune-row">
-                        <label for="tune-jerkPivotGain">Jerk pivot gain</label>
-                        <input type="range" id="tune-jerkPivotGain" min="-12" max="0" step="0.1">
-                        <input type="number" class="tune-value" id="out-jerkPivotGain" min="-12" max="0" step="0.1"
-                            inputmode="decimal">
+
+                    <div class="tune-pane" data-tune-pane="engine" hidden>
+                        <div class="tune-output">
+                            <label>
+                                <input type="checkbox" class="tune-out-enable"
+                                    data-out-layer="engine">
+                                Audio output
+                            </label>
+                        </div>
+                        <div class="tune-row tune-gain-row">
+                            <label for="gain-engine">Gain</label>
+                            <input type="range" id="gain-engine" min="-60" max="0" step="0.5">
+                            <input type="number" class="tune-value" id="gainout-engine" min="-60" max="0"
+                                step="0.5" inputmode="decimal">
+                        </div>
+                        <!-- Names the haptics.engineProfiles entry this replay's vehicle
+                             resolved to, which is the entry a commit writes back to. -->
+                        <div class="tune-profile" id="tune-engine-profile">Profile: —</div>
+                        <div class="tune-row">
+                            <label for="tune-primaryBalance">Primary bal</label>
+                            <input type="range" id="tune-primaryBalance" min="0" max="1" step="0.01">
+                            <input type="number" class="tune-value" id="out-primaryBalance" min="0" max="1" step="0.01"
+                                inputmode="decimal">
+                        </div>
+                        <div class="tune-row">
+                            <label for="tune-secondaryBalance">Secondary bal</label>
+                            <input type="range" id="tune-secondaryBalance" min="0" max="1" step="0.01">
+                            <input type="number" class="tune-value" id="out-secondaryBalance" min="0" max="1"
+                                step="0.01" inputmode="decimal">
+                        </div>
+                        <div class="tune-row">
+                            <label for="tune-engineGain">Gain</label>
+                            <input type="range" id="tune-engineGain" min="-24" max="0" step="0.25">
+                            <input type="number" class="tune-value" id="out-engineGain" min="-24" max="0" step="0.25"
+                                inputmode="decimal">
+                        </div>
+                        <div class="tune-row">
+                            <label for="tune-pulseScale">Pulse scale</label>
+                            <input type="range" id="tune-pulseScale" min="0" max="1" step="0.01">
+                            <input type="number" class="tune-value" id="out-pulseScale" min="0" max="1" step="0.01"
+                                inputmode="decimal">
+                        </div>
+                        <div class="tune-actions">
+                            <button type="button" class="tune-reset" data-tune-tab="engine">Reset</button>
+                            <button type="button" class="tune-commit" data-tune-tab="engine"
+                                title="Write these values to this vehicle's engine profile in the config file">Commit</button>
+                        </div>
                     </div>
-                    <div class="tune-row">
-                        <label for="tune-snapCurve">Snap curve</label>
-                        <input type="range" id="tune-snapCurve" min="5" max="995" step="5">
-                        <input type="number" class="tune-value" id="out-snapCurve" min="5" max="995" step="5"
-                            inputmode="numeric">
+
+                    <div class="tune-pane" data-tune-pane="transmission" hidden>
+                        <div class="tune-output">
+                            <label>
+                                <input type="checkbox" class="tune-out-enable"
+                                    data-out-layer="transmission">
+                                Audio output
+                            </label>
+                        </div>
+                        <div class="tune-row tune-gain-row">
+                            <label for="gain-transmission">Gain</label>
+                            <input type="range" id="gain-transmission" min="-60" max="0" step="0.5">
+                            <input type="number" class="tune-value" id="gainout-transmission" min="-60" max="0"
+                                step="0.5" inputmode="decimal">
+                        </div>
+                        <!-- Both knobs shape the dynamic driveline step, and so do nothing
+                             while haptics.dynamicTransmissionFeedback is off. That mode
+                             switch stays on the settings page: apart from the layer gain
+                             above, this widget shapes the signal, as the Chassis tab does. -->
+                        <div class="tune-row">
+                            <label for="tune-transmissionJerkCurve">Shift curve</label>
+                            <input type="range" id="tune-transmissionJerkCurve" min="5" max="995" step="5">
+                            <input type="number" class="tune-value" id="out-transmissionJerkCurve" min="5" max="995"
+                                step="5" inputmode="numeric">
+                        </div>
+                        <div class="tune-row">
+                            <label for="tune-transmissionStepBlend">Shift blend</label>
+                            <input type="range" id="tune-transmissionStepBlend" min="0" max="1" step="0.01">
+                            <input type="number" class="tune-value" id="out-transmissionStepBlend" min="0" max="1"
+                                step="0.01" inputmode="decimal">
+                        </div>
+                        <div class="tune-actions">
+                            <button type="button" class="tune-reset" data-tune-tab="transmission">Reset</button>
+                            <button type="button" class="tune-commit" data-tune-tab="transmission"
+                                title="Write these values to the haptics section of the config file">Commit</button>
+                        </div>
                     </div>
-                    <div class="tune-row">
-                        <label for="tune-snapMax">Snap max</label>
-                        <input type="range" id="tune-snapMax" min="1" max="200" step="1">
-                        <input type="number" class="tune-value" id="out-snapMax" min="1" max="200" step="1"
-                            inputmode="numeric">
-                    </div>
-                    <div class="tune-actions">
-                        <button type="button" id="tune-reset">Reset</button>
-                        <button type="button" id="tune-commit"
-                            title="Write these values to the haptics section of the config file">Commit</button>
+
+                    <div class="tune-pane" data-tune-pane="texture" hidden>
+                        <div class="tune-output">
+                            <label>
+                                <input type="checkbox" class="tune-out-enable"
+                                    data-out-layer="texture">
+                                Audio output
+                            </label>
+                        </div>
+                        <div class="tune-row tune-gain-row">
+                            <label for="gain-texture">Gain</label>
+                            <input type="range" id="gain-texture" min="-60" max="0" step="0.5">
+                            <input type="number" class="tune-value" id="gainout-texture" min="-60" max="0"
+                                step="0.5" inputmode="decimal">
+                        </div>
+                        <!-- Number boxes rather than the sliders the other tabs use. Each of
+                             these twelve values is applied by the server-side render, so a
+                             change costs a re-render of the whole section — a slider sweep
+                             would queue renders it could never keep up with. Twelve sliders
+                             would also stand taller than the panel. -->
+                        <div class="surface-grid">
+                            <span></span>
+                            <span class="surface-head">Level</span>
+                            <span class="surface-head">Coarse</span>
+                            <label for="surf-tarmac-level">Tarmac</label>
+                            <input type="number" class="tune-value" id="surf-tarmac-level"
+                                data-surface="tarmac" data-surface-field="level"
+                                min="0" max="2" step="0.05" inputmode="decimal">
+                            <input type="number" class="tune-value" id="surf-tarmac-coarseness"
+                                data-surface="tarmac" data-surface-field="coarseness"
+                                min="0.1" max="2" step="0.05" inputmode="decimal">
+                            <label for="surf-concrete-level">Concrete</label>
+                            <input type="number" class="tune-value" id="surf-concrete-level"
+                                data-surface="concrete" data-surface-field="level"
+                                min="0" max="2" step="0.05" inputmode="decimal">
+                            <input type="number" class="tune-value" id="surf-concrete-coarseness"
+                                data-surface="concrete" data-surface-field="coarseness"
+                                min="0.1" max="2" step="0.05" inputmode="decimal">
+                            <label for="surf-grass-level">Grass</label>
+                            <input type="number" class="tune-value" id="surf-grass-level"
+                                data-surface="grass" data-surface-field="level"
+                                min="0" max="2" step="0.05" inputmode="decimal">
+                            <input type="number" class="tune-value" id="surf-grass-coarseness"
+                                data-surface="grass" data-surface-field="coarseness"
+                                min="0.1" max="2" step="0.05" inputmode="decimal">
+                            <label for="surf-dirt-level">Dirt</label>
+                            <input type="number" class="tune-value" id="surf-dirt-level"
+                                data-surface="dirt" data-surface-field="level"
+                                min="0" max="2" step="0.05" inputmode="decimal">
+                            <input type="number" class="tune-value" id="surf-dirt-coarseness"
+                                data-surface="dirt" data-surface-field="coarseness"
+                                min="0.1" max="2" step="0.05" inputmode="decimal">
+                            <label for="surf-sand-level">Sand</label>
+                            <input type="number" class="tune-value" id="surf-sand-level"
+                                data-surface="sand" data-surface-field="level"
+                                min="0" max="2" step="0.05" inputmode="decimal">
+                            <input type="number" class="tune-value" id="surf-sand-coarseness"
+                                data-surface="sand" data-surface-field="coarseness"
+                                min="0.1" max="2" step="0.05" inputmode="decimal">
+                            <label for="surf-snow-level">Snow</label>
+                            <input type="number" class="tune-value" id="surf-snow-level"
+                                data-surface="snow" data-surface-field="level"
+                                min="0" max="2" step="0.05" inputmode="decimal">
+                            <input type="number" class="tune-value" id="surf-snow-coarseness"
+                                data-surface="snow" data-surface-field="coarseness"
+                                min="0.1" max="2" step="0.05" inputmode="decimal">
+                        </div>
+                        <div class="tune-actions">
+                            <button type="button" class="tune-reset" data-tune-tab="texture">Reset</button>
+                            <button type="button" class="tune-commit" data-tune-tab="texture"
+                                title="Write the gain and the surface values to the config file">Commit</button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -838,6 +1178,7 @@
                 grass: { bg: 'rgba(90, 235, 90, 0.55)', border: 'rgba(90, 235, 90, 1)' },
                 dirt: { bg: 'rgba(205, 133, 63, 0.5)', border: 'rgba(205, 133, 63, 1)' },
                 sand: { bg: 'rgba(244, 208, 63, 0.5)', border: 'rgba(244, 208, 63, 1)' },
+                snow: { bg: 'rgba(200, 230, 245, 0.5)', border: 'rgba(200, 230, 245, 1)' },
                 unknown: { bg: 'rgba(160, 160, 160, 0.5)', border: 'rgba(160, 160, 160, 1)' },
             };
 
@@ -846,7 +1187,8 @@
             let allData = [];
             let chart = null;
             let gainChart = null;
-            let activePlot = 'jerksnap';
+            const DEFAULT_PLOT = 'jerksnap';
+            let activePlot = DEFAULT_PLOT;
             let speedChart = null;
             let speeds = [];            // per-frame ground speed (km/h) from telemetry
             let rangeStart = 0;
@@ -919,6 +1261,10 @@
                     params.set('pany', mapPanY.toFixed(1));
                 }
                 if (poiDist > 0) params.set('poi', String(Math.round(poiDist)));
+                // Panel state. Both are emitted only when they differ from the state a
+                // fresh page starts in, so a default view keeps a short URL.
+                if (activePlot !== DEFAULT_PLOT) params.set('plot', activePlot);
+                if (laneZoomOn) params.set('wavezoom', '1');
                 history.replaceState(null, '', '?' + params.toString());
             }
 
@@ -941,6 +1287,26 @@
                 syncRangeToViewport();   // re-derive selection from the restored viewport (also redraws the chart)
                 drawMap(currentLapKey);
                 updateUrl();             // keep the URL in step with the values we actually clamped to
+            }
+
+            // Swap the visible scatter canvas and mark the matching tab. An unknown plot
+            // name (a hand-edited URL) falls back to the default rather than hiding both
+            // canvases.
+            function showPlot(plot) {
+                activePlot = plot === 'gainfreq' ? 'gainfreq' : DEFAULT_PLOT;
+
+                document.querySelectorAll('.plot-panel .chart-tab').forEach(t => {
+                    t.classList.toggle('active', t.dataset.plot === activePlot);
+                });
+
+                document.getElementById('chart').hidden = activePlot !== 'jerksnap';
+                document.getElementById('gain-chart').hidden = activePlot !== 'gainfreq';
+
+                // Chart.js mis-sizes a canvas that was hidden when it was built — resize it
+                // now that it is visible again, then redraw. Both charts are null before the
+                // first lap loads, which is the case on the initial restore from the URL.
+                const shown = activePlot === 'jerksnap' ? chart : gainChart;
+                if (shown) { shown.resize(); shown.update('none'); }
             }
 
             async function init() {
@@ -973,6 +1339,16 @@
                     highlightCount = parseInt(highlightParam);
                 }
 
+                // Restore the plot tab and the lane zoom before the first draw, so the
+                // charts and the waveform lanes are built in the state the URL names.
+                showPlot(params.get('plot') || DEFAULT_PLOT);
+
+                const waveZoomEl = document.getElementById('wave-zoom-toggle');
+                if (params.get('wavezoom') === '1') {
+                    waveZoomEl.checked = true;
+                    laneZoomOn = true;
+                }
+
                 pendingLap = params.get('lap');
                 if (params.has('zoom') || params.has('poi')) {
                     pendingView = {
@@ -1000,24 +1376,13 @@
                     scheduleAudioRefresh();
                 });
 
-                // Scatter panel tabs: swap the visible canvas, no URL state.
-                document.querySelectorAll('.chart-tab').forEach(tab => {
+                // Scatter panel tabs. Scoped to the plot panel: the tune widget's tabs
+                // carry the same class and would otherwise run this handler too.
+                document.querySelectorAll('.plot-panel .chart-tab').forEach(tab => {
                     tab.addEventListener('click', () => {
-                        const plot = tab.dataset.plot;
-                        if (plot === activePlot) return;
-                        activePlot = plot;
-
-                        document.querySelectorAll('.chart-tab').forEach(t => t.classList.toggle('active', t === tab));
-
-                        const jerkSnapCanvas = document.getElementById('chart');
-                        const gainFreqCanvas = document.getElementById('gain-chart');
-                        jerkSnapCanvas.hidden = plot !== 'jerksnap';
-                        gainFreqCanvas.hidden = plot !== 'gainfreq';
-
-                        // Chart.js mis-sizes a canvas that was hidden when it was built —
-                        // resize it now that it is visible again, then redraw.
-                        const shown = plot === 'jerksnap' ? chart : gainChart;
-                        if (shown) { shown.resize(); shown.update('none'); }
+                        if (tab.dataset.plot === activePlot) return;
+                        showPlot(tab.dataset.plot);
+                        updateUrl();
                     });
                 });
 
@@ -1051,6 +1416,7 @@
                 document.getElementById('v-year').textContent = meta.vehicleYear || '—';
                 document.getElementById('v-category').textContent = meta.vehicleCategory || '—';
                 document.getElementById('v-drivetrain').textContent = meta.vehicleDrivetrain || '—';
+                applyEngineProfileMeta(meta.engineProfile);
 
                 setupVideo(meta, filename);
 
@@ -2671,7 +3037,10 @@
 
                 // Keep the waveform's highlight box in step with the POI/highlight, which can
                 // change without re-fetching audio (e.g. dragging the POI within the section).
-                if (waveBuffer) drawWave();
+                // While the lanes are zoomed the box also sets the window, so the lanes are
+                // reframed instead of merely redrawn.
+                if (laneZoomOn && waveBuffer) syncLaneZoomWindow();
+                else if (waveBuffer) drawWave();
             }
 
             // ---------------------------------------------------------------------
@@ -2682,7 +3051,7 @@
             // ---------------------------------------------------------------------
             let audioCtx = null;
             let waveBuffer = null;        // decoded AudioBuffer for the current section
-            let waveSource = null;        // active AudioBufferSourceNode while playing
+            let waveVoices = {};          // layer -> { source, gain }, live while playing
             let wavePlaying = false;
             let wavePlayOffset = 0;       // seconds into the buffer the playhead sits at
             let wavePlayStartCtx = 0;     // audioCtx.currentTime when the current source started
@@ -2690,11 +3059,161 @@
             let wavePeaks = null;         // { min:[], max:[] } envelope, one pair per canvas column
             let waveLastKey = '';
             let audioReqSeq = 0;          // guards against out-of-order fetch responses
+
+            // Read-only lanes for the other haptic layers. Each holds its own decoded
+            // buffer and envelope but no transport: they are drawn against the chassis
+            // lane's playhead, so there is one audio clock on the page, not three.
+            // All four waveform lanes share one zoom window, because they are read
+            // against each other at the same instant. Zooming them independently would
+            // put the same moment at different x positions in each lane.
+            //
+            // laneZoomOn selects the width of the visible window: the whole section when
+            // off, the highlight window when on. The highlight window is already a time
+            // period the user picks, so the waveform keeps a readable span whatever the
+            // section length. laneOffset is the left edge of the window, as a fraction of
+            // the section.
+            //
+            // The chassis lane is included, so its pointer mapping — scrub, click-to-seek
+            // and hover — must convert through the window rather than treating its width
+            // as the whole section. See fracAtPointer.
+            let laneZoomOn = false;
+            let laneOffset = 0;
+
+            // Frames the highlight box covers. The box is the emphasised scatter points,
+            // which can be non-contiguous, so the span is measured rather than assumed
+            // from highlightCount. highlightCount is the fallback before the first draw.
+            function highlightFrameSpan() {
+                if (!highlightSource || !highlightSource.length) return Math.max(1, highlightCount);
+
+                let lo = Infinity, hi = -Infinity;
+                for (const p of highlightSource) {
+                    if (p.frame < lo) lo = p.frame;
+                    if (p.frame > hi) hi = p.frame;
+                }
+
+                return Math.max(1, hi - lo + 1);
+            }
+
+            // laneZoom is how many times narrower the window is than the whole section.
+            // Both the section and the highlight window change with the selection, so the
+            // factor is derived on each use rather than stored.
+            function laneZoom() {
+                if (!laneZoomOn) return 1;
+
+                const { startFrame, endFrame } = getFrameRange();
+                const span = Math.max(1, endFrame - startFrame);
+
+                return Math.max(1, Math.min(span / highlightFrameSpan(), span));
+            }
+
+            // Mark the lanes that can be panned. The class follows the derived factor, so
+            // it must be refreshed when the section changes as well as on a zoom change.
+            function updateLaneZoomClass() {
+                const zoomed = laneZoom() > 1;
+                const ids = ['wave-canvas', ...waveLanes.map(l => l.canvasId)];
+                for (const id of ids) {
+                    const canvas = document.getElementById(id);
+                    if (canvas) canvas.classList.toggle('zoomed', zoomed);
+                }
+            }
+
+            // The chassis lane's flat colour. It is the fallback behind the surface
+            // colouring, in the same role lane.colour plays for the read-only lanes.
+            const CHASSIS_LANE_COLOUR = 'rgba(233,69,96,0.9)';
+
+            const waveLanes = [
+                { layer: 'engine', canvasId: 'wave-canvas-engine', colour: 'rgba(160,150,235,0.9)', buffer: null, peaks: null },
+                { layer: 'transmission', canvasId: 'wave-canvas-transmission', colour: 'rgba(255,193,7,0.9)', buffer: null, peaks: null },
+                // The texture lane is drawn column by column in the map's surface colours
+                // rather than one flat colour, so the rumble is read against the surface
+                // that produced it. The chassis lane is coloured the same way. Each lane's
+                // colour is the fallback for a lap with no map coordinates loaded.
+                {
+                    layer: 'texture', canvasId: 'wave-canvas-texture',
+                    colour: 'rgba(120,200,140,0.9)', surfaceColoured: true, buffer: null, peaks: null,
+                },
+            ];
+            // The widget's knobs, grouped by the tab that shows them. Every helper below
+            // works off the flattened list, so a key only has to be named here and given a
+            // tune-/out- input pair in the markup.
+            // Which layers are audible. Every layer is rendered and drawn whatever the
+            // state here: these toggles only decide what reaches the speakers. The chassis
+            // buffer is also the transport's clock, so it is fetched even when muted.
+            const AUDIO_LAYERS = ['chassis', 'engine', 'transmission', 'texture'];
+            const audioOut = { chassis: true, engine: false, transmission: false, texture: false };
+
+            // The layer mix gains, in dB, as haptics.chassisGain and its three siblings
+            // hold them. The capture renders a layer without its mix gain — the app applies
+            // that gain in the channel mixer at playback — so the knob here is applied to
+            // the audition instead, and the page hears what the device hears. The drawn
+            // waveform stays at the rendered level, since it shows the shaped signal.
+            //
+            // layerGainDefaults holds the values the config was loaded with, which is what
+            // a tab's Reset returns to.
+            const layerGains = { chassis: 0, engine: -3.5, transmission: 0, texture: 0 };
+            const layerGainDefaults = { ...layerGains };
+
+            // Per-surface road-texture character, as haptics.surfaceRumble holds it. Level
+            // is the surface's loudness and coarseness multiplies the noise cutoff. Unlike
+            // the layer gain, these are applied by the render: a change re-renders the
+            // section, which is why the controls are number boxes and not sliders.
+            //
+            // An unknown surface resolves to tarmac in the generator, so it has no entry.
+            const SURFACES = ['tarmac', 'concrete', 'grass', 'dirt', 'sand', 'snow'];
+            const surfaceRumble = {};
+            const surfaceRumbleDefaults = {};
+
+            // Config field each layer's gain commits to, under the synthesizer section.
+            // These are channel mixer gains, which is why they are not in haptics with the
+            // shaping knobs beside them in the widget.
+            const LAYER_GAIN_KEYS = {
+                chassis: 'chassisGain',
+                engine: 'engineGain',
+                transmission: 'transmissionGain',
+                texture: 'textureGain',
+            };
+
+            // dB to sample multiplier. This is the app's signal.GainToPowerRatio, exponent
+            // 10 and all: the audition must match the device, not be independently correct.
+            function gainToRatio(db) {
+                return db === 0 ? 1 : Math.pow(10, db / 10);
+            }
+
+            // The multiplier a layer's voice runs at. A muted layer is silent whatever its
+            // gain, so the toggle and the knob compose rather than fight.
+            function layerVoiceGain(layer) {
+                return audioOut[layer] ? gainToRatio(layerGains[layer]) : 0;
+            }
+
+            // The decoded buffer for one layer, or null before its render arrives.
+            function layerBuffer(layer) {
+                if (layer === 'chassis') return waveBuffer;
+                const lane = waveLanes.find(l => l.layer === layer);
+                return lane ? lane.buffer : null;
+            }
+
+            const TUNE_TABS = {
+                chassis: ['jerkCurve', 'jerkPivot', 'jerkPivotGain', 'snapCurve', 'snapMax'],
+                engine: ['primaryBalance', 'secondaryBalance', 'engineGain', 'pulseScale'],
+                transmission: ['transmissionJerkCurve', 'transmissionStepBlend'],
+                texture: [],
+            };
+            const TUNE_KEYS = Object.values(TUNE_TABS).flat();
+
+            // The engine entries are placeholders. A real engine profile belongs to one
+            // vehicle, so the Engine tab's defaults are replaced by the profile the loaded
+            // replay resolves to, in applyEngineProfileMeta.
             const tuneDefaults = {
                 jerkCurve: 190, jerkPivot: 601, jerkPivotGain: -3.0, snapCurve: 310, snapMax: 90,
+                primaryBalance: 1.0, secondaryBalance: 1.0, engineGain: -6.0, pulseScale: 1.0,
+                transmissionJerkCurve: 750, transmissionStepBlend: 0.5,
             };
             const tuneValues = { ...tuneDefaults };
-            const TUNE_KEYS = ['jerkCurve', 'jerkPivot', 'jerkPivotGain', 'snapCurve', 'snapMax'];
+
+            // The haptics.engineProfiles entry the loaded replay's vehicle resolves to.
+            // Empty means the vehicle matched none: the Engine tab then has nothing to
+            // render an override for and nothing to commit to.
+            let engineProfileKey = '';
 
             // Controls whose slider travel is geometric rather than linear. For these keys
             // the range input carries a 0..TUNE_SLIDER_STEPS position and the number box
@@ -2703,14 +3222,23 @@
             // in the first few percent of travel.
             const TUNE_LOG_KEYS = new Set(['jerkPivot']);
 
-            // Keys stored as a real number rather than an integer. jerkPivotGain is a
-            // plain dB figure like every other gain, so it commits to a tenth of a dB
-            // instead of being rounded to whole units like the rest.
-            const TUNE_DECIMAL_KEYS = new Set(['jerkPivotGain']);
+            // Decimal places each key commits to. A key absent from this table commits as
+            // a whole number. Never round a key coarser than its own step: the value would
+            // snap back and the slider thumb would refuse to move.
+            const TUNE_DECIMALS = {
+                jerkPivotGain: 1,
+                primaryBalance: 2,
+                secondaryBalance: 2,
+                engineGain: 2,
+                pulseScale: 2,
+                transmissionStepBlend: 2,
+            };
 
             // roundTuneValue snaps a committed value to the precision its key stores.
             function roundTuneValue(key, value) {
-                return TUNE_DECIMAL_KEYS.has(key) ? Math.round(value * 10) / 10 : Math.round(value);
+                const scale = Math.pow(10, TUNE_DECIMALS[key] || 0);
+
+                return Math.round(value * scale) / scale;
             }
             const TUNE_SLIDER_STEPS = 1000;
 
@@ -2785,7 +3313,39 @@
                 const { startFrame, endFrame } = getFrameRange();
                 return [replay, currentLapKey, startFrame, endFrame,
                     ...TUNE_KEYS.map(k => tuneValues[k]),
+                    ...SURFACES.map(surfaceRumbleKey),
                     useRaw ? 'raw' : 'filt'].join('|');
+            }
+
+            // setTuneParams writes the knob values the render should use onto a query.
+            // The engine four are omitted when the vehicle resolved no profile: the render
+            // treats a partial set as absent and keeps the stored profile, and there would
+            // be no stored profile for these placeholder values to stand in for anyway.
+            function setTuneParams(params) {
+                for (const [tab, keys] of Object.entries(TUNE_TABS)) {
+                    if (tab === 'engine' && !engineProfileKey) continue;
+
+                    keys.forEach(k => params.set(k, String(tuneValues[k])));
+                }
+
+                // A surface is sent as a pair. The render takes a surface only when both
+                // halves arrive, so a surface with no loaded value is left out entirely.
+                for (const surface of SURFACES) {
+                    const entry = surfaceRumble[surface];
+                    if (!entry) continue;
+
+                    params.set(surface + 'Level', String(entry.level));
+                    params.set(surface + 'Coarseness', String(entry.coarseness));
+                }
+            }
+
+            // One surface's values as a string, for the render key. A surface with no
+            // loaded value contributes an empty slot rather than being skipped, so the key
+            // keeps its shape.
+            function surfaceRumbleKey(surface) {
+                const entry = surfaceRumble[surface];
+
+                return entry ? entry.level + ',' + entry.coarseness : '';
             }
 
             let audioRefreshTimer = null;
@@ -2808,7 +3368,7 @@
                     from: String(startFrame), to: String(endFrame),
                     raw: useRaw ? '1' : '0',
                 });
-                TUNE_KEYS.forEach(k => params.set(k, String(tuneValues[k])));
+                setTuneParams(params);
 
                 const seq = ++audioReqSeq;
                 setWaveStatus('rendering…');
@@ -2827,6 +3387,11 @@
                     drawWave();
                     updateWaveTime();
 
+                    // The extra lanes render the same section with the same tuning, so
+                    // they are fetched together and drawn as they arrive. A lane that
+                    // fails leaves its own trace empty rather than failing the render.
+                    loadWaveLanes(params, seq);
+
                     videoFollowSuppressed = true;
                     followPlayhead();
                     videoFollowSuppressed = false;
@@ -2837,17 +3402,182 @@
                 }
             }
 
+            // Fetch each read-only lane for the current section. seq is the chassis
+            // request's sequence number: a lane whose render is superseded is discarded,
+            // exactly as the chassis buffer is.
+            function loadWaveLanes(baseParams, seq) {
+                // A new section invalidates the old window position: frame 0 of the new
+                // section is where the playhead is about to start. The section length also
+                // changes, so the zoom factor the window class follows changes with it.
+                setLaneOffset(0);
+                updateLaneZoomClass();
+
+                for (const lane of waveLanes) {
+                    const params = new URLSearchParams(baseParams);
+                    params.set('layer', lane.layer);
+
+                    lane.buffer = null;
+                    lane.peaks = null;
+                    drawLane(lane);
+
+                    fetch('/api/tuneassist/audio?' + params.toString())
+                        .then(resp => resp.ok ? resp.arrayBuffer() : Promise.reject(new Error('no audio')))
+                        .then(raw => ensureAudioCtx().decodeAudioData(raw))
+                        .then(decoded => {
+                            if (seq !== audioReqSeq) return; // superseded by a newer render
+                            lane.buffer = decoded;
+
+                            const { from, to } = laneWindow();
+                            lane.peaks = envelopeFor(
+                                document.getElementById(lane.canvasId), decoded, from, to);
+
+                            drawLane(lane);
+
+                            // The lanes decode after the chassis lane, so playback can
+                            // already be running. An audible layer joins the mix here.
+                            if (wavePlaying && audioOut[lane.layer]) {
+                                startVoice(lane.layer, playheadSeconds());
+                            }
+                        })
+                        .catch(() => { /* an empty lane is the failure state */ });
+                }
+            }
+
             // Downsample the mono buffer to a per-column min/max envelope for drawing.
             function computeWavePeaks() {
-                const canvas = document.getElementById('wave-canvas');
+                const { from, to } = laneWindow();
+                wavePeaks = envelopeFor(document.getElementById('wave-canvas'), waveBuffer, from, to);
+            }
+
+            // Recompute every read-only lane's envelope. Column count follows canvas
+            // width, so this runs on load and on resize.
+            // The visible span of the lanes, as fractions of the whole section.
+            function laneWindow() {
+                const width = 1 / laneZoom();
+                const from = Math.max(0, Math.min(1 - width, laneOffset));
+                return { from, width, to: from + width };
+            }
+
+            // Move the window so a given fraction of the section is visible, clamped to
+            // the ends. Returns true when the window actually moved, so the caller knows
+            // whether the envelopes need recomputing.
+            function setLaneOffset(offset) {
+                const width = 1 / laneZoom();
+                const clamped = Math.max(0, Math.min(1 - width, offset));
+                if (clamped === laneOffset) return false;
+                laneOffset = clamped;
+                return true;
+            }
+
+            // Horizontal wheel pan for a zoomed lane. A trackpad sends the sideways
+            // gesture as deltaX; a one-wheel mouse sends it as deltaY with Shift held.
+            // Both pan the shared window, so the lanes stay aligned.
+            //
+            // A wheel notch is reported in lines or pages on some browsers, so the delta
+            // is converted to pixels before it is read as a fraction of the lane width.
+            const WHEEL_LINE_PX = 16;
+
+            function wheelPanLane(e, canvas) {
+                if (laneZoom() <= 1) return;
+
+                let dx = Math.abs(e.deltaX) >= Math.abs(e.deltaY) ? e.deltaX : (e.shiftKey ? e.deltaY : 0);
+                if (!dx) return;
+
+                if (e.deltaMode === 1) dx *= WHEEL_LINE_PX;
+                else if (e.deltaMode === 2) dx *= canvas.clientWidth;
+
+                // The page must not scroll sideways under the gesture.
+                e.preventDefault();
+
+                const rect = canvas.getBoundingClientRect();
+                const moved = dx / Math.max(1, rect.width) / laneZoom();
+                if (setLaneOffset(laneOffset + moved)) rebuildWaveforms();
+            }
+
+            // Keep the playhead inside the lane window during playback.
+            //
+            // The window pages rather than tracking continuously: each move recomputes
+            // three envelopes, so following sample by sample would do that work on every
+            // animation frame. Paging puts the playhead a quarter of the way into the new
+            // window, which leaves most of the window as look-ahead.
+            function followLaneWindow() {
+                if (laneZoom() <= 1 || !waveBuffer || waveBuffer.duration <= 0) return;
+
+                const frac = playheadSeconds() / waveBuffer.duration;
+                const { from, width, to } = laneWindow();
+                if (frac >= from && frac <= to) return;
+
+                if (setLaneOffset(frac - width * 0.25)) {
+                    if (waveBuffer) computeWavePeaks();
+                    computeLanePeaks();
+                }
+            }
+
+            // Centre the window on the highlight box, or on the playhead when there is no
+            // box. Used when the window width changes, because the old left edge no longer
+            // frames the moment under audition.
+            function centreLaneWindow() {
+                const width = 1 / laneZoom();
+                const { startFrame, endFrame } = getFrameRange();
+                const span = Math.max(1, endFrame - startFrame);
+
+                let centre = null;
+                if (highlightSource && highlightSource.length) {
+                    let lo = Infinity, hi = -Infinity;
+                    for (const p of highlightSource) {
+                        if (p.frame < lo) lo = p.frame;
+                        if (p.frame > hi) hi = p.frame;
+                    }
+                    centre = ((lo + hi) / 2 - startFrame) / span;
+                } else if (waveBuffer && waveBuffer.duration > 0) {
+                    centre = playheadSeconds() / waveBuffer.duration;
+                }
+
+                return setLaneOffset((centre == null ? 0 : centre) - width / 2);
+            }
+
+            // Follow a moved or resized highlight box while the lanes are zoomed. The box
+            // sets the window width, so a change to the box must reframe the lanes.
+            function syncLaneZoomWindow() {
+                if (!laneZoomOn || !waveBuffer) return;
+
+                centreLaneWindow();
+                rebuildWaveforms();
+            }
+
+            // Rebuild every waveform's envelope for the current window, then redraw.
+            // drawWave draws the chassis lane and calls drawLanes, so one call covers all
+            // four. Every window move goes through here: miss it on one lane and that lane
+            // shows a stale span while the others have moved.
+            function rebuildWaveforms() {
+                if (waveBuffer) computeWavePeaks();
+                computeLanePeaks();
+                drawWave();
+            }
+
+            function computeLanePeaks() {
+                const { from, to } = laneWindow();
+                for (const lane of waveLanes) {
+                    const canvas = document.getElementById(lane.canvasId);
+                    lane.peaks = lane.buffer ? envelopeFor(canvas, lane.buffer, from, to) : null;
+                }
+            }
+
+            // Downsample a fraction of the buffer to a per-column min/max envelope.
+            // fromFrac/toFrac default to the whole buffer, which is what the chassis lane
+            // always passes.
+            function envelopeFor(canvas, buffer, fromFrac = 0, toFrac = 1) {
                 const cols = Math.max(1, canvas.clientWidth);
-                const data = waveBuffer.getChannelData(0);
-                const per = data.length / cols;
+                const data = buffer.getChannelData(0);
+                const first = Math.max(0, Math.floor(fromFrac * data.length));
+                const last = Math.min(data.length, Math.ceil(toFrac * data.length));
+                const span = Math.max(1, last - first);
+                const per = span / cols;
                 const mn = new Float32Array(cols);
                 const mx = new Float32Array(cols);
                 for (let c = 0; c < cols; c++) {
-                    const s = Math.floor(c * per);
-                    const e = Math.min(data.length, Math.floor((c + 1) * per));
+                    const s = first + Math.floor(c * per);
+                    const e = Math.min(last, first + Math.floor((c + 1) * per));
                     let lo = 1, hi = -1;
                     for (let i = s; i < e; i++) {
                         const v = data[i];
@@ -2857,7 +3587,191 @@
                     if (e <= s) { lo = 0; hi = 0; }
                     mn[c] = lo; mx[c] = hi;
                 }
-                wavePeaks = { min: mn, max: mx, cols };
+                return { min: mn, max: mx, cols };
+            }
+
+            // Window box: the span of the emphasised scatter points (highlightCount frames
+            // around the POI) mapped onto this section's frame range, so the audio under
+            // the highlighted points is boxed off (e.g. 15 points ≈ 250 ms). Every lane
+            // draws it, because the lanes are read against each other at the same instant.
+            function drawWindowBox(ctx, w, h) {
+                if (!waveBuffer || !highlightSource || !highlightSource.length) return;
+
+                const { startFrame, endFrame } = getFrameRange();
+                const span = Math.max(1, endFrame - startFrame);
+                let lo = Infinity, hi = -Infinity;
+                for (const p of highlightSource) {
+                    if (p.frame < lo) lo = p.frame;
+                    if (p.frame > hi) hi = p.frame;
+                }
+                const xL = laneXClamped((lo - startFrame) / span, w);
+                const xR = laneXClamped((hi - startFrame) / span, w);
+                if (xR <= xL) return;
+
+                // Colour the box by the surface at the POI, matching the map/speed markers.
+                const coords = mapData[currentLapKey] || [];
+                const pf = Math.max(0, Math.min(distToFrame(poiDist), coords.length - 1));
+                const sc = surfaceColors[(coords[pf] && coords[pf].surface)] || surfaceColors.unknown;
+                ctx.fillStyle = alphaScale(sc.bg, 0.4);
+                ctx.fillRect(xL, 0, xR - xL, h);
+                ctx.strokeStyle = sc.border;
+                ctx.lineWidth = 1;
+                ctx.strokeRect(xL + 0.5, 0.5, (xR - xL) - 1, h - 1);
+            }
+
+            // The surface colour of each lane column. A column covers a slice of the zoom
+            // window, which maps linearly onto the section's frames — the same mapping
+            // fracAtPointer uses for a pointer. A lap with no map coordinates yields null,
+            // and the lane falls back to its own colour.
+            function laneSurfaceColours(cols) {
+                const coords = mapData[currentLapKey] || [];
+                if (!coords.length) return null;
+
+                const { from, width } = laneWindow();
+                const { startFrame, endFrame } = getFrameRange();
+                const span = endFrame - startFrame;
+                const colours = new Array(cols);
+
+                for (let c = 0; c < cols; c++) {
+                    const frac = from + ((c + 0.5) / cols) * width;
+                    const frame = Math.round(startFrame + frac * span);
+                    const point = coords[Math.max(0, Math.min(coords.length - 1, frame))];
+                    colours[c] = (surfaceColors[point.surface] || surfaceColors.unknown).border;
+                }
+
+                return colours;
+            }
+
+            // Stroke one lane's envelope, one vertical line per column. Columns of the same
+            // colour are batched into one path: a stroke per column would be one path call
+            // per pixel of lane width, on every animation frame of playback.
+            //
+            // surfaceColoured draws the columns in the map's surface colours; colour is the
+            // flat colour used otherwise, and the fallback when the lap has no map
+            // coordinates to colour by.
+            function strokeEnvelope(ctx, peaks, w, mid, colour, surfaceColoured) {
+                const cols = peaks.cols;
+                const colours = surfaceColoured ? laneSurfaceColours(cols) : null;
+
+                let runColour = null;
+                ctx.beginPath();
+
+                for (let c = 0; c < cols; c++) {
+                    const columnColour = colours ? colours[c] : colour;
+
+                    if (columnColour !== runColour) {
+                        if (runColour !== null) {
+                            ctx.strokeStyle = runColour;
+                            ctx.stroke();
+                            ctx.beginPath();
+                        }
+
+                        runColour = columnColour;
+                    }
+
+                    const x = (c / cols) * w + 0.5;
+                    ctx.moveTo(x, mid - peaks.max[c] * mid);
+                    ctx.lineTo(x, mid - peaks.min[c] * mid);
+                }
+
+                if (runColour !== null) {
+                    ctx.strokeStyle = runColour;
+                    ctx.stroke();
+                }
+            }
+
+            // Draw one read-only lane: envelope, then the shared playhead and hover
+            // marker at the same fractions the chassis lane uses, so the three lanes
+            // line up column for column.
+            function drawLane(lane) {
+                const canvas = document.getElementById(lane.canvasId);
+                if (!canvas) return;
+                const dpr = window.devicePixelRatio || 1;
+                const w = canvas.clientWidth, h = canvas.clientHeight;
+                if (canvas.width !== w * dpr || canvas.height !== h * dpr) {
+                    canvas.width = w * dpr; canvas.height = h * dpr;
+                }
+                const ctx = canvas.getContext('2d');
+                ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+                ctx.clearRect(0, 0, w, h);
+
+                const mid = h / 2;
+                ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+                ctx.beginPath(); ctx.moveTo(0, mid); ctx.lineTo(w, mid); ctx.stroke();
+
+                if (lane.peaks) strokeEnvelope(ctx, lane.peaks, w, mid, lane.colour, lane.surfaceColoured);
+
+                drawWindowBox(ctx, w, h);
+
+                // Hover marker, mapped from the same frame range as the chassis lane and
+                // then through the zoom window. A hover outside the window is not drawn.
+                if (hoveredFrame != null) {
+                    const { startFrame, endFrame } = getFrameRange();
+                    if (hoveredFrame >= startFrame && hoveredFrame <= endFrame) {
+                        const span = Math.max(1, endFrame - startFrame);
+                        const hx = laneX((hoveredFrame - startFrame) / span, w);
+                        if (hx != null) {
+                            const boxW = Math.max(4, (w * laneZoom()) / span);
+                            const bx = Math.max(0, Math.min(w - boxW, hx - boxW / 2));
+                            ctx.fillStyle = 'rgba(255,255,255,0.22)';
+                            ctx.fillRect(bx, 0, boxW, h);
+                        }
+                    }
+                }
+
+                // Playhead, snapped to a device pixel for the same reason as the
+                // chassis lane's. It is absent while the window is elsewhere in the
+                // section, which only happens when the user has panned away by hand:
+                // playback pages the window to keep up.
+                if (waveBuffer && waveBuffer.duration > 0) {
+                    const x = laneX(playheadSeconds() / waveBuffer.duration, w);
+                    if (x != null) {
+                        const px = (Math.round(x * dpr) + 0.5) / dpr;
+                        ctx.strokeStyle = 'rgba(0,229,255,0.5)';
+                        ctx.lineWidth = 1;
+                        ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, h); ctx.stroke();
+                    }
+                }
+
+                // Window indicator: a scrollbar-style bar along the bottom edge showing
+                // which part of the section the lanes are displaying. Without it a zoomed
+                // lane gives no clue where in the lap it sits.
+                if (laneZoom() > 1) {
+                    const { from, width } = laneWindow();
+                    ctx.fillStyle = 'rgba(255,255,255,0.06)';
+                    ctx.fillRect(0, h - 3, w, 3);
+                    ctx.fillStyle = 'rgba(0,229,255,0.45)';
+                    ctx.fillRect(from * w, h - 3, Math.max(2, width * w), 3);
+                }
+            }
+
+            // Map a fraction of the whole section to an x within a lane, clamped to the
+            // lane's edges. Used for the span of a highlight box, which stays meaningful
+            // when only part of it is on screen.
+            function laneXClamped(frac, w) {
+                const { from, width } = laneWindow();
+                return Math.max(0, Math.min(1, (frac - from) / width)) * w;
+            }
+
+            // The fraction of the whole section under a pointer x within a lane. This is
+            // the inverse of laneX, and is what keeps scrubbing accurate when zoomed.
+            function fracAtPointer(clientX, rect) {
+                const local = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+                const { from, width } = laneWindow();
+                return Math.max(0, Math.min(1, from + local * width));
+            }
+
+            // Map a fraction of the whole section to an x within a lane, or null when it
+            // falls outside the zoom window.
+            function laneX(frac, w) {
+                const { from, width } = laneWindow();
+                const local = (frac - from) / width;
+                if (local < 0 || local > 1) return null;
+                return local * w;
+            }
+
+            function drawLanes() {
+                for (const lane of waveLanes) drawLane(lane);
             }
 
             function drawWave() {
@@ -2880,43 +3794,9 @@
                 ctx.strokeStyle = 'rgba(255,255,255,0.08)';
                 ctx.beginPath(); ctx.moveTo(0, mid); ctx.lineTo(w, mid); ctx.stroke();
 
-                if (wavePeaks) {
-                    ctx.strokeStyle = 'rgba(233,69,96,0.9)';
-                    ctx.beginPath();
-                    const cols = wavePeaks.cols;
-                    for (let c = 0; c < cols; c++) {
-                        const x = (c / cols) * w + 0.5;
-                        ctx.moveTo(x, mid - wavePeaks.max[c] * mid);
-                        ctx.lineTo(x, mid - wavePeaks.min[c] * mid);
-                    }
-                    ctx.stroke();
-                }
+                if (wavePeaks) strokeEnvelope(ctx, wavePeaks, w, mid, CHASSIS_LANE_COLOUR, true);
 
-                // Highlight box: the span of the emphasised scatter points (highlightCount
-                // frames around the POI) mapped onto this section's frame range, so the audio
-                // under the highlighted points is boxed off (e.g. 15 points ≈ 250 ms).
-                if (waveBuffer && highlightSource && highlightSource.length) {
-                    const { startFrame, endFrame } = getFrameRange();
-                    const span = Math.max(1, endFrame - startFrame);
-                    let lo = Infinity, hi = -Infinity;
-                    for (const p of highlightSource) {
-                        if (p.frame < lo) lo = p.frame;
-                        if (p.frame > hi) hi = p.frame;
-                    }
-                    const xL = Math.max(0, Math.min(w, ((lo - startFrame) / span) * w));
-                    const xR = Math.max(0, Math.min(w, ((hi - startFrame) / span) * w));
-                    if (xR > xL) {
-                        // Colour the box by the surface at the POI, matching the map/speed markers.
-                        const coords = mapData[currentLapKey] || [];
-                        const pf = Math.max(0, Math.min(distToFrame(poiDist), coords.length - 1));
-                        const sc = surfaceColors[(coords[pf] && coords[pf].surface)] || surfaceColors.unknown;
-                        ctx.fillStyle = alphaScale(sc.bg, 0.4);
-                        ctx.fillRect(xL, 0, xR - xL, h);
-                        ctx.strokeStyle = sc.border;
-                        ctx.lineWidth = 1;
-                        ctx.strokeRect(xL + 0.5, 0.5, (xR - xL) - 1, h - 1);
-                    }
-                }
+                drawWindowBox(ctx, w, h);
 
                 // Hover marker: a secondary box tracking the frame hovered on the speed graph
                 // / scatter plot, so the audio at the hovered point is located on the waveform.
@@ -2924,11 +3804,13 @@
                     const { startFrame, endFrame } = getFrameRange();
                     if (hoveredFrame >= startFrame && hoveredFrame <= endFrame) {
                         const span = Math.max(1, endFrame - startFrame);
-                        const hx = ((hoveredFrame - startFrame) / span) * w;
-                        const boxW = Math.max(4, w / span);
-                        const bx = Math.max(0, Math.min(w - boxW, hx - boxW / 2));
-                        ctx.fillStyle = 'rgba(255,255,255,0.22)';
-                        ctx.fillRect(bx, 0, boxW, h);
+                        const hx = laneX((hoveredFrame - startFrame) / span, w);
+                        if (hx != null) {
+                            const boxW = Math.max(4, (w * laneZoom()) / span);
+                            const bx = Math.max(0, Math.min(w - boxW, hx - boxW / 2));
+                            ctx.fillStyle = 'rgba(255,255,255,0.22)';
+                            ctx.fillRect(bx, 0, boxW, h);
+                        }
                     }
                 }
 
@@ -2941,11 +3823,28 @@
                 // snap has to happen in device pixels and convert back.
                 if (waveBuffer) {
                     const frac = waveBuffer.duration > 0 ? playheadSeconds() / waveBuffer.duration : 0;
-                    const px = (Math.round(frac * w * dpr) + 0.5) / dpr;
-                    ctx.strokeStyle = 'rgba(0,229,255,0.5)';
-                    ctx.lineWidth = 1;
-                    ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, h); ctx.stroke();
+                    const x = laneX(frac, w);
+                    if (x != null) {
+                        const px = (Math.round(x * dpr) + 0.5) / dpr;
+                        ctx.strokeStyle = 'rgba(0,229,255,0.5)';
+                        ctx.lineWidth = 1;
+                        ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, h); ctx.stroke();
+                    }
                 }
+
+                // Window indicator: which part of the section is on screen. Drawn on the
+                // chassis lane too, since it is zoomed by the same control.
+                if (laneZoom() > 1) {
+                    const { from, width } = laneWindow();
+                    ctx.fillStyle = 'rgba(255,255,255,0.06)';
+                    ctx.fillRect(0, h - 3, w, 3);
+                    ctx.fillStyle = 'rgba(0,229,255,0.45)';
+                    ctx.fillRect(from * w, h - 3, Math.max(2, width * w), 3);
+                }
+
+                // The lanes share this lane's playhead and hover marker, so they redraw
+                // with it rather than on a clock of their own.
+                drawLanes();
             }
 
             function tickPlayhead() {
@@ -2955,13 +3854,61 @@
                     // where playback finished. startPlayback returns to the top from here.
                     stopPlayback();
                     wavePlayOffset = waveBuffer.duration;
-                    drawWave(); updateWaveTime(); followPlayhead();
+                    followLaneWindow(); drawWave(); updateWaveTime(); followPlayhead();
                     clampVideoToLap();
                     return;
                 }
-                drawWave(); updateWaveTime(); followPlayhead();
+                followLaneWindow(); drawWave(); updateWaveTime(); followPlayhead();
                 videoSyncToPlayhead(false);
                 waveRaf = requestAnimationFrame(tickPlayhead);
+            }
+
+            // Start one layer's voice at an offset into the section. Each voice has its
+            // own gain, so a layer muted mid-lap keeps its source running and stays in
+            // step with the others. A layer with no render yet gets no voice; startVoice
+            // runs again when that layer's buffer arrives.
+            function startVoice(layer, offset) {
+                const buffer = layerBuffer(layer);
+                if (!buffer || waveVoices[layer]) return;
+
+                const ctx = ensureAudioCtx();
+                const gain = ctx.createGain();
+                gain.gain.value = layerVoiceGain(layer);
+                gain.connect(ctx.destination);
+
+                const source = ctx.createBufferSource();
+                source.buffer = buffer;
+                source.connect(gain);
+                source.start(0, Math.min(offset, buffer.duration));
+
+                waveVoices[layer] = { source, gain };
+            }
+
+            function stopVoices() {
+                for (const voice of Object.values(waveVoices)) {
+                    try { voice.source.onended = null; voice.source.stop(); } catch (e) { }
+                }
+                waveVoices = {};
+            }
+
+            // Turn one layer's output on or off. A live voice only changes gain, so the
+            // change is heard at once and the other layers are not disturbed.
+            function setLayerOutput(layer, on) {
+                audioOut[layer] = on;
+
+                const voice = waveVoices[layer];
+                if (voice) { voice.gain.gain.value = layerVoiceGain(layer); return; }
+                if (on && wavePlaying) startVoice(layer, playheadSeconds());
+            }
+
+            // Move one layer's mix gain. A live voice follows it immediately, so the knob
+            // is heard as it is dragged. Nothing is re-rendered: the gain is applied after
+            // the capture, exactly as the channel mixer applies it in the app.
+            function setLayerGain(layer, db) {
+                layerGains[layer] = db;
+
+                const voice = waveVoices[layer];
+                if (voice) voice.gain.gain.value = layerVoiceGain(layer);
             }
 
             function startPlayback() {
@@ -2970,11 +3917,11 @@
                 if (wavePlayOffset >= waveBuffer.duration - 1e-3) wavePlayOffset = 0;
                 const ctx = ensureAudioCtx();
                 if (ctx.state === 'suspended') ctx.resume();
-                waveSource = ctx.createBufferSource();
-                waveSource.buffer = waveBuffer;
-                waveSource.connect(ctx.destination);
+                stopVoices();
                 wavePlayStartCtx = ctx.currentTime;
-                waveSource.start(0, wavePlayOffset);
+                for (const layer of AUDIO_LAYERS) {
+                    if (audioOut[layer]) startVoice(layer, wavePlayOffset);
+                }
                 wavePlaying = true;
                 setPlayIcon();
                 followPlayhead();
@@ -2985,24 +3932,18 @@
 
             // Pause: freeze the playhead at its current position.
             function pausePlayback() {
-                if (waveSource) {
-                    wavePlayOffset = playheadSeconds();
-                    try { waveSource.onended = null; waveSource.stop(); } catch (e) { }
-                    waveSource = null;
-                }
+                if (wavePlaying) wavePlayOffset = playheadSeconds();
+                stopVoices();
                 wavePlaying = false;
                 setPlayIcon();
                 cancelAnimationFrame(waveRaf);
                 videoPause();
-                drawWave(); updateWaveTime(); followPlayhead();
+                followLaneWindow(); drawWave(); updateWaveTime(); followPlayhead();
             }
 
             // Stop: silence without moving the stored offset (used before reload/seek).
             function stopPlayback() {
-                if (waveSource) {
-                    try { waveSource.onended = null; waveSource.stop(); } catch (e) { }
-                    waveSource = null;
-                }
+                stopVoices();
                 wavePlaying = false;
                 setPlayIcon();
                 cancelAnimationFrame(waveRaf);
@@ -3015,12 +3956,13 @@
             }
 
             // Map a pointer x within the waveform to a lap frame index in the visible section.
-            function frameAtPointer(clientX) {
+            // The lanes are not all the same width, so the caller names the canvas the
+            // pointer x was measured against. It defaults to the chassis lane.
+            function frameAtPointer(clientX, canvas = document.getElementById('wave-canvas')) {
                 if (!currentLapKey) return null;
-                const canvas = document.getElementById('wave-canvas');
                 const rect = canvas.getBoundingClientRect();
                 if (rect.width <= 0) return null;
-                const frac = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+                const frac = fracAtPointer(clientX, rect);
                 const { startFrame, endFrame } = getFrameRange();
                 return Math.max(startFrame, Math.min(endFrame, Math.round(startFrame + frac * (endFrame - startFrame))));
             }
@@ -3034,7 +3976,20 @@
                 const wasPlaying = wavePlaying;
                 stopPlayback();
                 wavePlayOffset = frac * waveBuffer.duration;
-                if (wasPlaying) startPlayback(); else { drawWave(); updateWaveTime(); followPlayhead(); }
+                if (wasPlaying) startPlayback(); else { followLaneWindow(); drawWave(); updateWaveTime(); followPlayhead(); }
+            }
+
+            // Click action shared by every lane: the POI lands on the clicked frame and
+            // the playhead parks at the left edge of the window box.
+            function setPoiAtFrame(frame) {
+                if (frame == null || !cumulativeDists.length) return;
+
+                poiDist = Math.round(cumulativeDists[frame] ?? 0);
+                updateSelectionInfo();
+                updateChart();
+                drawMap(currentLapKey);
+                scheduleUrlUpdate();
+                seekToBoxLeft();
             }
 
             // Leftmost frame of the current primary highlight box (null if none).
@@ -3049,39 +4004,6 @@
             function seekToBoxLeft() {
                 const lo = boxLeftFrame();
                 if (waveBuffer && lo != null) seekToFrame(lo);
-            }
-
-            // Reposition the POI so the highlight box's LEFT edge lands on targetLeft. The box
-            // is centred on the POI, so we measure its half-span (centred on the target) then
-            // shift the POI right by that much. Used on drag-release so the box starts where
-            // the playhead was dropped.
-            function setPoiSoBoxLeftAt(targetLeft) {
-                if (!cumulativeDists.length) return;
-                const maxF = cumulativeDists.length - 1;
-                const clampF = (f) => Math.max(0, Math.min(maxF, f));
-
-                poiDist = Math.round(cumulativeDists[clampF(targetLeft)] ?? 0);
-                updateChart(); // recompute the box centred on the target to read its half-span
-                const lo = boxLeftFrame();
-                const half = lo != null ? Math.max(0, distToFrame(poiDist) - lo) : 0;
-
-                poiDist = Math.round(cumulativeDists[clampF(targetLeft + half)] ?? 0);
-                updateSelectionInfo();
-                updateChart();
-                drawMap(currentLapKey);
-                scheduleUrlUpdate();
-            }
-
-            // Scrub: set the playhead from a pointer x within the waveform canvas.
-            function seekToPointer(clientX) {
-                if (!waveBuffer) return;
-                const canvas = document.getElementById('wave-canvas');
-                const rect = canvas.getBoundingClientRect();
-                const frac = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-                const wasPlaying = wavePlaying;
-                stopPlayback();
-                wavePlayOffset = frac * waveBuffer.duration;
-                if (wasPlaying) startPlayback(); else { drawWave(); updateWaveTime(); followPlayhead(); }
             }
 
             // Bind the video's own transport back into the shared playhead, so scrubbing or
@@ -3147,39 +4069,162 @@
             function setupAudioUI() {
                 document.getElementById('wave-play').addEventListener('click', togglePlay);
 
-                const canvas = document.getElementById('wave-canvas');
-                let scrubbing = false;
-                let didDrag = false;
-                canvas.addEventListener('pointerdown', (e) => {
-                    scrubbing = true; didDrag = false; canvas.setPointerCapture(e.pointerId);
-                    seekToPointer(e.clientX); // move the playhead to the press point
+                document.querySelectorAll('#tune-widget .tune-out-enable').forEach(box => {
+                    box.checked = audioOut[box.dataset.outLayer];
+                    box.addEventListener('change', () => {
+                        setLayerOutput(box.dataset.outLayer, box.checked);
+                    });
                 });
-                canvas.addEventListener('pointermove', (e) => {
-                    if (scrubbing) { didDrag = true; seekToPointer(e.clientX); return; }
-                    // Act as a hover source: sync the hovered frame to the speed/scatter/map.
-                    const f = frameAtPointer(e.clientX);
-                    if (f != null) setHovered(f, 'wave');
-                });
-                canvas.addEventListener('pointerup', (e) => {
-                    if (scrubbing) {
-                        const f = frameAtPointer(e.clientX);
-                        if (didDrag) {
-                            // Drag-release: box's left edge lands where the playhead was dropped.
-                            if (f != null) { setPoiSoBoxLeftAt(f); seekToBoxLeft(); }
-                        } else if (f != null && cumulativeDists.length) {
-                            // Click: POI at the clicked frame; playhead parks at the box's left edge.
-                            poiDist = Math.round(cumulativeDists[f] ?? 0);
-                            updateSelectionInfo();
-                            updateChart();
-                            drawMap(currentLapKey);
-                            scheduleUrlUpdate();
-                            seekToBoxLeft();
+
+                // The gain pair is linear in dB, so the slider position is the value and
+                // none of the geometric mapping the shaping knobs need applies here.
+                for (const layer of AUDIO_LAYERS) {
+                    const slider = document.getElementById('gain-' + layer);
+                    const box = document.getElementById('gainout-' + layer);
+                    const lo = Number(box.min), hi = Number(box.max);
+
+                    const commit = (raw, { syncBox = true, syncSlider = true } = {}) => {
+                        const v = Number(raw);
+                        if (!Number.isFinite(v)) return;
+
+                        const clamped = Math.min(hi, Math.max(lo, v));
+                        setLayerGain(layer, clamped);
+                        if (syncSlider) slider.value = clamped;
+                        if (syncBox) box.value = clamped;
+                    };
+
+                    slider.addEventListener('input', () => commit(slider.value, { syncSlider: false }));
+                    box.addEventListener('input', () => {
+                        const v = Number(box.value);
+                        if (box.value !== '' && Number.isFinite(v) && v >= lo && v <= hi) {
+                            commit(v, { syncBox: false });
                         }
-                    }
-                    scrubbing = false;
+                    });
+                    box.addEventListener('change', () => {
+                        commit(box.value === '' ? layerGains[layer] : box.value);
+                    });
+                }
+
+                applyLayerGainsToControls();
+
+                // The surface boxes re-render, so they commit on change rather than on
+                // input: a value is not sent while it is half typed.
+                document.querySelectorAll('#tune-widget .surface-grid input').forEach(box => {
+                    const surface = box.dataset.surface;
+                    const field = box.dataset.surfaceField;
+                    const lo = Number(box.min), hi = Number(box.max);
+
+                    box.addEventListener('change', () => {
+                        const entry = surfaceRumble[surface];
+                        if (!entry) return;
+
+                        const raw = Number(box.value);
+                        const value = box.value !== '' && Number.isFinite(raw)
+                            ? Math.min(hi, Math.max(lo, raw))
+                            : entry[field];
+
+                        entry[field] = value;
+                        box.value = value;
+                        scheduleAudioRefresh();
+                    });
+
+                    box.addEventListener('keydown', (e) => {
+                        if (e.key === 'Enter') box.blur();
+                    });
                 });
-                canvas.addEventListener('pointercancel', () => { scrubbing = false; didDrag = false; });
-                canvas.addEventListener('pointerleave', () => { if (!scrubbing) setHovered(null, 'wave'); });
+
+                // Space is the transport key for the whole page. The default action would
+                // scroll the page, or toggle the focused control, so it is suppressed.
+                // Typing in a field, or using a checkbox or a button, keeps the key.
+                document.addEventListener('keydown', (e) => {
+                    if (e.key !== ' ' && e.code !== 'Space') return;
+                    if (e.ctrlKey || e.metaKey || e.altKey) return;
+                    const el = e.target;
+                    if (el && (el.isContentEditable || /^(INPUT|SELECT|TEXTAREA|BUTTON)$/.test(el.tagName))) return;
+                    e.preventDefault();
+                    togglePlay();
+                });
+
+                // Lane window. Zooming centres the window on the highlight box, so the
+                // moment being auditioned stays on screen as the window narrows.
+                document.getElementById('wave-zoom-toggle').addEventListener('change', (e) => {
+                    laneZoomOn = e.target.checked;
+
+                    updateUrl();
+                    updateLaneZoomClass();
+                    centreLaneWindow();
+                    rebuildWaveforms();
+                });
+
+                // Every waveform lane takes the same pointer gestures: hover, click and
+                // drag-to-pan. The chassis lane is included, so the audible lane reads and
+                // behaves like the layers beside it.
+                //
+                // Hover syncs the hovered frame to the map, speed graph and scatter plot.
+                // A click sets the POI. A drag pans a zoomed lane, and pans all four lanes
+                // together, since they share one window. A drag is therefore not a click:
+                // the press must move DRAG_SLOP pixels or less to set the POI.
+                const DRAG_SLOP = 3;
+
+                function setupLanePointer(canvas) {
+                    if (!canvas) return;
+
+                    let dragX = null;
+                    let pressX = null;
+                    let didPan = false;
+
+                    canvas.addEventListener('pointerdown', (e) => {
+                        pressX = e.clientX;
+                        didPan = false;
+                        if (laneZoom() <= 1) return;
+                        dragX = e.clientX;
+                        canvas.setPointerCapture(e.pointerId);
+                        canvas.style.cursor = 'grabbing';
+                    });
+
+                    canvas.addEventListener('pointermove', (e) => {
+                        if (dragX == null) {
+                            const f = frameAtPointer(e.clientX, canvas);
+                            if (f != null) setHovered(f, 'wave');
+                            return;
+                        }
+
+                        if (Math.abs(e.clientX - pressX) > DRAG_SLOP) didPan = true;
+
+                        const rect = canvas.getBoundingClientRect();
+                        // A drag of the full lane width moves the window by its own
+                        // width, so the content tracks the pointer one-for-one.
+                        const moved = (dragX - e.clientX) / Math.max(1, rect.width) / laneZoom();
+                        dragX = e.clientX;
+                        if (setLaneOffset(laneOffset + moved)) rebuildWaveforms();
+                    });
+
+                    const endDrag = (e) => {
+                        if (dragX != null) {
+                            dragX = null;
+                            try { canvas.releasePointerCapture(e.pointerId); } catch (err) { }
+                            canvas.style.cursor = '';
+                        }
+                        pressX = null;
+                    };
+
+                    canvas.addEventListener('pointerup', (e) => {
+                        const wasPress = pressX != null && Math.abs(e.clientX - pressX) <= DRAG_SLOP;
+                        endDrag(e);
+                        if (wasPress && !didPan) setPoiAtFrame(frameAtPointer(e.clientX, canvas));
+                        didPan = false;
+                    });
+
+                    canvas.addEventListener('pointercancel', (e) => { endDrag(e); didPan = false; });
+                    canvas.addEventListener('pointerleave', () => {
+                        if (dragX == null) setHovered(null, 'wave');
+                    });
+
+                    canvas.addEventListener('wheel', (e) => wheelPanLane(e, canvas), { passive: false });
+                }
+
+                setupLanePointer(document.getElementById('wave-canvas'));
+                for (const lane of waveLanes) setupLanePointer(document.getElementById(lane.canvasId));
 
                 TUNE_KEYS.forEach(k => {
                     const slider = document.getElementById('tune-' + k);
@@ -3223,29 +4268,110 @@
                     });
                 });
 
-                document.getElementById('tune-reset').addEventListener('click', () => {
-                    TUNE_KEYS.forEach(k => {
-                        tuneValues[k] = tuneDefaults[k];
-                    });
-                    applyTuneToControls();
-                    scheduleAudioRefresh();
-                    updateGainChart();
+                document.querySelectorAll('#tune-widget .chart-tab').forEach(tab => {
+                    tab.addEventListener('click', () => showTuneTab(tab.dataset.tuneTab));
                 });
 
-                document.getElementById('tune-commit').addEventListener('click', commitTuning);
+                // Reset restores one tab's keys. For the Engine tab the "default" is the
+                // profile the loaded replay resolved to, which applyEngineProfileMeta
+                // wrote into tuneDefaults — not a shipped constant.
+                document.querySelectorAll('#tune-widget .tune-reset').forEach(button => {
+                    button.addEventListener('click', () => {
+                        const tab = button.dataset.tuneTab;
+
+                        TUNE_TABS[tab].forEach(k => { tuneValues[k] = tuneDefaults[k]; });
+                        setLayerGain(tab, layerGainDefaults[tab]);
+                        if (tab === 'texture') resetSurfaces();
+                        applyTuneToControls();
+                        applyLayerGainsToControls();
+                        scheduleAudioRefresh();
+                        updateGainChart();
+                    });
+                });
+
+                document.querySelectorAll('#tune-widget .tune-commit').forEach(button => {
+                    button.addEventListener('click', () => commitTuning(button));
+                });
 
                 // Re-render the waveform envelope on resize (canvas column count changes).
-                window.addEventListener('resize', () => { if (waveBuffer) { computeWavePeaks(); drawWave(); } });
+                window.addEventListener('resize', () => { if (waveBuffer) rebuildWaveforms(); });
 
                 applyTuneToControls();
+
+                // Seed the mix gains and the surface values from the running config, so the
+                // audition starts where the device is set. A failed load leaves the shipped
+                // values in place.
+                fetch('/api/config').then(r => r.json()).then(cfg => {
+                    const synth = (cfg && cfg.synthesizer) || {};
+
+                    applySurfaceConfig((cfg && cfg.haptics || {}).surfaceRumble);
+
+                    for (const [layer, key] of Object.entries(LAYER_GAIN_KEYS)) {
+                        const value = synth[key];
+                        if (!Number.isFinite(value)) continue;
+
+                        layerGainDefaults[layer] = value;
+                        setLayerGain(layer, value);
+                    }
+
+                    applyLayerGainsToControls();
+                }).catch(() => { });
 
                 // Load the shipped defaults so the sliders start where the live app does.
                 fetch('/api/tuneassist/tuning-defaults').then(r => r.json()).then(d => {
                     TUNE_KEYS.forEach(k => { if (Number.isFinite(d[k])) { tuneDefaults[k] = d[k]; tuneValues[k] = d[k]; } });
+                    applySurfaceDefaults(d.surfaceRumble);
                     applyTuneToControls();
                     if (d.pulseLimits) pulseLimits = { ...pulseLimits, ...d.pulseLimits };
                     if (gainChart) { applyGainAxisBounds(); updateGainChart(); }
                 }).catch(() => { });
+            }
+
+            // showTuneTab brings one pane of the widget forward. The panes are siblings
+            // rather than a single rebuilt block, so every control keeps its listeners and
+            // its value across a switch.
+            function showTuneTab(tab) {
+                if (!TUNE_TABS[tab]) return;
+
+                document.querySelectorAll('#tune-widget .chart-tab').forEach(button => {
+                    button.classList.toggle('active', button.dataset.tuneTab === tab);
+                });
+
+                document.querySelectorAll('#tune-widget .tune-pane').forEach(pane => {
+                    pane.hidden = pane.dataset.tunePane !== tab;
+                });
+            }
+
+            // applyEngineProfileMeta seeds the Engine tab from the profile the loaded
+            // replay's vehicle resolves to, and names the config entry a commit writes
+            // back to. It runs on every replay load: leaving the previous vehicle's values
+            // on the sliders would show one engine's profile while auditioning another.
+            function applyEngineProfileMeta(profile) {
+                const label = document.getElementById('tune-engine-profile');
+                const pane = document.querySelector('#tune-widget [data-tune-pane="engine"]');
+
+                if (!profile || !profile.key) {
+                    engineProfileKey = '';
+                    label.textContent = 'Profile: none for this vehicle';
+                    pane.classList.add('tune-pane-empty');
+
+                    return;
+                }
+
+                engineProfileKey = profile.key;
+                label.textContent = 'Profile: ' + profile.key;
+                pane.classList.remove('tune-pane-empty');
+
+                // The config field is `gain`; the slider key is `engineGain`, so that it
+                // does not collide with the chassis pane's jerkPivotGain in the flat
+                // tuneValues map.
+                tuneDefaults.primaryBalance = profile.primaryBalance;
+                tuneDefaults.secondaryBalance = profile.secondaryBalance;
+                tuneDefaults.engineGain = profile.gain;
+                tuneDefaults.pulseScale = profile.pulseScale;
+
+                TUNE_TABS.engine.forEach(k => { tuneValues[k] = tuneDefaults[k]; });
+                applyTuneToControls();
             }
 
             // The curve exponents are held here as the raw thousandths the sliders show
@@ -3253,23 +4379,89 @@
             // fraction and multiplies by 1000 on the way in. Everything else is sent as
             // it stands. Getting this wrong is silent — the value simply lands a factor
             // of 1000 out — so the scaling is listed per key rather than applied broadly.
-            function tuningToConfigPayload() {
-                return {
-                    jerkCurve: tuneValues.jerkCurve / 1000,
-                    jerkPivot: tuneValues.jerkPivot,
-                    jerkPivotGain: tuneValues.jerkPivotGain,
-                    snapCurve: tuneValues.snapCurve / 1000,
-                    snapMax: tuneValues.snapMax,
-                };
+            //
+            // Each tab returns its own section of the config tree, so a commit writes the
+            // tab in view and nothing else. A tab with nothing to write returns null.
+            function tuningPayloadFor(tab) {
+                // Every tab writes its layer's mix gain. It is the one knob the Road tab
+                // has, and on the Engine tab it is the only one a vehicle with no profile
+                // can still commit.
+                const synthesizer = LAYER_GAIN_KEYS[tab]
+                    ? { [LAYER_GAIN_KEYS[tab]]: layerGains[tab] }
+                    : {};
+
+                if (tab === 'chassis') {
+                    return {
+                        synthesizer,
+                        haptics: {
+                            jerkCurve: tuneValues.jerkCurve / 1000,
+                            jerkPivot: tuneValues.jerkPivot,
+                            jerkPivotGain: tuneValues.jerkPivotGain,
+                            snapCurve: tuneValues.snapCurve / 1000,
+                            snapMax: tuneValues.snapMax,
+                        },
+                    };
+                }
+
+                if (tab === 'transmission') {
+                    return {
+                        synthesizer,
+                        haptics: {
+                            dynamicTransmissionJerkCurve: tuneValues.transmissionJerkCurve / 1000,
+                            dynamicTransmissionStepBlend: tuneValues.transmissionStepBlend,
+                        },
+                    };
+                }
+
+                if (tab === 'texture') {
+                    // The gain is a mixer channel and the surface values are shaping, so
+                    // the two halves of this tab land in different config sections.
+                    return { synthesizer, haptics: { surfaceRumble } };
+                }
+
+                if (tab === 'engine') {
+                    // synthesizer.engineGain is the layer's place in the mix; the profile's
+                    // own gain is a per-vehicle offset. The two are different fields and
+                    // the Engine tab shows both.
+                    //
+                    // Only the resolved profile key is sent. The endpoint merges the
+                    // sub-map, so every other vehicle's profile is left as it stands. A
+                    // vehicle with no profile commits the mix gain alone.
+                    if (!engineProfileKey) return { synthesizer };
+
+                    return {
+                        synthesizer: {
+                            ...synthesizer,
+                            engineProfiles: {
+                                [engineProfileKey]: {
+                                    primaryBalance: tuneValues.primaryBalance,
+                                    secondaryBalance: tuneValues.secondaryBalance,
+                                    gain: tuneValues.engineGain,
+                                    pulseScale: tuneValues.pulseScale,
+                                },
+                            },
+                        },
+                    };
+                }
+
+                return null;
             }
 
-            // Write the current knob positions into the haptics section of the config
-            // file. The endpoint applies them to the running app and persists them in one
-            // step, so this is the same path the settings page saves through — including
-            // the shared navbar spinner/tick, rather than a status line of its own.
-            async function commitTuning() {
-                const button = document.getElementById('tune-commit');
+            // Write the active tab's knob positions into the config file. The endpoint
+            // applies them to the running app and persists them in one step, so this is the
+            // same path the settings page saves through — including the shared navbar
+            // spinner/tick, rather than a status line of its own.
+
+            async function commitTuning(button) {
                 const status = document.getElementById('wave-status');
+                const tab = button.dataset.tuneTab;
+                const payload = tuningPayloadFor(tab);
+
+                if (!payload) {
+                    status.textContent = 'Nothing to commit';
+
+                    return;
+                }
 
                 button.disabled = true;
                 if (typeof window.showNavbarStatus === 'function') window.showNavbarStatus('saving');
@@ -3278,7 +4470,7 @@
                     const response = await fetch('/api/config', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ haptics: tuningToConfigPayload() }),
+                        body: JSON.stringify(payload),
                     });
 
                     const result = await response.json().catch(() => null);
@@ -3297,6 +4489,72 @@
                     status.textContent = 'Commit failed: ' + error.message;
                 } finally {
                     button.disabled = false;
+                }
+            }
+
+            // The surface values arrive from two endpoints, in either order, so neither
+            // handler may assume it runs first.
+            //
+            // The shipped defaults are what a Reset returns to. They also stand in as the
+            // starting value, but only for a surface the live config has not already set.
+            function applySurfaceDefaults(defaults) {
+                if (!defaults) return;
+
+                for (const surface of SURFACES) {
+                    const entry = defaults[surface];
+                    if (!entry) continue;
+
+                    surfaceRumbleDefaults[surface] = { level: entry.level, coarseness: entry.coarseness };
+                    if (!surfaceRumble[surface]) {
+                        surfaceRumble[surface] = { level: entry.level, coarseness: entry.coarseness };
+                    }
+                }
+
+                applySurfacesToControls();
+            }
+
+            // The running config is what the render already used, so it sets the starting
+            // value and overrides a shipped default that landed first. The controls stay
+            // empty and inert until one of the two arrives, so a failed load cannot send a
+            // made-up value to the render.
+            function applySurfaceConfig(stored) {
+                if (!stored) return;
+
+                for (const surface of SURFACES) {
+                    const entry = stored[surface];
+                    if (!entry || !Number.isFinite(entry.level) || !Number.isFinite(entry.coarseness)) continue;
+
+                    surfaceRumble[surface] = { level: entry.level, coarseness: entry.coarseness };
+                }
+
+                applySurfacesToControls();
+            }
+
+            function resetSurfaces() {
+                for (const surface of SURFACES) {
+                    const entry = surfaceRumbleDefaults[surface];
+                    if (!entry) continue;
+
+                    surfaceRumble[surface] = { level: entry.level, coarseness: entry.coarseness };
+                }
+
+                applySurfacesToControls();
+            }
+
+            function applySurfacesToControls() {
+                for (const surface of SURFACES) {
+                    const entry = surfaceRumble[surface];
+                    if (!entry) continue;
+
+                    document.getElementById('surf-' + surface + '-level').value = entry.level;
+                    document.getElementById('surf-' + surface + '-coarseness').value = entry.coarseness;
+                }
+            }
+
+            function applyLayerGainsToControls() {
+                for (const layer of AUDIO_LAYERS) {
+                    document.getElementById('gain-' + layer).value = layerGains[layer];
+                    document.getElementById('gainout-' + layer).value = layerGains[layer];
                 }
             }
 

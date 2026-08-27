@@ -29,6 +29,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/vwhitteron/simtezilo-dev/app/calibrator"
 	"github.com/vwhitteron/simtezilo-dev/app/config"
+	"github.com/vwhitteron/simtezilo-dev/app/haptics/profiles"
 	"github.com/vwhitteron/simtezilo-dev/app/kinematics"
 	"github.com/vwhitteron/simtezilo-dev/app/synthesizer"
 	"github.com/vwhitteron/simtezilo-dev/app/vehicle"
@@ -50,6 +51,26 @@ type Tuning struct {
 	JerkPivotGain float64 // GetHapticsJerkPivotGain — level of the reference jerk, in dB below full scale
 	SnapCurve     int     // GetHapticsSnapCurve — frequency response curvature
 	SnapMax       int     // GetHapticsSnapMax — frequency scale ceiling
+
+	// TransmissionJerkCurve is the driveline response curve, in thousandths. Zero
+	// keeps the shipped default, as the chassis curves do.
+	TransmissionJerkCurve int
+
+	// TransmissionStepBlend is how deeply this shift's driveline step blends into
+	// the previous one. Its whole 0..1 range is legal, zero included, so there is no
+	// value left to stand for "not supplied": nil does that instead.
+	TransmissionStepBlend *float64
+
+	// SurfaceRumble overrides the per-surface road-texture character, keyed by the
+	// lowercase surface name. Only the surfaces named here are overridden; an absent
+	// key leaves the stored value in place, and a nil map changes nothing.
+	SurfaceRumble map[string]config.SurfaceRumble
+
+	// EngineProfile overrides the haptic profile the replay's vehicle resolves to.
+	// It is applied after the profile lookup rather than in applyTuning, because the
+	// profile key is not known until the first telemetry frame names the vehicle.
+	// A nil pointer leaves the stored profile in place.
+	EngineProfile *profiles.EngineProfile
 }
 
 // DefaultTuning returns the shipped default jerk/snap knob values, read from a fresh
@@ -58,12 +79,18 @@ type Tuning struct {
 func DefaultTuning() Tuning {
 	cfg := config.New(config.Options{Logger: zerolog.New(io.Discard)})
 
+	stepBlend := cfg.GetHapticsTransmissionStepBlend()
+
 	return Tuning{
 		JerkCurve:     int(cfg.GethapticsJerkCurve()),
 		JerkPivot:     cfg.GetHapticsJerkPivot(),
 		JerkPivotGain: cfg.GetHapticsJerkPivotGain(),
 		SnapCurve:     int(cfg.GetHapticsSnapCurve()),
 		SnapMax:       cfg.GetHapticsSnapMax(),
+
+		TransmissionJerkCurve: int(cfg.GetHapticsTransmissionJerkCurve()),
+		TransmissionStepBlend: &stepBlend,
+		SurfaceRumble:         cfg.GetHapticsSurfaceRumbles(),
 	}
 }
 
@@ -133,12 +160,43 @@ type CaptureOptions struct {
 	Unfiltered bool           // bypass the kinematics fs/2 nyquist gate (raw ungated render)
 	Window     *CaptureWindow // restricts Sink delivery to this window; nil means the whole replay
 
+	// Layers selects which haptic layers to render. The zero value renders the
+	// chassis impact pulse alone, which is what this harness originally did and what
+	// the jerk/snap tuning workflow expects.
+	Layers CaptureLayers
+
 	// Sink, when set, receives each block of master output produced inside the
 	// window as it is rendered, and nothing is retained in the returned Capture's
 	// Samples/Frames. The slice passed to Sink is only valid for the duration of the
 	// call — it is a reused read buffer — so a caller that needs to keep the data
 	// must copy it.
 	Sink func(samples []float64)
+}
+
+// CaptureLayers selects the haptic layers a capture renders. The zero value renders
+// the chassis impact pulse alone.
+type CaptureLayers struct {
+	// Texture renders the continuous road-texture layer. It is off by default because
+	// it dominates a mixed capture as broadband road noise, which hides the bump the
+	// chassis workflow auditions.
+	Texture bool
+
+	// Transmission renders the gear-shift haptic. Gear changes are detected from the
+	// kinematics gear index, exactly as the live app detects them.
+	Transmission bool
+
+	// Engine renders the engine haptic. It ticks at engineHapticFrameRate, which
+	// divides the telemetry rate exactly, so it fires on every second delivered packet.
+	//
+	// This render is audibly equivalent to app.CaptureHaptics but not sample-identical
+	// to it: that harness steps a simulated clock, so it splits the generated blocks at
+	// different points. Use app.CaptureHaptics when an exact cross-commit comparison is
+	// needed.
+	Engine bool
+
+	// Chassis renders the impact pulse. It defaults to on: a zero CaptureLayers means
+	// "chassis only", so existing callers keep their behaviour.
+	NoChassis bool
 }
 
 // Frame records a single chassis refresh: where in the sample stream it starts, the
@@ -225,15 +283,21 @@ func CaptureChassis(ctx context.Context, opts CaptureOptions) (*Capture, error) 
 	samplesPerFrame := float64(internalRate) / float64(telemetryFrameRate)
 
 	run := &chassisRun{
+		cfg:             cfg,
+		log:             logger,
 		client:          client,
 		gen:             gen,
+		layers:          opts.Layers,
 		kin:             &kin,
 		route:           route,
 		synth:           synth,
 		readBuf:         readBuf,
 		samplesPerFrame: samplesPerFrame,
+		engineProfile:   opts.Tuning.EngineProfile,
 		lapFrameIndex:   make(map[int16]int),
 	}
+
+	run.buildOptionalGenerators(opts.Layers, cfg, synth, &kin, logger)
 
 	for frame, scanErr := range client.Scan(ctx) {
 		if ctx.Err() != nil {
@@ -256,19 +320,33 @@ func CaptureChassis(ctx context.Context, opts CaptureOptions) (*Capture, error) 
 // frame at a time, so the frame body can live in its own method rather than swelling
 // CaptureChassis's branch count.
 type chassisRun struct {
+	cfg             *config.Config
+	log             zerolog.Logger
 	client          *gttelemetry.Client
 	gen             *Generator
+	transmissionGen *TransmissionGenerator
+	engineGen       *EngineGenerator
+	layers          CaptureLayers
 	kin             *kinematics.State
 	route           *captureRouter
 	synth           *synthesizer.Synthesizer
 	readBuf         []float64
 	samplesPerFrame float64
 
+	// engineProfile overrides the resolved vehicle's engine profile. nil keeps the
+	// profile the config lookup found.
+	engineProfile *profiles.EngineProfile
+
 	dims            vehicle.Dimensions
 	vehicleCaptured bool
 	chassisLastSeq  uint32
-	lapFrameIndex   map[int16]int
-	frameCarry      float64
+
+	// packetsSeen counts delivered packets, which is what the engine tick divides. It
+	// must not be derived from the sequence number: that jumps on a dropped packet and
+	// would move the engine off its beat.
+	packetsSeen   int
+	lapFrameIndex map[int16]int
+	frameCarry    float64
 }
 
 // frame advances the run by one delivered telemetry packet and reports whether the
@@ -279,19 +357,16 @@ func (r *chassisRun) frame(frame *gttelemetry.Transformer) (stop bool) {
 	}
 
 	if !r.vehicleCaptured {
-		r.dims = captureDimensions(r.client)
-		r.chassisLastSeq = frame.SequenceID()
-		r.vehicleCaptured = true
+		r.captureVehicleOnce(frame.SequenceID())
 	}
+
+	r.packetsSeen++
 
 	seq := frame.SequenceID()
 
 	r.kin.Update(float64(frameDelta(seq, r.chassisLastSeq))/float64(telemetryFrameRate), r.dims, r.client)
 
-	// Only the chassis impact pulse is rendered — not the continuous road-texture
-	// layer (gen.Texture()), which would otherwise dominate the capture as broadband
-	// road noise. This tool auditions the bump haptics in isolation.
-	r.gen.Chassis()
+	r.driveLayers(seq)
 
 	lap := frame.CurrentLap()
 	idx := r.lapFrameIndex[lap]
@@ -320,6 +395,85 @@ func (r *chassisRun) frame(frame *gttelemetry.Transformer) (stop bool) {
 	drainFrame(r.synth, r.readBuf, want, r.route.block)
 
 	return false
+}
+
+// buildOptionalGenerators creates the generators for the layers beyond chassis and
+// texture, which the base Generator already covers. Both read telemetry through a
+// getter, because the client outlives neither a settings change nor a new capture.
+func (r *chassisRun) buildOptionalGenerators(
+	layers CaptureLayers,
+	cfg *config.Config,
+	synth *synthesizer.Synthesizer,
+	kin *kinematics.State,
+	logger zerolog.Logger,
+) {
+	source := func() TelemetrySource { return r.client.Telemetry }
+
+	if layers.Transmission {
+		r.transmissionGen = NewTransmissionGenerator(cfg, synth, kin, source, logger)
+	}
+
+	if layers.Engine {
+		r.engineGen = NewEngineGenerator(cfg, synth, source, logger)
+	}
+}
+
+// captureVehicleOnce reads the vehicle on the first live frame and hands it to the
+// generators that need it. The transmission's gain floor and seeded character come from
+// the vehicle type; the engine's firing frequency comes from its characteristics, and
+// without it the engine generator renders silence.
+func (r *chassisRun) captureVehicleOnce(seq uint32) {
+	r.dims = captureDimensions(r.client)
+	r.chassisLastSeq = seq
+	r.vehicleCaptured = true
+
+	if r.transmissionGen == nil && r.engineGen == nil {
+		return
+	}
+
+	characteristics := captureVehicle(r.cfg, r.client, r.log, r.engineProfile)
+
+	if r.transmissionGen != nil {
+		r.transmissionGen.SetVehicle(characteristics)
+	}
+
+	if r.engineGen != nil {
+		r.engineGen.SetVehicle(characteristics)
+	}
+}
+
+// driveLayers runs the selected haptic layers for one delivered packet, in the live
+// app's order.
+func (r *chassisRun) driveLayers(seq uint32) {
+	// The gear-shift layer runs before the bump, matching the live ordering in
+	// generateForceHaptics: driveline first, then either a shift or a measurement tick.
+	if r.transmissionGen != nil {
+		r.transmissionGen.AdvanceDriveline()
+
+		if r.transmissionGen.GearHasChanged() {
+			r.transmissionGen.PlayGearShift(seq)
+		} else {
+			r.transmissionGen.TickMeasurement()
+		}
+	}
+
+	// By default only the chassis impact pulse is rendered — not the continuous
+	// road-texture layer, which would otherwise dominate the capture as broadband road
+	// noise. That default lets this tool audition the bump haptics in isolation.
+	if !r.layers.NoChassis {
+		r.gen.Chassis()
+	}
+
+	if r.layers.Texture {
+		r.gen.Texture()
+	}
+
+	// The engine runs at half the telemetry rate, so it fires on every second delivered
+	// packet. Two packets drain exactly one engine frame of output, which is the live
+	// generate-versus-drain relationship.
+	if r.engineGen != nil && r.packetsSeen%(telemetryFrameRate/engineHapticFrameRate) == 0 {
+		r.engineGen.Generate(seq)
+	}
 }
 
 // frameDelta returns the number of telemetry frames spanned since the last one. The
@@ -402,28 +556,46 @@ func drainFrame(synth *synthesizer.Synthesizer, readBuf []float64, want int, con
 
 // applyTuning writes the non-zero override knobs into the config. Setting the
 // curve/max pairs recomputes the derived jerk/snap scale factors internally.
-func applyTuning(cfg *config.Config, t Tuning) {
-	if t.JerkCurve > 0 {
-		cfg.SetHapticsJerkCurve(t.JerkCurve)
+func applyTuning(cfg *config.Config, tuning Tuning) {
+	if tuning.JerkCurve > 0 {
+		cfg.SetHapticsJerkCurve(tuning.JerkCurve)
 	}
 
-	if t.JerkPivot > 0 {
-		cfg.SetHapticsJerkPivot(t.JerkPivot)
+	if tuning.JerkPivot > 0 {
+		cfg.SetHapticsJerkPivot(tuning.JerkPivot)
 	}
 
 	// JerkPivotGain's valid range (-12..0 dB) includes negative values and zero,
 	// so the usual ">0 means supplied" sentinel can't distinguish "not supplied"
 	// from a legitimate 0 dB gain. Use a bounds check instead.
-	if t.JerkPivotGain >= -12 && t.JerkPivotGain <= 0 {
-		cfg.SetHapticsJerkPivotGain(t.JerkPivotGain)
+	if tuning.JerkPivotGain >= -12 && tuning.JerkPivotGain <= 0 {
+		cfg.SetHapticsJerkPivotGain(tuning.JerkPivotGain)
 	}
 
-	if t.SnapCurve > 0 {
-		cfg.SetHapticsSnapCurve(t.SnapCurve)
+	if tuning.SnapCurve > 0 {
+		cfg.SetHapticsSnapCurve(tuning.SnapCurve)
 	}
 
-	if t.SnapMax > 0 {
-		cfg.SetHapticsSnapMax(t.SnapMax)
+	if tuning.SnapMax > 0 {
+		cfg.SetHapticsSnapMax(tuning.SnapMax)
+	}
+
+	applyLayerTuning(cfg, tuning)
+}
+
+// applyLayerTuning writes the transmission and road-texture overrides. It is split
+// from applyTuning so neither half grows past the branch budget as layers are added.
+func applyLayerTuning(cfg *config.Config, tuning Tuning) {
+	if tuning.TransmissionJerkCurve > 0 {
+		cfg.SetHapticsTransmissionJerkCurve(tuning.TransmissionJerkCurve)
+	}
+
+	if tuning.TransmissionStepBlend != nil {
+		cfg.SetHapticsTransmissionStepBlend(*tuning.TransmissionStepBlend)
+	}
+
+	for surface, rumble := range tuning.SurfaceRumble {
+		cfg.SetHapticsSurfaceRumble(surface, rumble)
 	}
 }
 
@@ -466,4 +638,30 @@ func channelValueAt(values []float64, index int) float64 {
 	}
 
 	return values[index]
+}
+
+// captureVehicle reads the vehicle fields the transmission layer needs. It does not
+// derive the engine characteristics: that derivation lives in package app, which is
+// why an engine capture is not one of the layers this harness offers.
+func captureVehicle(
+	cfg *config.Config, client *gttelemetry.Client, logger zerolog.Logger, override *profiles.EngineProfile,
+) vehicle.Characteristics {
+	engine, revLimit := EngineForVehicle(cfg, client, logger)
+
+	// The override lands after the lookup, so it applies to whichever profile this
+	// vehicle resolved to. Re-clamp afterwards: EngineForVehicle already clamped the
+	// stored pulse scale, and an overridden one has not been through that limit.
+	if override != nil && engine.Haptics != nil {
+		*engine.Haptics = *override
+
+		clampPulseRate(&engine, revLimit)
+	}
+
+	return vehicle.Characteristics{
+		ID:          client.Telemetry.VehicleID(),
+		VehicleType: vehicle.DetermineVehicleType(client.Telemetry.VehicleType()),
+		Engine:      engine,
+		RevLimit:    revLimit,
+		Dimensions:  captureDimensions(client),
+	}
 }

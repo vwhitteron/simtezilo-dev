@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strconv"
 
+	"github.com/vwhitteron/simtezilo-dev/app/haptics"
 	"github.com/vwhitteron/simtezilo-dev/app/kinematics"
 	"github.com/vwhitteron/simtezilo-dev/app/kinematics/vector"
 	"github.com/vwhitteron/simtezilo-dev/app/signal"
@@ -22,46 +23,48 @@ const (
 	framePeriod = 1.0 / sampleRate
 )
 
+// offTarmacSurfaces are the non-tarmac surfaces a sample can be labelled with, in
+// the order a label is picked when the four wheels straddle more than one of them.
+// The first label is the sample's primary surface, so the order runs from the
+// surface that dominates the feel to the one that least does.
+var offTarmacSurfaces = []gtmodels.SurfaceType{ //nolint:gochecknoglobals // fixed lookup table, not mutated
+	gtmodels.SurfaceTypeConcrete,
+	gtmodels.SurfaceTypeGrass,
+	gtmodels.SurfaceTypeDirt,
+	gtmodels.SurfaceTypeSand,
+	gtmodels.SurfaceTypeSnow,
+}
+
 // classifySurfaces returns the set of surface labels for a sample.
 // Tarmac requires all four wheels on tarmac.
-// Concrete and grass are reported when any wheel is on that surface.
+// Every other surface is reported when any wheel is on that surface.
 func classifySurfaces(s gtmodels.CornerSetGeneric[gtmodels.SurfaceType]) []string {
 	wheels := [4]gtmodels.SurfaceType{s.FrontLeft, s.FrontRight, s.RearLeft, s.RearRight}
 
 	allTarmac := true
-	hasConcrete := false
-	hasGrass := false
+	present := make(map[gtmodels.SurfaceType]bool, len(offTarmacSurfaces))
 
 	for _, wheelType := range wheels {
 		if wheelType != gtmodels.SurfaceTypeTarmac {
 			allTarmac = false
 		}
 
-		if wheelType == gtmodels.SurfaceTypeConcrete {
-			hasConcrete = true
-		}
-
-		if wheelType == gtmodels.SurfaceTypeGrass {
-			hasGrass = true
-		}
+		present[wheelType] = true
 	}
 
 	var labels []string
 
-	tarmac := gtmodels.SurfaceTypeTarmac
-	concrete := gtmodels.SurfaceTypeConcrete
-	grass := gtmodels.SurfaceTypeGrass
-
 	if allTarmac {
+		tarmac := gtmodels.SurfaceTypeTarmac
 		labels = append(labels, tarmac.String())
 	}
 
-	if hasConcrete {
-		labels = append(labels, concrete.String())
-	}
+	for _, surface := range offTarmacSurfaces {
+		if !present[surface] {
+			continue
+		}
 
-	if hasGrass {
-		labels = append(labels, grass.String())
+		labels = append(labels, surface.String())
 	}
 
 	return labels
@@ -143,8 +146,23 @@ type metadata struct {
 	VehicleModel      string `json:"vehicleModel"`
 	VehicleCategory   string `json:"vehicleCategory"`
 	VehicleDrivetrain string `json:"vehicleDrivetrain"`
+	// EngineProfile is the engine haptic profile this replay's vehicle resolves to.
+	// The tuning assistant needs it to seed its engine controls and to name the
+	// haptics.engineProfiles entry a commit writes back to. It is nil when the
+	// vehicle matches no entry, which is also when the engine layer is silent.
+	EngineProfile *engineProfileMeta `json:"engineProfile,omitempty"`
+
 	// Video is set only when the analysis came from a video source.
 	Video *videoMeta `json:"video,omitempty"`
+}
+
+// engineProfileMeta is one engine profile plus the config key it was found under.
+type engineProfileMeta struct {
+	Key              string  `json:"key"`
+	PrimaryBalance   float64 `json:"primaryBalance"`
+	SecondaryBalance float64 `json:"secondaryBalance"`
+	Gain             float64 `json:"gain"`
+	PulseScale       float64 `json:"pulseScale"`
 }
 
 type lapAccumulator struct {
@@ -207,6 +225,7 @@ func collectAllLaps(ctx context.Context, source string) (map[int16][]dataPoint, 
 
 		if !vehicleCaptured {
 			meta, dims = captureVehicleMeta(frame)
+			meta.EngineProfile = resolveEngineProfileMeta(client)
 			vehicleCaptured = true
 		}
 
@@ -239,6 +258,24 @@ func collectAllLaps(ctx context.Context, source string) (map[int16][]dataPoint, 
 	}
 
 	return result, mapResult, meta, nil
+}
+
+// resolveEngineProfileMeta reports the engine profile the current vehicle resolves
+// to. An unmatched vehicle yields nil, so the web UI can disable its engine controls
+// rather than offer a commit to an empty key.
+func resolveEngineProfileMeta(client *gttelemetry.Client) *engineProfileMeta {
+	key, profile := haptics.ResolveEngineProfile(client)
+	if key == "" {
+		return nil
+	}
+
+	return &engineProfileMeta{
+		Key:              key,
+		PrimaryBalance:   profile.PrimaryBalance,
+		SecondaryBalance: profile.SecondaryBalance,
+		Gain:             profile.Gain,
+		PulseScale:       profile.PulseScale,
+	}
 }
 
 // captureVehicleMeta reads the vehicle metadata and derives its dimensions from a

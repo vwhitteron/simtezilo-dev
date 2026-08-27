@@ -9,7 +9,9 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/vwhitteron/simtezilo-dev/app/config"
 	"github.com/vwhitteron/simtezilo-dev/app/haptics"
+	"github.com/vwhitteron/simtezilo-dev/app/haptics/profiles"
 )
 
 // errNoAudio is returned by renderSectionWAV when the requested lap/section yields
@@ -27,7 +29,25 @@ const (
 	telemetryFrameRateHint = 60
 )
 
-// renderSectionWAV renders the chassis haptic stream for one lap section and returns
+// captureLayers maps a layer name from the web UI onto the capture's layer selector.
+// An unknown or absent name renders the chassis pulse, which is what the tool showed
+// before it offered a choice.
+func captureLayers(name string) (haptics.CaptureLayers, bool) {
+	switch name {
+	case "", "chassis":
+		return haptics.CaptureLayers{}, true
+	case "texture":
+		return haptics.CaptureLayers{NoChassis: true, Texture: true}, true
+	case "transmission":
+		return haptics.CaptureLayers{NoChassis: true, Transmission: true}, true
+	case "engine":
+		return haptics.CaptureLayers{NoChassis: true, Engine: true}, true
+	default:
+		return haptics.CaptureLayers{}, false
+	}
+}
+
+// renderSectionWAV renders one haptic layer for one lap section and returns
 // it as a 16-bit PCM WAV. Samples are converted to PCM as they are produced and only
 // the requested section is held in memory, so a long replay costs a section-sized
 // buffer rather than a whole-replay float64 capture.
@@ -35,7 +55,15 @@ const (
 // The buffer opens with header-sized padding and the PCM is written straight after
 // it, so the finished WAV is the buffer itself — the payload is never copied into a
 // second full-size slice just to prepend 44 bytes.
-func renderSectionWAV(ctx context.Context, source string, tuning haptics.Tuning, unfiltered bool, lap int16, fromFrame, toFrame int) ([]byte, error) {
+func renderSectionWAV(
+	ctx context.Context,
+	source string,
+	tuning haptics.Tuning,
+	layers haptics.CaptureLayers,
+	unfiltered bool,
+	lap int16,
+	fromFrame, toFrame int,
+) ([]byte, error) {
 	var wav bytes.Buffer
 
 	wav.Grow(wavHeaderLen + estimatePCMLen(fromFrame, toFrame))
@@ -44,6 +72,7 @@ func renderSectionWAV(ctx context.Context, source string, tuning haptics.Tuning,
 	capture, err := haptics.CaptureChassis(ctx, haptics.CaptureOptions{
 		Source:     source,
 		Tuning:     tuning,
+		Layers:     layers,
 		Unfiltered: unfiltered,
 		Window:     &haptics.CaptureWindow{Lap: lap, FromFrame: fromFrame, ToFrame: toFrame},
 		Sink:       func(samples []float64) { encodePCM(&wav, samples) },
@@ -154,6 +183,92 @@ func parseIntParam(req *http.Request, name string, def int) int {
 	}
 
 	return v
+}
+
+// engineProfileParam builds an engine profile override from the query, or returns
+// nil when the request carries no engine knobs. All four fields travel together: a
+// profile is a set, and mixing supplied values with the shipped ones for the rest
+// would render a profile the user never chose.
+//
+// The sentinel is absence rather than a zero value. Every field has a legal zero, so
+// a "0 means unset" rule would make a fully-attenuated profile unreachable.
+func engineProfileParam(req *http.Request) *profiles.EngineProfile {
+	query := req.URL.Query()
+
+	fields := []string{"primaryBalance", "secondaryBalance", "engineGain", "pulseScale"}
+	for _, name := range fields {
+		if query.Get(name) == "" {
+			return nil
+		}
+	}
+
+	return &profiles.EngineProfile{
+		PrimaryBalance:   clampFloat(parseFloatParam(req, "primaryBalance", 1), 0, 1),
+		SecondaryBalance: clampFloat(parseFloatParam(req, "secondaryBalance", 1), 0, 1),
+		Gain:             clampFloat(parseFloatParam(req, "engineGain", 0), engineGainMinDB, 0),
+		PulseScale:       clampFloat(parseFloatParam(req, "pulseScale", 1), 0, 1),
+	}
+}
+
+// engineGainMinDB is the floor the config schema puts on an engine profile's gain.
+const engineGainMinDB = -24.0
+
+// surfaceRumbleSurfaces lists the surfaces the road-texture layer overrides.
+var surfaceRumbleSurfaces = []string{"tarmac", "concrete", "grass", "dirt", "sand", "snow"} //nolint:gochecknoglobals // fixed lookup table, not mutated
+
+// surfaceRumbleParams reads the per-surface road-texture overrides off the query.
+// Each surface takes a <name>Level and <name>Coarseness pair; a surface is
+// overridden only when both are present and in range, so a partial pair leaves
+// the stored value alone.
+func surfaceRumbleParams(request *http.Request) map[string]config.SurfaceRumble {
+	query := request.URL.Query()
+
+	var overrides map[string]config.SurfaceRumble
+
+	for _, surface := range surfaceRumbleSurfaces {
+		if query.Get(surface+"Level") == "" || query.Get(surface+"Coarseness") == "" {
+			continue
+		}
+
+		level := optionalFloatParam(request, surface+"Level", 0, 2)
+		coarseness := optionalFloatParam(request, surface+"Coarseness", 0.1, 2)
+
+		if level == nil || coarseness == nil {
+			continue
+		}
+
+		if overrides == nil {
+			overrides = make(map[string]config.SurfaceRumble, len(surfaceRumbleSurfaces))
+		}
+
+		overrides[surface] = config.SurfaceRumble{Level: *level, Coarseness: *coarseness}
+	}
+
+	return overrides
+}
+
+// optionalFloatParam reads a float query parameter whose whole range is legal, so no
+// value is left over to mean "not supplied". An absent or unparseable parameter
+// yields nil; a present one is clamped into [minValue, maxValue].
+func optionalFloatParam(req *http.Request, name string, minValue, maxValue float64) *float64 {
+	raw := req.URL.Query().Get(name)
+	if raw == "" {
+		return nil
+	}
+
+	parsed, err := strconv.ParseFloat(raw, 64)
+	if err != nil {
+		return nil
+	}
+
+	value := clampFloat(parsed, minValue, maxValue)
+
+	return &value
+}
+
+// clampFloat bounds an untrusted query value into the range its config field accepts.
+func clampFloat(v, lo, hi float64) float64 {
+	return math.Min(hi, math.Max(lo, v))
 }
 
 // clampToInt16 bounds an untrusted query value (a client-supplied lap number) into

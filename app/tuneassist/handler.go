@@ -59,6 +59,13 @@ func New(opts Options) *Service {
 func buildTuningDefaults(log zerolog.Logger) []byte {
 	defaults := haptics.DefaultTuning()
 
+	// Dereferenced here rather than marshalled as a pointer, so a nil would be a
+	// build error instead of a silent null in the payload the sliders read.
+	stepBlend := 0.0
+	if defaults.TransmissionStepBlend != nil {
+		stepBlend = *defaults.TransmissionStepBlend
+	}
+
 	// map[string]any rather than map[string]int: jerkPivotGain is a dB figure and
 	// carries a fractional part.
 	defaultsJSON, err := json.Marshal(map[string]any{
@@ -67,6 +74,11 @@ func buildTuningDefaults(log zerolog.Logger) []byte {
 		"jerkPivotGain": defaults.JerkPivotGain,
 		"snapCurve":     defaults.SnapCurve,
 		"snapMax":       defaults.SnapMax,
+
+		"transmissionJerkCurve": defaults.TransmissionJerkCurve,
+		"transmissionStepBlend": stepBlend,
+
+		"surfaceRumble": defaults.SurfaceRumble,
 
 		"pulseLimits": haptics.DefaultPulseLimits(),
 	})
@@ -161,6 +173,14 @@ func (s *Service) HandleData(response http.ResponseWriter, request *http.Request
 // five tuning knobs jerkCurve/jerkPivot/jerkPivotGain/snapCurve/snapMax (0 =>
 // shipped default, except jerkPivotGain which uses 1 as its not-supplied sentinel
 // since 0 is a legal gain value).
+//
+// It also takes the transmission pair transmissionJerkCurve/transmissionStepBlend
+// (the blend is optional rather than sentinelled, since its whole range is legal),
+// and the engine profile as primaryBalance/secondaryBalance/engineGain/pulseScale.
+// The engine four are all-or-nothing: an absent parameter leaves the replay
+// vehicle's stored profile in place. Road-texture surfaces (tarmac, concrete, grass,
+// dirt, sand, snow) are each overridden by a <name>Level/<name>Coarseness pair; a
+// surface is overridden only when both of its parameters are present.
 func (s *Service) HandleAudio(response http.ResponseWriter, request *http.Request) {
 	dir := s.replayDir()
 	replays := s.listReplays(dir)
@@ -187,9 +207,23 @@ func (s *Service) HandleAudio(response http.ResponseWriter, request *http.Reques
 		JerkPivotGain: parseFloatParam(request, "jerkPivotGain", 1),
 		SnapCurve:     parseIntParam(request, "snapCurve", 0),
 		SnapMax:       parseIntParam(request, "snapMax", 0),
+
+		TransmissionJerkCurve: parseIntParam(request, "transmissionJerkCurve", 0),
+		TransmissionStepBlend: optionalFloatParam(request, "transmissionStepBlend", 0, 1),
+
+		SurfaceRumble: surfaceRumbleParams(request),
+
+		EngineProfile: engineProfileParam(request),
 	}
 
 	unfiltered := request.URL.Query().Get("raw") == "1"
+
+	layers, known := captureLayers(request.URL.Query().Get("layer"))
+	if !known {
+		http.Error(response, "unknown haptic layer", http.StatusBadRequest)
+
+		return
+	}
 
 	source, _, err := s.resolveSource(dir, filename)
 	if err != nil {
@@ -199,7 +233,7 @@ func (s *Service) HandleAudio(response http.ResponseWriter, request *http.Reques
 		return
 	}
 
-	wav, err := renderSectionWAV(request.Context(), source, tuning, unfiltered, lap, fromFrame, toFrame)
+	wav, err := renderSectionWAV(request.Context(), source, tuning, layers, unfiltered, lap, fromFrame, toFrame)
 	if err != nil {
 		if errors.Is(err, errNoAudio) {
 			http.Error(response, "no audio for requested lap/section", http.StatusNotFound)
@@ -207,7 +241,7 @@ func (s *Service) HandleAudio(response http.ResponseWriter, request *http.Reques
 			return
 		}
 
-		s.log.Error().Err(err).Str("replay", filename).Msg("rendering chassis audio")
+		s.log.Error().Err(err).Str("replay", filename).Msg("rendering haptic audio")
 		http.Error(response, err.Error(), http.StatusInternalServerError)
 
 		return
