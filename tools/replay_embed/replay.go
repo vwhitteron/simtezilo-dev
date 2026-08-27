@@ -230,18 +230,16 @@ type replayShape struct {
 	span   int // Frames from the first packet to the last
 }
 
-// indexBySequence maps a frame index to its telemetry payload.
-// Frame indices follow the sequence ID, so a dropped frame leaves a hole
+// sequenceFrames returns the timeline position of every packet.
+// Positions follow the sequence ID, so a dropped frame leaves a hole
 // rather than shifting every later packet forward.
-func indexBySequence(packets []packet) (map[int][]byte, replayShape) {
-	index := make(map[int][]byte, len(packets))
+func sequenceFrames(packets []packet) ([]int, replayShape) {
+	frames := make([]int, len(packets))
 
 	var (
 		shape replayShape
 		frame int
 	)
-
-	index[0] = packets[0].data
 
 	for current := 1; current < len(packets); current++ {
 		// Compare as signed values so a backwards jump cannot underflow.
@@ -260,10 +258,23 @@ func indexBySequence(packets []packet) (map[int][]byte, replayShape) {
 		}
 
 		frame += int(step)
-		index[frame] = packets[current].data
+		frames[current] = frame
 	}
 
 	shape.span = frame + 1
+
+	return frames, shape
+}
+
+// indexBySequence maps a frame index to its telemetry payload.
+func indexBySequence(packets []packet) (map[int][]byte, replayShape) {
+	frames, shape := sequenceFrames(packets)
+
+	index := make(map[int][]byte, len(packets))
+
+	for current, frame := range frames {
+		index[frame] = packets[current].data
+	}
 
 	return index, shape
 }

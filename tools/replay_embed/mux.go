@@ -13,8 +13,9 @@ import (
 var errVerifyFailed = errors.New("output verification failed")
 
 // mux copies the video and audio streams and adds the telemetry track.
-func mux(opts options, telemetryFile string) error {
-	args := []string{"-y", "-i", opts.video, "-i", telemetryFile, "-map", "0:v:0"}
+// videoFile is the cut and converted source, which may differ from opts.video.
+func mux(ctx context.Context, opts options, videoFile string, telemetryFile string) error {
+	args := []string{"-y", "-i", videoFile, "-i", telemetryFile, "-map", "0:v:0"}
 
 	// Map audio only when present, and drop any data track from the source.
 	if opts.hasAudio {
@@ -35,7 +36,7 @@ func mux(opts options, telemetryFile string) error {
 		fmt.Fprintf(os.Stderr, "ffmpeg %v\n", args)
 	}
 
-	cmd := exec.CommandContext(context.Background(), "ffmpeg", args...)
+	cmd := exec.CommandContext(ctx, "ffmpeg", args...)
 	cmd.Stderr = os.Stderr
 
 	err := cmd.Run()
@@ -47,8 +48,8 @@ func mux(opts options, telemetryFile string) error {
 }
 
 // verify confirms the output holds the expected telemetry data stream.
-func verify(path string, info videoInfo) error {
-	probe, err := runProbe(path,
+func verify(ctx context.Context, path string, info videoInfo) error {
+	probe, err := runProbe(ctx, path,
 		"stream=codec_type,codec_tag_string,nb_frames,duration,avg_frame_rate")
 	if err != nil {
 		return err
@@ -68,7 +69,7 @@ func verify(path string, info videoInfo) error {
 		dataStreams++
 		frames, _ = strconv.Atoi(stream.NbFrames)
 		duration, _ = strconv.ParseFloat(stream.Duration, 64)
-		rate = stream.AvgFrameRat
+		rate = stream.AvgFrameRate
 	}
 
 	if dataStreams != 1 {
