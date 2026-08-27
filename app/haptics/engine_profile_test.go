@@ -1,4 +1,4 @@
-package app //nolint:testpackage // white-box testing
+package haptics //nolint:testpackage // white-box testing
 
 import (
 	"testing"

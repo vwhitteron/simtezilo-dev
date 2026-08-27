@@ -1,4 +1,4 @@
-package app //nolint:testpackage // white-box testing
+package haptics //nolint:testpackage // white-box testing
 
 import (
 	"io"
@@ -11,6 +11,7 @@ import (
 	"github.com/vwhitteron/simtezilo-dev/app/kinematics"
 	"github.com/vwhitteron/simtezilo-dev/app/signal"
 	"github.com/vwhitteron/simtezilo-dev/app/vehicle"
+	gttelemetry "github.com/zetetos/gt-telemetry/v2"
 )
 
 // SetupTest across these suites deliberately builds a plain, unopinionated App: it
@@ -33,10 +34,50 @@ func floorClearingCharacter(gainMinDB, characterMax, stepBlend, jerkCurveThousan
 	return characterNorm * characterMax / gearShiftReferenceFrames
 }
 
+// fakeTelemetry is a TelemetrySource under the test's control. The generator reads
+// telemetry only through this interface, so a suite can drive the gear-ratio and rpm
+// paths with no telemetry client. Those paths could not be reached at all while the
+// generator read a *gttelemetry.Client field directly.
+type fakeTelemetry struct {
+	rpm      float32
+	throttle float32
+	ratios   []float32
+}
+
+func (f *fakeTelemetry) EngineRPM() float32 { return f.rpm }
+
+func (f *fakeTelemetry) ThrottleOutputPercent() float32 { return f.throttle }
+
+func (f *fakeTelemetry) Transmission() gttelemetry.Transmission {
+	return gttelemetry.Transmission{GearRatios: f.ratios}
+}
+
+// newTransmissionFixture builds a generator wired to the caller's kinematics state,
+// with no synth (refreshPulse is a no-op without one) and a fake telemetry source.
+//
+// It sets the gain floor directly rather than through SetVehicle, because these suites
+// assert against an unseeded profile: SetVehicle seeds, and a seeded profile would
+// mask what the tests measure.
+func newTransmissionFixture(
+	cfg *config.Config, kin *kinematics.State, tel *fakeTelemetry, revLimit uint16,
+) *TransmissionGenerator {
+	*kin = kinematics.NewKinematicsState()
+
+	gen := NewTransmissionGenerator(cfg, nil, kin,
+		func() TelemetrySource { return tel }, zerolog.New(io.Discard))
+
+	gen.gainMin = cfg.GetSynthTransmissionGainMinRace()
+	gen.revLimit = revLimit
+
+	return gen
+}
+
 type GearShiftProfileTestSuite struct {
 	suite.Suite
 
-	app *App
+	gen *TransmissionGenerator
+	kin kinematics.State
+	tel fakeTelemetry
 }
 
 func TestGearShiftProfileTestSuite(t *testing.T) {
@@ -52,11 +93,7 @@ func (suite *GearShiftProfileTestSuite) SetupTest() {
 	// settling, launch exclusion) independently of the driveline magnitude mapping,
 	// which has its own suite. Neither the config nor the gain floor is tuned here:
 	// each test that depends on a specific value sets it explicitly.
-	suite.app = &App{
-		kinematics:          kinematics.NewKinematicsState(),
-		config:              cfg,
-		transmissionGainMin: cfg.GetSynthTransmissionGainMinRace(),
-	}
+	suite.newGenerator(cfg, 0)
 }
 
 // The seed must map to exactly the gain floor, which is what guarantees the first
@@ -66,26 +103,26 @@ func (suite *GearShiftProfileTestSuite) SetupTest() {
 // GearShiftImpulseTestSuite's floor tests, which exercise the actual driveline
 // mapping this seed feeds.
 func (suite *GearShiftProfileTestSuite) TestSeedMapsToTheGainFloor() {
-	suite.app.config.SetHapticsTransmissionJerkCurve(750)
-	suite.app.transmissionGainMin = -4.50
-	suite.app.seedGearShiftProfile()
+	suite.gen.cfg.SetHapticsTransmissionJerkCurve(750)
+	suite.gen.gainMin = -4.50
+	suite.gen.seedProfile()
 
-	suite.InDelta(suite.floorSeed(), suite.app.gearShift.characterUp, 0.001)
-	suite.Zero(suite.app.gearShift.samplesUp)
-	suite.False(suite.app.gearShift.measuring)
+	suite.InDelta(suite.floorSeed(), suite.gen.profile.characterUp, 0.001)
+	suite.Zero(suite.gen.profile.samplesUp)
+	suite.False(suite.gen.profile.measuring)
 }
 
 // A quieter floor must seed a quieter starting point, since the seed is derived
 // from it rather than from a fixed per-vehicle-type constant.
 func (suite *GearShiftProfileTestSuite) TestSeedTracksTheFloor() {
-	suite.app.transmissionGainMin = -4.50 // race floor
-	suite.app.seedGearShiftProfile()
-	raceSeed := suite.app.gearShift.characterUp
+	suite.gen.gainMin = -4.50 // race floor
+	suite.gen.seedProfile()
+	raceSeed := suite.gen.profile.characterUp
 
-	suite.app.transmissionGainMin = -6.00 // street floor
-	suite.app.seedGearShiftProfile()
+	suite.gen.gainMin = -6.00 // street floor
+	suite.gen.seedProfile()
 
-	suite.Less(suite.app.gearShift.characterUp, raceSeed,
+	suite.Less(suite.gen.profile.characterUp, raceSeed,
 		"a lower street floor should seed below the race floor")
 }
 
@@ -95,10 +132,10 @@ func (suite *GearShiftProfileTestSuite) TestSeedTracksTheFloor() {
 // the learned character alone, exactly as it did through the jerk mapping this test
 // used to exercise.
 func (suite *GearShiftProfileTestSuite) TestWarmUpOnlyRises() {
-	suite.app.config.SetHapticsTransmissionStepBlend(0.5)
-	suite.app.config.SetHapticsTransmissionJerkCurve(750)
-	suite.app.transmissionGainMin = -4.50
-	suite.app.seedGearShiftProfile()
+	suite.gen.cfg.SetHapticsTransmissionStepBlend(0.5)
+	suite.gen.cfg.SetHapticsTransmissionJerkCurve(750)
+	suite.gen.gainMin = -4.50
+	suite.gen.seedProfile()
 
 	const warmUpShifts = 10
 
@@ -109,11 +146,11 @@ func (suite *GearShiftProfileTestSuite) TestWarmUpOnlyRises() {
 	warmUpPeak := 2 * floorClearingCharacter(-4.50, 1800, 0.5, 750)
 
 	levels := make([]float64, 0, warmUpShifts+1)
-	levels = append(levels, suite.app.gearShiftMagnitudeFromDriveline())
+	levels = append(levels, suite.gen.magnitudeFromDriveline())
 
 	for range warmUpShifts {
 		suite.measureShift(warmUpPeak, warmUpPeak, warmUpPeak, warmUpPeak)
-		levels = append(levels, suite.app.gearShiftMagnitudeFromDriveline())
+		levels = append(levels, suite.gen.magnitudeFromDriveline())
 	}
 
 	for i := 1; i < len(levels); i++ {
@@ -128,49 +165,49 @@ func (suite *GearShiftProfileTestSuite) TestWarmUpOnlyRises() {
 // A vehicle gentler than its own floor stays pinned there rather than drifting
 // audibly downward.
 func (suite *GearShiftProfileTestSuite) TestVehicleBelowFloorStaysAtFloor() {
-	suite.app.transmissionGainMin = -4.50
-	suite.app.seedGearShiftProfile()
+	suite.gen.gainMin = -4.50
+	suite.gen.seedProfile()
 
-	floor := signal.GainToPowerRatio(suite.app.transmissionGainMin)
+	floor := signal.GainToPowerRatio(suite.gen.gainMin)
 
 	for range 10 {
 		suite.measureShift(5, 5, 5, 5)
-		suite.InDelta(floor, suite.app.gearShiftMagnitudeFromDriveline(), 0.001)
+		suite.InDelta(floor, suite.gen.magnitudeFromDriveline(), 0.001)
 	}
 }
 
 func (suite *GearShiftProfileTestSuite) TestMeasurementTakesWindowPeak() {
-	suite.app.seedGearShiftProfile()
+	suite.gen.seedProfile()
 
 	// The largest jerk of a fast shift is the torque re-application, which lands
 	// at the end of the window rather than at the leading edge.
 	suite.measureShift(50, 80, 120, 240)
 
-	suite.Equal(1, suite.app.gearShift.samplesUp)
-	suite.False(suite.app.gearShift.measuring)
-	suite.InDelta(suite.blended(240), suite.app.gearShift.characterUp, 0.001)
+	suite.Equal(1, suite.gen.profile.samplesUp)
+	suite.False(suite.gen.profile.measuring)
+	suite.InDelta(suite.blended(240), suite.gen.profile.characterUp, 0.001)
 }
 
 func (suite *GearShiftProfileTestSuite) TestMeasurementIgnoresJerkBeyondWindow() {
-	suite.app.seedGearShiftProfile()
+	suite.gen.seedProfile()
 
 	suite.measureShift(30, 40, 35, 30)
-	suite.Require().False(suite.app.gearShift.measuring)
+	suite.Require().False(suite.gen.profile.measuring)
 
-	settled := suite.app.gearShift.characterUp
+	settled := suite.gen.profile.characterUp
 	suite.InDelta(suite.blended(40), settled, 0.001)
 
 	// A large jerk well after the shift (a kerb strike, say) must not be folded in.
 	suite.setSurgeJerk(900)
-	suite.app.tickGearShiftMeasurement()
+	suite.gen.TickMeasurement()
 
-	suite.InDelta(settled, suite.app.gearShift.characterUp, 0.001)
+	suite.InDelta(settled, suite.gen.profile.characterUp, 0.001)
 }
 
 // The estimate must actually arrive at the vehicle's character within its sample
 // budget, rather than asymptotically approaching a value it never reaches.
 func (suite *GearShiftProfileTestSuite) TestReachesCharacterWithinSampleBudget() {
-	suite.app.seedGearShiftProfile()
+	suite.gen.seedProfile()
 
 	const target = 180.0
 
@@ -178,135 +215,135 @@ func (suite *GearShiftProfileTestSuite) TestReachesCharacterWithinSampleBudget()
 		suite.measureShift(target, target, target, target)
 	}
 
-	suite.InDelta(target, suite.app.gearShift.characterUp, target*0.1,
+	suite.InDelta(target, suite.gen.profile.characterUp, target*0.1,
 		"the character should be within 10%% of true once the samples are in")
-	suite.True(suite.app.gearShift.settled(false))
+	suite.True(suite.gen.profile.settled(false))
 }
 
 // Shift harshness is a fixed property of a gearbox, so once the samples are in the
 // character is frozen: no later shift, however atypical, may move it. This is what
 // stops the effect drifting over a long stint.
 func (suite *GearShiftProfileTestSuite) TestSettledCharacterIsFrozen() {
-	suite.app.seedGearShiftProfile()
+	suite.gen.seedProfile()
 
 	for range gearShiftLearningSamples {
 		suite.measureShift(40, 40, 40, 40)
 	}
 
-	settled := suite.app.gearShift.characterUp
-	suite.Require().True(suite.app.gearShift.settled(false))
+	settled := suite.gen.profile.characterUp
+	suite.Require().True(suite.gen.profile.settled(false))
 
 	for range 10 {
 		suite.measureShift(200, 200, 200, 200)
 	}
 
-	suite.InDelta(settled, suite.app.gearShift.characterUp, 0.001,
+	suite.InDelta(settled, suite.gen.profile.characterUp, 0.001,
 		"a settled character must not drift")
-	suite.Equal(gearShiftLearningSamples, suite.app.gearShift.samplesUp,
+	suite.Equal(gearShiftLearningSamples, suite.gen.profile.samplesUp,
 		"no further samples should be taken once settled")
 }
 
 // Freezing is per direction: a car may settle its upshifts long before its
 // downshifts if the driver has been using one more than the other.
 func (suite *GearShiftProfileTestSuite) TestDirectionsSettleIndependently() {
-	suite.app.seedGearShiftProfile()
+	suite.gen.seedProfile()
 
 	for range gearShiftLearningSamples {
 		suite.measureShiftDirection(false, 200, 200)
 	}
 
-	suite.True(suite.app.gearShift.settled(false))
-	suite.False(suite.app.gearShift.settled(true),
+	suite.True(suite.gen.profile.settled(false))
+	suite.False(suite.gen.profile.settled(true),
 		"downshifts must still be learning")
 
-	before := suite.app.gearShift.characterDown
+	before := suite.gen.profile.characterDown
 
 	suite.measureShiftDirection(true, 200, 200)
-	suite.Greater(suite.app.gearShift.characterDown, before,
+	suite.Greater(suite.gen.profile.characterDown, before,
 		"an unsettled direction must still be learning")
 }
 
 func (suite *GearShiftProfileTestSuite) TestPreemptedMeasurementIsFoldedIn() {
-	suite.app.seedGearShiftProfile()
+	suite.gen.seedProfile()
 
 	// Arm a measurement and advance it partway, as a rapid multi-downshift would.
-	suite.app.kinematics.Current.GroundSpeed = gearShiftLaunchSpeedMps + 1
+	suite.kin.Current.GroundSpeed = gearShiftLaunchSpeedMps + 1
 	suite.setSurgeJerk(100)
-	suite.app.armGearShiftMeasurement(suite.app.kinematics.GetSurgeJerk(), false)
+	suite.gen.armMeasurement(suite.kin.GetSurgeJerk(), false)
 
 	suite.setSurgeJerk(180)
-	suite.app.tickGearShiftMeasurement()
-	suite.Require().True(suite.app.gearShift.measuring)
+	suite.gen.TickMeasurement()
+	suite.Require().True(suite.gen.profile.measuring)
 
 	// A second shift arrives before the window closes.
-	suite.app.completeGearShiftMeasurement()
+	suite.gen.completeMeasurement()
 
-	suite.Equal(1, suite.app.gearShift.samplesUp)
-	suite.False(suite.app.gearShift.measuring)
-	suite.InDelta(suite.blended(180), suite.app.gearShift.characterUp, 0.001,
+	suite.Equal(1, suite.gen.profile.samplesUp)
+	suite.False(suite.gen.profile.measuring)
+	suite.InDelta(suite.blended(180), suite.gen.profile.characterUp, 0.001,
 		"partial measurement should still contribute its peak")
 }
 
 func (suite *GearShiftProfileTestSuite) TestTickIsNoOpWhenNotMeasuring() {
-	suite.app.seedGearShiftProfile()
+	suite.gen.seedProfile()
 
-	before := suite.app.gearShift.characterUp
+	before := suite.gen.profile.characterUp
 
 	suite.setSurgeJerk(500)
-	suite.app.tickGearShiftMeasurement()
+	suite.gen.TickMeasurement()
 
-	suite.Zero(suite.app.gearShift.samplesUp)
-	suite.InDelta(before, suite.app.gearShift.characterUp, 0.001)
+	suite.Zero(suite.gen.profile.samplesUp)
+	suite.InDelta(before, suite.gen.profile.characterUp, 0.001)
 }
 
 // A standing start applies full drive torque to a stationary car, producing a jerk
 // several times any gear change. Folding it in would set the estimate far too high
 // and pin the effect at full scale for the following shifts.
 func (suite *GearShiftProfileTestSuite) TestLaunchIsExcludedFromLearning() {
-	suite.app.seedGearShiftProfile()
+	suite.gen.seedProfile()
 
-	before := suite.app.gearShift.characterUp
+	before := suite.gen.profile.characterUp
 
-	suite.app.kinematics.Current.GroundSpeed = gearShiftLaunchSpeedMps - 1
+	suite.kin.Current.GroundSpeed = gearShiftLaunchSpeedMps - 1
 	suite.setSurgeJerk(515)
 
-	suite.app.armGearShiftMeasurement(suite.app.kinematics.GetSurgeJerk(), false)
+	suite.gen.armMeasurement(suite.kin.GetSurgeJerk(), false)
 
-	suite.False(suite.app.gearShift.measuring, "a launch must not arm a measurement")
+	suite.False(suite.gen.profile.measuring, "a launch must not arm a measurement")
 
 	// Frames after the launch must not be folded in either.
 	suite.setSurgeJerk(515)
-	suite.app.tickGearShiftMeasurement()
+	suite.gen.TickMeasurement()
 
-	suite.Zero(suite.app.gearShift.samplesUp)
-	suite.InDelta(before, suite.app.gearShift.characterUp, 0.001,
+	suite.Zero(suite.gen.profile.samplesUp)
+	suite.InDelta(before, suite.gen.profile.characterUp, 0.001,
 		"the estimate should still be the untouched seed")
 }
 
 func (suite *GearShiftProfileTestSuite) TestRollingShiftIsLearnedFrom() {
-	suite.app.seedGearShiftProfile()
+	suite.gen.seedProfile()
 
-	suite.app.kinematics.Current.GroundSpeed = gearShiftLaunchSpeedMps + 1
+	suite.kin.Current.GroundSpeed = gearShiftLaunchSpeedMps + 1
 	suite.setSurgeJerk(180)
 
-	suite.app.armGearShiftMeasurement(suite.app.kinematics.GetSurgeJerk(), false)
+	suite.gen.armMeasurement(suite.kin.GetSurgeJerk(), false)
 
-	suite.True(suite.app.gearShift.measuring, "a rolling shift must arm a measurement")
+	suite.True(suite.gen.profile.measuring, "a rolling shift must arm a measurement")
 
 	for range 32 {
-		suite.app.tickGearShiftMeasurement()
+		suite.gen.TickMeasurement()
 	}
 
-	suite.Equal(1, suite.app.gearShift.samplesUp)
-	suite.InDelta(suite.blended(180), suite.app.gearShift.characterUp, 0.001)
+	suite.Equal(1, suite.gen.profile.samplesUp)
+	suite.InDelta(suite.blended(180), suite.gen.profile.characterUp, 0.001)
 }
 
 func (suite *GearShiftProfileTestSuite) TestEstimateStaysFiniteWithoutMeasurements() {
-	suite.app.seedGearShiftProfile()
+	suite.gen.seedProfile()
 
-	suite.False(math.IsNaN(suite.app.gearShift.characterUp))
-	suite.False(math.IsInf(suite.app.gearShift.characterUp, 0))
-	suite.Positive(suite.app.gearShift.characterUp)
+	suite.False(math.IsNaN(suite.gen.profile.characterUp))
+	suite.False(math.IsInf(suite.gen.profile.characterUp, 0))
+	suite.Positive(suite.gen.profile.characterUp)
 }
 
 // A window long enough to catch a clutched gearbox's late torque re-application is
@@ -314,7 +351,7 @@ func (suite *GearShiftProfileTestSuite) TestEstimateStaysFiniteWithoutMeasuremen
 // A minority of such windows must not move the character at all, which is what
 // taking the median rather than the mean buys.
 func (suite *GearShiftProfileTestSuite) TestOutlierWindowsCannotDefineTheVehicle() {
-	suite.app.seedGearShiftProfile()
+	suite.gen.seedProfile()
 
 	// A Supra RZ profile: a genuine character around 70, with two of its eight
 	// windows reaching the 350-445 m/s^3 its threshold braking produces.
@@ -323,33 +360,33 @@ func (suite *GearShiftProfileTestSuite) TestOutlierWindowsCannotDefineTheVehicle
 		suite.measureShift(peak, peak)
 	}
 
-	suite.InDelta(70, suite.app.gearShift.characterUp, 10.0,
+	suite.InDelta(70, suite.gen.profile.characterUp, 10.0,
 		"a quarter of the windows being outliers must not move the median")
 
-	suite.Less(suite.app.gearShift.characterUp, 100.0,
+	suite.Less(suite.gen.profile.characterUp, 100.0,
 		"outlier windows must not drag the character to race-car levels")
 }
 
 // The median must not blunt a vehicle that genuinely is harsh: when the peaks really
 // are large, the character follows them.
 func (suite *GearShiftProfileTestSuite) TestGenuinelyHarshVehicleIsLearned() {
-	suite.app.seedGearShiftProfile()
+	suite.gen.seedProfile()
 
 	for range gearShiftLearningSamples {
 		suite.measureShift(205, 205)
 	}
 
-	suite.InDelta(205, suite.app.gearShift.characterUp, 10.0,
+	suite.InDelta(205, suite.gen.profile.characterUp, 10.0,
 		"a sustained genuine character should be reached in full")
 }
 
 // floorSeed is the jerk the seed should resolve to: the value mapping to exactly
 // the configured gain floor.
 func (suite *GearShiftProfileTestSuite) floorSeed() float64 {
-	curve := suite.app.config.GetHapticsTransmissionJerkCurve() / 1000
+	curve := suite.gen.cfg.GetHapticsTransmissionJerkCurve() / 1000
 	characterMax := gearShiftCharacterMax
 
-	seed := characterMax * math.Pow(signal.GainToPowerRatio(suite.app.transmissionGainMin), 1/curve)
+	seed := characterMax * math.Pow(signal.GainToPowerRatio(suite.gen.gainMin), 1/curve)
 
 	return seed / gearShiftReferenceFrames
 }
@@ -363,7 +400,7 @@ func (suite *GearShiftProfileTestSuite) blended(peaks ...float64) float64 {
 // setSurgeJerk drives the value GetSurgeJerk will report on the next read. The
 // haptic path only ever reads the magnitude, so the sign here is irrelevant.
 func (suite *GearShiftProfileTestSuite) setSurgeJerk(jerk float64) {
-	suite.app.kinematics.Current.SurgeJerk = jerk
+	suite.kin.Current.SurgeJerk = jerk
 }
 
 // measureShift runs one complete shift measurement: the leading edge plus the
@@ -380,8 +417,8 @@ func (suite *GearShiftProfileTestSuite) measureShiftDirection(down bool, jerks .
 
 	suite.setSurgeJerk(jerks[0])
 
-	suite.app.kinematics.Current.GroundSpeed = gearShiftLaunchSpeedMps + 1
-	suite.app.armGearShiftMeasurement(suite.app.kinematics.GetSurgeJerk(), down)
+	suite.kin.Current.GroundSpeed = gearShiftLaunchSpeedMps + 1
+	suite.gen.armMeasurement(suite.kin.GetSurgeJerk(), down)
 
 	measureFrames := gearShiftMaxMeasureFrames
 
@@ -392,7 +429,7 @@ func (suite *GearShiftProfileTestSuite) measureShiftDirection(down bool, jerks .
 		}
 
 		suite.setSurgeJerk(jerk)
-		suite.app.tickGearShiftMeasurement()
+		suite.gen.TickMeasurement()
 	}
 }
 
@@ -401,7 +438,9 @@ func (suite *GearShiftProfileTestSuite) measureShiftDirection(down bool, jerks .
 type GearShiftDrivelineTestSuite struct {
 	suite.Suite
 
-	app *App
+	gen *TransmissionGenerator
+	kin kinematics.State
+	tel fakeTelemetry
 }
 
 func TestGearShiftDrivelineTestSuite(t *testing.T) {
@@ -413,22 +452,17 @@ func TestGearShiftDrivelineTestSuite(t *testing.T) {
 func (suite *GearShiftDrivelineTestSuite) SetupTest() {
 	cfg := config.New(config.Options{Logger: zerolog.New(io.Discard)})
 
-	suite.app = &App{
-		kinematics:          kinematics.NewKinematicsState(),
-		config:              cfg,
-		transmissionGainMin: cfg.GetSynthTransmissionGainMinRace(),
-		vehicle:             vehicle.Characteristics{RevLimit: 9000},
-	}
+	suite.newGenerator(cfg, 9000)
 }
 
 // The event term is what gives a shift its per-gear identity: a big ratio jump must
 // read as a bigger event than a small one at the same engine speed.
 func (suite *GearShiftDrivelineTestSuite) TestBigRatioJumpBeatsSmallOne() {
 	suite.shift(3, 2, 1.35, 1.85, 7000)
-	big := suite.app.gearShiftDrivelineStep()
+	big := suite.gen.drivelineStep()
 
 	suite.shift(6, 5, 0.85, 0.95, 7000)
-	small := suite.app.gearShiftDrivelineStep()
+	small := suite.gen.drivelineStep()
 
 	suite.Greater(big, small, "a wider ratio step should be a larger driveline event")
 }
@@ -437,10 +471,10 @@ func (suite *GearShiftDrivelineTestSuite) TestBigRatioJumpBeatsSmallOne() {
 // off idle, so revs must scale the event.
 func (suite *GearShiftDrivelineTestSuite) TestHighRevsBeatLowRevs() {
 	suite.shift(3, 2, 1.35, 1.85, 8100)
-	high := suite.app.gearShiftDrivelineStep()
+	high := suite.gen.drivelineStep()
 
 	suite.shift(3, 2, 1.35, 1.85, 3600)
-	low := suite.app.gearShiftDrivelineStep()
+	low := suite.gen.drivelineStep()
 
 	suite.Greater(high, low, "the same shift near the limiter should be a larger event")
 	suite.InDelta(high*(3600.0/8100.0), low, 0.001, "the event should scale linearly with revs")
@@ -449,13 +483,13 @@ func (suite *GearShiftDrivelineTestSuite) TestHighRevsBeatLowRevs() {
 // The whole point of deriving the event from ratios: a downshift into a hairpin must
 // out-magnitude a top-gear upshift, with no look-ahead.
 func (suite *GearShiftDrivelineTestSuite) TestDownshiftOutweighsHighGearUpshift() {
-	suite.app.seedGearShiftProfile()
+	suite.gen.seedProfile()
 
 	suite.shift(3, 2, 1.35, 1.85, 8100)
-	downshift := suite.app.gearShiftMagnitudeFromDriveline()
+	downshift := suite.gen.magnitudeFromDriveline()
 
 	suite.shift(5, 6, 0.95, 0.85, 5000)
-	upshift := suite.app.gearShiftMagnitudeFromDriveline()
+	upshift := suite.gen.magnitudeFromDriveline()
 
 	suite.Greater(downshift, upshift)
 }
@@ -465,10 +499,10 @@ func (suite *GearShiftDrivelineTestSuite) TestDownshiftOutweighsHighGearUpshift(
 func (suite *GearShiftDrivelineTestSuite) TestReverseAndNeutralYieldNoEvent() {
 	for _, gear := range []int{0, 15} {
 		suite.shift(1, gear, 2.90, 0, 2000)
-		suite.Zero(suite.app.gearShiftDrivelineStep())
+		suite.Zero(suite.gen.drivelineStep())
 
-		suite.NotPanics(func() { _ = suite.app.gearShiftMagnitudeFromDriveline() })
-		suite.False(suite.app.gearShiftIsDownshift(),
+		suite.NotPanics(func() { _ = suite.gen.magnitudeFromDriveline() })
+		suite.False(suite.gen.isDownshift(),
 			"gear %d is a sentinel, not a lower gear", gear)
 	}
 }
@@ -476,29 +510,29 @@ func (suite *GearShiftDrivelineTestSuite) TestReverseAndNeutralYieldNoEvent() {
 // A vehicle whose telemetry carries no gear ratios must still produce a usable
 // shift, driven by the learned character alone.
 func (suite *GearShiftDrivelineTestSuite) TestMissingRatiosFallBackToCharacter() {
-	suite.app.seedGearShiftProfile()
+	suite.gen.seedProfile()
 
 	suite.shift(3, 2, 0, 0, 7000)
 
-	suite.Zero(suite.app.gearShiftDrivelineStep())
-	suite.InDelta(signal.GainToPowerRatio(suite.app.transmissionGainMin),
-		suite.app.gearShiftMagnitudeFromDriveline(), 0.001)
+	suite.Zero(suite.gen.drivelineStep())
+	suite.InDelta(signal.GainToPowerRatio(suite.gen.gainMin),
+		suite.gen.magnitudeFromDriveline(), 0.001)
 }
 
 // Upshift and downshift character are learned independently, which is what lets a
 // gated box be gentle upward and violent downward at the same time.
 func (suite *GearShiftDrivelineTestSuite) TestDirectionsLearnIndependently() {
-	suite.app.seedGearShiftProfile()
+	suite.gen.seedProfile()
 
-	suite.app.kinematics.Current.GroundSpeed = gearShiftLaunchSpeedMps + 1
+	suite.kin.Current.GroundSpeed = gearShiftLaunchSpeedMps + 1
 
 	measure := func(down bool, peak float64) {
-		suite.app.kinematics.Current.SurgeJerk = peak
-		suite.app.armGearShiftMeasurement(peak, down)
+		suite.kin.Current.SurgeJerk = peak
+		suite.gen.armMeasurement(peak, down)
 
 		for range 32 {
-			suite.app.kinematics.Current.SurgeJerk = 0
-			suite.app.tickGearShiftMeasurement()
+			suite.kin.Current.SurgeJerk = 0
+			suite.gen.TickMeasurement()
 		}
 	}
 
@@ -508,14 +542,14 @@ func (suite *GearShiftDrivelineTestSuite) TestDirectionsLearnIndependently() {
 		measure(true, 205)
 	}
 
-	suite.Greater(suite.app.gearShift.characterDown, suite.app.gearShift.characterUp*2,
+	suite.Greater(suite.gen.profile.characterDown, suite.gen.profile.characterUp*2,
 		"a gated box's downshift character must not be averaged away by its upshifts")
 
 	suite.shift(3, 2, 1.35, 1.85, 7000)
-	down := suite.app.gearShiftMagnitudeFromDriveline()
+	down := suite.gen.magnitudeFromDriveline()
 
 	suite.shift(2, 3, 1.85, 1.35, 7000)
-	up := suite.app.gearShiftMagnitudeFromDriveline()
+	up := suite.gen.magnitudeFromDriveline()
 
 	suite.Greater(down, up, "the learned asymmetry must reach the played magnitude")
 }
@@ -523,51 +557,36 @@ func (suite *GearShiftDrivelineTestSuite) TestDirectionsLearnIndependently() {
 // The magnitude is relative to the transmission channel, so trimming the channel
 // must not also move the effect: PlayEffect applies the channel gain itself.
 func (suite *GearShiftDrivelineTestSuite) TestMagnitudeIsIndependentOfChannelGain() {
-	suite.app.seedGearShiftProfile()
+	suite.gen.seedProfile()
 
 	suite.shift(3, 2, 1.35, 1.85, 7000)
-	atUnityGain := suite.app.gearShiftMagnitudeFromDriveline()
+	atUnityGain := suite.gen.magnitudeFromDriveline()
 
-	suite.app.config.SetSynthTransmissionGain(-6.0)
-	suite.app.setTransmissionGain(vehicle.TypeRace)
+	suite.gen.cfg.SetSynthTransmissionGain(-6.0)
+	suite.gen.SetVehicle(vehicle.Characteristics{VehicleType: vehicle.TypeRace, RevLimit: 9000})
 	suite.shift(3, 2, 1.35, 1.85, 7000)
 
-	suite.InDelta(atUnityGain, suite.app.gearShiftMagnitudeFromDriveline(), 0.001,
+	suite.InDelta(atUnityGain, suite.gen.magnitudeFromDriveline(), 0.001,
 		"channel trim must be applied once, by the mixer, not folded in here")
 }
 
 // Whatever the inputs, the played magnitude stays inside the vehicle's window.
 func (suite *GearShiftDrivelineTestSuite) TestMagnitudeStaysWithinTheWindow() {
-	suite.app.seedGearShiftProfile()
+	suite.gen.seedProfile()
 
-	floor := signal.GainToPowerRatio(suite.app.transmissionGainMin)
+	floor := signal.GainToPowerRatio(suite.gen.gainMin)
 
-	suite.app.gearShift.characterDown = 100000
+	suite.gen.profile.characterDown = 100000
 	suite.shift(6, 1, 0.85, 3.50, 9000)
 
-	magnitude := suite.app.gearShiftMagnitudeFromDriveline()
+	magnitude := suite.gen.magnitudeFromDriveline()
 	suite.LessOrEqual(magnitude, 1.0)
 	suite.GreaterOrEqual(magnitude, floor)
 
-	suite.app.gearShift.characterDown = 0
+	suite.gen.profile.characterDown = 0
 	suite.shift(3, 2, 1.35, 1.36, 100)
 
-	suite.GreaterOrEqual(suite.app.gearShiftMagnitudeFromDriveline(), floor)
-}
-
-// shift positions the state as a change between two gears at a given engine speed,
-// using representative close-ratio values.
-func (suite *GearShiftDrivelineTestSuite) shift(from, to int, ratioFrom, ratioTo, rpm float64) {
-	suite.app.kinematics.Last.TransmissionGear = from
-	suite.app.kinematics.Current.TransmissionGear = to
-	suite.app.gearShift.lastRatio = ratioFrom
-	suite.app.gearShift.lastRPM = rpm
-	suite.app.gearShift.curRatio = ratioTo
-
-	// A rolling shift. Below gearShiftLaunchSpeedMps the magnitude collapses to the
-	// gain floor by design, since selecting a gear at a standstill moves no driveline
-	// energy, and every case here is about what a moving car plays.
-	suite.app.kinematics.Current.GroundSpeed = gearShiftLaunchSpeedMps + 1
+	suite.GreaterOrEqual(suite.gen.magnitudeFromDriveline(), floor)
 }
 
 // GearShiftResyncWindowTestSuite covers the measurement window's re-engagement
@@ -576,7 +595,9 @@ func (suite *GearShiftDrivelineTestSuite) shift(from, to int, ratioFrom, ratioTo
 type GearShiftResyncWindowTestSuite struct {
 	suite.Suite
 
-	app *App
+	gen *TransmissionGenerator
+	kin kinematics.State
+	tel fakeTelemetry
 }
 
 func TestGearShiftResyncWindowTestSuite(t *testing.T) {
@@ -588,11 +609,7 @@ func TestGearShiftResyncWindowTestSuite(t *testing.T) {
 func (suite *GearShiftResyncWindowTestSuite) SetupTest() {
 	cfg := config.New(config.Options{Logger: zerolog.New(io.Discard)})
 
-	suite.app = &App{
-		kinematics:          kinematics.NewKinematicsState(),
-		config:              cfg,
-		transmissionGainMin: cfg.GetSynthTransmissionGainMinRace(),
-	}
+	suite.newGenerator(cfg, 0)
 }
 
 // TestWindowClosesOnReEngagement checks the two halves of the terminator together:
@@ -610,30 +627,30 @@ func (suite *GearShiftResyncWindowTestSuite) TestWindowClosesOnReEngagement() {
 		suite.tickAt(50, target*2, 30)
 	}
 
-	suite.Require().True(suite.app.gearShift.measuring)
-	suite.Require().False(suite.app.gearShift.resynced)
+	suite.Require().True(suite.gen.profile.measuring)
+	suite.Require().False(suite.gen.profile.resynced)
 
 	suite.tickAt(50, target, 30) // in tolerance, syncFrames=1: transient, not yet re-synced
-	suite.True(suite.app.gearShift.measuring)
-	suite.False(suite.app.gearShift.resynced)
+	suite.True(suite.gen.profile.measuring)
+	suite.False(suite.gen.profile.resynced)
 
 	suite.tickAt(50, target, 30) // second consecutive in-tolerance frame: re-synced
-	suite.True(suite.app.gearShift.measuring,
+	suite.True(suite.gen.profile.measuring,
 		"the hold-off must still be running immediately after re-sync is declared")
-	suite.True(suite.app.gearShift.resynced)
-	suite.Equal(gearShiftResyncHoldFrames, suite.app.gearShift.framesLeft,
+	suite.True(suite.gen.profile.resynced)
+	suite.Equal(gearShiftResyncHoldFrames, suite.gen.profile.framesLeft,
 		"re-sync should shorten the window to exactly the hold-off, not end it outright")
 
 	for i := range gearShiftResyncHoldFrames - 1 {
 		suite.tickAt(50, target, 30)
-		suite.True(suite.app.gearShift.measuring, "hold-off frame %d should not close early", i)
+		suite.True(suite.gen.profile.measuring, "hold-off frame %d should not close early", i)
 	}
 
 	suite.tickAt(50, target, 30)
-	suite.False(suite.app.gearShift.measuring,
+	suite.False(suite.gen.profile.measuring,
 		"the window should complete exactly at the hold-off boundary")
 
-	suite.Less(suite.app.gearShift.framesElapsed, 32,
+	suite.Less(suite.gen.profile.framesElapsed, 32,
 		"re-engagement should close the window well before the frame cap")
 }
 
@@ -642,7 +659,7 @@ func (suite *GearShiftResyncWindowTestSuite) TestWindowClosesOnReEngagement() {
 // synchronisation was picked up as the shift's peak, because the old window ran to
 // a fixed frame count regardless of when the driveline actually re-engaged.
 func (suite *GearShiftResyncWindowTestSuite) TestJerkAfterTheHoldOffIsExcluded() {
-	suite.app.seedGearShiftProfile()
+	suite.gen.seedProfile()
 
 	suite.armAt(true, 2.0, 2.8, 6000, 30)
 	target := suite.inSync()
@@ -655,23 +672,23 @@ func (suite *GearShiftResyncWindowTestSuite) TestJerkAfterTheHoldOffIsExcluded()
 
 	suite.tickAt(20, target, 30) // in tolerance, syncFrames=1
 	suite.tickAt(20, target, 30) // in tolerance, syncFrames=2 -> resynced
-	suite.Require().True(suite.app.gearShift.resynced)
+	suite.Require().True(suite.gen.profile.resynced)
 
 	// Run the hold-off out to completion.
-	for suite.app.gearShift.measuring {
+	for suite.gen.profile.measuring {
 		suite.tickAt(20, target, 30)
 	}
 
-	suite.Require().False(suite.app.gearShift.measuring)
+	suite.Require().False(suite.gen.profile.measuring)
 
-	recorded := suite.app.gearShift.character(true)
+	recorded := suite.gen.profile.character(true)
 	suite.InDelta(suite.blended(120), recorded, 0.001,
 		"the recorded character should reflect the genuine peak, not a later spike")
 
 	// A brake or kerb event arriving after the window has closed must not be
 	// folded in: tickGearShiftMeasurement is a no-op once measuring is false.
 	suite.tickAt(800, target, 30)
-	suite.InDelta(recorded, suite.app.gearShift.character(true), 0.001,
+	suite.InDelta(recorded, suite.gen.profile.character(true), 0.001,
 		"jerk after the hold-off must not move the recorded character")
 }
 
@@ -680,7 +697,7 @@ func (suite *GearShiftResyncWindowTestSuite) TestJerkAfterTheHoldOffIsExcluded()
 // release, which follows synchronisation rather than accompanying it, so a large
 // jerk arriving inside the hold-off must still count toward the character.
 func (suite *GearShiftResyncWindowTestSuite) TestJerkWithinTheHoldOffIsCaptured() {
-	suite.app.seedGearShiftProfile()
+	suite.gen.seedProfile()
 
 	suite.armAt(true, 2.0, 2.8, 6000, 30)
 	target := suite.inSync()
@@ -691,18 +708,18 @@ func (suite *GearShiftResyncWindowTestSuite) TestJerkWithinTheHoldOffIsCaptured(
 
 	suite.tickAt(20, target, 30) // in tolerance, syncFrames=1
 	suite.tickAt(20, target, 30) // in tolerance, syncFrames=2 -> resynced
-	suite.Require().True(suite.app.gearShift.resynced)
+	suite.Require().True(suite.gen.profile.resynced)
 
 	// A few frames into the hold-off, the clutch peak arrives.
 	suite.tickAt(20, target, 30)
 	suite.tickAt(20, target, 30)
 	suite.tickAt(300, target, 30)
 
-	for suite.app.gearShift.measuring {
+	for suite.gen.profile.measuring {
 		suite.tickAt(20, target, 30)
 	}
 
-	suite.InDelta(suite.blended(300), suite.app.gearShift.character(true), 0.001,
+	suite.InDelta(suite.blended(300), suite.gen.profile.character(true), 0.001,
 		"a peak arriving inside the hold-off must be captured")
 }
 
@@ -716,9 +733,9 @@ func (suite *GearShiftResyncWindowTestSuite) TestNoEarlyCloseBeforeMinimumFrames
 
 	for i := range gearShiftMinMeasureFrames - 1 {
 		suite.tickAt(50, target, 30)
-		suite.True(suite.app.gearShift.measuring,
+		suite.True(suite.gen.profile.measuring,
 			"frame %d is below the minimum and must not close the window", i)
-		suite.False(suite.app.gearShift.resynced)
+		suite.False(suite.gen.profile.resynced)
 	}
 }
 
@@ -740,13 +757,13 @@ func (suite *GearShiftResyncWindowTestSuite) TestSingleInToleranceFrameDoesNotEn
 		suite.tickAt(50, rpm, 30)
 
 		if frame < measureFrames-1 {
-			suite.True(suite.app.gearShift.measuring,
+			suite.True(suite.gen.profile.measuring,
 				"a single in-tolerance frame must not end the window (frame %d)", frame)
 		}
 	}
 
-	suite.False(suite.app.gearShift.measuring, "the window should still close at the cap")
-	suite.False(suite.app.gearShift.resynced)
+	suite.False(suite.gen.profile.measuring, "the window should still close at the cap")
+	suite.False(suite.gen.profile.resynced)
 }
 
 // TestFallsBackToTheFrameCapWithoutAPrediction covers every way the shift can give
@@ -767,7 +784,7 @@ func (suite *GearShiftResyncWindowTestSuite) TestFallsBackToTheFrameCapWithoutAP
 		suite.SetupTest()
 
 		suite.armAt(false, tcase.ratioFrom, tcase.ratioTo, tcase.rpm, tcase.speed)
-		suite.Require().Zero(suite.app.gearShift.syncTarget, tcase.name)
+		suite.Require().Zero(suite.gen.profile.syncTarget, tcase.name)
 
 		suite.NotPanics(func() {
 			for range 32 {
@@ -775,7 +792,7 @@ func (suite *GearShiftResyncWindowTestSuite) TestFallsBackToTheFrameCapWithoutAP
 			}
 		}, tcase.name)
 
-		suite.False(suite.app.gearShift.measuring,
+		suite.False(suite.gen.profile.measuring,
 			"%s: a shift with no usable prediction must still close at the configured cap", tcase.name)
 	}
 }
@@ -786,18 +803,18 @@ func (suite *GearShiftResyncWindowTestSuite) TestFallsBackToTheFrameCapWithoutAP
 // fixed rpm target to drift out of tolerance and never match.
 func (suite *GearShiftResyncWindowTestSuite) TestReEngagementIsFoundWhileBraking() {
 	suite.armAt(true, 2.0, 2.8, 6000, 40)
-	target := suite.app.gearShift.syncTarget
+	target := suite.gen.profile.syncTarget
 
 	// Ratio staying on target under heavy braking: rpm falls proportionally with
 	// ground speed, so rpm/speed holds at the target even as both fall sharply.
 	speed := 40.0
 	resynced := false
 
-	for i := 0; i < 20 && suite.app.gearShift.measuring; i++ {
+	for i := 0; i < 20 && suite.gen.profile.measuring; i++ {
 		speed -= 1.5
 		suite.tickAt(50, target*speed, speed)
 
-		if suite.app.gearShift.resynced {
+		if suite.gen.profile.resynced {
 			resynced = true
 
 			break
@@ -818,9 +835,9 @@ func (suite *GearShiftResyncWindowTestSuite) TestReEngagementIsFoundWhileBraking
 		suite.tickAt(50, 6000, speed)
 	}
 
-	suite.False(suite.app.gearShift.resynced,
+	suite.False(suite.gen.profile.resynced,
 		"a fixed rpm target must drift out of tolerance under braking rather than settle")
-	suite.False(suite.app.gearShift.measuring,
+	suite.False(suite.gen.profile.measuring,
 		"with no resync the window must still close at the cap")
 }
 
@@ -836,21 +853,21 @@ func (suite *GearShiftResyncWindowTestSuite) TestZeroSpeedFrameDoesNotCountTowar
 		suite.tickAt(50, target, 30)
 	}
 
-	suite.Require().Equal(1, suite.app.gearShift.syncFrames,
+	suite.Require().Equal(1, suite.gen.profile.syncFrames,
 		"the first in-tolerance frame at the minimum should start the count")
 
 	suite.tickAt(50, target, 0)
-	suite.Zero(suite.app.gearShift.syncFrames, "a zero-speed frame must reset the re-engagement count")
-	suite.False(suite.app.gearShift.resynced)
+	suite.Zero(suite.gen.profile.syncFrames, "a zero-speed frame must reset the re-engagement count")
+	suite.False(suite.gen.profile.resynced)
 }
 
 // floorSeed is the jerk the seed should resolve to: the value mapping to exactly
 // the configured gain floor.
 func (suite *GearShiftResyncWindowTestSuite) floorSeed() float64 {
-	curve := suite.app.config.GetHapticsTransmissionJerkCurve() / 1000
+	curve := suite.gen.cfg.GetHapticsTransmissionJerkCurve() / 1000
 	characterMax := gearShiftCharacterMax
 
-	seed := characterMax * math.Pow(signal.GainToPowerRatio(suite.app.transmissionGainMin), 1/curve)
+	seed := characterMax * math.Pow(signal.GainToPowerRatio(suite.gen.gainMin), 1/curve)
 
 	return seed / gearShiftReferenceFrames
 }
@@ -864,27 +881,27 @@ func (suite *GearShiftResyncWindowTestSuite) blended(peaks ...float64) float64 {
 // armAt sets up a shift from ratioFrom to ratioTo at the given pre-shift rpm and
 // speed, then arms the measurement. syncTarget becomes (rpm/speed)*(ratioTo/ratioFrom).
 func (suite *GearShiftResyncWindowTestSuite) armAt(down bool, ratioFrom, ratioTo, rpm, speed float64) {
-	suite.app.gearShift.lastRatio = ratioFrom
-	suite.app.gearShift.curRatio = ratioTo
-	suite.app.gearShift.lastRPM = rpm
-	suite.app.gearShift.curRPM = rpm
+	suite.gen.profile.lastRatio = ratioFrom
+	suite.gen.profile.curRatio = ratioTo
+	suite.gen.profile.lastRPM = rpm
+	suite.gen.profile.curRPM = rpm
 
-	suite.app.kinematics.Last.GroundSpeed = speed
+	suite.kin.Last.GroundSpeed = speed
 	// The launch-speed exclusion is not what these cases are testing, so the
 	// arming speed is kept clear of it independently of the pre-shift speed under
 	// test (which some cases deliberately set to zero).
-	suite.app.kinematics.Current.GroundSpeed = math.Max(speed, gearShiftLaunchSpeedMps+1)
+	suite.kin.Current.GroundSpeed = math.Max(speed, gearShiftLaunchSpeedMps+1)
 
-	suite.app.armGearShiftMeasurement(0, down)
+	suite.gen.armMeasurement(0, down)
 }
 
 // tickAt advances one frame with the given jerk, engine rpm and ground speed.
 func (suite *GearShiftResyncWindowTestSuite) tickAt(jerk, rpm, speed float64) {
-	suite.app.kinematics.Current.SurgeJerk = jerk
-	suite.app.kinematics.Current.GroundSpeed = speed
-	suite.app.gearShift.curRPM = rpm
+	suite.kin.Current.SurgeJerk = jerk
+	suite.kin.Current.GroundSpeed = speed
+	suite.gen.profile.curRPM = rpm
 
-	suite.app.tickGearShiftMeasurement()
+	suite.gen.TickMeasurement()
 }
 
 // gearShiftResyncTestSpeed is the ground speed every
@@ -894,7 +911,7 @@ const gearShiftResyncTestSpeed = 30
 // inSync returns the rpm that puts the driveline exactly on target at the
 // suite's fixed test speed.
 func (suite *GearShiftResyncWindowTestSuite) inSync() float64 {
-	return suite.app.gearShift.syncTarget * gearShiftResyncTestSpeed
+	return suite.gen.profile.syncTarget * gearShiftResyncTestSpeed
 }
 
 // GearShiftImpulseTestSuite covers the duration side of the learned profile: the
@@ -905,7 +922,9 @@ func (suite *GearShiftResyncWindowTestSuite) inSync() float64 {
 type GearShiftImpulseTestSuite struct {
 	suite.Suite
 
-	app *App
+	gen *TransmissionGenerator
+	kin kinematics.State
+	tel fakeTelemetry
 }
 
 func TestGearShiftImpulseTestSuite(t *testing.T) {
@@ -917,12 +936,7 @@ func TestGearShiftImpulseTestSuite(t *testing.T) {
 func (suite *GearShiftImpulseTestSuite) SetupTest() {
 	cfg := config.New(config.Options{Logger: zerolog.New(io.Discard)})
 
-	suite.app = &App{
-		kinematics:          kinematics.NewKinematicsState(),
-		config:              cfg,
-		transmissionGainMin: cfg.GetSynthTransmissionGainMinRace(),
-		vehicle:             vehicle.Characteristics{RevLimit: 9000},
-	}
+	suite.newGenerator(cfg, 9000)
 }
 
 // TestDurationIsLearnedFromResyncAndMedianed checks that the duration sample folded
@@ -931,7 +945,7 @@ func (suite *GearShiftImpulseTestSuite) SetupTest() {
 // value: a modern paddle box that always re-engages at the same offset must settle
 // there rather than drift toward the frame cap the hold-off keeps running past.
 func (suite *GearShiftImpulseTestSuite) TestDurationIsLearnedFromResyncAndMedianed() {
-	suite.app.seedGearShiftProfile()
+	suite.gen.seedProfile()
 
 	const resyncOffset = 8
 
@@ -939,8 +953,8 @@ func (suite *GearShiftImpulseTestSuite) TestDurationIsLearnedFromResyncAndMedian
 		suite.driveShiftToResyncAt(false, resyncOffset, 30)
 	}
 
-	suite.True(suite.app.gearShift.settled(false))
-	suite.InDelta(float64(resyncOffset), suite.app.gearShift.durationUp, 0.001)
+	suite.True(suite.gen.profile.settled(false))
+	suite.InDelta(float64(resyncOffset), suite.gen.profile.durationUp, 0.001)
 }
 
 // TestCappedWindowRecordsNoDuration is the case the completeGearShiftMeasurement
@@ -950,7 +964,7 @@ func (suite *GearShiftImpulseTestSuite) TestDurationIsLearnedFromResyncAndMedian
 // shift as the slowest gearbox in the fleet, which is not what happened — the
 // driveline simply never satisfied the re-sync test within the window.
 func (suite *GearShiftImpulseTestSuite) TestCappedWindowRecordsNoDuration() {
-	suite.app.seedGearShiftProfile()
+	suite.gen.seedProfile()
 
 	suite.armAt(false, 2.0, 1.5, 6000, 30)
 
@@ -962,12 +976,12 @@ func (suite *GearShiftImpulseTestSuite) TestCappedWindowRecordsNoDuration() {
 		suite.tickAt(120, offTarget, 30)
 	}
 
-	suite.Require().False(suite.app.gearShift.measuring)
-	suite.Require().False(suite.app.gearShift.resynced)
+	suite.Require().False(suite.gen.profile.measuring)
+	suite.Require().False(suite.gen.profile.resynced)
 
-	suite.Equal(1, suite.app.gearShift.samplesUp,
+	suite.Equal(1, suite.gen.profile.samplesUp,
 		"the jerk peak must still be recorded even though the window hit the cap")
-	suite.Zero(suite.app.gearShift.durationSamplesUp,
+	suite.Zero(suite.gen.profile.durationSamplesUp,
 		"a window that hit the cap without re-syncing must not contribute a duration sample")
 }
 
@@ -975,7 +989,7 @@ func (suite *GearShiftImpulseTestSuite) TestCappedWindowRecordsNoDuration() {
 // gearbox can complete its upshifts and downshifts in different times, and each
 // direction's duration must be attributed only to the shifts it was measured from.
 func (suite *GearShiftImpulseTestSuite) TestDirectionsLearnDurationIndependently() {
-	suite.app.seedGearShiftProfile()
+	suite.gen.seedProfile()
 
 	for range gearShiftLearningSamples {
 		suite.driveShiftToResyncAt(false, 6, 30)
@@ -985,8 +999,8 @@ func (suite *GearShiftImpulseTestSuite) TestDirectionsLearnDurationIndependently
 		suite.driveShiftToResyncAt(true, 9, 40)
 	}
 
-	suite.InDelta(6.0, suite.app.gearShift.durationUp, 0.001)
-	suite.InDelta(9.0, suite.app.gearShift.durationDown, 0.001)
+	suite.InDelta(6.0, suite.gen.profile.durationUp, 0.001)
+	suite.InDelta(9.0, suite.gen.profile.durationDown, 0.001)
 }
 
 // TestImpulseRanksSlowGentleAboveFastGentle is the case gearShiftImpulse exists for:
@@ -1012,15 +1026,15 @@ func (suite *GearShiftImpulseTestSuite) TestImpulseRanksSlowGentleAboveFastGentl
 func (suite *GearShiftImpulseTestSuite) TestImpulseReachesThePlayedMagnitude() {
 	const character = 100.0
 
-	suite.app.gearShift.characterUp = character
-	suite.app.gearShift.durationUp = gearShiftSharpFrames
+	suite.gen.profile.characterUp = character
+	suite.gen.profile.durationUp = gearShiftSharpFrames
 	suite.shift(2, 3, 1.85, 1.35, 7000)
-	shortDuration := suite.app.gearShiftMagnitudeFromDriveline()
+	shortDuration := suite.gen.magnitudeFromDriveline()
 
-	suite.app.gearShift.characterUp = character
-	suite.app.gearShift.durationUp = gearShiftHeavyFrames
+	suite.gen.profile.characterUp = character
+	suite.gen.profile.durationUp = gearShiftHeavyFrames
 	suite.shift(2, 3, 1.85, 1.35, 7000)
-	longDuration := suite.app.gearShiftMagnitudeFromDriveline()
+	longDuration := suite.gen.magnitudeFromDriveline()
 
 	suite.Greater(longDuration, shortDuration,
 		"the same character stretched over a longer measured duration must play louder")
@@ -1030,21 +1044,21 @@ func (suite *GearShiftImpulseTestSuite) TestImpulseReachesThePlayedMagnitude() {
 // of the same name: however extreme the learned character and duration, the played
 // magnitude must stay inside the vehicle's configured window.
 func (suite *GearShiftImpulseTestSuite) TestMagnitudeStaysWithinTheWindow() {
-	floor := signal.GainToPowerRatio(suite.app.transmissionGainMin)
+	floor := signal.GainToPowerRatio(suite.gen.gainMin)
 
-	suite.app.gearShift.characterDown = 100000
-	suite.app.gearShift.durationDown = gearShiftHeavyFrames * 100
+	suite.gen.profile.characterDown = 100000
+	suite.gen.profile.durationDown = gearShiftHeavyFrames * 100
 	suite.shift(6, 1, 0.85, 3.50, 9000)
 
-	magnitude := suite.app.gearShiftMagnitudeFromDriveline()
+	magnitude := suite.gen.magnitudeFromDriveline()
 	suite.LessOrEqual(magnitude, 1.0)
 	suite.GreaterOrEqual(magnitude, floor)
 
-	suite.app.gearShift.characterDown = 0
-	suite.app.gearShift.durationDown = 0
+	suite.gen.profile.characterDown = 0
+	suite.gen.profile.durationDown = 0
 	suite.shift(3, 2, 1.35, 1.36, 100)
 
-	suite.GreaterOrEqual(suite.app.gearShiftMagnitudeFromDriveline(), floor)
+	suite.GreaterOrEqual(suite.gen.magnitudeFromDriveline(), floor)
 }
 
 // TestMagnitudeIsIndependentOfChannelGain mirrors GearShiftDrivelineTestSuite's
@@ -1054,18 +1068,18 @@ func (suite *GearShiftImpulseTestSuite) TestMagnitudeIsIndependentOfChannelGain(
 	// setTransmissionGain below reseeds the whole profile, so the initial calculation
 	// must start from a seeded profile too, otherwise it compares a zero-value
 	// profile against a freshly seeded one instead of the same floor twice.
-	suite.app.seedGearShiftProfile()
-	suite.app.gearShift.characterUp = 150
-	suite.app.gearShift.durationUp = 9
+	suite.gen.seedProfile()
+	suite.gen.profile.characterUp = 150
+	suite.gen.profile.durationUp = 9
 
 	suite.shift(3, 2, 1.35, 1.85, 7000)
-	atUnityGain := suite.app.gearShiftMagnitudeFromDriveline()
+	atUnityGain := suite.gen.magnitudeFromDriveline()
 
-	suite.app.config.SetSynthTransmissionGain(-6.0)
-	suite.app.setTransmissionGain(vehicle.TypeRace)
+	suite.gen.cfg.SetSynthTransmissionGain(-6.0)
+	suite.gen.SetVehicle(vehicle.Characteristics{VehicleType: vehicle.TypeRace, RevLimit: 9000})
 	suite.shift(3, 2, 1.35, 1.85, 7000)
 
-	suite.InDelta(atUnityGain, suite.app.gearShiftMagnitudeFromDriveline(), 0.001,
+	suite.InDelta(atUnityGain, suite.gen.magnitudeFromDriveline(), 0.001,
 		"channel trim must be applied once, by the mixer, not folded in here")
 }
 
@@ -1095,26 +1109,26 @@ func (suite *GearShiftImpulseTestSuite) TestPulseShapeIsMonotonic() {
 // again. A stationary Porsche 963 measured 0.390 against a 0.355 floor, so standing
 // gear selections came out nearly as strong as moving ones.
 func (suite *GearShiftImpulseTestSuite) TestStandingGearSelectionPlaysOnlyTheFloor() {
-	floor := signal.GainToPowerRatio(suite.app.transmissionGainMin)
+	floor := signal.GainToPowerRatio(suite.gen.gainMin)
 
 	// A harsh, fully learned gearbox, so nothing but the speed gate can hold it down.
-	suite.app.gearShift.characterUp = 240
-	suite.app.gearShift.durationUp = 5
+	suite.gen.profile.characterUp = 240
+	suite.gen.profile.durationUp = 5
 
 	suite.shift(1, 2, 2.57, 2.06, 7000)
-	suite.Greater(suite.app.gearShiftMagnitudeFromDriveline(), floor,
+	suite.Greater(suite.gen.magnitudeFromDriveline(), floor,
 		"a rolling shift must rise above the floor")
 
-	suite.app.kinematics.Current.GroundSpeed = 0
-	suite.InDelta(floor, suite.app.gearShiftMagnitudeFromDriveline(), 0.0001,
+	suite.kin.Current.GroundSpeed = 0
+	suite.InDelta(floor, suite.gen.magnitudeFromDriveline(), 0.0001,
 		"a gear selected at a standstill must play the floor and nothing more")
 
 	// The gate is the same threshold the learner already uses to exclude launches.
-	suite.app.kinematics.Current.GroundSpeed = gearShiftLaunchSpeedMps - 0.1
-	suite.InDelta(floor, suite.app.gearShiftMagnitudeFromDriveline(), 0.0001)
+	suite.kin.Current.GroundSpeed = gearShiftLaunchSpeedMps - 0.1
+	suite.InDelta(floor, suite.gen.magnitudeFromDriveline(), 0.0001)
 
-	suite.app.kinematics.Current.GroundSpeed = gearShiftLaunchSpeedMps + 0.1
-	suite.Greater(suite.app.gearShiftMagnitudeFromDriveline(), floor)
+	suite.kin.Current.GroundSpeed = gearShiftLaunchSpeedMps + 0.1
+	suite.Greater(suite.gen.magnitudeFromDriveline(), floor)
 }
 
 // TestPulseShapeExactEndpointsAndMidpoint pins the mapping's two reference points
@@ -1158,10 +1172,10 @@ func (suite *GearShiftImpulseTestSuite) TestPulseShapeClampsRatherThanExtrapolat
 // impulseFor computes gearShiftImpulse for an upshift with the given learned
 // character and duration, without disturbing any other test's profile state.
 func (suite *GearShiftImpulseTestSuite) impulseFor(character, duration float64) float64 {
-	suite.app.gearShift.characterUp = character
-	suite.app.gearShift.durationUp = duration
+	suite.gen.profile.characterUp = character
+	suite.gen.profile.durationUp = duration
 
-	return suite.app.gearShiftImpulse(false)
+	return suite.gen.impulse(false)
 }
 
 // driveShiftToResyncAt arms and runs a measurement in the given direction so that
@@ -1181,10 +1195,10 @@ func (suite *GearShiftImpulseTestSuite) driveShiftToResyncAt(down bool, resyncOf
 
 	suite.tickAt(50, target, speed) // in tolerance, syncFrames=1
 	suite.tickAt(50, target, speed) // in tolerance, syncFrames=2 -> resynced at resyncOffset
-	suite.Require().True(suite.app.gearShift.resynced)
-	suite.Require().Equal(resyncOffset, suite.app.gearShift.resyncAt)
+	suite.Require().True(suite.gen.profile.resynced)
+	suite.Require().Equal(resyncOffset, suite.gen.profile.resyncAt)
 
-	for suite.app.gearShift.measuring {
+	for suite.gen.profile.measuring {
 		suite.tickAt(50, target, speed)
 	}
 }
@@ -1193,45 +1207,140 @@ func (suite *GearShiftImpulseTestSuite) driveShiftToResyncAt(down bool, resyncOf
 // using representative close-ratio values. Mirrors
 // GearShiftDrivelineTestSuite.shift.
 func (suite *GearShiftImpulseTestSuite) shift(from, to int, ratioFrom, ratioTo, rpm float64) {
-	suite.app.kinematics.Last.TransmissionGear = from
-	suite.app.kinematics.Current.TransmissionGear = to
-	suite.app.gearShift.lastRatio = ratioFrom
-	suite.app.gearShift.lastRPM = rpm
-	suite.app.gearShift.curRatio = ratioTo
+	suite.kin.Last.TransmissionGear = from
+	suite.kin.Current.TransmissionGear = to
+	suite.gen.profile.lastRatio = ratioFrom
+	suite.gen.profile.lastRPM = rpm
+	suite.gen.profile.curRatio = ratioTo
 
 	// A rolling shift. Below gearShiftLaunchSpeedMps the magnitude collapses to the
 	// gain floor by design, since selecting a gear at a standstill moves no driveline
 	// energy, and every case here is about what a moving car plays.
-	suite.app.kinematics.Current.GroundSpeed = gearShiftLaunchSpeedMps + 1
+	suite.kin.Current.GroundSpeed = gearShiftLaunchSpeedMps + 1
 }
 
 // armAt sets up a shift from ratioFrom to ratioTo at the given pre-shift rpm and
 // speed, then arms the measurement. syncTarget becomes (rpm/speed)*(ratioTo/ratioFrom).
 // Mirrors GearShiftResyncWindowTestSuite.armAt.
 func (suite *GearShiftImpulseTestSuite) armAt(down bool, ratioFrom, ratioTo, rpm, speed float64) {
-	suite.app.gearShift.lastRatio = ratioFrom
-	suite.app.gearShift.curRatio = ratioTo
-	suite.app.gearShift.lastRPM = rpm
-	suite.app.gearShift.curRPM = rpm
+	suite.gen.profile.lastRatio = ratioFrom
+	suite.gen.profile.curRatio = ratioTo
+	suite.gen.profile.lastRPM = rpm
+	suite.gen.profile.curRPM = rpm
 
-	suite.app.kinematics.Last.GroundSpeed = speed
-	suite.app.kinematics.Current.GroundSpeed = math.Max(speed, gearShiftLaunchSpeedMps+1)
+	suite.kin.Last.GroundSpeed = speed
+	suite.kin.Current.GroundSpeed = math.Max(speed, gearShiftLaunchSpeedMps+1)
 
-	suite.app.armGearShiftMeasurement(0, down)
+	suite.gen.armMeasurement(0, down)
 }
 
 // tickAt advances one frame with the given jerk, engine rpm and ground speed.
 // Mirrors GearShiftResyncWindowTestSuite.tickAt.
 func (suite *GearShiftImpulseTestSuite) tickAt(jerk, rpm, speed float64) {
-	suite.app.kinematics.Current.SurgeJerk = jerk
-	suite.app.kinematics.Current.GroundSpeed = speed
-	suite.app.gearShift.curRPM = rpm
+	suite.kin.Current.SurgeJerk = jerk
+	suite.kin.Current.GroundSpeed = speed
+	suite.gen.profile.curRPM = rpm
 
-	suite.app.tickGearShiftMeasurement()
+	suite.gen.TickMeasurement()
 }
 
 // inSync returns the rpm that puts the driveline exactly on target at a speed.
 // Mirrors GearShiftResyncWindowTestSuite.inSync.
 func (suite *GearShiftImpulseTestSuite) inSync(speed float64) float64 {
-	return suite.app.gearShift.syncTarget * speed
+	return suite.gen.profile.syncTarget * speed
+}
+
+// Each suite wires its own generator to its own kinematics state and fake telemetry.
+// The bodies are identical; Go has no way to share one method across four suite types
+// without an embedded base, and embedding would hide the fields the tests read.
+
+func (suite *GearShiftProfileTestSuite) newGenerator(cfg *config.Config, revLimit uint16) {
+	suite.gen = newTransmissionFixture(cfg, &suite.kin, &suite.tel, revLimit)
+}
+
+func (suite *GearShiftResyncWindowTestSuite) newGenerator(cfg *config.Config, revLimit uint16) {
+	suite.gen = newTransmissionFixture(cfg, &suite.kin, &suite.tel, revLimit)
+}
+
+func (suite *GearShiftImpulseTestSuite) newGenerator(cfg *config.Config, revLimit uint16) {
+	suite.gen = newTransmissionFixture(cfg, &suite.kin, &suite.tel, revLimit)
+}
+
+// The driveline sampler reads the telemetry client, so it could not be tested at all
+// while the generator held a *gttelemetry.Client. These cases cover the guards that
+// keep a sentinel gear index out of the ratio slice, which is the reason the generator
+// does not use Transformer.CurrentGearRatio.
+
+func (suite *GearShiftDrivelineTestSuite) TestAdvanceDrivelineSamplesTheSelectedGear() {
+	suite.tel.ratios = []float32{3.2, 2.1, 1.6, 1.312, 1.0}
+	suite.tel.rpm = 6500
+	suite.kin.Current.TransmissionGear = 4
+
+	suite.gen.AdvanceDriveline()
+
+	suite.InDelta(1.312, suite.gen.profile.curRatio, 0.0001)
+	suite.InDelta(6500, suite.gen.profile.curRPM, 0.0001)
+}
+
+// Each frame must push the current sample down to the previous one, because the
+// magnitude path reads the pair rather than the telemetry client.
+func (suite *GearShiftDrivelineTestSuite) TestAdvanceDrivelineShiftsCurrentToLast() {
+	suite.tel.ratios = []float32{3.2, 2.1, 1.6, 1.312, 1.0}
+
+	suite.tel.rpm = 6500
+	suite.kin.Current.TransmissionGear = 4
+	suite.gen.AdvanceDriveline()
+
+	suite.tel.rpm = 4800
+	suite.kin.Current.TransmissionGear = 5
+	suite.gen.AdvanceDriveline()
+
+	suite.InDelta(1.312, suite.gen.profile.lastRatio, 0.0001)
+	suite.InDelta(6500, suite.gen.profile.lastRPM, 0.0001)
+	suite.InDelta(1.0, suite.gen.profile.curRatio, 0.0001)
+	suite.InDelta(4800, suite.gen.profile.curRPM, 0.0001)
+}
+
+// Reverse (0) and neutral (15) are sentinel indices, not positions in the ratio
+// slice. Indexing the slice with either one would read the wrong ratio or panic.
+func (suite *GearShiftDrivelineTestSuite) TestSentinelGearsHaveNoRatio() {
+	suite.tel.ratios = []float32{3.2, 2.1, 1.6, 1.312, 1.0}
+
+	for _, gear := range []int{0, 15} {
+		suite.kin.Current.TransmissionGear = gear
+
+		suite.Zero(suite.gen.currentGearRatio(),
+			"gear %d is a sentinel, not a ratio index", gear)
+	}
+}
+
+// A gear beyond the reported ratios, or one whose ratio is unset, yields no ratio
+// rather than an out-of-range read.
+func (suite *GearShiftDrivelineTestSuite) TestMissingRatioYieldsZero() {
+	suite.tel.ratios = []float32{3.2, 2.1, 0}
+
+	suite.kin.Current.TransmissionGear = 3
+	suite.Zero(suite.gen.currentGearRatio(), "an unset ratio is not usable")
+
+	suite.kin.Current.TransmissionGear = 6
+	suite.Zero(suite.gen.currentGearRatio(), "gear beyond the reported ratios")
+}
+
+// shift positions the state as a change between two gears at a given engine speed,
+// using representative close-ratio values.
+func (suite *GearShiftDrivelineTestSuite) shift(from, to int, ratioFrom, ratioTo, rpm float64) {
+	suite.kin.Last.TransmissionGear = from
+	suite.kin.Current.TransmissionGear = to
+	suite.gen.profile.lastRatio = ratioFrom
+	suite.gen.profile.lastRPM = rpm
+	suite.gen.profile.curRatio = ratioTo
+
+	// A rolling shift. Below gearShiftLaunchSpeedMps the magnitude collapses to the
+	// gain floor by design, since selecting a gear at a standstill moves no driveline
+	// energy, and every case here is about what a moving car plays.
+	suite.kin.Current.GroundSpeed = gearShiftLaunchSpeedMps + 1
+}
+
+func (suite *GearShiftDrivelineTestSuite) newGenerator(cfg *config.Config, revLimit uint16) {
+	suite.gen = newTransmissionFixture(cfg, &suite.kin, &suite.tel, revLimit)
 }

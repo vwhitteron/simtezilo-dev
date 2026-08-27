@@ -1,4 +1,4 @@
-package app //nolint:testpackage // white-box testing
+package haptics //nolint:testpackage // white-box testing
 
 // Diagnostic probe for the gear-change haptic. It drives the real kinematics
 // pipeline over a recorded replay, detects gear transitions exactly as the live
@@ -13,6 +13,7 @@ package app //nolint:testpackage // white-box testing
 import (
 	"context"
 	"fmt"
+	"io"
 	"math"
 	"os"
 	"sort"
@@ -20,6 +21,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/rs/zerolog"
+	"github.com/vwhitteron/simtezilo-dev/app/calibrator"
+	"github.com/vwhitteron/simtezilo-dev/app/config"
+	"github.com/vwhitteron/simtezilo-dev/app/kinematics"
+	"github.com/vwhitteron/simtezilo-dev/app/synthesizer"
+	"github.com/vwhitteron/simtezilo-dev/app/vehicle"
 	gttelemetry "github.com/zetetos/gt-telemetry/v2"
 	gtmodels "github.com/zetetos/gt-telemetry/v2/pkg/models"
 )
@@ -119,12 +126,41 @@ func TestGearShiftProbe(t *testing.T) {
 	reportProbe(t, app, shifts, format)
 }
 
-// newProbeApp mirrors newCaptureApp but pins the telemetry format the way
-// tuneassist does, since the .gtz replays carry Addendum3 payloads.
-func newProbeApp(source string) (*App, *gttelemetry.Client, error) {
-	app, _, err := newCaptureApp(source)
+// probeApp is the minimal rig the probe drives: the real transmission generator over
+// a real synthesizer and kinematics state. It replaces the partial App the probe used
+// to build, which dragged in the audio backend for a run that opens no device.
+type probeApp struct {
+	cfg    *config.Config
+	synth  *synthesizer.Synthesizer
+	kin    kinematics.State
+	gen    *TransmissionGenerator
+	veh    vehicle.Characteristics
+	client *gttelemetry.Client
+}
+
+// newProbeApp builds the rig and pins the telemetry format the way tuneassist does,
+// since the .gtz replays carry Addendum3 payloads.
+func newProbeApp(source string) (*probeApp, *gttelemetry.Client, error) {
+	logger := zerolog.New(io.Discard)
+
+	cfg := config.New(config.Options{Logger: logger})
+
+	calib, err := calibrator.NewToneGenerator(cfg)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("calibrator: %w", err)
+	}
+
+	app := &probeApp{cfg: cfg, kin: kinematics.NewKinematicsState()}
+
+	app.synth, err = synthesizer.New(&synthesizer.SynthOpts{
+		Config:     cfg.GetSynthesizer(),
+		BaseConfig: cfg,
+		Logger:     logger,
+		Kinematics: &app.kin,
+		Calibrator: calib,
+	})
+	if err != nil {
+		return nil, nil, fmt.Errorf("synth: %w", err)
 	}
 
 	client, err := gttelemetry.New(gttelemetry.Options{
@@ -135,11 +171,32 @@ func newProbeApp(source string) (*App, *gttelemetry.Client, error) {
 		return nil, nil, fmt.Errorf("telemetry client: %w", err)
 	}
 
-	app.gtClient = client
+	app.client = client
+	app.gen = NewTransmissionGenerator(cfg, app.synth, &app.kin,
+		func() TelemetrySource { return client.Telemetry }, logger)
 
 	applyProbeTuningOverrides(app)
 
 	return app, client, nil
+}
+
+// buildVehicle sets the vehicle fields the transmission path reads. The engine
+// characteristics the app's own vehicle builder derives play no part in a gear-shift
+// measurement, so the probe does not derive them.
+func (a *probeApp) buildVehicle() {
+	revLimit := a.client.Telemetry.EngineRPMLight().Max
+	if revLimit == 0 {
+		revLimit = 8000
+	}
+
+	a.veh = vehicle.Characteristics{
+		ID:          a.client.Telemetry.VehicleID(),
+		VehicleType: vehicle.DetermineVehicleType(a.client.Telemetry.VehicleType()),
+		RevLimit:    revLimit,
+		Dimensions:  captureDimensions(a.client),
+	}
+
+	a.gen.SetVehicle(a.veh)
 }
 
 // applyProbeTuningOverrides lets a sweep drive the tuning knobs from the environment
@@ -150,13 +207,13 @@ func newProbeApp(source string) (*App, *gttelemetry.Client, error) {
 // matching the current shipped defaults, rather than left to whatever config.New
 // happens to default to, so a retuned default cannot silently change what an
 // env-var-less probe run measures.
-func applyProbeTuningOverrides(app *App) {
+func applyProbeTuningOverrides(app *probeApp) {
 	gearShiftCharacterMax = 1800.0
 	gearShiftStepMax = 0.30
 	gearShiftMaxMeasureFrames = 32
 
-	app.config.SetHapticsTransmissionStepBlend(0.5)
-	app.config.SetHapticsTransmissionJerkCurve(750)
+	app.cfg.SetHapticsTransmissionStepBlend(0.5)
+	app.cfg.SetHapticsTransmissionJerkCurve(750)
 
 	if v, ok := probeEnvFloat("GEARSHIFT_PROBE_CHARACTER_MAX"); ok {
 		gearShiftCharacterMax = v
@@ -167,23 +224,21 @@ func applyProbeTuningOverrides(app *App) {
 	}
 
 	if v, ok := probeEnvFloat("GEARSHIFT_PROBE_STEP_BLEND"); ok {
-		app.config.SetHapticsTransmissionStepBlend(v)
+		app.cfg.SetHapticsTransmissionStepBlend(v)
 	}
 
 	if v, ok := probeEnvFloat("GEARSHIFT_PROBE_CURVE"); ok {
-		app.config.SetHapticsTransmissionJerkCurve(int(v))
+		app.cfg.SetHapticsTransmissionJerkCurve(int(v))
 	}
 
 	if v, ok := probeEnvFloat("GEARSHIFT_PROBE_FRAMES"); ok {
 		gearShiftMaxMeasureFrames = int(v)
 	}
 
-	// Overrides the probe's own replay of the re-sync criterion (see resyncOffset),
-	// not the live gearShiftSyncTolerance constant, so a sweep can find the tolerance
-	// that best separates gearbox re-engagement from measurement noise without a
-	// rebuild.
+	// Sweeps the live tolerance itself, which both the running effect and the probe's
+	// replay of the criterion read, so a sweep finds the tolerance that actually ships.
 	if v, ok := probeEnvFloat("GEARSHIFT_PROBE_SYNC_TOL"); ok {
-		probeSyncTolerance = v
+		gearShiftSyncTolerance = v
 	}
 }
 
@@ -213,7 +268,7 @@ type probeRunState struct {
 
 // runProbe advances the replay frame by frame, building the vehicle on the first
 // live frame and recording a window around every gear transition.
-func (a *App) runProbe(t *testing.T, client *gttelemetry.Client) ([]probeShift, string) {
+func (a *probeApp) runProbe(t *testing.T, client *gttelemetry.Client) ([]probeShift, string) {
 	t.Helper()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -238,15 +293,14 @@ func (a *App) runProbe(t *testing.T, client *gttelemetry.Client) ([]probeShift, 
 
 // processProbeFrame advances the vehicle for one telemetry frame and, once the
 // vehicle is built, records gear-change context into state.
-func (a *App) processProbeFrame(frame *gttelemetry.Transformer, client *gttelemetry.Client, state *probeRunState) {
+func (a *probeApp) processProbeFrame(frame *gttelemetry.Transformer, client *gttelemetry.Client, state *probeRunState) {
 	if !frame.TelemetryStarted() {
 		return
 	}
 
 	if !state.built && frame.VehicleEngineLayout() != "" {
-		a.buildVehicleForCapture()
+		a.buildVehicle()
 
-		a.state.telemetryActive = true
 		state.built = true
 	}
 
@@ -254,10 +308,10 @@ func (a *App) processProbeFrame(frame *gttelemetry.Transformer, client *gtteleme
 		return
 	}
 
-	a.kinematics.Update(1.0/frameRate, a.vehicle.Dimensions, client)
-	a.advanceGearShiftDriveline()
+	a.kin.Update(1.0/telemetryFrameRate, a.veh.Dimensions, client)
+	a.gen.AdvanceDriveline()
 
-	state.format = a.kinematics.Current.Format
+	state.format = a.kin.Current.Format
 	state.lastLap = frame.CurrentLap()
 
 	cur := a.sampleProbeFrame(frame)
@@ -266,15 +320,15 @@ func (a *App) processProbeFrame(frame *gttelemetry.Transformer, client *gtteleme
 	// one, so a shift detected this frame does not see its own trail.
 	state.open = extendOpenShifts(state.shifts, state.open, cur)
 
-	if a.gearHasChanged() && len(state.ring) > 0 {
+	if a.gen.GearHasChanged() && len(state.ring) > 0 {
 		state.shifts = append(state.shifts, a.recordProbeShift(state.ring, cur, state.lastLap))
 		state.open = append(state.open, len(state.shifts)-1)
 	}
 
 	// tickGearShiftMeasurement is deliberately not called on shift frames, matching
 	// generateForceHaptics' if/else so the learned EWMA tracks the live app exactly.
-	if !a.gearHasChanged() {
-		a.tickGearShiftMeasurement()
+	if !a.gen.GearHasChanged() {
+		a.gen.TickMeasurement()
 	}
 
 	state.ring = append(state.ring, cur)
@@ -282,23 +336,23 @@ func (a *App) processProbeFrame(frame *gttelemetry.Transformer, client *gtteleme
 		state.ring = state.ring[1:]
 	}
 
-	a.kinematics.Last = a.kinematics.Current
+	a.kin.Last = a.kin.Current
 }
 
 // sampleProbeFrame reads every quantity of interest for the current frame.
-func (a *App) sampleProbeFrame(frame *gttelemetry.Transformer) probeFrame {
+func (a *probeApp) sampleProbeFrame(frame *gttelemetry.Transformer) probeFrame {
 	return probeFrame{
 		seq:       frame.SequenceID(),
-		gear:      a.kinematics.Current.TransmissionGear,
-		speed:     a.kinematics.Current.GroundSpeed,
-		surgeJerk: a.kinematics.GetSurgeJerk(),
-		surgeAcc:  a.kinematics.GetSurgeGforce() * 9.80665,
+		gear:      a.kin.Current.TransmissionGear,
+		speed:     a.kin.Current.GroundSpeed,
+		surgeJerk: a.kin.GetSurgeJerk(),
+		surgeAcc:  a.kin.GetSurgeGforce() * 9.80665,
 		rpm:       float64(frame.EngineRPM()),
 		throttle:  float64(frame.ThrottleInputPercent()),
 		brake:     float64(frame.BrakeInputPercent()),
 		clutchAct: float64(frame.ClutchActuationPercent()),
 		clutchEng: float64(frame.ClutchEngagementPercent()),
-		ratio:     probeGearRatio(frame, a.kinematics.Current.TransmissionGear),
+		ratio:     probeGearRatio(frame, a.kin.Current.TransmissionGear),
 	}
 }
 
@@ -321,7 +375,7 @@ func probeGearRatio(frame *gttelemetry.Transformer, gear int) float64 {
 
 // recordProbeShift captures the state at a detected transition, including what the
 // current implementation would have played, before the effect mutates the profile.
-func (a *App) recordProbeShift(ring []probeFrame, cur probeFrame, lap int16) probeShift {
+func (a *probeApp) recordProbeShift(ring []probeFrame, cur probeFrame, lap int16) probeShift {
 	prev := ring[len(ring)-1]
 
 	shift := probeShift{
@@ -335,7 +389,7 @@ func (a *App) recordProbeShift(ring []probeFrame, cur probeFrame, lap int16) pro
 		rpmBefore:  prev.rpm,
 		ratioFrom:  prev.ratio,
 		ratioTo:    cur.ratio,
-		jerkEWMAAt: a.gearShift.character(cur.gear < prev.gear),
+		jerkEWMAAt: a.gen.profile.character(cur.gear < prev.gear),
 	}
 
 	// Mirror gearShiftSyncTarget exactly: rpm/speed at the new ratio, self-calibrating
@@ -347,13 +401,13 @@ func (a *App) recordProbeShift(ring []probeFrame, cur probeFrame, lap int16) pro
 
 	// Reproduce the live magnitude, then advance the learner exactly as
 	// playGearShiftHaptic does so the EWMA trajectory matches the real session.
-	shift.magnitudePlaye = a.determineGearShiftMagnitude()
+	shift.magnitudePlaye = a.gen.determineMagnitude()
 
-	if a.gearShift.measuring {
-		a.completeGearShiftMeasurement()
+	if a.gen.profile.measuring {
+		a.gen.completeMeasurement()
 	}
 
-	a.armGearShiftMeasurement(cur.surgeJerk, a.gearShiftIsDownshift())
+	a.gen.armMeasurement(cur.surgeJerk, a.gen.isDownshift())
 
 	shift.jerkTrace = append(shift.jerkTrace, cur.surgeJerk)
 	shift.accTrace = append(shift.accTrace, cur.surgeAcc)
@@ -401,7 +455,7 @@ func finaliseProbeShift(shift *probeShift) {
 		}
 	}
 
-	shift.resyncOffset = resyncOffset(shift, probeSyncTolerance)
+	shift.resyncOffset = resyncOffset(shift)
 
 	// The live measurement window closes at resyncOffset, so that is the peak the
 	// effect would actually have learned from. When the trail never resyncs, the
@@ -422,51 +476,34 @@ func finaliseProbeShift(shift *probeShift) {
 	}
 }
 
-// probeSyncTolerance is the probe's own copy of gearShiftSyncTolerance, overridable
-// via GEARSHIFT_PROBE_SYNC_TOL so a sweep can find the tolerance without touching the
-// live constant, which is what actually ships.
-var probeSyncTolerance = gearShiftSyncTolerance //nolint:gochecknoglobals // probe tuning knob, see applyProbeTuningOverrides
-
-// resyncOffset replays the live re-sync criterion (gearShiftHasResynced) over a
-// captured trace, so the probe can report the frame offset the measurement window
-// would actually have closed at, without duplicating any state the live code carries
-// only across ticks. It mirrors that function frame-for-frame:
-//   - offsets before gearShiftMinMeasureFrames never touch the consecutive-frame
-//     counter, matching the early return that skips it entirely;
-//   - a frame counts as in-tolerance only when speed is positive and rpm/speed sits
-//     within tol of syncTarget;
-//   - re-sync is declared on the 2nd (gearShiftSyncFrames) consecutive in-tolerance
-//     frame.
+// resyncOffset replays the live re-sync criterion over a captured trace, so the probe
+// can report the frame offset at which the measurement window would actually have
+// closed.
 //
-// Offset 0 is the shift frame itself; the live code cannot resync on it, so the
-// replay starts at offset 1. Returns -1 when the shift has no usable target or the
+// It drives the real hasResynced through a scratch generator rather than restating the
+// criterion, so the two cannot drift. The scratch generator carries only the state that
+// criterion reads: the sync target, the elapsed-frame count, this frame's engine speed,
+// and the ground speed on its kinematics state.
+//
+// Offset 0 is the shift frame itself; the live code cannot resync on it, so the replay
+// starts at offset 1. It returns -1 when the shift has no usable target, or when the
 // trail never satisfies the criterion.
-func resyncOffset(shift *probeShift, tol float64) int {
+func resyncOffset(shift *probeShift) int {
 	if shift.syncTarget <= 0 {
 		return -1
 	}
 
-	syncFrames := 0
+	var kin kinematics.State
+
+	gen := &TransmissionGenerator{kin: &kin}
+	gen.profile.syncTarget = shift.syncTarget
 
 	for offset := 1; offset < len(shift.rpmTrace); offset++ {
-		if offset < gearShiftMinMeasureFrames {
-			continue
-		}
+		gen.profile.framesElapsed = offset
+		gen.profile.curRPM = shift.rpmTrace[offset]
+		kin.Current.GroundSpeed = shift.speedTrace[offset]
 
-		speed := shift.speedTrace[offset]
-
-		inTolerance := speed > 0 &&
-			math.Abs(shift.rpmTrace[offset]/speed-shift.syncTarget) <= tol*shift.syncTarget
-
-		if !inTolerance {
-			syncFrames = 0
-
-			continue
-		}
-
-		syncFrames++
-
-		if syncFrames >= gearShiftSyncFrames {
+		if gen.hasResynced() {
 			return offset
 		}
 	}
@@ -475,12 +512,12 @@ func resyncOffset(shift *probeShift, tol float64) int {
 }
 
 // reportProbe emits the per-shift table and the per-replay summary.
-func reportProbe(t *testing.T, app *App, shifts []probeShift, format string) {
+func reportProbe(t *testing.T, app *probeApp, shifts []probeShift, format string) {
 	t.Helper()
 
 	t.Logf("vehicle=%d type=%s revLimit=%d format=%q floorGain=%.2fdB shifts=%d",
-		app.vehicle.ID, app.vehicle.VehicleType, app.vehicle.RevLimit, format,
-		app.transmissionGainMin, len(shifts))
+		app.veh.ID, app.veh.VehicleType, app.veh.RevLimit, format,
+		app.gen.gainMin, len(shifts))
 
 	t.Logf("CSV seq,lap,from,to,dir,speed,throttle,brake,rpmBefore,ratioFrom,ratioTo," +
 		"ratioStep,rpmPredicted,rpmMeasured12,peak3,peakFull,argmax,magnitude,jerkEWMA,resync,peakToResync,argmaxToResync")
@@ -521,7 +558,7 @@ func traceAt(trace []float64, idx int) float64 {
 // summariseProbe answers the decision points directly: does the 3-frame window
 // find the peak, do the ratios predict the RPM step, and did the effect ever
 // leave its floor?
-func summariseProbe(t *testing.T, app *App, shifts []probeShift) {
+func summariseProbe(t *testing.T, app *probeApp, shifts []probeShift) {
 	t.Helper()
 
 	if len(shifts) == 0 {
@@ -570,7 +607,7 @@ type probeStats struct {
 
 // collectProbeStats walks every shift once, gathering the raw quantities the
 // SUMMARY lines are derived from.
-func collectProbeStats(shifts []probeShift, app *App) probeStats {
+func collectProbeStats(shifts []probeShift, app *probeApp) probeStats {
 	var stats probeStats
 
 	for _, shift := range shifts {
@@ -587,7 +624,7 @@ func collectProbeStats(shifts []probeShift, app *App) probeStats {
 			stats.withRatios++
 
 			stats.stepValues = append(stats.stepValues, math.Abs(step*step-1)*
-				(shift.rpmBefore/math.Max(1, float64(app.vehicle.RevLimit))))
+				(shift.rpmBefore/math.Max(1, float64(app.veh.RevLimit))))
 
 			if measured := traceAt(shift.rpmTrace, 12); measured > 0 && shift.rpmBefore > 0 {
 				stats.ratioErr = append(stats.ratioErr, measured/(shift.rpmBefore*step)-1)
@@ -707,10 +744,10 @@ func logDrivelineStepPercentiles(t *testing.T, stats probeStats) {
 		percentile(stats.stepValues, 0.5), percentile(stats.stepValues, 0.95), percentile(stats.stepValues, 1.0))
 }
 
-func logMagnitudeStats(t *testing.T, app *App, stats probeStats) {
+func logMagnitudeStats(t *testing.T, app *probeApp, stats probeStats) {
 	t.Helper()
 
-	floor := math.Pow(10, app.transmissionGainMin/10)
+	floor := math.Pow(10, app.gen.gainMin/10)
 	atFloor := 0
 
 	for _, m := range stats.mags {
@@ -737,11 +774,11 @@ type directionStats struct {
 	upPeak, downPeak, upStep, downStep []float64
 }
 
-func collectDirectionStats(shifts []probeShift, app *App) directionStats {
+func collectDirectionStats(shifts []probeShift, app *probeApp) directionStats {
 	var dir directionStats
 
 	for _, shift := range shifts {
-		step := math.Abs(shift.ratioStep()*shift.ratioStep()-1) * (shift.rpmBefore / math.Max(1, float64(app.vehicle.RevLimit)))
+		step := math.Abs(shift.ratioStep()*shift.ratioStep()-1) * (shift.rpmBefore / math.Max(1, float64(app.veh.RevLimit)))
 
 		if shift.down() {
 			dir.downPeak = append(dir.downPeak, shift.peakWindowFull)
@@ -771,14 +808,14 @@ func logDirectionSplit(t *testing.T, dir directionStats) {
 		percentile(dir.downPeak, 0.90)/math.Max(1, percentile(dir.downPeak, 0.5)))
 }
 
-func logLearnedVsTarget(t *testing.T, app *App, shifts []probeShift, dir directionStats) {
+func logLearnedVsTarget(t *testing.T, app *probeApp, shifts []probeShift, dir directionStats) {
 	t.Helper()
 
 	t.Logf("SUMMARY learned characterUp=%.1f (target %.1f) characterDown=%.1f (target %.1f) max=%.0f samples=%d shifts=%d",
-		app.gearShift.characterUp, percentile(dir.upPeak, 0.5),
-		app.gearShift.characterDown, percentile(dir.downPeak, 0.5),
+		app.gen.profile.characterUp, percentile(dir.upPeak, 0.5),
+		app.gen.profile.characterDown, percentile(dir.downPeak, 0.5),
 		gearShiftCharacterMax,
-		app.gearShift.samplesUp+app.gearShift.samplesDown, len(shifts))
+		app.gen.profile.samplesUp+app.gen.profile.samplesDown, len(shifts))
 
 	logWarmUpCost(t, app, shifts)
 }
@@ -788,15 +825,15 @@ func logLearnedVsTarget(t *testing.T, app *App, shifts []probeShift, dir directi
 // every session opens below the vehicle's true character until enough shifts of each
 // direction have been seen — and the per-direction split doubles the number of shifts
 // needed, since each direction warms independently.
-func logWarmUpCost(t *testing.T, app *App, shifts []probeShift) {
+func logWarmUpCost(t *testing.T, app *probeApp, shifts []probeShift) {
 	t.Helper()
 
 	if len(shifts) < 4 {
 		return
 	}
 
-	finalUp := app.gearShift.characterUp
-	finalDown := app.gearShift.characterDown
+	finalUp := app.gen.profile.characterUp
+	finalDown := app.gen.profile.characterDown
 
 	var upSeen, downSeen, upWarm, downWarm int
 

@@ -23,8 +23,9 @@ import (
 // (not imported) because package app imports haptics, so haptics cannot import
 // back into app without a cycle. Keep them in step with app/app_constants.go.
 const (
-	hapticFrameRate    = 120 // 120 Hz — chassis pulse minimum-frame sizing
-	telemetryFrameRate = 60  // 60 Hz — texture cushion sizing
+	hapticFrameRate       = 120 // 120 Hz — chassis pulse minimum-frame sizing
+	telemetryFrameRate    = 60  // 60 Hz — texture cushion sizing
+	engineHapticFrameRate = 30  // 30 Hz — engine channel cushion sizing
 )
 
 // Generator produces the chassis impact pulse and the road-texture layer. It is

@@ -51,6 +51,11 @@ type HapticCaptureOptions struct {
 	DurSeconds  float64 // capture this many seconds of replay (<=0 means to end)
 	Engine      bool    // drive the engine haptic
 	Chassis     bool    // drive the chassis ("bump") haptic
+
+	// Transmission drives the gear-shift haptic. Gear changes are detected from the
+	// kinematics gear index exactly as the live app detects them, so a replay that
+	// contains no shift produces silence on this layer rather than an error.
+	Transmission bool
 }
 
 // EngineFrame records the per-engine-tick context, so the caller can correlate a
@@ -97,8 +102,8 @@ func CaptureHaptics(opts HapticCaptureOptions) (*HapticCapture, error) {
 		return nil, errors.New("a replay Source is required")
 	}
 
-	if !opts.Engine && !opts.Chassis {
-		return nil, errors.New("enable at least one of Engine or Chassis")
+	if !opts.Engine && !opts.Chassis && !opts.Transmission {
+		return nil, errors.New("enable at least one of Engine, Chassis or Transmission")
 	}
 
 	app, client, err := newCaptureApp(opts.Source)
@@ -123,6 +128,11 @@ func CaptureHaptics(opts HapticCaptureOptions) (*HapticCapture, error) {
 
 	app.buildVehicleForCapture()
 	app.state.telemetryActive = true
+
+	// shouldGenerateEngineHaptic gates on this flag, which the live app raises in
+	// enableHaptics. Without it an engine capture renders silence. The chassis and
+	// transmission layers are gated by the caller instead, so they never noticed.
+	app.state.hapticsEnabled = true
 
 	return app.runCaptureLoop(next, opts), nil
 }
@@ -160,6 +170,9 @@ func newCaptureApp(source string) (*App, *gttelemetry.Client, error) {
 	}
 
 	app.chassisGen = haptics.NewGenerator(app.config, app.synth, &app.kinematics, logger)
+	app.engineGen = haptics.NewEngineGenerator(app.config, app.synth, app.telemetrySource, logger)
+	app.transmissionGen = haptics.NewTransmissionGenerator(
+		app.config, app.synth, &app.kinematics, app.telemetrySource, logger)
 
 	client, err := gttelemetry.New(gttelemetry.Options{Source: source, Logger: &logger})
 	if err != nil {
@@ -206,20 +219,18 @@ func (a *App) seekToVehicle(next pullFunc, seekSeconds float64) error {
 // odometer/fuel side effects (which the capture App has no state for).
 func (a *App) buildVehicleForCapture() {
 	vehicleType := vehicle.DetermineVehicleType(a.gtClient.Telemetry.VehicleType())
-	engine := a.getEngineData()
-	revLimit := a.gtClient.Telemetry.EngineRPMLight().Max
-
-	a.adjustEngineHaptics(&engine, revLimit)
+	engine, revLimit := haptics.EngineForVehicle(a.config, a.gtClient, a.log)
 
 	a.vehicle = vehicle.Characteristics{
 		ID:          a.gtClient.Telemetry.VehicleID(),
 		VehicleType: vehicleType,
 		Engine:      engine,
-		RevLimit:    a.normalizeRevLimit(revLimit),
+		RevLimit:    revLimit,
 		Dimensions:  a.captureDimensions(),
 	}
 
 	a.setTransmissionGain(vehicleType)
+	a.engineGen.SetVehicle(a.vehicle)
 }
 
 // captureDimensions reproduces updateVehicle's wheelbase/track derivation, which
@@ -251,6 +262,53 @@ func (a *App) captureDimensions() vehicle.Dimensions {
 		LongitudinalRadius: wheelbaseMetres / 2,
 		TransverseRadius:   trackWidthMetres / 2,
 	}
+}
+
+// capturePacketHaptics advances kinematics and drives the per-packet haptic layers
+// for one delivered telemetry frame, in the same order as the live app's
+// generateForceHaptics. It appends a ChassisFrame when the chassis layer is enabled.
+func (a *App) capturePacketHaptics(
+	opts HapticCaptureOptions, seq, lastSeq uint32, cursor int, out *HapticCapture,
+) {
+	// The kinematics window spans the sequence delta, so a drop widens it (and
+	// reshapes jerk/snap).
+	delta := seq - lastSeq
+	if delta == 0 {
+		delta = 1
+	}
+
+	a.kinematics.Update(float64(delta)/float64(telemetryFrameRate), a.vehicle.Dimensions, a.gtClient)
+
+	// The gear-shift layer runs before the bump, matching the live ordering:
+	// driveline first, then either a shift or a measurement tick.
+	if opts.Transmission {
+		a.advanceGearShiftDriveline()
+
+		if a.gearHasChanged() {
+			a.playGearShiftHaptic()
+		} else {
+			a.tickGearShiftMeasurement()
+		}
+	}
+
+	if !opts.Chassis {
+		return
+	}
+
+	// Chassis refreshes once per delivered packet, exactly as the live app
+	// regenerates the bump on each new telemetry frame.
+	a.chassisGen.Chassis()
+	a.chassisGen.Texture()
+
+	out.ChassisFrames = append(out.ChassisFrames, ChassisFrame{
+		OutCursor: cursor,
+		Seq:       seq,
+		Delta:     delta,
+		Jerk:      a.kinematics.Current.SixDOFTranslationCalc.Jerk,
+		Snap:      a.kinematics.Current.SixDOFTranslationCalc.Snap,
+		Amplitude: channelValueAt(a.kinematics.Current.SynthChannelAmplitude, 0),
+		FreqHz:    channelValueAt(a.kinematics.Current.SynthChannelFrequency, 0),
+	})
 }
 
 // runCaptureLoop is the discrete-event simulation. It interleaves packet arrivals
@@ -309,31 +367,17 @@ func (a *App) runCaptureLoop(next pullFunc, opts HapticCaptureOptions) *HapticCa
 			a.state.current.sequenceNumber = seq
 			nextPacket += packetPeriod
 
-			// Chassis refreshes once per delivered packet, exactly as the live app
-			// regenerates the bump on each new telemetry frame. The kinematics window
-			// spans the sequence delta, so a drop widens it (and reshapes jerk/snap).
-			if opts.Chassis {
-				delta := uint32(int64(seq) - int64(chassisLastSeq))
-				if delta == 0 {
-					delta = 1
-				}
-
-				a.kinematics.Update(float64(delta)/float64(telemetryFrameRate), a.vehicle.Dimensions, a.gtClient)
-				a.chassisGen.Chassis()
-				a.chassisGen.Texture()
-
-				out.ChassisFrames = append(out.ChassisFrames, ChassisFrame{
-					OutCursor: cursor,
-					Seq:       seq,
-					Delta:     delta,
-					Jerk:      a.kinematics.Current.SixDOFTranslationCalc.Jerk,
-					Snap:      a.kinematics.Current.SixDOFTranslationCalc.Snap,
-					Amplitude: channelValueAt(a.kinematics.Current.SynthChannelAmplitude, 0),
-					FreqHz:    channelValueAt(a.kinematics.Current.SynthChannelFrequency, 0),
-				})
-
-				chassisLastSeq = seq
+			// Kinematics feeds both the chassis bump and the gear-shift detection, so
+			// it advances once per packet whenever either layer is enabled. An
+			// engine-only run skips it, because the engine haptic reads no kinematics
+			// and skipping keeps that capture identical to earlier runs.
+			if !opts.Chassis && !opts.Transmission {
+				continue
 			}
+
+			a.capturePacketHaptics(opts, seq, chassisLastSeq, cursor, out)
+
+			chassisLastSeq = seq
 		}
 
 		// Fire any engine-haptic ticks due by now.
@@ -348,14 +392,14 @@ func (a *App) runCaptureLoop(next pullFunc, opts HapticCaptureOptions) *HapticCa
 			// "Cached" means no fresh packet has advanced the sequence since the
 			// engine generator last consumed one, so getCurrentRPM falls back to the
 			// held RPM (the real effect of a drop landing on this tick).
-			cached := seq <= a.state.engine.lastSeq
+			cached := seq <= a.engineGen.LastSeq()
 
 			a.generateEngineHaptic()
 
 			out.EngineFrames = append(out.EngineFrames, EngineFrame{
 				OutCursor: cursor,
 				Seq:       seq,
-				RPM:       a.state.engine.lastKnownRPM,
+				RPM:       a.engineGen.LastRPM(),
 				Dropped:   dropsPending,
 				Cached:    cached,
 			})
