@@ -34,9 +34,16 @@
 
         h1 {
             text-align: center;
-            margin-bottom: 16px;
             font-size: 1.4em;
             color: var(--bs-emphasis-color);
+        }
+
+        /* The status sits on the title row, and absolute positioning keeps it out of
+           the flow. A status that took space would move the transport controls each
+           time the status text appeared. */
+        .title-row {
+            position: relative;
+            margin-bottom: 16px;
         }
 
         /* Same width and centring as .content-row below, so the first control lines
@@ -512,6 +519,21 @@
             background: var(--bs-sable-300);
         }
 
+        /* Narrower than the play button, so the transport reads as one primary control
+           with a step on each side. */
+        .chassis-transport button.wave-step {
+            width: 26px;
+            font-size: 0.8em;
+        }
+
+        /* Tighter than .lap-row select, so the speed control does not tower over the
+           play button beside it. */
+        .chassis-transport select {
+            padding: 4px 8px;
+            font-size: 0.8em;
+            height: 30px;
+        }
+
         .wave-time {
             font-size: 0.75em;
             color: var(--bs-body-color);
@@ -519,9 +541,14 @@
         }
 
         .wave-status {
+            position: absolute;
+            right: 0;
+            top: 50%;
+            transform: translateY(-50%);
             font-size: 0.72em;
-            color: var(--bs-primary);
-            margin-left: auto;
+            /* The emphasis tint, not --bs-primary. The plain primary is a 50% blue
+               that reads badly as small text on the dark background. */
+            color: var(--bs-primary-text-emphasis);
         }
 
         /* The frame lives on the panel, and this padding insets the trace from that
@@ -800,7 +827,10 @@
     <div id="navigation"></div>
 
     <div class="tuneassist-content">
-        <h1>Haptics Tuning Assistant</h1>
+        <div class="title-row">
+            <h1>Haptics Tuning Assistant</h1>
+            <span class="wave-status" id="wave-status"></span>
+        </div>
         <div class="lap-row">
             <div class="lap-group">
                 <label for="replay-select">Replay:</label>
@@ -835,9 +865,16 @@
                 </label>
             </div>
             <div class="chassis-transport">
-                <button id="wave-play" type="button" title="Play / pause">&#9654;</button>
+                <button id="wave-step-back" type="button" class="wave-step" title="Step back one telemetry frame (Left arrow, Shift for 10)">&#9666;</button>
+                <button id="wave-play" type="button" title="Play / pause (Space)">&#9654;</button>
+                <button id="wave-step-fwd" type="button" class="wave-step" title="Step forward one telemetry frame (Right arrow, Shift for 10)">&#9656;</button>
+                <select id="wave-rate" title="Playback speed. The haptic audio is resampled, so a speed other than 1x also moves every frequency by the same factor. Judge frequency content at 1x. Keys: [ and ].">
+                    <option value="0.25">0.25x</option>
+                    <option value="0.5">0.5x</option>
+                    <option value="1" selected>1x</option>
+                    <option value="2">2x</option>
+                </select>
                 <span class="wave-time" id="wave-time">0.00 / 0.00 s</span>
-                <span class="wave-status" id="wave-status"></span>
             </div>
         </div>
         <div class="content-row">
@@ -1211,6 +1248,7 @@
             let currentLapKey = null;
             let pendingLap = null;      // lap key from the URL, applied once on the initial replay load
             let pendingView = null;     // {zoom,panx,pany,poi} from the URL, applied once with the initial lap
+            let pendingFrame = null;    // playhead frame from the URL, applied once the lap's audio has rendered
             const HIGHLIGHT_LABEL = 'point of interest';             // scatter dataset label (hidden from legend)
             const HIGHLIGHT_RING = '#ffffff';                        // white outline on the emphasised points
             let highlightSource = [];                                // {x,y,dist,frame,surface} of POI-nearest points
@@ -1265,6 +1303,15 @@
                 // fresh page starts in, so a default view keeps a short URL.
                 if (activePlot !== DEFAULT_PLOT) params.set('plot', activePlot);
                 if (laneZoomOn) params.set('wavezoom', '1');
+                // Playhead position within the lap. Every follower — map point, scatter
+                // point, speed marker and the replay video — is driven from this frame,
+                // so one integer restores them all. The video's own time is deliberately
+                // not stored: an ffmpeg re-cut can change the video's sample count, while
+                // the frame stays valid.
+                if (waveBuffer && currentLapKey) {
+                    const f = playheadFrame();
+                    if (Number.isFinite(f) && f !== getFrameRange().startFrame) params.set('f', String(f));
+                }
                 history.replaceState(null, '', '?' + params.toString());
             }
 
@@ -1350,6 +1397,8 @@
                 }
 
                 pendingLap = params.get('lap');
+                const frameParam = parseInt(params.get('f'), 10);
+                pendingFrame = Number.isFinite(frameParam) ? frameParam : null;
                 if (params.has('zoom') || params.has('poi')) {
                     pendingView = {
                         zoom: parseFloat(params.get('zoom')),
@@ -1443,6 +1492,7 @@
                         applyView(pendingView);
                     }
                     pendingView = null;
+                    if (!urlLapMatched) pendingFrame = null;
                 }
 
                 replaySelectEl.disabled = false;
@@ -2448,6 +2498,7 @@
 
             function videoPlay() {
                 if (!videoInfo) return;
+                videoElement().playbackRate = waveRate;
                 videoSyncToPlayhead(true);
                 // A blocked autoplay must not stop the audition; the charts still run.
                 videoElement().play().catch(() => { });
@@ -3058,6 +3109,7 @@
             let waveRaf = null;
             let wavePeaks = null;         // { min:[], max:[] } envelope, one pair per canvas column
             let waveLastKey = '';
+            let waveRate = 1;             // transport speed, applied to the voices and the video
             let audioReqSeq = 0;          // guards against out-of-order fetch responses
 
             // Read-only lanes for the other haptic layers. Each holds its own decoded
@@ -3272,7 +3324,9 @@
             function playheadSeconds() {
                 if (!waveBuffer) return 0;
                 let t = wavePlayOffset;
-                if (wavePlaying) t += audioCtx.currentTime - wavePlayStartCtx;
+                // The voices are resampled by waveRate, so one second of context time
+                // covers waveRate seconds of the buffer.
+                if (wavePlaying) t += (audioCtx.currentTime - wavePlayStartCtx) * waveRate;
                 return Math.max(0, Math.min(t, waveBuffer.duration));
             }
 
@@ -3395,6 +3449,14 @@
                     videoFollowSuppressed = true;
                     followPlayhead();
                     videoFollowSuppressed = false;
+
+                    // The URL's playhead frame lands once, as soon as there is a buffer to
+                    // seek within. seekToFrame moves the follower, so the video lands too.
+                    if (pendingFrame != null) {
+                        const frame = pendingFrame;
+                        pendingFrame = null;
+                        seekToFrame(frame);
+                    }
 
                     setWaveStatus('');
                 } catch (e) {
@@ -3597,6 +3659,11 @@
             function drawWindowBox(ctx, w, h) {
                 if (!waveBuffer || !highlightSource || !highlightSource.length) return;
 
+                // The zoomed window is the highlight window, so the box would cover the whole
+                // lane and only wash out the trace. The zoom itself already says where the
+                // highlight is.
+                if (laneZoomOn) return;
+
                 const { startFrame, endFrame } = getFrameRange();
                 const span = Math.max(1, endFrame - startFrame);
                 let lo = Infinity, hi = -Infinity;
@@ -3608,13 +3675,17 @@
                 const xR = laneXClamped((hi - startFrame) / span, w);
                 if (xR <= xL) return;
 
-                // Colour the box by the surface at the POI, matching the map/speed markers.
-                const coords = mapData[currentLapKey] || [];
-                const pf = Math.max(0, Math.min(distToFrame(poiDist), coords.length - 1));
-                const sc = surfaceColors[(coords[pf] && coords[pf].surface)] || surfaceColors.unknown;
-                ctx.fillStyle = alphaScale(sc.bg, 0.4);
+                // The box is neutral, not surface-coloured. The chassis and texture lanes are
+                // themselves drawn in the surface colours, so a tarmac-blue box against a
+                // tarmac-blue trace disappeared. White separates the box from every surface
+                // colour and every lane colour.
+                //
+                // The fill stays faint, because a stronger wash lifts the canvas behind the
+                // trace until the envelope is hard to read. The border is what marks the box
+                // out, so the border carries the contrast.
+                ctx.fillStyle = 'rgba(255,255,255,0.07)';
                 ctx.fillRect(xL, 0, xR - xL, h);
-                ctx.strokeStyle = sc.border;
+                ctx.strokeStyle = 'rgba(255,255,255,0.6)';
                 ctx.lineWidth = 1;
                 ctx.strokeRect(xL + 0.5, 0.5, (xR - xL) - 1, h - 1);
             }
@@ -3878,6 +3949,7 @@
 
                 const source = ctx.createBufferSource();
                 source.buffer = buffer;
+                source.playbackRate.value = waveRate;
                 source.connect(gain);
                 source.start(0, Math.min(offset, buffer.duration));
 
@@ -3939,6 +4011,8 @@
                 cancelAnimationFrame(waveRaf);
                 videoPause();
                 followLaneWindow(); drawWave(); updateWaveTime(); followPlayhead();
+                // Keep the URL's playhead frame in step with continuous playback.
+                scheduleUrlUpdate();
             }
 
             // Stop: silence without moving the stored offset (used before reload/seek).
@@ -3948,6 +4022,27 @@
                 setPlayIcon();
                 cancelAnimationFrame(waveRaf);
                 videoPause();
+            }
+
+            // Change the transport speed. A live BufferSource carries on from where it is
+            // when its playbackRate moves, so the voices are not restarted and no gap is
+            // put into the signal. The offset is rebased first, because the elapsed context
+            // time before the change was clocked at the old rate.
+            //
+            // The audio is resampled, not time-stretched, so every frequency moves by the
+            // same factor. That is what makes a slow pass useful for hearing the shape of a
+            // transient, and why frequency content must still be judged at 1x.
+            function setPlaybackRate(rate) {
+                if (wavePlaying) {
+                    wavePlayOffset = playheadSeconds();
+                    wavePlayStartCtx = audioCtx.currentTime;
+                }
+                waveRate = rate;
+
+                for (const voice of Object.values(waveVoices)) {
+                    voice.source.playbackRate.value = rate;
+                }
+                if (videoInfo) videoElement().playbackRate = rate;
             }
 
             function togglePlay() {
@@ -3977,6 +4072,45 @@
                 stopPlayback();
                 wavePlayOffset = frac * waveBuffer.duration;
                 if (wasPlaying) startPlayback(); else { followLaneWindow(); drawWave(); updateWaveTime(); followPlayhead(); }
+                // Keep the URL's playhead frame in step with the seek.
+                scheduleUrlUpdate();
+            }
+
+            // Move the playhead by whole telemetry frames. Stepping is an inspection
+            // action, so it pauses first: the audio would otherwise run straight off the
+            // frame the step just landed on.
+            //
+            // seekToFrame moves the hover follower through followPlayhead, so the map, the
+            // scatter point, the speed marker and the video all land on the same frame.
+            function stepFrame(delta) {
+                if (!waveBuffer) return;
+                if (wavePlaying) pausePlayback();
+
+                const { startFrame, endFrame } = getFrameRange();
+                const frame = Math.max(startFrame, Math.min(endFrame, playheadFrame() + delta));
+
+                seekToFrame(frame);
+            }
+
+            // Jump to the first or the last frame of the section. dir is -1 or 1.
+            function seekToSectionEdge(dir) {
+                if (!waveBuffer) return;
+                if (wavePlaying) pausePlayback();
+
+                const { startFrame, endFrame } = getFrameRange();
+
+                seekToFrame(dir < 0 ? startFrame : endFrame);
+            }
+
+            // Move the speed one place along the select. The select stays the single source
+            // of the speed list, so a new option needs no change here.
+            function nudgeRate(dir) {
+                const select = document.getElementById('wave-rate');
+                const next = Math.max(0, Math.min(select.options.length - 1, select.selectedIndex + dir));
+                if (next === select.selectedIndex) return;
+
+                select.selectedIndex = next;
+                setPlaybackRate(Number(select.value));
             }
 
             // Click action shared by every lane: the POI lands on the clicked frame and
@@ -4069,6 +4203,15 @@
             function setupAudioUI() {
                 document.getElementById('wave-play').addEventListener('click', togglePlay);
 
+                document.getElementById('wave-step-back').addEventListener('click', () => stepFrame(-1));
+                document.getElementById('wave-step-fwd').addEventListener('click', () => stepFrame(1));
+
+                const rateSelect = document.getElementById('wave-rate');
+                rateSelect.value = String(waveRate);
+                rateSelect.addEventListener('change', () => {
+                    setPlaybackRate(Number(rateSelect.value));
+                });
+
                 document.querySelectorAll('#tune-widget .tune-out-enable').forEach(box => {
                     box.checked = audioOut[box.dataset.outLayer];
                     box.addEventListener('change', () => {
@@ -4133,16 +4276,51 @@
                     });
                 });
 
-                // Space is the transport key for the whole page. The default action would
-                // scroll the page, or toggle the focused control, so it is suppressed.
-                // Typing in a field, or using a checkbox or a button, keeps the key.
+                // The transport keys for the whole page:
+                //
+                //   Space          play / pause
+                //   Left / Right   step one telemetry frame (Shift steps ten)
+                //   Home / End     jump to the start or the end of the section
+                //   [ / ]          slower / faster
+                //
+                // Each default action would scroll the page, or drive the focused control,
+                // so it is suppressed. Typing in a field, or using a checkbox or a button,
+                // keeps the key: the page's own controls must stay operable from the
+                // keyboard.
                 document.addEventListener('keydown', (e) => {
-                    if (e.key !== ' ' && e.code !== 'Space') return;
                     if (e.ctrlKey || e.metaKey || e.altKey) return;
+
                     const el = e.target;
                     if (el && (el.isContentEditable || /^(INPUT|SELECT|TEXTAREA|BUTTON)$/.test(el.tagName))) return;
+
+                    const step = e.shiftKey ? 10 : 1;
+
+                    switch (true) {
+                        case e.key === ' ' || e.code === 'Space':
+                            togglePlay();
+                            break;
+                        case e.key === 'ArrowLeft':
+                            stepFrame(-step);
+                            break;
+                        case e.key === 'ArrowRight':
+                            stepFrame(step);
+                            break;
+                        case e.key === 'Home':
+                            seekToSectionEdge(-1);
+                            break;
+                        case e.key === 'End':
+                            seekToSectionEdge(1);
+                            break;
+                        case e.key === '[':
+                            nudgeRate(-1);
+                            break;
+                        case e.key === ']':
+                            nudgeRate(1);
+                            break;
+                        default:
+                            return;
+                    }
                     e.preventDefault();
-                    togglePlay();
                 });
 
                 // Lane window. Zooming centres the window on the highlight box, so the

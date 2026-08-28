@@ -61,8 +61,11 @@ const (
 
 	// textureOnsetSpeedMps is the width of the fade-in window just above the standstill
 	// gate over which the amplitude eases from silence up to the floor, so the layer slides
-	// in smoothly as the car pulls away rather than snapping on at the gate.
-	textureOnsetSpeedMps = 1.5
+	// in smoothly as the car pulls away rather than snapping on at the gate. The window is
+	// wide enough that the layer reaches full level at 20 km/h (5.56 m/s), which keeps the
+	// rumble out of car-park and pit-lane speeds and makes the onset too gradual to hear as
+	// a step. The same ramp runs in reverse as the car slows to a stop.
+	textureOnsetSpeedMps = 3.5556
 
 	// textureCutoffSpeedRefMps is the ground speed at which the noise low-pass cutoff
 	// reaches the top of its configured band; the texture brightens with speed because
