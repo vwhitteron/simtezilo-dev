@@ -2,6 +2,7 @@
 package kinematics
 
 import (
+	"math"
 	"time"
 
 	"github.com/vwhitteron/simtezilo-dev/app/kinematics/translationalenvelope"
@@ -97,6 +98,17 @@ type Kinematics struct {
 	// telemetry. Zeroed CornerSet on formats that do not carry suspension data.
 	SuspensionHeight models.CornerSet
 
+	// SuspensionRoughness is the sliding RMS, in m/s, of the high-passed per-corner
+	// suspension velocity averaged across the four corners, over roughly 200 ms. It
+	// measures how rough the surface is, not individual bumps.
+	SuspensionRoughness float64
+
+	// SuspensionRoughnessValid reports whether SuspensionRoughness carries a usable
+	// measurement. It is false while the window refills after a sequence gap and on
+	// formats carrying no suspension data, so a consumer can tell "measured smooth"
+	// from "no data".
+	SuspensionRoughnessValid bool
+
 	// SurfaceType is the per-corner road surface classification for this frame, as
 	// provided by telemetry (tarmac, concrete, grass, dirt, sand, snow, or unknown).
 	// It drives the road-texture layer's loudness and grain: the render layer maps
@@ -124,6 +136,11 @@ type State struct {
 	// See nyquistGate.
 	transNyquist nyquistGate
 	rotNyquist   nyquistGate
+
+	// roughness is the road-roughness envelope's ring-buffer state. It lives on
+	// State, not Kinematics, so the ring is not copied every frame by k.Last =
+	// k.Current.
+	roughness roughnessEnvelope
 
 	// DisableNyquistGate bypasses both fs/2 cadence gates, so the calculated
 	// velocity chains consume the raw telemetry velocity unchanged. It exists for
@@ -234,7 +251,7 @@ func (k *State) Update(windowSeconds float64, vehicleDimensions vehicle.Dimensio
 	k.Current.SuspensionHeight = gtclient.Telemetry.SuspensionHeightMetres()
 	k.Current.SurfaceType = gtclient.Telemetry.SurfaceType()
 
-	k.resolveDerivatives()
+	k.resolveDerivatives(windowSeconds)
 }
 
 // Contiguous gap-free frames each source needs before its snap (the deepest
@@ -248,11 +265,128 @@ const (
 	nativeSnapWarmFrames = 2
 )
 
+// Constants governing the road-roughness envelope (roughnessEnvelope.update).
+const (
+	// roughnessHighpassHz is the one-pole DC-blocker corner applied to each
+	// corner's suspension velocity, in Hz. Telemetry arrives at 59.94 Hz, so the
+	// usable band is 0-30 Hz. Body attitude motion (braking dive, jump crest,
+	// heave/pitch/roll of the sprung mass) sits at 0.8-2.5 Hz and must be
+	// rejected; wheel hop and aliased road content at 10-30 Hz must pass. At 8 Hz
+	// the response is -18 dB at 1 Hz and -0.5 dB at 25 Hz. Its time constant is 20
+	// ms, about 1.2 frames, so a free fall's constant velocity decays to zero
+	// within two frames of the wheels leaving the ground. Do not raise it above
+	// ~12 Hz: the pole then eats the remaining band and the fs/2 cadence artefact
+	// dominates. Do not lower it below ~5 Hz: braking dive leaks through as false
+	// roughness.
+	roughnessHighpassHz = 8.0
+
+	// roughnessWindowFrames is the sliding RMS window length, 200.2 ms at 59.94
+	// Hz. Its envelope cutoff is about 5 Hz, which is what makes it measure how
+	// rough the surface IS rather than tracking individual bumps; the chassis
+	// impact pulse keeps sole ownership of discrete bumps and kerbs. A 3-frame
+	// kerb strike contributes a quarter of the window's energy and decays over
+	// 200 ms, so it reads as a swell, not a hit.
+	roughnessWindowFrames = 12
+
+	// roughnessMinFillFrames is how many frames must be in the ring before the
+	// envelope reports a measurement, so one post-gap spike cannot produce a
+	// full-scale roughness on a single frame.
+	roughnessMinFillFrames = 4
+
+	// roughnessMaxVelocityMps is a per-corner sanity clamp on the high-passed
+	// velocity, so a corrupt or extreme sample cannot dominate the window.
+	roughnessMaxVelocityMps = 5.0
+
+	// roughnessCorners is the number of suspension corners averaged into the
+	// envelope: front-left, front-right, rear-left, rear-right.
+	roughnessCorners = 4
+)
+
+// roughnessEnvelope estimates road-surface roughness from suspension movement.
+// Telemetry's 59.94 Hz rate means this can only ever produce a level, never a
+// spectrum.
+type roughnessEnvelope struct {
+	lowpass [roughnessCorners]float64      // per-corner one-pole low-pass state, m/s; the high-pass is the subtraction below
+	ring    [roughnessWindowFrames]float64 // per-frame mean square across the corners
+	index   int
+	filled  int
+	sum     float64
+}
+
+// update advances the envelope by one frame and returns the current roughness
+// estimate (RMS, m/s) and whether it is valid. height and last are this frame's
+// and the previous frame's per-corner suspension heights; windowSeconds is the
+// frame period; contiguous reports whether this frame follows the last one
+// without a sequence gap.
+func (r *roughnessEnvelope) update(height, last models.CornerSet, windowSeconds float64, contiguous bool) (float64, bool) {
+	// A gap means the height delta spans more than one frame, so it is not a
+	// single-frame velocity, and the fixed high-pass coefficient assumes a fixed
+	// frame rate.
+	if !contiguous || windowSeconds <= 0 {
+		*r = roughnessEnvelope{}
+
+		return 0, false
+	}
+
+	// Formats that carry no suspension data report all zeros. Without this
+	// guard they would report a permanently smooth road rather than no
+	// measurement.
+	if height == (models.CornerSet{}) {
+		*r = roughnessEnvelope{}
+
+		return 0, false
+	}
+
+	// One-pole low-pass coefficient for the given frame period; see the
+	// coefficient idiom at app/haptics/texture.go:204.
+	alpha := 1 - math.Exp(-2*math.Pi*roughnessHighpassHz*windowSeconds)
+
+	current := [roughnessCorners]float64{
+		float64(height.FrontLeft), float64(height.FrontRight),
+		float64(height.RearLeft), float64(height.RearRight),
+	}
+	previous := [roughnessCorners]float64{
+		float64(last.FrontLeft), float64(last.FrontRight),
+		float64(last.RearLeft), float64(last.RearRight),
+	}
+
+	sumSq := 0.0
+
+	for i := range roughnessCorners {
+		velocity := (current[i] - previous[i]) / windowSeconds
+
+		r.lowpass[i] += alpha * (velocity - r.lowpass[i])
+
+		road := velocity - r.lowpass[i]
+		road = min(max(road, -roughnessMaxVelocityMps), roughnessMaxVelocityMps)
+
+		sumSq += road * road
+	}
+
+	r.sum -= r.ring[r.index]
+	r.ring[r.index] = sumSq / roughnessCorners
+	r.sum += r.ring[r.index]
+	r.index = (r.index + 1) % roughnessWindowFrames
+
+	if r.filled < roughnessWindowFrames {
+		r.filled++
+	}
+
+	if r.filled < roughnessMinFillFrames {
+		return 0, false
+	}
+
+	// Divide by filled, not the window size, so the estimator degrades
+	// gracefully while re-warming instead of reporting an artificially low RMS.
+	return math.Sqrt(r.sum / float64(r.filled)), true
+}
+
 // resolveDerivatives selects, per domain, the jerk/snap values the chassis haptic
 // should consume after accounting for telemetry gaps. A frame is contiguous when
 // its sequence ID is exactly one greater than the previous frame's; any gap resets
 // contiguousFrames, so the chains re-warm from scratch instead of differencing
-// across the gap (which produces a spurious high-power pulse).
+// across the gap (which produces a spurious high-power pulse). It also advances
+// the suspension-roughness envelope, since the envelope shares the same gap gate.
 //
 // Selection is whole-source: jerk and snap always come from the same fully-warmed
 // source, so the pulse never mixes a warmed jerk with an unwarmed snap. The
@@ -262,8 +396,10 @@ const (
 // suppressed until the calculated chain warms — which is why a recovering pulse
 // can be translational-only for the one frame between native and calculated
 // readiness.
-func (k *State) resolveDerivatives() {
-	if k.Current.SequenceID == k.Last.SequenceID+1 {
+func (k *State) resolveDerivatives(windowSeconds float64) {
+	contiguous := k.Current.SequenceID == k.Last.SequenceID+1
+
+	if contiguous {
 		if k.contiguousFrames < calcSnapWarmFrames {
 			k.contiguousFrames++
 		}
@@ -272,6 +408,8 @@ func (k *State) resolveDerivatives() {
 		k.GapResets++
 		k.LastGapDelta = int(int64(k.Current.SequenceID) - int64(k.Last.SequenceID))
 	}
+
+	k.Current.SuspensionRoughness, k.Current.SuspensionRoughnessValid = k.roughness.update(k.Current.SuspensionHeight, k.Last.SuspensionHeight, windowSeconds, contiguous)
 
 	calcWarm := k.contiguousFrames >= calcSnapWarmFrames
 	nativeWarm := formatSupportsNativeEnvelope(k.Current.Format) &&

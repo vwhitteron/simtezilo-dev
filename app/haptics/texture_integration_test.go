@@ -181,3 +181,82 @@ func TestChassisTextureMutedBelowSpeed(t *testing.T) {
 		t.Fatalf("stationary texture should be silent, got peak %.4f", peak)
 	}
 }
+
+// textureRoughnessRMS drives the texture layer at a fixed speed/surface with the
+// given roughness reading and returns the drained RMS, once primed.
+func textureRoughnessRMS(t *testing.T, roughness float64, valid bool) float64 {
+	t.Helper()
+
+	rig := buildTextureTestRig(t, true)
+
+	rig.kin.Current.SurfaceType = dirtCorners()
+	rig.kin.Current.GroundSpeed = 40
+	rig.kin.Current.SuspensionRoughness = roughness
+	rig.kin.Current.SuspensionRoughnessValid = valid
+
+	for range 30 {
+		rig.gen.Texture()
+		_, _ = drainRMS(rig, 1)
+	}
+
+	for range 20 {
+		rig.gen.Texture()
+	}
+
+	rms, _ := drainRMS(rig, 40)
+
+	return rms
+}
+
+// TestChassisTextureRoughnessNeutralAtReference is the guard proving the roughness
+// envelope leaves the hand-tuned surfaceRumble levels untouched on reference
+// tarmac: an invalid reading (roughness feature off) and a valid reading exactly at
+// textureRoughnessRefMps must both reduce to the same, unmodified rumble.
+func TestChassisTextureRoughnessNeutralAtReference(t *testing.T) {
+	invalidRMS := textureRoughnessRMS(t, 0, false)
+	atRefRMS := textureRoughnessRMS(t, textureRoughnessRefMps, true)
+
+	if invalidRMS == 0 || atRefRMS == 0 {
+		t.Fatalf("expected non-silent output, got invalid=%.6f atRef=%.6f", invalidRMS, atRefRMS)
+	}
+
+	relDiff := math.Abs(atRefRMS-invalidRMS) / invalidRMS
+	if relDiff > 0.02 {
+		t.Fatalf("roughness at the reference should reproduce the unmodulated level: invalid=%.6f atRef=%.6f (%.2f%% diff)",
+			invalidRMS, atRefRMS, relDiff*100)
+	}
+}
+
+// TestChassisTextureRoughnessMonotonic confirms the layer's loudness rises
+// monotonically with roughness and stays within the documented amplitude-factor
+// bounds relative to the neutral (reference-roughness) level.
+func TestChassisTextureRoughnessMonotonic(t *testing.T) {
+	neutral := textureRoughnessRMS(t, textureRoughnessRefMps, true)
+
+	quarter := textureRoughnessRMS(t, textureRoughnessRefMps*0.25, true)
+	unity := textureRoughnessRMS(t, textureRoughnessRefMps, true)
+	quad := textureRoughnessRMS(t, textureRoughnessRefMps*4, true)
+
+	for _, rms := range []float64{quarter, unity, quad} {
+		if math.IsNaN(rms) || math.IsInf(rms, 0) {
+			t.Fatalf("non-finite RMS: %.6f", rms)
+		}
+	}
+
+	if !(quarter < unity && unity < quad) {
+		t.Fatalf("expected strictly increasing RMS with roughness, got quarter=%.6f unity=%.6f quad=%.6f", quarter, unity, quad)
+	}
+
+	// Allow a small tolerance for the block ramp: successive Texture() calls
+	// interpolate the amplitude across a block rather than stepping instantly.
+	const tolerance = 1.05
+
+	lower := neutral * textureRoughnessAmpMin / tolerance
+	upper := neutral * textureRoughnessAmpMax * tolerance
+
+	for _, rms := range []float64{quarter, unity, quad} {
+		if rms < lower || rms > upper {
+			t.Fatalf("RMS %.6f outside [%.6f, %.6f] (neutral=%.6f * [ampMin,ampMax])", rms, lower, upper, neutral)
+		}
+	}
+}

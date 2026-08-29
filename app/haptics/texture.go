@@ -10,9 +10,13 @@ import (
 )
 
 // Road-texture layer render tuning. The rumble is driven by ground speed and road
-// surface type — not by suspension movement — so it reads as a distinct, continuous
-// background layer rather than tracking the same bumps/kerbs the chassis impact pulse
-// fires on.
+// surface type, modulated by a slow roughness envelope taken from suspension
+// movement. The envelope is a ~200 ms sliding RMS, so it measures how rough the
+// surface IS rather than tracking individual bumps; the chassis impact pulse keeps
+// sole ownership of discrete bumps and kerbs, so this layer stays a distinct,
+// continuous background. Suspension data cannot supply the carrier in any case:
+// telemetry arrives at 59.94 Hz, and its Nyquist limit sits below the bottom of this
+// layer's 55-150 Hz band, so it can only contribute a level, never a spectrum.
 //
 // The carrier is band-limited NOISE, not a tone: real road texture is broadband,
 // irregular vibration, so a pure sine reads as an artificial buzz. The noise amplitude
@@ -35,8 +39,10 @@ const (
 	textureMaxAmplitude = 1.0
 
 	// textureMinSpeedMps is the standstill gate: the rumble is silent at or below this
-	// speed so a parked/creeping car does not buzz. Above it the speed curve ramps in.
-	textureMinSpeedMps = 2.0
+	// speed so a parked car does not buzz. Above it the speed curve ramps in. The gate sits
+	// at zero because the fade-in window below starts there; a creeping car is kept quiet by
+	// the fade, not by a speed threshold.
+	textureMinSpeedMps = 0.0
 
 	// textureAmplitudeSpeedRefMps is the ground speed by which the speed-amplitude curve
 	// has effectively saturated (soft cap). Set to a moderate speed so the rumble is
@@ -59,35 +65,56 @@ const (
 	// would be excessive on a straight.
 	textureLowSpeedFloor = 0.84
 
-	// textureOnsetSpeedMps is the width of the fade-in window just above the standstill
-	// gate over which the amplitude eases from silence up to the floor, so the layer slides
-	// in smoothly as the car pulls away rather than snapping on at the gate. The window is
-	// wide enough that the layer reaches full level at 20 km/h (5.56 m/s), which keeps the
-	// rumble out of car-park and pit-lane speeds and makes the onset too gradual to hear as
-	// a step. The same ramp runs in reverse as the car slows to a stop.
-	textureOnsetSpeedMps = 3.5556
+	// textureOnsetSpeedMps is the width of the fade-in window above the standstill gate over
+	// which the amplitude eases from silence up to the floor, so the layer slides in smoothly
+	// as the car pulls away rather than snapping on. The window spans 0 to 30 km/h
+	// (8.33 m/s), which holds car-park and pit-lane speeds well down and makes the onset far
+	// too gradual to hear as a step. The same ramp runs in reverse as the car slows to a
+	// stop.
+	textureOnsetSpeedMps = 8.3333
 
 	// textureCutoffSpeedRefMps is the ground speed at which the noise low-pass cutoff
-	// reaches the top of its configured band; the texture brightens with speed because
-	// road features sweep under the tyres faster.
-	textureCutoffSpeedRefMps = 70.0
+	// reaches the top of its band; the texture brightens with speed because road features
+	// sweep under the tyres faster. The cutoff rises linearly with speed up to this point,
+	// which is the shape the physics gives: the texture frequency a tyre generates is the
+	// speed divided by the road feature wavelength, so it is proportional to speed. The
+	// reference sits at the top of ordinary road speed (~160 km/h) so the sweep spreads
+	// across the whole driven range instead of finishing in the first few m/s.
+	textureCutoffSpeedRefMps = 45.0
 
-	// textureHighpassHz is the fixed lower edge of the noise band. A one-pole high-pass
-	// at this corner removes the sub-bass content that, below the tactile flutter-fusion
-	// threshold (~30-50 Hz), is felt as distinct individual kicks a few times a second
-	// rather than a continuous rumble. It also keeps the layer clear of the whole-body
-	// ride band (~1-30 Hz); the tactile road feel through the pedals and floorpan that
-	// this layer models is a higher-register phenomenon (studies put pedal/floor feel
+	// textureHighpassHz is the upper limit of the noise band's lower edge. A one-pole
+	// high-pass at this corner removes the sub-bass content that, below the tactile
+	// flutter-fusion threshold (~30-50 Hz), is felt as distinct individual kicks a few times
+	// a second rather than a continuous rumble. It also keeps the layer clear of the
+	// whole-body ride band (~1-30 Hz); the tactile road feel through the pedals and floorpan
+	// that this layer models is a higher-register phenomenon (studies put pedal/floor feel
 	// mainly at 20-100 Hz, with structure-borne tyre/suspension roughness up to
 	// ~160-300 Hz). The peaky low-frequency impacts are left to the chassis pulse layer.
 	textureHighpassHz = 65.0
 
-	// textureBandMinHz and textureBandMaxHz are the fixed lower and upper edges of the
-	// speed-swept noise band. Both were configurable and are now fixed. The band sets the
-	// cutoff only: the noise is normalised to unit RMS below, so the band moves the
-	// spectrum and leaves the output level to the surface and the speed. Anything above
-	// textureDeviceCeilingHz is clamped away as well, so the setting had no useful travel.
-	textureBandMinHz = 90.0
+	// textureHighpassFloorHz is the lower limit of that same edge. The high-pass corner
+	// tracks the speed-driven low-pass cutoff (see textureHighpassRatio) so the whole band
+	// slides down at low speed rather than only its top edge. This floor stops the slide at
+	// the flutter-fusion threshold, below which the rumble breaks up into separate kicks.
+	textureHighpassFloorHz = 32.0
+
+	// textureHighpassRatio sets the high-pass corner as a fraction of the low-pass cutoff,
+	// which fixes the band width at a constant ratio (~1 octave) as the band sweeps. A
+	// constant-ratio band keeps the grain's character the same while its register moves.
+	textureHighpassRatio = 0.5
+
+	// textureBandMinHz and textureBandMaxHz are the fixed lower and upper ends of the
+	// speed-swept cutoff. Both were configurable and are now fixed. They set the cutoff
+	// only: the noise is normalised to unit RMS below, so they move the spectrum and leave
+	// the output level to the surface and the speed. Anything above textureDeviceCeilingHz
+	// is clamped away as well, so the setting had no useful travel.
+	//
+	// The low end sits well under the old 90 Hz so a car just off the standstill gate
+	// rumbles in a low register and audibly climbs as it gathers speed. Paired with the
+	// tracking high-pass this puts the band at roughly 32-61 Hz at 10 km/h and roughly
+	// 65-148 Hz at 160 km/h: over an octave of travel spread across the driven speed
+	// range, instead of the near-fixed pitch the old 90 Hz floor gave.
+	textureBandMinHz = 55.0
 	textureBandMaxHz = 150.0
 
 	// textureDeviceCeilingHz is the upper bound the speed-driven cutoff is clamped to,
@@ -118,6 +145,50 @@ const (
 	// realistic ~2.5× crest and lively grain — and only soft-limits the rare extreme tail so
 	// a stray peak cannot spike the transducer; the mixer peak limiter is the hard backstop.
 	textureDrive = 0.5
+
+	// textureRoughnessRefMps is the pivot roughness (m/s) against which the layer's
+	// live SuspensionRoughness is compared. It is a MEASURED value, not a chosen one:
+	// the median of the tarmac 20-40 m/s median roughness across eight replays
+	// spanning eight cars and three tracks (Spa, Nordschleife, Saint-Croix), which
+	// ranged 0.0189 to 0.0271, a 1.43x spread. Telemetry arrives at 59.94 Hz and road
+	// content above 30 Hz folds down (aliases) into the measured band, so this is a
+	// relative correlate of roughness and never a calibrated physical quantity.
+	// Re-measure it with TestRoughnessProbe in app/haptics/roughness_probe_test.go.
+	textureRoughnessRefMps = 0.0241
+
+	// textureRoughnessCurve is the compression exponent applied to the roughness
+	// ratio. Roughness RMS scales roughly with road amplitude, but perceived
+	// vibration intensity is nearer its square root, so a 4x rougher patch reads as
+	// 2x.
+	textureRoughnessCurve = 0.5
+
+	// textureRoughnessAmpDepth is how far roughness moves the level away from the
+	// surface's tuned value. 0 reproduces the pre-roughness behaviour exactly; it
+	// sits below 1 so a rough patch lifts rather than swamping the surface
+	// distinction the tuned surfaceRumble levels encode.
+	textureRoughnessAmpDepth = 0.60
+
+	// textureRoughnessAmpMin and textureRoughnessAmpMax bound the roughness
+	// amplitude factor. The min deliberately floors the airborne case: with the
+	// wheels off the ground the envelope collapses, and a 30% dip reads as "the
+	// road went away" while a drop to silence would read as a bug. Do not lower it
+	// below about 0.6.
+	textureRoughnessAmpMin = 0.70
+	textureRoughnessAmpMax = 1.60
+
+	// textureRoughnessCoarsenDepth moves the low-pass cutoff DOWNWARD as roughness
+	// rises, matching the existing coarseness convention where dirt at 0.80 is
+	// coarser than tarmac at 1.00. It is a quarter of the amplitude depth so it
+	// cannot fight the speed sweep, which owns brightness.
+	textureRoughnessCoarsenDepth = 0.15
+
+	// textureRoughnessCutoffMin and textureRoughnessCutoffMax bound the roughness
+	// cutoff factor, deliberately asymmetric. A rougher road should audibly coarsen;
+	// a smoother one should barely brighten, because textureCutoffSpeedRefMps
+	// already owns the speed-to-brightness sweep. The span is about one semitone, a
+	// character shift rather than a pitch move.
+	textureRoughnessCutoffMin = 0.88
+	textureRoughnessCutoffMax = 1.06
 )
 
 // textureChannelState holds the per-output-channel noise generator and filter state
@@ -138,11 +209,12 @@ type textureChannelState struct {
 }
 
 // Texture renders the continuous road-texture layer: low-level, band-limited noise
-// per routed texture channel whose amplitude tracks the suspension-activity envelope
-// and whose brightness (low-pass cutoff) rises with speed. Texture is its own synth
-// source (independent mute/gain/routing); each block is appended at the channel write
-// cursor and the filter state persists across blocks, so successive blocks join
-// without a click.
+// per routed texture channel whose amplitude is set by road surface and speed, then
+// lifted or trimmed by the suspension-roughness envelope; brightness (low-pass
+// cutoff) rises with speed and coarsens slightly as the road roughens. Texture is its
+// own synth source (independent mute/gain/routing); each block is appended at the
+// channel write cursor and the filter state persists across blocks, so successive
+// blocks join without a click.
 func (g *Generator) Texture() {
 	if g.cfg.GetSynthTextureMute() {
 		return
@@ -150,15 +222,16 @@ func (g *Generator) Texture() {
 
 	speed := g.kin.Current.GroundSpeed
 	surfaceLevel, surfaceCoarseness := aggregateSurface(g.cfg, g.kin.Current.SurfaceType)
+	roughAmp, roughCutoff := textureRoughnessFactors(g.kin.Current.SuspensionRoughness, g.kin.Current.SuspensionRoughnessValid)
 
-	amplitude := surfaceLevel * textureSpeedAmplitude(speed)
+	amplitude := surfaceLevel * textureSpeedAmplitude(speed) * roughAmp
 	amplitude = min(amplitude, textureMaxAmplitude)
 
 	cutoffHz := textureCutoffHz(
 		speed,
 		textureBandMinHz,
 		textureBandMaxHz,
-	) * surfaceCoarseness
+	) * surfaceCoarseness * roughCutoff
 
 	// Clamp to just under the transducer roll-off so a bright surface (coarseness > 1) or a
 	// high configured band cannot push the cutoff into the device stopband.
@@ -181,9 +254,10 @@ func (g *Generator) Texture() {
 	lpAlpha := 1 - math.Exp(-2*math.Pi*cutoffHz/sampleRate)
 
 	// One-pole high-pass corner (subtracted below) sets the lower edge, removing the
-	// sub-bass slow swells that read as distinct kicks. Kept below the low-pass cutoff
-	// so the band never collapses when the speed-driven cutoff is low.
-	hpHz := min(textureHighpassHz, cutoffHz*0.5)
+	// sub-bass slow swells that read as distinct kicks. It tracks the low-pass cutoff at a
+	// fixed ratio, so the whole band slides with speed at a constant width, and is clamped
+	// between the flutter-fusion floor and the fixed upper corner.
+	hpHz := min(max(cutoffHz*textureHighpassRatio, textureHighpassFloorHz), textureHighpassHz)
 	hpAlpha := 1 - math.Exp(-2*math.Pi*hpHz/sampleRate)
 
 	for channel := range numChannels {
@@ -300,6 +374,28 @@ func textureSpeedAmplitude(speedMps float64) float64 {
 	return onset * (textureLowSpeedFloor + (1-textureLowSpeedFloor)*growth)
 }
 
+// textureRoughnessFactors maps the live suspension-roughness measurement into an
+// amplitude and cutoff multiplier for the texture layer. Both factors are exactly
+// 1.0 when roughness equals textureRoughnessRefMps, so the hand-tuned surfaceRumble
+// levels play back unchanged on ordinary tarmac and roughness only ever deviates
+// from them. That property is structural: ratio == 1 gives factor == 1 for any
+// exponent.
+func textureRoughnessFactors(roughness float64, valid bool) (amplitude, cutoff float64) {
+	// A telemetry gap, a format without suspension data, or an uncalibrated
+	// reference are all safe: this leaves the layer exactly as it behaved before
+	// roughness existed.
+	if !valid || textureRoughnessRefMps <= 0 {
+		return 1, 1
+	}
+
+	factor := math.Pow(max(roughness, 0)/textureRoughnessRefMps, textureRoughnessCurve)
+
+	amplitude = min(max(1+textureRoughnessAmpDepth*(factor-1), textureRoughnessAmpMin), textureRoughnessAmpMax)
+	cutoff = min(max(1-textureRoughnessCoarsenDepth*(factor-1), textureRoughnessCutoffMin), textureRoughnessCutoffMax)
+
+	return amplitude, cutoff
+}
+
 // surfaceRumble maps a single surface classification to its rumble level (loudness,
 // ≈ output RMS at full speed, before the textureMaxAmplitude cap) and coarseness (a
 // multiplier on the speed-derived low-pass cutoff: <1 lowers the cutoff for a coarser
@@ -363,9 +459,9 @@ func aggregateSurface(cfg *config.Config, surfaces models.CornerSetGeneric[model
 	return sumLevel / float64(len(corners)), sumCoarseness / float64(len(corners))
 }
 
-// textureCutoffHz maps ground speed into the configured texture frequency band,
-// yielding the noise low-pass cutoff (brightness), which rises with speed and
-// saturates at the top of the band.
+// textureCutoffHz maps ground speed into the texture frequency band, yielding the noise
+// low-pass cutoff (brightness), which rises linearly with speed and saturates at the top
+// of the band.
 func textureCutoffHz(speedMps, minHz, maxHz float64) float64 {
 	factor := speedMps / textureCutoffSpeedRefMps
 	if factor < 0 {
