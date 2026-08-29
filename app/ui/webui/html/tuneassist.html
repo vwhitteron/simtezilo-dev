@@ -520,10 +520,11 @@
         }
 
         /* Narrower than the play button, so the transport reads as one primary control
-           with a step on each side. */
+           with the step sizes ranged out on each side. The width still holds the widest
+           label, "-10". */
         .chassis-transport button.wave-step {
-            width: 26px;
-            font-size: 0.8em;
+            width: 30px;
+            font-size: 0.75em;
         }
 
         /* Tighter than .lap-row select, so the speed control does not tower over the
@@ -865,9 +866,11 @@
                 </label>
             </div>
             <div class="chassis-transport">
-                <button id="wave-step-back" type="button" class="wave-step" title="Step back one telemetry frame (Left arrow, Shift for 10)">&#9666;</button>
+                <button id="wave-step-back-10" type="button" class="wave-step" title="Step back ten telemetry frames (Shift + Left arrow)">-10</button>
+                <button id="wave-step-back" type="button" class="wave-step" title="Step back one telemetry frame (Left arrow)">-1</button>
                 <button id="wave-play" type="button" title="Play / pause (Space)">&#9654;</button>
-                <button id="wave-step-fwd" type="button" class="wave-step" title="Step forward one telemetry frame (Right arrow, Shift for 10)">&#9656;</button>
+                <button id="wave-step-fwd" type="button" class="wave-step" title="Step forward one telemetry frame (Right arrow)">+1</button>
+                <button id="wave-step-fwd-10" type="button" class="wave-step" title="Step forward ten telemetry frames (Shift + Right arrow)">+10</button>
                 <select id="wave-rate" title="Playback speed. The haptic audio is resampled, so a speed other than 1x also moves every frequency by the same factor. Judge frequency content at 1x. Keys: [ and ].">
                     <option value="0.25">0.25x</option>
                     <option value="0.5">0.5x</option>
@@ -1772,12 +1775,34 @@
                 return worldToScreen(coords[poiFrame].x, coords[poiFrame].z, mapMapping(coords, W, H), W, H);
             }
 
+            // Move the point of interest to a frame and take the playback head with it.
+            // The map and the charts share this action, so a click in any of them lands
+            // the video and the audio on the same frame. Without the seek the marker moved
+            // but the picture stayed where it was.
+            function movePoiToFrame(frame) {
+                if (frame == null || !cumulativeDists.length) return;
+
+                poiDist = Math.round(cumulativeDists[frame] ?? 0);
+                updateSelectionInfo();
+                updateChart();
+                drawMap(currentLapKey);
+                scheduleUrlUpdate();
+                // seekToFrame moves the video too, through followPlayhead. Fall back to a
+                // direct video seek when there is no audio loaded yet.
+                if (waveBuffer) seekToFrame(frame); else syncVideoToFrame(frame);
+            }
+
             function initMapInteraction() {
                 const canvas = document.getElementById('map-canvas');
                 let isDragging = false;
                 let isDraggingPoi = false;
                 let dragLastX = 0, dragLastY = 0;
-                const POI_HIT_R = 10; // px hit radius for grabbing the POI marker
+                let dragDownX = 0, dragDownY = 0;
+                let didPan = false;          // the pan drag moved far enough to not be a click
+                let poiDragFrame = null;     // last frame the POI drag landed on
+                const POI_HIT_R = 10;        // px hit radius for grabbing the POI marker
+                const PAN_SLOP = 3;          // px of movement a click is allowed
+                const CLICK_MAX_D = 40;      // px from the track a click may land
 
                 function canvasMouse(e) {
                     const rect = canvas.getBoundingClientRect();
@@ -1792,6 +1817,7 @@
                     if (coords.length < 1) return;
                     const best = nearestFrameToScreen(mx, my, coords, canvas.width, canvas.height);
                     if (best < 0) return;
+                    poiDragFrame = best;
                     // Move only the POI; the map stays put (no edge-panning while dragging).
                     poiDist = Math.round(cumulativeDists[best] ?? 0);
                     updateSelectionInfo();
@@ -1813,14 +1839,16 @@
                         const p = poiScreenPos(coords, canvas.width, canvas.height);
                         if (Math.hypot(mx - p.sx, my - p.sy) <= POI_HIT_R) {
                             isDraggingPoi = true;
+                            poiDragFrame = null;
                             canvas.style.cursor = 'grabbing';
                             e.preventDefault();
                             return;
                         }
                     }
                     isDragging = true;
-                    dragLastX = e.clientX;
-                    dragLastY = e.clientY;
+                    didPan = false;
+                    dragLastX = dragDownX = e.clientX;
+                    dragLastY = dragDownY = e.clientY;
                     canvas.classList.add('dragging');
                     e.preventDefault();
                 });
@@ -1845,6 +1873,7 @@
                         return;
                     }
                     if (!isDragging) return;
+                    if (Math.hypot(e.clientX - dragDownX, e.clientY - dragDownY) > PAN_SLOP) didPan = true;
                     mapPanX += e.clientX - dragLastX;
                     mapPanY += e.clientY - dragLastY;
                     dragLastX = e.clientX;
@@ -1855,16 +1884,42 @@
                     scheduleUrlUpdate();
                 });
 
-                window.addEventListener('mouseup', () => {
+                window.addEventListener('mouseup', (e) => {
                     if (isDraggingPoi) {
                         isDraggingPoi = false;
                         canvas.style.cursor = '';
+                        // The drag itself only scrubs the video, to keep the decoder quiet.
+                        // Land the audio playhead once, where the marker was dropped.
+                        movePoiToFrame(poiDragFrame);
+                        poiDragFrame = null;
                     }
                     if (isDragging) {
                         isDragging = false;
                         canvas.classList.remove('dragging');
+                        // A press that never moved is a click, not a pan. Put the POI on the
+                        // nearest track point, so the map does not demand a 10 px grab of
+                        // the marker to move the playback head.
+                        if (!didPan) mapClickToPoi(e);
                     }
+                    didPan = false;
                 });
+
+                // Place the POI on the track point nearest to a click. Clicks far from the
+                // track are ignored, so a click on empty map space does not jump the lap.
+                function mapClickToPoi(e) {
+                    const coords = mapData[currentLapKey] || [];
+                    if (coords.length < 1 || totalDist <= 0) return;
+
+                    const { mx, my } = canvasMouse(e);
+                    const best = nearestFrameToScreen(mx, my, coords, canvas.width, canvas.height);
+                    if (best < 0) return;
+
+                    const p = worldToScreen(coords[best].x, coords[best].z,
+                        mapMapping(coords, canvas.width, canvas.height), canvas.width, canvas.height);
+                    if (Math.hypot(mx - p.sx, my - p.sy) > CLICK_MAX_D) return;
+
+                    movePoiToFrame(best);
+                }
 
                 canvas.addEventListener('wheel', (e) => {
                     e.preventDefault();
@@ -2122,11 +2177,7 @@
                             if (elements.length === 0) return;
                             const pt = chart.data.datasets[elements[0].datasetIndex].data[elements[0].index];
                             if (!pt || pt.frame == null) return;
-                            poiDist = Math.round(cumulativeDists[pt.frame] ?? pt.dist ?? 0);
-                            updateSelectionInfo();
-                            updateChart();
-                            drawMap(currentLapKey);
-                            scheduleUrlUpdate();
+                            movePoiToFrame(pt.frame);
                         },
                         plugins: {
                             legend: {
@@ -2232,11 +2283,7 @@
                             if (elements.length === 0) return;
                             const pt = gainChart.data.datasets[elements[0].datasetIndex].data[elements[0].index];
                             if (!pt || pt.frame == null) return;
-                            poiDist = Math.round(cumulativeDists[pt.frame] ?? 0);
-                            updateSelectionInfo();
-                            updateChart();
-                            drawMap(currentLapKey);
-                            scheduleUrlUpdate();
+                            movePoiToFrame(pt.frame);
                         },
                         plugins: {
                             legend: {
@@ -2638,13 +2685,7 @@
                             // Clicking the speed chart repositions the POI to that frame.
                             if (elements.length > 0) {
                                 const d = speedChart.data.datasets[elements[0].datasetIndex].data[elements[0].index];
-                                if (d && d.frame != null && cumulativeDists.length) {
-                                    poiDist = Math.round(cumulativeDists[d.frame] ?? 0);
-                                    updateSelectionInfo();
-                                    updateChart();
-                                    drawMap(currentLapKey);
-                                    scheduleUrlUpdate();
-                                }
+                                if (d && d.frame != null) movePoiToFrame(d.frame);
                             }
                         },
                         plugins: { legend: { display: false }, tooltip: { enabled: false } },
@@ -3102,7 +3143,27 @@
             // ---------------------------------------------------------------------
             let audioCtx = null;
             let waveBuffer = null;        // decoded AudioBuffer for the current section
-            let waveVoices = {};          // layer -> { source, gain }, live while playing
+            let waveVoices = {};          // layer -> { source, fade, gain }, live while playing
+
+            // Fade applied to every gain change: the start and the stop of a voice, a layer
+            // muted or unmuted, and a mix knob drag. A hard change steps the signal from
+            // whatever sample it sits on straight to another level, and that step is a click.
+            // The haptic content is all below 160 Hz, where a sample is rarely near zero, so
+            // the step is large and the click is loud.
+            //
+            // 12 ms is over half a cycle at 40 Hz, which is enough to make the step inaudible,
+            // and short enough that it does not soften the transients the page exists to judge.
+            const WAVE_FADE_S = 0.012;
+
+            // Move an AudioParam to a value over the fade window instead of stepping it.
+            // The scheduled values are cleared first, so a change during a fade starts from
+            // the level the fade reached rather than from the level it was heading for.
+            function rampParam(param, value) {
+                const now = audioCtx.currentTime;
+                param.cancelScheduledValues(now);
+                param.setValueAtTime(param.value, now);
+                param.linearRampToValueAtTime(value, now + WAVE_FADE_S);
+            }
             let wavePlaying = false;
             let wavePlayOffset = 0;       // seconds into the buffer the playhead sits at
             let wavePlayStartCtx = 0;     // audioCtx.currentTime when the current source started
@@ -3938,6 +3999,10 @@
             // own gain, so a layer muted mid-lap keeps its source running and stays in
             // step with the others. A layer with no render yet gets no voice; startVoice
             // runs again when that layer's buffer arrives.
+            //
+            // The chain is source -> fade -> gain. The fade node carries the start and the
+            // stop envelope, and the gain node carries the mix. The two are kept apart so a
+            // knob drag during a fade does not cancel the fade.
             function startVoice(layer, offset) {
                 const buffer = layerBuffer(layer);
                 if (!buffer || waveVoices[layer]) return;
@@ -3947,20 +4012,39 @@
                 gain.gain.value = layerVoiceGain(layer);
                 gain.connect(ctx.destination);
 
+                const fade = ctx.createGain();
+                fade.gain.value = 0;
+                fade.connect(gain);
+                rampParam(fade.gain, 1);
+
                 const source = ctx.createBufferSource();
                 source.buffer = buffer;
                 source.playbackRate.value = waveRate;
-                source.connect(gain);
+                source.connect(fade);
                 source.start(0, Math.min(offset, buffer.duration));
 
-                waveVoices[layer] = { source, gain };
+                waveVoices[layer] = { source, fade, gain };
             }
 
+            // Silence every voice and drop it. Each source runs on to the end of its fade
+            // before it stops, so the tail is a ramp rather than a step. The voice map is
+            // cleared first, so a voice started straight after this — a seek, or a restart
+            // at a new speed — is a new voice and crossfades with the one going out.
             function stopVoices() {
-                for (const voice of Object.values(waveVoices)) {
-                    try { voice.source.onended = null; voice.source.stop(); } catch (e) { }
-                }
+                const voices = Object.values(waveVoices);
                 waveVoices = {};
+                if (!voices.length || !audioCtx) return;
+
+                const stopAt = audioCtx.currentTime + WAVE_FADE_S;
+                for (const voice of voices) {
+                    try {
+                        voice.source.onended = null;
+                        rampParam(voice.fade.gain, 0);
+                        voice.source.stop(stopAt);
+                    } catch (e) {
+                        try { voice.source.stop(); } catch (e2) { }
+                    }
+                }
             }
 
             // Turn one layer's output on or off. A live voice only changes gain, so the
@@ -3969,7 +4053,7 @@
                 audioOut[layer] = on;
 
                 const voice = waveVoices[layer];
-                if (voice) { voice.gain.gain.value = layerVoiceGain(layer); return; }
+                if (voice) { rampParam(voice.gain.gain, layerVoiceGain(layer)); return; }
                 if (on && wavePlaying) startVoice(layer, playheadSeconds());
             }
 
@@ -3980,7 +4064,7 @@
                 layerGains[layer] = db;
 
                 const voice = waveVoices[layer];
-                if (voice) voice.gain.gain.value = layerVoiceGain(layer);
+                if (voice) rampParam(voice.gain.gain, layerVoiceGain(layer));
             }
 
             function startPlayback() {
@@ -4203,8 +4287,10 @@
             function setupAudioUI() {
                 document.getElementById('wave-play').addEventListener('click', togglePlay);
 
+                document.getElementById('wave-step-back-10').addEventListener('click', () => stepFrame(-10));
                 document.getElementById('wave-step-back').addEventListener('click', () => stepFrame(-1));
                 document.getElementById('wave-step-fwd').addEventListener('click', () => stepFrame(1));
+                document.getElementById('wave-step-fwd-10').addEventListener('click', () => stepFrame(10));
 
                 const rateSelect = document.getElementById('wave-rate');
                 rateSelect.value = String(waveRate);
