@@ -146,10 +146,22 @@
            track minimum is the width below which the pair looks cramped, so the
            row goes vertical while each panel is still a useful size. auto-fit also
            gives the remaining panel the full width when its partner is hidden (no
-           replay video). */
+           replay video).
+
+           The track minimum is also at least half the row, less the column gap. That
+           caps the row at two tracks. A bare minimum lets a wide row make more tracks
+           than there are panels, and the auto-fill row below keeps those extra tracks,
+           which shrinks a lone lane to a fraction of the width.
+
+           The viewport sets the stack point, not the row width. The row width
+           depends on the sidebar, the page padding and the scrollbar. Above the
+           breakpoint the minimum is zero, so the half-row term gives two tracks.
+           Below the breakpoint the minimum is the full row, so there is one track.
+           Change the stack width in the @media rule below only. */
         .panel-row {
+            --panel-col-min: 0px;
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(480px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(max(var(--panel-col-min), calc((100% - 20px) / 2)), 1fr));
             /* One row for the headings, one for the framed boxes. The panels
                subgrid onto these two rows (see below), so the browser aligns the
                boxes with each other instead of the two panels having to arrive at
@@ -197,6 +209,19 @@
             display: none;
         }
 
+        /* Stacked, the second panel of a row needs its own space. row-gap is zero
+           because a row gap would land between each heading and its box, so the
+           margin gives the same 28px that separates the rows. */
+        @media (max-width: 1199.98px) {
+            .panel-row {
+                --panel-col-min: 100%;
+            }
+
+            .panel-row>*+* {
+                margin-top: 28px;
+            }
+        }
+
         .panel-row+.panel-row {
             margin-top: 28px;
         }
@@ -209,7 +234,7 @@
            lane matches its neighbours; the responsive collapse to one column at narrow
            widths is unchanged. */
         .panel-row-keep-columns {
-            grid-template-columns: repeat(auto-fill, minmax(480px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(max(var(--panel-col-min), calc((100% - 20px) / 2)), 1fr));
         }
 
         /* The frame is on the panel above, so this box only reserves the space.
@@ -637,24 +662,56 @@
             pointer-events: none;
         }
 
-        /* The output toggle sits outside .tune-row on purpose. A pane with no profile
-           greys its rows out, and the layer is still audible in that state. */
-        .tune-widget .tune-output {
-            margin-bottom: 12px;
+        /* The monitor toggle is out of the flow, so the heading text stays centred. */
+        .chassis-panel h3,
+        .wave-lane-panel h3 {
+            position: relative;
         }
 
-        .tune-widget .tune-output label {
+        /* The checkbox is hidden but kept, so the toggle still works from the keyboard.
+           The icon is a red muted speaker when the layer is off, and a green speaker when it is on. */
+        .wave-monitor {
+            position: absolute;
+            right: 20px;
+            top: 50%;
+            transform: translateY(-50%);
             display: flex;
             align-items: center;
-            gap: 6px;
-            font-size: 0.72em;
-            color: var(--bs-secondary-color);
+            margin: 0;
+            font-size: 1.4em;
+            color: var(--bs-danger, #dc3545);
             cursor: pointer;
+            user-select: none;
         }
 
-        .tune-widget .tune-output input {
-            accent-color: var(--bs-primary);
-            cursor: pointer;
+        .wave-monitor .icon {
+            margin-right: 0;
+        }
+
+        .wave-monitor:has(input:checked) {
+            color: var(--bs-success, #198754);
+        }
+
+        .wave-monitor .wave-monitor-on,
+        .wave-monitor:has(input:checked) .wave-monitor-off {
+            display: none;
+        }
+
+        .wave-monitor:has(input:checked) .wave-monitor-on {
+            display: inline-flex;
+        }
+
+        .wave-monitor:has(input:focus-visible) {
+            outline: 1px solid var(--bs-primary);
+            outline-offset: 2px;
+        }
+
+        .wave-monitor input {
+            position: absolute;
+            opacity: 0;
+            width: 0;
+            height: 0;
+            margin: 0;
         }
 
         /* One row per surface: name, level, coarseness. The column widths match
@@ -860,18 +917,24 @@
             </div>
             <div class="lap-group">
                 <label for="wave-zoom-toggle">Zoom:</label>
-                <label class="toggle-switch" title="Show only the highlight window in every haptic waveform. They share one window, so the same moment stays at the same position in each lane.">
+                <label class="toggle-switch"
+                    title="Show only the highlight window in every haptic waveform. They share one window, so the same moment stays at the same position in each lane.">
                     <input type="checkbox" id="wave-zoom-toggle">
                     <span class="slider"></span>
                 </label>
             </div>
             <div class="chassis-transport">
-                <button id="wave-step-back-10" type="button" class="wave-step" title="Step back ten telemetry frames (Shift + Left arrow)">-10</button>
-                <button id="wave-step-back" type="button" class="wave-step" title="Step back one telemetry frame (Left arrow)">-1</button>
+                <button id="wave-step-back-10" type="button" class="wave-step"
+                    title="Step back ten telemetry frames (Shift + Left arrow)">-10</button>
+                <button id="wave-step-back" type="button" class="wave-step"
+                    title="Step back one telemetry frame (Left arrow)">-1</button>
                 <button id="wave-play" type="button" title="Play / pause (Space)">&#9654;</button>
-                <button id="wave-step-fwd" type="button" class="wave-step" title="Step forward one telemetry frame (Right arrow)">+1</button>
-                <button id="wave-step-fwd-10" type="button" class="wave-step" title="Step forward ten telemetry frames (Shift + Right arrow)">+10</button>
-                <select id="wave-rate" title="Playback speed. The haptic audio is resampled, so a speed other than 1x also moves every frequency by the same factor. Judge frequency content at 1x. Keys: [ and ].">
+                <button id="wave-step-fwd" type="button" class="wave-step"
+                    title="Step forward one telemetry frame (Right arrow)">+1</button>
+                <button id="wave-step-fwd-10" type="button" class="wave-step"
+                    title="Step forward ten telemetry frames (Shift + Right arrow)">+10</button>
+                <select id="wave-rate"
+                    title="Playback speed. The haptic audio is resampled, so a speed other than 1x also moves every frequency by the same factor. Judge frequency content at 1x. Keys: [ and ].">
                     <option value="0.25">0.25x</option>
                     <option value="0.5">0.5x</option>
                     <option value="1" selected>1x</option>
@@ -910,7 +973,13 @@
                         </div>
                     </div>
                     <div class="chassis-panel">
-                        <h3>Chassis Haptic Waveform</h3>
+                        <h3>Chassis Haptic Waveform
+                            <label class="wave-monitor" title="Monitor: play this layer through the audio output">
+                                <input type="checkbox" class="tune-out-enable" data-out-layer="chassis" checked>
+                                <span class="icon wave-monitor-on" data-icon="volume" aria-label="Monitor on"></span>
+                                <span class="icon wave-monitor-off" data-icon="volume-xmark" aria-label="Monitor off"></span>
+                            </label>
+                        </h3>
                         <div class="wave-container">
                             <canvas id="wave-canvas"></canvas>
                         </div>
@@ -924,13 +993,25 @@
                      audible and scrubbable. -->
                 <div class="panel-row">
                     <div class="wave-lane-panel">
-                        <h3>Engine Haptic Waveform</h3>
+                        <h3>Engine Haptic Waveform
+                            <label class="wave-monitor" title="Monitor: play this layer through the audio output">
+                                <input type="checkbox" class="tune-out-enable" data-out-layer="engine">
+                                <span class="icon wave-monitor-on" data-icon="volume" aria-label="Monitor on"></span>
+                                <span class="icon wave-monitor-off" data-icon="volume-xmark" aria-label="Monitor off"></span>
+                            </label>
+                        </h3>
                         <div class="wave-container">
                             <canvas id="wave-canvas-engine" class="wave-lane-canvas"></canvas>
                         </div>
                     </div>
                     <div class="wave-lane-panel">
-                        <h3>Transmission Haptic Waveform</h3>
+                        <h3>Transmission Haptic Waveform
+                            <label class="wave-monitor" title="Monitor: play this layer through the audio output">
+                                <input type="checkbox" class="tune-out-enable" data-out-layer="transmission">
+                                <span class="icon wave-monitor-on" data-icon="volume" aria-label="Monitor on"></span>
+                                <span class="icon wave-monitor-off" data-icon="volume-xmark" aria-label="Monitor off"></span>
+                            </label>
+                        </h3>
                         <div class="wave-container">
                             <canvas id="wave-canvas-transmission" class="wave-lane-canvas"></canvas>
                         </div>
@@ -938,7 +1019,13 @@
                 </div>
                 <div class="panel-row panel-row-keep-columns">
                     <div class="wave-lane-panel">
-                        <h3>Road Noise Haptic Waveform</h3>
+                        <h3>Road Noise Haptic Waveform
+                            <label class="wave-monitor" title="Monitor: play this layer through the audio output">
+                                <input type="checkbox" class="tune-out-enable" data-out-layer="texture">
+                                <span class="icon wave-monitor-on" data-icon="volume" aria-label="Monitor on"></span>
+                                <span class="icon wave-monitor-off" data-icon="volume-xmark" aria-label="Monitor off"></span>
+                            </label>
+                        </h3>
                         <div class="wave-container">
                             <canvas id="wave-canvas-texture" class="wave-lane-canvas"></canvas>
                         </div>
@@ -955,10 +1042,6 @@
                     <dl>
                         <dt>POI</dt>
                         <dd id="sel-poi">—</dd>
-                        <dt>POI offset</dt>
-                        <dd id="sel-poi-offset">—</dd>
-                        <dt>Hover offset</dt>
-                        <dd id="sel-hover-offset">—</dd>
                         <dt>Zoom</dt>
                         <dd id="sel-zoom">—</dd>
                         <dt>Points</dt>
@@ -987,27 +1070,17 @@
                     <div class="chart-tabs" role="tablist">
                         <button type="button" class="chart-tab active" role="tab"
                             data-tune-tab="chassis">Chassis</button>
-                        <button type="button" class="chart-tab" role="tab"
-                            data-tune-tab="engine">Engine</button>
-                        <button type="button" class="chart-tab" role="tab"
-                            data-tune-tab="transmission">Trans</button>
-                        <button type="button" class="chart-tab" role="tab"
-                            data-tune-tab="texture">Road</button>
+                        <button type="button" class="chart-tab" role="tab" data-tune-tab="engine">Engine</button>
+                        <button type="button" class="chart-tab" role="tab" data-tune-tab="transmission">Trans</button>
+                        <button type="button" class="chart-tab" role="tab" data-tune-tab="texture">Road</button>
                     </div>
 
                     <div class="tune-pane" data-tune-pane="chassis">
-                        <div class="tune-output">
-                            <label>
-                                <input type="checkbox" class="tune-out-enable"
-                                    data-out-layer="chassis" checked>
-                                Audio output
-                            </label>
-                        </div>
                         <div class="tune-row tune-gain-row">
                             <label for="gain-chassis">Gain</label>
                             <input type="range" id="gain-chassis" min="-60" max="0" step="0.5">
-                            <input type="number" class="tune-value" id="gainout-chassis" min="-60" max="0"
-                                step="0.5" inputmode="decimal">
+                            <input type="number" class="tune-value" id="gainout-chassis" min="-60" max="0" step="0.5"
+                                inputmode="decimal">
                         </div>
                         <div class="tune-row">
                             <label for="tune-jerkCurve">Jerk curve</label>
@@ -1051,18 +1124,11 @@
                     </div>
 
                     <div class="tune-pane" data-tune-pane="engine" hidden>
-                        <div class="tune-output">
-                            <label>
-                                <input type="checkbox" class="tune-out-enable"
-                                    data-out-layer="engine">
-                                Audio output
-                            </label>
-                        </div>
                         <div class="tune-row tune-gain-row">
                             <label for="gain-engine">Gain</label>
                             <input type="range" id="gain-engine" min="-60" max="0" step="0.5">
-                            <input type="number" class="tune-value" id="gainout-engine" min="-60" max="0"
-                                step="0.5" inputmode="decimal">
+                            <input type="number" class="tune-value" id="gainout-engine" min="-60" max="0" step="0.5"
+                                inputmode="decimal">
                         </div>
                         <!-- Names the haptics.engineProfiles entry this replay's vehicle
                              resolved to, which is the entry a commit writes back to. -->
@@ -1099,13 +1165,6 @@
                     </div>
 
                     <div class="tune-pane" data-tune-pane="transmission" hidden>
-                        <div class="tune-output">
-                            <label>
-                                <input type="checkbox" class="tune-out-enable"
-                                    data-out-layer="transmission">
-                                Audio output
-                            </label>
-                        </div>
                         <div class="tune-row tune-gain-row">
                             <label for="gain-transmission">Gain</label>
                             <input type="range" id="gain-transmission" min="-60" max="0" step="0.5">
@@ -1136,18 +1195,11 @@
                     </div>
 
                     <div class="tune-pane" data-tune-pane="texture" hidden>
-                        <div class="tune-output">
-                            <label>
-                                <input type="checkbox" class="tune-out-enable"
-                                    data-out-layer="texture">
-                                Audio output
-                            </label>
-                        </div>
                         <div class="tune-row tune-gain-row">
                             <label for="gain-texture">Gain</label>
                             <input type="range" id="gain-texture" min="-60" max="0" step="0.5">
-                            <input type="number" class="tune-value" id="gainout-texture" min="-60" max="0"
-                                step="0.5" inputmode="decimal">
+                            <input type="number" class="tune-value" id="gainout-texture" min="-60" max="0" step="0.5"
+                                inputmode="decimal">
                         </div>
                         <!-- Number boxes rather than the sliders the other tabs use. Each of
                              these twelve values is applied by the server-side render, so a
@@ -1159,47 +1211,36 @@
                             <span class="surface-head">Level</span>
                             <span class="surface-head">Coarse</span>
                             <label for="surf-tarmac-level">Tarmac</label>
-                            <input type="number" class="tune-value" id="surf-tarmac-level"
-                                data-surface="tarmac" data-surface-field="level"
-                                min="0" max="2" step="0.05" inputmode="decimal">
-                            <input type="number" class="tune-value" id="surf-tarmac-coarseness"
-                                data-surface="tarmac" data-surface-field="coarseness"
-                                min="0.1" max="2" step="0.05" inputmode="decimal">
+                            <input type="number" class="tune-value" id="surf-tarmac-level" data-surface="tarmac"
+                                data-surface-field="level" min="0" max="2" step="0.05" inputmode="decimal">
+                            <input type="number" class="tune-value" id="surf-tarmac-coarseness" data-surface="tarmac"
+                                data-surface-field="coarseness" min="0.1" max="2" step="0.05" inputmode="decimal">
                             <label for="surf-concrete-level">Concrete</label>
-                            <input type="number" class="tune-value" id="surf-concrete-level"
-                                data-surface="concrete" data-surface-field="level"
-                                min="0" max="2" step="0.05" inputmode="decimal">
+                            <input type="number" class="tune-value" id="surf-concrete-level" data-surface="concrete"
+                                data-surface-field="level" min="0" max="2" step="0.05" inputmode="decimal">
                             <input type="number" class="tune-value" id="surf-concrete-coarseness"
-                                data-surface="concrete" data-surface-field="coarseness"
-                                min="0.1" max="2" step="0.05" inputmode="decimal">
+                                data-surface="concrete" data-surface-field="coarseness" min="0.1" max="2" step="0.05"
+                                inputmode="decimal">
                             <label for="surf-grass-level">Grass</label>
-                            <input type="number" class="tune-value" id="surf-grass-level"
-                                data-surface="grass" data-surface-field="level"
-                                min="0" max="2" step="0.05" inputmode="decimal">
-                            <input type="number" class="tune-value" id="surf-grass-coarseness"
-                                data-surface="grass" data-surface-field="coarseness"
-                                min="0.1" max="2" step="0.05" inputmode="decimal">
+                            <input type="number" class="tune-value" id="surf-grass-level" data-surface="grass"
+                                data-surface-field="level" min="0" max="2" step="0.05" inputmode="decimal">
+                            <input type="number" class="tune-value" id="surf-grass-coarseness" data-surface="grass"
+                                data-surface-field="coarseness" min="0.1" max="2" step="0.05" inputmode="decimal">
                             <label for="surf-dirt-level">Dirt</label>
-                            <input type="number" class="tune-value" id="surf-dirt-level"
-                                data-surface="dirt" data-surface-field="level"
-                                min="0" max="2" step="0.05" inputmode="decimal">
-                            <input type="number" class="tune-value" id="surf-dirt-coarseness"
-                                data-surface="dirt" data-surface-field="coarseness"
-                                min="0.1" max="2" step="0.05" inputmode="decimal">
+                            <input type="number" class="tune-value" id="surf-dirt-level" data-surface="dirt"
+                                data-surface-field="level" min="0" max="2" step="0.05" inputmode="decimal">
+                            <input type="number" class="tune-value" id="surf-dirt-coarseness" data-surface="dirt"
+                                data-surface-field="coarseness" min="0.1" max="2" step="0.05" inputmode="decimal">
                             <label for="surf-sand-level">Sand</label>
-                            <input type="number" class="tune-value" id="surf-sand-level"
-                                data-surface="sand" data-surface-field="level"
-                                min="0" max="2" step="0.05" inputmode="decimal">
-                            <input type="number" class="tune-value" id="surf-sand-coarseness"
-                                data-surface="sand" data-surface-field="coarseness"
-                                min="0.1" max="2" step="0.05" inputmode="decimal">
+                            <input type="number" class="tune-value" id="surf-sand-level" data-surface="sand"
+                                data-surface-field="level" min="0" max="2" step="0.05" inputmode="decimal">
+                            <input type="number" class="tune-value" id="surf-sand-coarseness" data-surface="sand"
+                                data-surface-field="coarseness" min="0.1" max="2" step="0.05" inputmode="decimal">
                             <label for="surf-snow-level">Snow</label>
-                            <input type="number" class="tune-value" id="surf-snow-level"
-                                data-surface="snow" data-surface-field="level"
-                                min="0" max="2" step="0.05" inputmode="decimal">
-                            <input type="number" class="tune-value" id="surf-snow-coarseness"
-                                data-surface="snow" data-surface-field="coarseness"
-                                min="0.1" max="2" step="0.05" inputmode="decimal">
+                            <input type="number" class="tune-value" id="surf-snow-level" data-surface="snow"
+                                data-surface-field="level" min="0" max="2" step="0.05" inputmode="decimal">
+                            <input type="number" class="tune-value" id="surf-snow-coarseness" data-surface="snow"
+                                data-surface-field="coarseness" min="0.1" max="2" step="0.05" inputmode="decimal">
                         </div>
                         <div class="tune-actions">
                             <button type="button" class="tune-reset" data-tune-tab="texture">Reset</button>
@@ -1589,9 +1630,11 @@
 
             // Refresh the read-only Selection panel below the map.
             function updateSelectionInfo() {
-                document.getElementById('sel-poi').textContent = totalDist > 0 ? formatDist(poiDist) : '—';
+                // Show the POI distance with its frame offset in brackets: "713 m (690)".
                 const poiOff = totalDist > 0 ? frameOffset(distToFrame(poiDist)) : null;
-                document.getElementById('sel-poi-offset').textContent = poiOff != null ? String(poiOff) : '—';
+                document.getElementById('sel-poi').textContent = totalDist > 0
+                    ? formatDist(poiDist) + (poiOff != null ? ` (${poiOff})` : '')
+                    : '—';
                 document.getElementById('sel-zoom').textContent = totalDist > 0 ? mapZoom.toFixed(2) + '×' : '—';
             }
 
@@ -2365,8 +2408,6 @@
             function setHovered(frame, source) {
                 if (frame === hoveredFrame) return;
                 hoveredFrame = frame;
-                const hOff = frameOffset(frame);
-                document.getElementById('sel-hover-offset').textContent = hOff != null ? String(hOff) : '—';
                 drawMap(currentLapKey);
                 if (source !== 'scatter') highlightScatterFrame(frame); // scatter highlights itself natively
                 if (speedChart) speedChart.render();
@@ -4298,7 +4339,12 @@
                     setPlaybackRate(Number(rateSelect.value));
                 });
 
-                document.querySelectorAll('#tune-widget .tune-out-enable').forEach(box => {
+                document.querySelectorAll('.wave-monitor [data-icon]').forEach(async el => {
+                    const svg = await IconHelper.loadIcon(el.dataset.icon);
+                    if (svg) el.innerHTML = svg;
+                });
+
+                document.querySelectorAll('.wave-monitor .tune-out-enable').forEach(box => {
                     box.checked = audioOut[box.dataset.outLayer];
                     box.addEventListener('change', () => {
                         setLayerOutput(box.dataset.outLayer, box.checked);
