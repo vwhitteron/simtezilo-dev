@@ -3152,15 +3152,19 @@
             // Hz ticks on the left of each panel and second ticks along the bottom, using
             // the rendered buffer's own duration when there is one so the axis reflects
             // the audio actually shown, not just the frame count. Each panel has its own
-            // Hz scale, so each gets its own ticks.
-            function drawSpectrogramAxes(ctx, marginLeft, cw, panels, panelH, durationSeconds) {
+            // Hz range and its own height, so each gets its own ticks. Both panels share
+            // one Hz-per-pixel scale, so the tick step is taken from the tallest panel
+            // and reused, which keeps the ticks level across the two.
+            function drawSpectrogramAxes(ctx, marginLeft, cw, panels, durationSeconds) {
                 ctx.save();
                 ctx.fillStyle = '#888';
                 ctx.font = '11px system-ui, sans-serif';
                 ctx.textAlign = 'right';
 
-                panels.forEach(({ panelTop, maxHz }) => {
-                    const hzStep = niceStep(maxHz / 4) || 1;
+                const widestHz = Math.max(...panels.map(p => p.maxHz));
+                const hzStep = niceStep(widestHz / 4) || 1;
+
+                panels.forEach(({ panelTop, panelH, maxHz }) => {
                     ctx.textBaseline = 'middle';
                     for (let hz = 0; hz <= maxHz + 1e-6; hz += hzStep) {
                         const y = panelTop + panelH * (1 - hz / maxHz);
@@ -3171,7 +3175,8 @@
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'top';
                 // The seconds axis goes under the lowest panel, which both panels share.
-                const bottomY = panels[panels.length - 1].panelTop + panelH + 4;
+                const lowest = panels[panels.length - 1];
+                const bottomY = lowest.panelTop + lowest.panelH + 4;
                 const secStep = niceStep(durationSeconds / 6) || 1;
                 for (let s = 0; s <= durationSeconds + 1e-6; s += secStep) {
                     const x = marginLeft + (cw - marginLeft) * (s / (durationSeconds || 1));
@@ -3198,12 +3203,27 @@
 
             // Panel geometry shared by drawSpectrogram and the pointer handlers, so a
             // hover/click lands on exactly the pixel the draw put the data at.
+            //
+            // The two panels carry different Hz ranges: the motion panel stops at the
+            // telemetry Nyquist, the pulse panel at the configured pulse ceiling. Their
+            // heights are split in proportion to those ranges, so one pixel is the same
+            // number of Hz in both panels and a band reads at the same height in each.
+            // At the default 60 Hz ceiling the motion panel is half the pulse panel.
             function spectrogramLayout(cw, ch) {
                 const plotW = Math.max(0, cw - SPECTROGRAM_MARGIN_LEFT);
-                const panelH = Math.max(0, (ch - SPECTROGRAM_MARGIN_BOTTOM - SPECTROGRAM_PANEL_GAP) / 2);
+                const motionMaxHz = TELEMETRY_HZ / 2;
+                const pulseMaxHz = pulseLimits.maxFrequencyHz;
+
+                const totalH = Math.max(0, ch - SPECTROGRAM_MARGIN_BOTTOM - SPECTROGRAM_PANEL_GAP);
+                const hzSpan = motionMaxHz + pulseMaxHz;
+                const motionH = hzSpan > 0 ? totalH * (motionMaxHz / hzSpan) : totalH / 2;
+                const pulseH = totalH - motionH;
+
                 return {
-                    marginLeft: SPECTROGRAM_MARGIN_LEFT, plotW, panelH,
-                    motionY: 0, pulseY: panelH + SPECTROGRAM_PANEL_GAP,
+                    marginLeft: SPECTROGRAM_MARGIN_LEFT, plotW,
+                    motionMaxHz, pulseMaxHz,
+                    motionY: 0, motionH,
+                    pulseY: motionH + SPECTROGRAM_PANEL_GAP, pulseH,
                 };
             }
 
@@ -3219,29 +3239,27 @@
                 ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
                 ctx.clearRect(0, 0, cw, ch);
 
-                const { marginLeft, plotW, panelH, motionY, pulseY } = spectrogramLayout(cw, ch);
+                const {
+                    marginLeft, plotW, motionMaxHz, pulseMaxHz,
+                    motionY, motionH, pulseY, pulseH,
+                } = spectrogramLayout(cw, ch);
 
                 // About one column per 2 CSS px, capped so a very wide panel does not
                 // force thousands of FFTs.
                 const cols = Math.max(1, Math.min(600, Math.round(plotW / 2)));
-                const pulseMaxHz = pulseLimits.maxFrequencyHz;
-                // Telemetry arrives at 60 Hz, so the motion panel holds nothing above
-                // 30 Hz. Give it its own 30 Hz axis rather than the pulse ceiling, so
-                // the panel spends every pixel on the band that has data.
-                const motionMaxHz = TELEMETRY_HZ / 2;
 
                 ensureSpectrogramMotion(cols);
                 ensureSpectrogramPulse(cols, pulseMaxHz);
 
-                drawSpectrogramPanel(ctx, marginLeft, motionY, plotW, panelH, motionMaxHz, spectrogramMotion, 'Motion (accel)');
-                drawSpectrogramPanel(ctx, marginLeft, pulseY, plotW, panelH, pulseMaxHz, spectrogramPulse, 'Pulse (chassis)');
+                drawSpectrogramPanel(ctx, marginLeft, motionY, plotW, motionH, motionMaxHz, spectrogramMotion, 'Motion (accel)');
+                drawSpectrogramPanel(ctx, marginLeft, pulseY, plotW, pulseH, pulseMaxHz, spectrogramPulse, 'Pulse (chassis)');
 
                 const { startFrame, endFrame } = getFrameRange();
                 const durationSeconds = waveBuffer ? waveBuffer.duration : Math.max(0, endFrame - startFrame) / TELEMETRY_HZ;
                 drawSpectrogramAxes(ctx, marginLeft, cw, [
-                    { panelTop: motionY, maxHz: motionMaxHz },
-                    { panelTop: pulseY, maxHz: pulseMaxHz },
-                ], panelH, durationSeconds);
+                    { panelTop: motionY, panelH: motionH, maxHz: motionMaxHz },
+                    { panelTop: pulseY, panelH: pulseH, maxHz: pulseMaxHz },
+                ], durationSeconds);
 
                 // Hover line, across both panels, at the section fraction the hovered
                 // frame sits at — the same fraction seekToFrame uses in reverse.
@@ -3254,7 +3272,7 @@
                     ctx.lineWidth = 1;
                     ctx.beginPath();
                     ctx.moveTo(x + 0.5, motionY);
-                    ctx.lineTo(x + 0.5, pulseY + panelH);
+                    ctx.lineTo(x + 0.5, pulseY + pulseH);
                     ctx.stroke();
                     ctx.restore();
                 }
@@ -3280,10 +3298,12 @@
                 // Frame under (x, y), or null outside both panel rects — a pointer over
                 // the axis margins does not move the follower.
                 function frameAt(x, y) {
-                    const { marginLeft, plotW, panelH, motionY, pulseY } = spectrogramLayout(canvas.clientWidth, canvas.clientHeight);
+                    const {
+                        marginLeft, plotW, motionY, motionH, pulseY, pulseH,
+                    } = spectrogramLayout(canvas.clientWidth, canvas.clientHeight);
                     if (x < marginLeft || x > marginLeft + plotW) return null;
-                    const inMotion = y >= motionY && y <= motionY + panelH;
-                    const inPulse = y >= pulseY && y <= pulseY + panelH;
+                    const inMotion = y >= motionY && y <= motionY + motionH;
+                    const inPulse = y >= pulseY && y <= pulseY + pulseH;
                     if (!inMotion && !inPulse) return null;
                     return spectrogramFrameAtX(x, marginLeft, plotW);
                 }
