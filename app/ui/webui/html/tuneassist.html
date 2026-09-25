@@ -347,6 +347,15 @@
             display: none !important;
         }
 
+        /* The spectrogram is hand-drawn (no Chart.js), so nothing else sizes its
+           backing store. Chart.js gives its canvases the content-box size of
+           .plot-container (clientWidth/Height minus the 8px padding read above);
+           this mirrors that exactly so the panel lines up the same way. */
+        #spectrogram-chart {
+            width: calc(100% - 16px);
+            height: calc(100% - 16px);
+        }
+
         .speed-panel h3 {
             display: flex;
             align-items: center;
@@ -662,14 +671,20 @@
             pointer-events: none;
         }
 
-        /* The monitor toggle is out of the flow, so the heading text stays centred. */
+        /* The monitor toggle is out of the flow, so the heading text stays centred.
+           The plot panel's tab strip stands in for an <h3>, so it anchors its own
+           toggle the same way. Scoped to .plot-panel: the tune widget's strip carries
+           the same class and holds no toggle. */
         .chassis-panel h3,
-        .wave-lane-panel h3 {
+        .wave-lane-panel h3,
+        .plot-panel .chart-tabs {
             position: relative;
         }
 
         /* The checkbox is hidden but kept, so the toggle still works from the keyboard.
-           The icon is a red muted speaker when the layer is off, and a green speaker when it is on. */
+           The icon is a red muted speaker when the layer is off, and a green speaker when it is on.
+           The scatter panel reuses this block with an eye pair instead of a speaker pair:
+           a red crossed eye when the window highlight is off, a green eye when it is on. */
         .wave-monitor {
             position: absolute;
             right: 20px;
@@ -682,6 +697,10 @@
             color: var(--bs-danger, #dc3545);
             cursor: pointer;
             user-select: none;
+        }
+
+        .wave-monitor[hidden] {
+            display: none;
         }
 
         .wave-monitor .icon {
@@ -952,10 +971,23 @@
                                 Snap</button>
                             <button type="button" class="chart-tab" role="tab" data-plot="gainfreq">Gain /
                                 Frequency</button>
+                            <button type="button" class="chart-tab" role="tab"
+                                data-plot="spectrogram">Spectrogram</button>
+                            <button type="button" class="chart-tab" role="tab" data-plot="spectrum">Spectrum</button>
+                            <label class="wave-monitor"
+                                title="Highlight the points inside the window period on the scatter plots">
+                                <input type="checkbox" id="scatter-highlight-toggle" checked>
+                                <span class="icon wave-monitor-on" data-icon="eye"
+                                    aria-label="Window highlight on"></span>
+                                <span class="icon wave-monitor-off" data-icon="eye-slash"
+                                    aria-label="Window highlight off"></span>
+                            </label>
                         </div>
                         <div class="plot-container">
                             <canvas id="chart"></canvas>
                             <canvas id="gain-chart" hidden></canvas>
+                            <canvas id="spectrogram-chart" hidden></canvas>
+                            <canvas id="spectrum-chart" hidden></canvas>
                         </div>
                     </div>
                     <div class="video-panel" id="video-panel" hidden>
@@ -977,7 +1009,8 @@
                             <label class="wave-monitor" title="Monitor: play this layer through the audio output">
                                 <input type="checkbox" class="tune-out-enable" data-out-layer="chassis" checked>
                                 <span class="icon wave-monitor-on" data-icon="volume" aria-label="Monitor on"></span>
-                                <span class="icon wave-monitor-off" data-icon="volume-xmark" aria-label="Monitor off"></span>
+                                <span class="icon wave-monitor-off" data-icon="volume-xmark"
+                                    aria-label="Monitor off"></span>
                             </label>
                         </h3>
                         <div class="wave-container">
@@ -997,7 +1030,8 @@
                             <label class="wave-monitor" title="Monitor: play this layer through the audio output">
                                 <input type="checkbox" class="tune-out-enable" data-out-layer="engine">
                                 <span class="icon wave-monitor-on" data-icon="volume" aria-label="Monitor on"></span>
-                                <span class="icon wave-monitor-off" data-icon="volume-xmark" aria-label="Monitor off"></span>
+                                <span class="icon wave-monitor-off" data-icon="volume-xmark"
+                                    aria-label="Monitor off"></span>
                             </label>
                         </h3>
                         <div class="wave-container">
@@ -1009,7 +1043,8 @@
                             <label class="wave-monitor" title="Monitor: play this layer through the audio output">
                                 <input type="checkbox" class="tune-out-enable" data-out-layer="transmission">
                                 <span class="icon wave-monitor-on" data-icon="volume" aria-label="Monitor on"></span>
-                                <span class="icon wave-monitor-off" data-icon="volume-xmark" aria-label="Monitor off"></span>
+                                <span class="icon wave-monitor-off" data-icon="volume-xmark"
+                                    aria-label="Monitor off"></span>
                             </label>
                         </h3>
                         <div class="wave-container">
@@ -1023,7 +1058,8 @@
                             <label class="wave-monitor" title="Monitor: play this layer through the audio output">
                                 <input type="checkbox" class="tune-out-enable" data-out-layer="texture">
                                 <span class="icon wave-monitor-on" data-icon="volume" aria-label="Monitor on"></span>
-                                <span class="icon wave-monitor-off" data-icon="volume-xmark" aria-label="Monitor off"></span>
+                                <span class="icon wave-monitor-off" data-icon="volume-xmark"
+                                    aria-label="Monitor off"></span>
                             </label>
                         </h3>
                         <div class="wave-container">
@@ -1254,13 +1290,13 @@
 
         <script>
             const surfaceColors = {
-                tarmac: { bg: 'rgba(54, 162, 235, 0.5)', border: 'rgba(54, 162, 235, 1)' },
-                concrete: { bg: 'rgba(153, 102, 255, 0.5)', border: 'rgba(153, 102, 255, 1)' },
-                grass: { bg: 'rgba(90, 235, 90, 0.55)', border: 'rgba(90, 235, 90, 1)' },
-                dirt: { bg: 'rgba(205, 133, 63, 0.5)', border: 'rgba(205, 133, 63, 1)' },
-                sand: { bg: 'rgba(244, 208, 63, 0.5)', border: 'rgba(244, 208, 63, 1)' },
-                snow: { bg: 'rgba(200, 230, 245, 0.5)', border: 'rgba(200, 230, 245, 1)' },
-                unknown: { bg: 'rgba(160, 160, 160, 0.5)', border: 'rgba(160, 160, 160, 1)' },
+                tarmac: { bg: 'rgba(54, 162, 235, 0.22)', border: 'rgba(54, 162, 235, 1)' },
+                concrete: { bg: 'rgba(153, 102, 255, 0.22)', border: 'rgba(153, 102, 255, 1)' },
+                grass: { bg: 'rgba(90, 235, 90, 0.22)', border: 'rgba(90, 235, 90, 1)' },
+                dirt: { bg: 'rgba(205, 133, 63, 0.22)', border: 'rgba(205, 133, 63, 1)' },
+                sand: { bg: 'rgba(244, 208, 63, 0.22)', border: 'rgba(244, 208, 63, 1)' },
+                snow: { bg: 'rgba(200, 230, 245, 0.22)', border: 'rgba(200, 230, 245, 1)' },
+                unknown: { bg: 'rgba(160, 160, 160, 0.22)', border: 'rgba(160, 160, 160, 1)' },
             };
 
             let lapData = {};
@@ -1268,8 +1304,17 @@
             let allData = [];
             let chart = null;
             let gainChart = null;
+            let spectrumChart = null;
             const DEFAULT_PLOT = 'jerksnap';
             let activePlot = DEFAULT_PLOT;
+            // Canvas id behind each plot tab. Table-driven so showPlot needs no per-tab
+            // branch when a new tab is added.
+            const PLOT_CANVAS_ID = {
+                jerksnap: 'chart',
+                gainfreq: 'gain-chart',
+                spectrogram: 'spectrogram-chart',
+                spectrum: 'spectrum-chart',
+            };
             let speedChart = null;
             let speeds = [];            // per-frame ground speed (km/h) from telemetry
             let rangeStart = 0;
@@ -1283,6 +1328,7 @@
             let speedWrapThreshold = null;
             let poiDist = 0;            // point-of-interest distance along lap (metres)
             let highlightCount = 15;    // number of plotted points to emphasise near the POI
+            let scatterHighlightOn = true;  // draw the window-period overlay on the scatter plots
             let useRaw = false;         // false = processed (device) jerk/snap, true = raw (ungated)
 
             // Active jerk/snap accessors: switch the whole plot between the processed
@@ -1295,10 +1341,19 @@
             let pendingFrame = null;    // playhead frame from the URL, applied once the lap's audio has rendered
             const HIGHLIGHT_LABEL = 'point of interest';             // scatter dataset label (hidden from legend)
             const HIGHLIGHT_RING = '#ffffff';                        // white outline on the emphasised points
+            const SCATTER_CLOUD_RADIUS = 1.5;                        // small, borderless dots for the unselected cloud
+            const SCATTER_HIGHLIGHT_RADIUS = 2.5;                      // opaque emphasised dots drawn over the cloud
+            const SCATTER_HIGHLIGHT_RING = 'rgba(255, 255, 255, 0.8)';  // thin near-solid ring, distinct from the vivid fill
+            const SCATTER_HIGHLIGHT_LIFT = 12;                       // lightness points added to the saturated emphasised dots
             let highlightSource = [];                                // {x,y,dist,frame,surface} of POI-nearest points
             let gainHighlightSource = [];                            // {x,y,frame,surface} of POI-nearest points, gain/frequency plot
             let gainPlotPoints = [];                                 // last shownPoints from updateChart, for the no-arg updateGainChart() calls
             let gainPlotSelected = new Set();                        // last selected set from updateChart, ditto
+            // Playback window: the rows the emphasised scatter points show while the playhead
+            // leads them. Null means the points show the POI set. Set once playback starts,
+            // cleared when updateChart rebuilds the POI set.
+            let playheadSelection = null;
+            let playheadSelectionFrame = null;                       // playhead frame the selection was built at
             let cumulativeDists = [];
             let totalDist = 0;
             const MAX_ZOOM = 50;        // maximum map zoom factor
@@ -1307,6 +1362,7 @@
             let mapPanY = 0;
             let mapZoomedToRange = false;
             let hoveredFrame = null;
+            let hoveredSource = null;   // setHovered source of hoveredFrame; 'playback' does not fade the map
 
             let fadeRaf = null;
             let fadeStartTime = null;
@@ -1318,6 +1374,49 @@
             let scaleChaseRaf = null;
             let displayedScales = null;       // { xMin, xMax, yMin, yMax } currently shown
             let targetScales = null;          // { xMin, xMax, yMin, yMax } we're chasing toward
+
+            // Scatter scroll zoom. A wheel tick scales both axes about the cursor, with the
+            // same factor and double-click reset the map uses. While a chart holds a zoom
+            // viewport its auto-fit path stays parked, so a retune keeps the zoomed view.
+            const SCATTER_ZOOM_STEP = 1.15;   // span factor per wheel tick
+            const SCATTER_MAX_ZOOM = 50;      // deepest zoom, as a multiple of the auto-fit span
+            let scatterZoom = null;           // jerk/snap viewport, or null for auto-fit
+            let gainZoom = null;              // gain/frequency viewport, or null for auto-fit
+            let scatterPanning = false;       // a modifier drag is moving a scatter viewport
+
+            // Shift is the scatter pan modifier. Held, it drags the view and keeps the press
+            // off the data: the selected point does not change.
+            function panHeld(e) { return e.shiftKey; }
+
+            // Legend items for the scatter charts. Fill each swatch with the opaque surface
+            // colour, because the dataset fill is the faint cloud alpha.
+            function scatterLegendLabels(chart) {
+                return Chart.defaults.plugins.legend.labels.generateLabels(chart).map(item => {
+                    const c = surfaceColors[item.text];
+                    if (c) item.fillStyle = item.strokeStyle = c.border;
+                    return item;
+                });
+            }
+
+            // Saturate an rgba() colour fully and add `lift` points of lightness. Keep the alpha.
+            // Keep greys grey, because a grey has no real hue. Cap the lift at 65% so colours stay vivid. Do not darken pale colours.
+            function vivid(colorStr, lift) {
+                const m = colorStr.match(/rgba\(([\d.]+),\s*([\d.]+),\s*([\d.]+),\s*([\d.]+)\)/);
+                if (!m) return colorStr;
+                const [r, g, b] = [m[1], m[2], m[3]].map(v => v / 255);
+                const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+                const l = (max + min) / 2;
+                const sat = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
+                let h = 0;
+                if (d !== 0) {
+                    if (max === r) h = ((g - b) / d) % 6;
+                    else if (max === g) h = (b - r) / d + 2;
+                    else h = (r - g) / d + 4;
+                }
+                const outS = sat < 0.05 ? 0 : 100;
+                const outL = l * 100 >= 65 ? l * 100 : Math.min(l * 100 + lift, 65);
+                return `hsla(${Math.round(((h * 60) + 360) % 360)}, ${outS}%, ${outL.toFixed(1)}%, ${m[4]})`;
+            }
 
             function alphaScale(colorStr, t) {
                 return colorStr.replace(/,([\s\d.]+)\)$/, (_, a) => `,${parseFloat(a) * t})`);
@@ -1347,6 +1446,7 @@
                 // fresh page starts in, so a default view keeps a short URL.
                 if (activePlot !== DEFAULT_PLOT) params.set('plot', activePlot);
                 if (laneZoomOn) params.set('wavezoom', '1');
+                if (!scatterHighlightOn) params.set('pointhl', '0');
                 // Playhead position within the lap. Every follower — map point, scatter
                 // point, speed marker and the replay video — is driven from this frame,
                 // so one integer restores them all. The video's own time is deliberately
@@ -1384,20 +1484,34 @@
             // name (a hand-edited URL) falls back to the default rather than hiding both
             // canvases.
             function showPlot(plot) {
-                activePlot = plot === 'gainfreq' ? 'gainfreq' : DEFAULT_PLOT;
+                activePlot = PLOT_CANVAS_ID[plot] ? plot : DEFAULT_PLOT;
 
                 document.querySelectorAll('.plot-panel .chart-tab').forEach(t => {
                     t.classList.toggle('active', t.dataset.plot === activePlot);
                 });
 
-                document.getElementById('chart').hidden = activePlot !== 'jerksnap';
-                document.getElementById('gain-chart').hidden = activePlot !== 'gainfreq';
+                Object.entries(PLOT_CANVAS_ID).forEach(([name, id]) => {
+                    document.getElementById(id).hidden = name !== activePlot;
+                });
+
+                // The overlay belongs to the two scatter plots only. The spectrogram and the
+                // spectrum carry no per-point highlight, so the eye hides rather than lie.
+                const pointHl = document.getElementById('scatter-highlight-toggle');
+                if (pointHl) {
+                    pointHl.closest('.wave-monitor').hidden =
+                        activePlot !== 'jerksnap' && activePlot !== 'gainfreq';
+                }
 
                 // Chart.js mis-sizes a canvas that was hidden when it was built — resize it
-                // now that it is visible again, then redraw. Both charts are null before the
+                // now that it is visible again, then redraw. Every chart is null before the
                 // first lap loads, which is the case on the initial restore from the URL.
-                const shown = activePlot === 'jerksnap' ? chart : gainChart;
+                const charts = { jerksnap: chart, gainfreq: gainChart, spectrum: spectrumChart };
+                const shown = charts[activePlot];
                 if (shown) { shown.resize(); shown.update('none'); }
+
+                // The spectrogram canvas is hand-drawn, so it needs its own redraw on
+                // becoming visible — a canvas hidden via [hidden] reports 0 clientWidth.
+                if (activePlot === 'spectrogram') drawSpectrogram();
             }
 
             async function init() {
@@ -1440,6 +1554,21 @@
                     laneZoomOn = true;
                 }
 
+                const pointHlEl = document.getElementById('scatter-highlight-toggle');
+                if (params.get('pointhl') === '0') {
+                    pointHlEl.checked = false;
+                    scatterHighlightOn = false;
+                }
+                // Only the highlight datasets change, so the surface clouds are left alone.
+                pointHlEl.addEventListener('change', () => {
+                    scatterHighlightOn = pointHlEl.checked;
+                    syncHighlight();
+                    if (chart) chart.update('none');
+                    syncGainHighlight();
+                    if (gainChart) gainChart.update('none');
+                    updateUrl();
+                });
+
                 pendingLap = params.get('lap');
                 const frameParam = parseInt(params.get('f'), 10);
                 pendingFrame = Number.isFinite(frameParam) ? frameParam : null;
@@ -1480,6 +1609,7 @@
                 });
 
                 initMapInteraction();
+                initSpectrogramInteraction();
 
                 if (replayFiles.length > 0) {
                     const replayParam = params.get('replay');
@@ -1578,6 +1708,9 @@
                 if (!gainChart) {
                     createGainChart();
                 }
+                if (!spectrumChart) {
+                    createSpectrumChart();
+                }
                 if (!speedChart) {
                     createSpeedChart();
                 }
@@ -1585,9 +1718,21 @@
                 if (scaleChaseRaf) { cancelAnimationFrame(scaleChaseRaf); scaleChaseRaf = null; }
                 displayedScales = null;
                 targetScales = null;
+                scatterZoom = null;
+                gainZoom = null;
+                scatterPanning = false;
+                gainChart.options.scales.y.ticks.stepSize = GAIN_STEP_DB;
                 updateChart();
                 drawMap(lapKey);
                 scheduleAudioRefresh();
+
+                // Draw the motion curve immediately rather than waiting for audio to render;
+                // refreshAudio adds the pulse curve on top once the render lands.
+                updateSpectrumChart();
+
+                // New lap: both spectrogram panels (motion section, pulse buffer) are stale.
+                invalidateSpectrogram();
+                drawSpectrogram();
 
                 // Move the video onto the new lap. Its position belongs to the lap that was
                 // showing, which the clamp would otherwise pin to the wrong edge.
@@ -1759,6 +1904,14 @@
                 updateSelectionInfo();
                 updateChart();
                 scheduleAudioRefresh();
+
+                // The motion panel does not wait for a re-render like the pulse one does;
+                // follow the new section immediately, the same way updateSpectrumChart's
+                // motion curve does. The pulse cache key includes the frame range, so it
+                // naturally falls back to "rendering…" until refreshAudio's success
+                // handler lands the new section's audio.
+                invalidateSpectrogram();
+                drawSpectrogram();
             }
 
             // Base (identity-transform) coordinate mapping used by the map, matching drawMap.
@@ -1814,8 +1967,15 @@
 
             // Screen position of the POI marker for the current poiDist.
             function poiScreenPos(coords, W, H) {
-                const poiFrame = Math.max(0, Math.min(distToFrame(poiDist), coords.length - 1));
-                return worldToScreen(coords[poiFrame].x, coords[poiFrame].z, mapMapping(coords, W, H), W, H);
+                const f = mapMarkerFrame(coords);
+                return worldToScreen(coords[f].x, coords[f].z, mapMapping(coords, W, H), W, H);
+            }
+
+            // Frame the map marker sits on. Once playback starts, the marker follows the
+            // playhead, as the emphasised scatter points do. Otherwise it sits on the POI.
+            function mapMarkerFrame(coords) {
+                const f = playheadSelectionFrame ?? distToFrame(poiDist);
+                return Math.max(0, Math.min(f, coords.length - 1));
             }
 
             // Move the point of interest to a frame and take the playback head with it.
@@ -1843,6 +2003,7 @@
                 let dragDownX = 0, dragDownY = 0;
                 let didPan = false;          // the pan drag moved far enough to not be a click
                 let poiDragFrame = null;     // last frame the POI drag landed on
+                let poiDragResume = false;   // playback was running when the POI drag started
                 const POI_HIT_R = 10;        // px hit radius for grabbing the POI marker
                 const PAN_SLOP = 3;          // px of movement a click is allowed
                 const CLICK_MAX_D = 40;      // px from the track a click may land
@@ -1883,6 +2044,10 @@
                         if (Math.hypot(mx - p.sx, my - p.sy) <= POI_HIT_R) {
                             isDraggingPoi = true;
                             poiDragFrame = null;
+                            // Pause for the drag, so the marker and the video follow the pointer,
+                            // not the playhead. Playback starts again from the drop point.
+                            poiDragResume = wavePlaying;
+                            if (poiDragResume) pausePlayback();
                             canvas.style.cursor = 'grabbing';
                             e.preventDefault();
                             return;
@@ -1935,6 +2100,8 @@
                         // Land the audio playhead once, where the marker was dropped.
                         movePoiToFrame(poiDragFrame);
                         poiDragFrame = null;
+                        if (poiDragResume) startPlayback();
+                        poiDragResume = false;
                     }
                     if (isDragging) {
                         isDragging = false;
@@ -2074,8 +2241,9 @@
                     ctx.lineJoin = 'round';
 
                     // When hovering, gray out all segments and then redraw just the hovered point on top.
-                    // Otherwise draw each segment in its surface colour.
-                    const isHovering = hoveredFrame !== null && !!visMask[hoveredFrame];
+                    // Otherwise draw each segment in its surface colour. Playback does not fade the
+                    // track, because the marker already shows the playback position.
+                    const isHovering = hoveredFrame !== null && hoveredSource !== 'playback' && !!visMask[hoveredFrame];
 
                     // Build set of surface types that are currently hidden in the chart legend
                     const hiddenSurfaces = new Set();
@@ -2150,10 +2318,10 @@
                 ctx.lineTo(startPt.cx + perpX * halfLen, startPt.cy + perpY * halfLen);
                 ctx.stroke();
 
-                // Point-of-interest marker: filled with its surface colour, white ring (matches the
-                // emphasised scatter points).
+                // Marker: on the POI, or on the playhead once playback starts. Filled with its surface
+                // colour, white ring (matches the emphasised scatter points).
                 if (totalDist > 0) {
-                    const poiFrame = Math.max(0, Math.min(distToFrame(poiDist), coords.length - 1));
+                    const poiFrame = mapMarkerFrame(coords);
                     const pp = toCanvas(coords[poiFrame].x, coords[poiFrame].z);
                     const c = surfaceColors[coords[poiFrame].surface] || surfaceColors.unknown;
                     ctx.beginPath();
@@ -2198,25 +2366,104 @@
                 beforeUpdate(chart) { chart._frameIndex = null; }
             };
 
+            const READOUT_GAP = 12;   // clear space the crosshair readout keeps from the legend
+
+            // Dashed crosshair through the hovered scatter point, plus a one-line value
+            // readout. The built-in tooltip is off: a floating box covers the points it
+            // describes, so the readout sits at the right-hand end of the legend row.
+            // `format` turns the hovered datum into that line.
+            function crosshairReadout(format) {
+                return {
+                    id: 'crosshairReadout',
+                    afterDraw(c) {
+                        const active = c.getActiveElements();
+                        if (active.length === 0) return;
+                        const meta = c.getDatasetMeta(active[0].datasetIndex);
+                        const el = meta && meta.data[active[0].index];
+                        if (!el) return;
+
+                        const { left, right, top, bottom } = c.chartArea;
+                        const ctx = c.ctx;
+
+                        // Crosshair: full-width and full-height guides through the point.
+                        ctx.save();
+                        ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+                        ctx.lineWidth = 1;
+                        ctx.setLineDash([4, 4]);
+                        ctx.beginPath();
+                        ctx.moveTo(left, el.y);
+                        ctx.lineTo(right, el.y);
+                        ctx.moveTo(el.x, top);
+                        ctx.lineTo(el.x, bottom);
+                        ctx.stroke();
+                        ctx.restore();
+
+                        const datum = c.data.datasets[active[0].datasetIndex].data[active[0].index];
+                        const text = format(datum);
+                        if (!text) return;
+
+                        // Right-align the readout on the legend row. The legend stays
+                        // centred, so on a narrow chart the labels can reach the right-hand
+                        // end. Measure the legend and drop the readout into the bottom-right
+                        // of the plot when the row has no room left.
+                        ctx.save();
+                        ctx.font = '12px system-ui, sans-serif';
+                        ctx.textAlign = 'right';
+                        ctx.textBaseline = 'middle';
+
+                        const legend = c.legend;
+                        const textWidth = ctx.measureText(text).width;
+                        let legendRight = -Infinity;
+                        (legend && legend.legendHitBoxes || []).forEach(box => {
+                            legendRight = Math.max(legendRight, box.left + box.width);
+                        });
+                        const fits = right - textWidth > legendRight + READOUT_GAP;
+
+                        if (fits) {
+                            ctx.fillStyle = '#ccc';
+                            ctx.fillText(text, right, legend.top + legend.height / 2);
+                        } else {
+                            // Bottom-right of the plot: the corner that usually holds the
+                            // fewest points. The text still sits over the plot, so the text
+                            // carries its own backdrop.
+                            const y = bottom - READOUT_GAP - 8;
+                            ctx.fillStyle = 'rgba(20,20,24,0.8)';
+                            ctx.fillRect(right - textWidth - 12, y - 10, textWidth + 12, 20);
+                            ctx.fillStyle = '#ccc';
+                            ctx.fillText(text, right - 6, y);
+                        }
+                        ctx.restore();
+                    }
+                };
+            }
+
             function createChart() {
                 const ctx = document.getElementById('chart').getContext('2d');
                 chart = new Chart(ctx, {
                     type: 'scatter',
                     data: { datasets: [] },
-                    plugins: [frameIndexCache],
+                    plugins: [
+                        frameIndexCache,
+                        crosshairReadout(d => `Jerk: ${d.x.toFixed(1)} m/s³   Snap: ${d.y.toFixed(1)} m/s⁴`)
+                    ],
                     options: {
                         animation: false,
                         responsive: true,
                         maintainAspectRatio: false,
                         onHover: (_event, elements) => {
+                            // A pan drags the whole view past the pointer, so it must not
+                            // rewrite the hovered frame on the way.
+                            if (scatterPanning) return;
                             const frame = elements.length > 0
                                 ? (chart.data.datasets[elements[0].datasetIndex].data[elements[0].index].frame ?? null)
                                 : null;
                             // Hovering the scatter also marks the map track point and speed-chart point.
                             setHovered(frame ?? null, 'scatter');
                         },
-                        onClick: (_event, elements) => {
+                        onClick: (event, elements) => {
                             // Clicking a scatter point moves the POI to that point's lap position.
+                            // A click under the pan modifier ends a drag, so it selects nothing.
+                            if (panHeld(event.native || event)) return;
                             if (elements.length === 0) return;
                             const pt = chart.data.datasets[elements[0].datasetIndex].data[elements[0].index];
                             if (!pt || pt.frame == null) return;
@@ -2227,7 +2474,8 @@
                                 display: true,
                                 labels: {
                                     color: '#ccc', usePointStyle: true, pointStyle: 'circle',
-                                    filter: (item) => item.text !== HIGHLIGHT_LABEL
+                                    filter: (item) => item.text !== HIGHLIGHT_LABEL,
+                                    generateLabels: scatterLegendLabels
                                 },
                                 onClick(e, legendItem, legend) {
                                     // Run the default toggle
@@ -2239,16 +2487,12 @@
                                     const visibleDatasets = chart.data.datasets.filter((_, i) => chart.isDatasetVisible(i));
                                     const niceBounds = computeNiceBounds(visibleDatasets);
                                     targetScales = { ...niceBounds };
-                                    startScaleChase();
+                                    if (!scatterZoom) startScaleChase();
                                     // Reflect visibility on the circuit map
                                     drawMap(currentLapKey);
                                 }
                             },
-                            tooltip: {
-                                callbacks: {
-                                    label: (ctx) => `Jerk: ${ctx.parsed.x.toFixed(1)}, Snap: ${ctx.parsed.y.toFixed(1)}`
-                                }
-                            }
+                            tooltip: { enabled: false }
                         },
                         scales: {
                             x: {
@@ -2274,6 +2518,7 @@
                         }
                     }
                 });
+                installScatterNav(chart, () => targetScales, applyScatterViewport);
             }
 
             // Draws a dashed horizontal line at the configured jerk pivot gain, so retuning
@@ -2317,12 +2562,14 @@
                         responsive: true,
                         maintainAspectRatio: false,
                         onHover: (_event, elements) => {
+                            if (scatterPanning) return;
                             const frame = elements.length > 0
                                 ? (gainChart.data.datasets[elements[0].datasetIndex].data[elements[0].index].frame ?? null)
                                 : null;
                             setHovered(frame ?? null, 'scatter');
                         },
-                        onClick: (_event, elements) => {
+                        onClick: (event, elements) => {
+                            if (panHeld(event.native || event)) return;
                             if (elements.length === 0) return;
                             const pt = gainChart.data.datasets[elements[0].datasetIndex].data[elements[0].index];
                             if (!pt || pt.frame == null) return;
@@ -2333,7 +2580,8 @@
                                 display: true,
                                 labels: {
                                     color: '#ccc', usePointStyle: true, pointStyle: 'circle',
-                                    filter: (item) => item.text !== HIGHLIGHT_LABEL
+                                    filter: (item) => item.text !== HIGHLIGHT_LABEL,
+                                    generateLabels: scatterLegendLabels
                                 },
                                 onClick(e, legendItem, legend) {
                                     // Run the default toggle
@@ -2346,11 +2594,7 @@
                                     drawMap(currentLapKey);
                                 }
                             },
-                            tooltip: {
-                                callbacks: {
-                                    label: (ctx) => `Gain: ${ctx.parsed.y.toFixed(1)} dB, Freq: ${ctx.parsed.x.toFixed(1)} Hz`
-                                }
-                            }
+                            tooltip: { enabled: false }
                         },
                         scales: {
                             x: {
@@ -2364,19 +2608,26 @@
                                 title: { display: true, text: 'Pulse gain (dB)', color: '#aaa', font: { size: 14 } },
                                 min: GAIN_FLOOR_DB,
                                 max: 0,
-                                ticks: { color: '#888' },
+                                // Ticks land on multiples of GAIN_STEP_DB. Chart.js drops whole
+                                // ticks when the axis is crowded, so the spacing stays a multiple.
+                                ticks: { color: '#888', stepSize: GAIN_STEP_DB },
                                 grid: { color: 'rgba(255,255,255,0.06)' }
                             }
                         }
                     },
-                    plugins: [pivotGainLine, frameIndexCache]
+                    plugins: [
+                        pivotGainLine,
+                        frameIndexCache,
+                        crosshairReadout(d => `Gain: ${d.y.toFixed(1)} dB   Freq: ${d.x.toFixed(1)} Hz`)
+                    ]
                 });
+                installScatterNav(gainChart, gainAutoBounds, applyGainViewport);
             }
 
             // Re-applies the pulse-frequency axis bounds from `pulseLimits`, for when the chart
             // was built before the /tuning-defaults fetch landed.
             function applyGainAxisBounds() {
-                if (!gainChart) return;
+                if (!gainChart || gainZoom) return;
                 gainChart.options.scales.x.min = pulseLimits.minFrequencyHz;
                 gainChart.options.scales.x.max = pulseLimits.maxFrequencyHz;
                 gainChart.update('none');
@@ -2385,17 +2636,660 @@
             // Fit the gain axis to the visible points. 0 dB stays the ceiling — it is the
             // amplitude clamp, so no point can sit above it — and the floor never goes below
             // GAIN_FLOOR_DB. The pivot gain is folded in so its dashed reference line stays on
-            // screen even when every plotted point is louder than it. Caller renders.
-            function applyGainYBounds() {
-                if (!gainChart) return;
+            // screen even when every plotted point is louder than it. The floor snaps down to a
+            // multiple of GAIN_STEP_DB, so the axis resizes in fixed steps. Caller renders.
+            function gainAutoBounds() {
                 let lo = Infinity;
                 gainChart.data.datasets.forEach((ds, i) => {
                     if (!gainChart.isDatasetVisible(i)) return;
                     ds.data.forEach(pt => { if (pt.y < lo) lo = pt.y; });
                 });
                 if (!isFinite(lo)) lo = GAIN_FLOOR_DB;
-                gainChart.options.scales.y.min = Math.max(GAIN_FLOOR_DB, niceMinMax(Math.min(lo, tuneValues.jerkPivotGain), 0).min);
-                gainChart.options.scales.y.max = 0;
+                lo = Math.min(lo, tuneValues.jerkPivotGain);
+                const stepped = -GAIN_STEP_DB * Math.ceil(-lo / GAIN_STEP_DB);
+                return {
+                    xMin: pulseLimits.minFrequencyHz,
+                    xMax: pulseLimits.maxFrequencyHz,
+                    yMin: Math.max(GAIN_FLOOR_DB, Math.min(-GAIN_STEP_DB, stepped)),
+                    yMax: 0,
+                };
+            }
+
+            // Write the auto-fit y bounds into the chart. A scroll zoom parks this. Caller renders.
+            function applyGainYBounds() {
+                if (!gainChart || gainZoom) return;
+                const bounds = gainAutoBounds();
+                gainChart.options.scales.y.min = bounds.yMin;
+                gainChart.options.scales.y.max = bounds.yMax;
+            }
+
+            // Vertical dashed markers at the motion and delivered-pulse PSD centroids,
+            // read from the chart's own _centroids property (set by updateSpectrumChart)
+            // rather than module state — the two curves are unrelated to any other chart.
+            const spectrumCentroidLines = {
+                id: 'spectrumCentroidLines',
+                afterDatasetsDraw(c) {
+                    const centroids = c._centroids;
+                    if (!centroids) return;
+                    const xScale = c.scales.x;
+                    const { left, right, top, bottom } = c.chartArea;
+                    const ctx = c.ctx;
+
+                    function line(hz, color) {
+                        if (hz == null) return;
+                        const x = xScale.getPixelForValue(hz);
+                        if (x < left || x > right) return;
+                        ctx.save();
+                        ctx.strokeStyle = color;
+                        ctx.lineWidth = 1.5;
+                        ctx.setLineDash([5, 4]);
+                        ctx.beginPath();
+                        ctx.moveTo(x, top);
+                        ctx.lineTo(x, bottom);
+                        ctx.stroke();
+                        ctx.restore();
+                    }
+
+                    line(centroids.motion, 'rgba(90, 200, 235, 0.85)');
+                    line(centroids.delivered, 'rgba(233, 69, 96, 0.85)');
+                },
+            };
+
+            function createSpectrumChart() {
+                const ctx = document.getElementById('spectrum-chart').getContext('2d');
+                spectrumChart = new Chart(ctx, {
+                    type: 'line',
+                    data: { datasets: [] },
+                    options: {
+                        animation: false,
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        parsing: false,
+                        plugins: {
+                            legend: { display: true, labels: { color: '#ccc' } },
+                            title: {
+                                display: true,
+                                text: '',
+                                color: '#ccc',
+                                font: { size: 11, weight: 'normal' },
+                                padding: { bottom: 4 },
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(0)}% of energy below ${ctx.parsed.x.toFixed(1)} Hz`
+                                }
+                            }
+                        },
+                        scales: {
+                            x: {
+                                type: 'linear',
+                                title: { display: true, text: 'Frequency (Hz)', color: '#aaa', font: { size: 14 } },
+                                min: 0,
+                                max: pulseLimits.maxFrequencyHz, // updateSpectrumChart re-applies it once the config loads
+                                ticks: { color: '#888' },
+                                grid: { color: 'rgba(255,255,255,0.06)' }
+                            },
+                            y: {
+                                title: { display: true, text: 'Cumulative energy (%)', color: '#aaa', font: { size: 14 } },
+                                min: 0,
+                                max: 100,
+                                // Grid lines at 25/50/75% read as quartiles across both curves.
+                                ticks: { color: '#888', stepSize: 25 },
+                                grid: { color: 'rgba(255,255,255,0.1)' }
+                            }
+                        }
+                    },
+                    plugins: [spectrumCentroidLines]
+                });
+            }
+
+            // Running share of band power (0–100%) against frequency, within [loHz, hiHz].
+            // Starts at 0% on loHz. Null when the band holds no energy (e.g. a silent buffer).
+            function cumulativeEnergy(psd, loHz, hiHz) {
+                let total = 0;
+                for (let i = 0; i < psd.hz.length; i++) {
+                    if (psd.hz[i] >= loHz && psd.hz[i] <= hiHz) total += psd.power[i];
+                }
+                if (!(total > 0)) return null;
+                const pts = [{ x: loHz, y: 0 }];
+                let cum = 0;
+                for (let i = 0; i < psd.hz.length; i++) {
+                    const f = psd.hz[i];
+                    if (f < loHz) continue;
+                    if (f > hiHz) break;
+                    cum += psd.power[i];
+                    pts.push({ x: f, y: 100 * cum / total });
+                }
+                return pts;
+            }
+
+            // Frequency at which a cumulative curve first reaches `pct`, interpolated
+            // between points. Null for a null curve.
+            function hzAtPercent(pts, pct) {
+                if (!pts) return null;
+                for (let i = 1; i < pts.length; i++) {
+                    if (pts[i].y >= pct) {
+                        const a = pts[i - 1], b = pts[i];
+                        const t = b.y > a.y ? (pct - a.y) / (b.y - a.y) : 1;
+                        return a.x + t * (b.x - a.x);
+                    }
+                }
+                return pts[pts.length - 1].x;
+            }
+
+            // Decimates a curve to at most `maxPoints` drawn points, so a long pulse FFT
+            // does not hand Chart.js thousands of segments. Always keeps the last point.
+            function decimateCurve(pts, maxPoints) {
+                const step = Math.max(1, Math.floor(pts.length / maxPoints));
+                if (step === 1) return pts;
+                const out = [];
+                for (let i = 0; i < pts.length; i += step) out.push(pts[i]);
+                if (out[out.length - 1] !== pts[pts.length - 1]) out.push(pts[pts.length - 1]);
+                return out;
+            }
+
+            // Overlays the cumulative energy of the motion PSD (raw acceleration, always
+            // available once a section is selected) against the rendered chassis pulse PSD
+            // (only once refreshAudio's render lands). Each curve runs 0–100% of its own band
+            // power, so the unrelated units cancel. The horizontal gap between the curves is
+            // the frequency shift at each energy share. Called from selectLap (motion only,
+            // while audio is still rendering) and from refreshAudio's success path (both).
+            function updateSpectrumChart() {
+                if (!spectrumChart) return;
+                const coords = mapData[currentLapKey] || [];
+                const { startFrame, endFrame } = getFrameRange();
+
+                // Show no frequency above the configured pulse maximum.
+                const xMax = pulseLimits.maxFrequencyHz;
+                spectrumChart.options.scales.x.max = xMax;
+
+                const datasets = [];
+                let motionCentroidHz = null;
+                let deliveredCentroidHz = null;
+                let motionCurve = null;
+                let pulseCurve = null;
+
+                // Motion: PSD of raw acceleration magnitude over the selected section, at
+                // the telemetry rate. Accumulated only over the motion band: braking and
+                // cornering put most energy below 3 Hz, and above 30 Hz is telemetry noise.
+                const accelSamples = coords.slice(startFrame, endFrame + 1).map(c => c.accel ?? 0);
+                if (accelSamples.length >= 64) {
+                    // Remove the section mean. The DC bin otherwise leaks into the first bins.
+                    const accelMean = accelSamples.reduce((sum, a) => sum + a, 0) / accelSamples.length;
+                    for (let i = 0; i < accelSamples.length; i++) accelSamples[i] -= accelMean;
+
+                    const motionPsd = welchPsd(accelSamples, 0, accelSamples.length, TELEMETRY_HZ, 64);
+                    motionCentroidHz = centroid(motionPsd, MOTION_BAND[0], MOTION_BAND[1]);
+                    motionCurve = cumulativeEnergy(motionPsd, MOTION_BAND[0], Math.min(MOTION_BAND[1], xMax));
+
+                    if (motionCurve) {
+                        datasets.push({
+                            label: 'Motion',
+                            data: motionCurve,
+                            borderColor: 'rgba(90, 200, 235, 0.9)',
+                            backgroundColor: 'transparent',
+                            borderWidth: 2,
+                            pointRadius: 0,
+                            tension: 0,
+                        });
+                    }
+                }
+
+                // Pulse: PSD of the rendered chassis audio for the same section, once it has
+                // rendered. Section change with no new audio keeps the old pulse curve until
+                // the render lands, as the waveform itself does.
+                if (waveBuffer) {
+                    const samples = waveBuffer.getChannelData(0);
+                    // The raised sine is mostly DC; remove the mean before the FFT so that
+                    // near-zero bin does not swamp the true frequency content.
+                    let mean = 0;
+                    for (let i = 0; i < samples.length; i++) mean += samples[i];
+                    mean /= samples.length || 1;
+                    const centred = new Float64Array(samples.length);
+                    for (let i = 0; i < samples.length; i++) centred[i] = samples[i] - mean;
+
+                    // 32768 samples give about 1.5 Hz bins at 48 kHz. Shorter segments
+                    // make bins too wide for a 16–60 Hz pulse range.
+                    const segLen = Math.min(32768, 1 << Math.floor(Math.log2(Math.max(2, centred.length))));
+                    if (segLen >= 16) {
+                        const pulsePsd = welchPsd(centred, 0, centred.length, waveBuffer.sampleRate, segLen);
+
+                        // Use the motion band's lower limit, so both curves and centroids skip
+                        // the same sub-3 Hz envelope energy and compare like with like.
+                        deliveredCentroidHz = centroid(pulsePsd, MOTION_BAND[0], xMax);
+                        pulseCurve = cumulativeEnergy(pulsePsd, MOTION_BAND[0], xMax);
+
+                        if (pulseCurve) {
+                            datasets.push({
+                                label: 'Pulse',
+                                data: decimateCurve(pulseCurve, 300),
+                                borderColor: 'rgba(233, 69, 96, 0.9)',
+                                backgroundColor: 'transparent',
+                                borderWidth: 2,
+                                pointRadius: 0,
+                                tension: 0,
+                            });
+                        }
+                    }
+                }
+
+                spectrumChart.data.datasets = datasets;
+                spectrumChart._centroids = { motion: motionCentroidHz, delivered: deliveredCentroidHz };
+
+                // Title: 10/50/90% energy frequencies per signal, then the centroid ratio.
+                const spread = (curve) => curve
+                    ? [10, 50, 90].map(p => hzAtPercent(curve, p).toFixed(1)).join(' / ') + ' Hz'
+                    : '—';
+                const ratio = (motionCentroidHz && deliveredCentroidHz) ? deliveredCentroidHz / motionCentroidHz : null;
+                const status = waveBuffer ? '' : ' · rendering…';
+                spectrumChart.options.plugins.title.text = motionCurve == null
+                    ? `no motion in section${status}`
+                    : `10/50/90%: motion ${spread(motionCurve)} · pulse ${spread(pulseCurve)}` +
+                    (ratio != null ? ` · centroid ratio ${ratio.toFixed(2)}` : '') + status;
+
+                spectrumChart.update('none');
+            }
+
+            // ---------------------------------------------------------------------
+            // Spectrogram tab
+            //
+            // Two stacked time-frequency heatmaps for the selected section: motion
+            // (telemetry acceleration) on top, pulse (rendered chassis audio) below.
+            // Hand-drawn on a plain canvas — no Chart.js, since a heatmap is pixels,
+            // not points. Each panel's heatmap is an offscreen canvas built once per
+            // {section/lap/waveBuffer/pulseLimits/panel size} and cached: most redraws
+            // (hover, playback) only need to blit the cached image and the hover line.
+            // ---------------------------------------------------------------------
+            const SPECTROGRAM_DYNAMIC_RANGE_DB = 40; // dB below the 99th percentile shown
+            const SPECTROGRAM_EPS = 1e-12;           // floor before log10, so silence doesn't give -Infinity
+            const PULSE_STFT_WINDOW = 512;           // samples at the decimated ~480 Hz rate (~1.07 s, matches MOTION_WINDOW)
+            const PULSE_DECIMATED_HZ = 480;          // target decimation rate before the pulse STFT
+
+            let spectrogramMotion = null; // { key, image, dataTopHz } — cached motion heatmap
+            let spectrogramPulse = null;  // { key, image, dataTopHz, status } — cached pulse heatmap; status: 'rendering' | 'no audio' | 'ready'
+            let spectrogramRedrawRaf = null;
+
+            // Drops both cached heatmaps (lap/section change) or just the pulse one
+            // (a re-render of the same section's audio). The next drawSpectrogram()
+            // call rebuilds whichever is missing.
+            function invalidateSpectrogram(includeMotion = true) {
+                if (includeMotion) spectrogramMotion = null;
+                spectrogramPulse = null;
+            }
+
+            // Inferno-like colormap: black -> purple -> red -> orange -> yellow-white.
+            // `t` is a linear 0..1 fraction of the displayed dB range.
+            const SPECTROGRAM_STOPS = [
+                [0, 0, 4], [64, 15, 90], [152, 32, 96], [216, 68, 55], [245, 140, 30], [252, 220, 130],
+            ];
+            function infernoColor(t) {
+                t = Math.max(0, Math.min(1, t));
+                const n = SPECTROGRAM_STOPS.length - 1;
+                const scaled = t * n;
+                const i = Math.min(n - 1, Math.floor(scaled));
+                const f = scaled - i;
+                const a = SPECTROGRAM_STOPS[i], b = SPECTROGRAM_STOPS[i + 1];
+                return [
+                    Math.round(a[0] + (b[0] - a[0]) * f),
+                    Math.round(a[1] + (b[1] - a[1]) * f),
+                    Math.round(a[2] + (b[2] - a[2]) * f),
+                ];
+            }
+
+            // Value at percentile `p` (0-100) of `arr`. Used to pick each panel's colour
+            // ceiling from the energy that is actually on screen, rather than a fixed dB.
+            function percentile(arr, p) {
+                if (!arr.length) return 0;
+                const sorted = [...arr].sort((a, b) => a - b);
+                return sorted[Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length))];
+            }
+
+            // Short-time spectrum for one spectrogram column: a Hann-windowed, mean-removed
+            // FFT of samples[centre-winLen/2, centre+winLen/2). Windows that run past
+            // [0, length) are zero-padded there (the mean removed is of only the samples
+            // that exist). winLen must be a power of two. Returns power (linear, |X|^2)
+            // for the whole FFT; only the first half (bins [0, winLen/2)) is meaningful.
+            function stftColumn(samples, length, centre, winLen) {
+                const buf = new Float64Array(winLen);
+                const win = hann(winLen);
+                const half = winLen >> 1;
+                let mean = 0, n = 0;
+                for (let i = 0; i < winLen; i++) {
+                    const idx = centre - half + i;
+                    if (idx >= 0 && idx < length) { buf[i] = samples[idx]; mean += buf[i]; n++; }
+                }
+                if (n > 0) mean /= n;
+                for (let i = 0; i < winLen; i++) {
+                    const idx = centre - half + i;
+                    buf[i] = ((idx >= 0 && idx < length) ? samples[idx] - mean : 0) * win[i];
+                }
+                return fftMag2(buf);
+            }
+
+            // Decimates `samples` by block-averaging every `factor` samples into one,
+            // dropping a short final partial block. Brings the chassis audio down to
+            // close to PULSE_DECIMATED_HZ before its STFT, so the window there covers
+            // about the same span of time as the motion window does at the telemetry rate.
+            function decimateAverage(samples, factor) {
+                const outLen = Math.floor(samples.length / factor);
+                const out = new Float64Array(outLen);
+                for (let i = 0; i < outLen; i++) {
+                    let sum = 0;
+                    for (let j = 0; j < factor; j++) sum += samples[i * factor + j];
+                    out[i] = sum / factor;
+                }
+                return out;
+            }
+
+            // Builds an offscreen canvas of the STFT columns in `cells` (cols x bins,
+            // column-major: cells[col*bins + bin]), coloured by percentile-normalised dB
+            // within [bandLoHz, bandHiHz]. Row 0 of the image is the top frequency bin,
+            // so drawImage needs no separate vertical flip to put low Hz at the bottom.
+            function buildSpectrogramImage(cells, cols, bins, binHz, bandLoHz, bandHiHz) {
+                const db = new Float32Array(cells.length);
+                for (let i = 0; i < cells.length; i++) db[i] = 10 * Math.log10(cells[i] + SPECTROGRAM_EPS);
+
+                const bandDb = [];
+                for (let c = 0; c < cols; c++) {
+                    for (let b = 0; b < bins; b++) {
+                        const f = b * binHz;
+                        if (f >= bandLoHz && f <= bandHiHz) bandDb.push(db[c * bins + b]);
+                    }
+                }
+                const top = percentile(bandDb, 99);
+                const lo = top - SPECTROGRAM_DYNAMIC_RANGE_DB;
+                const range = top - lo || 1;
+
+                const canvas = document.createElement('canvas');
+                canvas.width = cols;
+                canvas.height = bins;
+                const ictx = canvas.getContext('2d');
+                const imgData = ictx.createImageData(cols, bins);
+                for (let c = 0; c < cols; c++) {
+                    for (let b = 0; b < bins; b++) {
+                        const t = (db[c * bins + b] - lo) / range;
+                        const [r, g, bl] = infernoColor(t);
+                        const row = bins - 1 - b; // flip: high bin -> top row
+                        const idx = (row * cols + c) * 4;
+                        imgData.data[idx] = r; imgData.data[idx + 1] = g; imgData.data[idx + 2] = bl; imgData.data[idx + 3] = 255;
+                    }
+                }
+                ictx.putImageData(imgData, 0, 0);
+                return canvas;
+            }
+
+            // Rebuilds the motion heatmap when the section, lap or column/row count it was
+            // last built for has changed. Column k samples the telemetry frame at the
+            // section-fraction (k+0.5)/cols, matching seekToFrame's linear frame mapping.
+            function ensureSpectrogramMotion(cols) {
+                const { startFrame, endFrame } = getFrameRange();
+                const key = [currentLapKey, startFrame, endFrame, cols].join('|');
+                if (spectrogramMotion && spectrogramMotion.key === key) return;
+
+                const coords = mapData[currentLapKey] || [];
+                const n = coords.length;
+                const winLen = MOTION_WINDOW;
+                const bins = winLen >> 1;
+                const binHz = TELEMETRY_HZ / winLen;
+                if (n < 2 || endFrame <= startFrame) { spectrogramMotion = { key, image: null }; return; }
+
+                const samples = coords.map(c => c.accel ?? 0);
+                const cells = new Float64Array(cols * bins);
+                for (let c = 0; c < cols; c++) {
+                    const frac = (c + 0.5) / cols;
+                    const centre = Math.round(startFrame + frac * (endFrame - startFrame));
+                    const power = stftColumn(samples, n, centre, winLen);
+                    for (let b = 0; b < bins; b++) cells[c * bins + b] = power[b];
+                }
+
+                spectrogramMotion = {
+                    key,
+                    image: buildSpectrogramImage(cells, cols, bins, binHz, MOTION_BAND[0], MOTION_BAND[1]),
+                    dataTopHz: MOTION_BAND[1],
+                };
+            }
+
+            // Rebuilds the pulse heatmap when the section, lap, rendered buffer, column
+            // count or pulse frequency ceiling it was last built for has changed. Column k
+            // samples the decimated buffer at the section-fraction (k+0.5)/cols, the same
+            // fraction the motion panel uses, so the two panels line up.
+            function ensureSpectrogramPulse(cols, maxHz) {
+                // Build only from a buffer rendered for this section. After a section change
+                // the old buffer stays until the new render lands, and it must not be drawn
+                // against the new section's time axis. refreshAudio invalidates the cache
+                // when a buffer lands, so the key does not need to identify the buffer.
+                const { startFrame, endFrame } = getFrameRange();
+                const replay = document.getElementById('replay-select').value;
+                const bufferReady = waveBuffer != null && waveSectionKey === [replay, currentLapKey, startFrame, endFrame].join('|');
+                const status = document.getElementById('wave-status').textContent;
+                const key = [replay, currentLapKey, startFrame, endFrame, cols, maxHz, bufferReady, bufferReady ? '' : status].join('|');
+                if (spectrogramPulse && spectrogramPulse.key === key) return;
+
+                if (!bufferReady) {
+                    spectrogramPulse = { key, image: null, status: (status === 'error' || status === 'no audio') ? 'no audio' : 'rendering' };
+                    return;
+                }
+
+                const raw = waveBuffer.getChannelData(0);
+                const factor = Math.max(1, Math.round(waveBuffer.sampleRate / PULSE_DECIMATED_HZ));
+                const rate = waveBuffer.sampleRate / factor;
+                const samples = decimateAverage(raw, factor);
+                const n = samples.length;
+                const winLen = PULSE_STFT_WINDOW;
+                const bins = winLen >> 1;
+                const binHz = rate / winLen;
+
+                if (n < 2) { spectrogramPulse = { key, image: null, status: 'no audio' }; return; }
+
+                const cells = new Float64Array(cols * bins);
+                for (let c = 0; c < cols; c++) {
+                    const frac = (c + 0.5) / cols;
+                    const centre = Math.round(frac * n);
+                    const power = stftColumn(samples, n, centre, winLen);
+                    for (let b = 0; b < bins; b++) cells[c * bins + b] = power[b];
+                }
+
+                spectrogramPulse = {
+                    key,
+                    image: buildSpectrogramImage(cells, cols, bins, binHz, MOTION_BAND[0], maxHz),
+                    dataTopHz: maxHz,
+                    status: 'ready',
+                };
+            }
+
+            // Draws one panel's cached heatmap (or a status message when there is none
+            // yet) into [x, y, w, h], on the shared 0..maxHz scale. The image covers
+            // [0, dataTopHz] with 0 Hz at its bottom row.
+            //
+            // When dataTopHz is under maxHz the image occupies the lower part of the
+            // panel and the remaining "no data" band is shaded flat above it. When
+            // dataTopHz is over maxHz — the pulse ceiling goes as low as 26 Hz, under
+            // the 30 Hz motion band — the source rows above maxHz are cropped away.
+            // Do not stretch the whole image to fill the panel. A stretch breaks the
+            // alignment between the heatmap and the Hz axis beside it.
+            function drawSpectrogramPanel(ctx, x, y, w, h, maxHz, panel, label) {
+                ctx.save();
+                ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+                ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+
+                if (panel && panel.image) {
+                    const visibleFrac = Math.min(1, maxHz / panel.dataTopHz);
+                    const srcH = Math.max(1, Math.round(panel.image.height * visibleFrac));
+                    const dataH = h * Math.min(1, panel.dataTopHz / maxHz);
+                    ctx.imageSmoothingEnabled = false;
+                    ctx.drawImage(
+                        panel.image,
+                        0, panel.image.height - srcH, panel.image.width, srcH,
+                        x, y + (h - dataH), w, dataH,
+                    );
+                    if (dataH < h) {
+                        ctx.fillStyle = 'rgba(255,255,255,0.04)';
+                        ctx.fillRect(x, y, w, h - dataH);
+                    }
+                } else {
+                    ctx.fillStyle = '#888';
+                    ctx.font = '11px system-ui, sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(panel && panel.status === 'no audio' ? 'no audio' : 'rendering…', x + w / 2, y + h / 2);
+                }
+
+                ctx.fillStyle = '#aaa';
+                ctx.font = '11px system-ui, sans-serif';
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'top';
+                ctx.fillText(label, x + 4, y + 2);
+                ctx.restore();
+            }
+
+            // Hz ticks on the left of both panels (they share a scale) and second ticks
+            // along the bottom, using the rendered buffer's own duration when there is
+            // one so the axis reflects the audio actually shown, not just the frame count.
+            function drawSpectrogramAxes(ctx, marginLeft, cw, motionY, pulseY, panelH, maxHz, durationSeconds) {
+                ctx.save();
+                ctx.fillStyle = '#888';
+                ctx.font = '11px system-ui, sans-serif';
+                ctx.textAlign = 'right';
+
+                const hzStep = niceStep(maxHz / 4) || 1;
+                [motionY, pulseY].forEach(panelTop => {
+                    ctx.textBaseline = 'middle';
+                    for (let hz = 0; hz <= maxHz + 1e-6; hz += hzStep) {
+                        const y = panelTop + panelH * (1 - hz / maxHz);
+                        ctx.fillText(Math.round(hz) + ' Hz', marginLeft - 6, y);
+                    }
+                });
+
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'top';
+                const bottomY = pulseY + panelH + 4;
+                const secStep = niceStep(durationSeconds / 6) || 1;
+                for (let s = 0; s <= durationSeconds + 1e-6; s += secStep) {
+                    const x = marginLeft + (cw - marginLeft) * (s / (durationSeconds || 1));
+                    ctx.fillText(s.toFixed(secStep < 1 ? 1 : 0) + ' s', x, bottomY);
+                }
+                ctx.restore();
+            }
+
+            // Lap frame under a spectrogram-panel-relative x, or null outside the plot area.
+            function spectrogramFrameAtX(x, marginLeft, plotW) {
+                if (plotW <= 0) return null;
+                const { startFrame, endFrame } = getFrameRange();
+                const frac = Math.max(0, Math.min(1, (x - marginLeft) / plotW));
+                return Math.round(startFrame + frac * (endFrame - startFrame));
+            }
+
+            // Redraws the spectrogram tab: rebuilds either cached heatmap that has gone
+            // stale, then blits both panels, the axes and the hover line. Cheap when
+            // nothing but the hover frame changed, since ensureSpectrogram* short-circuit
+            // on a matching cache key.
+            const SPECTROGRAM_MARGIN_LEFT = 42;   // room for the Hz axis labels
+            const SPECTROGRAM_MARGIN_BOTTOM = 16; // room for the seconds axis labels
+            const SPECTROGRAM_PANEL_GAP = 14;     // gap between the motion and pulse panels
+
+            // Panel geometry shared by drawSpectrogram and the pointer handlers, so a
+            // hover/click lands on exactly the pixel the draw put the data at.
+            function spectrogramLayout(cw, ch) {
+                const plotW = Math.max(0, cw - SPECTROGRAM_MARGIN_LEFT);
+                const panelH = Math.max(0, (ch - SPECTROGRAM_MARGIN_BOTTOM - SPECTROGRAM_PANEL_GAP) / 2);
+                return {
+                    marginLeft: SPECTROGRAM_MARGIN_LEFT, plotW, panelH,
+                    motionY: 0, pulseY: panelH + SPECTROGRAM_PANEL_GAP,
+                };
+            }
+
+            function drawSpectrogram() {
+                const canvas = document.getElementById('spectrogram-chart');
+                const cw = canvas.clientWidth, ch = canvas.clientHeight;
+                if (cw === 0 || ch === 0 || !currentLapKey) return; // hidden tab, or no lap yet
+
+                const dpr = window.devicePixelRatio || 1;
+                const pw = Math.round(cw * dpr), ph = Math.round(ch * dpr);
+                if (canvas.width !== pw || canvas.height !== ph) { canvas.width = pw; canvas.height = ph; }
+                const ctx = canvas.getContext('2d');
+                ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+                ctx.clearRect(0, 0, cw, ch);
+
+                const { marginLeft, plotW, panelH, motionY, pulseY } = spectrogramLayout(cw, ch);
+
+                // About one column per 2 CSS px, capped so a very wide panel does not
+                // force thousands of FFTs.
+                const cols = Math.max(1, Math.min(600, Math.round(plotW / 2)));
+                const maxHz = pulseLimits.maxFrequencyHz;
+
+                ensureSpectrogramMotion(cols);
+                ensureSpectrogramPulse(cols, maxHz);
+
+                drawSpectrogramPanel(ctx, marginLeft, motionY, plotW, panelH, maxHz, spectrogramMotion, 'Motion (accel)');
+                drawSpectrogramPanel(ctx, marginLeft, pulseY, plotW, panelH, maxHz, spectrogramPulse, 'Pulse (chassis)');
+
+                const { startFrame, endFrame } = getFrameRange();
+                const durationSeconds = waveBuffer ? waveBuffer.duration : Math.max(0, endFrame - startFrame) / TELEMETRY_HZ;
+                drawSpectrogramAxes(ctx, marginLeft, cw, motionY, pulseY, panelH, maxHz, durationSeconds);
+
+                // Hover line, across both panels, at the section fraction the hovered
+                // frame sits at — the same fraction seekToFrame uses in reverse.
+                if (hoveredFrame != null && hoveredFrame >= startFrame && hoveredFrame <= endFrame) {
+                    const span = Math.max(1, endFrame - startFrame);
+                    const frac = (hoveredFrame - startFrame) / span;
+                    const x = marginLeft + plotW * frac;
+                    ctx.save();
+                    ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.moveTo(x + 0.5, motionY);
+                    ctx.lineTo(x + 0.5, pulseY + panelH);
+                    ctx.stroke();
+                    ctx.restore();
+                }
+            }
+
+            // Throttles hover-driven redraws to one per animation frame, so audio
+            // playback (which calls setHovered every tick) does not draw more than the
+            // screen can show.
+            function scheduleSpectrogramRedraw() {
+                if (spectrogramRedrawRaf) return;
+                spectrogramRedrawRaf = requestAnimationFrame(() => {
+                    spectrogramRedrawRaf = null;
+                    drawSpectrogram();
+                });
+            }
+
+            // Wires pointer interaction on the spectrogram canvas: hover follows the
+            // shared follower like the waveform and scatter charts do, and a click seeks
+            // (or, with no audio yet, moves the video) exactly like the map click does.
+            function initSpectrogramInteraction() {
+                const canvas = document.getElementById('spectrogram-chart');
+
+                // Frame under (x, y), or null outside both panel rects — a pointer over
+                // the axis margins does not move the follower.
+                function frameAt(x, y) {
+                    const { marginLeft, plotW, panelH, motionY, pulseY } = spectrogramLayout(canvas.clientWidth, canvas.clientHeight);
+                    if (x < marginLeft || x > marginLeft + plotW) return null;
+                    const inMotion = y >= motionY && y <= motionY + panelH;
+                    const inPulse = y >= pulseY && y <= pulseY + panelH;
+                    if (!inMotion && !inPulse) return null;
+                    return spectrogramFrameAtX(x, marginLeft, plotW);
+                }
+
+                function pointerPos(e) {
+                    const rect = canvas.getBoundingClientRect();
+                    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+                }
+
+                canvas.addEventListener('mousemove', (e) => {
+                    if (!currentLapKey) return;
+                    const { x, y } = pointerPos(e);
+                    const frame = frameAt(x, y);
+                    setHovered(frame, 'spectrogram');
+                });
+                canvas.addEventListener('mouseleave', () => setHovered(null, 'spectrogram'));
+                canvas.addEventListener('click', (e) => {
+                    const { x, y } = pointerPos(e);
+                    const frame = frameAt(x, y);
+                    if (frame == null) return;
+                    if (waveBuffer) seekToFrame(frame); else syncVideoToFrame(frame);
+                });
             }
 
             // Draws the POI as a dashed vertical line on the speed chart, with a dot and label
@@ -2406,13 +3300,15 @@
             // by exactly the same follower the mouse moves.
             // `source` is the chart the hover came from, so we don't fight its own native highlight.
             function setHovered(frame, source) {
-                if (frame === hoveredFrame) return;
+                if (frame === hoveredFrame && source === hoveredSource) return;
                 hoveredFrame = frame;
+                hoveredSource = source;
                 drawMap(currentLapKey);
                 if (source !== 'scatter') highlightScatterFrame(frame); // scatter highlights itself natively
                 if (speedChart) speedChart.render();
                 if (waveBuffer) drawWave();
                 if (source !== 'video') syncVideoToFrame(frame);
+                if (activePlot === 'spectrogram') scheduleSpectrogramRedraw();
             }
 
             // ---------------------------------------------------------------------
@@ -2435,10 +3331,9 @@
             // moved the video, so the handler compares against this to tell a scrub of the
             // video's own control from the echo of a seek made here.
             let videoLastSetSeconds = null;
-            // Set while a playhead reset that the user did not ask for is being applied.
-            // Re-rendering the audio moves the playhead back to the section start, which
-            // should still move the charts as it always has, but must not drag the video
-            // with it: the user is watching one moment while turning a tuning knob.
+            // Set while refreshAudio re-applies the playhead after a render. A new section
+            // moves the playhead back to the section start, which should still move the
+            // charts, but must not drag the video with it.
             let videoFollowSuppressed = false;
 
             // How far the video may drift from the audio playhead before it is pulled back.
@@ -2597,18 +3492,15 @@
                 videoElement().pause();
             }
 
-            // Programmatically put a scatter point into its hover state (and tooltip) by frame.
-            // Applies to both scatter charts (jerk/snap and gain/frequency) so whichever is on
+            // Programmatically put a scatter point into its hover state by frame. The
+            // crosshair readout follows the active element, so the plot tracks the follower.
+            // Applies to every scatter chart (jerk/snap, gain/frequency) so whichever is on
             // screen follows the map/speed/waveform hover.
             function highlightScatterFrame(frame) {
                 [chart, gainChart].forEach(c => {
                     if (!c) return;
                     const el = frame == null ? null : (frameIndexFor(c).get(frame) || null);
                     c.setActiveElements(el ? [el] : []);
-                    if (c.tooltip) {
-                        const meta = el && c.getDatasetMeta(el.datasetIndex).data[el.index];
-                        c.tooltip.setActiveElements(el ? [el] : [], meta ? { x: meta.x, y: meta.y } : { x: 0, y: 0 });
-                    }
                     c.render();
                 });
             }
@@ -2847,6 +3739,7 @@
             // updateSnapScale), so the gain/frequency plot tracks the sliders without a
             // server round-trip on every move.
             const GAIN_FLOOR_DB = -60;   // plot floor; the curve runs to -inf as jerk -> 0
+            const GAIN_STEP_DB = 3;      // gain axis floor snaps to a multiple of this, so it resizes in steps
             let pulseLimits = { minFrequencyHz: 16, maxFrequencyHz: 60, maxAmplitude: 1 };
 
             function gainDbOf(jerk) {
@@ -2876,6 +3769,121 @@
                 return pt.y > GAIN_FLOOR_DB;
             }
 
+            // ---------------------------------------------------------------------
+            // Motion / pulse spectral analysis
+            //
+            // The 2026-09-13 frequency study found telemetry motion is broadband — its
+            // spectral centroid sits near the window's own bandwidth regardless of
+            // surface — while the pulse generator's nominal frequency tracks |jerk|
+            // instead. These helpers compute the PSDs and short-time spectra the
+            // Spectrogram and Spectrum tabs plot. No CDN dependency: a small in-place
+            // FFT is enough for one page's worth of analysis.
+            // ---------------------------------------------------------------------
+            const TELEMETRY_HZ = 60;      // per-frame telemetry rate
+            const MOTION_WINDOW = 64;     // frames (~1.07 s at 60 Hz, 0.94 Hz bins)
+            const MOTION_BAND = [3, 30];  // Hz; matches the study's broadband finding
+
+            // In-place radix-2 Cooley-Tukey FFT. re/im must be equal-length arrays whose
+            // length is a power of two; both are overwritten with the transform.
+            function fft(re, im) {
+                const n = re.length;
+                for (let i = 1, j = 0; i < n; i++) {
+                    let bit = n >> 1;
+                    for (; j & bit; bit >>= 1) j ^= bit;
+                    j ^= bit;
+                    if (i < j) {
+                        [re[i], re[j]] = [re[j], re[i]];
+                        [im[i], im[j]] = [im[j], im[i]];
+                    }
+                }
+                for (let len = 2; len <= n; len <<= 1) {
+                    const ang = -2 * Math.PI / len;
+                    const wr = Math.cos(ang), wi = Math.sin(ang);
+                    const half = len >> 1;
+                    for (let i = 0; i < n; i += len) {
+                        let curWr = 1, curWi = 0;
+                        for (let k = 0; k < half; k++) {
+                            const ur = re[i + k], ui = im[i + k];
+                            const vr = re[i + k + half] * curWr - im[i + k + half] * curWi;
+                            const vi = re[i + k + half] * curWi + im[i + k + half] * curWr;
+                            re[i + k] = ur + vr;
+                            im[i + k] = ui + vi;
+                            re[i + k + half] = ur - vr;
+                            im[i + k + half] = ui - vi;
+                            const nwr = curWr * wr - curWi * wi;
+                            curWi = curWr * wi + curWi * wr;
+                            curWr = nwr;
+                        }
+                    }
+                }
+            }
+
+            // Power per bin (|X|^2) of the real-valued signal `re`, whose length must be
+            // a power of two. Returns a new array; `re` is left as the FFT's real part.
+            function fftMag2(re) {
+                const n = re.length;
+                const im = new Float64Array(n);
+                fft(re, im);
+                const power = new Float64Array(n);
+                for (let i = 0; i < n; i++) power[i] = re[i] * re[i] + im[i] * im[i];
+                return power;
+            }
+
+            // Cached Hann windows, keyed by length. The page only ever asks for a handful
+            // of segment lengths, so recomputing per call would be pure waste.
+            const hannCache = new Map();
+            function hann(n) {
+                let w = hannCache.get(n);
+                if (w) return w;
+                w = new Float64Array(n);
+                for (let i = 0; i < n; i++) w[i] = 0.5 - 0.5 * Math.cos(2 * Math.PI * i / (n - 1));
+                hannCache.set(n, w);
+                return w;
+            }
+
+            // Welch PSD of samples[from, to) at sampleRate: 50% overlap, Hann-windowed
+            // segments of segLen (must be a power of two), power averaged across
+            // segments. Returns { hz, power } in linear (not dB) units.
+            function welchPsd(samples, from, to, sampleRate, segLen) {
+                const step = segLen >> 1;
+                const half = segLen >> 1;
+                const hz = new Float32Array(half);
+                const power = new Float64Array(half);
+                const win = hann(segLen);
+
+                // Window power correction, so tapering the segment edges to zero does not
+                // read as a lower PSD than a rectangular window would.
+                let winPower = 0;
+                for (let i = 0; i < segLen; i++) winPower += win[i] * win[i];
+
+                let segments = 0;
+                const buf = new Float64Array(segLen);
+                for (let start = from; start + segLen <= to; start += step) {
+                    for (let i = 0; i < segLen; i++) buf[i] = (samples[start + i] ?? 0) * win[i];
+                    const mag2 = fftMag2(buf);
+                    for (let i = 0; i < half; i++) power[i] += mag2[i];
+                    segments++;
+                }
+                for (let i = 0; i < half; i++) hz[i] = i * sampleRate / segLen;
+                if (segments > 0) {
+                    for (let i = 0; i < half; i++) power[i] /= segments * winPower;
+                }
+                return { hz, power };
+            }
+
+            // Power-weighted mean frequency within [loHz, hiHz]. Null when the band holds
+            // no energy (e.g. a silent buffer).
+            function centroid(psd, loHz, hiHz) {
+                let num = 0, den = 0;
+                for (let i = 0; i < psd.hz.length; i++) {
+                    const f = psd.hz[i];
+                    if (f < loHz || f > hiHz) continue;
+                    num += f * psd.power[i];
+                    den += psd.power[i];
+                }
+                return den > 0 ? num / den : null;
+            }
+
             function lerp(a, b, t) { return a + (b - a) * t; }
 
             function scalesCloseEnough(a, b) {
@@ -2888,7 +3896,7 @@
             function startScaleChase() {
                 if (scaleChaseRaf) return; // already running
                 function step() {
-                    if (!displayedScales || !targetScales) {
+                    if (!displayedScales || !targetScales || scatterZoom) {
                         scaleChaseRaf = null;
                         return;
                     }
@@ -2965,31 +3973,195 @@
                 return { xMin: xNice.min, xMax: xNice.max, yMin: yNice.min, yMax: yNice.max };
             }
 
+            // Shift a span of `span` so it stays inside [loLimit, hiLimit]. The span is never
+            // wider than the limits, so the shift always fits.
+            function clampSpanStart(min, span, loLimit, hiLimit) {
+                if (min + span > hiLimit) min = hiLimit - span;
+                if (min < loLimit) min = loLimit;
+                return min;
+            }
+
+            // The viewport a wheel tick asks for on a scatter chart. `base` is the auto-fit
+            // viewport: the zoom never leaves it, and a tick that reaches it returns null to
+            // mean "back to auto-fit". The value under the cursor keeps its pixel.
+            function wheelZoomViewport(c, event, base) {
+                const xs = c.scales.x, ys = c.scales.y;
+                const xSpanNow = xs.max - xs.min, ySpanNow = ys.max - ys.min;
+                const baseXSpan = base.xMax - base.xMin, baseYSpan = base.yMax - base.yMin;
+                if (xSpanNow <= 0 || ySpanNow <= 0 || baseXSpan <= 0 || baseYSpan <= 0) return null;
+
+                const f = event.deltaY < 0 ? 1 / SCATTER_ZOOM_STEP : SCATTER_ZOOM_STEP;
+                if (f > 1 && (xSpanNow * f >= baseXSpan || ySpanNow * f >= baseYSpan)) return null;
+                const xSpan = Math.max(xSpanNow * f, baseXSpan / SCATTER_MAX_ZOOM);
+                const ySpan = Math.max(ySpanNow * f, baseYSpan / SCATTER_MAX_ZOOM);
+
+                const rect = c.canvas.getBoundingClientRect();
+                const px = event.clientX - rect.left, py = event.clientY - rect.top;
+                const fx = (xs.getValueForPixel(px) - xs.min) / xSpanNow;
+                const fy = (ys.getValueForPixel(py) - ys.min) / ySpanNow;
+
+                const xMin = clampSpanStart(xs.min + (xSpanNow - xSpan) * fx, xSpan, base.xMin, base.xMax);
+                const yMin = clampSpanStart(ys.min + (ySpanNow - ySpan) * fy, ySpan, base.yMin, base.yMax);
+                return { xMin, xMax: xMin + xSpan, yMin, yMax: yMin + ySpan };
+            }
+
+            // True when the pointer sits over the plotting area. A wheel outside it scrolls
+            // the page as usual.
+            function overChartArea(c, event) {
+                const rect = c.canvas.getBoundingClientRect();
+                const px = event.clientX - rect.left, py = event.clientY - rect.top;
+                const a = c.chartArea;
+                if (!a) return false;
+                return px >= a.left && px <= a.right && py >= a.top && py <= a.bottom;
+            }
+
+            // The viewport after a drag of (dxPx, dyPx). The span holds, and the view stays
+            // inside the auto-fit bounds, so a drag at full zoom-out moves nothing. The data
+            // follows the pointer, so the value window travels the other way.
+            function dragPanViewport(c, dxPx, dyPx, base) {
+                const xs = c.scales.x, ys = c.scales.y;
+                const xSpan = xs.max - xs.min, ySpan = ys.max - ys.min;
+                const area = c.chartArea;
+                if (!area || xSpan <= 0 || ySpan <= 0) return null;
+                const wPx = area.right - area.left, hPx = area.bottom - area.top;
+                if (wPx <= 0 || hPx <= 0) return null;
+
+                // The y pixel axis points down and the y value axis points up, so the y term
+                // takes the opposite sign to the x term.
+                const xMin = clampSpanStart(xs.min - dxPx * xSpan / wPx, xSpan, base.xMin, base.xMax);
+                const yMin = clampSpanStart(ys.min + dyPx * ySpan / hPx, ySpan, base.yMin, base.yMax);
+                return { xMin, xMax: xMin + xSpan, yMin, yMax: yMin + ySpan };
+            }
+
+            // Wire scroll zoom and modifier-drag pan onto a scatter chart. `base` returns the
+            // chart's auto-fit viewport. `apply` shows a viewport, or returns the chart to
+            // auto-fit when it is given null.
+            function installScatterNav(c, base, apply) {
+                const canvas = c.canvas;
+
+                canvas.addEventListener('wheel', (e) => {
+                    const bounds = base();
+                    if (!bounds || !overChartArea(c, e)) return;
+                    e.preventDefault();
+                    apply(wheelZoomViewport(c, e, bounds));
+                }, { passive: false });
+
+                canvas.addEventListener('dblclick', () => apply(null));
+
+                // Client position of the last pan step, or null when no pan runs.
+                let panFrom = null;
+
+                canvas.addEventListener('mousedown', (e) => {
+                    if (!panHeld(e) || !overChartArea(c, e)) return;
+                    panFrom = { x: e.clientX, y: e.clientY };
+                    scatterPanning = true;
+                    canvas.style.cursor = 'grabbing';
+                    e.preventDefault();   // no text selection while the drag runs
+                });
+
+                // Show the grab cursor while the modifier is held, so the pan is discoverable.
+                canvas.addEventListener('mousemove', (e) => {
+                    if (panFrom) return;
+                    canvas.style.cursor = panHeld(e) ? 'grab' : '';
+                });
+
+                window.addEventListener('mousemove', (e) => {
+                    if (!panFrom) return;
+                    const bounds = base();
+                    const next = bounds
+                        ? dragPanViewport(c, e.clientX - panFrom.x, e.clientY - panFrom.y, bounds)
+                        : null;
+                    panFrom = { x: e.clientX, y: e.clientY };
+                    if (next) apply(next);
+                });
+
+                window.addEventListener('mouseup', () => {
+                    if (!panFrom) return;
+                    panFrom = null;
+                    scatterPanning = false;
+                    canvas.style.cursor = '';
+                });
+            }
+
+            // Show a viewport on the jerk/snap scatter, or return to the auto-fit bounds. The
+            // viewport becomes the displayed scales, so a reset lerps back through the chase.
+            function applyScatterViewport(next) {
+                if (!next) {
+                    if (!scatterZoom) return;
+                    scatterZoom = null;
+                    startScaleChase();
+                    return;
+                }
+                scatterZoom = next;
+                displayedScales = { ...next };
+                if (scaleChaseRaf) { cancelAnimationFrame(scaleChaseRaf); scaleChaseRaf = null; }
+                // Exact bounds, not the chase's nice-step rounding: the rounding stops label
+                // jitter during a lerp, and here it would cancel the zoom step.
+                chart.options.scales.x.min = next.xMin;
+                chart.options.scales.x.max = next.xMax;
+                chart.options.scales.y.min = next.yMin;
+                chart.options.scales.y.max = next.yMax;
+                chart.update('none');
+            }
+
+            // Show a viewport on the gain/frequency scatter, or return to its fixed axis
+            // bounds. The axes are fixed rather than chased, so the viewport goes straight
+            // into the chart options.
+            function applyGainViewport(next) {
+                const y = gainChart.options.scales.y;
+                if (!next) {
+                    if (!gainZoom) return;
+                    gainZoom = null;
+                    y.ticks.stepSize = GAIN_STEP_DB;
+                    applyGainAxisBounds();
+                    applyGainYBounds();
+                    gainChart.update('none');
+                    return;
+                }
+                gainZoom = next;
+                const x = gainChart.options.scales.x;
+                x.min = next.xMin; x.max = next.xMax;
+                y.min = next.yMin; y.max = next.yMax;
+                // The fixed 3 dB tick step leaves a deep zoom with one label, so let Chart.js
+                // pick the step while the zoom holds.
+                y.ticks.stepSize = undefined;
+                gainChart.update('none');
+            }
+
             // Rebuild the "point of interest" overlay dataset from highlightSource, excluding any
             // surfaces currently hidden via the legend. Given a low `order` so it draws on top
             // (Chart.js paints datasets in reverse order). Each point keeps its surface colour with
-            // a white ring. Call after any change to selection or surface visibility.
+            // a white ring. Call after any change to selection or surface visibility. The eye
+            // toggle switches the overlay off: the dataset is dropped and none is rebuilt.
             function syncHighlight() {
                 if (!chart) return;
 
                 chart.data.datasets = chart.data.datasets.filter(ds => ds.label !== HIGHLIGHT_LABEL);
+                if (!scatterHighlightOn) return;
 
                 const hidden = new Set();
                 chart.data.datasets.forEach((ds, i) => {
                     if (chart.getDatasetMeta(i).hidden) hidden.add(ds.label);
                 });
 
-                const pts = highlightSource.filter(p => !hidden.has(p.surface));
+                const src = playheadSelection
+                    ? playheadSelection.map(d => ({
+                        x: jerkOf(d), y: snapOf(d), dist: cumulativeDists[d.frame] ?? 0, frame: d.frame, surface: d.surface,
+                    }))
+                    : highlightSource;
+                const pts = src.filter(p => !hidden.has(p.surface));
                 if (pts.length === 0) return;
 
                 chart.data.datasets.push({
                     label: HIGHLIGHT_LABEL,
                     data: pts,
-                    backgroundColor: pts.map(p => (surfaceColors[p.surface] || surfaceColors.unknown).border),
-                    borderColor: HIGHLIGHT_RING,
-                    borderWidth: 1.5,
-                    pointRadius: 3.5,
-                    pointHoverRadius: 6,
+                    backgroundColor: pts.map(p => vivid((surfaceColors[p.surface] || surfaceColors.unknown).border, SCATTER_HIGHLIGHT_LIFT)),
+                    borderColor: SCATTER_HIGHLIGHT_RING,
+                    borderWidth: 0.75,
+                    pointRadius: SCATTER_HIGHLIGHT_RADIUS,
+                    pointHoverRadius: 5,
+                    pointHoverBorderColor: HIGHLIGHT_RING,
+                    pointHoverBorderWidth: 1.5,
                     order: -1,
                 });
             }
@@ -2999,23 +4171,32 @@
                 if (!gainChart) return;
 
                 gainChart.data.datasets = gainChart.data.datasets.filter(ds => ds.label !== HIGHLIGHT_LABEL);
+                if (!scatterHighlightOn) return;
 
                 const hidden = new Set();
                 gainChart.data.datasets.forEach((ds, i) => {
                     if (gainChart.getDatasetMeta(i).hidden) hidden.add(ds.label);
                 });
 
-                const pts = gainHighlightSource.filter(p => !hidden.has(p.surface));
+                // Rebuild from the rows, not cached points: a retune moves every gain point.
+                const src = playheadSelection
+                    ? playheadSelection
+                        .map(d => ({ x: freqHzOf(snapOf(d)), y: gainDbOf(jerkOf(d)), frame: d.frame, surface: d.surface }))
+                        .filter(audible)
+                    : gainHighlightSource;
+                const pts = src.filter(p => !hidden.has(p.surface));
                 if (pts.length === 0) return;
 
                 gainChart.data.datasets.push({
                     label: HIGHLIGHT_LABEL,
                     data: pts,
-                    backgroundColor: pts.map(p => (surfaceColors[p.surface] || surfaceColors.unknown).border),
-                    borderColor: HIGHLIGHT_RING,
-                    borderWidth: 1.5,
-                    pointRadius: 3.5,
-                    pointHoverRadius: 6,
+                    backgroundColor: pts.map(p => vivid((surfaceColors[p.surface] || surfaceColors.unknown).border, SCATTER_HIGHLIGHT_LIFT)),
+                    borderColor: SCATTER_HIGHLIGHT_RING,
+                    borderWidth: 0.75,
+                    pointRadius: SCATTER_HIGHLIGHT_RADIUS,
+                    pointHoverRadius: 5,
+                    pointHoverBorderColor: HIGHLIGHT_RING,
+                    pointHoverBorderWidth: 1.5,
                     order: -1,
                 });
             }
@@ -3057,9 +4238,12 @@
                         data,
                         backgroundColor: c.bg,
                         borderColor: c.border,
-                        borderWidth: 1,
-                        pointRadius: 2.5,
-                        pointHoverRadius: 5,
+                        borderWidth: 0,
+                        pointRadius: SCATTER_CLOUD_RADIUS,
+                        pointHoverRadius: 4,
+                        pointHoverBackgroundColor: c.border,
+                        pointHoverBorderColor: HIGHLIGHT_RING,
+                        pointHoverBorderWidth: 1.5,
                     };
                 });
 
@@ -3069,6 +4253,10 @@
             }
 
             function updateChart() {
+                // A rebuild re-selects around the POI. Playback takes the points back on its next frame.
+                playheadSelection = null;
+                playheadSelectionFrame = null;
+
                 const coords = mapData[currentLapKey] || [];
                 const grouped = {};
 
@@ -3114,9 +4302,12 @@
                         borderColor: alphaScale(c.border, 0),
                         _targetBg: c.bg,
                         _targetBorder: c.border,
-                        borderWidth: 1,
-                        pointRadius: 2.5,
-                        pointHoverRadius: 5,
+                        borderWidth: 0,
+                        pointRadius: SCATTER_CLOUD_RADIUS,
+                        pointHoverRadius: 4,
+                        pointHoverBackgroundColor: c.border,
+                        pointHoverBorderColor: HIGHLIGHT_RING,
+                        pointHoverBorderWidth: 1.5,
                     };
                     newDatasets.push(ds);
                     return ds;
@@ -3125,7 +4316,8 @@
                 // Emphasise the POI-nearest points on top, honouring surface-legend visibility.
                 syncHighlight();
 
-                // Stash for the no-arg updateGainChart() calls (retuning has neither in scope).
+                // Stash for the no-arg updateGainChart() calls (retuning has neither in
+                // scope).
                 gainPlotPoints = shownPoints;
                 gainPlotSelected = selected;
                 updateGainChart(shownPoints, selected);
@@ -3138,13 +4330,14 @@
                     displayedScales = { ...niceBounds };
                     targetScales = { ...niceBounds };
                 } else {
-                    // Set chase target; the animation loop will smoothly lerp toward it
+                    // Set chase target; the animation loop will smoothly lerp toward it. A
+                    // scroll zoom holds the view, so only the target moves.
                     targetScales = { ...niceBounds };
-                    startScaleChase();
+                    if (!scatterZoom) startScaleChase();
                 }
 
                 // Apply current displayed scales and render once
-                applyScalesToChart(displayedScales);
+                if (!scatterZoom) applyScalesToChart(displayedScales);
                 chart.update('none');
 
                 if (fadeRaf) cancelAnimationFrame(fadeRaf);
@@ -3211,6 +4404,7 @@
             let waveRaf = null;
             let wavePeaks = null;         // { min:[], max:[] } envelope, one pair per canvas column
             let waveLastKey = '';
+            let waveSectionKey = '';      // replay|lap|from|to of the buffer on screen, without the tuning
             let waveRate = 1;             // transport speed, applied to the voices and the video
             let audioReqSeq = 0;          // guards against out-of-order fetch responses
 
@@ -3364,6 +4558,24 @@
             };
             const tuneValues = { ...tuneDefaults };
 
+            // haptics field each chassis/transmission knob is stored under. The names
+            // differ: the widget keys are flat and tab-scoped, the config keys are not.
+            // The engine keys are absent on purpose — they come from the vehicle's
+            // profile, in applyEngineProfileMeta.
+            const TUNE_CONFIG_KEYS = {
+                jerkCurve: 'jerkCurve',
+                jerkPivot: 'jerkPivot',
+                jerkPivotGain: 'jerkPivotGain',
+                snapCurve: 'snapCurve',
+                snapMax: 'snapMax',
+                transmissionJerkCurve: 'dynamicTransmissionJerkCurve',
+                transmissionStepBlend: 'dynamicTransmissionStepBlend',
+            };
+
+            // Keys the running config supplied. The shipped defaults must not overwrite
+            // these, whichever of the two fetches lands second.
+            const tuneFromConfig = new Set();
+
             // The haptics.engineProfiles entry the loaded replay's vehicle resolves to.
             // Empty means the vehicle matched none: the Engine tab then has nothing to
             // render an override for and nothing to commit to.
@@ -3417,6 +4629,8 @@
 
             function setWaveStatus(text) {
                 document.getElementById('wave-status').textContent = text;
+                // The pulse spectrogram panel shows this status until its buffer lands.
+                if (activePlot === 'spectrogram') scheduleSpectrogramRedraw();
             }
 
             function setPlayIcon() {
@@ -3455,7 +4669,30 @@
             function followPlayhead() {
                 if (!waveBuffer || waveBuffer.duration <= 0 || !currentLapKey) return;
 
-                setHovered(playheadFrame(), 'playback');
+                const frame = playheadFrame();
+                // Emphasise the playback window before the follower marks the frame, so the
+                // hover lands on the rebuilt highlight dataset.
+                if (wavePlaying || playheadSelection) selectPlayheadWindow(frame);
+                setHovered(frame, 'playback');
+            }
+
+            // Emphasise the `highlightCount` plotted rows from the playhead forward. The window
+            // leads the playhead, so a playhead parked at the box's left edge shows the POI set.
+            // Only the highlight datasets are rebuilt; the surface clouds do not change.
+            function selectPlayheadWindow(frame) {
+                if (!chart || frame === playheadSelectionFrame) return;
+                playheadSelectionFrame = frame;
+
+                playheadSelection = gainPlotPoints
+                    .filter(d => d.frame >= frame)
+                    .sort((a, b) => a.frame - b.frame)
+                    .slice(0, highlightCount);
+
+                syncHighlight();
+                chart.update('none');
+                syncGainHighlight();
+                if (gainChart) gainChart.update('none');
+                // No drawMap here: followPlayhead calls setHovered next, and setHovered redraws the map.
             }
 
             function updateWaveTime() {
@@ -3536,10 +4773,33 @@
                     const decoded = await ensureAudioCtx().decodeAudioData(raw);
                     if (seq !== audioReqSeq) return; // a newer request has superseded this one
 
-                    stopPlayback();
+                    // A re-render of the same section (a tuning or filter change) keeps the
+                    // playhead, the follower and the lane window where they are. Only a new
+                    // section starts again from its first frame.
+                    const sectionKey = [replay, currentLapKey, startFrame, endFrame].join('|');
+                    const sameSection = waveBuffer != null && sectionKey === waveSectionKey;
+                    // Read the position before stopPlayback: it does not store the offset.
+                    const resumeSeconds = sameSection ? playheadSeconds() : 0;
+                    const resumePlaying = sameSection && wavePlaying;
+                    waveSectionKey = sectionKey;
+
+                    stopPlayback(resumePlaying);
                     waveBuffer = decoded;
-                    wavePlayOffset = 0;
+                    wavePlayOffset = Math.min(resumeSeconds, decoded.duration);
+
+                    // A new section invalidates the old window position. The section length
+                    // also changes, so the zoom factor the window class follows changes too.
+                    if (!sameSection) {
+                        setLaneOffset(0);
+                        updateLaneZoomClass();
+                    }
+
                     computeWavePeaks();
+                    updateSpectrumChart();
+                    // A new render invalidates the pulse spectrogram even when the section
+                    // did not change (retuning re-renders the same section's audio).
+                    invalidateSpectrogram(false);
+                    drawSpectrogram();
                     drawWave();
                     updateWaveTime();
 
@@ -3548,9 +4808,14 @@
                     // fails leaves its own trace empty rather than failing the render.
                     loadWaveLanes(params, seq);
 
-                    videoFollowSuppressed = true;
-                    followPlayhead();
-                    videoFollowSuppressed = false;
+                    if (resumePlaying) {
+                        // The lanes are still decoding. Each one joins the mix when it lands.
+                        startPlayback();
+                    } else {
+                        videoFollowSuppressed = true;
+                        followPlayhead();
+                        videoFollowSuppressed = false;
+                    }
 
                     // The URL's playhead frame lands once, as soon as there is a buffer to
                     // seek within. seekToFrame moves the follower, so the video lands too.
@@ -3570,12 +4835,6 @@
             // request's sequence number: a lane whose render is superseded is discarded,
             // exactly as the chassis buffer is.
             function loadWaveLanes(baseParams, seq) {
-                // A new section invalidates the old window position: frame 0 of the new
-                // section is where the playhead is about to start. The section length also
-                // changes, so the zoom factor the window class follows changes with it.
-                setLaneOffset(0);
-                updateLaneZoomClass();
-
                 for (const lane of waveLanes) {
                     const params = new URLSearchParams(baseParams);
                     params.set('layer', lane.layer);
@@ -4141,12 +5400,14 @@
             }
 
             // Stop: silence without moving the stored offset (used before reload/seek).
-            function stopPlayback() {
+            // Pass restarting when startPlayback follows at once. The video then keeps
+            // playing: a pause() followed by play() can leave the video stopped.
+            function stopPlayback(restarting = false) {
                 stopVoices();
                 wavePlaying = false;
                 setPlayIcon();
                 cancelAnimationFrame(waveRaf);
-                videoPause();
+                if (!restarting) videoPause();
             }
 
             // Change the transport speed. A live BufferSource carries on from where it is
@@ -4194,7 +5455,7 @@
                 const span = Math.max(1, endFrame - startFrame);
                 const frac = Math.max(0, Math.min(1, (frame - startFrame) / span));
                 const wasPlaying = wavePlaying;
-                stopPlayback();
+                stopPlayback(wasPlaying);
                 wavePlayOffset = frac * waveBuffer.duration;
                 if (wasPlaying) startPlayback(); else { followLaneWindow(); drawWave(); updateWaveTime(); followPlayhead(); }
                 // Keep the URL's playhead frame in step with the seek.
@@ -4314,13 +5575,18 @@
                 // The video's own play/pause drives the shared transport. Each guard also
                 // stops the echo: startPlayback sets wavePlaying before calling videoPlay,
                 // and pausePlayback clears it before calling videoPause.
+                //
+                // The events arrive late. A seek during playback pauses and plays the video
+                // in one step, so its pause event arrives after playback has started again.
+                // Ignore an event the element state no longer matches. Otherwise the two
+                // handlers restart and stop the transport in a loop.
                 el.addEventListener('play', () => {
-                    if (!videoInfo || wavePlaying) return;
+                    if (!videoInfo || wavePlaying || el.paused) return;
                     startPlayback();
                 });
 
                 el.addEventListener('pause', () => {
-                    if (!videoInfo || !wavePlaying) return;
+                    if (!videoInfo || !wavePlaying || !el.paused) return;
                     pausePlayback();
                 });
             }
@@ -4605,6 +5871,7 @@
 
                 // Re-render the waveform envelope on resize (canvas column count changes).
                 window.addEventListener('resize', () => { if (waveBuffer) rebuildWaveforms(); });
+                window.addEventListener('resize', () => { if (activePlot === 'spectrogram') drawSpectrogram(); });
 
                 applyTuneToControls();
 
@@ -4614,7 +5881,10 @@
                 fetch('/api/config').then(r => r.json()).then(cfg => {
                     const synth = (cfg && cfg.synthesizer) || {};
 
-                    applySurfaceConfig((cfg && cfg.haptics || {}).surfaceRumble);
+                    const hapticsCfg = (cfg && cfg.haptics) || {};
+
+                    applySurfaceConfig(hapticsCfg.surfaceRumble);
+                    applyTuneConfig(hapticsCfg);
 
                     for (const [layer, key] of Object.entries(LAYER_GAIN_KEYS)) {
                         const value = synth[key];
@@ -4627,13 +5897,25 @@
                     applyLayerGainsToControls();
                 }).catch(() => { });
 
-                // Load the shipped defaults so the sliders start where the live app does.
+                // Load the shipped defaults, for the pulse limits and for any knob the
+                // running config did not set. A key the config already supplied is left
+                // alone: the config is the more specific of the two.
                 fetch('/api/tuneassist/tuning-defaults').then(r => r.json()).then(d => {
-                    TUNE_KEYS.forEach(k => { if (Number.isFinite(d[k])) { tuneDefaults[k] = d[k]; tuneValues[k] = d[k]; } });
+                    TUNE_KEYS.forEach(k => {
+                        if (tuneFromConfig.has(k) || !Number.isFinite(d[k])) return;
+
+                        tuneDefaults[k] = d[k];
+                        tuneValues[k] = d[k];
+                    });
                     applySurfaceDefaults(d.surfaceRumble);
                     applyTuneToControls();
                     if (d.pulseLimits) pulseLimits = { ...pulseLimits, ...d.pulseLimits };
                     if (gainChart) { applyGainAxisBounds(); updateGainChart(); }
+                    // The spectrum x-axis ceiling, and both spectrogram panels' frequency
+                    // scale, are derived from pulseLimits too.
+                    if (spectrumChart) updateSpectrumChart();
+                    invalidateSpectrogram();
+                    drawSpectrogram();
                 }).catch(() => { });
             }
 
@@ -4800,6 +6082,24 @@
                 } finally {
                     button.disabled = false;
                 }
+            }
+
+            // Seed the chassis and transmission knobs from the running config. These are
+            // the values the device is set to, so they are both the starting position and
+            // what a tab's Reset returns to — the same rule the layer gains follow.
+            function applyTuneConfig(haptics) {
+                if (!haptics) return;
+
+                for (const [key, field] of Object.entries(TUNE_CONFIG_KEYS)) {
+                    const value = haptics[field];
+                    if (!Number.isFinite(value)) continue;
+
+                    tuneDefaults[key] = value;
+                    tuneValues[key] = value;
+                    tuneFromConfig.add(key);
+                }
+
+                applyTuneToControls();
             }
 
             // The surface values arrive from two endpoints, in either order, so neither

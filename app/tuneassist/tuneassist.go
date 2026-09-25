@@ -94,16 +94,17 @@ type derivTracker struct {
 	samples      int
 }
 
-// update advances the chain by one frame and returns the current raw jerk and snap.
-// windowSeconds is the frame period. The returned values read zero until enough
-// samples have accumulated (jerk needs 3, snap needs 4) so the second derivative is
-// real rather than an artefact of differencing against the zero-initialised history;
-// the internal chain always uses the true values.
-func (d *derivTracker) update(vel gtmodels.Vector, windowSeconds float64) (jerk, snap float64) {
+// update advances the chain by one frame and returns the current raw accel, jerk,
+// and snap. windowSeconds is the frame period. The returned values read zero until
+// enough samples have accumulated (accel needs 2, jerk needs 3, snap needs 4) so
+// each derivative is real rather than an artefact of differencing against the
+// zero-initialised history; the internal chain always uses the true values.
+func (d *derivTracker) update(vel gtmodels.Vector, windowSeconds float64) (accel, jerk, snap float64) {
 	accelFactor := float32(1.0 / windowSeconds)
-	accel := vector.Scale(vector.Delta(vel, d.lastVel), accelFactor, accelFactor, accelFactor)
-	accelMag := vector.Magnitude(accel)
+	accelVec := vector.Scale(vector.Delta(vel, d.lastVel), accelFactor, accelFactor, accelFactor)
+	accelMag := vector.Magnitude(accelVec)
 
+	accel = accelMag
 	jerk = (accelMag - d.lastAccelMag) / windowSeconds
 	snap = (jerk - d.lastJerk) / windowSeconds
 
@@ -111,6 +112,10 @@ func (d *derivTracker) update(vel gtmodels.Vector, windowSeconds float64) (jerk,
 	d.lastAccelMag = accelMag
 	d.lastJerk = jerk
 	d.samples++
+
+	if d.samples < 2 {
+		accel = 0
+	}
 
 	if d.samples < 3 {
 		jerk = 0
@@ -120,7 +125,7 @@ func (d *derivTracker) update(vel gtmodels.Vector, windowSeconds float64) (jerk,
 		snap = 0
 	}
 
-	return jerk, snap
+	return accel, jerk, snap
 }
 
 type mapCoord struct {
@@ -131,6 +136,10 @@ type mapCoord struct {
 	Throttle float32 `json:"throttle"` // throttle input, percent 0-100
 	Brake    float32 `json:"brake"`    // brake input, percent 0-100
 	Seq      uint32  `json:"seq"`      // telemetry sequence ID (drop-aware frame offset)
+	// Accel is the acceleration magnitude in m/s², the larger of translation and
+	// wheel-scaled rotation, ungated (no nyquist gate), so spectra see the real
+	// motion band.
+	Accel float32 `json:"accel"`
 	// VideoFrame is the sample's position in the whole recording, counted over every
 	// packet the scan delivered. For a video source it is the index of the matching
 	// sample in the embedded telemetry track, which is what places this point on the
@@ -355,12 +364,26 @@ func accumulateFrame(
 	// uses it to cross-reference scatter points against the map/speed tracks.
 	frameIdx := len(acc.mapCoords)
 
+	// Raw: the same larger-of-trans/rot rule over the ungated chains. Rotation is
+	// scaled to metres at the wheels first, as the processed path does. Advanced
+	// before the map-coords append so its accel magnitude can be recorded there.
+	rawTransAccel, rawTransJerk, rawTransSnap := rawTrans.update(frame.VelocityVector(), framePeriod)
+	scaledAngVel := vector.Scale(
+		frame.AngularVelocityVector(),
+		dims.LongitudinalRadius, dims.LongitudinalRadius, dims.TransverseRadius,
+	)
+	rawRotAccel, rawRotJerk, rawRotSnap := rawRot.update(scaledAngVel, framePeriod)
+
+	jerkRawMag := signal.Abs(signal.LargestMagnitude(rawTransJerk, rawRotJerk))
+	snapRawMag := signal.Abs(signal.LargestMagnitude(rawTransSnap, rawRotSnap))
+
 	acc.mapCoords = append(acc.mapCoords, mapCoord{
 		X: pos.X, Z: pos.Z, Surface: primarySurface,
 		Speed:    frame.GroundSpeedMetresPerSecond(),
 		Throttle: frame.ThrottleInputPercent(),
 		Brake:    frame.BrakeInputPercent(),
 		Seq:      frame.SequenceID(),
+		Accel:    float32(max(rawTransAccel, rawRotAccel)),
 
 		VideoFrame: packetIndex,
 	})
@@ -372,18 +395,6 @@ func accumulateFrame(
 		state.Current.ResolvedTransJerk, state.Current.ResolvedRotJerk))
 	snapMag := signal.Abs(signal.LargestMagnitude(
 		state.Current.ResolvedTransSnap, state.Current.ResolvedRotSnap))
-
-	// Raw: the same larger-of-trans/rot rule over the ungated chains. Rotation is
-	// scaled to metres at the wheels first, as the processed path does.
-	rawTransJerk, rawTransSnap := rawTrans.update(frame.VelocityVector(), framePeriod)
-	scaledAngVel := vector.Scale(
-		frame.AngularVelocityVector(),
-		dims.LongitudinalRadius, dims.LongitudinalRadius, dims.TransverseRadius,
-	)
-	rawRotJerk, rawRotSnap := rawRot.update(scaledAngVel, framePeriod)
-
-	jerkRawMag := signal.Abs(signal.LargestMagnitude(rawTransJerk, rawRotJerk))
-	snapRawMag := signal.Abs(signal.LargestMagnitude(rawTransSnap, rawRotSnap))
 
 	for _, label := range surfLabels {
 		acc.points = append(acc.points, dataPoint{
