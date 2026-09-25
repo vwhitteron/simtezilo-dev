@@ -143,18 +143,19 @@ func (c *Controller) Close() {
 		return
 	}
 
-	c.log.Info().Msg("Closing fan controller client")
-
 	err := c.client.Close()
 	if err != nil {
 		c.log.Error().
 			Err(err).
 			Str("component", "fan").
 			Str("result", "failure").
-			Msg("Close")
+			Msg("Disconnect fan controller")
+	} else {
+		c.log.Info().
+			Str("component", "fan").
+			Str("result", "success").
+			Msg("Disconnect fan controller")
 	}
-
-	c.log.Info().Msg("Fan controller close phase complete")
 }
 
 // runFanControlTask connects to the fan device and maintains the output duty cycle, reconnecting on errors.
@@ -188,7 +189,9 @@ func (c *Controller) runFanControlTask() {
 			c.log.Warn().
 				Err(err).
 				Str("component", "fan").
-				Msg("Connect failed, retrying")
+				Str("address", client.DeviceAddress()).
+				Str("result", "failure").
+				Msg("Fan connect")
 
 			if c.fanWait(fanReconnectDelay) {
 				return
@@ -199,7 +202,11 @@ func (c *Controller) runFanControlTask() {
 
 		c.client = client
 
-		c.log.Info().Str("component", "fan").Str("address", client.DeviceAddress()).Msg("Connected")
+		c.log.Info().
+			Str("component", "fan").
+			Str("address", client.DeviceAddress()).
+			Str("result", "success").
+			Msg("Fan connect")
 
 		reconnect := c.runFanControlDutyCycle()
 
@@ -211,7 +218,10 @@ func (c *Controller) runFanControlTask() {
 			return
 		}
 
-		c.log.Info().Str("component", "fan").Msg("Connection lost, reconnecting")
+		c.log.Warn().
+			Str("component", "fan").
+			Str("action", "reconnect").
+			Msg("Fan connection lost")
 
 		if c.fanWait(fanReconnectDelay) {
 			return

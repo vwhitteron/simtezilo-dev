@@ -226,7 +226,7 @@ func (d *Discord) handleReconnection() {
 		d.log.Error().
 			Err(err).
 			Str("result", "failure").
-			Msg("voice channel connect")
+			Msg("Voice channel connect")
 
 		// Use select to allow context cancellation during sleep
 		select {
@@ -242,7 +242,7 @@ func (d *Discord) handleReconnection() {
 
 	d.log.Info().
 		Str("result", "success").
-		Msg("voice channel connect")
+		Msg("Voice channel connect")
 
 	// connect anti-spam just in case
 	if d.messageGap < 1*time.Second {

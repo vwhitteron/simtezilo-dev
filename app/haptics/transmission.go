@@ -290,7 +290,7 @@ func (g *TransmissionGenerator) PlayGearShift(seq uint32) {
 
 	g.armMeasurement(surgeJerk, down)
 
-	g.log.Info().
+	g.log.Debug().
 		Int("sequence_id", int(seq)).
 		Float64("magnitude", magnitude).
 		Float64("gforce", g.kin.GetSurgeGforce()).

@@ -1468,7 +1468,9 @@ func (a *App) signalStartupSuccess() {
 		return
 	}
 
-	a.log.Info().Msg("Successfully signaled startup to platform, failed start counter reset")
+	a.log.Info().
+		Str("action", "signal successful startup").
+		Msg("Platform notify")
 }
 
 // tickerPeriod returns the exact tick period for a frame rate in Hz. Using
