@@ -487,8 +487,8 @@ func testHapticsJerkCurveGetSet(t *testing.T) {
 	// Arrange
 	cfg := newTestConfig()
 
-	// Act & Assert - default is 190
-	assert.InDelta(t, 190, cfg.GethapticsJerkCurve(), 0.001)
+	// Act & Assert - default is 255
+	assert.InDelta(t, 255, cfg.GethapticsJerkCurve(), 0.001)
 
 	// Act - set new value
 	cfg.SetHapticsJerkCurve(300)
@@ -544,8 +544,8 @@ func testHapticsJerkPivotGetSet(t *testing.T) {
 	// Arrange
 	cfg := newTestConfig()
 
-	// Act & Assert - default is 601 m/s^3
-	assert.InDelta(t, 601, cfg.GetHapticsJerkPivot(), 0.001)
+	// Act & Assert - default is 624 m/s^3
+	assert.InDelta(t, 624, cfg.GetHapticsJerkPivot(), 0.001)
 
 	// Act - set new value
 	cfg.SetHapticsJerkPivot(1200)
@@ -759,8 +759,8 @@ func testHapticsSnapCurveGetSet(t *testing.T) {
 	// Arrange
 	cfg := newTestConfig()
 
-	// Act & Assert - default is 310
-	assert.InDelta(t, 310, cfg.GetHapticsSnapCurve(), 0.001)
+	// Act & Assert - default is 410
+	assert.InDelta(t, 410, cfg.GetHapticsSnapCurve(), 0.001)
 
 	// Act - set new value
 	cfg.SetHapticsSnapCurve(400)
@@ -1006,7 +1006,7 @@ func testHapticsTextureDefaults(t *testing.T) {
 	// Act & Assert - road-texture layer defaults. The on/off control is the synth
 	// texture mute (default unmuted); these shape the signal.
 	assert.False(t, cfg.GetSynthTextureMute())
-	assert.InDelta(t, -3.00, cfg.GetSynthTextureGain(), 0.001)
+	assert.InDelta(t, -6.00, cfg.GetSynthTextureGain(), 0.001)
 }
 
 func testHapticsPulseMaxHzIncreaseDecrease(t *testing.T) {
@@ -2597,8 +2597,8 @@ func testSynthEngineGain(t *testing.T) {
 	// Arrange
 	cfg := newTestConfig()
 
-	// Act & Assert - default is -4.25
-	assert.InDelta(t, -4.25, cfg.GetSynthEngineGain(), 0.001)
+	// Act & Assert - default is -3.50
+	assert.InDelta(t, -3.50, cfg.GetSynthEngineGain(), 0.001)
 
 	// Act - set new value
 	cfg.SetSynthEngineGain(-10.0)
