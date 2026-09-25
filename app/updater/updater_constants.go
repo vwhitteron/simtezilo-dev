@@ -20,6 +20,12 @@ const (
 
 	// initialCheckDelay is the delay before the first update check after startup.
 	initialCheckDelay = 10 * time.Second
+
+	// clockSyncTimeout is the longest the updater waits for the system clock to synchronise.
+	clockSyncTimeout = 5 * time.Minute
+
+	// clockSyncPollInterval is the delay between system clock synchronisation checks.
+	clockSyncPollInterval = 5 * time.Second
 )
 
 const (
