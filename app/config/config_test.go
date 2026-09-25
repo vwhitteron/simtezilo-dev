@@ -1158,6 +1158,43 @@ func testHapticsEngineProfileNotFound(t *testing.T) {
 	assert.Nil(t, profile)
 }
 
+func testHapticsActiveEngineProfileEmpty(t *testing.T) {
+	t.Parallel()
+
+	// Arrange
+	cfg := newTestConfig()
+
+	// Act & Assert - no vehicle resolved a profile yet
+	assert.Empty(t, cfg.GetHapticsActiveEngineProfile())
+}
+
+func testHapticsActiveEngineProfileTracksResolved(t *testing.T) {
+	t.Parallel()
+
+	// Arrange
+	cfg := newTestConfig()
+
+	// Act - resolve a profile the way the engine generator does
+	cfg.GetHapticsEngineProfile("I4")
+
+	// Assert - the name is recorded in lower case for the web UI
+	assert.Equal(t, "i4", cfg.GetHapticsActiveEngineProfile())
+}
+
+func testHapticsActiveEngineProfileClearedOnMiss(t *testing.T) {
+	t.Parallel()
+
+	// Arrange
+	cfg := newTestConfig()
+	cfg.GetHapticsEngineProfile("i4")
+
+	// Act - a vehicle with no matching profile
+	cfg.GetHapticsEngineProfile("nonexistent")
+
+	// Assert
+	assert.Empty(t, cfg.GetHapticsActiveEngineProfile())
+}
+
 func testHapticsEnginePrimaryBalanceNoProfile(t *testing.T) {
 	t.Parallel()
 
@@ -1319,6 +1356,9 @@ func TestHapticsPulseAndEngineProfile(t *testing.T) {
 	t.Run("testHapticsTextureDefaults", testHapticsTextureDefaults)
 	t.Run("testHapticsEngineProfile", testHapticsEngineProfile)
 	t.Run("testHapticsEngineProfileNotFound", testHapticsEngineProfileNotFound)
+	t.Run("testHapticsActiveEngineProfileEmpty", testHapticsActiveEngineProfileEmpty)
+	t.Run("testHapticsActiveEngineProfileTracksResolved", testHapticsActiveEngineProfileTracksResolved)
+	t.Run("testHapticsActiveEngineProfileClearedOnMiss", testHapticsActiveEngineProfileClearedOnMiss)
 	t.Run("testHapticsEnginePrimaryBalanceNoProfile", testHapticsEnginePrimaryBalanceNoProfile)
 	t.Run("testHapticsEnginePrimaryBalanceWithProfile", testHapticsEnginePrimaryBalanceWithProfile)
 	t.Run("testHapticsEnginePrimaryBalanceIncreaseDecrease", testHapticsEnginePrimaryBalanceIncreaseDecrease)

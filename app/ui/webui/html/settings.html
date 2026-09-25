@@ -829,6 +829,9 @@
                 });
                 observer.observe(input, { attributes: true });
                 input.addEventListener('change', syncFromOriginal);
+                // A script that sets input.value fires no change event and updates
+                // no attribute. Such a script sends this event to refresh the clone.
+                input.addEventListener('touchspinner:sync', syncFromOriginal);
                 syncFromOriginal();
             }
 

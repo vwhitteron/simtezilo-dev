@@ -232,6 +232,7 @@ func (h *configHandler) handleGetConfig(response http.ResponseWriter, _ *http.Re
 			"engineGain":                h.config.GetSynthEngineGain(),
 			"gainIncrement":             h.config.GetSynthGainIncrement(),
 			"engineProfiles":            h.config.GetSynthEngineProfiles(),
+			"activeEngineProfile":       h.config.GetHapticsActiveEngineProfile(),
 			"enableEQ":                  h.config.GetSynthChannelsEqEnabled(),
 			"enableDrx":                 h.config.GetSynthDRXEnabled(),
 			"eq":                        h.config.GetSynthChannelsEq(),

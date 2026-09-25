@@ -1621,6 +1621,16 @@ func (c *Config) GetHapticsEngineProfile(name string) *profiles.EngineProfile {
 	return c.viper.Haptics._engineProfile
 }
 
+// GetHapticsActiveEngineProfile returns the name of the engine profile the
+// current vehicle resolved to. The result is empty when no vehicle resolved a
+// profile yet.
+func (c *Config) GetHapticsActiveEngineProfile() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.viper.Haptics._engineProfileName
+}
+
 // GetHapticesEnginePrimaryBalance returns the current engine primary balance.
 // If no profile is selected, it returns 1.0 (perfect balance).
 func (c *Config) GetHapticesEnginePrimaryBalance() float64 {

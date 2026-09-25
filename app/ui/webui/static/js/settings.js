@@ -78,6 +78,18 @@ class ConfigManager {
         return num.toFixed(2);
     }
 
+    // Set an input's value and refresh the touch spinner clone of the input.
+    // A direct value assignment fires no event, so the clone stays blank without
+    // this notification.
+    setInputValue(input, value) {
+        if (!input) {
+            return;
+        }
+
+        input.value = value;
+        input.dispatchEvent(new Event('touchspinner:sync'));
+    }
+
     async init() {
         await this.loadLanguages();
         await this.loadConfiguration(); // This calls populateForm() internally
@@ -874,12 +886,12 @@ class ConfigManager {
                     input.checked = configToCheckbox(input, value);
                 } else if (input.classList.contains('gain-input')) {
                     // Format gain inputs with 2 decimal places and minus prefix
-                    input.value = this.formatGainValue(value);
+                    this.setInputValue(input, this.formatGainValue(value));
                 } else if (input.classList.contains('decimal-input')) {
                     // Format decimal inputs with 2 decimal places
-                    input.value = this.formatDecimalValue(value);
+                    this.setInputValue(input, this.formatDecimalValue(value));
                 } else {
-                    input.value = value;
+                    this.setInputValue(input, value);
                     // Range sliders drive a separate value label via their oninput
                     // handler, which populateForm's direct assignment doesn't trigger;
                     // fire it so the label reflects the loaded value.
@@ -1758,11 +1770,13 @@ class ConfigManager {
             profileSelect.appendChild(option);
         });
 
-        // Auto-select first profile if available
+        // Select the profile the current vehicle resolved to. Fall back to the
+        // first profile when no vehicle resolved one yet.
+        const activeProfile = this.config.synthesizer.activeEngineProfile;
         if (sortedKeys.length > 0) {
-            const firstProfile = sortedKeys[0];
-            profileSelect.value = firstProfile;
-            this.loadEngineProfile(firstProfile, profiles[firstProfile]);
+            const selected = (activeProfile && profiles[activeProfile]) ? activeProfile : sortedKeys[0];
+            profileSelect.value = selected;
+            this.loadEngineProfile(selected, profiles[selected]);
             profileSettings.style.display = 'block';
             // Initialize touch spinners for engine profile fields
             if (typeof window.initTouchSpinners === 'function') {
@@ -1793,10 +1807,10 @@ class ConfigManager {
 
     // Load engine profile data into form
     loadEngineProfile(profileName, profile) {
-        document.getElementById('engine-primarybalance').value = this.formatDecimalValue(profile.primaryBalance);
-        document.getElementById('engine-secondarybalance').value = this.formatDecimalValue(profile.secondaryBalance);
-        document.getElementById('engine-gain').value = profile.gain;
-        document.getElementById('engine-pulsescale').value = this.formatDecimalValue(profile.pulseScale);
+        this.setInputValue(document.getElementById('engine-primarybalance'), this.formatDecimalValue(profile.primaryBalance));
+        this.setInputValue(document.getElementById('engine-secondarybalance'), this.formatDecimalValue(profile.secondaryBalance));
+        this.setInputValue(document.getElementById('engine-gain'), this.formatGainValue(profile.gain));
+        this.setInputValue(document.getElementById('engine-pulsescale'), this.formatDecimalValue(profile.pulseScale));
     }
 
     // Debounce save for engine profile
