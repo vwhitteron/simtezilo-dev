@@ -50,7 +50,8 @@ type Tuning struct {
 	JerkPivot     int     // GetHapticsJerkPivot — reference jerk, in m/s^3
 	JerkPivotGain float64 // GetHapticsJerkPivotGain — level of the reference jerk, in dB below full scale
 	SnapCurve     int     // GetHapticsSnapCurve — frequency response curvature
-	SnapMax       int     // GetHapticsSnapMax — frequency scale ceiling
+	SnapPivot     int     // GetHapticsSnapPivot — reference snap, in m/s^4
+	SnapPivotFreq float64 // GetHapticsSnapPivotFreq — pulse frequency of the reference snap, as a percent between min and max
 
 	// TransmissionJerkCurve is the driveline response curve, in thousandths. Zero
 	// keeps the shipped default, as the chassis curves do.
@@ -86,7 +87,8 @@ func DefaultTuning() Tuning {
 		JerkPivot:     cfg.GetHapticsJerkPivot(),
 		JerkPivotGain: cfg.GetHapticsJerkPivotGain(),
 		SnapCurve:     int(cfg.GetHapticsSnapCurve()),
-		SnapMax:       cfg.GetHapticsSnapMax(),
+		SnapPivot:     cfg.GetHapticsSnapPivot(),
+		SnapPivotFreq: cfg.GetHapticsSnapPivotFreq(),
 
 		TransmissionJerkCurve: int(cfg.GetHapticsTransmissionJerkCurve()),
 		TransmissionStepBlend: &stepBlend,
@@ -576,8 +578,12 @@ func applyTuning(cfg *config.Config, tuning Tuning) {
 		cfg.SetHapticsSnapCurve(tuning.SnapCurve)
 	}
 
-	if tuning.SnapMax > 0 {
-		cfg.SetHapticsSnapMax(tuning.SnapMax)
+	if tuning.SnapPivot > 0 {
+		cfg.SetHapticsSnapPivot(tuning.SnapPivot)
+	}
+
+	if tuning.SnapPivotFreq > 0 {
+		cfg.SetHapticsSnapPivotFreq(tuning.SnapPivotFreq)
 	}
 
 	applyLayerTuning(cfg, tuning)

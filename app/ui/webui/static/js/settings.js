@@ -2603,6 +2603,8 @@ document.addEventListener('DOMContentLoaded', () => {
         'hardware-displayorientation': 'Display rotation for screens that are mounted in different orientations',
         'haptics-jerkcurve': 'Controls the responsiveness curve for jerk feedback (higher = more responsive)',
         'haptics-snapcurve': 'Controls the responsiveness curve for snap feedback (higher = more responsive)',
+        'haptics-snappivot': 'Reference snap value in m/s^4 that the frequency response is calibrated against',
+        'haptics-snappivotfreq': 'Pulse frequency at the pivot snap, as a percentage between the minimum and maximum pulse frequency',
         'synth-mastergain': 'Overall volume level for all haptic feedback in decibels',
         'telemetry-source': 'UDP endpoint where telemetry data is received from the racing game'
     };

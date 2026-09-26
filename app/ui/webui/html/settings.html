@@ -2307,20 +2307,37 @@
                                                             </div>
                                                         </div>
                                                         <div class="col-md-6 col-lg-3">
-                                                            <label for="haptics-snapmax" class="form-label">
+                                                            <label for="haptics-snappivot" class="form-label">
                                                                 <span
-                                                                    data-i18n="runmode.settings.haptics.chassis.snapmax">Snap
-                                                                    Max</span>
+                                                                    data-i18n="runmode.settings.haptics.chassis.snappivot">Snap
+                                                                    Pivot</span>
                                                                 <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
                                                                     role="button" tabindex="0" aria-expanded="false"
-                                                                    data-i18n-tooltip="runmode.settings.haptics.chassis.snapmax.tooltip"></i>
+                                                                    data-i18n-tooltip="runmode.settings.haptics.chassis.snappivot.tooltip"></i>
                                                             </label>
                                                             <div class="input-with-suffix">
-                                                                <input type="number" id="haptics-snapmax"
+                                                                <input type="number" id="haptics-snappivot"
                                                                     class="form-control text-center no-spinner"
-                                                                    data-config="haptics.snapMax" min="1" max="200"
-                                                                    step="1">
-                                                                <span class="input-suffix">x1000</span>
+                                                                    data-config="haptics.snapPivot" min="1"
+                                                                    max="500000" step="100">
+                                                                <span class="input-suffix">m/s⁴</span>
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-md-6 col-lg-3">
+                                                            <label for="haptics-snappivotfreq" class="form-label">
+                                                                <span
+                                                                    data-i18n="runmode.settings.haptics.chassis.snappivotfreq">Snap
+                                                                    Pivot Freq</span>
+                                                                <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
+                                                                    role="button" tabindex="0" aria-expanded="false"
+                                                                    data-i18n-tooltip="runmode.settings.haptics.chassis.snappivotfreq.tooltip"></i>
+                                                            </label>
+                                                            <div class="input-with-suffix">
+                                                                <input type="number" id="haptics-snappivotfreq"
+                                                                    class="form-control text-center no-spinner"
+                                                                    data-config="haptics.snapPivotFreq" min="1"
+                                                                    max="100" step="1">
+                                                                <span class="input-suffix">%</span>
                                                             </div>
                                                         </div>
                                                     </div>

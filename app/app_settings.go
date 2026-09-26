@@ -63,7 +63,8 @@ func (a *App) settingAction(setting languagedb.Key, action string) string {
 		languagedb.UIMenuHapticsJerkPivot:               a.handleJerkPivotSetting,
 		languagedb.UIMenuHapticsJerkPivotGain:           a.handleJerkPivotGainSetting,
 		languagedb.UIMenuHapticsSnapCurve:               a.handleSnapCurveSetting,
-		languagedb.UIMenuHapticsSnapMax:                 a.handleSnapMaxSetting,
+		languagedb.UIMenuHapticsSnapPivot:               a.handleSnapPivotSetting,
+		languagedb.UIMenuHapticsSnapPivotFreq:           a.handleSnapPivotFreqSetting,
 		languagedb.UIMenuHapticsPulseMaxAmplitude:       a.handlePulseMaxAmplitudeSetting,
 		languagedb.UIMenuHapticsPulseMinFreq:            a.handlePulseMinFreqSetting,
 		languagedb.UIMenuHapticsPulseMaxFreq:            a.handlePulseMaxFreqSetting,
@@ -1122,19 +1123,34 @@ func (a *App) handleSnapCurveSetting(action string) string {
 	return strconv.Itoa(value)
 }
 
-func (a *App) handleSnapMaxSetting(action string) string {
+func (a *App) handleSnapPivotSetting(action string) string {
 	var value int
 
 	switch action {
 	case "increase":
-		value = a.config.IncreaseHapticsSnapMax()
+		value = a.config.IncreaseHapticsSnapPivot()
 	case "decrease":
-		value = a.config.DecreaseHapticsSnapMax()
+		value = a.config.DecreaseHapticsSnapPivot()
 	default:
-		value = a.config.GetHapticsSnapMax()
+		value = a.config.GetHapticsSnapPivot()
 	}
 
 	return strconv.Itoa(value)
+}
+
+func (a *App) handleSnapPivotFreqSetting(action string) string {
+	var value float64
+
+	switch action {
+	case "increase":
+		value = a.config.IncreaseHapticsSnapPivotFreq()
+	case "decrease":
+		value = a.config.DecreaseHapticsSnapPivotFreq()
+	default:
+		value = a.config.GetHapticsSnapPivotFreq()
+	}
+
+	return strconv.FormatFloat(value, 'f', 0, 64)
 }
 
 func (a *App) handlePulseMaxAmplitudeSetting(action string) string {

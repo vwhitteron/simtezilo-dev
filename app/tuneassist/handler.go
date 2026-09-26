@@ -73,7 +73,8 @@ func buildTuningDefaults(log zerolog.Logger) []byte {
 		"jerkPivot":     defaults.JerkPivot,
 		"jerkPivotGain": defaults.JerkPivotGain,
 		"snapCurve":     defaults.SnapCurve,
-		"snapMax":       defaults.SnapMax,
+		"snapPivot":     defaults.SnapPivot,
+		"snapPivotFreq": defaults.SnapPivotFreq,
 
 		"transmissionJerkCurve": defaults.TransmissionJerkCurve,
 		"transmissionStepBlend": stepBlend,
@@ -170,9 +171,9 @@ func (s *Service) HandleData(response http.ResponseWriter, request *http.Request
 // per request and only the requested section is held, so nothing accumulates across
 // replay, lap, or tuning changes; the web UI caches the decoded buffer client-side.
 // Query: replay, lap, from, to (per-lap frame indices; to<0 => whole lap), and the
-// five tuning knobs jerkCurve/jerkPivot/jerkPivotGain/snapCurve/snapMax (0 =>
-// shipped default, except jerkPivotGain which uses 1 as its not-supplied sentinel
-// since 0 is a legal gain value).
+// six tuning knobs jerkCurve/jerkPivot/jerkPivotGain/snapCurve/snapPivot/
+// snapPivotFreq (0 => shipped default, except jerkPivotGain which uses 1 as its
+// not-supplied sentinel since 0 is a legal gain value).
 //
 // It also takes the transmission pair transmissionJerkCurve/transmissionStepBlend
 // (the blend is optional rather than sentinelled, since its whole range is legal),
@@ -206,7 +207,8 @@ func (s *Service) HandleAudio(response http.ResponseWriter, request *http.Reques
 		// applyTuning's bounds check.
 		JerkPivotGain: parseFloatParam(request, "jerkPivotGain", 1),
 		SnapCurve:     parseIntParam(request, "snapCurve", 0),
-		SnapMax:       parseIntParam(request, "snapMax", 0),
+		SnapPivot:     parseIntParam(request, "snapPivot", 0),
+		SnapPivotFreq: parseFloatParam(request, "snapPivotFreq", 0),
 
 		TransmissionJerkCurve: parseIntParam(request, "transmissionJerkCurve", 0),
 		TransmissionStepBlend: optionalFloatParam(request, "transmissionStepBlend", 0, 1),

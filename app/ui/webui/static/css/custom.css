@@ -225,3 +225,32 @@
     z-index: 1030;
     background: var(--bs-body-bg);
 }
+
+/*
+ * Help icon in a plot panel's tab strip. A click on the icon opens the panel
+ * below, which lists the plot's pointer gestures. Muted, so it reads as an
+ * aside beside the tabs rather than as another tab; it brightens on hover to
+ * invite the pointer. tuneassist.html places and sizes it; this rule only
+ * carries the colour.
+ */
+.plot-hint {
+    color: var(--bs-secondary-color, var(--bs-gray-600));
+}
+
+.plot-hint:hover,
+.plot-hint:focus-visible {
+    color: var(--bs-body-color);
+}
+
+/*
+ * Guidance panel the .plot-hint icon opens. A raised card over the plot: body
+ * background so the plot does not read through it, a hairline border and a soft
+ * shadow to lift it off the canvas. tuneassist.html places and sizes it.
+ */
+.plot-hint-popup {
+    border: 1px solid var(--bs-border-color, rgba(255, 255, 255, 0.15));
+    border-radius: var(--bs-border-radius, 6px);
+    background: var(--bs-body-bg);
+    color: var(--bs-body-color);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+}

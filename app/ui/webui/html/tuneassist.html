@@ -703,6 +703,53 @@
             display: none;
         }
 
+        /* The size above is in em, so a toggle lands on whatever its container types.
+           Every speaker toggle sits in a panel <h3> at 0.72em; the eye sits in the tab
+           strip, which sets no size of its own, so the same rule rendered it about 1.4x
+           larger. Restate the heading's scale so the eye matches the speakers. It goes on
+           the toggle rather than on .chart-tabs because .chart-tab already applies 0.72em
+           itself, and a scale on the strip would compound with it. */
+        .plot-panel .chart-tabs .wave-monitor {
+            font-size: calc(0.72 * 1.4em);
+        }
+
+        /* The help icon mirrors the eye toggle across the strip: same vertical centring,
+           the same 20px inset and the same size, so the two read as one row. Out of flow,
+           so it never pushes the centred tabs off centre. .plot-panel subgrids onto two
+           rows only, so the icon has to live inside the strip rather than under the plot:
+           a third child of the panel lands in an implicit row and overlaps the panel
+           below. The guidance itself is the title. Colour lives in custom.css. */
+        .plot-panel .chart-tabs .plot-hint {
+            position: absolute;
+            left: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: calc(0.72 * 1.4em);
+            margin-right: 0;
+            cursor: help;
+        }
+
+        /* .icon sets display: inline-flex, which outranks the hidden attribute's UA
+           display: none. Same reason .wave-monitor[hidden] needs its own rule. */
+        .plot-panel .chart-tabs .plot-hint[hidden] {
+            display: none;
+        }
+
+        /* The guidance panel hangs from the icon that opens it, at the strip's left edge and
+           just below the strip, so it covers the plot rather than the tabs. One gesture per
+           line, so the lines never wrap. Appearance lives in custom.css. */
+        .plot-panel .chart-tabs .plot-hint-popup {
+            position: absolute;
+            left: 20px;
+            top: calc(100% - 2px);
+            z-index: 5;
+            padding: 6px 10px;
+            font-size: 0.72em;
+            line-height: 1.6;
+            text-align: left;
+            white-space: nowrap;
+        }
+
         .wave-monitor .icon {
             margin-right: 0;
         }
@@ -967,10 +1014,27 @@
                 <div class="panel-row">
                     <div class="plot-panel">
                         <div class="chart-tabs" role="tablist">
+                            <!-- The guidance opens on a click, not on hover, so it carries no
+                                 title: a native tooltip would show the same text on hover and
+                                 fight the panel. The popover below holds it instead. -->
+                            <span class="icon plot-hint" id="plot-hint" data-icon="circle-question" hidden
+                                role="button" tabindex="0" aria-expanded="false"
+                                aria-controls="plot-hint-popup"
+                                aria-label="Pointer gestures for this plot"></span>
+                            <div class="plot-hint-popup" id="plot-hint-popup" role="tooltip" hidden>
+                                <div>Shift-drag a pivot line: retune it</div>
+                                <div>Shift-drag the crossover: retune both</div>
+                                <div>Shift-scroll a pivot line: its curve up / down</div>
+                                <div>Shift-scroll the crossover: both curves</div>
+                                <div>Alt-drag anywhere: jerk / snap pivot values</div>
+                                <div>Alt-drag on a pivot line: that value alone</div>
+                                <div>Shift-drag off the lines: pan the view</div>
+                            </div>
                             <button type="button" class="chart-tab active" role="tab" data-plot="jerksnap">Jerk /
                                 Snap</button>
-                            <button type="button" class="chart-tab" role="tab" data-plot="gainfreq">Gain /
-                                Frequency</button>
+                            <button type="button" class="chart-tab" role="tab" data-plot="gainfreq"
+                                title="Pulse gain against pulse frequency. Shift-drag a pivot line to retune it, Shift-scroll it to adjust that curve, and Alt-drag anywhere to move the jerk and snap pivot values, or on one line to move that value alone">Gain
+                                / Frequency</button>
                             <button type="button" class="chart-tab" role="tab"
                                 data-plot="spectrogram">Spectrogram</button>
                             <button type="button" class="chart-tab" role="tab" data-plot="spectrum">Spectrum</button>
@@ -1111,22 +1175,30 @@
                         <button type="button" class="chart-tab" role="tab" data-tune-tab="texture">Road</button>
                     </div>
 
+                    <!-- Every knob is a slider and a number box over one value. Tab visits the
+                         number box only: the slider carries tabindex="-1", so a walk down the
+                         panel stops once per knob rather than twice. The box takes the arrow
+                         keys natively, so nothing is lost. Each row's <label> names the box for
+                         that reason, and the slider carries the same text as an aria-label. -->
                     <div class="tune-pane" data-tune-pane="chassis">
                         <div class="tune-row tune-gain-row">
-                            <label for="gain-chassis">Gain</label>
-                            <input type="range" id="gain-chassis" min="-60" max="0" step="0.5">
+                            <label for="gainout-chassis">Gain</label>
+                            <input type="range" id="gain-chassis" min="-60" max="0" step="0.5" tabindex="-1"
+                                aria-label="Gain">
                             <input type="number" class="tune-value" id="gainout-chassis" min="-60" max="0" step="0.5"
                                 inputmode="decimal">
                         </div>
                         <div class="tune-row">
-                            <label for="tune-jerkCurve">Jerk curve</label>
-                            <input type="range" id="tune-jerkCurve" min="5" max="995" step="5">
+                            <label for="out-jerkCurve">Jerk curve</label>
+                            <input type="range" id="tune-jerkCurve" min="5" max="995" step="5" tabindex="-1"
+                                aria-label="Jerk curve">
                             <input type="number" class="tune-value" id="out-jerkCurve" min="5" max="995" step="5"
                                 inputmode="numeric">
                         </div>
                         <div class="tune-row">
-                            <label for="tune-jerkPivot">Jerk pivot</label>
-                            <input type="range" id="tune-jerkPivot" min="0" max="1000" step="1">
+                            <label for="out-jerkPivot">Jerk pivot</label>
+                            <input type="range" id="tune-jerkPivot" min="0" max="1000" step="1" tabindex="-1"
+                                aria-label="Jerk pivot">
                             <!-- min must stay > 0: it is the `lo` of the geometric slider mapping, and a
                              zero lower bound makes tuneValueAtPos/tunePosForValue NaN. It also has to
                              be a multiple of step, because the spinner ladder is anchored at min —
@@ -1135,21 +1207,35 @@
                                 inputmode="numeric">
                         </div>
                         <div class="tune-row">
-                            <label for="tune-jerkPivotGain">Jerk pivot gain</label>
-                            <input type="range" id="tune-jerkPivotGain" min="-12" max="0" step="0.1">
+                            <label for="out-jerkPivotGain">Jerk pivot gain</label>
+                            <input type="range" id="tune-jerkPivotGain" min="-12" max="0" step="0.1" tabindex="-1"
+                                aria-label="Jerk pivot gain">
                             <input type="number" class="tune-value" id="out-jerkPivotGain" min="-12" max="0" step="0.1"
                                 inputmode="decimal">
                         </div>
                         <div class="tune-row">
-                            <label for="tune-snapCurve">Snap curve</label>
-                            <input type="range" id="tune-snapCurve" min="5" max="995" step="5">
+                            <label for="out-snapCurve">Snap curve</label>
+                            <input type="range" id="tune-snapCurve" min="5" max="995" step="5" tabindex="-1"
+                                aria-label="Snap curve">
                             <input type="number" class="tune-value" id="out-snapCurve" min="5" max="995" step="5"
                                 inputmode="numeric">
                         </div>
                         <div class="tune-row">
-                            <label for="tune-snapMax">Snap max</label>
-                            <input type="range" id="tune-snapMax" min="1" max="200" step="1">
-                            <input type="number" class="tune-value" id="out-snapMax" min="1" max="200" step="1"
+                            <label for="out-snapPivot">Snap pivot</label>
+                            <input type="range" id="tune-snapPivot" min="0" max="1000" step="1" tabindex="-1"
+                                aria-label="Snap pivot">
+                            <!-- min must stay > 0: it is the `lo` of the geometric slider mapping, and a
+                             zero lower bound makes tuneValueAtPos/tunePosForValue NaN. It also has to
+                             be a multiple of step, because the spinner ladder is anchored at min —
+                             min="1" step="10" would spin 631, 641 rather than 640, 650. -->
+                            <input type="number" class="tune-value" id="out-snapPivot" min="100" max="500000"
+                                step="100" inputmode="numeric">
+                        </div>
+                        <div class="tune-row">
+                            <label for="out-snapPivotFreq">Snap pivot freq</label>
+                            <input type="range" id="tune-snapPivotFreq" min="1" max="100" step="1" tabindex="-1"
+                                aria-label="Snap pivot freq">
+                            <input type="number" class="tune-value" id="out-snapPivotFreq" min="1" max="100" step="1"
                                 inputmode="numeric">
                         </div>
                         <div class="tune-actions">
@@ -1161,8 +1247,9 @@
 
                     <div class="tune-pane" data-tune-pane="engine" hidden>
                         <div class="tune-row tune-gain-row">
-                            <label for="gain-engine">Gain</label>
-                            <input type="range" id="gain-engine" min="-60" max="0" step="0.5">
+                            <label for="gainout-engine">Gain</label>
+                            <input type="range" id="gain-engine" min="-60" max="0" step="0.5" tabindex="-1"
+                                aria-label="Gain">
                             <input type="number" class="tune-value" id="gainout-engine" min="-60" max="0" step="0.5"
                                 inputmode="decimal">
                         </div>
@@ -1170,26 +1257,30 @@
                              resolved to, which is the entry a commit writes back to. -->
                         <div class="tune-profile" id="tune-engine-profile">Profile: —</div>
                         <div class="tune-row">
-                            <label for="tune-primaryBalance">Primary bal</label>
-                            <input type="range" id="tune-primaryBalance" min="0" max="1" step="0.01">
+                            <label for="out-primaryBalance">Primary bal</label>
+                            <input type="range" id="tune-primaryBalance" min="0" max="1" step="0.01" tabindex="-1"
+                                aria-label="Primary bal">
                             <input type="number" class="tune-value" id="out-primaryBalance" min="0" max="1" step="0.01"
                                 inputmode="decimal">
                         </div>
                         <div class="tune-row">
-                            <label for="tune-secondaryBalance">Secondary bal</label>
-                            <input type="range" id="tune-secondaryBalance" min="0" max="1" step="0.01">
+                            <label for="out-secondaryBalance">Secondary bal</label>
+                            <input type="range" id="tune-secondaryBalance" min="0" max="1" step="0.01" tabindex="-1"
+                                aria-label="Secondary bal">
                             <input type="number" class="tune-value" id="out-secondaryBalance" min="0" max="1"
                                 step="0.01" inputmode="decimal">
                         </div>
                         <div class="tune-row">
-                            <label for="tune-engineGain">Gain</label>
-                            <input type="range" id="tune-engineGain" min="-24" max="0" step="0.25">
+                            <label for="out-engineGain">Gain</label>
+                            <input type="range" id="tune-engineGain" min="-24" max="0" step="0.25" tabindex="-1"
+                                aria-label="Gain">
                             <input type="number" class="tune-value" id="out-engineGain" min="-24" max="0" step="0.25"
                                 inputmode="decimal">
                         </div>
                         <div class="tune-row">
-                            <label for="tune-pulseScale">Pulse scale</label>
-                            <input type="range" id="tune-pulseScale" min="0" max="1" step="0.01">
+                            <label for="out-pulseScale">Pulse scale</label>
+                            <input type="range" id="tune-pulseScale" min="0" max="1" step="0.01" tabindex="-1"
+                                aria-label="Pulse scale">
                             <input type="number" class="tune-value" id="out-pulseScale" min="0" max="1" step="0.01"
                                 inputmode="decimal">
                         </div>
@@ -1202,8 +1293,9 @@
 
                     <div class="tune-pane" data-tune-pane="transmission" hidden>
                         <div class="tune-row tune-gain-row">
-                            <label for="gain-transmission">Gain</label>
-                            <input type="range" id="gain-transmission" min="-60" max="0" step="0.5">
+                            <label for="gainout-transmission">Gain</label>
+                            <input type="range" id="gain-transmission" min="-60" max="0" step="0.5" tabindex="-1"
+                                aria-label="Gain">
                             <input type="number" class="tune-value" id="gainout-transmission" min="-60" max="0"
                                 step="0.5" inputmode="decimal">
                         </div>
@@ -1212,14 +1304,16 @@
                              switch stays on the settings page: apart from the layer gain
                              above, this widget shapes the signal, as the Chassis tab does. -->
                         <div class="tune-row">
-                            <label for="tune-transmissionJerkCurve">Shift curve</label>
-                            <input type="range" id="tune-transmissionJerkCurve" min="5" max="995" step="5">
+                            <label for="out-transmissionJerkCurve">Shift curve</label>
+                            <input type="range" id="tune-transmissionJerkCurve" min="5" max="995" step="5" tabindex="-1"
+                                aria-label="Shift curve">
                             <input type="number" class="tune-value" id="out-transmissionJerkCurve" min="5" max="995"
                                 step="5" inputmode="numeric">
                         </div>
                         <div class="tune-row">
-                            <label for="tune-transmissionStepBlend">Shift blend</label>
-                            <input type="range" id="tune-transmissionStepBlend" min="0" max="1" step="0.01">
+                            <label for="out-transmissionStepBlend">Shift blend</label>
+                            <input type="range" id="tune-transmissionStepBlend" min="0" max="1" step="0.01" tabindex="-1"
+                                aria-label="Shift blend">
                             <input type="number" class="tune-value" id="out-transmissionStepBlend" min="0" max="1"
                                 step="0.01" inputmode="decimal">
                         </div>
@@ -1232,8 +1326,9 @@
 
                     <div class="tune-pane" data-tune-pane="texture" hidden>
                         <div class="tune-row tune-gain-row">
-                            <label for="gain-texture">Gain</label>
-                            <input type="range" id="gain-texture" min="-60" max="0" step="0.5">
+                            <label for="gainout-texture">Gain</label>
+                            <input type="range" id="gain-texture" min="-60" max="0" step="0.5" tabindex="-1"
+                                aria-label="Gain">
                             <input type="number" class="tune-value" id="gainout-texture" min="-60" max="0" step="0.5"
                                 inputmode="decimal">
                         </div>
@@ -1388,12 +1483,48 @@
             // off the data: the selected point does not change.
             function panHeld(e) { return e.shiftKey; }
 
+            // Shift grabs a pivot handle on the gain/frequency chart: the horizontal line
+            // carries JerkPivotGain, the vertical line carries SnapPivotFreq, and their
+            // crossover carries both. The pointer must sit on the handle, so a Shift press
+            // away from the handles still pans. A Shift wheel on a handle reshapes the curve
+            // that handle belongs to.
+            function pivotGrabHeld(e) { return !!e.shiftKey; }
+
+            // Alt drags the pivot pair from anywhere on the gain/frequency chart. Both pivots
+            // travel with the pointer, so neither one needs to be found first.
+            function pivotPairHeld(e) { return !!e.altKey; }
+
+            const PIVOT_GRAB_PX = 7;    // pointer distance that counts as a hit on one line
+            const PIVOT_KNOT_PX = 11;   // crossover hit radius, wider so the pair wins the overlap
+
+            // The wheel has no press to aim with, so its bands are wider than the drag bands.
+            const CURVE_WHEEL_GRAB_PX = 24;
+            const CURVE_WHEEL_KNOT_PX = 32;
+
+            const PIVOT_CURSORS = { gain: 'ns-resize', freq: 'ew-resize', both: 'move' };
+
+            let pivotDrag = null;       // 'gain', 'freq' or 'both' while a pivot drag runs
+            let pivotHover = null;      // the handle under the pointer, with the modifier held
+            let pivotModifier = false;  // the modifier is held over the gain chart
+
             // Legend items for the scatter charts. Fill each swatch with the opaque surface
             // colour, because the dataset fill is the faint cloud alpha.
             function scatterLegendLabels(chart) {
                 return Chart.defaults.plugins.legend.labels.generateLabels(chart).map(item => {
                     const c = surfaceColors[item.text];
                     if (c) item.fillStyle = item.strokeStyle = c.border;
+                    return item;
+                });
+            }
+
+            // Legend items for a line chart drawn with round swatches. The datasets carry a
+            // transparent fill so no area is shaded under the curve, which would leave the
+            // swatch a hollow ring — fill it with the line colour so the dot reads solid,
+            // the way the scatter plots' dots do.
+            function lineLegendLabels(chart) {
+                return Chart.defaults.plugins.legend.labels.generateLabels(chart).map(item => {
+                    item.fillStyle = item.strokeStyle;
+                    item.lineWidth = 0;
                     return item;
                 });
             }
@@ -1483,6 +1614,23 @@
             // Swap the visible scatter canvas and mark the matching tab. An unknown plot
             // name (a hand-edited URL) falls back to the default rather than hiding both
             // canvases.
+            function plotHintOpen() {
+                const popup = document.getElementById('plot-hint-popup');
+
+                return !!popup && !popup.hidden;
+            }
+
+            // Open or close the plot guidance panel. The icon carries the expanded state, so
+            // assistive tech announces the panel the same way the pointer sees it.
+            function setPlotHintOpen(open) {
+                const popup = document.getElementById('plot-hint-popup');
+                const icon = document.getElementById('plot-hint');
+                if (!popup || !icon) return;
+
+                popup.hidden = !open;
+                icon.setAttribute('aria-expanded', open ? 'true' : 'false');
+            }
+
             function showPlot(plot) {
                 activePlot = PLOT_CANVAS_ID[plot] ? plot : DEFAULT_PLOT;
 
@@ -1500,6 +1648,16 @@
                 if (pointHl) {
                     pointHl.closest('.wave-monitor').hidden =
                         activePlot !== 'jerksnap' && activePlot !== 'gainfreq';
+                }
+
+                // The pivot lines belong to the gain/frequency plot, so their hint goes with
+                // them rather than standing over a plot that has no pivots to drag.
+                const plotHint = document.getElementById('plot-hint');
+                if (plotHint) {
+                    plotHint.hidden = activePlot !== 'gainfreq';
+                    // An open panel belongs to the plot that was showing, so the tab change
+                    // closes it rather than leaving it over a plot it does not describe.
+                    if (plotHint.hidden) setPlotHintOpen(false);
                 }
 
                 // Chart.js mis-sizes a canvas that was hidden when it was built — resize it
@@ -1597,6 +1755,30 @@
                     updateChart();
                     scheduleAudioRefresh();
                 });
+
+                // The guidance panel. A click on the icon opens it, a click anywhere else
+                // closes it, and Escape closes it and returns the focus to the icon.
+                const hintIcon = document.getElementById('plot-hint');
+                if (hintIcon) {
+                    hintIcon.addEventListener('click', (e) => {
+                        e.stopPropagation();   // the document handler would close it again
+                        setPlotHintOpen(!plotHintOpen());
+                    });
+
+                    hintIcon.addEventListener('keydown', (e) => {
+                        if (e.key !== 'Enter' && e.key !== ' ') return;
+                        e.preventDefault();   // Space scrolls the page otherwise
+                        setPlotHintOpen(!plotHintOpen());
+                    });
+
+                    document.addEventListener('click', () => setPlotHintOpen(false));
+
+                    document.addEventListener('keydown', (e) => {
+                        if (e.key !== 'Escape' || !plotHintOpen()) return;
+                        setPlotHintOpen(false);
+                        hintIcon.focus();
+                    });
+                }
 
                 // Scatter panel tabs. Scoped to the plot panel: the tune widget's tabs
                 // carry the same class and would otherwise run this handler too.
@@ -1721,6 +1903,9 @@
                 scatterZoom = null;
                 gainZoom = null;
                 scatterPanning = false;
+                pivotDrag = null;
+                pivotHover = null;
+                pivotModifier = false;
                 gainChart.options.scales.y.ticks.stepSize = GAIN_STEP_DB;
                 updateChart();
                 drawMap(lapKey);
@@ -2521,6 +2706,18 @@
                 installScatterNav(chart, () => targetScales, applyScatterViewport);
             }
 
+            // Both pivot reference lines share one colour, so a reader reads them as the
+            // pair they are. Their own labels name the axis each one marks.
+            const PIVOT_LINE_COLOR = 'rgba(233, 69, 96, 0.85)';
+
+            // True when one pivot line must draw as a grabbable handle: a drag owns the line,
+            // or the pointer sits on the line with the modifier held.
+            function pivotLineActive(which) {
+                const state = pivotDrag || pivotHover;
+
+                return state === which || state === 'both';
+            }
+
             // Draws a dashed horizontal line at the configured jerk pivot gain, so retuning
             // JerkPivotGain visibly moves the reference line against the plotted points.
             const pivotGainLine = {
@@ -2531,10 +2728,11 @@
                     const { top, bottom, right } = c.chartArea;
                     if (y < top || y > bottom) return;
 
+                    const active = pivotLineActive('gain');
                     const ctx = c.ctx;
                     ctx.save();
-                    ctx.strokeStyle = 'rgba(233, 69, 96, 0.85)';
-                    ctx.lineWidth = 1.5;
+                    ctx.strokeStyle = PIVOT_LINE_COLOR;
+                    ctx.lineWidth = active ? 3 : 1.5;
                     ctx.setLineDash([5, 4]);
                     ctx.beginPath();
                     ctx.moveTo(c.chartArea.left, y);
@@ -2546,8 +2744,105 @@
                     ctx.font = '11px system-ui, sans-serif';
                     ctx.textAlign = 'right';
                     ctx.textBaseline = 'bottom';
-                    ctx.fillStyle = 'rgba(233, 69, 96, 0.85)';
+                    ctx.fillStyle = PIVOT_LINE_COLOR;
                     ctx.fillText(label, right, y - 3);
+                    ctx.restore();
+                },
+            };
+
+            // Draws a dashed vertical line at the pivot pulse frequency, the frequency-axis
+            // counterpart of pivotGainLine. Retuning SnapPivotFreq moves it against the
+            // plotted points. The label sits inside the line, on whichever side has room.
+            const pivotFreqLine = {
+                id: 'pivotFreqLine',
+                afterDatasetsDraw(c) {
+                    const hz = pivotFreqHz();
+                    const x = c.scales.x.getPixelForValue(hz);
+                    const { top, bottom, left, right } = c.chartArea;
+                    if (x < left || x > right) return;
+
+                    const active = pivotLineActive('freq');
+                    const ctx = c.ctx;
+                    ctx.save();
+                    ctx.strokeStyle = PIVOT_LINE_COLOR;
+                    ctx.lineWidth = active ? 3 : 1.5;
+                    ctx.setLineDash([5, 4]);
+                    ctx.beginPath();
+                    ctx.moveTo(x, top);
+                    ctx.lineTo(x, bottom);
+                    ctx.stroke();
+
+                    ctx.setLineDash([]);
+                    const label = `${hz.toFixed(1)} Hz pivot`;
+                    const flip = x > right - 70;
+                    ctx.font = '11px system-ui, sans-serif';
+                    ctx.textAlign = flip ? 'right' : 'left';
+                    ctx.textBaseline = 'top';
+                    ctx.fillStyle = PIVOT_LINE_COLOR;
+                    ctx.fillText(label, flip ? x - 4 : x + 4, top + 3);
+                    ctx.restore();
+                },
+            };
+
+            // A square handle where the two pivot lines cross. It appears only under the drag
+            // modifier, so the plot stays clean at rest. A drag on the handle moves both
+            // pivots together. The handle fills in when the pointer is on it.
+            const pivotCrossover = {
+                id: 'pivotCrossover',
+                afterDatasetsDraw(c) {
+                    if (!pivotModifier && !pivotDrag) return;
+
+                    const x = c.scales.x.getPixelForValue(pivotFreqHz());
+                    const y = c.scales.y.getPixelForValue(tuneValues.jerkPivotGain);
+                    const { top, bottom, left, right } = c.chartArea;
+                    if (x < left || x > right || y < top || y > bottom) return;
+
+                    const armed = (pivotDrag || pivotHover) === 'both';
+                    const half = armed ? 6 : 4;
+                    const ctx = c.ctx;
+                    ctx.save();
+                    ctx.strokeStyle = PIVOT_LINE_COLOR;
+                    ctx.fillStyle = armed ? PIVOT_LINE_COLOR : 'rgba(20, 20, 24, 0.9)';
+                    ctx.lineWidth = 1.5;
+                    ctx.setLineDash([]);
+                    ctx.beginPath();
+                    ctx.rect(x - half, y - half, half * 2, half * 2);
+                    ctx.fill();
+                    ctx.stroke();
+                    ctx.restore();
+                },
+            };
+
+            // Half-amplitude reference on the gain axis. -6 dB is half the 0 dB clamp, so
+            // the line marks where a pulse loses half its amplitude. It is fixed, not tuned,
+            // which is why it draws dotted and in a colour the pivot pair does not use.
+            const HALF_AMPLITUDE_DB = -6;
+            const HALF_AMPLITUDE_COLOR = 'rgba(255, 216, 77, 0.85)';
+
+            const halfAmplitudeLine = {
+                id: 'halfAmplitudeLine',
+                afterDatasetsDraw(c) {
+                    const y = c.scales.y.getPixelForValue(HALF_AMPLITUDE_DB);
+                    const { top, bottom, left, right } = c.chartArea;
+                    if (y < top || y > bottom) return;
+
+                    const ctx = c.ctx;
+                    ctx.save();
+                    ctx.strokeStyle = HALF_AMPLITUDE_COLOR;
+                    ctx.lineWidth = 1.5;
+                    ctx.setLineDash([2, 3]);
+                    ctx.beginPath();
+                    ctx.moveTo(left, y);
+                    ctx.lineTo(right, y);
+                    ctx.stroke();
+
+                    // The label sits at the right edge, above the line.
+                    ctx.setLineDash([]);
+                    ctx.font = '11px system-ui, sans-serif';
+                    ctx.textAlign = 'right';
+                    ctx.textBaseline = 'bottom';
+                    ctx.fillStyle = HALF_AMPLITUDE_COLOR;
+                    ctx.fillText('-6.0 dB 50%', right, y - 3);
                     ctx.restore();
                 },
             };
@@ -2562,14 +2857,15 @@
                         responsive: true,
                         maintainAspectRatio: false,
                         onHover: (_event, elements) => {
-                            if (scatterPanning) return;
+                            if (scatterPanning || pivotDrag) return;
                             const frame = elements.length > 0
                                 ? (gainChart.data.datasets[elements[0].datasetIndex].data[elements[0].index].frame ?? null)
                                 : null;
                             setHovered(frame ?? null, 'scatter');
                         },
                         onClick: (event, elements) => {
-                            if (panHeld(event.native || event)) return;
+                            const native = event.native || event;
+                            if (panHeld(native) || pivotPairHeld(native) || pivotDrag) return;
                             if (elements.length === 0) return;
                             const pt = gainChart.data.datasets[elements[0].datasetIndex].data[elements[0].index];
                             if (!pt || pt.frame == null) return;
@@ -2616,12 +2912,24 @@
                         }
                     },
                     plugins: [
+                        halfAmplitudeLine,
                         pivotGainLine,
+                        pivotFreqLine,
+                        pivotCrossover,
                         frameIndexCache,
                         crosshairReadout(d => `Gain: ${d.y.toFixed(1)} dB   Freq: ${d.x.toFixed(1)} Hz`)
                     ]
                 });
-                installScatterNav(gainChart, gainAutoBounds, applyGainViewport);
+                // The pivot handlers own an Alt press, a Shift press on a handle and a Shift
+                // wheel on a handle. Every other press and wheel falls through to the nav, so
+                // the plot keeps its pan and its zoom.
+                installScatterNav(gainChart, gainAutoBounds, applyGainViewport,
+                    (e) => e.type === 'wheel'
+                        ? curveWheelClaims(gainChart, e)
+                        : overChartArea(gainChart, e) && (pivotPairHeld(e)
+                            || (pivotGrabHeld(e) && pivotHandleAt(gainChart, e) !== null)));
+                // After the nav: both listen on mousemove, and the later handler owns the cursor.
+                installPivotDrag(gainChart);
             }
 
             // Re-applies the pulse-frequency axis bounds from `pulseLimits`, for when the chart
@@ -2635,9 +2943,10 @@
 
             // Fit the gain axis to the visible points. 0 dB stays the ceiling — it is the
             // amplitude clamp, so no point can sit above it — and the floor never goes below
-            // GAIN_FLOOR_DB. The pivot gain is folded in so its dashed reference line stays on
-            // screen even when every plotted point is louder than it. The floor snaps down to a
-            // multiple of GAIN_STEP_DB, so the axis resizes in fixed steps. Caller renders.
+            // GAIN_FLOOR_DB. The pivot gain and the half-amplitude level are folded in, so
+            // both reference lines stay on screen even when every plotted point is louder
+            // than them. The floor snaps down to a multiple of GAIN_STEP_DB, so the axis
+            // resizes in fixed steps. Caller renders.
             function gainAutoBounds() {
                 let lo = Infinity;
                 gainChart.data.datasets.forEach((ds, i) => {
@@ -2645,7 +2954,7 @@
                     ds.data.forEach(pt => { if (pt.y < lo) lo = pt.y; });
                 });
                 if (!isFinite(lo)) lo = GAIN_FLOOR_DB;
-                lo = Math.min(lo, tuneValues.jerkPivotGain);
+                lo = Math.min(lo, tuneValues.jerkPivotGain, HALF_AMPLITUDE_DB);
                 const stepped = -GAIN_STEP_DB * Math.ceil(-lo / GAIN_STEP_DB);
                 return {
                     xMin: pulseLimits.minFrequencyHz,
@@ -2662,6 +2971,24 @@
                 gainChart.options.scales.y.min = bounds.yMin;
                 gainChart.options.scales.y.max = bounds.yMax;
             }
+
+            // Spectrum-tab curve colours, on the cool/warm complement: motion is cool, pulse
+            // is warm, and the two forms pair across the axis — cyan against yellow for the
+            // level curves, blue against orange for the cumulative ones. Blue/orange is the
+            // safest pair under colour-deficient vision, which is why the two curves a reader
+            // compares most often carry it.
+            //
+            // Checked with the data-viz palette validator against the dark surface: every
+            // pair clears the normal-vision and CVD separation floors (worst 18.9 and 16.3
+            // against a target of 15 and 8), the chroma floor and 3:1 contrast. Some steps
+            // sit above the dark lightness band, a guard against washed-out marks. All are
+            // saturated and well over 3:1, and a yellow inside that band turns olive.
+            const SPECTRUM_COLORS = {
+                motionLevel: 'rgba(90, 200, 235, 0.9)',   // #5AC8EB cyan
+                motionCum: 'rgba(63, 127, 216, 0.9)',     // #3F7FD8 blue
+                pulseLevel: 'rgba(255, 216, 77, 0.9)',    // #FFD84D yellow
+                pulseCum: 'rgba(237, 139, 51, 0.9)',      // #ED8B33 orange
+            };
 
             // Vertical dashed markers at the motion and delivered-pulse PSD centroids,
             // read from the chart's own _centroids property (set by updateSpectrumChart)
@@ -2690,10 +3017,14 @@
                         ctx.restore();
                     }
 
-                    line(centroids.motion, 'rgba(90, 200, 235, 0.85)');
-                    line(centroids.delivered, 'rgba(233, 69, 96, 0.85)');
+                    line(centroids.motion, SPECTRUM_COLORS.motionLevel);
+                    line(centroids.delivered, SPECTRUM_COLORS.pulseLevel);
                 },
             };
+
+            // Floor of the level plot's dB axis. A bin this far under the peak carries
+            // nothing worth reading, and the clamp stops a near-empty bin stretching the axis.
+            const LEVEL_FLOOR_DB = -60;
 
             function createSpectrumChart() {
                 const ctx = document.getElementById('spectrum-chart').getContext('2d');
@@ -2706,17 +3037,21 @@
                         maintainAspectRatio: false,
                         parsing: false,
                         plugins: {
-                            legend: { display: true, labels: { color: '#ccc' } },
-                            title: {
+                            legend: {
                                 display: true,
-                                text: '',
-                                color: '#ccc',
-                                font: { size: 11, weight: 'normal' },
-                                padding: { bottom: 4 },
+                                // Round swatches, as the two scatter plots use. A line
+                                // dataset would otherwise draw a bar, and the four entries
+                                // here name the same signals those plots colour.
+                                labels: {
+                                    color: '#ccc', usePointStyle: true, pointStyle: 'circle',
+                                    generateLabels: lineLegendLabels,
+                                },
                             },
                             tooltip: {
                                 callbacks: {
-                                    label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(0)}% of energy below ${ctx.parsed.x.toFixed(1)} Hz`
+                                    label: (ctx) => ctx.dataset.yAxisID === 'yCum'
+                                        ? `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(0)}% of energy below ${ctx.parsed.x.toFixed(1)} Hz`
+                                        : `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)} dB at ${ctx.parsed.x.toFixed(1)} Hz`
                                 }
                             }
                         },
@@ -2729,18 +3064,53 @@
                                 ticks: { color: '#888' },
                                 grid: { color: 'rgba(255,255,255,0.06)' }
                             },
-                            y: {
+                            // Left: per-frequency level. Right: the running total of the same
+                            // curve. The two ranges are chosen so both tick at five lines
+                            // (0/-15/-30/-45/-60 dB against 100/75/50/25/0%), which lets the
+                            // left axis own the grid and the right axis draw none. Two grids
+                            // on one plot would otherwise cross at unrelated heights.
+                            yLevel: {
+                                position: 'left',
+                                title: { display: true, text: 'Level (dB below own peak)', color: '#aaa', font: { size: 14 } },
+                                min: LEVEL_FLOOR_DB,
+                                max: 0,
+                                ticks: { color: '#888', stepSize: 15 },
+                                grid: { color: 'rgba(255,255,255,0.1)' }
+                            },
+                            yCum: {
+                                position: 'right',
                                 title: { display: true, text: 'Cumulative energy (%)', color: '#aaa', font: { size: 14 } },
                                 min: 0,
                                 max: 100,
-                                // Grid lines at 25/50/75% read as quartiles across both curves.
                                 ticks: { color: '#888', stepSize: 25 },
-                                grid: { color: 'rgba(255,255,255,0.1)' }
+                                grid: { drawOnChartArea: false }
                             }
                         }
                     },
                     plugins: [spectrumCentroidLines]
                 });
+            }
+
+            // Per-frequency PSD level in dB, referenced to the curve's own strongest bin
+            // within [loHz, hiHz]. 0 dB marks that bin, so two signals in unrelated units
+            // compare by shape. Levels under LEVEL_FLOOR_DB clamp to the floor. Null when
+            // the band holds no energy (e.g. a silent buffer).
+            function psdLevelCurve(psd, loHz, hiHz) {
+                let peak = 0;
+                for (let i = 0; i < psd.hz.length; i++) {
+                    const f = psd.hz[i];
+                    if (f >= loHz && f <= hiHz && psd.power[i] > peak) peak = psd.power[i];
+                }
+                if (!(peak > 0)) return null;
+                const pts = [];
+                for (let i = 0; i < psd.hz.length; i++) {
+                    const f = psd.hz[i];
+                    if (f < loHz) continue;
+                    if (f > hiHz) break;
+                    const db = 10 * Math.log10(Math.max(psd.power[i], 0) / peak);
+                    pts.push({ x: f, y: Math.max(LEVEL_FLOOR_DB, db) });
+                }
+                return pts.length ? pts : null;
             }
 
             // Running share of band power (0–100%) against frequency, within [loHz, hiHz].
@@ -2763,20 +3133,6 @@
                 return pts;
             }
 
-            // Frequency at which a cumulative curve first reaches `pct`, interpolated
-            // between points. Null for a null curve.
-            function hzAtPercent(pts, pct) {
-                if (!pts) return null;
-                for (let i = 1; i < pts.length; i++) {
-                    if (pts[i].y >= pct) {
-                        const a = pts[i - 1], b = pts[i];
-                        const t = b.y > a.y ? (pct - a.y) / (b.y - a.y) : 1;
-                        return a.x + t * (b.x - a.x);
-                    }
-                }
-                return pts[pts.length - 1].x;
-            }
-
             // Decimates a curve to at most `maxPoints` drawn points, so a long pulse FFT
             // does not hand Chart.js thousands of segments. Always keeps the last point.
             function decimateCurve(pts, maxPoints) {
@@ -2788,12 +3144,19 @@
                 return out;
             }
 
-            // Overlays the cumulative energy of the motion PSD (raw acceleration, always
-            // available once a section is selected) against the rendered chassis pulse PSD
-            // (only once refreshAudio's render lands). Each curve runs 0–100% of its own band
-            // power, so the unrelated units cancel. The horizontal gap between the curves is
-            // the frequency shift at each energy share. Called from selectLap (motion only,
-            // while audio is still rendering) and from refreshAudio's success path (both).
+            // Overlays the motion PSD (raw acceleration, always available once a section is
+            // selected) against the rendered chassis pulse PSD (only once refreshAudio's
+            // render lands). Each signal is drawn twice from the one FFT:
+            //
+            //   left axis  — level per frequency, in dB under that curve's own peak
+            //   right axis — the running total of the same power, 0–100% of its band
+            //
+            // Both forms are self-referenced, so the unrelated units cancel and the plot reads
+            // relative shape rather than loudness. A level curve shows a concentration of
+            // energy as a bump; its cumulative curve shows the same thing as a steep section,
+            // and the horizontal gap between the two cumulative curves is the frequency shift
+            // at each energy share. Called from selectLap (motion only, while audio is still
+            // rendering) and from refreshAudio's success path (both).
             function updateSpectrumChart() {
                 if (!spectrumChart) return;
                 const coords = mapData[currentLapKey] || [];
@@ -2806,8 +3169,28 @@
                 const datasets = [];
                 let motionCentroidHz = null;
                 let deliveredCentroidHz = null;
-                let motionCurve = null;
-                let pulseCurve = null;
+
+                // One line per {signal, form}. Every line is solid, so colour alone carries
+                // both the signal and the form — the four steps were picked and validated to
+                // stay apart under normal and colour-deficient vision.
+                const levelLine = (label, data, color) => ({
+                    label: label + ' level',
+                    data, yAxisID: 'yLevel',
+                    borderColor: color,
+                    backgroundColor: 'transparent',
+                    borderWidth: 2,
+                    pointRadius: 0,
+                    tension: 0,
+                });
+                const cumLine = (label, data, color) => ({
+                    label: label + ' energy',
+                    data, yAxisID: 'yCum',
+                    borderColor: color,
+                    backgroundColor: 'transparent',
+                    borderWidth: 2,
+                    pointRadius: 0,
+                    tension: 0,
+                });
 
                 // Motion: PSD of raw acceleration magnitude over the selected section, at
                 // the telemetry rate. Accumulated only over the motion band: braking and
@@ -2820,19 +3203,12 @@
 
                     const motionPsd = welchPsd(accelSamples, 0, accelSamples.length, TELEMETRY_HZ, 64);
                     motionCentroidHz = centroid(motionPsd, MOTION_BAND[0], MOTION_BAND[1]);
-                    motionCurve = cumulativeEnergy(motionPsd, MOTION_BAND[0], Math.min(MOTION_BAND[1], xMax));
+                    const motionTop = Math.min(MOTION_BAND[1], xMax);
+                    const motionCurve = cumulativeEnergy(motionPsd, MOTION_BAND[0], motionTop);
+                    const motionLevel = psdLevelCurve(motionPsd, MOTION_BAND[0], motionTop);
 
-                    if (motionCurve) {
-                        datasets.push({
-                            label: 'Motion',
-                            data: motionCurve,
-                            borderColor: 'rgba(90, 200, 235, 0.9)',
-                            backgroundColor: 'transparent',
-                            borderWidth: 2,
-                            pointRadius: 0,
-                            tension: 0,
-                        });
-                    }
+                    if (motionLevel) datasets.push(levelLine('Motion', motionLevel, SPECTRUM_COLORS.motionLevel));
+                    if (motionCurve) datasets.push(cumLine('Motion', motionCurve, SPECTRUM_COLORS.motionCum));
                 }
 
                 // Pulse: PSD of the rendered chassis audio for the same section, once it has
@@ -2857,38 +3233,20 @@
                         // Use the motion band's lower limit, so both curves and centroids skip
                         // the same sub-3 Hz envelope energy and compare like with like.
                         deliveredCentroidHz = centroid(pulsePsd, MOTION_BAND[0], xMax);
-                        pulseCurve = cumulativeEnergy(pulsePsd, MOTION_BAND[0], xMax);
+                        const pulseCurve = cumulativeEnergy(pulsePsd, MOTION_BAND[0], xMax);
+                        const pulseLevel = psdLevelCurve(pulsePsd, MOTION_BAND[0], xMax);
 
-                        if (pulseCurve) {
-                            datasets.push({
-                                label: 'Pulse',
-                                data: decimateCurve(pulseCurve, 300),
-                                borderColor: 'rgba(233, 69, 96, 0.9)',
-                                backgroundColor: 'transparent',
-                                borderWidth: 2,
-                                pointRadius: 0,
-                                tension: 0,
-                            });
-                        }
+                        if (pulseLevel) datasets.push(levelLine('Pulse', decimateCurve(pulseLevel, 300), SPECTRUM_COLORS.pulseLevel));
+                        if (pulseCurve) datasets.push(cumLine('Pulse', decimateCurve(pulseCurve, 300), SPECTRUM_COLORS.pulseCum));
                     }
                 }
 
                 spectrumChart.data.datasets = datasets;
                 spectrumChart._centroids = { motion: motionCentroidHz, delivered: deliveredCentroidHz };
 
-                // Title: 10/50/90% energy frequencies per signal, then the centroid ratio.
-                const spread = (curve) => curve
-                    ? [10, 50, 90].map(p => hzAtPercent(curve, p).toFixed(1)).join(' / ') + ' Hz'
-                    : '—';
-                const ratio = (motionCentroidHz && deliveredCentroidHz) ? deliveredCentroidHz / motionCentroidHz : null;
-                const status = waveBuffer ? '' : ' · rendering…';
-                spectrumChart.options.plugins.title.text = motionCurve == null
-                    ? `no motion in section${status}`
-                    : `10/50/90%: motion ${spread(motionCurve)} · pulse ${spread(pulseCurve)}` +
-                    (ratio != null ? ` · centroid ratio ${ratio.toFixed(2)}` : '') + status;
-
                 spectrumChart.update('none');
             }
+
 
             // ---------------------------------------------------------------------
             // Spectrogram tab
@@ -3787,11 +4145,18 @@
                 return Number.isFinite(db) ? Math.max(GAIN_FLOOR_DB, db) : GAIN_FLOOR_DB;
             }
 
+            // The pulse frequency at the pivot snap. SnapPivotFreq is a percentage of the
+            // span between the configured minimum and maximum pulse frequency.
+            function pivotFreqHz() {
+                const span = pulseLimits.maxFrequencyHz - pulseLimits.minFrequencyHz;
+
+                return pulseLimits.minFrequencyHz + span * (tuneValues.snapPivotFreq / 100);
+            }
+
             function freqHzOf(snap) {
                 const exponent = tuneValues.snapCurve / 1000;
-                const snapScale = 1 / Math.pow(1000 * tuneValues.snapMax, exponent);
-                const scaler = Math.pow(Math.abs(snap), exponent) * snapScale;
-                const hz = (pulseLimits.maxFrequencyHz - pulseLimits.minFrequencyHz) * scaler;
+                const snapScale = pivotFreqHz() / Math.pow(tuneValues.snapPivot, exponent);
+                const hz = Math.pow(Math.abs(snap), exponent) * snapScale;
                 return Number.isFinite(hz)
                     ? Math.min(pulseLimits.maxFrequencyHz, Math.max(pulseLimits.minFrequencyHz, hz))
                     : pulseLimits.minFrequencyHz;
@@ -4071,13 +4436,16 @@
 
             // Wire scroll zoom and modifier-drag pan onto a scatter chart. `base` returns the
             // chart's auto-fit viewport. `apply` shows a viewport, or returns the chart to
-            // auto-fit when it is given null.
-            function installScatterNav(c, base, apply) {
+            // auto-fit when it is given null. `claimed` is optional: it reports an event that
+            // another handler owns, such as a pivot drag or a curve wheel. A claimed press
+            // never pans and a claimed wheel never zooms.
+            function installScatterNav(c, base, apply, claimed) {
                 const canvas = c.canvas;
 
                 canvas.addEventListener('wheel', (e) => {
                     const bounds = base();
                     if (!bounds || !overChartArea(c, e)) return;
+                    if (claimed && claimed(e)) return;
                     e.preventDefault();
                     apply(wheelZoomViewport(c, e, bounds));
                 }, { passive: false });
@@ -4089,6 +4457,7 @@
 
                 canvas.addEventListener('mousedown', (e) => {
                     if (!panHeld(e) || !overChartArea(c, e)) return;
+                    if (claimed && claimed(e)) return;
                     panFrom = { x: e.clientX, y: e.clientY };
                     scatterPanning = true;
                     canvas.style.cursor = 'grabbing';
@@ -4098,6 +4467,7 @@
                 // Show the grab cursor while the modifier is held, so the pan is discoverable.
                 canvas.addEventListener('mousemove', (e) => {
                     if (panFrom) return;
+                    if (claimed && claimed(e)) return;   // the owning handler writes the cursor
                     canvas.style.cursor = panHeld(e) ? 'grab' : '';
                 });
 
@@ -4117,6 +4487,239 @@
                     scatterPanning = false;
                     canvas.style.cursor = '';
                 });
+            }
+
+            // Pixel position of the pivot crossing on the gain/frequency chart.
+            function pivotPixels(c) {
+                return {
+                    x: c.scales.x.getPixelForValue(pivotFreqHz()),
+                    y: c.scales.y.getPixelForValue(tuneValues.jerkPivotGain),
+                };
+            }
+
+            // The pivot handle under a pointer position, or null. The crossover claims its own
+            // radius first, so the pair stays reachable where the two lines meet.
+            function pivotHandleAt(c, event, grabPx = PIVOT_GRAB_PX, knotPx = PIVOT_KNOT_PX) {
+                if (!c.chartArea || !overChartArea(c, event)) return null;
+
+                const rect = c.canvas.getBoundingClientRect();
+                const px = event.clientX - rect.left, py = event.clientY - rect.top;
+                const at = pivotPixels(c);
+                const dx = Math.abs(px - at.x), dy = Math.abs(py - at.y);
+
+                if (dx <= knotPx && dy <= knotPx) return 'both';
+                if (dy <= grabPx) return 'gain';
+                if (dx <= grabPx) return 'freq';
+
+                return null;
+            }
+
+            // One wheel notch of curve change. It equals the two curve sliders' own step, so
+            // a notch moves the knob one slider stop.
+            const CURVE_WHEEL_STEP = 5;
+
+            // The curve a Shift wheel adjusts: 'gain' for JerkCurve on the horizontal line,
+            // 'freq' for SnapCurve on the vertical line, 'both' on the crossover. Null with
+            // the pointer off the handles.
+            function curveWheelTarget(c, event) {
+                if (!pivotGrabHeld(event)) return null;
+
+                return pivotHandleAt(c, event, CURVE_WHEEL_GRAB_PX, CURVE_WHEEL_KNOT_PX);
+            }
+
+            // Shift owns the wheel on this plot, whether or not it lands on a handle. The
+            // zoom must not fire under the same key, or a near miss jumps the view.
+            function curveWheelClaims(c, event) {
+                return pivotGrabHeld(event) && overChartArea(c, event);
+            }
+
+            // Wheel direction, as +1 up and -1 down. Shift turns a vertical wheel into a
+            // horizontal one in most browsers, so the x delta stands in for the y delta.
+            function wheelDirection(event) {
+                const delta = event.deltaY || event.deltaX;
+
+                return delta < 0 ? 1 : -1;
+            }
+
+            // Step one or both curve knobs by a wheel notch. Scroll up raises the value and
+            // scroll down lowers it. Each knob's own commit clamps it to the slider range.
+            function stepCurvesFromWheel(target, dir) {
+                if (target === 'gain' || target === 'both') {
+                    commitTuneValue('jerkCurve', tuneValues.jerkCurve + dir * CURVE_WHEEL_STEP);
+                }
+
+                if (target === 'freq' || target === 'both') {
+                    commitTuneValue('snapCurve', tuneValues.snapCurve + dir * CURVE_WHEEL_STEP);
+                }
+            }
+
+            // Write the pivot values a pointer position asks for. Each axis goes through its
+            // own knob commit, so the slider, the number box, the render and the chart all
+            // follow one write. The gain axis carries dB directly. The frequency axis carries
+            // Hz, and SnapPivotFreq stores a percentage of the pulse frequency span.
+            function setPivotsFromPointer(c, event, handle) {
+                const rect = c.canvas.getBoundingClientRect();
+
+                if (handle === 'gain' || handle === 'both') {
+                    commitTuneValue('jerkPivotGain', c.scales.y.getValueForPixel(event.clientY - rect.top));
+                }
+
+                if (handle === 'freq' || handle === 'both') {
+                    const hz = c.scales.x.getValueForPixel(event.clientX - rect.left);
+                    const span = pulseLimits.maxFrequencyHz - pulseLimits.minFrequencyHz;
+                    if (span > 0) {
+                        commitTuneValue('snapPivotFreq', 100 * (hz - pulseLimits.minFrequencyHz) / span);
+                    }
+                }
+            }
+
+            // Pixels of drag per decade of pivot travel. JerkPivot and SnapPivot span several
+            // decades each, so the drag scales them instead of adding to them.
+            const PIVOT_DRAG_DECADE_PX = 300;
+
+            // Move the jerk and snap pivot values by a pointer delta. This is the Alt drag,
+            // and it works anywhere on the plot. The plotted data follows the pointer, so a
+            // drag right lowers SnapPivot and a drag up lowers JerkPivot: a lower pivot moves
+            // the curve the other way. `only` limits the drag to one value: 'jerk' or 'snap',
+            // or null for both. Each knob's own commit clamps the value to its range.
+            function movePivotsBy(dxPx, dyPx, only) {
+                if (only !== 'snap') {
+                    commitTuneValue('jerkPivot',
+                        tuneValues.jerkPivot * Math.pow(10, dyPx / PIVOT_DRAG_DECADE_PX));
+                }
+
+                if (only !== 'jerk') {
+                    commitTuneValue('snapPivot',
+                        tuneValues.snapPivot * Math.pow(10, -dxPx / PIVOT_DRAG_DECADE_PX));
+                }
+            }
+
+            // The pivot value an Alt drag is limited to, from the handle it starts on. The
+            // gain line carries JerkPivot and the frequency line carries SnapPivot. The
+            // crossover and the open plot move both, so they give null.
+            function pivotDragLimit(handle) {
+                if (handle === 'gain') return 'jerk';
+                if (handle === 'freq') return 'snap';
+
+                return null;
+            }
+
+            // Turn the two pivot lines and their crossover into drag handles. The modifier
+            // keeps the press off the data, the way the pan modifier does.
+            function installPivotDrag(c) {
+                const canvas = c.canvas;
+                let pointer = null;      // last pointer position over this canvas
+                let dragFrom = null;     // last position of a relative drag of the pair
+                let dragLimit = null;    // 'jerk' or 'snap' while an Alt drag holds one line
+                let ownsCursor = false;  // the pan handler writes the cursor too
+
+                const setCursor = (value) => {
+                    if (value) {
+                        canvas.style.cursor = value;
+                        ownsCursor = true;
+                    } else if (ownsCursor) {
+                        canvas.style.cursor = '';
+                        ownsCursor = false;
+                    }
+                };
+
+                // The plugins draw the emphasis and the crossover handle from this state, so a
+                // change needs a render. An unchanged state must not render.
+                const apply = (modifier, hover) => {
+                    setCursor(hover ? PIVOT_CURSORS[hover] : null);
+                    if (modifier === pivotModifier && hover === pivotHover) return;
+                    pivotModifier = modifier;
+                    pivotHover = hover;
+                    c.update('none');
+                };
+
+                const track = (event) => {
+                    // A running pan owns the pointer and the cursor, so no handle arms under it.
+                    if (scatterPanning || !overChartArea(c, event)) { apply(false, null); return; }
+                    // The Alt drag moves the pivot values, not the lines, so the crossover
+                    // stays hidden. A line under the pointer still arms: it limits the drag.
+                    if (pivotPairHeld(event)) {
+                        const limited = pivotDragLimit(pivotHandleAt(c, event));
+                        apply(false, limited === 'jerk' ? 'gain' : limited === 'snap' ? 'freq' : null);
+                        setCursor(limited === 'jerk' ? PIVOT_CURSORS.gain
+                            : limited === 'snap' ? PIVOT_CURSORS.freq : 'move');
+                        return;
+                    }
+                    // Shift shows the handles, and arms the one under the pointer.
+                    if (pivotGrabHeld(event)) { apply(true, pivotHandleAt(c, event)); return; }
+                    apply(false, null);
+                };
+
+                // A modified wheel reshapes a curve instead of zooming. installScatterNav
+                // yields the event through its claim, so the two never both act.
+                canvas.addEventListener('wheel', (e) => {
+                    if (pivotDrag || !curveWheelClaims(c, e)) return;
+                    e.preventDefault();   // Shift never zooms here, on a handle or off it
+                    const target = curveWheelTarget(c, e);
+                    if (!target) return;
+                    stepCurvesFromWheel(target, wheelDirection(e));
+                }, { passive: false });
+
+                canvas.addEventListener('mousedown', (e) => {
+                    if (!overChartArea(c, e)) return;
+
+                    if (pivotPairHeld(e)) {
+                        // The press must not move anything: the values follow the pointer
+                        // from here, so a drag that starts anywhere still reads naturally.
+                        // A press on one line limits the drag to that line's pivot value.
+                        pivotDrag = 'pivots';
+                        dragLimit = pivotDragLimit(pivotHandleAt(c, e));
+                        dragFrom = { x: e.clientX, y: e.clientY };
+                    } else if (pivotGrabHeld(e)) {
+                        const handle = pivotHandleAt(c, e);
+                        if (!handle) return;   // Shift away from the handles pans instead
+                        pivotDrag = handle;
+                        setPivotsFromPointer(c, e, handle);
+                    } else {
+                        return;
+                    }
+
+                    setCursor(PIVOT_CURSORS[pivotDrag]
+                        || PIVOT_CURSORS[dragLimit === 'jerk' ? 'gain' : dragLimit === 'snap' ? 'freq' : 'both']);
+                    e.preventDefault();   // no text selection while the drag runs
+                });
+
+                canvas.addEventListener('mousemove', (e) => {
+                    pointer = { clientX: e.clientX, clientY: e.clientY, altKey: e.altKey, shiftKey: e.shiftKey };
+                    if (!pivotDrag) track(pointer);
+                });
+
+                canvas.addEventListener('mouseleave', () => {
+                    pointer = null;
+                    if (!pivotDrag) apply(false, null);
+                });
+
+                window.addEventListener('mousemove', (e) => {
+                    if (!pivotDrag) return;
+                    if (!dragFrom) { setPivotsFromPointer(c, e, pivotDrag); return; }
+                    movePivotsBy(e.clientX - dragFrom.x, e.clientY - dragFrom.y, dragLimit);
+                    dragFrom = { x: e.clientX, y: e.clientY };
+                });
+
+                window.addEventListener('mouseup', () => {
+                    if (!pivotDrag) return;
+                    pivotDrag = null;
+                    dragFrom = null;
+                    dragLimit = null;
+                    setCursor(null);
+                    if (pointer) track(pointer); else apply(false, null);
+                    c.update('none');
+                });
+
+                // The modifier can change with the pointer at rest, so the handles appear and
+                // go on the key alone.
+                const onModifierKey = (e) => {
+                    if ((e.key !== 'Alt' && e.key !== 'Shift') || !pointer || pivotDrag) return;
+                    pointer = { ...pointer, altKey: e.altKey, shiftKey: e.shiftKey };
+                    track(pointer);
+                };
+                window.addEventListener('keydown', onModifierKey);
+                window.addEventListener('keyup', onModifierKey);
             }
 
             // Show a viewport on the jerk/snap scatter, or return to the auto-fit bounds. The
@@ -4577,7 +5180,7 @@
             }
 
             const TUNE_TABS = {
-                chassis: ['jerkCurve', 'jerkPivot', 'jerkPivotGain', 'snapCurve', 'snapMax'],
+                chassis: ['jerkCurve', 'jerkPivot', 'jerkPivotGain', 'snapCurve', 'snapPivot', 'snapPivotFreq'],
                 engine: ['primaryBalance', 'secondaryBalance', 'engineGain', 'pulseScale'],
                 transmission: ['transmissionJerkCurve', 'transmissionStepBlend'],
                 texture: [],
@@ -4588,11 +5191,24 @@
             // vehicle, so the Engine tab's defaults are replaced by the profile the loaded
             // replay resolves to, in applyEngineProfileMeta.
             const tuneDefaults = {
-                jerkCurve: 190, jerkPivot: 601, jerkPivotGain: -3.0, snapCurve: 310, snapMax: 90,
+                jerkCurve: 190, jerkPivot: 601, jerkPivotGain: -3.0, snapCurve: 310, snapPivot: 62944,
+                snapPivotFreq: 50,
                 primaryBalance: 1.0, secondaryBalance: 1.0, engineGain: -6.0, pulseScale: 1.0,
                 transmissionJerkCurve: 750, transmissionStepBlend: 0.5,
             };
             const tuneValues = { ...tuneDefaults };
+
+            // Commit closure per knob, keyed the way tuneValues is. setupAudioUI fills the
+            // table when it wires the controls, and commitTuneValue is how code outside the
+            // widget — the pivot drag handles — writes a knob.
+            const tuneCommits = {};
+
+            // Commit one knob value from outside the widget. The knob's own closure clamps the
+            // value, rounds it, syncs both controls and refreshes the render.
+            function commitTuneValue(key, value) {
+                const commit = tuneCommits[key];
+                if (commit) commit(value);
+            }
 
             // haptics field each chassis/transmission knob is stored under. The names
             // differ: the widget keys are flat and tab-scoped, the config keys are not.
@@ -4603,7 +5219,8 @@
                 jerkPivot: 'jerkPivot',
                 jerkPivotGain: 'jerkPivotGain',
                 snapCurve: 'snapCurve',
-                snapMax: 'snapMax',
+                snapPivot: 'snapPivot',
+                snapPivotFreq: 'snapPivotFreq',
                 transmissionJerkCurve: 'dynamicTransmissionJerkCurve',
                 transmissionStepBlend: 'dynamicTransmissionStepBlend',
             };
@@ -4621,8 +5238,9 @@
             // the range input carries a 0..TUNE_SLIDER_STEPS position and the number box
             // keeps the real stored value; every other key uses both directly. jerkPivot
             // spans 1..20000 m/s^3, so a linear thumb would bury the useful region near 600
-            // in the first few percent of travel.
-            const TUNE_LOG_KEYS = new Set(['jerkPivot']);
+            // in the first few percent of travel. snapPivot spans 1..500000 m/s^4, so the
+            // same reasoning applies.
+            const TUNE_LOG_KEYS = new Set(['jerkPivot', 'snapPivot']);
 
             // Decimal places each key commits to. A key absent from this table commits as
             // a whole number. Never round a key coarser than its own step: the value would
@@ -5641,7 +6259,7 @@
                     setPlaybackRate(Number(rateSelect.value));
                 });
 
-                document.querySelectorAll('.wave-monitor [data-icon]').forEach(async el => {
+                document.querySelectorAll('[data-icon]').forEach(async el => {
                     const svg = await IconHelper.loadIcon(el.dataset.icon);
                     if (svg) el.innerHTML = svg;
                 });
@@ -5859,6 +6477,7 @@
                         scheduleAudioRefresh();
                         updateGainChart();
                     };
+                    tuneCommits[k] = commit;
 
                     slider.addEventListener('input', () => commit(
                         tuneValueAtPos(k, Number(slider.value), lo, hi), { syncSlider: false },
@@ -6026,7 +6645,8 @@
                             jerkPivot: tuneValues.jerkPivot,
                             jerkPivotGain: tuneValues.jerkPivotGain,
                             snapCurve: tuneValues.snapCurve / 1000,
-                            snapMax: tuneValues.snapMax,
+                            snapPivot: tuneValues.snapPivot,
+                            snapPivotFreq: tuneValues.snapPivotFreq,
                         },
                     };
                 }

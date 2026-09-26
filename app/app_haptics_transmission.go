@@ -14,7 +14,7 @@ import (
 // it. The GT client is built after the generators and is rebuilt whenever the
 // telemetry settings change, so a captured source would be nil at first and stale
 // afterwards.
-func (a *App) telemetrySource() haptics.TelemetrySource { //nolint:ireturn // the generators read telemetry through this interface by design, so a fake can drive them
+func (a *App) telemetrySource() haptics.TelemetrySource {
 	return a.gtClient.Telemetry
 }
 

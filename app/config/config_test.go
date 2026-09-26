@@ -810,61 +810,176 @@ func testHapticsSnapCurveIncreaseDecrease(t *testing.T) {
 	assert.InDelta(t, 200, cfg.GetHapticsSnapCurve(), 0.001)
 }
 
-func testHapticsSnapMaxGetSet(t *testing.T) {
+func testHapticsSnapPivotGetSet(t *testing.T) {
 	t.Parallel()
 
 	// Arrange
 	cfg := newTestConfig()
 
-	// Act & Assert - default is 90
-	assert.InDelta(t, 90, cfg.GetHapticsSnapMax(), 0.001)
+	// Act & Assert - default is 62944
+	assert.InDelta(t, 62944, cfg.GetHapticsSnapPivot(), 0.001)
 
 	// Act - set new value
-	cfg.SetHapticsSnapMax(100)
+	cfg.SetHapticsSnapPivot(20000)
 
 	// Assert
-	assert.InDelta(t, 100, cfg.GetHapticsSnapMax(), 0.001)
+	assert.InDelta(t, 20000, cfg.GetHapticsSnapPivot(), 0.001)
 }
 
-func testHapticsSnapMaxClamping(t *testing.T) {
+func testHapticsSnapPivotClamping(t *testing.T) {
 	t.Parallel()
 
 	// Arrange
 	cfg := newTestConfig()
 
 	// Act - set value below minimum (1)
-	cfg.SetHapticsSnapMax(0)
+	cfg.SetHapticsSnapPivot(0)
 
 	// Assert - should be clamped to 1
-	assert.InDelta(t, 1, cfg.GetHapticsSnapMax(), 0.001)
+	assert.InDelta(t, 1, cfg.GetHapticsSnapPivot(), 0.001)
 
-	// Act - set value above maximum (200)
-	cfg.SetHapticsSnapMax(300)
+	// Act - set value above maximum (500000)
+	cfg.SetHapticsSnapPivot(600000)
 
-	// Assert - should be clamped to 200
-	assert.InDelta(t, 200, cfg.GetHapticsSnapMax(), 0.001)
+	// Assert - should be clamped to 500000
+	assert.InDelta(t, 500000, cfg.GetHapticsSnapPivot(), 0.001)
 }
 
-func testHapticsSnapMaxIncreaseDecrease(t *testing.T) {
+func testHapticsSnapPivotIncreaseDecrease(t *testing.T) {
 	t.Parallel()
 
 	// Arrange
 	cfg := newTestConfig()
-	cfg.SetHapticsSnapMax(50)
+	cfg.SetHapticsSnapPivot(5000)
 
 	// Act - increase
-	result := cfg.IncreaseHapticsSnapMax()
+	result := cfg.IncreaseHapticsSnapPivot()
 
 	// Assert
-	assert.InDelta(t, 51, result, 0.001)
-	assert.InDelta(t, 51, cfg.GetHapticsSnapMax(), 0.001)
+	assert.InDelta(t, 5100, result, 0.001)
+	assert.InDelta(t, 5100, cfg.GetHapticsSnapPivot(), 0.001)
 
 	// Act - decrease
-	result = cfg.DecreaseHapticsSnapMax()
+	result = cfg.DecreaseHapticsSnapPivot()
 
 	// Assert
-	assert.InDelta(t, 50, result, 0.001)
-	assert.InDelta(t, 50, cfg.GetHapticsSnapMax(), 0.001)
+	assert.InDelta(t, 5000, result, 0.001)
+	assert.InDelta(t, 5000, cfg.GetHapticsSnapPivot(), 0.001)
+}
+
+func testHapticsSnapPivotFreqGetSet(t *testing.T) {
+	t.Parallel()
+
+	// Arrange
+	cfg := newTestConfig()
+
+	// Act & Assert - default is 50.0
+	assert.InDelta(t, 50.0, cfg.GetHapticsSnapPivotFreq(), 0.001)
+
+	// Act - set new value
+	cfg.SetHapticsSnapPivotFreq(70.0)
+
+	// Assert
+	assert.InDelta(t, 70.0, cfg.GetHapticsSnapPivotFreq(), 0.001)
+}
+
+func testHapticsSnapPivotFreqClamping(t *testing.T) {
+	t.Parallel()
+
+	// Arrange
+	cfg := newTestConfig()
+
+	// Act - set value below minimum (1.0)
+	cfg.SetHapticsSnapPivotFreq(0)
+
+	// Assert - should be clamped to 1.0
+	assert.InDelta(t, 1.0, cfg.GetHapticsSnapPivotFreq(), 0.001)
+
+	// Act - set value above maximum (100.0)
+	cfg.SetHapticsSnapPivotFreq(150.0)
+
+	// Assert - should be clamped to 100.0
+	assert.InDelta(t, 100.0, cfg.GetHapticsSnapPivotFreq(), 0.001)
+}
+
+func testHapticsSnapPivotFreqIncreaseDecrease(t *testing.T) {
+	t.Parallel()
+
+	// Arrange
+	cfg := newTestConfig()
+	cfg.SetHapticsSnapPivotFreq(50.0)
+
+	// Act - increase
+	result := cfg.IncreaseHapticsSnapPivotFreq()
+
+	// Assert
+	assert.InDelta(t, 51.0, result, 0.001)
+	assert.InDelta(t, 51.0, cfg.GetHapticsSnapPivotFreq(), 0.001)
+
+	// Act - decrease
+	result = cfg.DecreaseHapticsSnapPivotFreq()
+
+	// Assert
+	assert.InDelta(t, 50.0, result, 0.001)
+	assert.InDelta(t, 50.0, cfg.GetHapticsSnapPivotFreq(), 0.001)
+}
+
+// testHapticsSnapScalePivotAnchor checks the defining property of the pivot
+// parameterisation: at snap == snapPivot, the pulse frequency sits at exactly
+// the configured percentage between the minimum and maximum pulse frequency,
+// and stays there as the curve is reshaped around it.
+func testHapticsSnapScalePivotAnchor(t *testing.T) {
+	t.Parallel()
+
+	freqHzAtPivot := func(cfg *Config) float64 {
+		pivot := float64(cfg.GetHapticsSnapPivot())
+		exponent := cfg.GetHapticsSnapCurve() / 1000
+
+		return cfg.GetHapticsSnapScale() * math.Pow(pivot, exponent)
+	}
+
+	for _, curve := range []int{5, 190, 500, 995} {
+		cfg := newTestConfig()
+		cfg.SetHapticsSnapPivot(16597)
+		cfg.SetHapticsSnapPivotFreq(50.0)
+		cfg.SetHapticsSnapCurve(curve)
+
+		wantHz := cfg.GetHapticsPulseMinHz() + (cfg.GetHapticsPulseMaxHz()-cfg.GetHapticsPulseMinHz())*0.5
+		assert.InDelta(t, wantHz, freqHzAtPivot(cfg), 0.0001, "curve %d should leave the pivot at 50%%", curve)
+	}
+
+	// A pivot frequency of 100 puts the pivot at the maximum pulse frequency.
+	cfg := newTestConfig()
+	cfg.SetHapticsSnapPivot(20000)
+	cfg.SetHapticsSnapPivotFreq(100.0)
+	assert.InDelta(t, cfg.GetHapticsPulseMaxHz(), freqHzAtPivot(cfg), 0.0001)
+}
+
+// testHapticsSnapMaxMigration checks that a config carrying the deprecated
+// snapMax knob converts to the equivalent pivot and then clears the old field, so
+// the conversion cannot run twice.
+func testHapticsSnapMaxMigration(t *testing.T) {
+	t.Parallel()
+
+	// Arrange - the shipped defaults, expressed the old way.
+	cfg := NewFromJSON([]byte(`{
+		"schemaVersion": "1.0.0",
+		"haptics": {"snapCurve": 190, "snapMax": 37}
+	}`), zerolog.Nop())
+
+	// Assert - snapMax 37 at curve 190 is pivot 17104 under the test config's
+	// pulse limits (16 and 60 Hz) and the default 50 percent pivot frequency.
+	assert.Equal(t, 17104, cfg.GetHapticsSnapPivot())
+	assert.InDelta(t, 50.0, cfg.GetHapticsSnapPivotFreq(), 0.001)
+
+	// Assert - the converted scale matches what snapMax 37 produced before.
+	assert.InDelta(t, (60-16)/math.Pow(37000, 0.19), cfg.GetHapticsSnapScale(), 0.0005)
+
+	// Assert - the deprecated field is cleared, so a reload is a no-op.
+	cfg.mu.RLock()
+	defer cfg.mu.RUnlock()
+
+	assert.Zero(t, cfg.viper.Haptics.SnapMax, "snapMax should be cleared once migrated")
 }
 
 func testHapticsSnapScale(t *testing.T) {
@@ -899,9 +1014,14 @@ func TestHapticsCoreSection(t *testing.T) {
 	t.Run("testHapticsSnapCurveGetSet", testHapticsSnapCurveGetSet)
 	t.Run("testHapticsSnapCurveClamping", testHapticsSnapCurveClamping)
 	t.Run("testHapticsSnapCurveIncreaseDecrease", testHapticsSnapCurveIncreaseDecrease)
-	t.Run("testHapticsSnapMaxGetSet", testHapticsSnapMaxGetSet)
-	t.Run("testHapticsSnapMaxClamping", testHapticsSnapMaxClamping)
-	t.Run("testHapticsSnapMaxIncreaseDecrease", testHapticsSnapMaxIncreaseDecrease)
+	t.Run("testHapticsSnapPivotGetSet", testHapticsSnapPivotGetSet)
+	t.Run("testHapticsSnapPivotClamping", testHapticsSnapPivotClamping)
+	t.Run("testHapticsSnapPivotIncreaseDecrease", testHapticsSnapPivotIncreaseDecrease)
+	t.Run("testHapticsSnapPivotFreqGetSet", testHapticsSnapPivotFreqGetSet)
+	t.Run("testHapticsSnapPivotFreqClamping", testHapticsSnapPivotFreqClamping)
+	t.Run("testHapticsSnapPivotFreqIncreaseDecrease", testHapticsSnapPivotFreqIncreaseDecrease)
+	t.Run("testHapticsSnapScalePivotAnchor", testHapticsSnapScalePivotAnchor)
+	t.Run("testHapticsSnapMaxMigration", testHapticsSnapMaxMigration)
 	t.Run("testHapticsSnapScale", testHapticsSnapScale)
 	t.Run("testSynthDRXEnabledGetSet", testSynthDRXEnabledGetSet)
 }
@@ -1060,6 +1180,39 @@ func testHapticsPulseFrequencyRange(t *testing.T) {
 
 	// Act & Assert
 	assert.InDelta(t, 60, cfg.GetHapticePulseFrequencyHzRange(), 0.001)
+}
+
+// testHapticsPulseFrequencyRangeReanchorsSnapScale checks that changing either
+// pulse frequency limit re-anchors the snap scale, so the pivot snap keeps
+// sitting at its configured percentage of the new span.
+func testHapticsPulseFrequencyRangeReanchorsSnapScale(t *testing.T) {
+	t.Parallel()
+
+	freqHzAtPivot := func(cfg *Config) float64 {
+		pivot := float64(cfg.GetHapticsSnapPivot())
+		exponent := cfg.GetHapticsSnapCurve() / 1000
+
+		return cfg.GetHapticsSnapScale() * math.Pow(pivot, exponent)
+	}
+
+	wantHz := func(cfg *Config) float64 {
+		return cfg.GetHapticsPulseMinHz() + (cfg.GetHapticsPulseMaxHz()-cfg.GetHapticsPulseMinHz())*
+			cfg.GetHapticsSnapPivotFreq()/100
+	}
+
+	// Act - widen the pulse frequency span.
+	cfg := newTestConfig()
+	cfg.SetHapticsPulseMinFrequencyHz(20)
+	cfg.SetHapticsPulseMaxFrequencyHz(80)
+
+	// Assert - the pivot still sits at its configured percentage of the span.
+	assert.InDelta(t, wantHz(cfg), freqHzAtPivot(cfg), 0.0001)
+
+	// Act - narrow the maximum only.
+	cfg.SetHapticsPulseMaxFrequencyHz(50)
+
+	// Assert
+	assert.InDelta(t, wantHz(cfg), freqHzAtPivot(cfg), 0.0001)
 }
 
 func testHapticsPulseMaxAmplitudeGetSet(t *testing.T) {
@@ -1349,6 +1502,7 @@ func TestHapticsPulseAndEngineProfile(t *testing.T) {
 	t.Run("testHapticsPulseMaxHzIncreaseDecrease", testHapticsPulseMaxHzIncreaseDecrease)
 	t.Run("testHapticsPulseMaxHzClamping", testHapticsPulseMaxHzClamping)
 	t.Run("testHapticsPulseFrequencyRange", testHapticsPulseFrequencyRange)
+	t.Run("testHapticsPulseFrequencyRangeReanchorsSnapScale", testHapticsPulseFrequencyRangeReanchorsSnapScale)
 	t.Run("testHapticsPulseMaxAmplitudeGetSet", testHapticsPulseMaxAmplitudeGetSet)
 	t.Run("testHapticsPulseMaxAmplitudeIncreaseDecrease", testHapticsPulseMaxAmplitudeIncreaseDecrease)
 	t.Run("testHapticsPulseMaxAmplitudeClamping", testHapticsPulseMaxAmplitudeClamping)

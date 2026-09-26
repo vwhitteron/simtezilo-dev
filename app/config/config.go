@@ -39,6 +39,15 @@ const (
 	hapticsJerkPivotGainMax = 0.0
 )
 
+// Bounds for the snap pivot pair. The pivot is a plain snap in m/s^4 and the
+// frequency a percentage between the minimum and maximum pulse frequency.
+const (
+	hapticsSnapPivotMin     = 1
+	hapticsSnapPivotMax     = 500000
+	hapticsSnapPivotFreqMin = 1.0
+	hapticsSnapPivotFreqMax = 100.0
+)
+
 // SurfaceRumble is one road surface's texture character. Level is the loudness,
 // which is approximately the output RMS at full speed before the amplitude cap.
 // Coarseness multiplies the speed-derived low-pass cutoff, so a value below 1
@@ -123,10 +132,15 @@ type haptics struct {
 	// JerkMax is deprecated: it was replaced by JerkPivot/JerkPivotGain. A
 	// non-zero value is converted on load and then zeroed, so omitempty drops it
 	// from the file on the next write and the migration runs at most once.
-	JerkMax             int                               `json:"jerkMax,omitempty"`
-	_jerkScale          float64                           `json:"-"`
-	SnapCurve           int                               `json:"snapCurve"`
-	SnapMax             int                               `json:"snapMax"`
+	JerkMax       int     `json:"jerkMax,omitempty"`
+	_jerkScale    float64 `json:"-"`
+	SnapCurve     int     `json:"snapCurve"`
+	SnapPivot     int     `json:"snapPivot"`
+	SnapPivotFreq float64 `json:"snapPivotFreq"`
+	// SnapMax is deprecated: it was replaced by SnapPivot/SnapPivotFreq. A
+	// non-zero value is converted on load and then zeroed, so omitempty drops it
+	// from the file on the next write and the migration runs at most once.
+	SnapMax             int                               `json:"snapMax,omitempty"`
 	_snapScale          float64                           `json:"-"`
 	PulseMaxAmplitude   float64                           `json:"pulseMaxAmplitude"`
 	PulseMaxFrequencyHz float64                           `json:"pulseMaxFrequencyHz"`
@@ -311,9 +325,10 @@ type Snapshot struct {
 	JerkScale     float64
 
 	// Haptics snap settings (chassis frequency)
-	SnapCurve float64
-	SnapMax   int
-	SnapScale float64
+	SnapCurve     float64
+	SnapPivot     int
+	SnapPivotFreq float64
+	SnapScale     float64
 
 	// Haptics pulse settings
 	PulseMaxAmplitude   float64
@@ -1435,61 +1450,92 @@ func (c *Config) DecreaseHapticsSnapCurve() int {
 	return c.viper.Haptics.SnapCurve
 }
 
-// GetHapticsSnapScale returns the current snap scale factor.
+// GetHapticsSnapScale returns the current snap scale factor, in Hz per
+// snap^exponent. The minimum and maximum pulse frequency clamp the result;
+// they do not define the mapping's endpoints.
 func (c *Config) GetHapticsSnapScale() float64 {
 	return c.snapshot.Load().SnapScale
 }
 
-// GetHapticsSnapMax returns the maximum snap value.
-func (c *Config) GetHapticsSnapMax() int {
-	return c.snapshot.Load().SnapMax
+// GetHapticsSnapPivot returns the pivot snap value, in m/s^4.
+// This is the reference event: the snap whose pulse frequency sits at
+// GetHapticsSnapPivotFreq percent between the minimum and maximum pulse
+// frequency, regardless of how the snap curve is shaped.
+func (c *Config) GetHapticsSnapPivot() int {
+	return c.snapshot.Load().SnapPivot
 }
 
-// SetHapticsSnapMax sets the maximum snap value.
-// The snap curve is applied over the range from 0 to this maximum value.
-// Any snap values above this value are clamped to this maximum.
-// Allowed range is 1 to 200.
-func (c *Config) SetHapticsSnapMax(value int) {
-	value = min(value, 200)
-	value = max(value, 1)
+// SetHapticsSnapPivot sets the pivot snap value, in m/s^4.
+func (c *Config) SetHapticsSnapPivot(value int) {
+	value = min(value, hapticsSnapPivotMax)
+	value = max(value, hapticsSnapPivotMin)
 
 	c.mu.Lock()
-	c.viper.Haptics.SnapMax = value
+	c.viper.Haptics.SnapPivot = value
 	c.mu.Unlock()
-
 	c.updateSnapScale()
 }
 
-// IncreaseHapticsSnapMax increases the maximum snap value in increments of 1.
-func (c *Config) IncreaseHapticsSnapMax() int {
+// IncreaseHapticsSnapPivot increases the pivot snap value in increments of 100.
+func (c *Config) IncreaseHapticsSnapPivot() int {
 	c.mu.Lock()
-
-	c.viper.Haptics.SnapMax = min(
-		100,
-		c.viper.Haptics.SnapMax+1,
-	)
-
+	c.viper.Haptics.SnapPivot = min(hapticsSnapPivotMax, c.viper.Haptics.SnapPivot+100)
+	result := c.viper.Haptics.SnapPivot
 	c.mu.Unlock()
-
 	c.updateSnapScale()
 
-	return c.viper.Haptics.SnapMax
+	return result
 }
 
-// DecreaseHapticsSnapMax decreases the maximum snap value in increments of 1.
-func (c *Config) DecreaseHapticsSnapMax() int {
+// DecreaseHapticsSnapPivot decreases the pivot snap value in increments of 100.
+func (c *Config) DecreaseHapticsSnapPivot() int {
 	c.mu.Lock()
-
-	c.viper.Haptics.SnapMax = max(
-		1,
-		c.viper.Haptics.SnapMax-1,
-	)
-
+	c.viper.Haptics.SnapPivot = max(hapticsSnapPivotMin, c.viper.Haptics.SnapPivot-100)
+	result := c.viper.Haptics.SnapPivot
 	c.mu.Unlock()
-
 	c.updateSnapScale()
 
-	return c.viper.Haptics.SnapMax
+	return result
+}
+
+// GetHapticsSnapPivotFreq returns the pulse frequency at the pivot snap, as a
+// percentage of the span between the minimum and maximum pulse frequency.
+func (c *Config) GetHapticsSnapPivotFreq() float64 {
+	return c.snapshot.Load().SnapPivotFreq
+}
+
+// SetHapticsSnapPivotFreq sets the pulse frequency at the pivot snap, as a
+// percentage of the span between the minimum and maximum pulse frequency.
+func (c *Config) SetHapticsSnapPivotFreq(value float64) {
+	value = min(value, hapticsSnapPivotFreqMax)
+	value = max(value, hapticsSnapPivotFreqMin)
+
+	c.mu.Lock()
+	c.viper.Haptics.SnapPivotFreq = value
+	c.mu.Unlock()
+	c.updateSnapScale()
+}
+
+// IncreaseHapticsSnapPivotFreq increases the pivot frequency in increments of 1.0.
+func (c *Config) IncreaseHapticsSnapPivotFreq() float64 {
+	c.mu.Lock()
+	c.viper.Haptics.SnapPivotFreq = min(hapticsSnapPivotFreqMax, c.viper.Haptics.SnapPivotFreq+1.0)
+	result := c.viper.Haptics.SnapPivotFreq
+	c.mu.Unlock()
+	c.updateSnapScale()
+
+	return result
+}
+
+// DecreaseHapticsSnapPivotFreq decreases the pivot frequency in increments of 1.0.
+func (c *Config) DecreaseHapticsSnapPivotFreq() float64 {
+	c.mu.Lock()
+	c.viper.Haptics.SnapPivotFreq = max(hapticsSnapPivotFreqMin, c.viper.Haptics.SnapPivotFreq-1.0)
+	result := c.viper.Haptics.SnapPivotFreq
+	c.mu.Unlock()
+	c.updateSnapScale()
+
+	return result
 }
 
 // GetHapticsTransmissionJerkCurve returns the driveline response curve for the
@@ -4029,6 +4075,10 @@ func (c *Config) finalise() {
 	// is computed from it below.
 	c.migrateJerkMax()
 
+	// Fold any deprecated snapMax value into the pivot before the derived scale
+	// is computed from it below.
+	c.migrateSnapMax()
+
 	// All per-channel synth arrays are sized to the configured output channel
 	// count so that any channel index the pipeline addresses is valid.
 	numChannels := c.viper.Haptics.Output.Channels
@@ -4155,15 +4205,73 @@ func (c *Config) migrateJerkMax() {
 	c.viper.Haptics.JerkMax = 0
 }
 
-// updateSnapScale recalculates the snap scale factor based on the current snap curve, scale and maximum.
+// recomputeSnapScale recalculates the snap scale factor from the current snap
+// curve, pivot pair and pulse frequency limits.
+//
+// The response is frequency(snap) = scale * snap^exponent, in Hz per
+// snap^exponent, anchored so the pivot snap sits pivotFreq percent of the way
+// from the minimum to the maximum pulse frequency:
+//
+//	pivotHz = pulseMinHz + (pulseMaxHz - pulseMinHz) * pivotFreq
+//	scale   = pivotHz / pivot^exponent
+//
+// The minimum and maximum pulse frequency then clamp the response. They no
+// longer define the mapping's endpoints.
+//
+// Caller must hold c.mu.
+func (c *Config) recomputeSnapScale() {
+	exponent := float64(c.viper.Haptics.SnapCurve) / 1000.0
+	pivot := float64(c.viper.Haptics.SnapPivot)
+	frac := c.viper.Haptics.SnapPivotFreq / 100
+	hzRange := c.viper.Haptics.PulseMaxFrequencyHz - c.viper.Haptics.PulseMinFrequencyHz
+	pivotHz := c.viper.Haptics.PulseMinFrequencyHz + hzRange*frac
+
+	c.viper.Haptics._snapScale = pivotHz / math.Pow(pivot, exponent)
+}
+
+// updateSnapScale recalculates the snap scale factor and rebuilds the
+// snapshot. See recomputeSnapScale for the maths.
 func (c *Config) updateSnapScale() {
 	c.mu.Lock()
-	exponent := float64(c.viper.Haptics.SnapCurve) / 1000.0
-	snapMax := 1000 * float64(c.viper.Haptics.SnapMax)
-	c.viper.Haptics._snapScale = 1 / math.Pow(snapMax, exponent)
+	c.recomputeSnapScale()
 	c.rebuildSnapshot()
 	c.registerUpdate(false)
 	c.mu.Unlock()
+}
+
+// migrateSnapMax converts a surviving snapMax value into the equivalent pivot
+// and then clears it, so the conversion runs at most once and omitempty drops
+// the key on the next write.
+//
+// snapMax named the full-scale snap directly, so the pivot that reproduces the
+// same scale is:
+//
+//	pivotHz = pulseMinHz + (pulseMaxHz - pulseMinHz) * pivotFreq
+//	pivot   = 1000 * snapMax * (pivotHz / (pulseMaxHz - pulseMinHz))^(1/exponent)
+//
+// Caller must hold c.mu.
+func (c *Config) migrateSnapMax() {
+	if c.viper.Haptics.SnapMax <= 0 {
+		return
+	}
+
+	exponent := float64(c.viper.Haptics.SnapCurve) / 1000.0
+	frac := c.viper.Haptics.SnapPivotFreq / 100
+	hzRange := c.viper.Haptics.PulseMaxFrequencyHz - c.viper.Haptics.PulseMinFrequencyHz
+	pivotHz := c.viper.Haptics.PulseMinFrequencyHz + hzRange*frac
+
+	if exponent <= 0 || hzRange <= 0 || pivotHz <= 0 {
+		c.viper.Haptics.SnapMax = 0
+
+		return
+	}
+
+	// snapMax counted in thousands of m/s^4; the pivot is a plain m/s^4 figure.
+	snapMax := 1000 * float64(c.viper.Haptics.SnapMax)
+	pivot := snapMax * math.Pow(pivotHz/hzRange, 1/exponent)
+
+	c.viper.Haptics.SnapPivot = min(hapticsSnapPivotMax, max(hapticsSnapPivotMin, int(math.Round(pivot))))
+	c.viper.Haptics.SnapMax = 0
 }
 
 // computeEqCurve computes the EQ curve for a specific channel based on its bands.
@@ -4303,9 +4411,10 @@ func (c *Config) rebuildSnapshot() {
 		JerkPivotGain: c.viper.Haptics.JerkPivotGain,
 		JerkScale:     c.viper.Haptics._jerkScale,
 
-		SnapCurve: float64(c.viper.Haptics.SnapCurve),
-		SnapMax:   c.viper.Haptics.SnapMax,
-		SnapScale: c.viper.Haptics._snapScale,
+		SnapCurve:     float64(c.viper.Haptics.SnapCurve),
+		SnapPivot:     c.viper.Haptics.SnapPivot,
+		SnapPivotFreq: c.viper.Haptics.SnapPivotFreq,
+		SnapScale:     c.viper.Haptics._snapScale,
 
 		PulseMaxAmplitude:   c.viper.Haptics.PulseMaxAmplitude,
 		PulseMaxFrequencyHz: c.viper.Haptics.PulseMaxFrequencyHz,
@@ -4371,6 +4480,7 @@ func (c *Config) updatePulseWidthExtents() {
 	c.viper.Haptics._pulseWidthMax = float64(c.viper.Synthesizer.InternalSampleRateHz) /
 		(2 * c.viper.Haptics.PulseMinFrequencyHz)
 
+	c.recomputeSnapScale()
 	c.rebuildSnapshot()
 	c.registerUpdate(false)
 }

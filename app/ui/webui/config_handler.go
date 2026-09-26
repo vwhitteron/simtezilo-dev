@@ -138,7 +138,8 @@ func (h *configHandler) handleGetConfig(response http.ResponseWriter, _ *http.Re
 			"jerkPivot":                    h.config.GetHapticsJerkPivot(),
 			"jerkPivotGain":                h.config.GetHapticsJerkPivotGain(),
 			"snapCurve":                    h.config.GetHapticsSnapCurve(),
-			"snapMax":                      h.config.GetHapticsSnapMax(),
+			"snapPivot":                    h.config.GetHapticsSnapPivot(),
+			"snapPivotFreq":                h.config.GetHapticsSnapPivotFreq(),
 			"pulseMaxAmplitude":            h.config.GetHapticsPulseMaxAmplitude(),
 			"pulseMaxFrequencyHz":          h.config.GetHapticsPulseMaxHz(),
 			"pulseMinFrequencyHz":          h.config.GetHapticsPulseMinHz(),
@@ -763,9 +764,10 @@ func (h *configHandler) applyHapticsConfig(config map[string]any) []string {
 	errors = appendErr(errors, applyField(config, "snapCurve", "invalid snap curve value", func(f float64) {
 		h.config.SetHapticsSnapCurve(int(math.Round(f * 1000.0)))
 	}))
-	errors = appendErr(errors, applyField(config, "snapMax", "invalid snap max value", func(f float64) {
-		h.config.SetHapticsSnapMax(int(f))
+	errors = appendErr(errors, applyField(config, "snapPivot", "invalid snap pivot value", func(f float64) {
+		h.config.SetHapticsSnapPivot(int(f))
 	}))
+	errors = appendErr(errors, applyField(config, "snapPivotFreq", "invalid snap pivot frequency value", h.config.SetHapticsSnapPivotFreq))
 	errors = appendErr(errors, applyField(config, "dynamicTransmissionJerkCurve", "invalid transmission jerk curve value", func(f float64) {
 		h.config.SetHapticsTransmissionJerkCurve(int(math.Round(f * 1000.0)))
 	}))

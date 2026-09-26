@@ -279,8 +279,9 @@ func (g *Generator) calculateChassisHapticPulseFrequency() float64 {
 	)
 
 	pulseFrequencyScaler := signal.Abs(signal.Exponent(snap, g.cfg.GetHapticsSnapCurve()/1000))
-	pulseFrequencyScaler = signal.Scale(pulseFrequencyScaler, g.cfg.GetHapticsSnapScale())
-	pulseFrequencyHz := g.cfg.GetHapticePulseFrequencyHzRange() * pulseFrequencyScaler
+	// The scale already carries the Hz mapping. The configured minimum and
+	// maximum pulse frequency only clamp the result.
+	pulseFrequencyHz := signal.Scale(pulseFrequencyScaler, g.cfg.GetHapticsSnapScale())
 
 	if pulseFrequencyHz < g.cfg.GetHapticsPulseMinHz() {
 		pulseFrequencyHz = g.cfg.GetHapticsPulseMinHz()
