@@ -131,19 +131,17 @@ func (h *configHandler) handleGetConfig(response http.ResponseWriter, _ *http.Re
 				"sampleRate": h.config.GetAudioHapticsSampleRate(),
 				"latencyMs":  h.config.GetAudioHapticsLatencyMs(),
 			},
-			"dynamicTransmissionFeedback":  h.config.GethapticsDynamicTransFeedbackEnabled(),
-			"dynamicTransmissionJerkCurve": h.config.GetHapticsTransmissionJerkCurve(),
-			"dynamicTransmissionStepBlend": h.config.GetHapticsTransmissionStepBlend(),
-			"jerkCurve":                    h.config.GethapticsJerkCurve(),
-			"jerkPivot":                    h.config.GetHapticsJerkPivot(),
-			"jerkPivotGain":                h.config.GetHapticsJerkPivotGain(),
-			"snapCurve":                    h.config.GetHapticsSnapCurve(),
-			"snapPivot":                    h.config.GetHapticsSnapPivot(),
-			"snapPivotFreq":                h.config.GetHapticsSnapPivotFreq(),
-			"pulseMaxAmplitude":            h.config.GetHapticsPulseMaxAmplitude(),
-			"pulseMaxFrequencyHz":          h.config.GetHapticsPulseMaxHz(),
-			"pulseMinFrequencyHz":          h.config.GetHapticsPulseMinHz(),
-			"surfaceRumble":                h.config.GetHapticsSurfaceRumbles(),
+			"dynamicTransmissionFeedback":        h.config.GethapticsDynamicTransFeedbackEnabled(),
+			"dynamicTransmissionJerkCompression": h.config.GetHapticsTransmissionJerkCompression(),
+			"dynamicTransmissionStepBlend":       h.config.GetHapticsTransmissionStepBlend(),
+			"jerkCompression":                    h.config.GethapticsJerkCompression(),
+			"jerkCenter":                         h.config.GetHapticsJerkCenter(),
+			"snapCompression":                    h.config.GetHapticsSnapCompression(),
+			"snapCenter":                         h.config.GetHapticsSnapCenter(),
+			"pulseMaxAmplitude":                  h.config.GetHapticsPulseMaxAmplitude(),
+			"pulseMaxFrequencyHz":                h.config.GetHapticsPulseMaxHz(),
+			"pulseMinFrequencyHz":                h.config.GetHapticsPulseMinHz(),
+			"surfaceRumble":                      h.config.GetHapticsSurfaceRumbles(),
 		},
 		"pitRadio": map[string]any{
 			"enabled":               h.config.PitRadioEnabled(),
@@ -754,22 +752,20 @@ func (h *configHandler) applyHapticsConfig(config map[string]any) []string {
 	var errors []string
 
 	errors = appendErr(errors, applyField(config, "dynamicTransmissionFeedback", "invalid dynamic transmission feedback value", h.config.SetHapticsDynamicTransFeedbackEnabled))
-	errors = appendErr(errors, applyField(config, "jerkCurve", "invalid jerk curve value", func(f float64) {
-		h.config.SetHapticsJerkCurve(int(math.Round(f * 1000.0)))
+	errors = appendErr(errors, applyField(config, "jerkCompression", "invalid jerk compression value", func(f float64) {
+		h.config.SetHapticsJerkCompression(int(math.Round(f * 1000.0)))
 	}))
-	errors = appendErr(errors, applyField(config, "jerkPivot", "invalid jerk pivot value", func(f float64) {
-		h.config.SetHapticsJerkPivot(int(f))
+	errors = appendErr(errors, applyField(config, "jerkCenter", "invalid jerk center value", func(f float64) {
+		h.config.SetHapticsJerkCenter(int(f))
 	}))
-	errors = appendErr(errors, applyField(config, "jerkPivotGain", "invalid jerk pivot gain value", h.config.SetHapticsJerkPivotGain))
-	errors = appendErr(errors, applyField(config, "snapCurve", "invalid snap curve value", func(f float64) {
-		h.config.SetHapticsSnapCurve(int(math.Round(f * 1000.0)))
+	errors = appendErr(errors, applyField(config, "snapCompression", "invalid snap compression value", func(f float64) {
+		h.config.SetHapticsSnapCompression(int(math.Round(f * 1000.0)))
 	}))
-	errors = appendErr(errors, applyField(config, "snapPivot", "invalid snap pivot value", func(f float64) {
-		h.config.SetHapticsSnapPivot(int(f))
+	errors = appendErr(errors, applyField(config, "snapCenter", "invalid snap center value", func(f float64) {
+		h.config.SetHapticsSnapCenter(int(f))
 	}))
-	errors = appendErr(errors, applyField(config, "snapPivotFreq", "invalid snap pivot frequency value", h.config.SetHapticsSnapPivotFreq))
-	errors = appendErr(errors, applyField(config, "dynamicTransmissionJerkCurve", "invalid transmission jerk curve value", func(f float64) {
-		h.config.SetHapticsTransmissionJerkCurve(int(math.Round(f * 1000.0)))
+	errors = appendErr(errors, applyField(config, "dynamicTransmissionJerkCompression", "invalid transmission jerk compression value", func(f float64) {
+		h.config.SetHapticsTransmissionJerkCompression(int(math.Round(f * 1000.0)))
 	}))
 	errors = appendErr(errors, applyField(config, "dynamicTransmissionStepBlend", "invalid transmission step blend value", h.config.SetHapticsTransmissionStepBlend))
 	errors = appendErr(errors, applyField(config, "pulseMaxAmplitude", "invalid pulse max amplitude value", h.config.SetHapticsPulseMaxAmplitude))

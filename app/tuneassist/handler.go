@@ -66,18 +66,14 @@ func buildTuningDefaults(log zerolog.Logger) []byte {
 		stepBlend = *defaults.TransmissionStepBlend
 	}
 
-	// map[string]any rather than map[string]int: jerkPivotGain is a dB figure and
-	// carries a fractional part.
 	defaultsJSON, err := json.Marshal(map[string]any{
-		"jerkCurve":     defaults.JerkCurve,
-		"jerkPivot":     defaults.JerkPivot,
-		"jerkPivotGain": defaults.JerkPivotGain,
-		"snapCurve":     defaults.SnapCurve,
-		"snapPivot":     defaults.SnapPivot,
-		"snapPivotFreq": defaults.SnapPivotFreq,
+		"jerkCompression": defaults.JerkCompression,
+		"jerkCenter":      defaults.JerkCenter,
+		"snapCompression": defaults.SnapCompression,
+		"snapCenter":      defaults.SnapCenter,
 
-		"transmissionJerkCurve": defaults.TransmissionJerkCurve,
-		"transmissionStepBlend": stepBlend,
+		"transmissionJerkCompression": defaults.TransmissionJerkCompression,
+		"transmissionStepBlend":       stepBlend,
 
 		"surfaceRumble": defaults.SurfaceRumble,
 
@@ -171,11 +167,11 @@ func (s *Service) HandleData(response http.ResponseWriter, request *http.Request
 // per request and only the requested section is held, so nothing accumulates across
 // replay, lap, or tuning changes; the web UI caches the decoded buffer client-side.
 // Query: replay, lap, from, to (per-lap frame indices; to<0 => whole lap), and the
-// six tuning knobs jerkCurve/jerkPivot/jerkPivotGain/snapCurve/snapPivot/
-// snapPivotFreq (0 => shipped default, except jerkPivotGain which uses 1 as its
-// not-supplied sentinel since 0 is a legal gain value).
+// four tuning knobs jerkCompression/jerkCenter/snapCompression/snapCenter
+// (0 => shipped default). The bias each pair is anchored to is a fixed
+// constant and is not a query parameter.
 //
-// It also takes the transmission pair transmissionJerkCurve/transmissionStepBlend
+// It also takes the transmission pair transmissionJerkCompression/transmissionStepBlend
 // (the blend is optional rather than sentinelled, since its whole range is legal),
 // and the engine profile as primaryBalance/secondaryBalance/engineGain/pulseScale.
 // The engine four are all-or-nothing: an absent parameter leaves the replay
@@ -200,18 +196,13 @@ func (s *Service) HandleAudio(response http.ResponseWriter, request *http.Reques
 	toFrame := parseIntParam(request, "to", -1)
 
 	tuning := haptics.Tuning{
-		JerkCurve: parseIntParam(request, "jerkCurve", 0),
-		JerkPivot: parseIntParam(request, "jerkPivot", 0),
-		// 0 dB is a legal gain value, so "not supplied" is signalled with 1,
-		// which falls outside the valid -12..0 dB range and is rejected by
-		// applyTuning's bounds check.
-		JerkPivotGain: parseFloatParam(request, "jerkPivotGain", 1),
-		SnapCurve:     parseIntParam(request, "snapCurve", 0),
-		SnapPivot:     parseIntParam(request, "snapPivot", 0),
-		SnapPivotFreq: parseFloatParam(request, "snapPivotFreq", 0),
+		JerkCompression: parseIntParam(request, "jerkCompression", 0),
+		JerkCenter:      parseIntParam(request, "jerkCenter", 0),
+		SnapCompression: parseIntParam(request, "snapCompression", 0),
+		SnapCenter:      parseIntParam(request, "snapCenter", 0),
 
-		TransmissionJerkCurve: parseIntParam(request, "transmissionJerkCurve", 0),
-		TransmissionStepBlend: optionalFloatParam(request, "transmissionStepBlend", 0, 1),
+		TransmissionJerkCompression: parseIntParam(request, "transmissionJerkCompression", 0),
+		TransmissionStepBlend:       optionalFloatParam(request, "transmissionStepBlend", 0, 1),
 
 		SurfaceRumble: surfaceRumbleParams(request),
 

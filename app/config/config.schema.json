@@ -410,58 +410,58 @@
                     "description": "Enable haptic replay",
                     "default": false
                 },
-                "jerkCurve": {
+                "jerkCompression": {
                     "type": "integer",
                     "description": "Jerk response curve",
                     "minimum": 5,
                     "maximum": 995,
                     "default": 190
                 },
-                "jerkPivot": {
+                "jerkCurve": {
                     "type": "integer",
-                    "description": "Reference jerk value held at the pivot gain in m/s^3",
+                    "description": "Deprecated: renamed to jerkCompression. A non-null value is copied across on load and then cleared.",
+                    "deprecated": true,
+                    "minimum": 5,
+                    "maximum": 995
+                },
+                "jerkCenter": {
+                    "type": "integer",
+                    "description": "Reference jerk value, in m/s^3, held at -3 dB below full scale",
                     "minimum": 1,
                     "maximum": 20000,
                     "default": 601
                 },
-                "jerkPivotGain": {
-                    "type": "number",
-                    "description": "Amplitude at the pivot jerk in dB below full scale",
-                    "minimum": -12.0,
-                    "maximum": 0.0,
-                    "default": -3.0
-                },
                 "jerkMax": {
                     "type": "integer",
-                    "description": "Deprecated: replaced by jerkPivot and jerkPivotGain. A non-zero value is converted on load and then cleared.",
+                    "description": "Deprecated: replaced by jerkCenter. A non-zero value is converted on load and then cleared.",
                     "deprecated": true,
                     "minimum": 0,
                     "maximum": 200
                 },
-                "snapCurve": {
+                "snapCompression": {
                     "type": "integer",
                     "description": "Snap response curve",
                     "minimum": 5,
                     "maximum": 995,
                     "default": 310
                 },
-                "snapPivot": {
+                "snapCurve": {
                     "type": "integer",
-                    "description": "Reference snap value held at the pivot frequency in m/s^4",
-                    "minimum": 1,
-                    "maximum": 500000,
-                    "default": 62944
+                    "description": "Deprecated: renamed to snapCompression. A non-null value is copied across on load and then cleared.",
+                    "deprecated": true,
+                    "minimum": 5,
+                    "maximum": 995
                 },
-                "snapPivotFreq": {
-                    "type": "number",
-                    "description": "Pulse frequency at the pivot snap, as a percentage between the minimum and maximum pulse frequency",
-                    "minimum": 1,
-                    "maximum": 100,
-                    "default": 50
+                "snapCenter": {
+                    "type": "integer",
+                    "description": "Reference snap value, in units of 100 m/s^4, held at the pulse frequency halfway between the minimum and maximum pulse frequency",
+                    "minimum": 5,
+                    "maximum": 995,
+                    "default": 629
                 },
                 "snapMax": {
                     "type": "integer",
-                    "description": "Deprecated: replaced by snapPivot and snapPivotFreq. A non-zero value is converted on load and then cleared.",
+                    "description": "Deprecated: replaced by snapCenter. A non-zero value is converted on load and then cleared.",
                     "deprecated": true,
                     "minimum": 0,
                     "maximum": 200
@@ -492,7 +492,7 @@
                     "description": "Enable dynamic transmission feedback",
                     "default": true
                 },
-                "dynamicTransmissionJerkCurve": {
+                "dynamicTransmissionJerkCompression": {
                     "type": "integer",
                     "description": "Response curve applied to the driveline-driven gear shift magnitude",
                     "minimum": 5,

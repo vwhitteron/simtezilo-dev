@@ -26,8 +26,8 @@ import (
 // gearShiftMagnitudeFromDriveline's character*(1-stepBlend) term:
 //
 //	floor == ((character*gearShiftReferenceFrames/characterMax)*(1-stepBlend))^curve
-func floorClearingCharacter(gainMinDB, characterMax, stepBlend, jerkCurveThousandths float64) float64 {
-	curve := jerkCurveThousandths / 1000
+func floorClearingCharacter(gainMinDB, characterMax, stepBlend, jerkCompressionThousandths float64) float64 {
+	curve := jerkCompressionThousandths / 1000
 	drive := math.Pow(signal.GainToPowerRatio(gainMinDB), 1/curve)
 	characterNorm := drive / (1 - stepBlend)
 
@@ -103,7 +103,7 @@ func (suite *GearShiftProfileTestSuite) SetupTest() {
 // GearShiftImpulseTestSuite's floor tests, which exercise the actual driveline
 // mapping this seed feeds.
 func (suite *GearShiftProfileTestSuite) TestSeedMapsToTheGainFloor() {
-	suite.gen.cfg.SetHapticsTransmissionJerkCurve(750)
+	suite.gen.cfg.SetHapticsTransmissionJerkCompression(750)
 	suite.gen.gainMin = -4.50
 	suite.gen.seedProfile()
 
@@ -133,7 +133,7 @@ func (suite *GearShiftProfileTestSuite) TestSeedTracksTheFloor() {
 // used to exercise.
 func (suite *GearShiftProfileTestSuite) TestWarmUpOnlyRises() {
 	suite.gen.cfg.SetHapticsTransmissionStepBlend(0.5)
-	suite.gen.cfg.SetHapticsTransmissionJerkCurve(750)
+	suite.gen.cfg.SetHapticsTransmissionJerkCompression(750)
 	suite.gen.gainMin = -4.50
 	suite.gen.seedProfile()
 
@@ -383,7 +383,7 @@ func (suite *GearShiftProfileTestSuite) TestGenuinelyHarshVehicleIsLearned() {
 // floorSeed is the jerk the seed should resolve to: the value mapping to exactly
 // the configured gain floor.
 func (suite *GearShiftProfileTestSuite) floorSeed() float64 {
-	curve := suite.gen.cfg.GetHapticsTransmissionJerkCurve() / 1000
+	curve := suite.gen.cfg.GetHapticsTransmissionJerkCompression() / 1000
 	characterMax := gearShiftCharacterMax
 
 	seed := characterMax * math.Pow(signal.GainToPowerRatio(suite.gen.gainMin), 1/curve)
@@ -864,7 +864,7 @@ func (suite *GearShiftResyncWindowTestSuite) TestZeroSpeedFrameDoesNotCountTowar
 // floorSeed is the jerk the seed should resolve to: the value mapping to exactly
 // the configured gain floor.
 func (suite *GearShiftResyncWindowTestSuite) floorSeed() float64 {
-	curve := suite.gen.cfg.GetHapticsTransmissionJerkCurve() / 1000
+	curve := suite.gen.cfg.GetHapticsTransmissionJerkCompression() / 1000
 	characterMax := gearShiftCharacterMax
 
 	seed := characterMax * math.Pow(signal.GainToPowerRatio(suite.gen.gainMin), 1/curve)

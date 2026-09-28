@@ -213,7 +213,7 @@ func applyProbeTuningOverrides(app *probeApp) {
 	gearShiftMaxMeasureFrames = 32
 
 	app.cfg.SetHapticsTransmissionStepBlend(0.5)
-	app.cfg.SetHapticsTransmissionJerkCurve(750)
+	app.cfg.SetHapticsTransmissionJerkCompression(750)
 
 	if v, ok := probeEnvFloat("GEARSHIFT_PROBE_CHARACTER_MAX"); ok {
 		gearShiftCharacterMax = v
@@ -228,7 +228,7 @@ func applyProbeTuningOverrides(app *probeApp) {
 	}
 
 	if v, ok := probeEnvFloat("GEARSHIFT_PROBE_CURVE"); ok {
-		app.cfg.SetHapticsTransmissionJerkCurve(int(v))
+		app.cfg.SetHapticsTransmissionJerkCompression(int(v))
 	}
 
 	if v, ok := probeEnvFloat("GEARSHIFT_PROBE_FRAMES"); ok {

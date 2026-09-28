@@ -182,7 +182,7 @@ func (g *Generator) calculateChassisHapticPulseAmplitude() (
 	// the same way and buries the output under DC. The sign costs some sustained
 	// energy where overlapping bumps of opposite polarity subtract, but that is the
 	// cheaper trade: the bump's low-frequency weight is what gives the pulse its body.
-	pulseAmplitude = signal.Exponent(jerk, g.cfg.GethapticsJerkCurve()/1000)
+	pulseAmplitude = signal.Exponent(jerk, g.cfg.GethapticsJerkCompression()/1000)
 	pulseAmplitude = signal.Scale(pulseAmplitude, g.cfg.GetHapticsJerkScale())
 
 	unclampedAmplitude = signal.Abs(pulseAmplitude)
@@ -278,7 +278,7 @@ func (g *Generator) calculateChassisHapticPulseFrequency() float64 {
 		g.kin.Current.ResolvedRotSnap,
 	)
 
-	pulseFrequencyScaler := signal.Abs(signal.Exponent(snap, g.cfg.GetHapticsSnapCurve()/1000))
+	pulseFrequencyScaler := signal.Abs(signal.Exponent(snap, g.cfg.GetHapticsSnapCompression()/1000))
 	// The scale already carries the Hz mapping. The configured minimum and
 	// maximum pulse frequency only clamp the result.
 	pulseFrequencyHz := signal.Scale(pulseFrequencyScaler, g.cfg.GetHapticsSnapScale())

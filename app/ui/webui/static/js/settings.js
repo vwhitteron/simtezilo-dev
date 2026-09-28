@@ -15,12 +15,12 @@ window.channelDisplayLabel = window.channelDisplayLabel || function (ch, names) 
 // Everything else is sent as displayed.
 //
 // This lives in one place because there are two save paths (per-input auto-save and
-// the bulk Save button); when only one of them scaled, typing 310 into Snap Curve
+// the bulk Save button); when only one of them scaled, typing 310 into Snap Compression
 // stored 310000.
 const CONFIG_FIELDS_SCALED_BY_1000 = new Set([
-    'haptics.jerkCurve',
-    'haptics.snapCurve',
-    'haptics.dynamicTransmissionJerkCurve',
+    'haptics.jerkCompression',
+    'haptics.snapCompression',
+    'haptics.dynamicTransmissionJerkCompression',
 ]);
 
 // A checkbox marked data-config-invert shows the logical negation of the value it
@@ -1033,7 +1033,7 @@ class ConfigManager {
     // selected; the mode only gates whether the inputs are editable.
     updateTransmissionDisabledState() {
         const dynamicRadio = document.getElementById('transmission-dynamic-radio');
-        const jerkCurveInput = document.getElementById('haptics-transmissionjerkcurve');
+        const jerkCompressionInput = document.getElementById('haptics-transmissionjerkcompression');
         const stepBlendInput = document.getElementById('haptics-transmissionstepblend');
 
         if (!dynamicRadio) {
@@ -1042,8 +1042,8 @@ class ConfigManager {
 
         const isDynamic = dynamicRadio.checked;
 
-        if (jerkCurveInput) {
-            jerkCurveInput.disabled = !isDynamic;
+        if (jerkCompressionInput) {
+            jerkCompressionInput.disabled = !isDynamic;
         }
         if (stepBlendInput) {
             stepBlendInput.disabled = !isDynamic;
@@ -2601,10 +2601,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // Add tooltips for complex settings (if needed)
     const complexInputs = {
         'hardware-displayorientation': 'Display rotation for screens that are mounted in different orientations',
-        'haptics-jerkcurve': 'Controls the responsiveness curve for jerk feedback (higher = more responsive)',
-        'haptics-snapcurve': 'Controls the responsiveness curve for snap feedback (higher = more responsive)',
-        'haptics-snappivot': 'Reference snap value in m/s^4 that the frequency response is calibrated against',
-        'haptics-snappivotfreq': 'Pulse frequency at the pivot snap, as a percentage between the minimum and maximum pulse frequency',
+        'haptics-jerkcompression': 'Controls the responsiveness curve for jerk feedback (higher = more responsive)',
+        'haptics-snapcompression': 'Controls the responsiveness curve for snap feedback (higher = more responsive)',
+        'haptics-snapcenter': 'Reference snap value, in units of 100 m/s^4, that the frequency response is calibrated against',
         'synth-mastergain': 'Overall volume level for all haptic feedback in decibels',
         'telemetry-source': 'UDP endpoint where telemetry data is received from the racing game'
     };

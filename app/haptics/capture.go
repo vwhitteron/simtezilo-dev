@@ -42,20 +42,19 @@ import (
 
 // Tuning overrides the jerk/snap generator knobs the web UI exposes. A zero
 // value for most fields leaves the shipped default in place. Amplitude is driven by
-// the jerk trio (curve, pivot, pivot gain), frequency by the snap pair; the config
+// the jerk pair (compression, center), frequency by the snap pair; the config
 // derives the internal jerk/snap scale factors from these on set, exactly as the
-// live app does.
+// live app does. The bias each pair is anchored to is a fixed constant, not a
+// tunable knob.
 type Tuning struct {
-	JerkCurve     int     // GetHapticsJerkCurve — amplitude response curvature
-	JerkPivot     int     // GetHapticsJerkPivot — reference jerk, in m/s^3
-	JerkPivotGain float64 // GetHapticsJerkPivotGain — level of the reference jerk, in dB below full scale
-	SnapCurve     int     // GetHapticsSnapCurve — frequency response curvature
-	SnapPivot     int     // GetHapticsSnapPivot — reference snap, in m/s^4
-	SnapPivotFreq float64 // GetHapticsSnapPivotFreq — pulse frequency of the reference snap, as a percent between min and max
+	JerkCompression int // GetHapticsJerkCompression — amplitude response curvature
+	JerkCenter      int // GetHapticsJerkCenter — reference jerk, in m/s^3
+	SnapCompression int // GetHapticsSnapCompression — frequency response curvature
+	SnapCenter      int // GetHapticsSnapCenter — reference snap, in units of 100 m/s^4
 
-	// TransmissionJerkCurve is the driveline response curve, in thousandths. Zero
+	// TransmissionJerkCompression is the driveline response curve, in thousandths. Zero
 	// keeps the shipped default, as the chassis curves do.
-	TransmissionJerkCurve int
+	TransmissionJerkCompression int
 
 	// TransmissionStepBlend is how deeply this shift's driveline step blends into
 	// the previous one. Its whole 0..1 range is legal, zero included, so there is no
@@ -83,16 +82,14 @@ func DefaultTuning() Tuning {
 	stepBlend := cfg.GetHapticsTransmissionStepBlend()
 
 	return Tuning{
-		JerkCurve:     int(cfg.GethapticsJerkCurve()),
-		JerkPivot:     cfg.GetHapticsJerkPivot(),
-		JerkPivotGain: cfg.GetHapticsJerkPivotGain(),
-		SnapCurve:     int(cfg.GetHapticsSnapCurve()),
-		SnapPivot:     cfg.GetHapticsSnapPivot(),
-		SnapPivotFreq: cfg.GetHapticsSnapPivotFreq(),
+		JerkCompression: int(cfg.GethapticsJerkCompression()),
+		JerkCenter:      cfg.GetHapticsJerkCenter(),
+		SnapCompression: int(cfg.GetHapticsSnapCompression()),
+		SnapCenter:      cfg.GetHapticsSnapCenter(),
 
-		TransmissionJerkCurve: int(cfg.GetHapticsTransmissionJerkCurve()),
-		TransmissionStepBlend: &stepBlend,
-		SurfaceRumble:         cfg.GetHapticsSurfaceRumbles(),
+		TransmissionJerkCompression: int(cfg.GetHapticsTransmissionJerkCompression()),
+		TransmissionStepBlend:       &stepBlend,
+		SurfaceRumble:               cfg.GetHapticsSurfaceRumbles(),
 	}
 }
 
@@ -559,31 +556,20 @@ func drainFrame(synth *synthesizer.Synthesizer, readBuf []float64, want int, con
 // applyTuning writes the non-zero override knobs into the config. Setting the
 // curve/max pairs recomputes the derived jerk/snap scale factors internally.
 func applyTuning(cfg *config.Config, tuning Tuning) {
-	if tuning.JerkCurve > 0 {
-		cfg.SetHapticsJerkCurve(tuning.JerkCurve)
+	if tuning.JerkCompression > 0 {
+		cfg.SetHapticsJerkCompression(tuning.JerkCompression)
 	}
 
-	if tuning.JerkPivot > 0 {
-		cfg.SetHapticsJerkPivot(tuning.JerkPivot)
+	if tuning.JerkCenter > 0 {
+		cfg.SetHapticsJerkCenter(tuning.JerkCenter)
 	}
 
-	// JerkPivotGain's valid range (-12..0 dB) includes negative values and zero,
-	// so the usual ">0 means supplied" sentinel can't distinguish "not supplied"
-	// from a legitimate 0 dB gain. Use a bounds check instead.
-	if tuning.JerkPivotGain >= -12 && tuning.JerkPivotGain <= 0 {
-		cfg.SetHapticsJerkPivotGain(tuning.JerkPivotGain)
+	if tuning.SnapCompression > 0 {
+		cfg.SetHapticsSnapCompression(tuning.SnapCompression)
 	}
 
-	if tuning.SnapCurve > 0 {
-		cfg.SetHapticsSnapCurve(tuning.SnapCurve)
-	}
-
-	if tuning.SnapPivot > 0 {
-		cfg.SetHapticsSnapPivot(tuning.SnapPivot)
-	}
-
-	if tuning.SnapPivotFreq > 0 {
-		cfg.SetHapticsSnapPivotFreq(tuning.SnapPivotFreq)
+	if tuning.SnapCenter > 0 {
+		cfg.SetHapticsSnapCenter(tuning.SnapCenter)
 	}
 
 	applyLayerTuning(cfg, tuning)
@@ -592,8 +578,8 @@ func applyTuning(cfg *config.Config, tuning Tuning) {
 // applyLayerTuning writes the transmission and road-texture overrides. It is split
 // from applyTuning so neither half grows past the branch budget as layers are added.
 func applyLayerTuning(cfg *config.Config, tuning Tuning) {
-	if tuning.TransmissionJerkCurve > 0 {
-		cfg.SetHapticsTransmissionJerkCurve(tuning.TransmissionJerkCurve)
+	if tuning.TransmissionJerkCompression > 0 {
+		cfg.SetHapticsTransmissionJerkCompression(tuning.TransmissionJerkCompression)
 	}
 
 	if tuning.TransmissionStepBlend != nil {

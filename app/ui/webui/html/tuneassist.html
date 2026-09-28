@@ -304,6 +304,13 @@
             outline-offset: 2px;
         }
 
+        /* The gain/frequency plot takes the arrow keys only while it has focus. A mouse
+           click gives it focus too, so the ring shows on :focus, not :focus-visible. */
+        #gain-chart:focus {
+            outline: 2px solid var(--bs-primary);
+            outline-offset: 2px;
+        }
+
         /* Plot surfaces are framed like the web UI's cards.
            Deliberately NOT the --bs-card-* variables: Bootstrap declares those
            inside its own `.card` rule, so on a bare <canvas> they are undefined
@@ -965,13 +972,6 @@
                 <select id="lap-select"></select>
             </div>
             <div class="lap-group">
-                <label for="filter-toggle">Filter:</label>
-                <label class="toggle-switch">
-                    <input type="checkbox" id="filter-toggle" checked>
-                    <span class="slider"></span>
-                </label>
-            </div>
-            <div class="lap-group">
                 <label for="highlight-count">Window:</label>
                 <select id="highlight-count">
                     <option value="15">250 ms</option>
@@ -1022,18 +1022,17 @@
                                 aria-controls="plot-hint-popup"
                                 aria-label="Pointer gestures for this plot"></span>
                             <div class="plot-hint-popup" id="plot-hint-popup" role="tooltip" hidden>
-                                <div>Shift-drag a pivot line: retune it</div>
-                                <div>Shift-drag the crossover: retune both</div>
-                                <div>Shift-scroll a pivot line: its curve up / down</div>
-                                <div>Shift-scroll the crossover: both curves</div>
-                                <div>Alt-drag anywhere: jerk / snap pivot values</div>
-                                <div>Alt-drag on a pivot line: that value alone</div>
-                                <div>Shift-drag off the lines: pan the view</div>
+                                <div>Shift-drag: jerk / snap center values</div>
+                                <div>Alt-drag: jerk / snap compression</div>
+                                <div>Ctrl+Alt-drag: compression, one axis only</div>
+                                <div>Alt-scroll: jerk compression up/down, snap compression left/right</div>
+                                <div>Click the plot, then Shift+arrows: jerk / snap center values</div>
+                                <div>Click the plot, then Alt+arrows: jerk / snap compression</div>
                             </div>
                             <button type="button" class="chart-tab active" role="tab" data-plot="jerksnap">Jerk /
                                 Snap</button>
                             <button type="button" class="chart-tab" role="tab" data-plot="gainfreq"
-                                title="Pulse gain against pulse frequency. Shift-drag a pivot line to retune it, Shift-scroll it to adjust that curve, and Alt-drag anywhere to move the jerk and snap pivot values, or on one line to move that value alone">Gain
+                                title="Pulse gain against pulse frequency. Shift-drag to move the jerk and snap center values, Alt-drag or Alt-scroll to adjust jerk and snap compression">Gain
                                 / Frequency</button>
                             <button type="button" class="chart-tab" role="tab"
                                 data-plot="spectrogram">Spectrogram</button>
@@ -1049,7 +1048,8 @@
                         </div>
                         <div class="plot-container">
                             <canvas id="chart"></canvas>
-                            <canvas id="gain-chart" hidden></canvas>
+                            <canvas id="gain-chart" tabindex="0" hidden
+                                aria-label="Gain / frequency plot. Shift+arrows move the centers, Alt+arrows adjust the compression"></canvas>
                             <canvas id="spectrogram-chart" hidden></canvas>
                             <canvas id="spectrum-chart" hidden></canvas>
                         </div>
@@ -1189,54 +1189,35 @@
                                 inputmode="decimal">
                         </div>
                         <div class="tune-row">
-                            <label for="out-jerkCurve">Jerk curve</label>
-                            <input type="range" id="tune-jerkCurve" min="5" max="995" step="5" tabindex="-1"
-                                aria-label="Jerk curve">
-                            <input type="number" class="tune-value" id="out-jerkCurve" min="5" max="995" step="5"
+                            <label for="out-jerkCompression">Jerk compression</label>
+                            <input type="range" id="tune-jerkCompression" min="5" max="995" step="5" tabindex="-1"
+                                aria-label="Jerk compression">
+                            <input type="number" class="tune-value" id="out-jerkCompression" min="5" max="995" step="5"
                                 inputmode="numeric">
                         </div>
                         <div class="tune-row">
-                            <label for="out-jerkPivot">Jerk pivot</label>
-                            <input type="range" id="tune-jerkPivot" min="0" max="1000" step="1" tabindex="-1"
-                                aria-label="Jerk pivot">
+                            <label for="out-jerkCenter">Jerk center</label>
+                            <input type="range" id="tune-jerkCenter" min="0" max="1000" step="1" tabindex="-1"
+                                aria-label="Jerk center">
                             <!-- min must stay > 0: it is the `lo` of the geometric slider mapping, and a
-                             zero lower bound makes tuneValueAtPos/tunePosForValue NaN. It also has to
-                             be a multiple of step, because the spinner ladder is anchored at min —
-                             min="1" step="10" would spin 631, 641 rather than 640, 650. -->
-                            <input type="number" class="tune-value" id="out-jerkPivot" min="10" max="20000" step="10"
+                             zero lower bound makes tuneValueAtPos/tunePosForValue NaN. step="1" keeps
+                             any integer valid; ArrowUp/ArrowDown step by TUNE_KEY_STEPS instead. -->
+                            <input type="number" class="tune-value" id="out-jerkCenter" min="1" max="20000" step="1"
                                 inputmode="numeric">
                         </div>
                         <div class="tune-row">
-                            <label for="out-jerkPivotGain">Jerk pivot gain</label>
-                            <input type="range" id="tune-jerkPivotGain" min="-12" max="0" step="0.1" tabindex="-1"
-                                aria-label="Jerk pivot gain">
-                            <input type="number" class="tune-value" id="out-jerkPivotGain" min="-12" max="0" step="0.1"
-                                inputmode="decimal">
-                        </div>
-                        <div class="tune-row">
-                            <label for="out-snapCurve">Snap curve</label>
-                            <input type="range" id="tune-snapCurve" min="5" max="995" step="5" tabindex="-1"
-                                aria-label="Snap curve">
-                            <input type="number" class="tune-value" id="out-snapCurve" min="5" max="995" step="5"
+                            <label for="out-snapCompression">Snap compression</label>
+                            <input type="range" id="tune-snapCompression" min="5" max="995" step="5" tabindex="-1"
+                                aria-label="Snap compression">
+                            <input type="number" class="tune-value" id="out-snapCompression" min="5" max="995" step="5"
                                 inputmode="numeric">
                         </div>
                         <div class="tune-row">
-                            <label for="out-snapPivot">Snap pivot</label>
-                            <input type="range" id="tune-snapPivot" min="0" max="1000" step="1" tabindex="-1"
-                                aria-label="Snap pivot">
-                            <!-- min must stay > 0: it is the `lo` of the geometric slider mapping, and a
-                             zero lower bound makes tuneValueAtPos/tunePosForValue NaN. It also has to
-                             be a multiple of step, because the spinner ladder is anchored at min —
-                             min="1" step="10" would spin 631, 641 rather than 640, 650. -->
-                            <input type="number" class="tune-value" id="out-snapPivot" min="100" max="500000"
-                                step="100" inputmode="numeric">
-                        </div>
-                        <div class="tune-row">
-                            <label for="out-snapPivotFreq">Snap pivot freq</label>
-                            <input type="range" id="tune-snapPivotFreq" min="1" max="100" step="1" tabindex="-1"
-                                aria-label="Snap pivot freq">
-                            <input type="number" class="tune-value" id="out-snapPivotFreq" min="1" max="100" step="1"
-                                inputmode="numeric">
+                            <label for="out-snapCenter">Snap center</label>
+                            <input type="range" id="tune-snapCenter" min="5" max="995" step="5" tabindex="-1"
+                                aria-label="Snap center">
+                            <input type="number" class="tune-value" id="out-snapCenter" min="5" max="995"
+                                step="1" inputmode="numeric">
                         </div>
                         <div class="tune-actions">
                             <button type="button" class="tune-reset" data-tune-tab="chassis">Reset</button>
@@ -1304,10 +1285,10 @@
                              switch stays on the settings page: apart from the layer gain
                              above, this widget shapes the signal, as the Chassis tab does. -->
                         <div class="tune-row">
-                            <label for="out-transmissionJerkCurve">Shift curve</label>
-                            <input type="range" id="tune-transmissionJerkCurve" min="5" max="995" step="5" tabindex="-1"
+                            <label for="out-transmissionJerkCompression">Shift curve</label>
+                            <input type="range" id="tune-transmissionJerkCompression" min="5" max="995" step="5" tabindex="-1"
                                 aria-label="Shift curve">
-                            <input type="number" class="tune-value" id="out-transmissionJerkCurve" min="5" max="995"
+                            <input type="number" class="tune-value" id="out-transmissionJerkCompression" min="5" max="995"
                                 step="5" inputmode="numeric">
                         </div>
                         <div class="tune-row">
@@ -1424,12 +1405,9 @@
             let poiDist = 0;            // point-of-interest distance along lap (metres)
             let highlightCount = 15;    // number of plotted points to emphasise near the POI
             let scatterHighlightOn = true;  // draw the window-period overlay on the scatter plots
-            let useRaw = false;         // false = processed (device) jerk/snap, true = raw (ungated)
-
-            // Active jerk/snap accessors: switch the whole plot between the processed
-            // (live-path) fields and the raw (ungated) fields the backend ships alongside.
-            const jerkOf = (d) => useRaw ? d.jerkRaw : d.jerk;
-            const snapOf = (d) => useRaw ? d.snapRaw : d.snap;
+            // Jerk/snap accessors. The plots always show the processed (live-path) fields.
+            const jerkOf = (d) => d.jerk;
+            const snapOf = (d) => d.snap;
             let currentLapKey = null;
             let pendingLap = null;      // lap key from the URL, applied once on the initial replay load
             let pendingView = null;     // {zoom,panx,pany,poi} from the URL, applied once with the initial lap
@@ -1476,36 +1454,24 @@
             const SCATTER_ZOOM_STEP = 1.15;   // span factor per wheel tick
             const SCATTER_MAX_ZOOM = 50;      // deepest zoom, as a multiple of the auto-fit span
             let scatterZoom = null;           // jerk/snap viewport, or null for auto-fit
-            let gainZoom = null;              // gain/frequency viewport, or null for auto-fit
             let scatterPanning = false;       // a modifier drag is moving a scatter viewport
 
             // Shift is the scatter pan modifier. Held, it drags the view and keeps the press
             // off the data: the selected point does not change.
             function panHeld(e) { return e.shiftKey; }
 
-            // Shift grabs a pivot handle on the gain/frequency chart: the horizontal line
-            // carries JerkPivotGain, the vertical line carries SnapPivotFreq, and their
-            // crossover carries both. The pointer must sit on the handle, so a Shift press
-            // away from the handles still pans. A Shift wheel on a handle reshapes the curve
-            // that handle belongs to.
-            function pivotGrabHeld(e) { return !!e.shiftKey; }
+            // Alt drags jerk and snap compression on the gain/frequency chart: vertical
+            // motion changes JerkCompression, horizontal motion changes SnapCompression, both
+            // at once. Alt also steps them from the wheel. It is the only compression modifier.
+            function compressionDragHeld(e) { return !!e.altKey; }
 
-            // Alt drags the pivot pair from anywhere on the gain/frequency chart. Both pivots
-            // travel with the pointer, so neither one needs to be found first.
-            function pivotPairHeld(e) { return !!e.altKey; }
+            // Shift drags the jerk and snap center values from anywhere on the gain/frequency
+            // chart. Both values travel with the pointer, so neither one needs to be found first.
+            function centerDragHeld(e) { return !!e.shiftKey; }
 
-            const PIVOT_GRAB_PX = 7;    // pointer distance that counts as a hit on one line
-            const PIVOT_KNOT_PX = 11;   // crossover hit radius, wider so the pair wins the overlap
+            const GAIN_CURSORS = { center: 'move', compression: 'all-scroll' };
 
-            // The wheel has no press to aim with, so its bands are wider than the drag bands.
-            const CURVE_WHEEL_GRAB_PX = 24;
-            const CURVE_WHEEL_KNOT_PX = 32;
-
-            const PIVOT_CURSORS = { gain: 'ns-resize', freq: 'ew-resize', both: 'move' };
-
-            let pivotDrag = null;       // 'gain', 'freq' or 'both' while a pivot drag runs
-            let pivotHover = null;      // the handle under the pointer, with the modifier held
-            let pivotModifier = false;  // the modifier is held over the gain chart
+            let gainDragMode = null;   // 'center' or 'compression' while a gain-chart drag runs
 
             // Legend items for the scatter charts. Fill each swatch with the opaque surface
             // colour, because the dataset fill is the faint cloud alpha.
@@ -1554,17 +1520,15 @@
             }
 
             // Reflect the current control + map state into the URL query string so a refresh
-            // (or a shared link) restores the same replay/lap/filter/highlight/viewport/POI.
+            // (or a shared link) restores the same replay/lap/highlight/viewport/POI.
             function updateUrl() {
                 const params = new URLSearchParams();
                 const replay = document.getElementById('replay-select').value;
                 const lap = document.getElementById('lap-select').value;
                 const highlight = document.getElementById('highlight-count').value;
-                const filter = document.getElementById('filter-toggle').checked;
                 if (replay) params.set('replay', replay);
                 if (lap) params.set('lap', lap);
                 if (highlight) params.set('highlight', highlight);
-                params.set('filter', filter ? '1' : '0');
                 // Map viewport + point of interest. Only emit zoom/pan once the map is actually
                 // zoomed in (default full-circuit view needs no restoring).
                 if (mapZoom !== 1 || mapPanX !== 0 || mapPanY !== 0) {
@@ -1650,8 +1614,8 @@
                         activePlot !== 'jerksnap' && activePlot !== 'gainfreq';
                 }
 
-                // The pivot lines belong to the gain/frequency plot, so their hint goes with
-                // them rather than standing over a plot that has no pivots to drag.
+                // The Alt/Shift/scroll gestures belong to the gain/frequency plot, so their
+                // hint goes with them rather than standing over a plot they don't apply to.
                 const plotHint = document.getElementById('plot-hint');
                 if (plotHint) {
                     plotHint.hidden = activePlot !== 'gainfreq';
@@ -1687,14 +1651,7 @@
                     replaySelectEl.appendChild(opt);
                 });
 
-                // Restore filter/highlight from the URL before the first chart draw.
-                const filterEl = document.getElementById('filter-toggle');
-                const filterParam = params.get('filter');
-                if (filterParam !== null) {
-                    filterEl.checked = filterParam !== '0';
-                    useRaw = !filterEl.checked;
-                }
-
+                // Restore the highlight from the URL before the first chart draw.
                 const highlightEl = document.getElementById('highlight-count');
                 const highlightParam = params.get('highlight');
                 if (highlightParam !== null && [...highlightEl.options].some(o => o.value === highlightParam)) {
@@ -1747,13 +1704,6 @@
                     highlightCount = parseInt(e.target.value);
                     updateUrl();
                     updateChart();
-                });
-
-                filterEl.addEventListener('change', (e) => {
-                    useRaw = !e.target.checked;
-                    updateUrl();
-                    updateChart();
-                    scheduleAudioRefresh();
                 });
 
                 // The guidance panel. A click on the icon opens it, a click anywhere else
@@ -1901,12 +1851,8 @@
                 displayedScales = null;
                 targetScales = null;
                 scatterZoom = null;
-                gainZoom = null;
                 scatterPanning = false;
-                pivotDrag = null;
-                pivotHover = null;
-                pivotModifier = false;
-                gainChart.options.scales.y.ticks.stepSize = GAIN_STEP_DB;
+                gainDragMode = null;
                 updateChart();
                 drawMap(lapKey);
                 scheduleAudioRefresh();
@@ -2706,116 +2652,9 @@
                 installScatterNav(chart, () => targetScales, applyScatterViewport);
             }
 
-            // Both pivot reference lines share one colour, so a reader reads them as the
-            // pair they are. Their own labels name the axis each one marks.
-            const PIVOT_LINE_COLOR = 'rgba(233, 69, 96, 0.85)';
-
-            // True when one pivot line must draw as a grabbable handle: a drag owns the line,
-            // or the pointer sits on the line with the modifier held.
-            function pivotLineActive(which) {
-                const state = pivotDrag || pivotHover;
-
-                return state === which || state === 'both';
-            }
-
-            // Draws a dashed horizontal line at the configured jerk pivot gain, so retuning
-            // JerkPivotGain visibly moves the reference line against the plotted points.
-            const pivotGainLine = {
-                id: 'pivotGainLine',
-                afterDatasetsDraw(c) {
-                    const yScale = c.scales.y;
-                    const y = yScale.getPixelForValue(tuneValues.jerkPivotGain);
-                    const { top, bottom, right } = c.chartArea;
-                    if (y < top || y > bottom) return;
-
-                    const active = pivotLineActive('gain');
-                    const ctx = c.ctx;
-                    ctx.save();
-                    ctx.strokeStyle = PIVOT_LINE_COLOR;
-                    ctx.lineWidth = active ? 3 : 1.5;
-                    ctx.setLineDash([5, 4]);
-                    ctx.beginPath();
-                    ctx.moveTo(c.chartArea.left, y);
-                    ctx.lineTo(right, y);
-                    ctx.stroke();
-
-                    ctx.setLineDash([]);
-                    const label = `${tuneValues.jerkPivotGain.toFixed(1)} dB pivot`;
-                    ctx.font = '11px system-ui, sans-serif';
-                    ctx.textAlign = 'right';
-                    ctx.textBaseline = 'bottom';
-                    ctx.fillStyle = PIVOT_LINE_COLOR;
-                    ctx.fillText(label, right, y - 3);
-                    ctx.restore();
-                },
-            };
-
-            // Draws a dashed vertical line at the pivot pulse frequency, the frequency-axis
-            // counterpart of pivotGainLine. Retuning SnapPivotFreq moves it against the
-            // plotted points. The label sits inside the line, on whichever side has room.
-            const pivotFreqLine = {
-                id: 'pivotFreqLine',
-                afterDatasetsDraw(c) {
-                    const hz = pivotFreqHz();
-                    const x = c.scales.x.getPixelForValue(hz);
-                    const { top, bottom, left, right } = c.chartArea;
-                    if (x < left || x > right) return;
-
-                    const active = pivotLineActive('freq');
-                    const ctx = c.ctx;
-                    ctx.save();
-                    ctx.strokeStyle = PIVOT_LINE_COLOR;
-                    ctx.lineWidth = active ? 3 : 1.5;
-                    ctx.setLineDash([5, 4]);
-                    ctx.beginPath();
-                    ctx.moveTo(x, top);
-                    ctx.lineTo(x, bottom);
-                    ctx.stroke();
-
-                    ctx.setLineDash([]);
-                    const label = `${hz.toFixed(1)} Hz pivot`;
-                    const flip = x > right - 70;
-                    ctx.font = '11px system-ui, sans-serif';
-                    ctx.textAlign = flip ? 'right' : 'left';
-                    ctx.textBaseline = 'top';
-                    ctx.fillStyle = PIVOT_LINE_COLOR;
-                    ctx.fillText(label, flip ? x - 4 : x + 4, top + 3);
-                    ctx.restore();
-                },
-            };
-
-            // A square handle where the two pivot lines cross. It appears only under the drag
-            // modifier, so the plot stays clean at rest. A drag on the handle moves both
-            // pivots together. The handle fills in when the pointer is on it.
-            const pivotCrossover = {
-                id: 'pivotCrossover',
-                afterDatasetsDraw(c) {
-                    if (!pivotModifier && !pivotDrag) return;
-
-                    const x = c.scales.x.getPixelForValue(pivotFreqHz());
-                    const y = c.scales.y.getPixelForValue(tuneValues.jerkPivotGain);
-                    const { top, bottom, left, right } = c.chartArea;
-                    if (x < left || x > right || y < top || y > bottom) return;
-
-                    const armed = (pivotDrag || pivotHover) === 'both';
-                    const half = armed ? 6 : 4;
-                    const ctx = c.ctx;
-                    ctx.save();
-                    ctx.strokeStyle = PIVOT_LINE_COLOR;
-                    ctx.fillStyle = armed ? PIVOT_LINE_COLOR : 'rgba(20, 20, 24, 0.9)';
-                    ctx.lineWidth = 1.5;
-                    ctx.setLineDash([]);
-                    ctx.beginPath();
-                    ctx.rect(x - half, y - half, half * 2, half * 2);
-                    ctx.fill();
-                    ctx.stroke();
-                    ctx.restore();
-                },
-            };
-
             // Half-amplitude reference on the gain axis. -6 dB is half the 0 dB clamp, so
             // the line marks where a pulse loses half its amplitude. It is fixed, not tuned,
-            // which is why it draws dotted and in a colour the pivot pair does not use.
+            // which is why it draws dotted and in a colour no other plot element uses.
             const HALF_AMPLITUDE_DB = -6;
             const HALF_AMPLITUDE_COLOR = 'rgba(255, 216, 77, 0.85)';
 
@@ -2842,7 +2681,7 @@
                     ctx.textAlign = 'right';
                     ctx.textBaseline = 'bottom';
                     ctx.fillStyle = HALF_AMPLITUDE_COLOR;
-                    ctx.fillText('-6.0 dB 50%', right, y - 3);
+                    ctx.fillText('50% strength', right, y - 3);
                     ctx.restore();
                 },
             };
@@ -2857,7 +2696,7 @@
                         responsive: true,
                         maintainAspectRatio: false,
                         onHover: (_event, elements) => {
-                            if (scatterPanning || pivotDrag) return;
+                            if (gainDragMode) return;
                             const frame = elements.length > 0
                                 ? (gainChart.data.datasets[elements[0].datasetIndex].data[elements[0].index].frame ?? null)
                                 : null;
@@ -2865,7 +2704,7 @@
                         },
                         onClick: (event, elements) => {
                             const native = event.native || event;
-                            if (panHeld(native) || pivotPairHeld(native) || pivotDrag) return;
+                            if (centerDragHeld(native) || compressionDragHeld(native) || gainDragMode) return;
                             if (elements.length === 0) return;
                             const pt = gainChart.data.datasets[elements[0].datasetIndex].data[elements[0].index];
                             if (!pt || pt.frame == null) return;
@@ -2902,7 +2741,7 @@
                             },
                             y: {
                                 title: { display: true, text: 'Pulse gain (dB)', color: '#aaa', font: { size: 14 } },
-                                min: GAIN_FLOOR_DB,
+                                min: GAIN_AXIS_FLOOR_DB,
                                 max: 0,
                                 // Ticks land on multiples of GAIN_STEP_DB. Chart.js drops whole
                                 // ticks when the axis is crowded, so the spacing stays a multiple.
@@ -2913,60 +2752,39 @@
                     },
                     plugins: [
                         halfAmplitudeLine,
-                        pivotGainLine,
-                        pivotFreqLine,
-                        pivotCrossover,
                         frameIndexCache,
                         crosshairReadout(d => `Gain: ${d.y.toFixed(1)} dB   Freq: ${d.x.toFixed(1)} Hz`)
                     ]
                 });
-                // The pivot handlers own an Alt press, a Shift press on a handle and a Shift
-                // wheel on a handle. Every other press and wheel falls through to the nav, so
-                // the plot keeps its pan and its zoom.
-                installScatterNav(gainChart, gainAutoBounds, applyGainViewport,
-                    (e) => e.type === 'wheel'
-                        ? curveWheelClaims(gainChart, e)
-                        : overChartArea(gainChart, e) && (pivotPairHeld(e)
-                            || (pivotGrabHeld(e) && pivotHandleAt(gainChart, e) !== null)));
-                // After the nav: both listen on mousemove, and the later handler owns the cursor.
-                installPivotDrag(gainChart);
+                // The gain/frequency chart has no pan or zoom: its axes are fixed, so it only
+                // needs the Alt/Shift drag and wheel gestures.
+                installGainGestures(gainChart);
             }
 
             // Re-applies the pulse-frequency axis bounds from `pulseLimits`, for when the chart
             // was built before the /tuning-defaults fetch landed.
             function applyGainAxisBounds() {
-                if (!gainChart || gainZoom) return;
+                if (!gainChart) return;
                 gainChart.options.scales.x.min = pulseLimits.minFrequencyHz;
                 gainChart.options.scales.x.max = pulseLimits.maxFrequencyHz;
                 gainChart.update('none');
             }
 
-            // Fit the gain axis to the visible points. 0 dB stays the ceiling — it is the
-            // amplitude clamp, so no point can sit above it — and the floor never goes below
-            // GAIN_FLOOR_DB. The pivot gain and the half-amplitude level are folded in, so
-            // both reference lines stay on screen even when every plotted point is louder
-            // than them. The floor snaps down to a multiple of GAIN_STEP_DB, so the axis
-            // resizes in fixed steps. Caller renders.
+            // The gain axis is locked to GAIN_AXIS_FLOOR_DB..0 dB, so the scale does not move
+            // as the points change. 0 dB is the amplitude clamp. Points below the floor
+            // simply don't appear on the plot.
             function gainAutoBounds() {
-                let lo = Infinity;
-                gainChart.data.datasets.forEach((ds, i) => {
-                    if (!gainChart.isDatasetVisible(i)) return;
-                    ds.data.forEach(pt => { if (pt.y < lo) lo = pt.y; });
-                });
-                if (!isFinite(lo)) lo = GAIN_FLOOR_DB;
-                lo = Math.min(lo, tuneValues.jerkPivotGain, HALF_AMPLITUDE_DB);
-                const stepped = -GAIN_STEP_DB * Math.ceil(-lo / GAIN_STEP_DB);
                 return {
                     xMin: pulseLimits.minFrequencyHz,
                     xMax: pulseLimits.maxFrequencyHz,
-                    yMin: Math.max(GAIN_FLOOR_DB, Math.min(-GAIN_STEP_DB, stepped)),
+                    yMin: GAIN_AXIS_FLOOR_DB,
                     yMax: 0,
                 };
             }
 
-            // Write the auto-fit y bounds into the chart. A scroll zoom parks this. Caller renders.
+            // Write the locked y bounds into the chart. Caller renders.
             function applyGainYBounds() {
-                if (!gainChart || gainZoom) return;
+                if (!gainChart) return;
                 const bounds = gainAutoBounds();
                 gainChart.options.scales.y.min = bounds.yMin;
                 gainChart.options.scales.y.max = bounds.yMax;
@@ -4133,29 +3951,41 @@
             // updateSnapScale), so the gain/frequency plot tracks the sliders without a
             // server round-trip on every move.
             const GAIN_FLOOR_DB = -60;   // plot floor; the curve runs to -inf as jerk -> 0
-            const GAIN_STEP_DB = 3;      // gain axis floor snaps to a multiple of this, so it resizes in steps
+            const GAIN_AXIS_FLOOR_DB = -24; // locked floor of the gain axis
+            const GAIN_STEP_DB = 3;      // gain axis tick step
             let pulseLimits = { minFrequencyHz: 16, maxFrequencyHz: 60, maxAmplitude: 1 };
 
+            // Fixed at the same values as config.go's hapticsJerkBiasDB and
+            // hapticsSnapBiasPercent: the bias is no longer a user setting.
+            const JERK_BIAS_DB = -3;
+            const SNAP_BIAS_PERCENT = 50;
+
+            // The physical snap center, in m/s^4: tuneValues.snapCenter is a 5..995
+            // setting value, and config.go's hapticsSnapCenterUnitMs4 is the multiplier
+            // that turns it into the physical quantity the mapping uses.
+            const SNAP_CENTER_UNIT_MS4 = 100;
+
             function gainDbOf(jerk) {
-                const exponent = tuneValues.jerkCurve / 1000;
-                const jerkScale = Math.pow(10, tuneValues.jerkPivotGain / 20) / Math.pow(tuneValues.jerkPivot, exponent);
+                const exponent = tuneValues.jerkCompression / 1000;
+                const jerkScale = Math.pow(10, JERK_BIAS_DB / 20) / Math.pow(tuneValues.jerkCenter, exponent);
                 const amp = Math.min(Math.pow(Math.abs(jerk), exponent) * jerkScale, pulseLimits.maxAmplitude);
                 if (!(amp > 0)) return GAIN_FLOOR_DB;
                 const db = 20 * Math.log10(amp);
                 return Number.isFinite(db) ? Math.max(GAIN_FLOOR_DB, db) : GAIN_FLOOR_DB;
             }
 
-            // The pulse frequency at the pivot snap. SnapPivotFreq is a percentage of the
-            // span between the configured minimum and maximum pulse frequency.
-            function pivotFreqHz() {
+            // The pulse frequency at the snap center. SNAP_BIAS_PERCENT is a percentage of
+            // the span between the configured minimum and maximum pulse frequency.
+            function snapBiasHz() {
                 const span = pulseLimits.maxFrequencyHz - pulseLimits.minFrequencyHz;
 
-                return pulseLimits.minFrequencyHz + span * (tuneValues.snapPivotFreq / 100);
+                return pulseLimits.minFrequencyHz + span * (SNAP_BIAS_PERCENT / 100);
             }
 
             function freqHzOf(snap) {
-                const exponent = tuneValues.snapCurve / 1000;
-                const snapScale = pivotFreqHz() / Math.pow(tuneValues.snapPivot, exponent);
+                const exponent = tuneValues.snapCompression / 1000;
+                const snapCenterMs4 = tuneValues.snapCenter * SNAP_CENTER_UNIT_MS4;
+                const snapScale = snapBiasHz() / Math.pow(snapCenterMs4, exponent);
                 const hz = Math.pow(Math.abs(snap), exponent) * snapScale;
                 return Number.isFinite(hz)
                     ? Math.min(pulseLimits.maxFrequencyHz, Math.max(pulseLimits.minFrequencyHz, hz))
@@ -4437,8 +4267,7 @@
             // Wire scroll zoom and modifier-drag pan onto a scatter chart. `base` returns the
             // chart's auto-fit viewport. `apply` shows a viewport, or returns the chart to
             // auto-fit when it is given null. `claimed` is optional: it reports an event that
-            // another handler owns, such as a pivot drag or a curve wheel. A claimed press
-            // never pans and a claimed wheel never zooms.
+            // another handler owns. A claimed press never pans and a claimed wheel never zooms.
             function installScatterNav(c, base, apply, claimed) {
                 const canvas = c.canvas;
 
@@ -4489,129 +4318,62 @@
                 });
             }
 
-            // Pixel position of the pivot crossing on the gain/frequency chart.
-            function pivotPixels(c) {
-                return {
-                    x: c.scales.x.getPixelForValue(pivotFreqHz()),
-                    y: c.scales.y.getPixelForValue(tuneValues.jerkPivotGain),
-                };
-            }
-
-            // The pivot handle under a pointer position, or null. The crossover claims its own
-            // radius first, so the pair stays reachable where the two lines meet.
-            function pivotHandleAt(c, event, grabPx = PIVOT_GRAB_PX, knotPx = PIVOT_KNOT_PX) {
-                if (!c.chartArea || !overChartArea(c, event)) return null;
-
-                const rect = c.canvas.getBoundingClientRect();
-                const px = event.clientX - rect.left, py = event.clientY - rect.top;
-                const at = pivotPixels(c);
-                const dx = Math.abs(px - at.x), dy = Math.abs(py - at.y);
-
-                if (dx <= knotPx && dy <= knotPx) return 'both';
-                if (dy <= grabPx) return 'gain';
-                if (dx <= grabPx) return 'freq';
-
-                return null;
-            }
-
-            // One wheel notch of curve change. It equals the two curve sliders' own step, so
-            // a notch moves the knob one slider stop.
+            // One wheel notch, or one slider stop of a modifier drag, of curve change. It
+            // equals the two curve sliders' own step, so either gesture moves a knob by
+            // exactly one slider stop.
             const CURVE_WHEEL_STEP = 5;
 
-            // The curve a Shift wheel adjusts: 'gain' for JerkCurve on the horizontal line,
-            // 'freq' for SnapCurve on the vertical line, 'both' on the crossover. Null with
-            // the pointer off the handles.
-            function curveWheelTarget(c, event) {
-                if (!pivotGrabHeld(event)) return null;
+            // A wheel notch (or trackpad equivalent) is reported in pixels, lines or pages
+            // depending on the browser. One step fires for each this many pixels banked on
+            // an axis, and the remainder carries to the next event.
+            const CURVE_WHEEL_ACCUM_PX = 10;
 
-                return pivotHandleAt(c, event, CURVE_WHEEL_GRAB_PX, CURVE_WHEEL_KNOT_PX);
-            }
+            // The most steps one wheel event can fire. A mouse notch reports up to about
+            // 100 px, so the cap stops one notch from jumping the knob too far.
+            const CURVE_WHEEL_MAX_STEPS = 4;
 
-            // Shift owns the wheel on this plot, whether or not it lands on a handle. The
-            // zoom must not fire under the same key, or a near miss jumps the view.
-            function curveWheelClaims(c, event) {
-                return pivotGrabHeld(event) && overChartArea(c, event);
-            }
+            // Pixels of drag per slider step of compression change: 5 units per 10 px.
+            const COMPRESSION_DRAG_PX_PER_STEP = 10;
 
-            // Wheel direction, as +1 up and -1 down. Shift turns a vertical wheel into a
-            // horizontal one in most browsers, so the x delta stands in for the y delta.
-            function wheelDirection(event) {
-                const delta = event.deltaY || event.deltaX;
+            // Ctrl+Alt drag locks compression to one axis. Ctrl can go down before the press
+            // or during the drag. The drag must travel this far from its start before the
+            // lock picks the axis that moved more. Nothing changes before that.
+            const COMPRESSION_AXIS_LOCK_PX = 6;
 
-                return delta < 0 ? 1 : -1;
-            }
-
-            // Step one or both curve knobs by a wheel notch. Scroll up raises the value and
-            // scroll down lowers it. Each knob's own commit clamps it to the slider range.
-            function stepCurvesFromWheel(target, dir) {
-                if (target === 'gain' || target === 'both') {
-                    commitTuneValue('jerkCurve', tuneValues.jerkCurve + dir * CURVE_WHEEL_STEP);
-                }
-
-                if (target === 'freq' || target === 'both') {
-                    commitTuneValue('snapCurve', tuneValues.snapCurve + dir * CURVE_WHEEL_STEP);
-                }
-            }
-
-            // Write the pivot values a pointer position asks for. Each axis goes through its
-            // own knob commit, so the slider, the number box, the render and the chart all
-            // follow one write. The gain axis carries dB directly. The frequency axis carries
-            // Hz, and SnapPivotFreq stores a percentage of the pulse frequency span.
-            function setPivotsFromPointer(c, event, handle) {
-                const rect = c.canvas.getBoundingClientRect();
-
-                if (handle === 'gain' || handle === 'both') {
-                    commitTuneValue('jerkPivotGain', c.scales.y.getValueForPixel(event.clientY - rect.top));
-                }
-
-                if (handle === 'freq' || handle === 'both') {
-                    const hz = c.scales.x.getValueForPixel(event.clientX - rect.left);
-                    const span = pulseLimits.maxFrequencyHz - pulseLimits.minFrequencyHz;
-                    if (span > 0) {
-                        commitTuneValue('snapPivotFreq', 100 * (hz - pulseLimits.minFrequencyHz) / span);
-                    }
-                }
-            }
-
-            // Pixels of drag per decade of pivot travel. JerkPivot and SnapPivot span several
+            // Pixels of drag per decade of center travel. JerkCenter and SnapCenter span several
             // decades each, so the drag scales them instead of adding to them.
-            const PIVOT_DRAG_DECADE_PX = 300;
+            const CENTER_DRAG_DECADE_PX = 300;
 
-            // Move the jerk and snap pivot values by a pointer delta. This is the Alt drag,
-            // and it works anywhere on the plot. The plotted data follows the pointer, so a
-            // drag right lowers SnapPivot and a drag up lowers JerkPivot: a lower pivot moves
-            // the curve the other way. `only` limits the drag to one value: 'jerk' or 'snap',
-            // or null for both. Each knob's own commit clamps the value to its range.
-            function movePivotsBy(dxPx, dyPx, only) {
-                if (only !== 'snap') {
-                    commitTuneValue('jerkPivot',
-                        tuneValues.jerkPivot * Math.pow(10, dyPx / PIVOT_DRAG_DECADE_PX));
-                }
+            // Move the jerk and snap center values by a pointer delta. This is the Shift drag,
+            // and it works anywhere on the plot: both values travel together. The plotted
+            // data follows the pointer, so a drag right lowers SnapCenter and a drag up
+            // lowers JerkCenter: a lower center moves the curve the other way. Each knob's
+            // own commit clamps the value to its range. SnapCenter is a 5..995 setting
+            // value, but the drag still scales it in decades of the physical m/s^4
+            // quantity — SNAP_CENTER_UNIT_MS4 converts between the two.
+            function moveCentersBy(dxPx, dyPx) {
+                commitTuneValue('jerkCenter',
+                    tuneValues.jerkCenter * Math.pow(10, dyPx / CENTER_DRAG_DECADE_PX));
 
-                if (only !== 'jerk') {
-                    commitTuneValue('snapPivot',
-                        tuneValues.snapPivot * Math.pow(10, -dxPx / PIVOT_DRAG_DECADE_PX));
-                }
+                const snapCenterMs4 = tuneValues.snapCenter * SNAP_CENTER_UNIT_MS4
+                    * Math.pow(10, -dxPx / CENTER_DRAG_DECADE_PX);
+                commitTuneValue('snapCenter', snapCenterMs4 / SNAP_CENTER_UNIT_MS4);
             }
 
-            // The pivot value an Alt drag is limited to, from the handle it starts on. The
-            // gain line carries JerkPivot and the frequency line carries SnapPivot. The
-            // crossover and the open plot move both, so they give null.
-            function pivotDragLimit(handle) {
-                if (handle === 'gain') return 'jerk';
-                if (handle === 'freq') return 'snap';
-
-                return null;
-            }
-
-            // Turn the two pivot lines and their crossover into drag handles. The modifier
-            // keeps the press off the data, the way the pan modifier does.
-            function installPivotDrag(c) {
+            // Wire the Shift/Alt drags and the Alt wheel onto the gain/frequency chart.
+            // Shift drags the jerk and snap center values from anywhere on the plot; Alt
+            // drags jerk and snap compression instead; and an Alt wheel steps compression
+            // the same way an Alt drag does.
+            function installGainGestures(c) {
                 const canvas = c.canvas;
-                let pointer = null;      // last pointer position over this canvas
-                let dragFrom = null;     // last position of a relative drag of the pair
-                let dragLimit = null;    // 'jerk' or 'snap' while an Alt drag holds one line
-                let ownsCursor = false;  // the pan handler writes the cursor too
+                let hoverPointer = null;          // last {clientX, clientY, altKey, shiftKey} over the canvas
+                let centerDragFrom = null;        // last position of a running center drag
+                let compressionDragFrom = null;   // the pointer position a compression drag started from
+                let compressionDragStart = null;  // tuneValues.{jerk,snap}Compression at that start
+                let compressionAxisLock = null;   // null, 'pending', 'x' (snap) or 'y' (jerk)
+                let compressionDragAt = null;     // the latest pointer position of the drag
+                let wheelAccumY = 0, wheelAccumX = 0;  // pixels banked toward the next wheel step
+                let ownsCursor = false;
 
                 const setCursor = (value) => {
                     if (value) {
@@ -4623,103 +4385,201 @@
                     }
                 };
 
-                // The plugins draw the emphasis and the crossover handle from this state, so a
-                // change needs a render. An unchanged state must not render.
-                const apply = (modifier, hover) => {
-                    setCursor(hover ? PIVOT_CURSORS[hover] : null);
-                    if (modifier === pivotModifier && hover === pivotHover) return;
-                    pivotModifier = modifier;
-                    pivotHover = hover;
-                    c.update('none');
+                // Shift shows the move cursor and Alt the compression cursor, so each
+                // gesture is discoverable before the press. A running drag keeps its own.
+                const updateHoverCursor = () => {
+                    if (gainDragMode) return;
+                    if (!hoverPointer) { setCursor(null); return; }
+                    if (centerDragHeld(hoverPointer)) setCursor(GAIN_CURSORS.center);
+                    else if (compressionDragHeld(hoverPointer)) setCursor(GAIN_CURSORS.compression);
+                    else setCursor(null);
                 };
 
-                const track = (event) => {
-                    // A running pan owns the pointer and the cursor, so no handle arms under it.
-                    if (scatterPanning || !overChartArea(c, event)) { apply(false, null); return; }
-                    // The Alt drag moves the pivot values, not the lines, so the crossover
-                    // stays hidden. A line under the pointer still arms: it limits the drag.
-                    if (pivotPairHeld(event)) {
-                        const limited = pivotDragLimit(pivotHandleAt(c, event));
-                        apply(false, limited === 'jerk' ? 'gain' : limited === 'snap' ? 'freq' : null);
-                        setCursor(limited === 'jerk' ? PIVOT_CURSORS.gain
-                            : limited === 'snap' ? PIVOT_CURSORS.freq : 'move');
-                        return;
+                canvas.addEventListener('mousemove', (e) => {
+                    hoverPointer = overChartArea(c, e)
+                        ? { clientX: e.clientX, clientY: e.clientY, altKey: e.altKey, shiftKey: e.shiftKey }
+                        : null;
+                    if (!gainDragMode) updateHoverCursor();
+                });
+
+                canvas.addEventListener('mouseleave', () => {
+                    hoverPointer = null;
+                    if (!gainDragMode) updateHoverCursor();
+                });
+
+                // Set both compressions from the drag's start value and its total pixel
+                // offset, not incrementally, so the knob always reflects where the pointer
+                // sits rather than accumulating rounding error. A zero offset on the unlocked
+                // axis restores that axis to its value at the start of the drag.
+                const applyCompressionDrag = (ctrlKey) => {
+                    if (!ctrlKey) {
+                        if (compressionAxisLock) setCursor(GAIN_CURSORS.compression);
+                        compressionAxisLock = null;
+                    } else if (!compressionAxisLock) {
+                        compressionAxisLock = 'pending';
                     }
-                    // Shift shows the handles, and arms the one under the pointer.
-                    if (pivotGrabHeld(event)) { apply(true, pivotHandleAt(c, event)); return; }
-                    apply(false, null);
-                };
 
-                // A modified wheel reshapes a curve instead of zooming. installScatterNav
-                // yields the event through its claim, so the two never both act.
-                canvas.addEventListener('wheel', (e) => {
-                    if (pivotDrag || !curveWheelClaims(c, e)) return;
-                    e.preventDefault();   // Shift never zooms here, on a handle or off it
-                    const target = curveWheelTarget(c, e);
-                    if (!target) return;
-                    stepCurvesFromWheel(target, wheelDirection(e));
-                }, { passive: false });
+                    const rate = CURVE_WHEEL_STEP / COMPRESSION_DRAG_PX_PER_STEP;
+                    let dx = compressionDragAt.x - compressionDragFrom.x;
+                    let dy = compressionDragAt.y - compressionDragFrom.y;
+
+                    // Under Ctrl, pick the axis that moved more once the drag clears the
+                    // dead zone, then hold it until Ctrl goes up.
+                    if (compressionAxisLock === 'pending') {
+                        if (Math.max(Math.abs(dx), Math.abs(dy)) < COMPRESSION_AXIS_LOCK_PX) return;
+                        compressionAxisLock = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
+                        setCursor(compressionAxisLock === 'x' ? 'ew-resize' : 'ns-resize');
+                    }
+                    if (compressionAxisLock === 'x') dy = 0;
+                    if (compressionAxisLock === 'y') dx = 0;
+
+                    const jerk = Math.round((compressionDragStart.jerk - dy * rate) / CURVE_WHEEL_STEP) * CURVE_WHEEL_STEP;
+                    const snap = Math.round((compressionDragStart.snap + dx * rate) / CURVE_WHEEL_STEP) * CURVE_WHEEL_STEP;
+                    commitTuneValue('jerkCompression', jerk);
+                    commitTuneValue('snapCompression', snap);
+                };
 
                 canvas.addEventListener('mousedown', (e) => {
                     if (!overChartArea(c, e)) return;
 
-                    if (pivotPairHeld(e)) {
-                        // The press must not move anything: the values follow the pointer
-                        // from here, so a drag that starts anywhere still reads naturally.
-                        // A press on one line limits the drag to that line's pivot value.
-                        pivotDrag = 'pivots';
-                        dragLimit = pivotDragLimit(pivotHandleAt(c, e));
-                        dragFrom = { x: e.clientX, y: e.clientY };
-                    } else if (pivotGrabHeld(e)) {
-                        const handle = pivotHandleAt(c, e);
-                        if (!handle) return;   // Shift away from the handles pans instead
-                        pivotDrag = handle;
-                        setPivotsFromPointer(c, e, handle);
-                    } else {
-                        return;
+                    if (centerDragHeld(e)) {
+                        gainDragMode = 'center';
+                        centerDragFrom = { x: e.clientX, y: e.clientY };
+                        setCursor(GAIN_CURSORS.center);
+                        e.preventDefault();   // no text selection while the drag runs
+                    } else if (compressionDragHeld(e)) {
+                        gainDragMode = 'compression';
+                        compressionDragFrom = { x: e.clientX, y: e.clientY };
+                        compressionDragStart = {
+                            jerk: tuneValues.jerkCompression,
+                            snap: tuneValues.snapCompression,
+                        };
+                        compressionAxisLock = null;
+                        compressionDragAt = { x: e.clientX, y: e.clientY };
+                        setCursor(GAIN_CURSORS.compression);
+                        applyCompressionDrag(e.ctrlKey);
+                        e.preventDefault();
                     }
-
-                    setCursor(PIVOT_CURSORS[pivotDrag]
-                        || PIVOT_CURSORS[dragLimit === 'jerk' ? 'gain' : dragLimit === 'snap' ? 'freq' : 'both']);
-                    e.preventDefault();   // no text selection while the drag runs
                 });
 
-                canvas.addEventListener('mousemove', (e) => {
-                    pointer = { clientX: e.clientX, clientY: e.clientY, altKey: e.altKey, shiftKey: e.shiftKey };
-                    if (!pivotDrag) track(pointer);
-                });
-
-                canvas.addEventListener('mouseleave', () => {
-                    pointer = null;
-                    if (!pivotDrag) apply(false, null);
+                // Ctrl-click opens the context menu on macOS. Block it under Ctrl+Alt, so the
+                // axis-locked drag can start.
+                canvas.addEventListener('contextmenu', (e) => {
+                    if (e.ctrlKey && compressionDragHeld(e) && overChartArea(c, e)) e.preventDefault();
                 });
 
                 window.addEventListener('mousemove', (e) => {
-                    if (!pivotDrag) return;
-                    if (!dragFrom) { setPivotsFromPointer(c, e, pivotDrag); return; }
-                    movePivotsBy(e.clientX - dragFrom.x, e.clientY - dragFrom.y, dragLimit);
-                    dragFrom = { x: e.clientX, y: e.clientY };
+                    if (gainDragMode === 'center') {
+                        moveCentersBy(e.clientX - centerDragFrom.x, e.clientY - centerDragFrom.y);
+                        centerDragFrom = { x: e.clientX, y: e.clientY };
+                    } else if (gainDragMode === 'compression') {
+                        compressionDragAt = { x: e.clientX, y: e.clientY };
+                        applyCompressionDrag(e.ctrlKey);
+                    }
                 });
 
                 window.addEventListener('mouseup', () => {
-                    if (!pivotDrag) return;
-                    pivotDrag = null;
-                    dragFrom = null;
-                    dragLimit = null;
-                    setCursor(null);
-                    if (pointer) track(pointer); else apply(false, null);
-                    c.update('none');
+                    if (!gainDragMode) return;
+                    gainDragMode = null;
+                    centerDragFrom = null;
+                    compressionDragFrom = null;
+                    compressionDragStart = null;
+                    compressionAxisLock = null;
+                    compressionDragAt = null;
+                    updateHoverCursor();
                 });
 
-                // The modifier can change with the pointer at rest, so the handles appear and
-                // go on the key alone.
+                // The hover cursor can change with the pointer at rest, so it goes on the
+                // key alone too, the way the pan cursor does.
                 const onModifierKey = (e) => {
-                    if ((e.key !== 'Alt' && e.key !== 'Shift') || !pointer || pivotDrag) return;
-                    pointer = { ...pointer, altKey: e.altKey, shiftKey: e.shiftKey };
-                    track(pointer);
+                    // Ctrl during a compression drag turns the axis lock on or off at once,
+                    // with the pointer at rest.
+                    if (e.key === 'Control' && gainDragMode === 'compression') {
+                        applyCompressionDrag(e.ctrlKey);
+                        return;
+                    }
+                    if ((e.key !== 'Alt' && e.key !== 'Shift') || !hoverPointer || gainDragMode) return;
+                    hoverPointer = { ...hoverPointer, altKey: e.altKey, shiftKey: e.shiftKey };
+                    updateHoverCursor();
                 };
                 window.addEventListener('keydown', onModifierKey);
                 window.addEventListener('keyup', onModifierKey);
+
+                // Step one center by one key press. The plotted data moves the way the
+                // arrow points, as in a Shift drag. The value moves to the adjacent multiple
+                // of its TUNE_KEY_STEPS step, the same as ArrowUp/ArrowDown in its number box.
+                const stepCenter = (key, dir) => {
+                    commitTuneValue(key, gridStep(tuneValues[key], TUNE_KEY_STEPS[key], dir));
+                };
+
+                // Arrow keys while the plot has focus. Shift moves the centers and Alt steps
+                // the compression, the same modifiers the drags use. Up and right move the
+                // data up and right. A plain arrow falls through to the frame transport.
+                // A handled key stops here, so Shift+arrow does not also step ten frames.
+                canvas.addEventListener('keydown', (e) => {
+                    if (e.ctrlKey || e.metaKey) return;
+                    const dx = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+                    const dy = e.key === 'ArrowUp' ? 1 : e.key === 'ArrowDown' ? -1 : 0;
+                    if (dx === 0 && dy === 0) return;
+
+                    if (centerDragHeld(e) && !compressionDragHeld(e)) {
+                        if (dy !== 0) stepCenter('jerkCenter', -dy);
+                        if (dx !== 0) stepCenter('snapCenter', -dx);
+                    } else if (compressionDragHeld(e) && !centerDragHeld(e)) {
+                        if (dy !== 0) commitTuneValue('jerkCompression', tuneValues.jerkCompression + dy * CURVE_WHEEL_STEP);
+                        if (dx !== 0) commitTuneValue('snapCompression', tuneValues.snapCompression + dx * CURVE_WHEEL_STEP);
+                    } else {
+                        return;
+                    }
+                    e.preventDefault();
+                    e.stopPropagation();
+                });
+
+                // Alt: the wheel steps jerk and snap compression — vertical for jerk,
+                // horizontal for snap — using whichever axis dominates the event so
+                // a diagonal trackpad gesture doesn't nudge both. Deltas convert to pixels the
+                // way wheelPanLane's do, then accumulate per axis. Each banked step's worth of
+                // travel fires one step, up to CURVE_WHEEL_MAX_STEPS for each event.
+                // A plain wheel falls through, so the page still scrolls over the plot. A
+                // Shift wheel does nothing: it is swallowed so the page does not scroll sideways.
+                canvas.addEventListener('wheel', (e) => {
+                    if (!overChartArea(c, e)) return;
+                    if (!compressionDragHeld(e) && !e.shiftKey) return;
+                    e.preventDefault();
+                    if (!compressionDragHeld(e)) return;
+
+                    // Line and page deltas come only from a discrete notch, so each one is
+                    // worth at least a full step. A one-line notch would otherwise need three.
+                    const notchPx = (d, unitPx) => Math.sign(d) * Math.max(Math.abs(d * unitPx), CURVE_WHEEL_ACCUM_PX);
+                    const dyPx = e.deltaMode === 1 ? notchPx(e.deltaY, WHEEL_LINE_PX)
+                        : e.deltaMode === 2 ? notchPx(e.deltaY, canvas.clientHeight) : e.deltaY;
+                    const dxPx = e.deltaMode === 1 ? notchPx(e.deltaX, WHEEL_LINE_PX)
+                        : e.deltaMode === 2 ? notchPx(e.deltaX, canvas.clientWidth) : e.deltaX;
+
+                    if (Math.abs(dyPx) >= Math.abs(dxPx)) { wheelAccumY += dyPx; wheelAccumX = 0; }
+                    else { wheelAccumX += dxPx; wheelAccumY = 0; }
+
+                    // Take the whole steps out of an accumulator and keep the remainder. A
+                    // capped event drops the excess, so a large notch does not queue steps.
+                    const takeSteps = (accum) => {
+                        const steps = Math.trunc(accum / CURVE_WHEEL_ACCUM_PX);
+                        if (steps === 0) return { steps: 0, rest: accum };
+                        const capped = Math.sign(steps) * Math.min(Math.abs(steps), CURVE_WHEEL_MAX_STEPS);
+                        const rest = capped === steps ? accum - steps * CURVE_WHEEL_ACCUM_PX : 0;
+                        return { steps: capped, rest };
+                    };
+
+                    const jerk = takeSteps(wheelAccumY);
+                    wheelAccumY = jerk.rest;
+                    if (jerk.steps !== 0) {
+                        commitTuneValue('jerkCompression', tuneValues.jerkCompression - jerk.steps * CURVE_WHEEL_STEP);
+                    }
+                    const snap = takeSteps(wheelAccumX);
+                    wheelAccumX = snap.rest;
+                    if (snap.steps !== 0) {
+                        commitTuneValue('snapCompression', tuneValues.snapCompression + snap.steps * CURVE_WHEEL_STEP);
+                    }
+                }, { passive: false });
             }
 
             // Show a viewport on the jerk/snap scatter, or return to the auto-fit bounds. The
@@ -4741,30 +4601,6 @@
                 chart.options.scales.y.min = next.yMin;
                 chart.options.scales.y.max = next.yMax;
                 chart.update('none');
-            }
-
-            // Show a viewport on the gain/frequency scatter, or return to its fixed axis
-            // bounds. The axes are fixed rather than chased, so the viewport goes straight
-            // into the chart options.
-            function applyGainViewport(next) {
-                const y = gainChart.options.scales.y;
-                if (!next) {
-                    if (!gainZoom) return;
-                    gainZoom = null;
-                    y.ticks.stepSize = GAIN_STEP_DB;
-                    applyGainAxisBounds();
-                    applyGainYBounds();
-                    gainChart.update('none');
-                    return;
-                }
-                gainZoom = next;
-                const x = gainChart.options.scales.x;
-                x.min = next.xMin; x.max = next.xMax;
-                y.min = next.yMin; y.max = next.yMax;
-                // The fixed 3 dB tick step leaves a deep zoom with one label, so let Chart.js
-                // pick the step while the zoom holds.
-                y.ticks.stepSize = undefined;
-                gainChart.update('none');
             }
 
             // Rebuild the "point of interest" overlay dataset from highlightSource, excluding any
@@ -5180,9 +5016,9 @@
             }
 
             const TUNE_TABS = {
-                chassis: ['jerkCurve', 'jerkPivot', 'jerkPivotGain', 'snapCurve', 'snapPivot', 'snapPivotFreq'],
+                chassis: ['jerkCompression', 'jerkCenter', 'snapCompression', 'snapCenter'],
                 engine: ['primaryBalance', 'secondaryBalance', 'engineGain', 'pulseScale'],
-                transmission: ['transmissionJerkCurve', 'transmissionStepBlend'],
+                transmission: ['transmissionJerkCompression', 'transmissionStepBlend'],
                 texture: [],
             };
             const TUNE_KEYS = Object.values(TUNE_TABS).flat();
@@ -5191,16 +5027,15 @@
             // vehicle, so the Engine tab's defaults are replaced by the profile the loaded
             // replay resolves to, in applyEngineProfileMeta.
             const tuneDefaults = {
-                jerkCurve: 190, jerkPivot: 601, jerkPivotGain: -3.0, snapCurve: 310, snapPivot: 62944,
-                snapPivotFreq: 50,
+                jerkCompression: 190, jerkCenter: 601, snapCompression: 310, snapCenter: 629,
                 primaryBalance: 1.0, secondaryBalance: 1.0, engineGain: -6.0, pulseScale: 1.0,
-                transmissionJerkCurve: 750, transmissionStepBlend: 0.5,
+                transmissionJerkCompression: 750, transmissionStepBlend: 0.5,
             };
             const tuneValues = { ...tuneDefaults };
 
             // Commit closure per knob, keyed the way tuneValues is. setupAudioUI fills the
             // table when it wires the controls, and commitTuneValue is how code outside the
-            // widget — the pivot drag handles — writes a knob.
+            // widget — the gain/frequency chart's drag and wheel gestures — writes a knob.
             const tuneCommits = {};
 
             // Commit one knob value from outside the widget. The knob's own closure clamps the
@@ -5215,13 +5050,11 @@
             // The engine keys are absent on purpose — they come from the vehicle's
             // profile, in applyEngineProfileMeta.
             const TUNE_CONFIG_KEYS = {
-                jerkCurve: 'jerkCurve',
-                jerkPivot: 'jerkPivot',
-                jerkPivotGain: 'jerkPivotGain',
-                snapCurve: 'snapCurve',
-                snapPivot: 'snapPivot',
-                snapPivotFreq: 'snapPivotFreq',
-                transmissionJerkCurve: 'dynamicTransmissionJerkCurve',
+                jerkCompression: 'jerkCompression',
+                jerkCenter: 'jerkCenter',
+                snapCompression: 'snapCompression',
+                snapCenter: 'snapCenter',
+                transmissionJerkCompression: 'dynamicTransmissionJerkCompression',
                 transmissionStepBlend: 'dynamicTransmissionStepBlend',
             };
 
@@ -5236,23 +5069,39 @@
 
             // Controls whose slider travel is geometric rather than linear. For these keys
             // the range input carries a 0..TUNE_SLIDER_STEPS position and the number box
-            // keeps the real stored value; every other key uses both directly. jerkPivot
+            // keeps the real stored value; every other key uses both directly. jerkCenter
             // spans 1..20000 m/s^3, so a linear thumb would bury the useful region near 600
-            // in the first few percent of travel. snapPivot spans 1..500000 m/s^4, so the
-            // same reasoning applies.
-            const TUNE_LOG_KEYS = new Set(['jerkPivot', 'snapPivot']);
+            // in the first few percent of travel. snapCenter is now a 5..995 setting value,
+            // small enough that a linear thumb covers it fine.
+            const TUNE_LOG_KEYS = new Set(['jerkCenter']);
 
             // Decimal places each key commits to. A key absent from this table commits as
             // a whole number. Never round a key coarser than its own step: the value would
             // snap back and the slider thumb would refuse to move.
             const TUNE_DECIMALS = {
-                jerkPivotGain: 1,
                 primaryBalance: 2,
                 secondaryBalance: 2,
                 engineGain: 2,
                 pulseScale: 2,
                 transmissionStepBlend: 2,
             };
+
+            // Arrow key step of the number box for keys that step onto a fixed grid. The
+            // value itself can be any integer, but ArrowUp and ArrowDown move it to the
+            // adjacent multiple of the step: 296 goes up to 300 and down to 295. A native
+            // step would use a min-anchored grid, so the box handles the keys itself.
+            const TUNE_KEY_STEPS = {
+                jerkCenter: 5,
+                snapCenter: 5,
+            };
+
+            // gridStep returns the adjacent multiple of step above (dir 1) or below
+            // (dir -1) value. An off-grid 296 goes up to 300 and down to 295.
+            function gridStep(value, step, dir) {
+                const grid = value / step;
+
+                return step * (dir > 0 ? Math.floor(grid) + 1 : Math.ceil(grid) - 1);
+            }
 
             // roundTuneValue snaps a committed value to the precision its key stores.
             function roundTuneValue(key, value) {
@@ -5360,8 +5209,7 @@
                 const { startFrame, endFrame } = getFrameRange();
                 return [replay, currentLapKey, startFrame, endFrame,
                     ...TUNE_KEYS.map(k => tuneValues[k]),
-                    ...SURFACES.map(surfaceRumbleKey),
-                    useRaw ? 'raw' : 'filt'].join('|');
+                    ...SURFACES.map(surfaceRumbleKey)].join('|');
             }
 
             // setTuneParams writes the knob values the render should use onto a query.
@@ -5413,7 +5261,6 @@
                 const params = new URLSearchParams({
                     replay, lap: String(currentLapKey),
                     from: String(startFrame), to: String(endFrame),
-                    raw: useRaw ? '1' : '0',
                 });
                 setTuneParams(params);
 
@@ -6496,6 +6343,11 @@
                     });
                     box.addEventListener('keydown', (e) => {
                         if (e.key === 'Enter') box.blur();
+
+                        const step = TUNE_KEY_STEPS[k];
+                        if (!step || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
+                        e.preventDefault();
+                        commit(gridStep(tuneValues[k], step, e.key === 'ArrowUp' ? 1 : -1));
                     });
                 });
 
@@ -6610,7 +6462,7 @@
                 pane.classList.remove('tune-pane-empty');
 
                 // The config field is `gain`; the slider key is `engineGain`, so that it
-                // does not collide with the chassis pane's jerkPivotGain in the flat
+                // does not collide with the chassis pane's jerkCenter in the flat
                 // tuneValues map.
                 tuneDefaults.primaryBalance = profile.primaryBalance;
                 tuneDefaults.secondaryBalance = profile.secondaryBalance;
@@ -6622,7 +6474,7 @@
             }
 
             // The curve exponents are held here as the raw thousandths the sliders show
-            // (jerkCurve 190, snapCurve 310), but POST /api/config takes them as the
+            // (jerkCompression 190, snapCompression 310), but POST /api/config takes them as the
             // fraction and multiplies by 1000 on the way in. Everything else is sent as
             // it stands. Getting this wrong is silent — the value simply lands a factor
             // of 1000 out — so the scaling is listed per key rather than applied broadly.
@@ -6641,12 +6493,10 @@
                     return {
                         synthesizer,
                         haptics: {
-                            jerkCurve: tuneValues.jerkCurve / 1000,
-                            jerkPivot: tuneValues.jerkPivot,
-                            jerkPivotGain: tuneValues.jerkPivotGain,
-                            snapCurve: tuneValues.snapCurve / 1000,
-                            snapPivot: tuneValues.snapPivot,
-                            snapPivotFreq: tuneValues.snapPivotFreq,
+                            jerkCompression: tuneValues.jerkCompression / 1000,
+                            jerkCenter: tuneValues.jerkCenter,
+                            snapCompression: tuneValues.snapCompression / 1000,
+                            snapCenter: tuneValues.snapCenter,
                         },
                     };
                 }
@@ -6655,7 +6505,7 @@
                     return {
                         synthesizer,
                         haptics: {
-                            dynamicTransmissionJerkCurve: tuneValues.transmissionJerkCurve / 1000,
+                            dynamicTransmissionJerkCompression: tuneValues.transmissionJerkCompression / 1000,
                             dynamicTransmissionStepBlend: tuneValues.transmissionStepBlend,
                         },
                     };

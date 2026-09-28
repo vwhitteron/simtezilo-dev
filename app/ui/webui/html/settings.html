@@ -708,7 +708,7 @@
                 decreaseBtn.addEventListener('click', function () {
                     const step = getStep();
                     const currentValue = parseFloat(input.value) || 0;
-                    const newValue = Math.max(currentValue - step, min);
+                    const newValue = Math.max(spinValue(input, currentValue, step, -1), min);
                     input.value = roundToStep(newValue, step);
                     input.dispatchEvent(new Event('change', { bubbles: true }));
                 });
@@ -717,7 +717,7 @@
                 increaseBtn.addEventListener('click', function () {
                     const step = getStep();
                     const currentValue = parseFloat(input.value) || 0;
-                    const newValue = Math.min(currentValue + step, max);
+                    const newValue = Math.min(spinValue(input, currentValue, step, 1), max);
                     input.value = roundToStep(newValue, step);
                     input.dispatchEvent(new Event('change', { bubbles: true }));
                 });
@@ -804,7 +804,7 @@
                 decreaseBtn.addEventListener('click', function () {
                     const step = getStep();
                     const currentValue = parseFloat(touchInput.value) || 0;
-                    const newValue = Math.max(currentValue - step, min);
+                    const newValue = Math.max(spinValue(input, currentValue, step, -1), min);
                     touchInput.value = roundToStep(newValue, step);
                     syncToOriginal();
                 });
@@ -812,7 +812,7 @@
                 increaseBtn.addEventListener('click', function () {
                     const step = getStep();
                     const currentValue = parseFloat(touchInput.value) || 0;
-                    const newValue = Math.min(currentValue + step, max);
+                    const newValue = Math.min(spinValue(input, currentValue, step, 1), max);
                     touchInput.value = roundToStep(newValue, step);
                     syncToOriginal();
                 });
@@ -834,6 +834,37 @@
                 input.addEventListener('touchspinner:sync', syncFromOriginal);
                 syncFromOriginal();
             }
+
+            // spinValue returns the value one step up (dir 1) or down (dir -1). An input
+            // with data-step-snap moves to the adjacent multiple of the step instead, so
+            // 296 goes up to 300 and down to 295.
+            function spinValue(input, value, step, dir) {
+                if (!('stepSnap' in input.dataset)) {
+                    return value + dir * step;
+                }
+                const grid = value / step;
+                return step * (dir > 0 ? Math.floor(grid) + 1 : Math.ceil(grid) - 1);
+            }
+
+            // The native arrow key step uses a grid anchored at min. Replace it with
+            // spinValue for data-step-snap inputs, and for their touch clones.
+            document.addEventListener('keydown', function (e) {
+                const input = e.target;
+                if (!(input instanceof HTMLInputElement) || !('stepSnap' in input.dataset)) {
+                    return;
+                }
+                if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') {
+                    return;
+                }
+                e.preventDefault();
+                const step = parseFloat(input.step) || 1;
+                const min = input.min !== '' ? parseFloat(input.min) : -Infinity;
+                const max = input.max !== '' ? parseFloat(input.max) : Infinity;
+                const currentValue = parseFloat(input.value) || 0;
+                const newValue = spinValue(input, currentValue, step, e.key === 'ArrowUp' ? 1 : -1);
+                input.value = roundToStep(Math.min(max, Math.max(min, newValue)), step);
+                input.dispatchEvent(new Event('change', { bubbles: true }));
+            });
 
             function roundToStep(value, step) {
                 const decimals = (step.toString().split('.')[1] || '').length;
@@ -2229,28 +2260,28 @@
                                             data-i18n="runmode.settings.haptics.tuning.title">Tuning</span></h5>
                                     <div class="row g-3 mb-4">
                                         <div class="col-md-6 col-lg-3">
-                                            <label for="haptics-jerkcurve" class="form-label">
-                                                <span data-i18n="runmode.settings.haptics.chassis.jerkcurve">Jerk
+                                            <label for="haptics-jerkcompression" class="form-label">
+                                                <span data-i18n="runmode.settings.haptics.chassis.jerkcompression">Jerk
                                                     Curve</span>
                                                 <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
                                                     role="button" tabindex="0" aria-expanded="false"
-                                                    data-i18n-tooltip="runmode.settings.haptics.chassis.jerkcurve.tooltip"></i>
+                                                    data-i18n-tooltip="runmode.settings.haptics.chassis.jerkcompression.tooltip"></i>
                                             </label>
-                                            <input type="number" id="haptics-jerkcurve"
+                                            <input type="number" id="haptics-jerkcompression"
                                                 class="form-control text-center no-spinner"
-                                                data-config="haptics.jerkCurve" min="5" max="995" step="1">
+                                                data-config="haptics.jerkCompression" min="5" max="995" step="1">
                                         </div>
                                         <div class="col-md-6 col-lg-3">
-                                            <label for="haptics-snapcurve" class="form-label">
-                                                <span data-i18n="runmode.settings.haptics.chassis.snapcurve">Snap
+                                            <label for="haptics-snapcompression" class="form-label">
+                                                <span data-i18n="runmode.settings.haptics.chassis.snapcompression">Snap
                                                     Curve</span>
                                                 <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
                                                     role="button" tabindex="0" aria-expanded="false"
-                                                    data-i18n-tooltip="runmode.settings.haptics.chassis.snapcurve.tooltip"></i>
+                                                    data-i18n-tooltip="runmode.settings.haptics.chassis.snapcompression.tooltip"></i>
                                             </label>
-                                            <input type="number" id="haptics-snapcurve"
+                                            <input type="number" id="haptics-snapcompression"
                                                 class="form-control text-center no-spinner"
-                                                data-config="haptics.snapCurve" min="5" max="995" step="1">
+                                                data-config="haptics.snapCompression" min="5" max="995" step="1">
                                         </div>
                                     </div>
 
@@ -2273,71 +2304,37 @@
                                                 <div class="card-body">
                                                     <div class="row g-3 mb-3">
                                                         <div class="col-md-6 col-lg-3">
-                                                            <label for="haptics-jerkpivot" class="form-label">
+                                                            <label for="haptics-jerkcenter" class="form-label">
                                                                 <span
-                                                                    data-i18n="runmode.settings.haptics.general.advanced.jerkpivot">Jerk
-                                                                    Pivot</span>
+                                                                    data-i18n="runmode.settings.haptics.general.advanced.jerkcenter">Jerk
+                                                                    Center</span>
                                                                 <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
                                                                     role="button" tabindex="0" aria-expanded="false"
-                                                                    data-i18n-tooltip="runmode.settings.haptics.general.advanced.jerkpivot.tooltip"></i>
+                                                                    data-i18n-tooltip="runmode.settings.haptics.general.advanced.jerkcenter.tooltip"></i>
                                                             </label>
                                                             <div class="input-with-suffix">
-                                                                <input type="number" id="haptics-jerkpivot"
+                                                                <input type="number" id="haptics-jerkcenter"
                                                                     class="form-control text-center no-spinner"
-                                                                    data-config="haptics.jerkPivot" min="1" max="20000"
-                                                                    step="1">
+                                                                    data-config="haptics.jerkCenter" min="1" max="20000"
+                                                                    step="5" data-step-snap>
                                                                 <span class="input-suffix">m/s³</span>
                                                             </div>
                                                         </div>
                                                         <div class="col-md-6 col-lg-3">
-                                                            <label for="haptics-jerkpivotgain" class="form-label">
+                                                            <label for="haptics-snapcenter" class="form-label">
                                                                 <span
-                                                                    data-i18n="runmode.settings.haptics.general.advanced.jerkpivotgain">Jerk
-                                                                    Pivot Gain</span>
+                                                                    data-i18n="runmode.settings.haptics.chassis.snapcenter">Snap
+                                                                    Center</span>
                                                                 <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
                                                                     role="button" tabindex="0" aria-expanded="false"
-                                                                    data-i18n-tooltip="runmode.settings.haptics.general.advanced.jerkpivotgain.tooltip"></i>
+                                                                    data-i18n-tooltip="runmode.settings.haptics.chassis.snapcenter.tooltip"></i>
                                                             </label>
                                                             <div class="input-with-suffix">
-                                                                <input type="number" id="haptics-jerkpivotgain"
-                                                                    class="form-control text-center gain-input"
-                                                                    data-config="haptics.jerkPivotGain" min="-12"
-                                                                    max="0" step="0.25">
-                                                                <span class="input-suffix">dB</span>
-                                                            </div>
-                                                        </div>
-                                                        <div class="col-md-6 col-lg-3">
-                                                            <label for="haptics-snappivot" class="form-label">
-                                                                <span
-                                                                    data-i18n="runmode.settings.haptics.chassis.snappivot">Snap
-                                                                    Pivot</span>
-                                                                <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
-                                                                    role="button" tabindex="0" aria-expanded="false"
-                                                                    data-i18n-tooltip="runmode.settings.haptics.chassis.snappivot.tooltip"></i>
-                                                            </label>
-                                                            <div class="input-with-suffix">
-                                                                <input type="number" id="haptics-snappivot"
+                                                                <input type="number" id="haptics-snapcenter"
                                                                     class="form-control text-center no-spinner"
-                                                                    data-config="haptics.snapPivot" min="1"
-                                                                    max="500000" step="100">
-                                                                <span class="input-suffix">m/s⁴</span>
-                                                            </div>
-                                                        </div>
-                                                        <div class="col-md-6 col-lg-3">
-                                                            <label for="haptics-snappivotfreq" class="form-label">
-                                                                <span
-                                                                    data-i18n="runmode.settings.haptics.chassis.snappivotfreq">Snap
-                                                                    Pivot Freq</span>
-                                                                <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
-                                                                    role="button" tabindex="0" aria-expanded="false"
-                                                                    data-i18n-tooltip="runmode.settings.haptics.chassis.snappivotfreq.tooltip"></i>
-                                                            </label>
-                                                            <div class="input-with-suffix">
-                                                                <input type="number" id="haptics-snappivotfreq"
-                                                                    class="form-control text-center no-spinner"
-                                                                    data-config="haptics.snapPivotFreq" min="1"
-                                                                    max="100" step="1">
-                                                                <span class="input-suffix">%</span>
+                                                                    data-config="haptics.snapCenter" min="5"
+                                                                    max="995" step="5" data-step-snap>
+                                                                <span class="input-suffix">×100 m/s⁴</span>
                                                             </div>
                                                         </div>
                                                     </div>
@@ -2566,19 +2563,19 @@
                                         </div>
                                     </div>
                                     <div class="row g-3 mb-4">
-                                        <div class="col-md-6" id="haptics-jerkcurve-group">
-                                            <label for="haptics-transmissionjerkcurve" class="form-label"
+                                        <div class="col-md-6" id="haptics-jerkcompression-group">
+                                            <label for="haptics-transmissionjerkcompression" class="form-label"
                                                 style="white-space: nowrap;">
                                                 <span
-                                                    data-i18n="runmode.settings.haptics.transmission.jerkcurve">Shift
+                                                    data-i18n="runmode.settings.haptics.transmission.jerkcompression">Shift
                                                     Compression Curve</span>
                                                 <i class="fa-solid fa-circle-question ms-1 tooltip-trigger text-muted"
                                                     role="button" tabindex="0" aria-expanded="false"
-                                                    data-i18n-tooltip="runmode.settings.haptics.transmission.jerkcurve.tooltip"></i>
+                                                    data-i18n-tooltip="runmode.settings.haptics.transmission.jerkcompression.tooltip"></i>
                                             </label>
-                                            <input type="number" id="haptics-transmissionjerkcurve"
+                                            <input type="number" id="haptics-transmissionjerkcompression"
                                                 class="form-control text-center no-spinner"
-                                                data-config="haptics.dynamicTransmissionJerkCurve" min="5" max="995"
+                                                data-config="haptics.dynamicTransmissionJerkCompression" min="5" max="995"
                                                 step="1">
                                         </div>
                                         <div class="col-md-6" id="haptics-stepblend-group">
