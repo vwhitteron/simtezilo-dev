@@ -64,9 +64,24 @@ func renderSectionWAV(
 	lap int16,
 	fromFrame, toFrame int,
 ) ([]byte, error) {
+	window := haptics.CaptureWindow{Lap: lap, FromFrame: fromFrame, ToFrame: toFrame}
+
+	return renderWindowWAV(ctx, source, tuning, layers, unfiltered, window)
+}
+
+// renderWindowWAV renders one haptic layer over window and returns it as a WAV. It
+// is renderSectionWAV for any window, including one that spans the whole replay.
+func renderWindowWAV(
+	ctx context.Context,
+	source string,
+	tuning haptics.Tuning,
+	layers haptics.CaptureLayers,
+	unfiltered bool,
+	window haptics.CaptureWindow,
+) ([]byte, error) {
 	var wav bytes.Buffer
 
-	wav.Grow(wavHeaderLen + estimatePCMLen(fromFrame, toFrame))
+	wav.Grow(wavHeaderLen + estimatePCMLen(window.FromFrame, window.ToFrame))
 	wav.Write(make([]byte, wavHeaderLen))
 
 	capture, err := haptics.CaptureChassis(ctx, haptics.CaptureOptions{
@@ -74,7 +89,7 @@ func renderSectionWAV(
 		Tuning:     tuning,
 		Layers:     layers,
 		Unfiltered: unfiltered,
-		Window:     &haptics.CaptureWindow{Lap: lap, FromFrame: fromFrame, ToFrame: toFrame},
+		Window:     &window,
 		Sink:       func(samples []float64) { encodePCM(&wav, samples) },
 	})
 	if err != nil {
@@ -186,7 +201,7 @@ func parseIntParam(req *http.Request, name string, def int) int {
 }
 
 // engineProfileParam builds an engine profile override from the query, or returns
-// nil when the request carries no engine knobs. All four fields travel together: a
+// nil when the request carries no engine settings. All four fields travel together: a
 // profile is a set, and mixing supplied values with the shipped ones for the rest
 // would render a profile the user never chose.
 //

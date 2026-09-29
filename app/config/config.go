@@ -29,47 +29,58 @@ const (
 	fanModeAll    = "all"
 )
 
-// Bounds for the jerk center. The center is a plain jerk in m/s^3, held at
-// hapticsJerkBiasDB below full scale regardless of how the jerk compression
-// is shaped.
+// hapticsJerkBiasDB is the fixed amplitude at the jerk center, in dB below
+// full scale. It is a fixed constant so the center alone anchors the curve.
+const hapticsJerkBiasDB = -3.0
+
+// hapticsSnapCenterUnitMs4 is the physical snap, in m/s^4, represented by one
+// unit of the (legacy, pre-inversion) snapCenter setting. It is still used by
+// the derived-center maths below, which is expressed in physical units.
+const hapticsSnapCenterUnitMs4 = 100
+
+// hapticsSnapBiasPercent is the fixed pulse frequency at the snap center, as a
+// percentage of the span between the minimum and maximum pulse frequency. It
+// is a fixed constant so the center alone anchors the curve.
+const hapticsSnapBiasPercent = 50.0
+
+// Bounds and step for the five inverted haptics settings (jerkCompression,
+// jerkCenter, snapCompression, snapCenter, dynamicTransmissionJerkCompression).
+// Each is stored as a setting value v, with the physical/exponent quantity
+// derived as o = 1000 - 10*v (see updateJerkScale/recomputeSnapScale). Higher
+// v means more compression/a lower center, which is the intuitive direction.
 const (
-	hapticsJerkCenterMin = 1
-	hapticsJerkCenterMax = 20000
-	// hapticsJerkBiasDB is the fixed amplitude at the jerk center, in dB below
-	// full scale. It is a fixed constant so the center alone anchors the curve.
-	hapticsJerkBiasDB = -3.0
+	hapticsSettingMin  = 0.5
+	hapticsSettingMax  = 99.5
+	hapticsSettingStep = 0.5
 )
 
-// Bounds for the snap center. The center is stored in setting units of
-// hapticsSnapCenterUnitMs4 m/s^4 each, held at hapticsSnapBiasPercent of the
-// way between the minimum and maximum pulse frequency regardless of how the
-// snap compression is shaped.
-const (
-	hapticsSnapCenterMin = 5
-	hapticsSnapCenterMax = 995
-	// hapticsSnapCenterUnitMs4 is the physical snap, in m/s^4, represented by
-	// one unit of the snapCenter setting.
-	hapticsSnapCenterUnitMs4 = 100
-	// hapticsSnapBiasPercent is the fixed pulse frequency at the snap center,
-	// as a percentage of the span between the minimum and maximum pulse
-	// frequency. It is a fixed constant so the center alone anchors the curve.
-	hapticsSnapBiasPercent = 50.0
-)
-
-// hapticsCenterStep is the increase and decrease step of the jerk and snap
-// center settings. A set value can be any integer inside the bounds.
-const hapticsCenterStep = 5
-
-// stepUpCenter returns the next multiple of hapticsCenterStep above value.
-// An off-grid value such as 296 steps up to 300, not 301.
-func stepUpCenter(value int) int {
-	return (value/hapticsCenterStep + 1) * hapticsCenterStep
+// clampSetting clamps a setting value to the shared bounds.
+func clampSetting(value float64) float64 {
+	return min(hapticsSettingMax, max(hapticsSettingMin, value))
 }
 
-// stepDownCenter returns the next multiple of hapticsCenterStep below value.
-// An off-grid value such as 296 steps down to 295, not 291.
-func stepDownCenter(value int) int {
-	return ((value+hapticsCenterStep-1)/hapticsCenterStep - 1) * hapticsCenterStep
+// roundSetting rounds a setting value to one decimal place, which is the
+// grid the five inverted settings are stored on.
+func roundSetting(value float64) float64 {
+	return math.Round(value*10) / 10
+}
+
+// stepUpSetting returns the next multiple of hapticsSettingStep above value,
+// clamped to the shared bounds. An off-grid value such as 37.6 steps up
+// to 38.0, not 38.5.
+func stepUpSetting(value float64) float64 {
+	stepped := (math.Floor(value/hapticsSettingStep) + 1) * hapticsSettingStep
+
+	return clampSetting(roundSetting(stepped))
+}
+
+// stepDownSetting returns the next multiple of hapticsSettingStep below
+// value, clamped to the shared bounds. An off-grid value such as 37.6
+// steps down to 37.5, not 37.0.
+func stepDownSetting(value float64) float64 {
+	stepped := (math.Ceil(value/hapticsSettingStep) - 1) * hapticsSettingStep
+
+	return clampSetting(roundSetting(stepped))
 }
 
 // SurfaceRumble is one road surface's texture character. Level is the loudness,
@@ -99,10 +110,10 @@ var routingSources = []string{
 	RoutingSourceTransmission,
 }
 
-// defaultTransmissionJerkCompression is the shipped jerk response curve, in thousandths.
+// defaultTransmissionJerkCompression is the shipped jerk response curve setting.
 // It also backfills configs written before the key existed, which would otherwise
-// read zero and collapse the mapping to full scale.
-const defaultTransmissionJerkCompression = 750.0
+// read zero and collapse the mapping to an exponent of 1 (full linear).
+const defaultTransmissionJerkCompression = 25.0
 
 type app struct {
 	Language       string  `json:"language"`
@@ -137,10 +148,16 @@ type haptics struct {
 	Output                      HapticsOutput `json:"output"` // haptic feedback output stream
 	EnableReplay                bool          `json:"enableReplay"`
 	DynamicTransmissionFeedback bool          `json:"dynamicTransmissionFeedback"`
-	// DynamicTransmissionJerkCompression is the driveline response curve, in thousandths,
-	// applied to the normalised drive magnitude before it is clamped to the
+	// DynamicTransmissionJerkCompression is the driveline response curve setting,
+	// in [hapticsSettingMin, hapticsSettingMax], applied to the normalised
+	// drive magnitude (as the exponent 1 - v/100) before it is clamped to the
 	// vehicle's gain floor.
-	DynamicTransmissionJerkCompression int `json:"dynamicTransmissionJerkCompression"`
+	DynamicTransmissionJerkCompression float64 `json:"dynamicTransmissionJerkCompression"`
+	// DynamicTransmissionJerkCurve is deprecated: it was renamed to
+	// DynamicTransmissionJerkCompression. A non-nil value is copied across on
+	// load and then cleared, so omitempty drops it from the file on the next
+	// write and the migration runs at most once.
+	DynamicTransmissionJerkCurve *int `json:"dynamicTransmissionJerkCurve,omitempty"`
 	// DynamicTransmissionStepBlend is the depth to which this shift's driveline
 	// step multiplies the learned per-vehicle character:
 	// drive = character * (1 - blend + blend*event). At 0 a shift plays the
@@ -150,8 +167,14 @@ type haptics struct {
 	// ranked by their gearbox character instead of letting a soft gearbox borrow
 	// loudness from a wide ratio jump it cannot actually deliver.
 	DynamicTransmissionStepBlend float64 `json:"dynamicTransmissionStepBlend"`
-	JerkCompression              int     `json:"jerkCompression"`
-	JerkCenter                   int     `json:"jerkCenter"`
+	// JerkCompression is a setting value in [hapticsSettingMin,
+	// hapticsSettingMax]. The exponent it shapes the jerk response with is
+	// 1 - v/100.
+	JerkCompression float64 `json:"jerkCompression"`
+	// JerkCenter is a setting value in [hapticsSettingMin,
+	// hapticsSettingMax]. The physical jerk it names, in m/s^3, is
+	// 1000 - 10*v.
+	JerkCenter float64 `json:"jerkCenter"`
 	// JerkCurve is deprecated: it was renamed to JerkCompression. A non-nil
 	// value is copied across on load and then cleared, so omitempty drops it
 	// from the file on the next write and the migration runs at most once.
@@ -161,10 +184,11 @@ type haptics struct {
 	// from the file on the next write and the migration runs at most once.
 	JerkMax         int     `json:"jerkMax,omitempty"`
 	_jerkScale      float64 `json:"-"`
-	SnapCompression int     `json:"snapCompression"`
-	// SnapCenter is a setting value in units of hapticsSnapCenterUnitMs4
-	// m/s^4, bounded to hapticsSnapCenterMin..hapticsSnapCenterMax.
-	SnapCenter int `json:"snapCenter"`
+	SnapCompression float64 `json:"snapCompression"`
+	// SnapCenter is a setting value in [hapticsSettingMin,
+	// hapticsSettingMax]. The physical snap it names, in m/s^4, is
+	// (1000 - 10*v) * hapticsSnapCenterUnitMs4.
+	SnapCenter float64 `json:"snapCenter"`
 	// SnapCurve is deprecated: it was renamed to SnapCompression. A non-nil
 	// value is copied across on load and then cleared, so omitempty drops it
 	// from the file on the next write and the migration runs at most once.
@@ -342,22 +366,25 @@ type Snapshot struct {
 	GainIncrement             float64
 	InternalSampleRateHz      int
 
-	// Haptics jerk settings (chassis amplitude). The response is
+	// Haptics jerk settings (chassis amplitude). JerkCompression and JerkCenter
+	// are setting values; the response is
 	//
-	//	amplitude(jerk) = JerkScale * jerk^(JerkCompression/1000)
+	//	amplitude(jerk) = JerkScale * jerk^(1 - JerkCompression/100)
 	//
-	// anchored so that a jerk of JerkCenter m/s^3 lands hapticsJerkBiasDB dB
-	// below full scale. JerkCompression is the shaping knob; the center is
-	// calibration, fixing which event counts as the reference. Changing the
-	// curve rotates the response about that center rather than about the
-	// ceiling, so the reference event holds its level as the shape changes.
+	// anchored so that a jerk of (1000 - 10*JerkCenter) m/s^3 lands
+	// hapticsJerkBiasDB dB below full scale. JerkCompression is the shaping
+	// setting; the center is calibration, fixing which event counts as the
+	// reference. Changing the curve rotates the response about that center
+	// rather than about the ceiling, so the reference event holds its level as
+	// the shape changes.
 	JerkCompression float64
-	JerkCenter      int
+	JerkCenter      float64
 	JerkScale       float64
 
-	// Haptics snap settings (chassis frequency)
+	// Haptics snap settings (chassis frequency). SnapCompression and
+	// SnapCenter are setting values.
 	SnapCompression float64
-	SnapCenter      int
+	SnapCenter      float64
 	SnapScale       float64
 
 	// Haptics pulse settings
@@ -372,7 +399,7 @@ type Snapshot struct {
 
 	// Dynamic transmission settings
 	DynamicTransmissionFeedback        bool
-	DynamicTransmissionJerkCompression int
+	DynamicTransmissionJerkCompression float64
 	DynamicTransmissionStepBlend       float64
 
 	// EQ settings (per channel)
@@ -451,6 +478,13 @@ func New(opts Options) *Config {
 			Err(err).
 			Msg("read config file")
 	} else {
+		// Lay the file over the defaults matching its own schema version, so a
+		// legacy file (including one with no schemaVersion, which every file the
+		// app writes stamps) that omits one of the inverted haptics settings
+		// keeps that setting's old-direction default instead of the new one,
+		// which migrateInvertedSettings would otherwise invert a second time.
+		config.viper = baseConfigFor(vConf.GetString("schemaVersion"))
+
 		err = vConf.Unmarshal(config.viper)
 		if err != nil {
 			log.Error().Err(err).Msg("unmarshal config")
@@ -490,6 +524,11 @@ func NewFromJSON(json []byte, log zerolog.Logger) *Config {
 	if err != nil {
 		log.Error().Err(err).Msg("read config file")
 	} else {
+		// See New: lay the file over the defaults matching its own schema
+		// version so a legacy file that omits an inverted haptics setting keeps
+		// its old-direction default rather than being inverted twice.
+		config.viper = baseConfigFor(vConf.GetString("schemaVersion"))
+
 		err = vConf.Unmarshal(config.viper)
 		if err != nil {
 			log.Error().Err(err).Msg("unmarshal config")
@@ -524,8 +563,14 @@ func (c *Config) SetDefault() {
 		// File exists, try to load it
 		data, err := os.ReadFile(defaultConfigPath)
 		if err == nil {
-			// Create a new config structure
-			newConfig := defaultConfig()
+			// Lay the file over the defaults matching its own schema version;
+			// see New for why a legacy file needs the old-direction defaults.
+			schemaVersion, err := schemaVersionFromJSON(data)
+			if err != nil {
+				schemaVersion = ""
+			}
+
+			newConfig := baseConfigFor(schemaVersion)
 
 			err = json.Unmarshal(data, newConfig)
 			if err == nil {
@@ -1266,19 +1311,24 @@ func (c *Config) SetHapticsDynamicTransFeedbackEnabled(value bool) {
 	c.registerUpdate(false)
 }
 
-// GethapticsJerkCompression returns the jerk compression value.
-// Values closer to 0 produce a more linear response.
-// Values closer to 1 produce a more exponential response.
+// GethapticsJerkCompression returns the jerk compression setting value, in
+// [hapticsSettingMin, hapticsSettingMax]. Higher values produce a more
+// compressed (exponential) response; see GetHapticsJerkExponent for the
+// derived exponent the haptics code actually shapes the curve with.
 func (c *Config) GethapticsJerkCompression() float64 {
 	return c.snapshot.Load().JerkCompression
 }
 
-// SetHapticsJerkCompression sets the jerk compression value.
-// Values closer to 0 produce a more linear response.
-// Values closer to 1 produce a more exponential response.
-func (c *Config) SetHapticsJerkCompression(value int) {
-	value = min(value, 995)
-	value = max(value, 5)
+// GetHapticsJerkExponent returns the jerk compression exponent derived from
+// the jerk compression setting: 1 - v/100.
+func (c *Config) GetHapticsJerkExponent() float64 {
+	return 1 - c.snapshot.Load().JerkCompression/100
+}
+
+// SetHapticsJerkCompression sets the jerk compression setting value. Higher
+// values produce a more compressed (exponential) response.
+func (c *Config) SetHapticsJerkCompression(value float64) {
+	value = clampSetting(roundSetting(value))
 
 	c.mu.Lock()
 	c.viper.Haptics.JerkCompression = value
@@ -1286,10 +1336,10 @@ func (c *Config) SetHapticsJerkCompression(value int) {
 	c.updateJerkScale()
 }
 
-// IncreaseHapticsJerkCompression increases the jerk compression value in increments of 5.
-func (c *Config) IncreaseHapticsJerkCompression() int {
+// IncreaseHapticsJerkCompression increases the jerk compression value in increments of 0.5.
+func (c *Config) IncreaseHapticsJerkCompression() float64 {
 	c.mu.Lock()
-	c.viper.Haptics.JerkCompression = min(995, c.viper.Haptics.JerkCompression+5)
+	c.viper.Haptics.JerkCompression = clampSetting(roundSetting(c.viper.Haptics.JerkCompression + hapticsSettingStep))
 	result := c.viper.Haptics.JerkCompression
 	c.mu.Unlock()
 	c.updateJerkScale()
@@ -1297,10 +1347,10 @@ func (c *Config) IncreaseHapticsJerkCompression() int {
 	return result
 }
 
-// DecreaseHapticsJerkCompression decreases the jerk compression value in increments of 5.
-func (c *Config) DecreaseHapticsJerkCompression() int {
+// DecreaseHapticsJerkCompression decreases the jerk compression value in increments of 0.5.
+func (c *Config) DecreaseHapticsJerkCompression() float64 {
 	c.mu.Lock()
-	c.viper.Haptics.JerkCompression = max(5, c.viper.Haptics.JerkCompression-5)
+	c.viper.Haptics.JerkCompression = clampSetting(roundSetting(c.viper.Haptics.JerkCompression - hapticsSettingStep))
 	result := c.viper.Haptics.JerkCompression
 	c.mu.Unlock()
 	c.updateJerkScale()
@@ -1313,17 +1363,18 @@ func (c *Config) GetHapticsJerkScale() float64 {
 	return c.snapshot.Load().JerkScale
 }
 
-// GetHapticsJerkCenter returns the jerk center value, in m/s^3.
-// This is the reference event: the jerk whose amplitude is held at
-// hapticsJerkBiasDB regardless of how the jerk compression is shaped.
-func (c *Config) GetHapticsJerkCenter() int {
+// GetHapticsJerkCenter returns the jerk center setting value, in
+// [hapticsSettingMin, hapticsSettingMax]. This is the reference
+// event: the jerk whose amplitude is held at hapticsJerkBiasDB regardless of
+// how the jerk compression is shaped. The physical jerk, in m/s^3, is
+// 1000 - 10*v.
+func (c *Config) GetHapticsJerkCenter() float64 {
 	return c.snapshot.Load().JerkCenter
 }
 
-// SetHapticsJerkCenter sets the jerk center value, in m/s^3.
-func (c *Config) SetHapticsJerkCenter(value int) {
-	value = min(value, hapticsJerkCenterMax)
-	value = max(value, hapticsJerkCenterMin)
+// SetHapticsJerkCenter sets the jerk center setting value.
+func (c *Config) SetHapticsJerkCenter(value float64) {
+	value = clampSetting(roundSetting(value))
 
 	c.mu.Lock()
 	c.viper.Haptics.JerkCenter = value
@@ -1331,10 +1382,10 @@ func (c *Config) SetHapticsJerkCenter(value int) {
 	c.updateJerkScale()
 }
 
-// IncreaseHapticsJerkCenter increases the jerk center value to the next multiple of 5.
-func (c *Config) IncreaseHapticsJerkCenter() int {
+// IncreaseHapticsJerkCenter increases the jerk center value to the next multiple of 0.5.
+func (c *Config) IncreaseHapticsJerkCenter() float64 {
 	c.mu.Lock()
-	c.viper.Haptics.JerkCenter = min(hapticsJerkCenterMax, stepUpCenter(c.viper.Haptics.JerkCenter))
+	c.viper.Haptics.JerkCenter = stepUpSetting(c.viper.Haptics.JerkCenter)
 	result := c.viper.Haptics.JerkCenter
 	c.mu.Unlock()
 	c.updateJerkScale()
@@ -1342,10 +1393,10 @@ func (c *Config) IncreaseHapticsJerkCenter() int {
 	return result
 }
 
-// DecreaseHapticsJerkCenter decreases the jerk center value to the next multiple of 5.
-func (c *Config) DecreaseHapticsJerkCenter() int {
+// DecreaseHapticsJerkCenter decreases the jerk center value to the next multiple of 0.5.
+func (c *Config) DecreaseHapticsJerkCenter() float64 {
 	c.mu.Lock()
-	c.viper.Haptics.JerkCenter = max(hapticsJerkCenterMin, stepDownCenter(c.viper.Haptics.JerkCenter))
+	c.viper.Haptics.JerkCenter = stepDownSetting(c.viper.Haptics.JerkCenter)
 	result := c.viper.Haptics.JerkCenter
 	c.mu.Unlock()
 	c.updateJerkScale()
@@ -1372,17 +1423,24 @@ func (c *Config) SetHapticsEnableReplay(value bool) {
 	c.registerUpdate(false)
 }
 
-// GetHapticsSnapCompression returns the snap compression value.
+// GetHapticsSnapCompression returns the snap compression setting value, in
+// [hapticsSettingMin, hapticsSettingMax]. Higher values produce a more
+// compressed (exponential) response; see GetHapticsSnapExponent for the
+// derived exponent the haptics code actually shapes the curve with.
 func (c *Config) GetHapticsSnapCompression() float64 {
 	return c.snapshot.Load().SnapCompression
 }
 
-// SetHapticsSnapCompression sets the snap compression value.
-// Values closer to 0 produce a more linear response.
-// Values closer to 1 produce a more exponential response.
-func (c *Config) SetHapticsSnapCompression(value int) {
-	value = min(value, 995)
-	value = max(value, 5)
+// GetHapticsSnapExponent returns the snap compression exponent derived from
+// the snap compression setting: 1 - v/100.
+func (c *Config) GetHapticsSnapExponent() float64 {
+	return 1 - c.snapshot.Load().SnapCompression/100
+}
+
+// SetHapticsSnapCompression sets the snap compression setting value. Higher
+// values produce a more compressed (exponential) response.
+func (c *Config) SetHapticsSnapCompression(value float64) {
+	value = clampSetting(roundSetting(value))
 
 	c.mu.Lock()
 	c.viper.Haptics.SnapCompression = value
@@ -1391,14 +1449,11 @@ func (c *Config) SetHapticsSnapCompression(value int) {
 	c.updateSnapScale()
 }
 
-// IncreaseHapticsSnapCompression increases the snap compression value in increments of 5.
-func (c *Config) IncreaseHapticsSnapCompression() int {
+// IncreaseHapticsSnapCompression increases the snap compression value in increments of 0.5.
+func (c *Config) IncreaseHapticsSnapCompression() float64 {
 	c.mu.Lock()
 
-	c.viper.Haptics.SnapCompression = min(
-		995,
-		c.viper.Haptics.SnapCompression+5,
-	)
+	c.viper.Haptics.SnapCompression = clampSetting(roundSetting(c.viper.Haptics.SnapCompression + hapticsSettingStep))
 
 	c.mu.Unlock()
 
@@ -1407,15 +1462,11 @@ func (c *Config) IncreaseHapticsSnapCompression() int {
 	return c.viper.Haptics.SnapCompression
 }
 
-// DecreaseHapticsSnapCompression decreases the snap compression value in increments of 5.
-func (c *Config) DecreaseHapticsSnapCompression() int {
+// DecreaseHapticsSnapCompression decreases the snap compression value in increments of 0.5.
+func (c *Config) DecreaseHapticsSnapCompression() float64 {
 	c.mu.Lock()
 
-	if c.viper.Haptics.SnapCompression >= 10 {
-		c.viper.Haptics.SnapCompression -= 5
-	} else {
-		c.viper.Haptics.SnapCompression = 5
-	}
+	c.viper.Haptics.SnapCompression = clampSetting(roundSetting(c.viper.Haptics.SnapCompression - hapticsSettingStep))
 
 	c.mu.Unlock()
 
@@ -1431,20 +1482,19 @@ func (c *Config) GetHapticsSnapScale() float64 {
 	return c.snapshot.Load().SnapScale
 }
 
-// GetHapticsSnapCenter returns the snap center value, as a setting in units
-// of hapticsSnapCenterUnitMs4 m/s^4. This is the reference event: the snap
-// whose pulse frequency sits at hapticsSnapBiasPercent between the minimum
-// and maximum pulse frequency, regardless of how the snap compression is
-// shaped.
-func (c *Config) GetHapticsSnapCenter() int {
+// GetHapticsSnapCenter returns the snap center setting value, in
+// [hapticsSettingMin, hapticsSettingMax]. This is the reference
+// event: the snap whose pulse frequency sits at hapticsSnapBiasPercent
+// between the minimum and maximum pulse frequency, regardless of how the
+// snap compression is shaped. The physical snap it names, in m/s^4, is
+// (1000 - 10*v) * hapticsSnapCenterUnitMs4.
+func (c *Config) GetHapticsSnapCenter() float64 {
 	return c.snapshot.Load().SnapCenter
 }
 
-// SetHapticsSnapCenter sets the snap center value, as a setting in units of
-// hapticsSnapCenterUnitMs4 m/s^4.
-func (c *Config) SetHapticsSnapCenter(value int) {
-	value = min(value, hapticsSnapCenterMax)
-	value = max(value, hapticsSnapCenterMin)
+// SetHapticsSnapCenter sets the snap center setting value.
+func (c *Config) SetHapticsSnapCenter(value float64) {
+	value = clampSetting(roundSetting(value))
 
 	c.mu.Lock()
 	c.viper.Haptics.SnapCenter = value
@@ -1452,10 +1502,10 @@ func (c *Config) SetHapticsSnapCenter(value int) {
 	c.updateSnapScale()
 }
 
-// IncreaseHapticsSnapCenter increases the snap center value to the next multiple of 5.
-func (c *Config) IncreaseHapticsSnapCenter() int {
+// IncreaseHapticsSnapCenter increases the snap center value to the next multiple of 0.5.
+func (c *Config) IncreaseHapticsSnapCenter() float64 {
 	c.mu.Lock()
-	c.viper.Haptics.SnapCenter = min(hapticsSnapCenterMax, stepUpCenter(c.viper.Haptics.SnapCenter))
+	c.viper.Haptics.SnapCenter = stepUpSetting(c.viper.Haptics.SnapCenter)
 	result := c.viper.Haptics.SnapCenter
 	c.mu.Unlock()
 	c.updateSnapScale()
@@ -1463,10 +1513,10 @@ func (c *Config) IncreaseHapticsSnapCenter() int {
 	return result
 }
 
-// DecreaseHapticsSnapCenter decreases the snap center value to the next multiple of 5.
-func (c *Config) DecreaseHapticsSnapCenter() int {
+// DecreaseHapticsSnapCenter decreases the snap center value to the next multiple of 0.5.
+func (c *Config) DecreaseHapticsSnapCenter() float64 {
 	c.mu.Lock()
-	c.viper.Haptics.SnapCenter = max(hapticsSnapCenterMin, stepDownCenter(c.viper.Haptics.SnapCenter))
+	c.viper.Haptics.SnapCenter = stepDownSetting(c.viper.Haptics.SnapCenter)
 	result := c.viper.Haptics.SnapCenter
 	c.mu.Unlock()
 	c.updateSnapScale()
@@ -1474,34 +1524,41 @@ func (c *Config) DecreaseHapticsSnapCenter() int {
 	return result
 }
 
-// GetHapticsTransmissionJerkCompression returns the driveline response curve for the
-// gear-shift magnitude. Falls back to the shipped default when unset, so configs
-// written before the key existed do not silently run at an exponent of zero.
+// GetHapticsTransmissionJerkCompression returns the driveline response curve
+// setting for the gear-shift magnitude. Falls back to the shipped default
+// when unset (<= 0), so configs written before the key existed do not
+// silently run at an exponent of 1.
 func (c *Config) GetHapticsTransmissionJerkCompression() float64 {
 	curve := c.snapshot.Load().DynamicTransmissionJerkCompression
 	if curve <= 0 {
 		return defaultTransmissionJerkCompression
 	}
 
-	return float64(curve)
+	return curve
 }
 
-// SetHapticsTransmissionJerkCompression sets the response curve for the jerk source.
-func (c *Config) SetHapticsTransmissionJerkCompression(value int) {
+// GetHapticsTransmissionJerkExponent returns the driveline jerk compression
+// exponent derived from the transmission jerk compression setting: 1 - v/100.
+func (c *Config) GetHapticsTransmissionJerkExponent() float64 {
+	return 1 - c.GetHapticsTransmissionJerkCompression()/100
+}
+
+// SetHapticsTransmissionJerkCompression sets the response curve setting for the jerk source.
+func (c *Config) SetHapticsTransmissionJerkCompression(value float64) {
 	c.mu.Lock()
 
-	value = min(value, 995)
-	value = max(value, 5)
-	c.viper.Haptics.DynamicTransmissionJerkCompression = value
+	c.viper.Haptics.DynamicTransmissionJerkCompression = clampSetting(roundSetting(value))
 	c.rebuildSnapshot()
 	c.registerUpdate(false)
 	c.mu.Unlock()
 }
 
-// IncreaseHapticsTransmissionJerkCompression increases the jerk compression value in increments of 5.
-func (c *Config) IncreaseHapticsTransmissionJerkCompression() int {
+// IncreaseHapticsTransmissionJerkCompression increases the jerk compression value in increments of 0.5.
+func (c *Config) IncreaseHapticsTransmissionJerkCompression() float64 {
 	c.mu.Lock()
-	c.viper.Haptics.DynamicTransmissionJerkCompression = min(995, c.viper.Haptics.DynamicTransmissionJerkCompression+5)
+	c.viper.Haptics.DynamicTransmissionJerkCompression = clampSetting(roundSetting(
+		c.GetHapticsTransmissionJerkCompression() + hapticsSettingStep,
+	))
 	c.rebuildSnapshot()
 	c.registerUpdate(false)
 	result := c.viper.Haptics.DynamicTransmissionJerkCompression
@@ -1510,10 +1567,12 @@ func (c *Config) IncreaseHapticsTransmissionJerkCompression() int {
 	return result
 }
 
-// DecreaseHapticsTransmissionJerkCompression decreases the jerk compression value in increments of 5.
-func (c *Config) DecreaseHapticsTransmissionJerkCompression() int {
+// DecreaseHapticsTransmissionJerkCompression decreases the jerk compression value in increments of 0.5.
+func (c *Config) DecreaseHapticsTransmissionJerkCompression() float64 {
 	c.mu.Lock()
-	c.viper.Haptics.DynamicTransmissionJerkCompression = max(5, c.viper.Haptics.DynamicTransmissionJerkCompression-5)
+	c.viper.Haptics.DynamicTransmissionJerkCompression = clampSetting(roundSetting(
+		c.GetHapticsTransmissionJerkCompression() - hapticsSettingStep,
+	))
 	c.rebuildSnapshot()
 	c.registerUpdate(false)
 	result := c.viper.Haptics.DynamicTransmissionJerkCompression
@@ -4007,17 +4066,9 @@ func resizeStringChannels(s []string, n int, fill string) []string {
 func (c *Config) finalise() {
 	c.mu.Lock()
 
-	// Fold any surviving legacy key names into their renamed field before the
-	// jerkMax/snapMax migrations below, which read the renamed fields.
-	c.migrateLegacyKeys()
-
-	// Fold any deprecated jerkMax value into the center before the derived scale
-	// is computed from it below.
-	c.migrateJerkMax()
-
-	// Fold any deprecated snapMax value into the center before the derived scale
-	// is computed from it below.
-	c.migrateSnapMax()
+	// Bring an older config up to the current schema before the derived scales
+	// are computed from it below.
+	c.migrateSchema()
 
 	// All per-channel synth arrays are sized to the configured output channel
 	// count so that any channel index the pipeline addresses is valid.
@@ -4091,13 +4142,15 @@ func (c *Config) finalise() {
 	c.updateSnapScale()
 }
 
-// updateJerkScale recalculates the jerk scale factor from the current jerk compression
-// and center.
+// updateJerkScale recalculates the jerk scale factor from the current jerk
+// compression and center settings.
 //
 // The response is amplitude(jerk) = scale * jerk^exponent, anchored so the jerk
 // center sits hapticsJerkBiasDB dB below full scale:
 //
-//	scale = 10^(hapticsJerkBiasDB/20) / center^exponent
+//	exponent = 1 - jerkCompression/100
+//	center   = 1000 - 10*jerkCenter
+//	scale    = 10^(hapticsJerkBiasDB/20) / center^exponent
 //
 // The full-scale jerk is then implied rather than configured, at
 // center * 10^(-hapticsJerkBiasDB/(20*exponent)) — it recedes as the curve
@@ -4105,65 +4158,13 @@ func (c *Config) finalise() {
 // the shape changes around it.
 func (c *Config) updateJerkScale() {
 	c.mu.Lock()
-	exponent := float64(c.viper.Haptics.JerkCompression) / 1000.0
-	center := float64(c.viper.Haptics.JerkCenter)
+	exponent := 1 - c.viper.Haptics.JerkCompression/100
+	center := 1000 - 10*c.viper.Haptics.JerkCenter
 	biasLinear := math.Pow(10, hapticsJerkBiasDB/20)
 	c.viper.Haptics._jerkScale = biasLinear / math.Pow(center, exponent)
 	c.rebuildSnapshot()
 	c.registerUpdate(false)
 	c.mu.Unlock()
-}
-
-// migrateLegacyKeys copies any surviving key renamed since the v0.8.0 public
-// release onto its renamed field and then clears it, so omitempty drops the
-// old key from the file on the next write and the migration runs at most
-// once. JerkCurve and SnapCurve are pointers so a legitimate zero value is
-// still distinguishable from an absent legacy key.
-//
-// Caller must hold c.mu.
-func (c *Config) migrateLegacyKeys() {
-	haptics := c.viper.Haptics
-
-	if haptics.JerkCurve != nil {
-		haptics.JerkCompression = *haptics.JerkCurve
-		haptics.JerkCurve = nil
-	}
-
-	if haptics.SnapCurve != nil {
-		haptics.SnapCompression = *haptics.SnapCurve
-		haptics.SnapCurve = nil
-	}
-}
-
-// migrateJerkMax converts a surviving jerkMax value into the equivalent center and
-// then clears it, so the conversion runs at most once and omitempty drops the key
-// on the next write.
-//
-// jerkMax named the full-scale jerk directly, so the center that reproduces the
-// same curve is the jerk at which that curve has fallen to the fixed bias:
-//
-//	center = jerkMax * 10^(hapticsJerkBiasDB/(20*exponent))
-//
-// Caller must hold c.mu.
-func (c *Config) migrateJerkMax() {
-	if c.viper.Haptics.JerkMax <= 0 {
-		return
-	}
-
-	exponent := float64(c.viper.Haptics.JerkCompression) / 1000.0
-	if exponent <= 0 {
-		c.viper.Haptics.JerkMax = 0
-
-		return
-	}
-
-	// jerkMax counted in hundreds of m/s^3; the center is a plain m/s^3 figure.
-	jerkMax := 100 * float64(c.viper.Haptics.JerkMax)
-	biasFrac := hapticsJerkBiasDB / 20
-	center := jerkMax * math.Pow(10, biasFrac/exponent)
-
-	c.viper.Haptics.JerkCenter = min(hapticsJerkCenterMax, max(hapticsJerkCenterMin, int(math.Round(center))))
-	c.viper.Haptics.JerkMax = 0
 }
 
 // snapBiasHz converts a snap bias percentage into the pulse frequency it
@@ -4183,16 +4184,18 @@ func (c *Config) snapBiasHz(biasPercent float64) float64 {
 // snap^exponent, anchored so the snap center sits hapticsSnapBiasPercent of
 // the way from the minimum to the maximum pulse frequency:
 //
-//	biasHz = pulseMinHz + (pulseMaxHz - pulseMinHz) * hapticsSnapBiasPercent/100
-//	scale  = biasHz / (center*hapticsSnapCenterUnitMs4)^exponent
+//	exponent = 1 - snapCompression/100
+//	center   = (1000 - 10*snapCenter) * hapticsSnapCenterUnitMs4
+//	biasHz   = pulseMinHz + (pulseMaxHz - pulseMinHz) * hapticsSnapBiasPercent/100
+//	scale    = biasHz / center^exponent
 //
 // The minimum and maximum pulse frequency then clamp the response. They no
 // longer define the mapping's endpoints.
 //
 // Caller must hold c.mu.
 func (c *Config) recomputeSnapScale() {
-	exponent := float64(c.viper.Haptics.SnapCompression) / 1000.0
-	center := float64(c.viper.Haptics.SnapCenter) * hapticsSnapCenterUnitMs4
+	exponent := 1 - c.viper.Haptics.SnapCompression/100
+	center := (1000 - 10*c.viper.Haptics.SnapCenter) * hapticsSnapCenterUnitMs4
 	biasHz := c.snapBiasHz(hapticsSnapBiasPercent)
 
 	c.viper.Haptics._snapScale = biasHz / math.Pow(center, exponent)
@@ -4206,42 +4209,6 @@ func (c *Config) updateSnapScale() {
 	c.rebuildSnapshot()
 	c.registerUpdate(false)
 	c.mu.Unlock()
-}
-
-// migrateSnapMax converts a surviving snapMax value into the equivalent center
-// and then clears it, so the conversion runs at most once and omitempty drops
-// the key on the next write.
-//
-// snapMax named the full-scale snap directly, so the center that reproduces the
-// same scale is:
-//
-//	biasHz = pulseMinHz + (pulseMaxHz - pulseMinHz) * hapticsSnapBiasPercent/100
-//	center = 1000 * snapMax * (biasHz / (pulseMaxHz - pulseMinHz))^(1/exponent)
-//
-// converted from m/s^4 into the setting's hapticsSnapCenterUnitMs4 units.
-//
-// Caller must hold c.mu.
-func (c *Config) migrateSnapMax() {
-	if c.viper.Haptics.SnapMax <= 0 {
-		return
-	}
-
-	exponent := float64(c.viper.Haptics.SnapCompression) / 1000.0
-	hzRange := c.viper.Haptics.PulseMaxFrequencyHz - c.viper.Haptics.PulseMinFrequencyHz
-	biasHz := c.snapBiasHz(hapticsSnapBiasPercent)
-
-	if exponent <= 0 || hzRange <= 0 || biasHz <= 0 {
-		c.viper.Haptics.SnapMax = 0
-
-		return
-	}
-
-	// snapMax counted in thousands of m/s^4; the center is a plain m/s^4 figure.
-	snapMax := 1000 * float64(c.viper.Haptics.SnapMax)
-	centerMs4 := snapMax * math.Pow(biasHz/hzRange, 1/exponent)
-
-	c.viper.Haptics.SnapCenter = min(hapticsSnapCenterMax, max(hapticsSnapCenterMin, int(math.Round(centerMs4/hapticsSnapCenterUnitMs4))))
-	c.viper.Haptics.SnapMax = 0
 }
 
 // computeEqCurve computes the EQ curve for a specific channel based on its bands.

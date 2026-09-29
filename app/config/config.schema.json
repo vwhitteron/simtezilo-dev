@@ -12,7 +12,7 @@
             "type": "string",
             "description": "Schema version this configuration complies with",
             "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
-            "const": "1.0.0"
+            "const": "1.1.0"
         },
         "app": {
             "type": "object",
@@ -411,11 +411,11 @@
                     "default": false
                 },
                 "jerkCompression": {
-                    "type": "integer",
-                    "description": "Jerk response curve",
-                    "minimum": 5,
-                    "maximum": 995,
-                    "default": 190
+                    "type": "number",
+                    "description": "Jerk response curve setting. Higher values give a more compressed (exponential) response.",
+                    "minimum": 0.5,
+                    "maximum": 99.5,
+                    "default": 74.5
                 },
                 "jerkCurve": {
                     "type": "integer",
@@ -425,11 +425,11 @@
                     "maximum": 995
                 },
                 "jerkCenter": {
-                    "type": "integer",
-                    "description": "Reference jerk value, in m/s^3, held at -3 dB below full scale",
-                    "minimum": 1,
-                    "maximum": 20000,
-                    "default": 601
+                    "type": "number",
+                    "description": "Reference jerk setting, held at -3 dB below full scale. The physical jerk it names, in m/s^3, is 1000 - 10*value; a lower setting names a higher jerk.",
+                    "minimum": 0.5,
+                    "maximum": 99.5,
+                    "default": 37.6
                 },
                 "jerkMax": {
                     "type": "integer",
@@ -439,11 +439,11 @@
                     "maximum": 200
                 },
                 "snapCompression": {
-                    "type": "integer",
-                    "description": "Snap response curve",
-                    "minimum": 5,
-                    "maximum": 995,
-                    "default": 310
+                    "type": "number",
+                    "description": "Snap response curve setting. Higher values give a more compressed (exponential) response.",
+                    "minimum": 0.5,
+                    "maximum": 99.5,
+                    "default": 59.0
                 },
                 "snapCurve": {
                     "type": "integer",
@@ -453,11 +453,11 @@
                     "maximum": 995
                 },
                 "snapCenter": {
-                    "type": "integer",
-                    "description": "Reference snap value, in units of 100 m/s^4, held at the pulse frequency halfway between the minimum and maximum pulse frequency",
-                    "minimum": 5,
-                    "maximum": 995,
-                    "default": 629
+                    "type": "number",
+                    "description": "Reference snap setting, held at the pulse frequency halfway between the minimum and maximum pulse frequency. The physical snap it names, in m/s^4, is (1000 - 10*value) * 100; a lower setting names a higher snap.",
+                    "minimum": 0.5,
+                    "maximum": 99.5,
+                    "default": 37.1
                 },
                 "snapMax": {
                     "type": "integer",
@@ -493,11 +493,18 @@
                     "default": true
                 },
                 "dynamicTransmissionJerkCompression": {
+                    "type": "number",
+                    "description": "Response curve setting applied to the driveline-driven gear shift magnitude. Higher values give a more compressed (exponential) response.",
+                    "minimum": 0.5,
+                    "maximum": 99.5,
+                    "default": 25.0
+                },
+                "dynamicTransmissionJerkCurve": {
                     "type": "integer",
-                    "description": "Response curve applied to the driveline-driven gear shift magnitude",
+                    "description": "Deprecated: renamed to dynamicTransmissionJerkCompression. A non-null value is copied across on load and then cleared.",
+                    "deprecated": true,
                     "minimum": 5,
-                    "maximum": 995,
-                    "default": 750
+                    "maximum": 995
                 },
                 "dynamicTransmissionStepBlend": {
                     "type": "number",

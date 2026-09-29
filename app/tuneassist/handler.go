@@ -163,13 +163,17 @@ func (s *Service) HandleData(response http.ResponseWriter, request *http.Request
 	}
 }
 
+// allLapsKey is the lap value that selects the whole replay instead of one lap.
+const allLapsKey = "all"
+
 // HandleAudio renders chassis audio for a lap section as a WAV. The render is done
 // per request and only the requested section is held, so nothing accumulates across
 // replay, lap, or tuning changes; the web UI caches the decoded buffer client-side.
 // Query: replay, lap, from, to (per-lap frame indices; to<0 => whole lap), and the
-// four tuning knobs jerkCompression/jerkCenter/snapCompression/snapCenter
-// (0 => shipped default). The bias each pair is anchored to is a fixed
-// constant and is not a query parameter.
+// four tuning settings jerkCompression/jerkCenter/snapCompression/snapCenter, each a
+// decimal setting value (0 => shipped default). A lap of "all" spans the whole replay,
+// and from/to then index every frame of the replay in order. The bias each pair is
+// anchored to is a fixed constant and is not a query parameter.
 //
 // It also takes the transmission pair transmissionJerkCompression/transmissionStepBlend
 // (the blend is optional rather than sentinelled, since its whole range is legal),
@@ -191,17 +195,20 @@ func (s *Service) HandleAudio(response http.ResponseWriter, request *http.Reques
 		return
 	}
 
-	lap := clampToInt16(parseIntParam(request, "lap", 0))
-	fromFrame := parseIntParam(request, "from", 0)
-	toFrame := parseIntParam(request, "to", -1)
+	window := haptics.CaptureWindow{
+		Lap:       clampToInt16(parseIntParam(request, "lap", 0)),
+		AllLaps:   request.URL.Query().Get("lap") == allLapsKey,
+		FromFrame: parseIntParam(request, "from", 0),
+		ToFrame:   parseIntParam(request, "to", -1),
+	}
 
 	tuning := haptics.Tuning{
-		JerkCompression: parseIntParam(request, "jerkCompression", 0),
-		JerkCenter:      parseIntParam(request, "jerkCenter", 0),
-		SnapCompression: parseIntParam(request, "snapCompression", 0),
-		SnapCenter:      parseIntParam(request, "snapCenter", 0),
+		JerkCompression: parseFloatParam(request, "jerkCompression", 0),
+		JerkCenter:      parseFloatParam(request, "jerkCenter", 0),
+		SnapCompression: parseFloatParam(request, "snapCompression", 0),
+		SnapCenter:      parseFloatParam(request, "snapCenter", 0),
 
-		TransmissionJerkCompression: parseIntParam(request, "transmissionJerkCompression", 0),
+		TransmissionJerkCompression: parseFloatParam(request, "transmissionJerkCompression", 0),
 		TransmissionStepBlend:       optionalFloatParam(request, "transmissionStepBlend", 0, 1),
 
 		SurfaceRumble: surfaceRumbleParams(request),
@@ -226,7 +233,7 @@ func (s *Service) HandleAudio(response http.ResponseWriter, request *http.Reques
 		return
 	}
 
-	wav, err := renderSectionWAV(request.Context(), source, tuning, layers, unfiltered, lap, fromFrame, toFrame)
+	wav, err := renderWindowWAV(request.Context(), source, tuning, layers, unfiltered, window)
 	if err != nil {
 		if errors.Is(err, errNoAudio) {
 			http.Error(response, "no audio for requested lap/section", http.StatusNotFound)

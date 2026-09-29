@@ -7,7 +7,7 @@ import profiles "github.com/vwhitteron/simtezilo-dev/app/haptics/profiles"
 func defaultConfig() *viperConfig {
 	return &viperConfig{
 		Schema:        "https://simtezilo.com/schemas/config/v1.0.0/config.schema.json",
-		SchemaVersion: "1.0.0",
+		SchemaVersion: currentSchemaVersion,
 		App: &app{
 			Language:     "en",
 			Accent:       "us",
@@ -49,10 +49,10 @@ func defaultConfig() *viperConfig {
 			DynamicTransmissionFeedback:        true,
 			DynamicTransmissionJerkCompression: defaultTransmissionJerkCompression,
 			DynamicTransmissionStepBlend:       0.5,
-			JerkCompression:                    255,
-			JerkCenter:                         624,
-			SnapCompression:                    410,
-			SnapCenter:                         629,
+			JerkCompression:                    74.5,
+			JerkCenter:                         37.6,
+			SnapCompression:                    59.0,
+			SnapCenter:                         37.1,
 			PulseMaxAmplitude:                  1,
 			PulseMaxFrequencyHz:                60,
 			PulseMinFrequencyHz:                16,

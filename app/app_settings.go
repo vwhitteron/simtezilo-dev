@@ -1062,7 +1062,7 @@ func (a *App) handleOutputModeSetting(action string) string {
 
 // Haptics - Chassis Feedback handlers.
 func (a *App) handleJerkCompressionSetting(action string) string {
-	var value int
+	var value float64
 
 	switch action {
 	case "increase":
@@ -1070,14 +1070,14 @@ func (a *App) handleJerkCompressionSetting(action string) string {
 	case "decrease":
 		value = a.config.DecreaseHapticsJerkCompression()
 	default:
-		value = int(a.config.GethapticsJerkCompression())
+		value = a.config.GethapticsJerkCompression()
 	}
 
-	return strconv.Itoa(value)
+	return strconv.FormatFloat(value, 'f', 1, 64)
 }
 
 func (a *App) handleJerkCenterSetting(action string) string {
-	var value int
+	var value float64
 
 	switch action {
 	case "increase":
@@ -1088,11 +1088,11 @@ func (a *App) handleJerkCenterSetting(action string) string {
 		value = a.config.GetHapticsJerkCenter()
 	}
 
-	return strconv.Itoa(value)
+	return strconv.FormatFloat(value, 'f', 1, 64)
 }
 
 func (a *App) handleSnapCompressionSetting(action string) string {
-	var value int
+	var value float64
 
 	switch action {
 	case "increase":
@@ -1100,14 +1100,14 @@ func (a *App) handleSnapCompressionSetting(action string) string {
 	case "decrease":
 		value = a.config.DecreaseHapticsSnapCompression()
 	default:
-		value = int(a.config.GetHapticsSnapCompression())
+		value = a.config.GetHapticsSnapCompression()
 	}
 
-	return strconv.Itoa(value)
+	return strconv.FormatFloat(value, 'f', 1, 64)
 }
 
 func (a *App) handleSnapCenterSetting(action string) string {
-	var value int
+	var value float64
 
 	switch action {
 	case "increase":
@@ -1118,7 +1118,7 @@ func (a *App) handleSnapCenterSetting(action string) string {
 		value = a.config.GetHapticsSnapCenter()
 	}
 
-	return strconv.Itoa(value)
+	return strconv.FormatFloat(value, 'f', 1, 64)
 }
 
 func (a *App) handlePulseMaxAmplitudeSetting(action string) string {
@@ -1182,7 +1182,7 @@ func (a *App) handletransmissionFFBStrengthSetting(action string) string {
 }
 
 func (a *App) handleTransmissionJerkCompressionSetting(action string) string {
-	var value int
+	var value float64
 
 	switch action {
 	case "increase":
@@ -1190,10 +1190,10 @@ func (a *App) handleTransmissionJerkCompressionSetting(action string) string {
 	case "decrease":
 		value = a.config.DecreaseHapticsTransmissionJerkCompression()
 	default:
-		value = int(a.config.GetHapticsTransmissionJerkCompression())
+		value = a.config.GetHapticsTransmissionJerkCompression()
 	}
 
-	return strconv.Itoa(value)
+	return strconv.FormatFloat(value, 'f', 1, 64)
 }
 
 func (a *App) handleTransmissionStepBlendSetting(action string) string {

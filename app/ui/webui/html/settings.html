@@ -2269,7 +2269,7 @@
                                             </label>
                                             <input type="number" id="haptics-jerkcompression"
                                                 class="form-control text-center no-spinner"
-                                                data-config="haptics.jerkCompression" min="5" max="995" step="1">
+                                                data-config="haptics.jerkCompression" data-decimals="1" min="0.5" max="99.5" step="0.1">
                                         </div>
                                         <div class="col-md-6 col-lg-3">
                                             <label for="haptics-snapcompression" class="form-label">
@@ -2281,7 +2281,7 @@
                                             </label>
                                             <input type="number" id="haptics-snapcompression"
                                                 class="form-control text-center no-spinner"
-                                                data-config="haptics.snapCompression" min="5" max="995" step="1">
+                                                data-config="haptics.snapCompression" data-decimals="1" min="0.5" max="99.5" step="0.1">
                                         </div>
                                     </div>
 
@@ -2312,13 +2312,10 @@
                                                                     role="button" tabindex="0" aria-expanded="false"
                                                                     data-i18n-tooltip="runmode.settings.haptics.general.advanced.jerkcenter.tooltip"></i>
                                                             </label>
-                                                            <div class="input-with-suffix">
-                                                                <input type="number" id="haptics-jerkcenter"
-                                                                    class="form-control text-center no-spinner"
-                                                                    data-config="haptics.jerkCenter" min="1" max="20000"
-                                                                    step="5" data-step-snap>
-                                                                <span class="input-suffix">m/s³</span>
-                                                            </div>
+                                                            <input type="number" id="haptics-jerkcenter"
+                                                                class="form-control text-center no-spinner"
+                                                                data-config="haptics.jerkCenter" data-decimals="1" min="0.5" max="99.5"
+                                                                step="0.1" data-step-snap>
                                                         </div>
                                                         <div class="col-md-6 col-lg-3">
                                                             <label for="haptics-snapcenter" class="form-label">
@@ -2329,13 +2326,10 @@
                                                                     role="button" tabindex="0" aria-expanded="false"
                                                                     data-i18n-tooltip="runmode.settings.haptics.chassis.snapcenter.tooltip"></i>
                                                             </label>
-                                                            <div class="input-with-suffix">
-                                                                <input type="number" id="haptics-snapcenter"
-                                                                    class="form-control text-center no-spinner"
-                                                                    data-config="haptics.snapCenter" min="5"
-                                                                    max="995" step="5" data-step-snap>
-                                                                <span class="input-suffix">×100 m/s⁴</span>
-                                                            </div>
+                                                            <input type="number" id="haptics-snapcenter"
+                                                                class="form-control text-center no-spinner"
+                                                                data-config="haptics.snapCenter" data-decimals="1" min="0.5"
+                                                                max="99.5" step="0.1" data-step-snap>
                                                         </div>
                                                     </div>
 
@@ -2575,8 +2569,8 @@
                                             </label>
                                             <input type="number" id="haptics-transmissionjerkcompression"
                                                 class="form-control text-center no-spinner"
-                                                data-config="haptics.dynamicTransmissionJerkCompression" min="5" max="995"
-                                                step="1">
+                                                data-config="haptics.dynamicTransmissionJerkCompression" min="0.5" max="99.5"
+                                                step="0.1">
                                         </div>
                                         <div class="col-md-6" id="haptics-stepblend-group">
                                             <label for="haptics-transmissionstepblend" class="form-label"
@@ -3578,8 +3572,8 @@
                     fixedRadio.checked = true;
                 }
 
-                // Enabling/disabling the dependent knobs lives in settings.js so the
-                // two paths cannot drift apart as knobs are added.
+                // Enabling/disabling the dependent settings lives in settings.js so the
+                // two paths cannot drift apart as settings are added.
                 if (window.configManager) {
                     window.configManager.updateTransmissionDisabledState();
                 }

@@ -1,6 +1,7 @@
 package config //nolint:testpackage // white-box testing for internal validation functions
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -57,7 +58,7 @@ func TestValidateJSONSchema_ValidConfig(t *testing.T) {
 	t.Parallel()
 
 	validJSON := `{
-		"schemaVersion": "1.0.0",
+		"schemaVersion": "1.1.0",
 		"app": {
 			"language": "en",
 			"logLevel": "info",
@@ -93,7 +94,7 @@ func TestValidateJSONSchema_InvalidLogLevel(t *testing.T) {
 	t.Parallel()
 
 	invalidJSON := `{
-		"schemaVersion": "1.0.0",
+		"schemaVersion": "1.1.0",
 		"app": {
 			"language": "en",
 			"logLevel": "invalid_level"
@@ -133,7 +134,7 @@ func TestValidateJSONSchema_InvalidWebUIPort(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			invalidJSON := `{"schemaVersion": "1.0.0", "app": {"webUIPort": ` + intToString(testCase.port) + `}}`
+			invalidJSON := `{"schemaVersion": "1.1.0", "app": {"webUIPort": ` + intToString(testCase.port) + `}}`
 			result := validateJSONSchema([]byte(invalidJSON))
 			assert.False(t, result.Valid, "expected invalid for port %d", testCase.port)
 		})
@@ -144,7 +145,7 @@ func TestValidateJSONSchema_InvalidHardwareModel(t *testing.T) {
 	t.Parallel()
 
 	invalidJSON := `{
-		"schemaVersion": "1.0.0",
+		"schemaVersion": "1.1.0",
 		"hardware": {
 			"model": "invalid_model"
 		}
@@ -159,7 +160,7 @@ func TestValidateJSONSchema_InvalidDisplayOrientation(t *testing.T) {
 	t.Parallel()
 
 	invalidJSON := `{
-		"schemaVersion": "1.0.0",
+		"schemaVersion": "1.1.0",
 		"hardware": {
 			"displayOrientation": 45
 		}
@@ -188,7 +189,7 @@ func TestValidateJSONSchema_SynthesizerGainOutOfRange(t *testing.T) {
 			t.Parallel()
 
 			invalidJSON := `{
-				"schemaVersion": "1.0.0",
+				"schemaVersion": "1.1.0",
 				"synthesizer": {
 					"` + testCase.field + `": ` + floatToString(testCase.value) + `
 				}
@@ -216,7 +217,7 @@ func TestValidateJSONSchema_SampleRateOutOfRange(t *testing.T) {
 			t.Parallel()
 
 			invalidJSON := `{
-				"schemaVersion": "1.0.0",
+				"schemaVersion": "1.1.0",
 				"synthesizer": {
 					"` + testCase.field + `": ` + intToString(testCase.value) + `
 				}
@@ -235,12 +236,12 @@ func TestValidateJSONSchema_HapticsOutOfRange(t *testing.T) {
 		field string
 		json  string
 	}{
-		{"jerkCompression too low", "jerkCompression", `"jerkCompression": 2`},
-		{"jerkCompression too high", "jerkCompression", `"jerkCompression": 1000`},
+		{"jerkCompression too low", "jerkCompression", `"jerkCompression": 0.1`},
+		{"jerkCompression too high", "jerkCompression", `"jerkCompression": 100`},
 		{"jerkCenter too low", "jerkCenter", `"jerkCenter": 0`},
-		{"jerkCenter too high", "jerkCenter", `"jerkCenter": 20001`},
+		{"jerkCenter too high", "jerkCenter", `"jerkCenter": 100`},
 		{"jerkMax too high", "jerkMax", `"jerkMax": 250`},
-		{"snapCompression too low", "snapCompression", `"snapCompression": 1`},
+		{"snapCompression too low", "snapCompression", `"snapCompression": 0.1`},
 		{"snapMax too high", "snapMax", `"snapMax": 201`},
 		{"pulseMaxAmplitude too high", "pulseMaxAmplitude", `"pulseMaxAmplitude": 1.5`},
 		{"pulseMaxAmplitude negative", "pulseMaxAmplitude", `"pulseMaxAmplitude": -0.1`},
@@ -251,7 +252,7 @@ func TestValidateJSONSchema_HapticsOutOfRange(t *testing.T) {
 			t.Parallel()
 
 			invalidJSON := `{
-				"schemaVersion": "1.0.0",
+				"schemaVersion": "1.1.0",
 				"haptics": {
 					` + testCase.json + `
 				}
@@ -280,7 +281,7 @@ func TestValidateJSONSchema_FuelMonitoringNonNegative(t *testing.T) {
 			t.Parallel()
 
 			invalidJSON := `{
-				"schemaVersion": "1.0.0",
+				"schemaVersion": "1.1.0",
 				"pitRadio": {
 					"fuelMonitoring": {
 						"` + testCase.field + `": -1.0
@@ -311,7 +312,7 @@ func TestValidateJSONSchema_TyreMonitoringRanges(t *testing.T) {
 			t.Parallel()
 
 			invalidJSON := `{
-				"schemaVersion": "1.0.0",
+				"schemaVersion": "1.1.0",
 				"pitRadio": {
 					"tyreMonitoring": {
 						` + testCase.json + `
@@ -329,7 +330,7 @@ func TestValidateJSONSchema_EQBandsArrayLength(t *testing.T) {
 
 	// Test wrong number of channels
 	invalidJSON := `{
-		"schemaVersion": "1.0.0",
+		"schemaVersion": "1.1.0",
 		"synthesizer": {
 			"eqBands": [
 				[{"frequency": 20, "gain": 0, "q": 1}]
@@ -345,7 +346,7 @@ func TestValidateJSONSchema_EQBandFrequencyRange(t *testing.T) {
 	t.Parallel()
 
 	invalidJSON := `{
-		"schemaVersion": "1.0.0",
+		"schemaVersion": "1.1.0",
 		"synthesizer": {
 			"eqBands": [
 				[
@@ -509,7 +510,7 @@ func TestExtractValidationErrors(t *testing.T) {
 	t.Parallel()
 
 	validJSON := `{
-		"schemaVersion": "1.0.0",
+		"schemaVersion": "1.1.0",
 		"app": {
 			"logLevel": "invalid"
 		}
@@ -538,7 +539,7 @@ func TestValidateConfig_ValidJSON(t *testing.T) {
 
 	cfg := &Config{}
 	validJSON := `{
-		"schemaVersion": "1.0.0",
+		"schemaVersion": "1.1.0",
 		"app": {
 			"language": "en",
 			"logLevel": "info",
@@ -562,6 +563,174 @@ func TestValidateConfig_ValidJSON(t *testing.T) {
 	assert.True(t, result.Valid, "expected valid config, got errors: %v", result.Errors)
 }
 
+func TestValidateConfig_LegacySettingsUpgrade(t *testing.T) {
+	t.Parallel()
+
+	// Arrange
+	cfg := &Config{}
+	legacyJSON := `{
+		"schemaVersion": "1.0.0",
+		"haptics": {
+			"jerkCompression": 255,
+			"jerkCenter": 624,
+			"snapCompression": 410,
+			"snapCenter": 629,
+			"dynamicTransmissionJerkCompression": 750
+		}
+	}`
+
+	// Act
+	result := cfg.ValidateConfig([]byte(legacyJSON))
+
+	// Assert
+	assert.True(t, result.Valid, "expected a 1.0.0 backup to validate, got errors: %v", result.Errors)
+}
+
+func TestUpgradeLegacyJSON(t *testing.T) {
+	t.Parallel()
+
+	// Arrange
+	legacyJSON := []byte(`{"schemaVersion": "1.0.0", "haptics": {"jerkCompression": 255, "snapCenter": 629}}`)
+
+	// Act
+	upgraded, err := upgradeLegacyJSON(legacyJSON)
+
+	// Assert
+	require.NoError(t, err)
+
+	var got viperConfig
+
+	require.NoError(t, json.Unmarshal(upgraded, &got))
+	assert.Equal(t, currentSchemaVersion, got.SchemaVersion)
+	assert.InDelta(t, 74.5, got.Haptics.JerkCompression, 1e-9)
+	assert.InDelta(t, 37.1, got.Haptics.SnapCenter, 1e-9)
+}
+
+func TestUpgradeLegacyJSONLeavesCurrentConfig(t *testing.T) {
+	t.Parallel()
+
+	// Arrange
+	currentJSON := []byte(`{"schemaVersion": "1.1.0", "haptics": {"jerkCompression": 74.5}}`)
+
+	// Act
+	upgraded, err := upgradeLegacyJSON(currentJSON)
+
+	// Assert
+	require.NoError(t, err)
+	assert.JSONEq(t, string(currentJSON), string(upgraded))
+}
+
+// TestUpgradeLegacyJSONPartialConfigKeepsLegacyDefaults checks that a 1.0.0
+// config that only sets the deprecated jerkCurve and snapCurve keys does not
+// have the settings it omits (jerkCenter, snapCenter and
+// dynamicTransmissionJerkCompression) inverted from their new-direction
+// shipped defaults: baseConfigFor must lay the file over the old-direction
+// defaults instead, so an omitted key keeps its legacy default and is then
+// inverted exactly once, alongside the keys the file does set.
+func TestUpgradeLegacyJSONPartialConfigKeepsLegacyDefaults(t *testing.T) {
+	t.Parallel()
+
+	// Arrange
+	legacyJSON := []byte(`{"schemaVersion": "1.0.0", "haptics": {"jerkCurve": 190, "snapCurve": 310}}`)
+
+	// Act
+	upgraded, err := upgradeLegacyJSON(legacyJSON)
+
+	// Assert
+	require.NoError(t, err)
+
+	var got viperConfig
+
+	require.NoError(t, json.Unmarshal(upgraded, &got))
+	assert.Equal(t, currentSchemaVersion, got.SchemaVersion)
+	assert.InDelta(t, 81.0, got.Haptics.JerkCompression, 1e-9, "jerkCurve 190 should invert to 81.0")
+	assert.InDelta(t, 69.0, got.Haptics.SnapCompression, 1e-9, "snapCurve 310 should invert to 69.0")
+	assert.InDelta(t, 37.6, got.Haptics.JerkCenter, 1e-9, "omitted jerkCenter should keep the shipped default")
+	assert.InDelta(t, 37.1, got.Haptics.SnapCenter, 1e-9, "omitted snapCenter should keep the shipped default")
+	assert.InDelta(t, 25.0, got.Haptics.DynamicTransmissionJerkCompression, 1e-9, "omitted dynamicTransmissionJerkCompression should keep the shipped default")
+}
+
+// TestUpgradeLegacyJSONRenamesDynamicTransmissionJerkCurve checks that a
+// 1.0.0 config carrying the pre-rename dynamicTransmissionJerkCurve key
+// migrates its value onto dynamicTransmissionJerkCompression, inverts it and
+// drops the legacy key.
+func TestUpgradeLegacyJSONRenamesDynamicTransmissionJerkCurve(t *testing.T) {
+	t.Parallel()
+
+	// Arrange
+	legacyJSON := []byte(`{"schemaVersion": "1.0.0", "haptics": {"dynamicTransmissionJerkCurve": 25}}`)
+
+	// Act
+	upgraded, err := upgradeLegacyJSON(legacyJSON)
+
+	// Assert
+	require.NoError(t, err)
+
+	var got viperConfig
+
+	require.NoError(t, json.Unmarshal(upgraded, &got))
+	assert.InDelta(t, 97.5, got.Haptics.DynamicTransmissionJerkCompression, 1e-9)
+	assert.Nil(t, got.Haptics.DynamicTransmissionJerkCurve, "dynamicTransmissionJerkCurve should be cleared once migrated")
+}
+
+// TestNewFromJSONMissingSchemaVersionIsMigrated checks that a config with no
+// schemaVersion at all, which every file the app writes stamps, is treated as
+// legacy: migrated, stamped to the current schema version, and its inverted
+// settings converted rather than being inverted from their new-direction
+// defaults.
+func TestNewFromJSONMissingSchemaVersionIsMigrated(t *testing.T) {
+	t.Parallel()
+
+	// Arrange
+	noVersionJSON := `{"haptics": {"jerkCurve": 190, "snapCurve": 310}}`
+
+	// Act
+	cfg := newTestConfigFromJSON(noVersionJSON)
+
+	// Assert
+	cfg.mu.RLock()
+	defer cfg.mu.RUnlock()
+
+	assert.Equal(t, currentSchemaVersion, cfg.viper.SchemaVersion)
+	assert.InDelta(t, 81.0, cfg.viper.Haptics.JerkCompression, 1e-9)
+	assert.InDelta(t, 69.0, cfg.viper.Haptics.SnapCompression, 1e-9)
+	assert.InDelta(t, 37.6, cfg.viper.Haptics.JerkCenter, 1e-9, "omitted jerkCenter should keep the shipped default")
+	assert.InDelta(t, 37.1, cfg.viper.Haptics.SnapCenter, 1e-9, "omitted snapCenter should keep the shipped default")
+	assert.InDelta(t, 25.0, cfg.viper.Haptics.DynamicTransmissionJerkCompression, 1e-9, "omitted dynamicTransmissionJerkCompression should keep the shipped default")
+}
+
+// TestNewFromJSONCurrentSchemaIsUnchanged checks that a 1.1.0 config already
+// holding new-direction values is left untouched by the viper load path.
+func TestNewFromJSONCurrentSchemaIsUnchanged(t *testing.T) {
+	t.Parallel()
+
+	// Arrange
+	currentJSON := `{
+		"schemaVersion": "1.1.0",
+		"haptics": {
+			"jerkCompression": 74.5,
+			"jerkCenter": 37.6,
+			"snapCompression": 59.0,
+			"snapCenter": 37.1,
+			"dynamicTransmissionJerkCompression": 25.0
+		}
+	}`
+
+	// Act
+	cfg := newTestConfigFromJSON(currentJSON)
+
+	// Assert
+	cfg.mu.RLock()
+	defer cfg.mu.RUnlock()
+
+	assert.Equal(t, currentSchemaVersion, cfg.viper.SchemaVersion)
+	assert.InDelta(t, 74.5, cfg.viper.Haptics.JerkCompression, 1e-9)
+	assert.InDelta(t, 37.6, cfg.viper.Haptics.JerkCenter, 1e-9)
+	assert.InDelta(t, 59.0, cfg.viper.Haptics.SnapCompression, 1e-9)
+	assert.InDelta(t, 37.1, cfg.viper.Haptics.SnapCenter, 1e-9)
+	assert.InDelta(t, 25.0, cfg.viper.Haptics.DynamicTransmissionJerkCompression, 1e-9)
+}
+
 func TestValidateConfig_InvalidJSON(t *testing.T) {
 	t.Parallel()
 
@@ -577,7 +746,7 @@ func TestValidateConfig_SchemaViolation(t *testing.T) {
 
 	cfg := &Config{}
 	invalidJSON := `{
-		"schemaVersion": "1.0.0",
+		"schemaVersion": "1.1.0",
 		"app": {
 			"webUIPort": 100000
 		}
@@ -595,7 +764,7 @@ func TestConfig_Validate_Integration(t *testing.T) {
 
 	cfg := &Config{
 		viper: &viperConfig{
-			SchemaVersion: "1.0.0",
+			SchemaVersion: "1.1.0",
 			App: &app{
 				Language:  "en",
 				LogLevel:  "info",
@@ -616,14 +785,14 @@ func TestConfig_Validate_Integration(t *testing.T) {
 					SampleRate: 32000,
 					LatencyMs:  66,
 				},
-				JerkCompression:                    190,
-				JerkCenter:                         601,
-				SnapCompression:                    310,
-				SnapCenter:                         629,
+				JerkCompression:                    81.0,
+				JerkCenter:                         39.9,
+				SnapCompression:                    69.0,
+				SnapCenter:                         37.1,
 				PulseMinFrequencyHz:                10,
 				PulseMaxFrequencyHz:                60,
 				PulseMaxAmplitude:                  1.0,
-				DynamicTransmissionJerkCompression: 750,
+				DynamicTransmissionJerkCompression: 25.0,
 				DynamicTransmissionStepBlend:       0.6,
 			},
 			Synthesizer: &Synthesizer{
@@ -657,7 +826,7 @@ func TestValidateJSONSchema_ValidHardwareModels(t *testing.T) {
 			t.Parallel()
 
 			validJSON := `{
-				"schemaVersion": "1.0.0",
+				"schemaVersion": "1.1.0",
 				"hardware": {
 					"model": "` + model + `"
 				}
@@ -678,7 +847,7 @@ func TestValidateJSONSchema_ValidLogLevels(t *testing.T) {
 			t.Parallel()
 
 			validJSON := `{
-				"schemaVersion": "1.0.0",
+				"schemaVersion": "1.1.0",
 				"app": {
 					"language": "en",
 					"logLevel": "` + level + `"
@@ -700,7 +869,7 @@ func TestValidateJSONSchema_ValidDisplayOrientations(t *testing.T) {
 			t.Parallel()
 
 			validJSON := `{
-				"schemaVersion": "1.0.0",
+				"schemaVersion": "1.1.0",
 				"hardware": {
 					"displayOrientation": ` + intToString(orientation) + `
 				}
@@ -731,7 +900,7 @@ func TestValidateJSONSchema_PitRadioMessageInterval(t *testing.T) {
 			t.Parallel()
 
 			jsonStr := `{
-				"schemaVersion": "1.0.0",
+				"schemaVersion": "1.1.0",
 				"pitRadio": {
 					"messageSendIntervalMs": ` + intToString(testCase.value) + `
 				}
@@ -761,7 +930,7 @@ func TestValidateJSONSchema_TelemetrySourceRequired(t *testing.T) {
 
 	// telemetry.source is required per schema
 	invalidJSON := `{
-		"schemaVersion": "1.0.0",
+		"schemaVersion": "1.1.0",
 		"telemetry": {}
 	}`
 
@@ -777,7 +946,7 @@ func TestCreateTempConfigFile(t *testing.T) {
 	configPath := filepath.Join(tempDir, "test_config.json")
 
 	validConfig := `{
-		"schemaVersion": "1.0.0",
+		"schemaVersion": "1.1.0",
 		"app": {
 			"language": "en",
 			"logLevel": "info",

@@ -9,20 +9,6 @@ window.channelDisplayLabel = window.channelDisplayLabel || function (ch, names) 
     return name + ' (' + (ch + 1) + ')';
 };
 
-// Haptics fields whose box holds a different unit from the config's stored form.
-// The curve exponents are shown as the raw thousandths the backend stores (5-995)
-// while the config keeps a float (0.005-0.995), so they are divided on the way in.
-// Everything else is sent as displayed.
-//
-// This lives in one place because there are two save paths (per-input auto-save and
-// the bulk Save button); when only one of them scaled, typing 310 into Snap Compression
-// stored 310000.
-const CONFIG_FIELDS_SCALED_BY_1000 = new Set([
-    'haptics.jerkCompression',
-    'haptics.snapCompression',
-    'haptics.dynamicTransmissionJerkCompression',
-]);
-
 // A checkbox marked data-config-invert shows the logical negation of the value it
 // is bound to, so a switch can be phrased as "enable the new behaviour" while the
 // config it writes stores the opposite ("use the legacy behaviour"). The negation
@@ -39,14 +25,6 @@ function checkboxToConfig(input) {
 // configToCheckbox maps a stored value to the checkbox's DOM state.
 function configToCheckbox(input, value) {
     return checkboxIsInverted(input) ? !value : Boolean(value);
-}
-
-function toConfigValue(configPath, value) {
-    if (typeof value !== 'number' || !CONFIG_FIELDS_SCALED_BY_1000.has(configPath)) {
-        return value;
-    }
-
-    return value / 1000.0;
 }
 
 // Settings page JavaScript functionality
@@ -76,6 +54,12 @@ class ConfigManager {
     formatDecimalValue(value) {
         const num = parseFloat(value) || 0;
         return num.toFixed(2);
+    }
+
+    // Format a value to the fixed decimal places in the data-decimals attribute.
+    formatFixedValue(input, value) {
+        const num = parseFloat(value) || 0;
+        return num.toFixed(parseInt(input.dataset.decimals, 10));
     }
 
     // Set an input's value and refresh the touch spinner clone of the input.
@@ -595,6 +579,9 @@ class ConfigManager {
                     if (input.classList.contains('decimal-input')) {
                         input.value = this.formatDecimalValue(input.value);
                     }
+                    if (input.dataset.decimals !== undefined) {
+                        this.setInputValue(input, this.formatFixedValue(input, input.value));
+                    }
                 });
 
                 // Also save on Enter key press
@@ -618,6 +605,9 @@ class ConfigManager {
                         }
                         if (input.classList.contains('decimal-input')) {
                             input.value = this.formatDecimalValue(input.value);
+                        }
+                        if (input.dataset.decimals !== undefined) {
+                            this.setInputValue(input, this.formatFixedValue(input, input.value));
                         }
                     });
                 }
@@ -662,8 +652,6 @@ class ConfigManager {
             if (isNaN(newValue)) {
                 newValue = 0;
             }
-
-            newValue = toConfigValue(configPath, newValue);
         } else {
             newValue = input.value;
         }
@@ -890,6 +878,9 @@ class ConfigManager {
                 } else if (input.classList.contains('decimal-input')) {
                     // Format decimal inputs with 2 decimal places
                     this.setInputValue(input, this.formatDecimalValue(value));
+                } else if (input.dataset.decimals !== undefined) {
+                    // Format inputs to the decimal places in data-decimals
+                    this.setInputValue(input, this.formatFixedValue(input, value));
                 } else {
                     this.setInputValue(input, value);
                     // Range sliders drive a separate value label via their oninput
@@ -1172,7 +1163,7 @@ class ConfigManager {
                 value = input.value;
             }
 
-            this.setNestedValue(formData, configPath, toConfigValue(configPath, value));
+            this.setNestedValue(formData, configPath, value);
         });
 
         return formData;

@@ -143,6 +143,15 @@ func (c *Config) ValidateConfig(jsonData []byte) ValidationResult {
 		}
 	}
 
+	// An older file is valid if loading it would upgrade it to the current schema.
+	jsonData, err = upgradeLegacyJSON(jsonData)
+	if err != nil {
+		addError(&result, "config", fmt.Sprintf("failed to upgrade config: %v", err))
+		result.Valid = false
+
+		return result
+	}
+
 	// Validate against JSON schema
 	schemaResult := validateJSONSchema(jsonData)
 	if !schemaResult.Valid {

@@ -669,7 +669,7 @@
             word-break: break-all;
         }
 
-        /* Set while the replay's vehicle matches no profile entry: the shaping knobs
+        /* Set while the replay's vehicle matches no profile entry: the shaping settings
            have nothing to edit and a commit has no profile key to write to. The gain row
            and the actions stay live, because the layer's mix gain is committable with or
            without a profile — see the .tune-gain-row rules below. */
@@ -718,6 +718,23 @@
            itself, and a scale on the strip would compound with it. */
         .plot-panel .chart-tabs .wave-monitor {
             font-size: calc(0.72 * 1.4em);
+        }
+
+        /* The eye and the compare toggle share the strip's right end. The group takes the
+           place a single toggle had, and the toggles inside it sit in flow, side by side. */
+        .plot-panel .chart-tabs .plot-toggles {
+            position: absolute;
+            right: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            display: flex;
+            align-items: center;
+            gap: 0.6em;
+        }
+
+        .plot-panel .chart-tabs .plot-toggles .wave-monitor {
+            position: static;
+            transform: none;
         }
 
         /* The help icon mirrors the eye toggle across the strip: same vertical centring,
@@ -1029,27 +1046,34 @@
                                 <div>Click the plot, then Shift+arrows: jerk / snap center values</div>
                                 <div>Click the plot, then Alt+arrows: jerk / snap compression</div>
                             </div>
-                            <button type="button" class="chart-tab active" role="tab" data-plot="jerksnap">Jerk /
-                                Snap</button>
+                            <button type="button" class="chart-tab active" role="tab" data-plot="jerksnap"
+                                title="Chassis jerk against chassis snap">Motion</button>
                             <button type="button" class="chart-tab" role="tab" data-plot="gainfreq"
-                                title="Pulse gain against pulse frequency. Shift-drag to move the jerk and snap center values, Alt-drag or Alt-scroll to adjust jerk and snap compression">Gain
-                                / Frequency</button>
+                                title="Pulse gain against pulse frequency. Shift-drag to move the jerk and snap center values, Alt-drag or Alt-scroll to adjust jerk and snap compression">Haptics</button>
                             <button type="button" class="chart-tab" role="tab"
                                 data-plot="spectrogram">Spectrogram</button>
                             <button type="button" class="chart-tab" role="tab" data-plot="spectrum">Spectrum</button>
-                            <label class="wave-monitor"
-                                title="Highlight the points inside the window period on the scatter plots">
-                                <input type="checkbox" id="scatter-highlight-toggle" checked>
-                                <span class="icon wave-monitor-on" data-icon="eye"
-                                    aria-label="Window highlight on"></span>
-                                <span class="icon wave-monitor-off" data-icon="eye-slash"
-                                    aria-label="Window highlight off"></span>
-                            </label>
+                            <div class="plot-toggles">
+                                <label class="wave-monitor"
+                                    title="Highlight the points inside the window period on the scatter plots">
+                                    <input type="checkbox" id="scatter-highlight-toggle" checked>
+                                    <span class="icon wave-monitor-on" data-icon="eye"
+                                        aria-label="Window highlight on"></span>
+                                    <span class="icon wave-monitor-off" data-icon="eye-slash"
+                                        aria-label="Window highlight off"></span>
+                                </label>
+                                <label class="wave-monitor" hidden
+                                    title="Compare: green shows the updated values, red shows the committed values">
+                                    <input type="checkbox" id="gain-compare-toggle" checked>
+                                    <span class="icon" data-icon="code-compare"
+                                        aria-label="Compare updated and committed values"></span>
+                                </label>
+                            </div>
                         </div>
                         <div class="plot-container">
                             <canvas id="chart"></canvas>
                             <canvas id="gain-chart" tabindex="0" hidden
-                                aria-label="Gain / frequency plot. Shift+arrows move the centers, Alt+arrows adjust the compression"></canvas>
+                                aria-label="Haptics plot: pulse gain against pulse frequency. Shift+arrows move the centers, Alt+arrows adjust the compression"></canvas>
                             <canvas id="spectrogram-chart" hidden></canvas>
                             <canvas id="spectrum-chart" hidden></canvas>
                         </div>
@@ -1175,9 +1199,9 @@
                         <button type="button" class="chart-tab" role="tab" data-tune-tab="texture">Road</button>
                     </div>
 
-                    <!-- Every knob is a slider and a number box over one value. Tab visits the
+                    <!-- Every setting is a slider and a number box over one value. Tab visits the
                          number box only: the slider carries tabindex="-1", so a walk down the
-                         panel stops once per knob rather than twice. The box takes the arrow
+                         panel stops once per setting rather than twice. The box takes the arrow
                          keys natively, so nothing is lost. Each row's <label> names the box for
                          that reason, and the slider carries the same text as an aria-label. -->
                     <div class="tune-pane" data-tune-pane="chassis">
@@ -1190,34 +1214,31 @@
                         </div>
                         <div class="tune-row">
                             <label for="out-jerkCompression">Jerk compression</label>
-                            <input type="range" id="tune-jerkCompression" min="5" max="995" step="5" tabindex="-1"
+                            <input type="range" id="tune-jerkCompression" min="0.5" max="99.5" step="0.5" tabindex="-1"
                                 aria-label="Jerk compression">
-                            <input type="number" class="tune-value" id="out-jerkCompression" min="5" max="995" step="5"
-                                inputmode="numeric">
+                            <input type="number" class="tune-value" id="out-jerkCompression" min="0.5" max="99.5"
+                                step="0.1" inputmode="decimal">
                         </div>
                         <div class="tune-row">
                             <label for="out-jerkCenter">Jerk center</label>
-                            <input type="range" id="tune-jerkCenter" min="0" max="1000" step="1" tabindex="-1"
+                            <input type="range" id="tune-jerkCenter" min="0.5" max="99.5" step="0.5" tabindex="-1"
                                 aria-label="Jerk center">
-                            <!-- min must stay > 0: it is the `lo` of the geometric slider mapping, and a
-                             zero lower bound makes tuneValueAtPos/tunePosForValue NaN. step="1" keeps
-                             any integer valid; ArrowUp/ArrowDown step by TUNE_KEY_STEPS instead. -->
-                            <input type="number" class="tune-value" id="out-jerkCenter" min="1" max="20000" step="1"
-                                inputmode="numeric">
+                            <input type="number" class="tune-value" id="out-jerkCenter" min="0.5" max="99.5" step="0.1"
+                                inputmode="decimal">
                         </div>
                         <div class="tune-row">
                             <label for="out-snapCompression">Snap compression</label>
-                            <input type="range" id="tune-snapCompression" min="5" max="995" step="5" tabindex="-1"
+                            <input type="range" id="tune-snapCompression" min="0.5" max="99.5" step="0.5" tabindex="-1"
                                 aria-label="Snap compression">
-                            <input type="number" class="tune-value" id="out-snapCompression" min="5" max="995" step="5"
-                                inputmode="numeric">
+                            <input type="number" class="tune-value" id="out-snapCompression" min="0.5" max="99.5"
+                                step="0.1" inputmode="decimal">
                         </div>
                         <div class="tune-row">
                             <label for="out-snapCenter">Snap center</label>
-                            <input type="range" id="tune-snapCenter" min="5" max="995" step="5" tabindex="-1"
+                            <input type="range" id="tune-snapCenter" min="0.5" max="99.5" step="0.5" tabindex="-1"
                                 aria-label="Snap center">
-                            <input type="number" class="tune-value" id="out-snapCenter" min="5" max="995"
-                                step="1" inputmode="numeric">
+                            <input type="number" class="tune-value" id="out-snapCenter" min="0.5" max="99.5"
+                                step="0.1" inputmode="decimal">
                         </div>
                         <div class="tune-actions">
                             <button type="button" class="tune-reset" data-tune-tab="chassis">Reset</button>
@@ -1280,16 +1301,16 @@
                             <input type="number" class="tune-value" id="gainout-transmission" min="-60" max="0"
                                 step="0.5" inputmode="decimal">
                         </div>
-                        <!-- Both knobs shape the dynamic driveline step, and so do nothing
+                        <!-- Both settings shape the dynamic driveline step, and so do nothing
                              while haptics.dynamicTransmissionFeedback is off. That mode
                              switch stays on the settings page: apart from the layer gain
                              above, this widget shapes the signal, as the Chassis tab does. -->
                         <div class="tune-row">
                             <label for="out-transmissionJerkCompression">Shift curve</label>
-                            <input type="range" id="tune-transmissionJerkCompression" min="5" max="995" step="5" tabindex="-1"
-                                aria-label="Shift curve">
-                            <input type="number" class="tune-value" id="out-transmissionJerkCompression" min="5" max="995"
-                                step="5" inputmode="numeric">
+                            <input type="range" id="tune-transmissionJerkCompression" min="0.5" max="99.5" step="0.5"
+                                tabindex="-1" aria-label="Shift curve">
+                            <input type="number" class="tune-value" id="out-transmissionJerkCompression" min="0.5"
+                                max="99.5" step="0.1" inputmode="decimal">
                         </div>
                         <div class="tune-row">
                             <label for="out-transmissionStepBlend">Shift blend</label>
@@ -1409,6 +1430,7 @@
             const jerkOf = (d) => d.jerk;
             const snapOf = (d) => d.snap;
             let currentLapKey = null;
+            const ALL_LAPS_KEY = 'all';  // lap key for the whole replay; also the audio endpoint's lap value
             let pendingLap = null;      // lap key from the URL, applied once on the initial replay load
             let pendingView = null;     // {zoom,panx,pany,poi} from the URL, applied once with the initial lap
             let pendingFrame = null;    // playhead frame from the URL, applied once the lap's audio has rendered
@@ -1614,6 +1636,17 @@
                         activePlot !== 'jerksnap' && activePlot !== 'gainfreq';
                 }
 
+                // The compare toggle lives on the Haptics plot only. Leaving that plot puts
+                // the waveforms back on the updated values, so no hidden toggle changes them.
+                const compare = document.getElementById('gain-compare-toggle');
+                if (compare) {
+                    compare.closest('.wave-monitor').hidden = activePlot !== 'gainfreq';
+                    if (activePlot !== 'gainfreq' && showCommitted) {
+                        showUpdatedTune();
+                        scheduleAudioRefresh();
+                    }
+                }
+
                 // The Alt/Shift/scroll gestures belong to the gain/frequency plot, so their
                 // hint goes with them rather than standing over a plot they don't apply to.
                 const plotHint = document.getElementById('plot-hint');
@@ -1674,6 +1707,14 @@
                     pointHlEl.checked = false;
                     scatterHighlightOn = false;
                 }
+                // Checked renders the updated values (green), unchecked the committed ones (red).
+                const compareEl = document.getElementById('gain-compare-toggle');
+                compareEl.addEventListener('change', () => {
+                    showCommitted = !compareEl.checked;
+                    updateGainChart();
+                    scheduleAudioRefresh();
+                });
+
                 // Only the highlight datasets change, so the surface clouds are left alone.
                 pointHlEl.addEventListener('change', () => {
                     scatterHighlightOn = pointHlEl.checked;
@@ -1775,21 +1816,24 @@
 
                 setupVideo(meta, filename);
 
-                // Rebuild lap dropdown
+                buildAllLaps(json.laps);
+
+                // Rebuild lap dropdown. "All" leads the list and is the default.
                 const lapSelectEl = document.getElementById('lap-select');
                 lapSelectEl.innerHTML = '';
-                json.laps.forEach(lap => {
+                const lapOptions = [[ALL_LAPS_KEY, 'All'], ...json.laps.map(lap => [String(lap), String(lap)])];
+                lapOptions.forEach(([value, label]) => {
                     const opt = document.createElement('option');
-                    opt.value = String(lap);
-                    opt.textContent = String(lap);
+                    opt.value = value;
+                    opt.textContent = label;
                     lapSelectEl.appendChild(opt);
                 });
 
                 if (json.laps.length > 0) {
-                    const lapKeys = json.laps.map(String);
+                    const lapKeys = lapOptions.map(([value]) => value);
                     const urlLapMatched = pendingLap !== null && lapKeys.includes(pendingLap);
-                    const targetLap = urlLapMatched ? pendingLap : lapKeys[0];
-                    pendingLap = null;  // consumed; later replay switches default to the first lap
+                    const targetLap = urlLapMatched ? pendingLap : ALL_LAPS_KEY;
+                    pendingLap = null;  // consumed; later replay switches default to the whole replay
                     selectLap(targetLap);
 
                     // Restore the saved viewport/POI once, only onto the lap named in the URL
@@ -1802,6 +1846,36 @@
                 }
 
                 replaySelectEl.disabled = false;
+            }
+
+            // Merge every lap into one whole-replay lap under ALL_LAPS_KEY. Coordinates are
+            // put in replay order by videoFrame, which counts every packet. The merged index
+            // then matches the frame index the audio endpoint uses for lap=all.
+            function buildAllLaps(laps) {
+                const entries = [];
+                laps.forEach(lap => {
+                    const key = String(lap);
+                    (mapData[key] || []).forEach((coord, frame) => entries.push({ key, frame, coord }));
+                });
+                entries.sort((a, b) => (a.coord.videoFrame ?? 0) - (b.coord.videoFrame ?? 0));
+
+                // Per-lap frame index -> whole-replay frame index, for each lap.
+                const replayIndex = {};
+                mapData[ALL_LAPS_KEY] = entries.map((e, i) => {
+                    (replayIndex[e.key] ||= [])[e.frame] = i;
+                    return e.coord;
+                });
+
+                const points = [];
+                laps.forEach(lap => {
+                    const key = String(lap);
+                    (lapData[key] || []).forEach(p => {
+                        const frame = replayIndex[key]?.[p.frame];
+                        if (frame != null) points.push({ ...p, frame });
+                    });
+                });
+                points.sort((a, b) => a.frame - b.frame);
+                lapData[ALL_LAPS_KEY] = points;
             }
 
             function selectLap(lapKey) {
@@ -3885,7 +3959,8 @@
                 // Detect a start/finish straddle: a run touching the first frame and one
                 // touching the last frame. The trailing run is unwrapped (shifted -totalDist)
                 // and plotted first, ahead of the leading run.
-                const wrap = runs.length >= 2 && runs[0][0] === 0 &&
+                // The whole replay does not wrap: its first and last frames are not adjacent.
+                const wrap = currentLapKey !== ALL_LAPS_KEY && runs.length >= 2 && runs[0][0] === 0 &&
                     runs[runs.length - 1][1] === n - 1 && totalDist > 0;
                 speedWrapThreshold = wrap ? cumulativeDists[runs[runs.length - 1][0]] : null;
                 const order = wrap ? [runs[runs.length - 1], ...runs.slice(0, runs.length - 1)] : runs;
@@ -3960,14 +4035,34 @@
             const JERK_BIAS_DB = -3;
             const SNAP_BIAS_PERCENT = 50;
 
-            // The physical snap center, in m/s^4: tuneValues.snapCenter is a 5..995
-            // setting value, and config.go's hapticsSnapCenterUnitMs4 is the multiplier
-            // that turns it into the physical quantity the mapping uses.
+            // The physical snap center, in m/s^4: tuneValues.snapCenter is a 0.5..99.5
+            // setting value (higher settings name a lower physical snap), and
+            // config.go's hapticsSnapCenterUnitMs4 is the multiplier that turns the
+            // physical value (1000 - 10*setting) into the quantity the mapping uses.
             const SNAP_CENTER_UNIT_MS4 = 100;
 
+            // The Haptics plot and the waveform render use the updated (uncommitted) values
+            // by default. The compare toggle switches both to the committed values, which
+            // tuneDefaults holds.
+            let showCommitted = false;
+
+            function shownTune() {
+                return showCommitted ? tuneDefaults : tuneValues;
+            }
+
+            // Show the updated values again. A setting change calls this, so the plot and the
+            // waveforms never hide the change that the user just made. The caller redraws.
+            function showUpdatedTune() {
+                if (!showCommitted) return;
+                showCommitted = false;
+                document.getElementById('gain-compare-toggle').checked = true;
+            }
+
             function gainDbOf(jerk) {
-                const exponent = tuneValues.jerkCompression / 1000;
-                const jerkScale = Math.pow(10, JERK_BIAS_DB / 20) / Math.pow(tuneValues.jerkCenter, exponent);
+                const tune = shownTune();
+                const exponent = 1 - tune.jerkCompression / 100;
+                const jerkCenter = 1000 - 10 * tune.jerkCenter;
+                const jerkScale = Math.pow(10, JERK_BIAS_DB / 20) / Math.pow(jerkCenter, exponent);
                 const amp = Math.min(Math.pow(Math.abs(jerk), exponent) * jerkScale, pulseLimits.maxAmplitude);
                 if (!(amp > 0)) return GAIN_FLOOR_DB;
                 const db = 20 * Math.log10(amp);
@@ -3983,8 +4078,9 @@
             }
 
             function freqHzOf(snap) {
-                const exponent = tuneValues.snapCompression / 1000;
-                const snapCenterMs4 = tuneValues.snapCenter * SNAP_CENTER_UNIT_MS4;
+                const tune = shownTune();
+                const exponent = 1 - tune.snapCompression / 100;
+                const snapCenterMs4 = (1000 - 10 * tune.snapCenter) * SNAP_CENTER_UNIT_MS4;
                 const snapScale = snapBiasHz() / Math.pow(snapCenterMs4, exponent);
                 const hz = Math.pow(Math.abs(snap), exponent) * snapScale;
                 return Number.isFinite(hz)
@@ -4319,9 +4415,9 @@
             }
 
             // One wheel notch, or one slider stop of a modifier drag, of curve change. It
-            // equals the two curve sliders' own step, so either gesture moves a knob by
-            // exactly one slider stop.
-            const CURVE_WHEEL_STEP = 5;
+            // equals the two curve sliders' own step, so either gesture moves a slider by
+            // exactly one step.
+            const CURVE_WHEEL_STEP = 0.5;
 
             // A wheel notch (or trackpad equivalent) is reported in pixels, lines or pages
             // depending on the browser. One step fires for each this many pixels banked on
@@ -4329,10 +4425,10 @@
             const CURVE_WHEEL_ACCUM_PX = 10;
 
             // The most steps one wheel event can fire. A mouse notch reports up to about
-            // 100 px, so the cap stops one notch from jumping the knob too far.
+            // 100 px, so the cap stops one notch from jumping the slider too far.
             const CURVE_WHEEL_MAX_STEPS = 4;
 
-            // Pixels of drag per slider step of compression change: 5 units per 10 px.
+            // Pixels of drag per slider step of compression change: 0.5 units per 10 px.
             const COMPRESSION_DRAG_PX_PER_STEP = 10;
 
             // Ctrl+Alt drag locks compression to one axis. Ctrl can go down before the press
@@ -4346,18 +4442,19 @@
 
             // Move the jerk and snap center values by a pointer delta. This is the Shift drag,
             // and it works anywhere on the plot: both values travel together. The plotted
-            // data follows the pointer, so a drag right lowers SnapCenter and a drag up
-            // lowers JerkCenter: a lower center moves the curve the other way. Each knob's
-            // own commit clamps the value to its range. SnapCenter is a 5..995 setting
-            // value, but the drag still scales it in decades of the physical m/s^4
-            // quantity — SNAP_CENTER_UNIT_MS4 converts between the two.
+            // data follows the pointer, so a drag right lowers the physical SnapCenter and a
+            // drag up lowers the physical JerkCenter: a lower physical center moves the curve
+            // the other way. Both centers are now inverted setting values (higher setting =
+            // lower physical quantity), so each is converted to its physical quantity, scaled
+            // by decades, and converted back before being committed. SNAP_CENTER_UNIT_MS4
+            // converts the setting's physical snap into the mapping's m/s^4 quantity.
             function moveCentersBy(dxPx, dyPx) {
-                commitTuneValue('jerkCenter',
-                    tuneValues.jerkCenter * Math.pow(10, dyPx / CENTER_DRAG_DECADE_PX));
+                const jerkPhysical = (1000 - 10 * tuneValues.jerkCenter) * Math.pow(10, dyPx / CENTER_DRAG_DECADE_PX);
+                commitTuneValue('jerkCenter', (1000 - jerkPhysical) / 10);
 
-                const snapCenterMs4 = tuneValues.snapCenter * SNAP_CENTER_UNIT_MS4
+                const snapCenterMs4 = (1000 - 10 * tuneValues.snapCenter) * SNAP_CENTER_UNIT_MS4
                     * Math.pow(10, -dxPx / CENTER_DRAG_DECADE_PX);
-                commitTuneValue('snapCenter', snapCenterMs4 / SNAP_CENTER_UNIT_MS4);
+                commitTuneValue('snapCenter', (1000 - snapCenterMs4 / SNAP_CENTER_UNIT_MS4) / 10);
             }
 
             // Wire the Shift/Alt drags and the Alt wheel onto the gain/frequency chart.
@@ -4408,7 +4505,7 @@
                 });
 
                 // Set both compressions from the drag's start value and its total pixel
-                // offset, not incrementally, so the knob always reflects where the pointer
+                // offset, not incrementally, so the slider always reflects where the pointer
                 // sits rather than accumulating rounding error. A zero offset on the unlocked
                 // axis restores that axis to its value at the start of the drag.
                 const applyCompressionDrag = (ctrlKey) => {
@@ -4433,8 +4530,11 @@
                     if (compressionAxisLock === 'x') dy = 0;
                     if (compressionAxisLock === 'y') dx = 0;
 
-                    const jerk = Math.round((compressionDragStart.jerk - dy * rate) / CURVE_WHEEL_STEP) * CURVE_WHEEL_STEP;
-                    const snap = Math.round((compressionDragStart.snap + dx * rate) / CURVE_WHEEL_STEP) * CURVE_WHEEL_STEP;
+                    // The sign is flipped from a plain pixel-to-value mapping because
+                    // compression is now an inverted setting: the same on-screen curve
+                    // change now takes the opposite change in the stored value.
+                    const jerk = Math.round((compressionDragStart.jerk + dy * rate) / CURVE_WHEEL_STEP) * CURVE_WHEEL_STEP;
+                    const snap = Math.round((compressionDragStart.snap - dx * rate) / CURVE_WHEEL_STEP) * CURVE_WHEEL_STEP;
                     commitTuneValue('jerkCompression', jerk);
                     commitTuneValue('snapCompression', snap);
                 };
@@ -4523,11 +4623,15 @@
                     if (dx === 0 && dy === 0) return;
 
                     if (centerDragHeld(e) && !compressionDragHeld(e)) {
-                        if (dy !== 0) stepCenter('jerkCenter', -dy);
-                        if (dx !== 0) stepCenter('snapCenter', -dx);
+                        // Both centers are inverted settings, so the grid step direction is
+                        // flipped from a plain dy/dx mapping to keep the on-screen data moving
+                        // the way the arrow points.
+                        if (dy !== 0) stepCenter('jerkCenter', dy);
+                        if (dx !== 0) stepCenter('snapCenter', dx);
                     } else if (compressionDragHeld(e) && !centerDragHeld(e)) {
-                        if (dy !== 0) commitTuneValue('jerkCompression', tuneValues.jerkCompression + dy * CURVE_WHEEL_STEP);
-                        if (dx !== 0) commitTuneValue('snapCompression', tuneValues.snapCompression + dx * CURVE_WHEEL_STEP);
+                        // Compression is also inverted, so the sign is flipped here too.
+                        if (dy !== 0) commitTuneValue('jerkCompression', tuneValues.jerkCompression - dy * CURVE_WHEEL_STEP);
+                        if (dx !== 0) commitTuneValue('snapCompression', tuneValues.snapCompression - dx * CURVE_WHEEL_STEP);
                     } else {
                         return;
                     }
@@ -4569,15 +4673,17 @@
                         return { steps: capped, rest };
                     };
 
+                    // The sign is flipped from a plain steps-to-value mapping because
+                    // compression is now an inverted setting.
                     const jerk = takeSteps(wheelAccumY);
                     wheelAccumY = jerk.rest;
                     if (jerk.steps !== 0) {
-                        commitTuneValue('jerkCompression', tuneValues.jerkCompression - jerk.steps * CURVE_WHEEL_STEP);
+                        commitTuneValue('jerkCompression', tuneValues.jerkCompression + jerk.steps * CURVE_WHEEL_STEP);
                     }
                     const snap = takeSteps(wheelAccumX);
                     wheelAccumX = snap.rest;
                     if (snap.steps !== 0) {
-                        commitTuneValue('snapCompression', tuneValues.snapCompression + snap.steps * CURVE_WHEEL_STEP);
+                        commitTuneValue('snapCompression', tuneValues.snapCompression - snap.steps * CURVE_WHEEL_STEP);
                     }
                 }, { passive: false });
             }
@@ -4855,7 +4961,7 @@
             let waveVoices = {};          // layer -> { source, fade, gain }, live while playing
 
             // Fade applied to every gain change: the start and the stop of a voice, a layer
-            // muted or unmuted, and a mix knob drag. A hard change steps the signal from
+            // muted or unmuted, and a mix slider drag. A hard change steps the signal from
             // whatever sample it sits on straight to another level, and that step is a click.
             // The haptic content is all below 160 Hz, where a sample is rarely near zero, so
             // the step is large and the click is loud.
@@ -4882,6 +4988,8 @@
             let waveSectionKey = '';      // replay|lap|from|to of the buffer on screen, without the tuning
             let waveRate = 1;             // transport speed, applied to the voices and the video
             let audioReqSeq = 0;          // guards against out-of-order fetch responses
+            let laneReqSeq = 0;           // the same guard for the read-only lanes, which can load apart from the chassis render
+            let waveLanesQuery = null;    // query the lanes last loaded from; an unchanged query skips the lane fetch
 
             // Read-only lanes for the other haptic layers. Each holds its own decoded
             // buffer and envelope but no transport: they are drawn against the chassis
@@ -4956,7 +5064,7 @@
                     colour: 'rgba(120,200,140,0.9)', surfaceColoured: true, buffer: null, peaks: null,
                 },
             ];
-            // The widget's knobs, grouped by the tab that shows them. Every helper below
+            // The widget's settings, grouped by the tab that shows them. Every helper below
             // works off the flattened list, so a key only has to be named here and given a
             // tune-/out- input pair in the markup.
             // Which layers are audible. Every layer is rendered and drawn whatever the
@@ -4967,7 +5075,7 @@
 
             // The layer mix gains, in dB, as haptics.chassisGain and its three siblings
             // hold them. The capture renders a layer without its mix gain — the app applies
-            // that gain in the channel mixer at playback — so the knob here is applied to
+            // that gain in the channel mixer at playback — so the setting here is applied to
             // the audition instead, and the page hears what the device hears. The drawn
             // waveform stays at the rendered level, since it shows the shaped signal.
             //
@@ -4988,7 +5096,7 @@
 
             // Config field each layer's gain commits to, under the synthesizer section.
             // These are channel mixer gains, which is why they are not in haptics with the
-            // shaping knobs beside them in the widget.
+            // shaping settings beside them in the widget.
             const LAYER_GAIN_KEYS = {
                 chassis: 'chassisGain',
                 engine: 'engineGain',
@@ -5003,7 +5111,7 @@
             }
 
             // The multiplier a layer's voice runs at. A muted layer is silent whatever its
-            // gain, so the toggle and the knob compose rather than fight.
+            // gain, so the toggle and the setting compose rather than fight.
             function layerVoiceGain(layer) {
                 return audioOut[layer] ? gainToRatio(layerGains[layer]) : 0;
             }
@@ -5023,29 +5131,35 @@
             };
             const TUNE_KEYS = Object.values(TUNE_TABS).flat();
 
+            // tuneBoxText formats a tune value for its number box. Chassis values always
+            // show one decimal place, so 75 shows as 75.0.
+            function tuneBoxText(k, v) {
+                return TUNE_TABS.chassis.includes(k) ? Number(v).toFixed(1) : v;
+            }
+
             // The engine entries are placeholders. A real engine profile belongs to one
             // vehicle, so the Engine tab's defaults are replaced by the profile the loaded
             // replay resolves to, in applyEngineProfileMeta.
             const tuneDefaults = {
-                jerkCompression: 190, jerkCenter: 601, snapCompression: 310, snapCenter: 629,
+                jerkCompression: 74.5, jerkCenter: 37.6, snapCompression: 59.0, snapCenter: 37.1,
                 primaryBalance: 1.0, secondaryBalance: 1.0, engineGain: -6.0, pulseScale: 1.0,
-                transmissionJerkCompression: 750, transmissionStepBlend: 0.5,
+                transmissionJerkCompression: 25.0, transmissionStepBlend: 0.5,
             };
             const tuneValues = { ...tuneDefaults };
 
-            // Commit closure per knob, keyed the way tuneValues is. setupAudioUI fills the
+            // Commit closure per setting, keyed the way tuneValues is. setupAudioUI fills the
             // table when it wires the controls, and commitTuneValue is how code outside the
-            // widget — the gain/frequency chart's drag and wheel gestures — writes a knob.
+            // widget — the gain/frequency chart's drag and wheel gestures — writes a setting.
             const tuneCommits = {};
 
-            // Commit one knob value from outside the widget. The knob's own closure clamps the
+            // Commit one setting value from outside the widget. The setting's own closure clamps the
             // value, rounds it, syncs both controls and refreshes the render.
             function commitTuneValue(key, value) {
                 const commit = tuneCommits[key];
                 if (commit) commit(value);
             }
 
-            // haptics field each chassis/transmission knob is stored under. The names
+            // haptics field each chassis/transmission setting is stored under. The names
             // differ: the widget keys are flat and tab-scoped, the config keys are not.
             // The engine keys are absent on purpose — they come from the vehicle's
             // profile, in applyEngineProfileMeta.
@@ -5070,15 +5184,19 @@
             // Controls whose slider travel is geometric rather than linear. For these keys
             // the range input carries a 0..TUNE_SLIDER_STEPS position and the number box
             // keeps the real stored value; every other key uses both directly. jerkCenter
-            // spans 1..20000 m/s^3, so a linear thumb would bury the useful region near 600
-            // in the first few percent of travel. snapCenter is now a 5..995 setting value,
-            // small enough that a linear thumb covers it fine.
-            const TUNE_LOG_KEYS = new Set(['jerkCenter']);
+            // and snapCenter are now both 0.5..99.5 setting values, small enough that a
+            // linear thumb covers them fine, so no key needs geometric travel any more.
+            const TUNE_LOG_KEYS = new Set([]);
 
             // Decimal places each key commits to. A key absent from this table commits as
             // a whole number. Never round a key coarser than its own step: the value would
             // snap back and the slider thumb would refuse to move.
             const TUNE_DECIMALS = {
+                jerkCompression: 1,
+                jerkCenter: 1,
+                snapCompression: 1,
+                snapCenter: 1,
+                transmissionJerkCompression: 1,
                 primaryBalance: 2,
                 secondaryBalance: 2,
                 engineGain: 2,
@@ -5087,16 +5205,20 @@
             };
 
             // Arrow key step of the number box for keys that step onto a fixed grid. The
-            // value itself can be any integer, but ArrowUp and ArrowDown move it to the
-            // adjacent multiple of the step: 296 goes up to 300 and down to 295. A native
-            // step would use a min-anchored grid, so the box handles the keys itself.
+            // value itself can be any multiple of 0.1, but ArrowUp and ArrowDown move it
+            // to the adjacent multiple of the step: 37.6 goes up to 38.0 and down to 37.5.
+            // A native step would use a min-anchored grid, so the box handles the keys
+            // itself.
             const TUNE_KEY_STEPS = {
-                jerkCenter: 5,
-                snapCenter: 5,
+                jerkCompression: 0.5,
+                jerkCenter: 0.5,
+                snapCompression: 0.5,
+                snapCenter: 0.5,
+                transmissionJerkCompression: 0.5,
             };
 
             // gridStep returns the adjacent multiple of step above (dir 1) or below
-            // (dir -1) value. An off-grid 296 goes up to 300 and down to 295.
+            // (dir -1) value. An off-grid 37.6 goes up to 38.0 and down to 37.5.
             function gridStep(value, step, dir) {
                 const grid = value / step;
 
@@ -5209,10 +5331,11 @@
                 const { startFrame, endFrame } = getFrameRange();
                 return [replay, currentLapKey, startFrame, endFrame,
                     ...TUNE_KEYS.map(k => tuneValues[k]),
+                    ...TUNE_TABS.chassis.map(k => shownTune()[k]),
                     ...SURFACES.map(surfaceRumbleKey)].join('|');
             }
 
-            // setTuneParams writes the knob values the render should use onto a query.
+            // setTuneParams writes the setting values the render should use onto a query.
             // The engine four are omitted when the vehicle resolved no profile: the render
             // treats a partial set as absent and keeps the stored profile, and there would
             // be no stored profile for these placeholder values to stand in for anyway.
@@ -5264,11 +5387,16 @@
                 });
                 setTuneParams(params);
 
+                // The compare toggle changes the chassis render only. The lanes keep the
+                // updated values, so a toggle leaves their query, and their buffers, as-is.
+                const chassisParams = new URLSearchParams(params);
+                TUNE_TABS.chassis.forEach(k => chassisParams.set(k, String(shownTune()[k])));
+
                 const seq = ++audioReqSeq;
                 setWaveStatus('rendering…');
 
                 try {
-                    const resp = await fetch('/api/tuneassist/audio?' + params.toString());
+                    const resp = await fetch('/api/tuneassist/audio?' + chassisParams.toString());
                     if (!resp.ok) { if (seq === audioReqSeq) setWaveStatus('no audio'); return; }
                     const raw = await resp.arrayBuffer();
                     const decoded = await ensureAudioCtx().decodeAudioData(raw);
@@ -5307,7 +5435,11 @@
                     // The extra lanes render the same section with the same tuning, so
                     // they are fetched together and drawn as they arrive. A lane that
                     // fails leaves its own trace empty rather than failing the render.
-                    loadWaveLanes(params, seq);
+                    // A render that changed only the chassis values keeps the lanes.
+                    if (params.toString() !== waveLanesQuery) {
+                        waveLanesQuery = params.toString();
+                        loadWaveLanes(params);
+                    }
 
                     if (resumePlaying) {
                         // The lanes are still decoding. Each one joins the mix when it lands.
@@ -5332,10 +5464,11 @@
                 }
             }
 
-            // Fetch each read-only lane for the current section. seq is the chassis
-            // request's sequence number: a lane whose render is superseded is discarded,
-            // exactly as the chassis buffer is.
-            function loadWaveLanes(baseParams, seq) {
+            // Fetch each read-only lane for the current section. A lane whose render is
+            // superseded by a newer lane fetch is discarded, exactly as the chassis buffer is.
+            // The lanes keep their own sequence: a chassis-only render must not discard them.
+            function loadWaveLanes(baseParams) {
+                const seq = ++laneReqSeq;
                 for (const lane of waveLanes) {
                     const params = new URLSearchParams(baseParams);
                     params.set('layer', lane.layer);
@@ -5348,7 +5481,7 @@
                         .then(resp => resp.ok ? resp.arrayBuffer() : Promise.reject(new Error('no audio')))
                         .then(raw => ensureAudioCtx().decodeAudioData(raw))
                         .then(decoded => {
-                            if (seq !== audioReqSeq) return; // superseded by a newer render
+                            if (seq !== laneReqSeq) return; // superseded by a newer render
                             lane.buffer = decoded;
 
                             const { from, to } = laneWindow();
@@ -5803,7 +5936,7 @@
             //
             // The chain is source -> fade -> gain. The fade node carries the start and the
             // stop envelope, and the gain node carries the mix. The two are kept apart so a
-            // knob drag during a fade does not cancel the fade.
+            // gain slider drag during a fade does not cancel the fade.
             function startVoice(layer, offset) {
                 const buffer = layerBuffer(layer);
                 if (!buffer || waveVoices[layer]) return;
@@ -5858,7 +5991,7 @@
                 if (on && wavePlaying) startVoice(layer, playheadSeconds());
             }
 
-            // Move one layer's mix gain. A live voice follows it immediately, so the knob
+            // Move one layer's mix gain. A live voice follows it immediately, so the change
             // is heard as it is dragged. Nothing is re-rendered: the gain is applied after
             // the capture, exactly as the channel mixer applies it in the app.
             function setLayerGain(layer, db) {
@@ -6119,7 +6252,7 @@
                 });
 
                 // The gain pair is linear in dB, so the slider position is the value and
-                // none of the geometric mapping the shaping knobs need applies here.
+                // none of the geometric mapping the shaping settings need applies here.
                 for (const layer of AUDIO_LAYERS) {
                     const slider = document.getElementById('gain-' + layer);
                     const box = document.getElementById('gainout-' + layer);
@@ -6320,8 +6453,9 @@
                         v = Math.min(hi, Math.max(lo, v));
                         tuneValues[k] = v;
                         if (syncSlider) slider.value = tunePosForValue(k, v, lo, hi);
-                        if (syncBox) box.value = v;
+                        if (syncBox) box.value = tuneBoxText(k, v);
                         scheduleAudioRefresh();
+                        showUpdatedTune();
                         updateGainChart();
                     };
                     tuneCommits[k] = commit;
@@ -6404,7 +6538,7 @@
                     applyLayerGainsToControls();
                 }).catch(() => { });
 
-                // Load the shipped defaults, for the pulse limits and for any knob the
+                // Load the shipped defaults, for the pulse limits and for any setting the
                 // running config did not set. A key the config already supplied is left
                 // alone: the config is the more specific of the two.
                 fetch('/api/tuneassist/tuning-defaults').then(r => r.json()).then(d => {
@@ -6473,16 +6607,14 @@
                 applyTuneToControls();
             }
 
-            // The curve exponents are held here as the raw thousandths the sliders show
-            // (jerkCompression 190, snapCompression 310), but POST /api/config takes them as the
-            // fraction and multiplies by 1000 on the way in. Everything else is sent as
-            // it stands. Getting this wrong is silent — the value simply lands a factor
-            // of 1000 out — so the scaling is listed per key rather than applied broadly.
+            // The five haptics settings are held here as the same decimal value
+            // (0.5..99.5) that POST /api/config takes, so they are sent as they stand —
+            // no scaling in either direction.
             //
             // Each tab returns its own section of the config tree, so a commit writes the
             // tab in view and nothing else. A tab with nothing to write returns null.
             function tuningPayloadFor(tab) {
-                // Every tab writes its layer's mix gain. It is the one knob the Road tab
+                // Every tab writes its layer's mix gain. It is the one setting the Road tab
                 // has, and on the Engine tab it is the only one a vehicle with no profile
                 // can still commit.
                 const synthesizer = LAYER_GAIN_KEYS[tab]
@@ -6493,9 +6625,9 @@
                     return {
                         synthesizer,
                         haptics: {
-                            jerkCompression: tuneValues.jerkCompression / 1000,
+                            jerkCompression: tuneValues.jerkCompression,
                             jerkCenter: tuneValues.jerkCenter,
-                            snapCompression: tuneValues.snapCompression / 1000,
+                            snapCompression: tuneValues.snapCompression,
                             snapCenter: tuneValues.snapCenter,
                         },
                     };
@@ -6505,7 +6637,7 @@
                     return {
                         synthesizer,
                         haptics: {
-                            dynamicTransmissionJerkCompression: tuneValues.transmissionJerkCompression / 1000,
+                            dynamicTransmissionJerkCompression: tuneValues.transmissionJerkCompression,
                             dynamicTransmissionStepBlend: tuneValues.transmissionStepBlend,
                         },
                     };
@@ -6545,7 +6677,7 @@
                 return null;
             }
 
-            // Write the active tab's knob positions into the config file. The endpoint
+            // Write the active tab's setting values into the config file. The endpoint
             // applies them to the running app and persists them in one step, so this is the
             // same path the settings page saves through — including the shared navbar
             // spinner/tick, rather than a status line of its own.
@@ -6577,6 +6709,10 @@
                     }
 
                     if (typeof window.showNavbarStatus === 'function') window.showNavbarStatus('success');
+                    // The values in the config now match the settings, so the compare toggle
+                    // and a Reset both see them as the committed values.
+                    TUNE_TABS[tab].forEach(k => { tuneDefaults[k] = tuneValues[k]; });
+                    updateGainChart();
                     status.textContent = 'Committed to config';
                     setTimeout(() => {
                         if (status.textContent === 'Committed to config') status.textContent = '';
@@ -6590,7 +6726,7 @@
                 }
             }
 
-            // Seed the chassis and transmission knobs from the running config. These are
+            // Seed the chassis and transmission settings from the running config. These are
             // the values the device is set to, so they are both the starting position and
             // what a tab's Reset returns to — the same rule the layer gains follow.
             function applyTuneConfig(haptics) {
@@ -6679,7 +6815,7 @@
                     const box = document.getElementById('out-' + k);
                     const lo = Number(box.min), hi = Number(box.max);
                     document.getElementById('tune-' + k).value = tunePosForValue(k, tuneValues[k], lo, hi);
-                    box.value = tuneValues[k];
+                    box.value = tuneBoxText(k, tuneValues[k]);
                 });
             }
 

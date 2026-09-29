@@ -40,21 +40,21 @@ import (
 // GT packet rate the live app refreshes the chassis haptic at (one bump
 // regeneration per delivered packet).
 
-// Tuning overrides the jerk/snap generator knobs the web UI exposes. A zero
+// Tuning overrides the jerk/snap generator settings the web UI exposes. A zero
 // value for most fields leaves the shipped default in place. Amplitude is driven by
 // the jerk pair (compression, center), frequency by the snap pair; the config
 // derives the internal jerk/snap scale factors from these on set, exactly as the
 // live app does. The bias each pair is anchored to is a fixed constant, not a
-// tunable knob.
+// tunable setting.
 type Tuning struct {
-	JerkCompression int // GetHapticsJerkCompression — amplitude response curvature
-	JerkCenter      int // GetHapticsJerkCenter — reference jerk, in m/s^3
-	SnapCompression int // GetHapticsSnapCompression — frequency response curvature
-	SnapCenter      int // GetHapticsSnapCenter — reference snap, in units of 100 m/s^4
+	JerkCompression float64 // GetHapticsJerkCompression — amplitude response curvature setting
+	JerkCenter      float64 // GetHapticsJerkCenter — reference jerk setting
+	SnapCompression float64 // GetHapticsSnapCompression — frequency response curvature setting
+	SnapCenter      float64 // GetHapticsSnapCenter — reference snap setting
 
-	// TransmissionJerkCompression is the driveline response curve, in thousandths. Zero
+	// TransmissionJerkCompression is the driveline response curve setting. Zero
 	// keeps the shipped default, as the chassis curves do.
-	TransmissionJerkCompression int
+	TransmissionJerkCompression float64
 
 	// TransmissionStepBlend is how deeply this shift's driveline step blends into
 	// the previous one. Its whole 0..1 range is legal, zero included, so there is no
@@ -73,7 +73,7 @@ type Tuning struct {
 	EngineProfile *profiles.EngineProfile
 }
 
-// DefaultTuning returns the shipped default jerk/snap knob values, read from a fresh
+// DefaultTuning returns the shipped default jerk/snap setting values, read from a fresh
 // default config so the UI's sliders start where the live app does and stay in step
 // with config_default.go.
 func DefaultTuning() Tuning {
@@ -82,12 +82,12 @@ func DefaultTuning() Tuning {
 	stepBlend := cfg.GetHapticsTransmissionStepBlend()
 
 	return Tuning{
-		JerkCompression: int(cfg.GethapticsJerkCompression()),
+		JerkCompression: cfg.GethapticsJerkCompression(),
 		JerkCenter:      cfg.GetHapticsJerkCenter(),
-		SnapCompression: int(cfg.GetHapticsSnapCompression()),
+		SnapCompression: cfg.GetHapticsSnapCompression(),
 		SnapCenter:      cfg.GetHapticsSnapCenter(),
 
-		TransmissionJerkCompression: int(cfg.GetHapticsTransmissionJerkCompression()),
+		TransmissionJerkCompression: cfg.GetHapticsTransmissionJerkCompression(),
 		TransmissionStepBlend:       &stepBlend,
 		SurfaceRumble:               cfg.GetHapticsSurfaceRumbles(),
 	}
@@ -123,25 +123,34 @@ func DefaultPulseLimits() PulseLimits {
 //
 // The window covers one lap and stops when that lap ends, so a caller auditioning a
 // lap hears that lap alone.
+//
+// AllLaps widens the window to the whole replay. Lap is then ignored, and FromFrame
+// and ToFrame index every frame of the replay in order rather than the frames of one
+// lap.
 type CaptureWindow struct {
 	Lap       int16
+	AllLaps   bool
 	FromFrame int
 	ToFrame   int
 }
 
-// gate reports what the frame at lap/idx means for the window: opens is true while
-// the frame lies inside it, and closes is true for the first frame past the window,
-// whose samples are the exclusive end and must not be emitted. A nil window opens
-// immediately and never closes.
+// gate reports what a frame means for the window: opens is true while the frame lies
+// inside it, and closes is true for the first frame past the window, whose samples
+// are the exclusive end and must not be emitted. idx is the frame's index in its lap
+// and replayIdx its index in the whole replay. A nil window opens immediately and
+// never closes.
 //
 // Leaving the window's lap is handled by the caller, which knows whether the window
 // was ever entered.
-func (w *CaptureWindow) gate(lap int16, idx int) (opens, closes bool) {
+func (w *CaptureWindow) gate(lap int16, idx, replayIdx int) (opens, closes bool) {
 	if w == nil {
 		return true, false
 	}
 
-	if lap != w.Lap {
+	switch {
+	case w.AllLaps:
+		idx = replayIdx
+	case lap != w.Lap:
 		return false, false
 	}
 
@@ -346,6 +355,10 @@ type chassisRun struct {
 	packetsSeen   int
 	lapFrameIndex map[int16]int
 	frameCarry    float64
+
+	// replayFrameIndex counts telemetry frames across every lap. It indexes a
+	// whole-replay capture window.
+	replayFrameIndex int
 }
 
 // frame advances the run by one delivered telemetry packet and reports whether the
@@ -371,7 +384,10 @@ func (r *chassisRun) frame(frame *gttelemetry.Transformer) (stop bool) {
 	idx := r.lapFrameIndex[lap]
 	r.lapFrameIndex[lap] = idx + 1
 
-	if r.route.frame(lap, idx, Frame{
+	replayIdx := r.replayFrameIndex
+	r.replayFrameIndex++
+
+	if r.route.frame(lap, idx, replayIdx, Frame{
 		OutCursor:  r.route.cursor,
 		Lap:        lap,
 		FrameIndex: idx,
@@ -503,8 +519,8 @@ type captureRouter struct {
 
 // frame records a telemetry frame and reports whether the scan should stop, which it
 // does at the first frame past the window.
-func (r *captureRouter) frame(lap int16, idx int, record Frame) (stop bool) {
-	opens, closes := r.window.gate(lap, idx)
+func (r *captureRouter) frame(lap int16, idx, replayIdx int, record Frame) (stop bool) {
+	opens, closes := r.window.gate(lap, idx, replayIdx)
 	if closes {
 		return true
 	}
@@ -513,7 +529,8 @@ func (r *captureRouter) frame(lap int16, idx int, record Frame) (stop bool) {
 	// whole-lap selection ToFrame is the lap's final index, so idx never passes it and
 	// nothing would ever close the window. The render would then run to the end of the
 	// replay and a lap audition would carry every following lap with it.
-	if r.emitting && r.window != nil && lap != r.window.Lap {
+	// A whole-replay window has no lap to leave.
+	if r.emitting && r.window != nil && !r.window.AllLaps && lap != r.window.Lap {
 		return true
 	}
 
@@ -553,7 +570,7 @@ func drainFrame(synth *synthesizer.Synthesizer, readBuf []float64, want int, con
 	}
 }
 
-// applyTuning writes the non-zero override knobs into the config. Setting the
+// applyTuning writes the non-zero override settings into the config. Setting the
 // curve/max pairs recomputes the derived jerk/snap scale factors internally.
 func applyTuning(cfg *config.Config, tuning Tuning) {
 	if tuning.JerkCompression > 0 {

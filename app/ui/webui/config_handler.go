@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"math"
 	"net/http"
 	"os"
 	"strings"
@@ -752,21 +751,11 @@ func (h *configHandler) applyHapticsConfig(config map[string]any) []string {
 	var errors []string
 
 	errors = appendErr(errors, applyField(config, "dynamicTransmissionFeedback", "invalid dynamic transmission feedback value", h.config.SetHapticsDynamicTransFeedbackEnabled))
-	errors = appendErr(errors, applyField(config, "jerkCompression", "invalid jerk compression value", func(f float64) {
-		h.config.SetHapticsJerkCompression(int(math.Round(f * 1000.0)))
-	}))
-	errors = appendErr(errors, applyField(config, "jerkCenter", "invalid jerk center value", func(f float64) {
-		h.config.SetHapticsJerkCenter(int(f))
-	}))
-	errors = appendErr(errors, applyField(config, "snapCompression", "invalid snap compression value", func(f float64) {
-		h.config.SetHapticsSnapCompression(int(math.Round(f * 1000.0)))
-	}))
-	errors = appendErr(errors, applyField(config, "snapCenter", "invalid snap center value", func(f float64) {
-		h.config.SetHapticsSnapCenter(int(f))
-	}))
-	errors = appendErr(errors, applyField(config, "dynamicTransmissionJerkCompression", "invalid transmission jerk compression value", func(f float64) {
-		h.config.SetHapticsTransmissionJerkCompression(int(math.Round(f * 1000.0)))
-	}))
+	errors = appendErr(errors, applyField(config, "jerkCompression", "invalid jerk compression value", h.config.SetHapticsJerkCompression))
+	errors = appendErr(errors, applyField(config, "jerkCenter", "invalid jerk center value", h.config.SetHapticsJerkCenter))
+	errors = appendErr(errors, applyField(config, "snapCompression", "invalid snap compression value", h.config.SetHapticsSnapCompression))
+	errors = appendErr(errors, applyField(config, "snapCenter", "invalid snap center value", h.config.SetHapticsSnapCenter))
+	errors = appendErr(errors, applyField(config, "dynamicTransmissionJerkCompression", "invalid transmission jerk compression value", h.config.SetHapticsTransmissionJerkCompression))
 	errors = appendErr(errors, applyField(config, "dynamicTransmissionStepBlend", "invalid transmission step blend value", h.config.SetHapticsTransmissionStepBlend))
 	errors = appendErr(errors, applyField(config, "pulseMaxAmplitude", "invalid pulse max amplitude value", h.config.SetHapticsPulseMaxAmplitude))
 	errors = appendErr(errors, applyField(config, "pulseMaxFrequencyHz", "invalid pulse max frequency value", h.config.SetHapticsPulseMaxFrequencyHz))

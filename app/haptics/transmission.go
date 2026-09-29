@@ -384,7 +384,7 @@ func (g *TransmissionGenerator) AdvanceDriveline() {
 // above the configured minimum and can only rise from there. The seed tracks the floor,
 // so it stays correct when the floor or the curve changes.
 func (g *TransmissionGenerator) seedProfile() {
-	curve := g.cfg.GetHapticsTransmissionJerkCompression() / 1000
+	curve := g.cfg.GetHapticsTransmissionJerkExponent()
 	characterMax := gearShiftCharacterMax
 
 	var seed float64
@@ -653,7 +653,7 @@ func (g *TransmissionGenerator) refreshPulse() {
 // large steps scale it in proportion.
 func (g *TransmissionGenerator) magnitudeFromDriveline() float64 {
 	depth := g.cfg.GetHapticsTransmissionStepBlend()
-	volumeCurve := g.cfg.GetHapticsTransmissionJerkCompression() / 1000
+	volumeCurve := g.cfg.GetHapticsTransmissionJerkExponent()
 
 	character := g.impulse(g.isDownshift()) / gearShiftCharacterMax
 	event := g.drivelineStep() / gearShiftStepMax
