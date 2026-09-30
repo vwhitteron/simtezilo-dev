@@ -19,11 +19,16 @@ type AdaptiveBuffer struct {
 	// Adaptive features
 	overflows       int       // count of buffer overflows
 	underruns       int       // count of buffer underruns
-	lastAccess      time.Time // last time buffer was accessed
 	readDelay       int       // delay between buffer write and read
 	lastOverflow    time.Time // timestamp of the most recent overflow event (zero if never)
 	lastUnderrun    time.Time // timestamp of the most recent underrun event (zero if never)
 	overflowSamples int       // cumulative samples dropped due to overflow
+
+	// underrunning is true while consecutive reads underrun. An idle channel
+	// underruns on every read, so lastUnderrun is stamped only when a run of
+	// underruns ends, and HealthDetailed reports "now" while one is in progress.
+	// This keeps time.Now off the per-block read path.
+	underrunning bool
 
 	// scaleScratch holds the magnitude-scaled copy used by WriteScaled so the
 	// caller's slice is never mutated.
@@ -90,8 +95,6 @@ func NewAdaptiveBufferCushion(length time.Duration, sampleRateHz, cushionMs int)
 		declickLen: declickLen,
 	}
 
-	buffer.updateLastAccess()
-
 	buffer.Clear()
 
 	return buffer
@@ -112,10 +115,9 @@ func (b *AdaptiveBuffer) Clear() {
 	b.underruns = 0
 	b.declickLeft = 0
 	b.lastSample = 0
+	b.underrunning = false
 
 	b.mu.Unlock()
-
-	b.updateLastAccess()
 }
 
 // Length returns the total buffer capacity.
@@ -178,7 +180,7 @@ func (b *AdaptiveBuffer) HealthDetailed() BufferHealth {
 		Available:       b.capacity - b.used,
 		ReadDelay:       b.readDelay,
 		LastOverflow:    b.lastOverflow,
-		LastUnderrun:    b.lastUnderrun,
+		LastUnderrun:    b.lastUnderrunTime(),
 		OverflowSamples: b.overflowSamples,
 	}
 }
@@ -250,8 +252,6 @@ func (b *AdaptiveBuffer) Write(samples []float64, offset int, overwrite bool) {
 		return
 	}
 
-	b.updateLastAccess()
-
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -281,8 +281,6 @@ func (b *AdaptiveBuffer) WriteScaled(samples []float64, magnitude float64, offse
 	if len(samples) == 0 {
 		return
 	}
-
-	b.updateLastAccess()
 
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -340,6 +338,35 @@ func (b *AdaptiveBuffer) GetOptimalReadSize(requestedSize int) int {
 
 	// Normal case
 	return min(requestedSize, b.used)
+}
+
+// lastUnderrunTime returns the time of the most recent underrun. During a run of
+// underruns the most recent one is the latest read, so it reports the current time.
+// The caller must hold b.mu.
+func (b *AdaptiveBuffer) lastUnderrunTime() time.Time {
+	if b.underrunning {
+		return time.Now()
+	}
+
+	return b.lastUnderrun
+}
+
+// trackUnderrun counts a consuming read that underran, and stamps lastUnderrun
+// when a full read ends a run of underruns. The caller must hold b.mu.
+func (b *AdaptiveBuffer) trackUnderrun(underran bool) {
+	if underran {
+		b.underruns++
+		b.underrunning = true
+
+		return
+	}
+
+	if b.underrunning {
+		// A full read ends the run. Its last underrun was the previous read, one
+		// block ago, which is well inside the precision the health log reports.
+		b.lastUnderrun = time.Now()
+		b.underrunning = false
+	}
 }
 
 // applyOffset applies the write position offset if specified.
@@ -434,21 +461,14 @@ func (b *AdaptiveBuffer) handleOverflow(samples []float64, overwrite bool) {
 // count are zero. A fully idle buffer whose ramp has already run out returns 0,
 // preserving the caller's ability to detect true silence.
 func (b *AdaptiveBuffer) readIntoBuffer(dst []float64, consume bool) int {
-	b.updateLastAccess()
-
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
 	length := len(dst)
+	avail := min(length, b.used)
 
-	avail := length
-	if avail > b.used {
-		avail = b.used
-
-		if consume {
-			b.underruns++
-			b.lastUnderrun = time.Now()
-		}
+	if consume {
+		b.trackUnderrun(avail < length)
 	}
 
 	for i := range avail {
@@ -528,10 +548,3 @@ func (b *AdaptiveBuffer) dropOldestSamples(count int) {
 
 // 	return outSamples
 // }
-
-func (b *AdaptiveBuffer) updateLastAccess() {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	b.lastAccess = time.Now()
-}
