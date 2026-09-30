@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/rs/zerolog"
 	"github.com/vwhitteron/simtezilo-dev/app/haptics"
@@ -39,10 +41,22 @@ type Service struct {
 	// web UI and the live haptic loop keep the other cores (target is a 4-core
 	// Raspberry Pi Zero 2 W).
 	heavy chan struct{}
+
+	// cacheTTL is how long a cached .gtr copy may go unused. sweepTimer deletes
+	// expired copies one TTL after the last use, and sweepMu guards it.
+	cacheTTL   time.Duration
+	sweepMu    sync.Mutex
+	sweepTimer *time.Timer
 }
 
 // New creates a Service ready to be wired into the web UI's HTTP mux.
 func New(opts Options) *Service {
+	return newService(opts, cacheIdleTTL)
+}
+
+// newService is New with an explicit cache TTL. The TTL is fixed before the
+// start-up sweep can read it.
+func newService(opts Options, cacheTTL time.Duration) *Service {
 	cacheDir := opts.CacheDir
 	if cacheDir == nil {
 		cacheDir = func() string { return "" }
@@ -53,9 +67,14 @@ func New(opts Options) *Service {
 		replayDir: opts.ReplayDir,
 		cacheDir:  cacheDir,
 		heavy:     make(chan struct{}, 1),
+		cacheTTL:  cacheTTL,
 	}
 
 	svc.tuningDefaults = buildTuningDefaults(opts.Log)
+
+	// Sweep once at start-up, so copies left by a previous run do not wait for
+	// the next use to expire.
+	svc.scheduleSweep(0)
 
 	return svc
 }
