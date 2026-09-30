@@ -205,6 +205,7 @@
         animation: none;
     }
 }
+
 /*
  * Keep the shared navbar in view while the page scrolls. The nav is injected
  * into #navigation by navigation.js on every page, so this lives here rather
@@ -253,4 +254,16 @@
     background: var(--bs-body-bg);
     color: var(--bs-body-color);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+}
+
+/*
+ * Plot well for the haptic waveform lanes. The trace spans the full canvas
+ * height at full scale, so the canvas edges are the ±1 limits. A lighter well
+ * than the panel makes those limits visible. A clipped or flat-topped peak
+ * then shows where it meets the edge.
+ */
+#wave-canvas,
+.wave-lane-canvas {
+    background: color-mix(in srgb, var(--bs-content-bg), #fff 3%);
+    border-radius: var(--bs-border-radius-sm, 4px);
 }

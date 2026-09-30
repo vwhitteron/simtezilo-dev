@@ -620,8 +620,6 @@
             width: 100%;
             height: 100%;
             border: 0;
-            border-radius: 0;
-            background: transparent;
         }
 
         /* Framed by .chassis-panel above, so it opts out of the card outline the
@@ -631,8 +629,6 @@
             width: 100%;
             height: 100%;
             border: 0;
-            border-radius: 0;
-            background: transparent;
         }
 
         .tune-widget h3 {
@@ -5883,8 +5879,8 @@
                 const ctx = canvas.getContext('2d');
                 ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
                 // Backdrop. clearRect leaves the canvas transparent so the themed
-                // `canvas { background: var(--bs-content-bg) }` rule shows through;
-                // painting a backdrop here would pin it to a fixed colour instead.
+                // plot-well background in custom.css shows through. Painting a
+                // backdrop here would pin it to a fixed colour instead.
                 ctx.clearRect(0, 0, w, h);
 
                 const mid = h / 2;
