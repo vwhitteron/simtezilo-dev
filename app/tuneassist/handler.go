@@ -197,6 +197,10 @@ const allLapsKey = "all"
 // vehicle's stored profile in place. Road-texture surfaces (tarmac, concrete, grass,
 // dirt, sand, snow) are each overridden by a <name>Level/<name>Coarseness pair; a
 // surface is overridden only when both of its parameters are present.
+//
+// The layer parameter selects chassis (the default), texture, transmission or
+// engine. A layer of "all" renders the four layers in one pass over the replay and
+// returns one WAV with a channel per layer, in allLayerNames order.
 func (s *Service) HandleAudio(response http.ResponseWriter, request *http.Request) {
 	dir := s.replayDir()
 	replays := s.listReplays(dir)
@@ -233,8 +237,10 @@ func (s *Service) HandleAudio(response http.ResponseWriter, request *http.Reques
 
 	unfiltered := request.URL.Query().Get("raw") == "1"
 
-	layers, known := captureLayers(request.URL.Query().Get("layer"))
-	if !known {
+	layerName := request.URL.Query().Get("layer")
+
+	layers, known := captureLayers(layerName)
+	if !known && layerName != allLayersKey {
 		http.Error(response, "unknown haptic layer", http.StatusBadRequest)
 
 		return
@@ -256,7 +262,14 @@ func (s *Service) HandleAudio(response http.ResponseWriter, request *http.Reques
 		return
 	}
 
-	wav, err := renderWindowWAV(request.Context(), source, tuning, layers, unfiltered, window)
+	var wav []byte
+
+	if layerName == allLayersKey {
+		wav, err = renderAllLayersWAV(request.Context(), source, tuning, unfiltered, window)
+	} else {
+		wav, err = renderWindowWAV(request.Context(), source, tuning, layers, unfiltered, window)
+	}
+
 	if err != nil {
 		if errors.Is(err, errNoAudio) {
 			http.Error(response, "no audio for requested lap/section", http.StatusNotFound)

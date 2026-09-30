@@ -4988,8 +4988,7 @@
             let waveSectionKey = '';      // replay|lap|from|to of the buffer on screen, without the tuning
             let waveRate = 1;             // transport speed, applied to the voices and the video
             let audioReqSeq = 0;          // guards against out-of-order fetch responses
-            let laneReqSeq = 0;           // the same guard for the read-only lanes, which can load apart from the chassis render
-            let waveLanesQuery = null;    // query the lanes last loaded from; an unchanged query skips the lane fetch
+            let waveLanesQuery = null;    // query the lanes last rendered from; an unchanged query keeps the lanes as they are and skips the layer=all render
 
             // Read-only lanes for the other haptic layers. Each holds its own decoded
             // buffer and envelope but no transport: they are drawn against the chassis
@@ -5064,6 +5063,28 @@
                     colour: 'rgba(120,200,140,0.9)', surfaceColoured: true, buffer: null, peaks: null,
                 },
             ];
+
+            // Channel order the server interleaves into a layer=all render. Fixed by the
+            // server, not derived from waveLanes, so a reorder of waveLanes (which only
+            // controls drawing order) can never desync the split.
+            const ALL_LAYER_CHANNELS = { chassis: 0, texture: 1, transmission: 2, engine: 3 };
+
+            // Split a layer=all response's interleaved channels into one mono AudioBuffer
+            // per channel, so the chassis render and the three lanes come from a single
+            // fetch instead of one each. A channel copyToChannel can't reach (the server
+            // sent fewer than expected) is left for the caller to treat as missing.
+            function splitChannels(decoded) {
+                const channels = [];
+                for (let i = 0; i < decoded.numberOfChannels; i++) {
+                    const mono = new AudioBuffer({
+                        length: decoded.length, numberOfChannels: 1, sampleRate: decoded.sampleRate,
+                    });
+                    mono.copyToChannel(decoded.getChannelData(i), 0);
+                    channels.push(mono);
+                }
+                return channels;
+            }
+
             // The widget's settings, grouped by the tab that shows them. Every helper below
             // works off the flattened list, so a key only has to be named here and given a
             // tune-/out- input pair in the markup.
@@ -5392,6 +5413,13 @@
                 const chassisParams = new URLSearchParams(params);
                 TUNE_TABS.chassis.forEach(k => chassisParams.set(k, String(shownTune()[k])));
 
+                // A change to a non-chassis tuning value (or a new section) leaves the
+                // lanes' last render stale, so this refresh asks for all four channels in
+                // one pass instead of the chassis channel alone. A chassis-only change, or
+                // the compare toggle, keeps the lanes as they are and stays single-channel.
+                const lanesStale = params.toString() !== waveLanesQuery;
+                if (lanesStale) chassisParams.set('layer', 'all');
+
                 const seq = ++audioReqSeq;
                 setWaveStatus('rendering…');
 
@@ -5413,14 +5441,36 @@
                     waveSectionKey = sectionKey;
 
                     stopPlayback(resumePlaying);
-                    waveBuffer = decoded;
-                    wavePlayOffset = Math.min(resumeSeconds, decoded.duration);
+
+                    // A layer=all response is the chassis channel and the three lanes
+                    // interleaved; a chassis-only response is already mono. Either way,
+                    // waveBuffer ends up holding just the chassis channel.
+                    let laneBuffers = null;
+                    if (lanesStale) {
+                        const channels = splitChannels(decoded);
+                        waveBuffer = channels[ALL_LAYER_CHANNELS.chassis] || decoded;
+
+                        laneBuffers = {};
+                        for (const lane of waveLanes) laneBuffers[lane.layer] = channels[ALL_LAYER_CHANNELS[lane.layer]] || null;
+                    } else {
+                        waveBuffer = decoded;
+                    }
+
+                    wavePlayOffset = Math.min(resumeSeconds, waveBuffer.duration);
 
                     // A new section invalidates the old window position. The section length
                     // also changes, so the zoom factor the window class follows changes too.
                     if (!sameSection) {
                         setLaneOffset(0);
                         updateLaneZoomClass();
+                    }
+
+                    // Apply the lanes after the window reset, so their envelopes use the
+                    // new section's window, and before playback resumes, so a resumed
+                    // voice never starts twice.
+                    if (laneBuffers) {
+                        applyWaveLanes(laneBuffers);
+                        waveLanesQuery = params.toString();
                     }
 
                     computeWavePeaks();
@@ -5432,17 +5482,10 @@
                     drawWave();
                     updateWaveTime();
 
-                    // The extra lanes render the same section with the same tuning, so
-                    // they are fetched together and drawn as they arrive. A lane that
-                    // fails leaves its own trace empty rather than failing the render.
-                    // A render that changed only the chassis values keeps the lanes.
-                    if (params.toString() !== waveLanesQuery) {
-                        waveLanesQuery = params.toString();
-                        loadWaveLanes(params);
-                    }
-
                     if (resumePlaying) {
-                        // The lanes are still decoding. Each one joins the mix when it lands.
+                        // The lane buffers are already applied above, so startPlayback
+                        // starts every audible layer together rather than the lanes
+                        // joining the mix late.
                         startPlayback();
                     } else {
                         videoFollowSuppressed = true;
@@ -5464,39 +5507,29 @@
                 }
             }
 
-            // Fetch each read-only lane for the current section. A lane whose render is
-            // superseded by a newer lane fetch is discarded, exactly as the chassis buffer is.
-            // The lanes keep their own sequence: a chassis-only render must not discard them.
-            function loadWaveLanes(baseParams) {
-                const seq = ++laneReqSeq;
+            // Apply the three lane buffers split from a layer=all render. A lane whose
+            // channel didn't decode (buffers[layer] is null) is left with an empty trace
+            // rather than failing the whole refresh.
+            function applyWaveLanes(buffers) {
                 for (const lane of waveLanes) {
-                    const params = new URLSearchParams(baseParams);
-                    params.set('layer', lane.layer);
+                    const buffer = buffers[lane.layer] || null;
+                    lane.buffer = buffer;
 
-                    lane.buffer = null;
-                    lane.peaks = null;
+                    if (buffer) {
+                        const { from, to } = laneWindow();
+                        lane.peaks = envelopeFor(document.getElementById(lane.canvasId), buffer, from, to);
+                    } else {
+                        lane.peaks = null;
+                    }
+
                     drawLane(lane);
 
-                    fetch('/api/tuneassist/audio?' + params.toString())
-                        .then(resp => resp.ok ? resp.arrayBuffer() : Promise.reject(new Error('no audio')))
-                        .then(raw => ensureAudioCtx().decodeAudioData(raw))
-                        .then(decoded => {
-                            if (seq !== laneReqSeq) return; // superseded by a newer render
-                            lane.buffer = decoded;
-
-                            const { from, to } = laneWindow();
-                            lane.peaks = envelopeFor(
-                                document.getElementById(lane.canvasId), decoded, from, to);
-
-                            drawLane(lane);
-
-                            // The lanes decode after the chassis lane, so playback can
-                            // already be running. An audible layer joins the mix here.
-                            if (wavePlaying && audioOut[lane.layer]) {
-                                startVoice(lane.layer, playheadSeconds());
-                            }
-                        })
-                        .catch(() => { /* an empty lane is the failure state */ });
+                    // refreshAudio applies the lanes before calling startPlayback, which
+                    // starts every audible layer with a buffer itself, so this only fires
+                    // for a caller that applies lanes to a mix already playing.
+                    if (wavePlaying && audioOut[lane.layer]) {
+                        startVoice(lane.layer, playheadSeconds());
+                    }
                 }
             }
 

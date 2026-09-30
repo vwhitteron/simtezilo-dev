@@ -32,7 +32,7 @@ func TestAudioEndpointLayers(t *testing.T) {
 
 	replay := "20260801.111955-circuit-de-spa-francorchamps-toyota-supra-rz-97.gtz"
 
-	for _, layer := range []string{"", "chassis", "texture", "transmission", "engine"} {
+	for _, layer := range []string{"", "chassis", "texture", "transmission", "engine", "all"} {
 		url := "/api/tuneassist/audio?replay=" + replay + "&lap=2&from=0&to=1800&layer=" + layer
 
 		rec := httptest.NewRecorder()

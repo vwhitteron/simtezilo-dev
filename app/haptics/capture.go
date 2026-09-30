@@ -241,28 +241,14 @@ func CaptureChassis(ctx context.Context, opts CaptureOptions) (*Capture, error) 
 
 	logger := zerolog.New(io.Discard)
 
-	cfg := config.New(config.Options{Logger: logger})
-
-	applyTuning(cfg, opts.Tuning)
-
-	calib, err := calibrator.NewToneGenerator(cfg)
+	client, err := gttelemetry.New(gttelemetry.Options{Source: opts.Source, Logger: &logger})
 	if err != nil {
-		return nil, fmt.Errorf("calibrator: %w", err)
+		return nil, fmt.Errorf("telemetry client: %w", err)
 	}
 
-	var kin kinematics.State
-
-	kin.DisableNyquistGate = opts.Unfiltered
-
-	synth, err := synthesizer.New(&synthesizer.SynthOpts{
-		Config:     cfg.GetSynthesizer(),
-		BaseConfig: cfg,
-		Logger:     logger,
-		Kinematics: &kin,
-		Calibrator: calib,
-	})
+	run, err := newLayerRun(client, opts.Tuning, opts.Unfiltered, opts.Layers, logger)
 	if err != nil {
-		return nil, fmt.Errorf("synth: %w", err)
+		return nil, err
 	}
 
 	// The mixer runs background goroutines rooted in its own context, and those keep
@@ -270,58 +256,178 @@ func CaptureChassis(ctx context.Context, opts CaptureOptions) (*Capture, error) 
 	// the life of the process. Closing cancels them, so a caller that renders
 	// repeatedly (the tuning assistant renders once per audition) does not accumulate
 	// a dead synth per render.
-	defer func() { _ = synth.Close() }()
+	defer func() { _ = run.synth.Close() }()
 
-	gen := NewGenerator(cfg, synth, &kin, logger)
+	out := &Capture{InternalRate: run.synth.GetSampleRate()}
+	run.route = &captureRouter{out: out, sink: opts.Sink, window: opts.Window}
+
+	err = scanRuns(ctx, client, []*chassisRun{run})
+	if err != nil {
+		return nil, err
+	}
+
+	return out, nil
+}
+
+// CaptureMultiOptions configures a capture that renders several layer sets in one
+// pass over the replay.
+type CaptureMultiOptions struct {
+	Source     string         // file://... replay URL
+	Tuning     Tuning         // generator overrides (zero fields keep defaults)
+	Unfiltered bool           // bypass the kinematics fs/2 nyquist gate (raw ungated render)
+	Window     *CaptureWindow // restricts Sink delivery to this window; nil means the whole replay
+
+	// Layers holds one layer set per render. Each set gets its own synth, generators
+	// and kinematics, so each render is identical to a CaptureChassis of that set.
+	Layers []CaptureLayers
+
+	// Sink receives each block of master output produced inside the window, tagged
+	// with the index of its layer set in Layers. The slice is a reused read buffer
+	// and is only valid for the duration of the call.
+	Sink func(layer int, samples []float64)
+}
+
+// MultiCapture is the result of a CaptureMulti run. The samples go to the Sink, so
+// only the sample rate is returned.
+type MultiCapture struct {
+	InternalRate int // synth internal sample rate (Hz) of every layer
+}
+
+// CaptureMulti renders several layer sets over one decode of the replay. Decoding
+// the replay costs as much as a render, so one pass for four layers is much cheaper
+// than four CaptureChassis calls.
+//
+// The runs do not share a kinematics state: the synth writes its channel amplitude
+// and frequency back into it. They share only the telemetry client, which the runs
+// read and never write.
+func CaptureMulti(ctx context.Context, opts CaptureMultiOptions) (*MultiCapture, error) {
+	if opts.Source == "" {
+		return nil, errors.New("a replay Source is required")
+	}
+
+	if opts.Sink == nil {
+		return nil, errors.New("a Sink is required")
+	}
+
+	logger := zerolog.New(io.Discard)
 
 	client, err := gttelemetry.New(gttelemetry.Options{Source: opts.Source, Logger: &logger})
 	if err != nil {
 		return nil, fmt.Errorf("telemetry client: %w", err)
 	}
 
-	internalRate := synth.GetSampleRate()
-	out := &Capture{InternalRate: internalRate}
+	runs := make([]*chassisRun, 0, len(opts.Layers))
 
-	route := &captureRouter{out: out, sink: opts.Sink, window: opts.Window}
+	// Close every synth built so far, including on a failed build, for the same
+	// reason CaptureChassis closes its synth.
+	defer func() {
+		for _, run := range runs {
+			_ = run.synth.Close()
+		}
+	}()
 
-	readBuf := make([]float64, 512)
+	for index, layers := range opts.Layers {
+		run, err := newLayerRun(client, opts.Tuning, opts.Unfiltered, layers, logger)
+		if err != nil {
+			return nil, err
+		}
 
-	// Fractional samples-per-frame accumulator so the total tracks real duration even
-	// though internalRate is not an integer multiple of telemetryFrameRate.
-	samplesPerFrame := float64(internalRate) / float64(telemetryFrameRate)
+		sink := func(samples []float64) { opts.Sink(index, samples) }
+		run.route = &captureRouter{out: &Capture{}, sink: sink, window: opts.Window}
+
+		runs = append(runs, run)
+	}
+
+	out := &MultiCapture{}
+	if len(runs) > 0 {
+		out.InternalRate = runs[0].synth.GetSampleRate()
+	}
+
+	err = scanRuns(ctx, client, runs)
+	if err != nil {
+		return nil, err
+	}
+
+	return out, nil
+}
+
+// newLayerRun builds one independent render of layers over client: its own config,
+// kinematics state, synth and generators. The caller must set the run's route and
+// close its synth.
+func newLayerRun(
+	client *gttelemetry.Client,
+	tuning Tuning,
+	unfiltered bool,
+	layers CaptureLayers,
+	logger zerolog.Logger,
+) (*chassisRun, error) {
+	cfg := config.New(config.Options{Logger: logger})
+
+	applyTuning(cfg, tuning)
+
+	calib, err := calibrator.NewToneGenerator(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("calibrator: %w", err)
+	}
+
+	kin := &kinematics.State{DisableNyquistGate: unfiltered}
+
+	synth, err := synthesizer.New(&synthesizer.SynthOpts{
+		Config:     cfg.GetSynthesizer(),
+		BaseConfig: cfg,
+		Logger:     logger,
+		Kinematics: kin,
+		Calibrator: calib,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("synth: %w", err)
+	}
 
 	run := &chassisRun{
-		cfg:             cfg,
-		log:             logger,
-		client:          client,
-		gen:             gen,
-		layers:          opts.Layers,
-		kin:             &kin,
-		route:           route,
-		synth:           synth,
-		readBuf:         readBuf,
-		samplesPerFrame: samplesPerFrame,
-		engineProfile:   opts.Tuning.EngineProfile,
+		cfg:     cfg,
+		log:     logger,
+		client:  client,
+		gen:     NewGenerator(cfg, synth, kin, logger),
+		layers:  layers,
+		kin:     kin,
+		synth:   synth,
+		readBuf: make([]float64, 512),
+		// Fractional samples-per-frame accumulator so the total tracks real duration
+		// even though the internal rate is not an integer multiple of telemetryFrameRate.
+		samplesPerFrame: float64(synth.GetSampleRate()) / float64(telemetryFrameRate),
+		engineProfile:   tuning.EngineProfile,
 		lapFrameIndex:   make(map[int16]int),
 	}
 
-	run.buildOptionalGenerators(opts.Layers, cfg, synth, &kin, logger)
+	run.buildOptionalGenerators(layers, cfg, synth, kin, logger)
 
+	return run, nil
+}
+
+// scanRuns decodes the replay once and feeds every frame to each run. The runs share
+// one window, so they all reach its end on the same frame, and the scan stops there.
+func scanRuns(ctx context.Context, client *gttelemetry.Client, runs []*chassisRun) error {
 	for frame, scanErr := range client.Scan(ctx) {
 		if ctx.Err() != nil {
-			return nil, ctx.Err()
+			return ctx.Err()
 		}
 
 		if scanErr != nil {
-			return nil, fmt.Errorf("reading frame: %w", scanErr)
+			return fmt.Errorf("reading frame: %w", scanErr)
 		}
 
-		if run.frame(frame) {
+		stop := false
+
+		for _, run := range runs {
+			stop = run.frame(frame) || stop
+		}
+
+		if stop {
 			break
 		}
 	}
 
-	return out, nil
+	return nil
 }
 
 // chassisRun holds the mutable per-replay state CaptureChassis advances one telemetry
