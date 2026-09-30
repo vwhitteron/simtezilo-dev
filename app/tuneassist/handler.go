@@ -1,6 +1,7 @@
 package tuneassist
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -33,6 +34,11 @@ type Service struct {
 	cacheDir  func() string
 
 	tuningDefaults []byte
+
+	// heavy limits the tuning assistant to one data or audio job at a time, so the
+	// web UI and the live haptic loop keep the other cores (target is a 4-core
+	// Raspberry Pi Zero 2 W).
+	heavy chan struct{}
 }
 
 // New creates a Service ready to be wired into the web UI's HTTP mux.
@@ -46,6 +52,7 @@ func New(opts Options) *Service {
 		log:       opts.Log,
 		replayDir: opts.ReplayDir,
 		cacheDir:  cacheDir,
+		heavy:     make(chan struct{}, 1),
 	}
 
 	svc.tuningDefaults = buildTuningDefaults(opts.Log)
@@ -137,6 +144,14 @@ func (s *Service) HandleData(response http.ResponseWriter, request *http.Request
 		return
 	}
 
+	release, err := s.acquire(request.Context())
+	if err != nil {
+		s.log.Debug().Err(err).Str("replay", filename).Msg("acquiring heavy job slot")
+
+		return
+	}
+	defer release()
+
 	source, video, err := s.resolveSource(dir, filename)
 	if err != nil {
 		s.log.Error().Err(err).Str("replay", filename).Msg("resolving replay source")
@@ -153,8 +168,8 @@ func (s *Service) HandleData(response http.ResponseWriter, request *http.Request
 		return
 	}
 
-	// Encoded straight to the client rather than marshalled into a buffer first, so
-	// the payload is never held in full alongside the analysis it came from.
+	// json.Encoder.Encode still marshals replayData into its own internal buffer
+	// before writing it out; it just spares us a second buffer of our own.
 	response.Header().Set("Content-Type", "application/json")
 
 	err = json.NewEncoder(response).Encode(replayData)
@@ -225,6 +240,14 @@ func (s *Service) HandleAudio(response http.ResponseWriter, request *http.Reques
 		return
 	}
 
+	release, err := s.acquire(request.Context())
+	if err != nil {
+		s.log.Debug().Err(err).Str("replay", filename).Msg("acquiring heavy job slot")
+
+		return
+	}
+	defer release()
+
 	source, _, err := s.resolveSource(dir, filename)
 	if err != nil {
 		s.log.Error().Err(err).Str("replay", filename).Msg("resolving replay source")
@@ -257,6 +280,18 @@ func (s *Service) HandleAudio(response http.ResponseWriter, request *http.Reques
 func (s *Service) HandleTuningDefaults(response http.ResponseWriter, _ *http.Request) {
 	response.Header().Set("Content-Type", "application/json")
 	_, _ = response.Write(s.tuningDefaults)
+}
+
+// acquire reserves the single heavy-job slot, blocking until it is free or ctx is
+// done. On success the returned release func must be called to free the slot; on
+// ctx expiry it returns a nil release func and ctx.Err().
+func (s *Service) acquire(ctx context.Context) (release func(), err error) {
+	select {
+	case s.heavy <- struct{}{}:
+		return func() { <-s.heavy }, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 }
 
 // listReplays scans dir for replay sources, sorted by name. A missing or unreadable
