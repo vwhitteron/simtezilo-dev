@@ -688,6 +688,30 @@
            The icon is a red muted speaker when the layer is off, and a green speaker when it is on.
            The scatter panel reuses this block with an eye pair instead of a speaker pair:
            a red crossed eye when the window highlight is off, a green eye when it is on. */
+        /* The heading's left end holds the lane legend, opposite the monitor toggle.
+           It is out of the flow for the same reason, so the heading text stays centred. */
+        .wave-legend {
+            position: absolute;
+            left: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            letter-spacing: normal;
+            text-transform: none;
+        }
+
+        /* display: flex above outranks the hidden attribute's UA display: none. */
+        .wave-legend[hidden] {
+            display: none;
+        }
+
+        .wave-legend-swatch {
+            width: 12px;
+            height: 4px;
+        }
+
         .wave-monitor {
             position: absolute;
             right: 20px;
@@ -1090,6 +1114,10 @@
                     </div>
                     <div class="chassis-panel">
                         <h3>Chassis Haptic Waveform
+                            <span class="wave-legend" id="drx-legend" hidden
+                                title="DRX shifts the Front pulse to a resonant frequency when the pulse passes the amplitude ceiling">
+                                <span class="wave-legend-swatch drx-legend-swatch"></span>DRX active
+                            </span>
                             <label class="wave-monitor" title="Monitor: play this layer through the audio output">
                                 <input type="checkbox" class="tune-out-enable" data-out-layer="chassis" checked>
                                 <span class="icon wave-monitor-on" data-icon="volume" aria-label="Monitor on"></span>
@@ -4054,12 +4082,18 @@
                 document.getElementById('gain-compare-toggle').checked = true;
             }
 
-            function gainDbOf(jerk) {
+            // The pulse amplitude before the maxAmplitude clamp. DRX triggers on this value,
+            // as calculateChassisHapticPulseAmplitude passes it to DRXShift.
+            function unclampedAmplitudeOf(jerk) {
                 const tune = shownTune();
                 const exponent = 1 - tune.jerkCompression / 100;
                 const jerkCenter = 1000 - 10 * tune.jerkCenter;
                 const jerkScale = Math.pow(10, JERK_BIAS_DB / 20) / Math.pow(jerkCenter, exponent);
-                const amp = Math.min(Math.pow(Math.abs(jerk), exponent) * jerkScale, pulseLimits.maxAmplitude);
+                return Math.pow(Math.abs(jerk), exponent) * jerkScale;
+            }
+
+            function gainDbOf(jerk) {
+                const amp = Math.min(unclampedAmplitudeOf(jerk), pulseLimits.maxAmplitude);
                 if (!(amp > 0)) return GAIN_FLOOR_DB;
                 const db = 20 * Math.log10(amp);
                 return Number.isFinite(db) ? Math.max(GAIN_FLOOR_DB, db) : GAIN_FLOOR_DB;
@@ -5047,6 +5081,16 @@
             // colouring, in the same role lane.colour plays for the read-only lanes.
             const CHASSIS_LANE_COLOUR = 'rgba(233,69,96,0.9)';
 
+            // The chassis lane marker where DRX is active: a solid bar on the top edge. It
+            // is orange so no surface colour hides it. The bottom edge is kept for the zoom
+            // window indicator.
+            const DRX_MARKER_COLOUR = 'rgba(255,140,0,1)';
+            const DRX_MARKER_HEIGHT = 4;
+            const DRX_MIN_SPAN_PX = 2;
+
+            // The DRX frame runs drxRuns() last built, with the inputs it built them from.
+            let drxRunsCache = { data: null, compression: null, center: null, maxAmplitude: null, enabled: null, runs: [] };
+
             const waveLanes = [
                 { layer: 'engine', canvasId: 'wave-canvas-engine', colour: 'rgba(160,150,235,0.9)', buffer: null, peaks: null },
                 { layer: 'transmission', canvasId: 'wave-canvas-transmission', colour: 'rgba(255,193,7,0.9)', buffer: null, peaks: null },
@@ -5869,6 +5913,70 @@
                 for (const lane of waveLanes) drawLane(lane);
             }
 
+            // Runs of frames where DRX shifts the channel 0 chassis pulse, as
+            // [firstFrame, lastFrame] pairs. DRX fires when the unclamped amplitude passes
+            // maxAmplitude. drawWave runs on every playback frame, so the runs are cached
+            // until the data or the shown jerk tuning changes.
+            function drxRuns() {
+                const tune = shownTune();
+                const cache = drxRunsCache;
+                if (cache.data === allData && cache.compression === tune.jerkCompression &&
+                    cache.center === tune.jerkCenter && cache.maxAmplitude === pulseLimits.maxAmplitude &&
+                    cache.enabled === pulseLimits.drxEnabled) {
+                    return cache.runs;
+                }
+
+                // A frame has one point per surface label, so collect frames in a set.
+                const active = new Set();
+                if (pulseLimits.drxEnabled) {
+                    for (const point of allData) {
+                        if (unclampedAmplitudeOf(jerkOf(point)) > pulseLimits.maxAmplitude) active.add(point.frame);
+                    }
+                }
+
+                const frames = [...active].sort((a, b) => a - b);
+                const runs = [];
+                for (const frame of frames) {
+                    const last = runs[runs.length - 1];
+                    if (last && frame === last[1] + 1) last[1] = frame;
+                    else runs.push([frame, frame]);
+                }
+
+                drxRunsCache = {
+                    data: allData, compression: tune.jerkCompression, center: tune.jerkCenter,
+                    maxAmplitude: pulseLimits.maxAmplitude, enabled: pulseLimits.drxEnabled, runs,
+                };
+                return runs;
+            }
+
+            // Mark every DRX run on the top edge of the chassis lane. A frame spans from its
+            // own position to the next frame's, the same mapping as the hover marker.
+            function drawDrxMarkers(ctx, w) {
+                const runs = drxRuns();
+                let drawn = false;
+
+                if (runs.length) {
+                    const { startFrame, endFrame } = getFrameRange();
+                    const span = Math.max(1, endFrame - startFrame);
+
+                    for (const [first, last] of runs) {
+                        if (last < startFrame || first > endFrame) continue;
+                        const xL = laneXClamped((first - startFrame) / span, w);
+                        const xR = laneXClamped((last + 1 - startFrame) / span, w);
+                        if (xR <= xL) continue;
+
+                        ctx.fillStyle = DRX_MARKER_COLOUR;
+                        ctx.fillRect(xL, 0, Math.max(DRX_MIN_SPAN_PX, xR - xL), DRX_MARKER_HEIGHT);
+                        drawn = true;
+                    }
+                }
+
+                // Show the legend only while a marker is on screen. Every pan, zoom and
+                // range change redraws the lane, so the legend follows the view.
+                const legend = document.getElementById('drx-legend');
+                if (legend && legend.hidden === drawn) legend.hidden = !drawn;
+            }
+
             function drawWave() {
                 const canvas = document.getElementById('wave-canvas');
                 const dpr = window.devicePixelRatio || 1;
@@ -5892,6 +6000,9 @@
                 if (wavePeaks) strokeEnvelope(ctx, wavePeaks, w, mid, CHASSIS_LANE_COLOUR, true);
 
                 drawWindowBox(ctx, w, h);
+
+                // Drawn over the trace and the window box, so a full-scale peak cannot hide it.
+                drawDrxMarkers(ctx, w);
 
                 // Hover marker: a secondary box tracking the frame hovered on the speed graph
                 // / scatter plot, so the audio at the hovered point is located on the waveform.
@@ -6580,6 +6691,9 @@
                     applySurfaceDefaults(d.surfaceRumble);
                     applyTuneToControls();
                     if (d.pulseLimits) pulseLimits = { ...pulseLimits, ...d.pulseLimits };
+                    // drxEnabled decides whether DRX markers exist, and the redraw updates
+                    // the DRX legend to match.
+                    drawWave();
                     if (gainChart) { applyGainAxisBounds(); updateGainChart(); }
                     // The spectrum x-axis ceiling, and both spectrogram panels' frequency
                     // scale, are derived from pulseLimits too.

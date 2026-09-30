@@ -267,3 +267,10 @@
     background: color-mix(in srgb, var(--bs-content-bg), #fff 3%);
     border-radius: var(--bs-border-radius-sm, 4px);
 }
+/*
+ * DRX legend swatch in the chassis lane heading. It matches DRX_MARKER_COLOUR in
+ * tuneassist.html, which draws the DRX markers on the lane.
+ */
+.drx-legend-swatch {
+    background: rgb(255, 140, 0);
+}

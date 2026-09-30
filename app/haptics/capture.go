@@ -101,6 +101,10 @@ type PulseLimits struct {
 	MinFrequencyHz float64 `json:"minFrequencyHz"`
 	MaxFrequencyHz float64 `json:"maxFrequencyHz"`
 	MaxAmplitude   float64 `json:"maxAmplitude"`
+
+	// DRXEnabled reports whether DRX can shift a channel 0 pulse. It needs DRX on, the
+	// channel's EQ on, and some EQ attenuation for DRX to use.
+	DRXEnabled bool `json:"drxEnabled"`
 }
 
 // DefaultPulseLimits reads the pulse bounds from a fresh default config, so they stay
@@ -112,6 +116,9 @@ func DefaultPulseLimits() PulseLimits {
 		MinFrequencyHz: cfg.GetHapticsPulseMinHz(),
 		MaxFrequencyHz: cfg.GetHapticsPulseMaxHz(),
 		MaxAmplitude:   cfg.GetHapticsPulseMaxAmplitude(),
+		DRXEnabled: cfg.GetSynthDRXEnabled() &&
+			cfg.GetSynthChannelEqEnabled(0) &&
+			cfg.GetSynthChannelDRXHeadroom(0) < 0,
 	}
 }
 
