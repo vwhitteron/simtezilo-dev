@@ -375,7 +375,8 @@ func (b *AdaptiveBuffer) writeOverwriteMode(samples []float64) {
 // waveforms still in flight past the end of the write, and a hard clamp pins the
 // output to the rail (sustained DC that overheats the transducer). The soft knee
 // does neither — it is 1-Lipschitz so it never manufactures a step, and it never
-// flatlines at the rail.
+// flatlines at the rail. The buffer holds kneed samples, so softMix un-knees the
+// stored sample first and the knee applies once to the full sum.
 func (b *AdaptiveBuffer) writeMixMode(samples []float64) {
 	for index, inputSample := range samples {
 		mixedSample := b.mixSampleAtIndex(index, inputSample)
@@ -392,7 +393,7 @@ func (b *AdaptiveBuffer) mixSampleAtIndex(index int, inputSample float64) float6
 		mixPos := (b.readPos + index) % b.capacity
 		existingSample := b.buffer[mixPos]
 
-		return softCombine(inputSample, existingSample)
+		return softMix(inputSample, existingSample)
 	}
 
 	return inputSample
