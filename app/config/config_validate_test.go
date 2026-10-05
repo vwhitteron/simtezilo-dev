@@ -646,7 +646,7 @@ func TestUpgradeLegacyJSONPartialConfigKeepsLegacyDefaults(t *testing.T) {
 	assert.InDelta(t, 81.0, got.Haptics.JerkCompression, 1e-9, "jerkCurve 190 should invert to 81.0")
 	assert.InDelta(t, 69.0, got.Haptics.SnapCompression, 1e-9, "snapCurve 310 should invert to 69.0")
 	assert.InDelta(t, 37.6, got.Haptics.JerkCenter, 1e-9, "omitted jerkCenter should keep the shipped default")
-	assert.InDelta(t, 37.1, got.Haptics.SnapCenter, 1e-9, "omitted snapCenter should keep the shipped default")
+	assert.InDelta(t, 64.7, got.Haptics.SnapCenter, 1e-9, "omitted snapCenter should keep the shipped default")
 	assert.InDelta(t, 25.0, got.Haptics.DynamicTransmissionJerkCompression, 1e-9, "omitted dynamicTransmissionJerkCompression should keep the shipped default")
 }
 
@@ -695,7 +695,7 @@ func TestNewFromJSONMissingSchemaVersionIsMigrated(t *testing.T) {
 	assert.InDelta(t, 81.0, cfg.viper.Haptics.JerkCompression, 1e-9)
 	assert.InDelta(t, 69.0, cfg.viper.Haptics.SnapCompression, 1e-9)
 	assert.InDelta(t, 37.6, cfg.viper.Haptics.JerkCenter, 1e-9, "omitted jerkCenter should keep the shipped default")
-	assert.InDelta(t, 37.1, cfg.viper.Haptics.SnapCenter, 1e-9, "omitted snapCenter should keep the shipped default")
+	assert.InDelta(t, 64.7, cfg.viper.Haptics.SnapCenter, 1e-9, "omitted snapCenter should keep the shipped default")
 	assert.InDelta(t, 25.0, cfg.viper.Haptics.DynamicTransmissionJerkCompression, 1e-9, "omitted dynamicTransmissionJerkCompression should keep the shipped default")
 }
 

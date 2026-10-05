@@ -866,8 +866,8 @@ func testHapticsSnapCenterGetSet(t *testing.T) {
 	// Arrange
 	cfg := newTestConfig()
 
-	// Act & Assert - default is 37.1
-	assert.InDelta(t, 37.1, cfg.GetHapticsSnapCenter(), 0.001)
+	// Act & Assert - default is 64.7
+	assert.InDelta(t, 64.7, cfg.GetHapticsSnapCenter(), 0.001)
 
 	// Act - set new value
 	cfg.SetHapticsSnapCenter(80.0)
@@ -919,9 +919,8 @@ func testHapticsSnapCenterIncreaseDecrease(t *testing.T) {
 
 // testHapticsSnapScaleCenterAnchor checks the defining property of the center
 // parameterisation: at snap == (1000 - 10*snapCenter)*hapticsSnapCenterUnitMs4,
-// the pulse frequency sits at exactly the fixed hapticsSnapBiasPercent between
-// the minimum and maximum pulse frequency, and stays there as the curve is
-// reshaped around it.
+// the pulse frequency sits at exactly the fixed hapticsSnapBiasHz, and stays
+// there as the curve is reshaped around it.
 func testHapticsSnapScaleCenterAnchor(t *testing.T) {
 	t.Parallel()
 
@@ -937,8 +936,7 @@ func testHapticsSnapScaleCenterAnchor(t *testing.T) {
 		cfg.SetHapticsSnapCenter(83.4)
 		cfg.SetHapticsSnapCompression(compression)
 
-		wantHz := cfg.GetHapticsPulseMinHz() + (cfg.GetHapticsPulseMaxHz()-cfg.GetHapticsPulseMinHz())*0.5
-		assert.InDelta(t, wantHz, freqHzAtCenter(cfg), 0.0001, "compression %v should leave the center at 50%%", compression)
+		assert.InDelta(t, hapticsSnapBiasHz, freqHzAtCenter(cfg), 0.0001, "compression %v should leave the center at the bias frequency", compression)
 	}
 }
 
@@ -956,13 +954,18 @@ func testHapticsSnapMaxMigration(t *testing.T) {
 		"haptics": {"snapCompression": 190, "snapMax": 37}
 	}`), zerolog.Nop())
 
-	// Assert - snapMax 37 at curve 190 is setting-unit center 171 under the
-	// test config's pulse limits (16 and 60 Hz) and the fixed 50 percent bias,
-	// which inverts to setting 82.9.
-	assert.InDelta(t, 82.9, cfg.GetHapticsSnapCenter(), 0.001)
+	// Assert - snapMax 37 at curve 190 converts onto the fixed 30 Hz anchor
+	// under the test config's pulse limits (16 and 60 Hz).
+	assert.InDelta(t, 95.1, cfg.GetHapticsSnapCenter(), 0.001)
 
-	// Assert - the converted scale matches what snapMax 37 produced before.
-	assert.InDelta(t, (60-16)/math.Pow(37000, 0.19), cfg.GetHapticsSnapScale(), 0.0005)
+	// Assert - the pulse frequency matches the old snapMax mapping,
+	// hzRange*(snap/snapMax)^exponent, to within the setting rounding.
+	for _, snap := range []float64{1e4, 5e4, 2e5} {
+		want := (60 - 16) * math.Pow(snap/37000, 0.19)
+		got := cfg.GetHapticsSnapScale() * math.Pow(snap, cfg.GetHapticsSnapExponent())
+
+		assert.InEpsilon(t, want, got, 0.02, "pulse frequency at snap %v should match the snapMax mapping", snap)
+	}
 
 	// Assert - the deprecated field is cleared, so a reload is a no-op.
 	cfg.mu.RLock()
@@ -1026,7 +1029,7 @@ func testHapticsSnapScale(t *testing.T) {
 // five haptics settings in their old-integer direction is converted to the new
 // inverted setting on load, including clamping an out-of-range value and
 // leaving an explicitly-unset (zero) transmission value at zero so the
-// default fallback still applies, and that SchemaVersion is stamped to 1.1.0.
+// default fallback still applies, and that SchemaVersion is stamped to the current version.
 func testHapticsInvertedSettingsMigration(t *testing.T) {
 	t.Parallel()
 
@@ -1058,7 +1061,7 @@ func testHapticsInvertedSettingsMigration(t *testing.T) {
 	defer cfg.mu.RUnlock()
 
 	assert.Zero(t, cfg.viper.Haptics.DynamicTransmissionJerkCompression, "an unset transmission value should not be converted")
-	assert.Equal(t, "1.1.0", cfg.viper.SchemaVersion, "the schema version should be stamped once migrated")
+	assert.Equal(t, currentSchemaVersion, cfg.viper.SchemaVersion, "the schema version should be stamped once migrated")
 }
 
 // testHapticsInvertedSettingsMigrationSetTransmission checks that a non-zero
@@ -1101,7 +1104,7 @@ func testHapticsInvertedSettingsMigrationAlreadyCurrent(t *testing.T) {
 	cfg.mu.RLock()
 	defer cfg.mu.RUnlock()
 
-	assert.Equal(t, "1.1.0", cfg.viper.SchemaVersion)
+	assert.Equal(t, currentSchemaVersion, cfg.viper.SchemaVersion)
 }
 
 func TestHapticsCoreSection(t *testing.T) {
@@ -1297,10 +1300,10 @@ func testHapticsPulseFrequencyRange(t *testing.T) {
 	assert.InDelta(t, 60, cfg.GetHapticePulseFrequencyHzRange(), 0.001)
 }
 
-// testHapticsPulseFrequencyRangeReanchorsSnapScale checks that changing either
-// pulse frequency limit re-anchors the snap scale, so the snap center keeps
-// sitting at its configured percentage of the new span.
-func testHapticsPulseFrequencyRangeReanchorsSnapScale(t *testing.T) {
+// testHapticsPulseFrequencyRangeLeavesSnapScale checks that changing either
+// pulse frequency limit does not move the snap scale, so the snap center keeps
+// sitting at the fixed hapticsSnapBiasHz and the limits only clamp.
+func testHapticsPulseFrequencyRangeLeavesSnapScale(t *testing.T) {
 	t.Parallel()
 
 	freqHzAtCenter := func(cfg *Config) float64 {
@@ -1310,24 +1313,24 @@ func testHapticsPulseFrequencyRangeReanchorsSnapScale(t *testing.T) {
 		return cfg.GetHapticsSnapScale() * math.Pow(center, exponent)
 	}
 
-	wantHz := func(cfg *Config) float64 {
-		return cfg.GetHapticsPulseMinHz() + (cfg.GetHapticsPulseMaxHz()-cfg.GetHapticsPulseMinHz())*
-			hapticsSnapBiasPercent/100
-	}
+	// Arrange
+	cfg := newTestConfig()
+	wantScale := cfg.GetHapticsSnapScale()
 
 	// Act - widen the pulse frequency span.
-	cfg := newTestConfig()
 	cfg.SetHapticsPulseMinFrequencyHz(20)
 	cfg.SetHapticsPulseMaxFrequencyHz(80)
 
-	// Assert - the center still sits at its configured percentage of the span.
-	assert.InDelta(t, wantHz(cfg), freqHzAtCenter(cfg), 0.0001)
+	// Assert
+	assert.InDelta(t, wantScale, cfg.GetHapticsSnapScale(), 1e-9)
+	assert.InDelta(t, hapticsSnapBiasHz, freqHzAtCenter(cfg), 0.0001)
 
 	// Act - narrow the maximum only.
 	cfg.SetHapticsPulseMaxFrequencyHz(50)
 
 	// Assert
-	assert.InDelta(t, wantHz(cfg), freqHzAtCenter(cfg), 0.0001)
+	assert.InDelta(t, wantScale, cfg.GetHapticsSnapScale(), 1e-9)
+	assert.InDelta(t, hapticsSnapBiasHz, freqHzAtCenter(cfg), 0.0001)
 }
 
 func testHapticsPulseMaxAmplitudeGetSet(t *testing.T) {
@@ -1617,7 +1620,7 @@ func TestHapticsPulseAndEngineProfile(t *testing.T) {
 	t.Run("testHapticsPulseMaxHzIncreaseDecrease", testHapticsPulseMaxHzIncreaseDecrease)
 	t.Run("testHapticsPulseMaxHzClamping", testHapticsPulseMaxHzClamping)
 	t.Run("testHapticsPulseFrequencyRange", testHapticsPulseFrequencyRange)
-	t.Run("testHapticsPulseFrequencyRangeReanchorsSnapScale", testHapticsPulseFrequencyRangeReanchorsSnapScale)
+	t.Run("testHapticsPulseFrequencyRangeLeavesSnapScale", testHapticsPulseFrequencyRangeLeavesSnapScale)
 	t.Run("testHapticsPulseMaxAmplitudeGetSet", testHapticsPulseMaxAmplitudeGetSet)
 	t.Run("testHapticsPulseMaxAmplitudeIncreaseDecrease", testHapticsPulseMaxAmplitudeIncreaseDecrease)
 	t.Run("testHapticsPulseMaxAmplitudeClamping", testHapticsPulseMaxAmplitudeClamping)

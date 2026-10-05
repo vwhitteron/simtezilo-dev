@@ -52,6 +52,11 @@ type Tuning struct {
 	SnapCompression float64 // GetHapticsSnapCompression — frequency response curvature setting
 	SnapCenter      float64 // GetHapticsSnapCenter — reference snap setting
 
+	// PulseMinFrequencyHz and PulseMaxFrequencyHz are the chassis pulse frequency
+	// window. Zero keeps the stored value, as the curves do.
+	PulseMinFrequencyHz float64
+	PulseMaxFrequencyHz float64
+
 	// TransmissionJerkCompression is the driveline response curve setting. Zero
 	// keeps the shipped default, as the chassis curves do.
 	TransmissionJerkCompression float64
@@ -87,20 +92,21 @@ func DefaultTuning() Tuning {
 		SnapCompression: cfg.GetHapticsSnapCompression(),
 		SnapCenter:      cfg.GetHapticsSnapCenter(),
 
+		PulseMinFrequencyHz: cfg.GetHapticsPulseMinHz(),
+		PulseMaxFrequencyHz: cfg.GetHapticsPulseMaxHz(),
+
 		TransmissionJerkCompression: cfg.GetHapticsTransmissionJerkCompression(),
 		TransmissionStepBlend:       &stepBlend,
 		SurfaceRumble:               cfg.GetHapticsSurfaceRumbles(),
 	}
 }
 
-// PulseLimits are the shipped chassis pulse bounds: the frequency window the pulse
-// frequency is clamped into and the amplitude ceiling. The tune assistant needs them
-// to plot gain/frequency, which it derives from jerk/snap client-side rather than
-// re-rendering a capture on every slider move.
+// PulseLimits are the shipped chassis pulse bounds the tune assistant cannot tune:
+// the amplitude ceiling and the DRX state. The assistant needs them to plot gain,
+// which it derives from jerk client-side rather than re-rendering a capture on every
+// slider move. The frequency window is tunable, so it is part of Tuning instead.
 type PulseLimits struct {
-	MinFrequencyHz float64 `json:"minFrequencyHz"`
-	MaxFrequencyHz float64 `json:"maxFrequencyHz"`
-	MaxAmplitude   float64 `json:"maxAmplitude"`
+	MaxAmplitude float64 `json:"maxAmplitude"`
 
 	// DRXEnabled reports whether DRX can shift a channel 0 pulse. It needs DRX on, the
 	// channel's EQ on, and some EQ attenuation for DRX to use.
@@ -113,9 +119,7 @@ func DefaultPulseLimits() PulseLimits {
 	cfg := config.New(config.Options{Logger: zerolog.New(io.Discard)})
 
 	return PulseLimits{
-		MinFrequencyHz: cfg.GetHapticsPulseMinHz(),
-		MaxFrequencyHz: cfg.GetHapticsPulseMaxHz(),
-		MaxAmplitude:   cfg.GetHapticsPulseMaxAmplitude(),
+		MaxAmplitude: cfg.GetHapticsPulseMaxAmplitude(),
 		DRXEnabled: cfg.GetSynthDRXEnabled() &&
 			cfg.GetSynthChannelEqEnabled(0) &&
 			cfg.GetSynthChannelDRXHeadroom(0) < 0,
@@ -702,7 +706,20 @@ func applyTuning(cfg *config.Config, tuning Tuning) {
 		cfg.SetHapticsSnapCenter(tuning.SnapCenter)
 	}
 
+	applyPulseTuning(cfg, tuning)
 	applyLayerTuning(cfg, tuning)
+}
+
+// applyPulseTuning writes the pulse frequency window overrides. The window only
+// clamps the pulse frequency. The snap bias is a fixed frequency.
+func applyPulseTuning(cfg *config.Config, tuning Tuning) {
+	if tuning.PulseMinFrequencyHz > 0 {
+		cfg.SetHapticsPulseMinFrequencyHz(tuning.PulseMinFrequencyHz)
+	}
+
+	if tuning.PulseMaxFrequencyHz > 0 {
+		cfg.SetHapticsPulseMaxFrequencyHz(tuning.PulseMaxFrequencyHz)
+	}
 }
 
 // applyLayerTuning writes the transmission and road-texture overrides. It is split

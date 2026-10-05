@@ -52,7 +52,7 @@ func defaultConfig() *viperConfig {
 			JerkCompression:                    74.5,
 			JerkCenter:                         37.6,
 			SnapCompression:                    59.0,
-			SnapCenter:                         37.1,
+			SnapCenter:                         64.7,
 			PulseMaxAmplitude:                  1,
 			PulseMaxFrequencyHz:                60,
 			PulseMinFrequencyHz:                16,

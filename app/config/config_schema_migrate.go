@@ -45,7 +45,7 @@ const (
 	legacyDefaultJerkCompression                    = 255
 	legacyDefaultJerkCenter                         = 624
 	legacyDefaultSnapCompression                    = 410
-	legacyDefaultSnapCenter                         = 629
+	legacyDefaultSnapCenter                         = 353
 	legacyDefaultDynamicTransmissionJerkCompression = 750
 )
 
@@ -179,8 +179,7 @@ func (c *Config) migrateJerkMax() {
 // snapMax named the full-scale snap directly, so the center that reproduces the
 // same scale is:
 //
-//	biasHz = pulseMinHz + (pulseMaxHz - pulseMinHz) * hapticsSnapBiasPercent/100
-//	center = 1000 * snapMax * (biasHz / (pulseMaxHz - pulseMinHz))^(1/exponent)
+//	center = 1000 * snapMax * (hapticsSnapBiasHz / (pulseMaxHz - pulseMinHz))^(1/exponent)
 //
 // converted from m/s^4 into the setting's hapticsSnapCenterUnitMs4 units.
 //
@@ -196,9 +195,8 @@ func (c *Config) migrateSnapMax() {
 
 	exponent := c.viper.Haptics.SnapCompression / 1000.0
 	hzRange := c.viper.Haptics.PulseMaxFrequencyHz - c.viper.Haptics.PulseMinFrequencyHz
-	biasHz := c.snapBiasHz(hapticsSnapBiasPercent)
 
-	if exponent <= 0 || hzRange <= 0 || biasHz <= 0 {
+	if exponent <= 0 || hzRange <= 0 {
 		c.viper.Haptics.SnapMax = 0
 
 		return
@@ -206,7 +204,7 @@ func (c *Config) migrateSnapMax() {
 
 	// snapMax counted in thousands of m/s^4; the center is a plain m/s^4 figure.
 	snapMax := 1000 * float64(c.viper.Haptics.SnapMax)
-	centerMs4 := snapMax * math.Pow(biasHz/hzRange, 1/exponent)
+	centerMs4 := snapMax * math.Pow(hapticsSnapBiasHz/hzRange, 1/exponent)
 
 	c.viper.Haptics.SnapCenter = min(float64(legacyHapticsSnapCenterMax), max(float64(legacyHapticsSnapCenterMin), math.Round(centerMs4/hapticsSnapCenterUnitMs4)))
 	c.viper.Haptics.SnapMax = 0

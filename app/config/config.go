@@ -38,10 +38,9 @@ const hapticsJerkBiasDB = -3.0
 // the derived-center maths below, which is expressed in physical units.
 const hapticsSnapCenterUnitMs4 = 100
 
-// hapticsSnapBiasPercent is the fixed pulse frequency at the snap center, as a
-// percentage of the span between the minimum and maximum pulse frequency. It
-// is a fixed constant so the center alone anchors the curve.
-const hapticsSnapBiasPercent = 50.0
+// hapticsSnapBiasHz is the fixed pulse frequency at the snap center, in Hz.
+// The minimum and maximum pulse frequency only clamp the response.
+const hapticsSnapBiasHz = 30.0
 
 // Bounds and step for the five inverted haptics settings (jerkCompression,
 // jerkCenter, snapCompression, snapCenter, dynamicTransmissionJerkCompression).
@@ -1484,9 +1483,8 @@ func (c *Config) GetHapticsSnapScale() float64 {
 
 // GetHapticsSnapCenter returns the snap center setting value, in
 // [hapticsSettingMin, hapticsSettingMax]. This is the reference
-// event: the snap whose pulse frequency sits at hapticsSnapBiasPercent
-// between the minimum and maximum pulse frequency, regardless of how the
-// snap compression is shaped. The physical snap it names, in m/s^4, is
+// event: the snap whose pulse frequency sits at hapticsSnapBiasHz,
+// regardless of how the snap compression is shaped. The physical snap it names, in m/s^4, is
 // (1000 - 10*v) * hapticsSnapCenterUnitMs4.
 func (c *Config) GetHapticsSnapCenter() float64 {
 	return c.snapshot.Load().SnapCenter
@@ -4167,38 +4165,26 @@ func (c *Config) updateJerkScale() {
 	c.mu.Unlock()
 }
 
-// snapBiasHz converts a snap bias percentage into the pulse frequency it
-// names, given the current pulse frequency limits.
-//
-// Caller must hold c.mu.
-func (c *Config) snapBiasHz(biasPercent float64) float64 {
-	hzRange := c.viper.Haptics.PulseMaxFrequencyHz - c.viper.Haptics.PulseMinFrequencyHz
-
-	return c.viper.Haptics.PulseMinFrequencyHz + hzRange*biasPercent/100
-}
-
 // recomputeSnapScale recalculates the snap scale factor from the current snap
-// compression, center and pulse frequency limits.
+// compression and center.
 //
 // The response is frequency(snap) = scale * snap^exponent, in Hz per
-// snap^exponent, anchored so the snap center sits hapticsSnapBiasPercent of
-// the way from the minimum to the maximum pulse frequency:
+// snap^exponent, anchored so the snap center sits at the fixed
+// hapticsSnapBiasHz:
 //
 //	exponent = 1 - snapCompression/100
 //	center   = (1000 - 10*snapCenter) * hapticsSnapCenterUnitMs4
-//	biasHz   = pulseMinHz + (pulseMaxHz - pulseMinHz) * hapticsSnapBiasPercent/100
-//	scale    = biasHz / center^exponent
+//	scale    = hapticsSnapBiasHz / center^exponent
 //
-// The minimum and maximum pulse frequency then clamp the response. They no
-// longer define the mapping's endpoints.
+// The minimum and maximum pulse frequency only clamp the response. They do
+// not define the mapping's endpoints.
 //
 // Caller must hold c.mu.
 func (c *Config) recomputeSnapScale() {
 	exponent := 1 - c.viper.Haptics.SnapCompression/100
 	center := (1000 - 10*c.viper.Haptics.SnapCenter) * hapticsSnapCenterUnitMs4
-	biasHz := c.snapBiasHz(hapticsSnapBiasPercent)
 
-	c.viper.Haptics._snapScale = biasHz / math.Pow(center, exponent)
+	c.viper.Haptics._snapScale = hapticsSnapBiasHz / math.Pow(center, exponent)
 }
 
 // updateSnapScale recalculates the snap scale factor and rebuilds the

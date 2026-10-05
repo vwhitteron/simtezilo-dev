@@ -98,6 +98,9 @@ func buildTuningDefaults(log zerolog.Logger) []byte {
 		"snapCompression": defaults.SnapCompression,
 		"snapCenter":      defaults.SnapCenter,
 
+		"pulseMinFrequencyHz": defaults.PulseMinFrequencyHz,
+		"pulseMaxFrequencyHz": defaults.PulseMaxFrequencyHz,
+
 		"transmissionJerkCompression": defaults.TransmissionJerkCompression,
 		"transmissionStepBlend":       stepBlend,
 
@@ -117,6 +120,17 @@ func buildTuningDefaults(log zerolog.Logger) []byte {
 // errNoCacheDir reports a video source requested without a cache directory to
 // extract its telemetry track into.
 var errNoCacheDir = errors.New("no cache directory configured for video sources")
+
+// validPulseWindow reports whether a pulse frequency window supplied as a pair has
+// its minimum below its maximum. A half that is absent keeps its stored value, so a
+// lone half cannot be checked here and is accepted.
+func validPulseWindow(tuning haptics.Tuning) bool {
+	if tuning.PulseMinFrequencyHz <= 0 || tuning.PulseMaxFrequencyHz <= 0 {
+		return true
+	}
+
+	return tuning.PulseMinFrequencyHz < tuning.PulseMaxFrequencyHz
+}
 
 // validateReplayName rejects empty names, path traversal attempts, and names not
 // present in the freshly-scanned replay listing.
@@ -205,7 +219,9 @@ const allLapsKey = "all"
 // replay, lap, or tuning changes; the web UI caches the decoded buffer client-side.
 // Query: replay, lap, from, to (per-lap frame indices; to<0 => whole lap), and the
 // four tuning settings jerkCompression/jerkCenter/snapCompression/snapCenter, each a
-// decimal setting value (0 => shipped default). A lap of "all" spans the whole replay,
+// decimal setting value (0 => shipped default), and the pulse frequency window
+// pulseMinFrequencyHz/pulseMaxFrequencyHz in Hz (0 => stored value; a window whose
+// minimum is not below its maximum is rejected). A lap of "all" spans the whole replay,
 // and from/to then index every frame of the replay in order. The bias each pair is
 // anchored to is a fixed constant and is not a query parameter.
 //
@@ -246,12 +262,21 @@ func (s *Service) HandleAudio(response http.ResponseWriter, request *http.Reques
 		SnapCompression: parseFloatParam(request, "snapCompression", 0),
 		SnapCenter:      parseFloatParam(request, "snapCenter", 0),
 
+		PulseMinFrequencyHz: parseFloatParam(request, "pulseMinFrequencyHz", 0),
+		PulseMaxFrequencyHz: parseFloatParam(request, "pulseMaxFrequencyHz", 0),
+
 		TransmissionJerkCompression: parseFloatParam(request, "transmissionJerkCompression", 0),
 		TransmissionStepBlend:       optionalFloatParam(request, "transmissionStepBlend", 0, 1),
 
 		SurfaceRumble: surfaceRumbleParams(request),
 
 		EngineProfile: engineProfileParam(request),
+	}
+
+	if !validPulseWindow(tuning) {
+		http.Error(response, "pulseMinFrequencyHz must be below pulseMaxFrequencyHz", http.StatusBadRequest)
+
+		return
 	}
 
 	unfiltered := request.URL.Query().Get("raw") == "1"
