@@ -165,37 +165,26 @@ func (s *Service) HandleReplays(response http.ResponseWriter, _ *http.Request) {
 
 // HandleData returns the per-lap jerk/snap/map analysis for a replay.
 func (s *Service) HandleData(response http.ResponseWriter, request *http.Request) {
-	dir := s.replayDir()
-	replays := s.listReplays(dir)
-
-	filename := request.URL.Query().Get("replay")
-
-	status, valid := validateReplayName(filename, replays)
-	if !valid {
-		http.Error(response, "invalid or unknown replay filename", status)
-
-		return
-	}
+	name := requestSourceName(request)
 
 	release, err := s.acquire(request.Context())
 	if err != nil {
-		s.log.Debug().Err(err).Str("replay", filename).Msg("acquiring heavy job slot")
+		s.log.Debug().Err(err).Str("replay", name).Msg("acquiring heavy job slot")
 
 		return
 	}
 	defer release()
 
-	source, video, err := s.resolveSource(dir, filename)
+	source, video, status, err := s.resolveRequestSource(request)
 	if err != nil {
-		s.log.Error().Err(err).Str("replay", filename).Msg("resolving replay source")
-		http.Error(response, err.Error(), http.StatusInternalServerError)
+		s.respondSourceError(response, name, status, err)
 
 		return
 	}
 
 	replayData, err := buildLapResponse(request.Context(), source, video)
 	if err != nil {
-		s.log.Error().Err(err).Str("replay", filename).Msg("building replay analysis")
+		s.log.Error().Err(err).Str("replay", name).Msg("building replay analysis")
 		http.Error(response, err.Error(), http.StatusInternalServerError)
 
 		return
@@ -207,7 +196,7 @@ func (s *Service) HandleData(response http.ResponseWriter, request *http.Request
 
 	err = json.NewEncoder(response).Encode(replayData)
 	if err != nil {
-		s.log.Error().Err(err).Str("replay", filename).Msg("encoding replay analysis")
+		s.log.Error().Err(err).Str("replay", name).Msg("encoding replay analysis")
 	}
 }
 
@@ -217,7 +206,7 @@ const allLapsKey = "all"
 // HandleAudio renders chassis audio for a lap section as a WAV. The render is done
 // per request and only the requested section is held, so nothing accumulates across
 // replay, lap, or tuning changes; the web UI caches the decoded buffer client-side.
-// Query: replay, lap, from, to (per-lap frame indices; to<0 => whole lap), and the
+// Query: replay (or upload, the ID of a stored upload), lap, from, to (per-lap frame indices; to<0 => whole lap), and the
 // four tuning settings jerkCompression/jerkCenter/snapCompression/snapCenter, each a
 // decimal setting value (0 => shipped default), and the pulse frequency window
 // pulseMinFrequencyHz/pulseMaxFrequencyHz in Hz (0 => stored value; a window whose
@@ -237,17 +226,7 @@ const allLapsKey = "all"
 // engine. A layer of "all" renders the four layers in one pass over the replay and
 // returns one WAV with a channel per layer, in allLayerNames order.
 func (s *Service) HandleAudio(response http.ResponseWriter, request *http.Request) {
-	dir := s.replayDir()
-	replays := s.listReplays(dir)
-
-	filename := request.URL.Query().Get("replay")
-
-	status, valid := validateReplayName(filename, replays)
-	if !valid {
-		http.Error(response, "invalid or unknown replay filename", status)
-
-		return
-	}
+	name := requestSourceName(request)
 
 	window := haptics.CaptureWindow{
 		Lap:       clampToInt16(parseIntParam(request, "lap", 0)),
@@ -292,16 +271,15 @@ func (s *Service) HandleAudio(response http.ResponseWriter, request *http.Reques
 
 	release, err := s.acquire(request.Context())
 	if err != nil {
-		s.log.Debug().Err(err).Str("replay", filename).Msg("acquiring heavy job slot")
+		s.log.Debug().Err(err).Str("replay", name).Msg("acquiring heavy job slot")
 
 		return
 	}
 	defer release()
 
-	source, _, err := s.resolveSource(dir, filename)
+	source, _, status, err := s.resolveRequestSource(request)
 	if err != nil {
-		s.log.Error().Err(err).Str("replay", filename).Msg("resolving replay source")
-		http.Error(response, err.Error(), http.StatusInternalServerError)
+		s.respondSourceError(response, name, status, err)
 
 		return
 	}
@@ -321,7 +299,7 @@ func (s *Service) HandleAudio(response http.ResponseWriter, request *http.Reques
 			return
 		}
 
-		s.log.Error().Err(err).Str("replay", filename).Msg("rendering haptic audio")
+		s.log.Error().Err(err).Str("replay", name).Msg("rendering haptic audio")
 		http.Error(response, err.Error(), http.StatusInternalServerError)
 
 		return
@@ -337,6 +315,16 @@ func (s *Service) HandleAudio(response http.ResponseWriter, request *http.Reques
 func (s *Service) HandleTuningDefaults(response http.ResponseWriter, _ *http.Request) {
 	response.Header().Set("Content-Type", "application/json")
 	_, _ = response.Write(s.tuningDefaults)
+}
+
+// respondSourceError answers a request whose replay or upload could not be resolved.
+// Only a server fault is logged, as a bad or unknown source is the caller's mistake.
+func (s *Service) respondSourceError(response http.ResponseWriter, name string, status int, err error) {
+	if status == http.StatusInternalServerError {
+		s.log.Error().Err(err).Str("replay", name).Msg("resolving replay source")
+	}
+
+	http.Error(response, err.Error(), status)
 }
 
 // acquire reserves the single heavy-job slot, blocking until it is free or ctx is

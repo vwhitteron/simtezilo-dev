@@ -4,15 +4,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="/js/theme.js"></script>
     <link rel="stylesheet" href="/css/halfmoon.min.css">
     <link rel="stylesheet" href="/css/icons.css?v=3">
-    <link rel="stylesheet" href="/css/custom.css?v=2">
+    <link rel="stylesheet" href="/css/custom.css?v=3">
     <script>
         const currentPageId = 'tuneassist';
     </script>
     <script src="/js/icons.js"></script>
     <script src="/js/i18n.js"></script>
     <script src="/js/navigation.js"></script>
+    <script src="/js/mp4box.all.min.js"></script>
+    <script src="/js/video-telemetry.js"></script>
     <title>Simtezilo</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
     <style>
@@ -75,8 +78,12 @@
             color: var(--bs-body-color);
             border: 1px solid var(--bs-border-color);
             border-radius: 6px;
-            padding: 6px 14px;
-            font-size: 0.9em;
+            /* A fixed height, not padding: browsers size a select's padding differently,
+               and every control in the row shares --sz-row-control-height. */
+            height: var(--sz-row-control-height);
+            box-sizing: border-box;
+            padding: 0 12px;
+            font-size: 0.85em;
             cursor: pointer;
         }
 
@@ -88,8 +95,8 @@
         .toggle-switch {
             position: relative;
             display: inline-block;
-            width: 40px;
-            height: 22px;
+            width: 32px;
+            height: 18px;
             cursor: pointer;
         }
 
@@ -105,15 +112,15 @@
             inset: 0;
             background: var(--bs-content-bg);
             border: 1px solid var(--bs-border-color);
-            border-radius: 22px;
+            border-radius: 18px;
             transition: background 0.15s, border-color 0.15s;
         }
 
         .toggle-switch .slider::before {
             content: "";
             position: absolute;
-            width: 16px;
-            height: 16px;
+            width: 12px;
+            height: 12px;
             left: 2px;
             top: 2px;
             background: var(--bs-emphasis-color);
@@ -127,7 +134,7 @@
         }
 
         .toggle-switch input:checked+.slider::before {
-            transform: translateX(18px);
+            transform: translateX(14px);
         }
 
         .toggle-switch input:focus-visible+.slider {
@@ -536,52 +543,40 @@
         }
 
         .chassis-transport button {
-            background: var(--bs-sable-500);
+            background: var(--sz-control-bg);
             color: var(--bs-body-color);
-            border: 1px solid var(--bs-sable-500);
+            border: 1px solid var(--sz-control-bg);
             border-radius: 6px;
-            width: 34px;
-            height: 30px;
-            font-size: 0.9em;
+            width: 32px;
+            height: var(--sz-row-control-height);
+            font-size: 0.85em;
             cursor: pointer;
             transition: background 0.15s ease;
         }
 
         .chassis-transport button:hover {
-            background: var(--bs-sable-300);
+            background: var(--sz-control-hover-bg);
         }
 
         /* Narrower than the play button, so the transport reads as one primary control
            with the step sizes ranged out on each side. The width still holds the widest
            label, "-10". */
         .chassis-transport button.wave-step {
-            width: 30px;
+            width: 28px;
             font-size: 0.75em;
         }
 
         /* Tighter than .lap-row select, so the speed control does not tower over the
            play button beside it. */
         .chassis-transport select {
-            padding: 4px 8px;
+            padding: 0 8px;
             font-size: 0.8em;
-            height: 30px;
         }
 
         .wave-time {
             font-size: 0.75em;
             color: var(--bs-body-color);
             font-variant-numeric: tabular-nums;
-        }
-
-        .wave-status {
-            position: absolute;
-            right: 0;
-            top: 50%;
-            transform: translateY(-50%);
-            font-size: 0.72em;
-            /* The emphasis tint, not --bs-primary. The plain primary is a 50% blue
-               that reads badly as small text on the dark background. */
-            color: var(--bs-primary-text-emphasis);
         }
 
         /* The frame lives on the panel, and this padding insets the trace from that
@@ -929,7 +924,7 @@
             color: var(--bs-body-color);
             text-align: right;
             font-variant-numeric: tabular-nums;
-            background: var(--bs-sable-700);
+            background: var(--sz-field-bg);
             border: 1px solid var(--bs-border-color);
             border-radius: 3px;
             padding: 2px 4px;
@@ -948,7 +943,7 @@
         .tune-widget input.tune-value:focus {
             outline: none;
             border-color: var(--bs-primary);
-            background: var(--bs-sable-600);
+            background: var(--sz-field-focus-bg);
         }
 
         .tune-widget .tune-actions {
@@ -960,9 +955,9 @@
 
         .tune-widget .tune-actions button {
             flex: 1 1 0;
-            background: var(--bs-sable-500);
+            background: var(--sz-control-bg);
             color: var(--bs-body-color);
-            border: 1px solid var(--bs-sable-500);
+            border: 1px solid var(--sz-control-bg);
             border-radius: 6px;
             padding: 4px 0;
             font-size: 0.74em;
@@ -970,7 +965,7 @@
         }
 
         .tune-widget .tune-actions button:hover:not(:disabled) {
-            background: var(--bs-sable-300);
+            background: var(--sz-control-hover-bg);
         }
 
         /* Held while the commit POST is in flight, so a double click cannot queue
@@ -982,25 +977,30 @@
     </style>
 </head>
 
-<body data-bs-theme="dark">
+<body>
     <div id="navigation"></div>
 
     <div class="tuneassist-content">
         <div class="title-row">
-            <h1>Haptics Tuning Assistant</h1>
-            <span class="wave-status" id="wave-status"></span>
+            <h1 data-i18n="runmode.tuneassist.title">Haptics Tuning Assistant</h1>
         </div>
         <div class="lap-row">
             <div class="lap-group">
-                <label for="replay-select">Replay:</label>
+                <label for="replay-select" data-i18n="runmode.tuneassist.toolbar.replay">Replay:</label>
                 <select id="replay-select"></select>
+                <button type="button" id="local-file-load"
+                    title="Load local file…" data-i18n-title="runmode.tuneassist.toolbar.loadlocal"
+                    aria-label="Load local file…" data-i18n-aria-label="runmode.tuneassist.toolbar.loadlocal">
+                    <span class="icon" data-icon="file-arrow-up" aria-hidden="true"></span>
+                </button>
+                <input type="file" id="local-file-input" accept=".mp4,.gtr,.gtz" hidden>
             </div>
             <div class="lap-group">
-                <label for="lap-select">Lap:</label>
+                <label for="lap-select" data-i18n="runmode.tuneassist.toolbar.lap">Lap:</label>
                 <select id="lap-select"></select>
             </div>
             <div class="lap-group">
-                <label for="highlight-count">Window:</label>
+                <label for="highlight-count" data-i18n="runmode.tuneassist.toolbar.window">Window:</label>
                 <select id="highlight-count">
                     <option value="15">250 ms</option>
                     <option value="30">500 ms</option>
@@ -1010,25 +1010,32 @@
                 </select>
             </div>
             <div class="lap-group">
-                <label for="wave-zoom-toggle">Zoom:</label>
+                <label for="wave-zoom-toggle" data-i18n="runmode.tuneassist.toolbar.zoom">Zoom:</label>
                 <label class="toggle-switch"
-                    title="Show only the highlight window in every haptic waveform. They share one window, so the same moment stays at the same position in each lane.">
+                    title="Show only the highlight window in every haptic waveform. They share one window, so the same moment stays at the same position in each lane."
+                    data-i18n-title="runmode.tuneassist.toolbar.zoom.tooltip">
                     <input type="checkbox" id="wave-zoom-toggle">
                     <span class="slider"></span>
                 </label>
             </div>
             <div class="chassis-transport">
                 <button id="wave-step-back-10" type="button" class="wave-step"
-                    title="Step back ten telemetry frames (Shift + Left arrow)">-10</button>
+                    title="Step back ten telemetry frames (Shift + Left arrow)"
+                    data-i18n-title="runmode.tuneassist.toolbar.stepback10">-10</button>
                 <button id="wave-step-back" type="button" class="wave-step"
-                    title="Step back one telemetry frame (Left arrow)">-1</button>
-                <button id="wave-play" type="button" title="Play / pause (Space)">&#9654;</button>
+                    title="Step back one telemetry frame (Left arrow)"
+                    data-i18n-title="runmode.tuneassist.toolbar.stepback1">-1</button>
+                <button id="wave-play" type="button" title="Play / pause (Space)"
+                    data-i18n-title="runmode.tuneassist.toolbar.play">&#9654;</button>
                 <button id="wave-step-fwd" type="button" class="wave-step"
-                    title="Step forward one telemetry frame (Right arrow)">+1</button>
+                    title="Step forward one telemetry frame (Right arrow)"
+                    data-i18n-title="runmode.tuneassist.toolbar.stepfwd1">+1</button>
                 <button id="wave-step-fwd-10" type="button" class="wave-step"
-                    title="Step forward ten telemetry frames (Shift + Right arrow)">+10</button>
+                    title="Step forward ten telemetry frames (Shift + Right arrow)"
+                    data-i18n-title="runmode.tuneassist.toolbar.stepfwd10">+10</button>
                 <select id="wave-rate"
-                    title="Playback speed. The haptic audio is resampled, so a speed other than 1x also moves every frequency by the same factor. Judge frequency content at 1x. Keys: [ and ].">
+                    title="Playback speed. The haptic audio is resampled, so a speed other than 1x also moves every frequency by the same factor. Judge frequency content at 1x. Keys: [ and ]."
+                    data-i18n-title="runmode.tuneassist.toolbar.speed.tooltip">
                     <option value="0.25">0.25x</option>
                     <option value="0.5">0.5x</option>
                     <option value="1" selected>1x</option>
@@ -1037,7 +1044,15 @@
                 <span class="wave-time" id="wave-time">0.00 / 0.00 s</span>
             </div>
         </div>
-        <div class="content-row">
+        <div class="content-row chart-area">
+            <div class="chart-status" id="chart-status" hidden>
+                <div class="chart-status-pill" id="chart-status-pill" role="status" aria-live="polite">
+                    <span class="spinner-border" id="chart-status-spinner" role="status" aria-hidden="true"></span>
+                    <span id="chart-status-text"></span>
+                    <button type="button" class="btn-close chart-status-close" id="chart-status-close"
+                        aria-label="Dismiss" data-i18n-aria-label="runmode.tuneassist.status.dismiss" hidden></button>
+                </div>
+            </div>
             <div class="chart-container">
                 <div class="panel-row">
                     <div class="plot-panel">
@@ -1045,51 +1060,69 @@
                             <!-- The guidance opens on a click, not on hover, so it carries no
                                  title: a native tooltip would show the same text on hover and
                                  fight the panel. The popover below holds it instead. -->
-                            <span class="icon plot-hint" id="plot-hint" data-icon="circle-question" hidden
-                                role="button" tabindex="0" aria-expanded="false"
-                                aria-controls="plot-hint-popup"
-                                aria-label="Pointer gestures for this plot"></span>
+                            <span class="icon plot-hint" id="plot-hint" data-icon="circle-question" hidden role="button"
+                                tabindex="0" aria-expanded="false" aria-controls="plot-hint-popup"
+                                aria-label="Pointer gestures for this plot"
+                                data-i18n-aria-label="runmode.tuneassist.plot.hint.aria"></span>
                             <div class="plot-hint-popup" id="plot-hint-popup" role="tooltip" hidden>
-                                <div>Shift-drag: jerk / snap center values</div>
-                                <div>Alt-drag: jerk / snap compression</div>
-                                <div>Ctrl+Alt-drag: compression, one axis only</div>
-                                <div>Alt-scroll: jerk compression up/down, snap compression left/right</div>
-                                <div>Click the plot, then Shift+arrows: jerk / snap center values</div>
-                                <div>Click the plot, then Alt+arrows: jerk / snap compression</div>
+                                <div data-i18n="runmode.tuneassist.plot.hint.shiftdrag">Shift-drag: jerk / snap center
+                                    values</div>
+                                <div data-i18n="runmode.tuneassist.plot.hint.altdrag">Alt-drag: jerk / snap compression
+                                </div>
+                                <div data-i18n="runmode.tuneassist.plot.hint.ctrlaltdrag">Ctrl+Alt-drag: compression,
+                                    one axis only</div>
+                                <div data-i18n="runmode.tuneassist.plot.hint.altscroll">Alt-scroll: jerk compression
+                                    up/down, snap compression left/right</div>
+                                <div data-i18n="runmode.tuneassist.plot.hint.shiftarrows">Click the plot, then
+                                    Shift+arrows: jerk / snap center values</div>
+                                <div data-i18n="runmode.tuneassist.plot.hint.altarrows">Click the plot, then Alt+arrows:
+                                    jerk / snap compression</div>
                             </div>
                             <button type="button" class="chart-tab active" role="tab" data-plot="jerksnap"
-                                title="Chassis jerk against chassis snap">Motion</button>
+                                title="Chassis jerk against chassis snap"
+                                data-i18n-title="runmode.tuneassist.plot.tab.motion.tooltip"
+                                data-i18n="runmode.tuneassist.plot.tab.motion">Motion</button>
                             <button type="button" class="chart-tab" role="tab" data-plot="gainfreq"
-                                title="Pulse gain against pulse frequency. Shift-drag to move the jerk and snap center values, Alt-drag or Alt-scroll to adjust jerk and snap compression">Haptics</button>
+                                title="Pulse gain against pulse frequency. Shift-drag to move the jerk and snap center values, Alt-drag or Alt-scroll to adjust jerk and snap compression"
+                                data-i18n-title="runmode.tuneassist.plot.tab.haptics.tooltip"
+                                data-i18n="runmode.tuneassist.plot.tab.haptics">Haptics</button>
                             <button type="button" class="chart-tab" role="tab" data-plot="distribution"
-                                title="Share of time at each pulse gain and at each pulse frequency">Distribution</button>
+                                title="Share of time at each pulse gain and at each pulse frequency"
+                                data-i18n-title="runmode.tuneassist.plot.tab.distribution.tooltip"
+                                data-i18n="runmode.tuneassist.plot.tab.distribution">Distribution</button>
                             <div class="plot-toggles">
                                 <label class="wave-monitor"
-                                    title="Highlight the points inside the window period on the scatter plots">
+                                    title="Highlight the points inside the window period on the scatter plots"
+                                    data-i18n-title="runmode.tuneassist.plot.highlight.tooltip">
                                     <input type="checkbox" id="scatter-highlight-toggle" checked>
-                                    <span class="icon wave-monitor-on" data-icon="eye"
-                                        aria-label="Window highlight on"></span>
+                                    <span class="icon wave-monitor-on" data-icon="eye" aria-label="Window highlight on"
+                                        data-i18n-aria-label="runmode.tuneassist.plot.highlight.on"></span>
                                     <span class="icon wave-monitor-off" data-icon="eye-slash"
-                                        aria-label="Window highlight off"></span>
+                                        aria-label="Window highlight off"
+                                        data-i18n-aria-label="runmode.tuneassist.plot.highlight.off"></span>
                                 </label>
                                 <label class="wave-monitor" hidden
-                                    title="Compare: green shows the updated values, red shows the committed values">
+                                    title="Compare: green shows the updated values, red shows the committed values"
+                                    data-i18n-title="runmode.tuneassist.plot.compare.tooltip">
                                     <input type="checkbox" id="gain-compare-toggle" checked>
                                     <span class="icon" data-icon="code-compare"
-                                        aria-label="Compare updated and committed values"></span>
+                                        aria-label="Compare updated and committed values"
+                                        data-i18n-aria-label="runmode.tuneassist.plot.compare.aria"></span>
                                 </label>
                             </div>
                         </div>
                         <div class="plot-container">
                             <canvas id="chart"></canvas>
                             <canvas id="gain-chart" tabindex="0" hidden
-                                aria-label="Haptics plot: pulse gain against pulse frequency. Shift+arrows move the centers, Alt+arrows adjust the compression"></canvas>
+                                aria-label="Haptics plot: pulse gain against pulse frequency. Shift+arrows move the centers, Alt+arrows adjust the compression"
+                                data-i18n-aria-label="runmode.tuneassist.plot.haptics.aria"></canvas>
                             <canvas id="distribution-chart" hidden
-                                aria-label="Distribution plot: share of time at each pulse gain and at each pulse frequency"></canvas>
+                                aria-label="Distribution plot: share of time at each pulse gain and at each pulse frequency"
+                                data-i18n-aria-label="runmode.tuneassist.plot.distribution.aria"></canvas>
                         </div>
                     </div>
                     <div class="video-panel" id="video-panel" hidden>
-                        <h3>Replay Video</h3>
+                        <h3 data-i18n="runmode.tuneassist.video.title">Replay Video</h3>
                         <div class="video-container">
                             <video id="replay-video" muted playsinline preload="auto" controls></video>
                         </div>
@@ -1097,22 +1130,26 @@
                 </div>
                 <div class="panel-row">
                     <div class="speed-panel">
-                        <h3>Speed</h3>
+                        <h3 data-i18n="runmode.tuneassist.speed.title">Speed</h3>
                         <div class="speed-container">
                             <canvas id="speed-chart"></canvas>
                         </div>
                     </div>
                     <div class="chassis-panel">
-                        <h3>Chassis Haptic Waveform
+                        <h3><span data-i18n="runmode.tuneassist.wave.chassis.title">Chassis Haptic Waveform</span>
                             <span class="wave-legend" id="drx-legend" hidden
-                                title="DRX shifts the Front pulse to a resonant frequency when the pulse passes the amplitude ceiling">
-                                <span class="wave-legend-swatch drx-legend-swatch"></span>DRX active
+                                title="DRX shifts the Front pulse to a resonant frequency when the pulse passes the amplitude ceiling"
+                                data-i18n-title="runmode.tuneassist.wave.drx.tooltip">
+                                <span class="wave-legend-swatch drx-legend-swatch"></span><span
+                                    data-i18n="runmode.tuneassist.wave.drx">DRX active</span>
                             </span>
-                            <label class="wave-monitor" title="Monitor: play this layer through the audio output">
+                            <label class="wave-monitor" title="Monitor: play this layer through the audio output"
+                                data-i18n-title="runmode.tuneassist.wave.monitor.tooltip">
                                 <input type="checkbox" class="tune-out-enable" data-out-layer="chassis" checked>
-                                <span class="icon wave-monitor-on" data-icon="volume" aria-label="Monitor on"></span>
-                                <span class="icon wave-monitor-off" data-icon="volume-xmark"
-                                    aria-label="Monitor off"></span>
+                                <span class="icon wave-monitor-on" data-icon="volume" aria-label="Monitor on"
+                                    data-i18n-aria-label="runmode.tuneassist.wave.monitor.on"></span>
+                                <span class="icon wave-monitor-off" data-icon="volume-xmark" aria-label="Monitor off"
+                                    data-i18n-aria-label="runmode.tuneassist.wave.monitor.off"></span>
                             </label>
                         </h3>
                         <div class="wave-container">
@@ -1128,12 +1165,14 @@
                      audible and scrubbable. -->
                 <div class="panel-row">
                     <div class="wave-lane-panel">
-                        <h3>Engine Haptic Waveform
-                            <label class="wave-monitor" title="Monitor: play this layer through the audio output">
+                        <h3><span data-i18n="runmode.tuneassist.wave.engine.title">Engine Haptic Waveform</span>
+                            <label class="wave-monitor" title="Monitor: play this layer through the audio output"
+                                data-i18n-title="runmode.tuneassist.wave.monitor.tooltip">
                                 <input type="checkbox" class="tune-out-enable" data-out-layer="engine">
-                                <span class="icon wave-monitor-on" data-icon="volume" aria-label="Monitor on"></span>
-                                <span class="icon wave-monitor-off" data-icon="volume-xmark"
-                                    aria-label="Monitor off"></span>
+                                <span class="icon wave-monitor-on" data-icon="volume" aria-label="Monitor on"
+                                    data-i18n-aria-label="runmode.tuneassist.wave.monitor.on"></span>
+                                <span class="icon wave-monitor-off" data-icon="volume-xmark" aria-label="Monitor off"
+                                    data-i18n-aria-label="runmode.tuneassist.wave.monitor.off"></span>
                             </label>
                         </h3>
                         <div class="wave-container">
@@ -1141,12 +1180,15 @@
                         </div>
                     </div>
                     <div class="wave-lane-panel">
-                        <h3>Transmission Haptic Waveform
-                            <label class="wave-monitor" title="Monitor: play this layer through the audio output">
+                        <h3><span data-i18n="runmode.tuneassist.wave.transmission.title">Transmission Haptic
+                                Waveform</span>
+                            <label class="wave-monitor" title="Monitor: play this layer through the audio output"
+                                data-i18n-title="runmode.tuneassist.wave.monitor.tooltip">
                                 <input type="checkbox" class="tune-out-enable" data-out-layer="transmission">
-                                <span class="icon wave-monitor-on" data-icon="volume" aria-label="Monitor on"></span>
-                                <span class="icon wave-monitor-off" data-icon="volume-xmark"
-                                    aria-label="Monitor off"></span>
+                                <span class="icon wave-monitor-on" data-icon="volume" aria-label="Monitor on"
+                                    data-i18n-aria-label="runmode.tuneassist.wave.monitor.on"></span>
+                                <span class="icon wave-monitor-off" data-icon="volume-xmark" aria-label="Monitor off"
+                                    data-i18n-aria-label="runmode.tuneassist.wave.monitor.off"></span>
                             </label>
                         </h3>
                         <div class="wave-container">
@@ -1156,12 +1198,14 @@
                 </div>
                 <div class="panel-row panel-row-keep-columns">
                     <div class="wave-lane-panel">
-                        <h3>Road Noise Haptic Waveform
-                            <label class="wave-monitor" title="Monitor: play this layer through the audio output">
+                        <h3><span data-i18n="runmode.tuneassist.wave.texture.title">Road Noise Haptic Waveform</span>
+                            <label class="wave-monitor" title="Monitor: play this layer through the audio output"
+                                data-i18n-title="runmode.tuneassist.wave.monitor.tooltip">
                                 <input type="checkbox" class="tune-out-enable" data-out-layer="texture">
-                                <span class="icon wave-monitor-on" data-icon="volume" aria-label="Monitor on"></span>
-                                <span class="icon wave-monitor-off" data-icon="volume-xmark"
-                                    aria-label="Monitor off"></span>
+                                <span class="icon wave-monitor-on" data-icon="volume" aria-label="Monitor on"
+                                    data-i18n-aria-label="runmode.tuneassist.wave.monitor.on"></span>
+                                <span class="icon wave-monitor-off" data-icon="volume-xmark" aria-label="Monitor off"
+                                    data-i18n-aria-label="runmode.tuneassist.wave.monitor.off"></span>
                             </label>
                         </h3>
                         <div class="wave-container">
@@ -1176,28 +1220,28 @@
                     <canvas id="map-canvas" width="220" height="220"></canvas>
                 </div>
                 <div class="info-widget" id="selection-widget">
-                    <h3>Info</h3>
+                    <h3 data-i18n="runmode.tuneassist.map.info">Info</h3>
                     <dl>
-                        <dt>POI</dt>
+                        <dt data-i18n="runmode.tuneassist.map.poi">POI</dt>
                         <dd id="sel-poi">—</dd>
-                        <dt>Zoom</dt>
+                        <dt data-i18n="runmode.tuneassist.map.zoom">Zoom</dt>
                         <dd id="sel-zoom">—</dd>
-                        <dt>Points</dt>
+                        <dt data-i18n="runmode.tuneassist.map.points">Points</dt>
                         <dd id="sel-points">—</dd>
                     </dl>
                 </div>
                 <div class="info-widget" id="vehicle-widget">
-                    <h3>Vehicle</h3>
+                    <h3 data-i18n="runmode.tuneassist.vehicle.title">Vehicle</h3>
                     <dl>
-                        <dt>Make</dt>
+                        <dt data-i18n="runmode.tuneassist.vehicle.make">Make</dt>
                         <dd id="v-make">—</dd>
-                        <dt>Model</dt>
+                        <dt data-i18n="runmode.tuneassist.vehicle.model">Model</dt>
                         <dd id="v-model">—</dd>
-                        <dt>Year</dt>
+                        <dt data-i18n="runmode.tuneassist.vehicle.year">Year</dt>
                         <dd id="v-year">—</dd>
-                        <dt>Category</dt>
+                        <dt data-i18n="runmode.tuneassist.vehicle.category">Category</dt>
                         <dd id="v-category">—</dd>
-                        <dt>Drivetrain</dt>
+                        <dt data-i18n="runmode.tuneassist.vehicle.drivetrain">Drivetrain</dt>
                         <dd id="v-drivetrain">—</dd>
                     </dl>
                 </div>
@@ -1206,11 +1250,14 @@
                          rather than the settings page's Bootstrap nav-tabs: this page loads
                          no Bootstrap tab JS. -->
                     <div class="chart-tabs" role="tablist">
-                        <button type="button" class="chart-tab active" role="tab"
-                            data-tune-tab="chassis">Chassis</button>
-                        <button type="button" class="chart-tab" role="tab" data-tune-tab="engine">Engine</button>
-                        <button type="button" class="chart-tab" role="tab" data-tune-tab="transmission">Trans</button>
-                        <button type="button" class="chart-tab" role="tab" data-tune-tab="texture">Road</button>
+                        <button type="button" class="chart-tab active" role="tab" data-tune-tab="chassis"
+                            data-i18n="runmode.tuneassist.tab.chassis">Chassis</button>
+                        <button type="button" class="chart-tab" role="tab" data-tune-tab="engine"
+                            data-i18n="runmode.tuneassist.tab.engine">Engine</button>
+                        <button type="button" class="chart-tab" role="tab" data-tune-tab="transmission"
+                            data-i18n="runmode.tuneassist.tab.transmission">Trans</button>
+                        <button type="button" class="chart-tab" role="tab" data-tune-tab="texture"
+                            data-i18n="runmode.tuneassist.tab.road">Road</button>
                     </div>
 
                     <!-- Every setting is a slider and a number box over one value. Tab visits the
@@ -1220,66 +1267,79 @@
                          that reason, and the slider carries the same text as an aria-label. -->
                     <div class="tune-pane" data-tune-pane="chassis">
                         <div class="tune-row tune-gain-row">
-                            <label for="gainout-chassis">Gain</label>
+                            <label for="gainout-chassis" data-i18n="runmode.tuneassist.tune.gain">Gain</label>
                             <input type="range" id="gain-chassis" min="-60" max="0" step="0.5" tabindex="-1"
-                                aria-label="Gain">
+                                aria-label="Gain" data-i18n-aria-label="runmode.tuneassist.tune.gain">
                             <input type="number" class="tune-value" id="gainout-chassis" min="-60" max="0" step="0.5"
                                 inputmode="decimal">
                         </div>
                         <div class="tune-row">
-                            <label for="out-jerkCompression">Jerk compression</label>
+                            <label for="out-jerkCompression" data-i18n="runmode.tuneassist.chassis.jerkcompression">Jerk
+                                compression</label>
                             <input type="range" id="tune-jerkCompression" min="0.5" max="99.5" step="0.5" tabindex="-1"
-                                aria-label="Jerk compression">
+                                aria-label="Jerk compression"
+                                data-i18n-aria-label="runmode.tuneassist.chassis.jerkcompression">
                             <input type="number" class="tune-value" id="out-jerkCompression" min="0.5" max="99.5"
                                 step="0.1" inputmode="decimal">
                         </div>
                         <div class="tune-row">
-                            <label for="out-jerkCenter">Jerk center</label>
+                            <label for="out-jerkCenter" data-i18n="runmode.tuneassist.chassis.jerkcenter">Jerk
+                                center</label>
                             <input type="range" id="tune-jerkCenter" min="0.5" max="99.5" step="0.5" tabindex="-1"
-                                aria-label="Jerk center">
+                                aria-label="Jerk center" data-i18n-aria-label="runmode.tuneassist.chassis.jerkcenter">
                             <input type="number" class="tune-value" id="out-jerkCenter" min="0.5" max="99.5" step="0.1"
                                 inputmode="decimal">
                         </div>
                         <div class="tune-row">
-                            <label for="out-snapCompression">Snap compression</label>
+                            <label for="out-snapCompression" data-i18n="runmode.tuneassist.chassis.snapcompression">Snap
+                                compression</label>
                             <input type="range" id="tune-snapCompression" min="0.5" max="99.5" step="0.5" tabindex="-1"
-                                aria-label="Snap compression">
+                                aria-label="Snap compression"
+                                data-i18n-aria-label="runmode.tuneassist.chassis.snapcompression">
                             <input type="number" class="tune-value" id="out-snapCompression" min="0.5" max="99.5"
                                 step="0.1" inputmode="decimal">
                         </div>
                         <div class="tune-row">
-                            <label for="out-snapCenter">Snap center</label>
+                            <label for="out-snapCenter" data-i18n="runmode.tuneassist.chassis.snapcenter">Snap
+                                center</label>
                             <input type="range" id="tune-snapCenter" min="0.5" max="99.5" step="0.5" tabindex="-1"
-                                aria-label="Snap center">
-                            <input type="number" class="tune-value" id="out-snapCenter" min="0.5" max="99.5"
-                                step="0.1" inputmode="decimal">
+                                aria-label="Snap center" data-i18n-aria-label="runmode.tuneassist.chassis.snapcenter">
+                            <input type="number" class="tune-value" id="out-snapCenter" min="0.5" max="99.5" step="0.1"
+                                inputmode="decimal">
                         </div>
                         <div class="tune-row">
-                            <label for="out-pulseMinFrequencyHz">Min Hz</label>
+                            <label for="out-pulseMinFrequencyHz" data-i18n="runmode.tuneassist.chassis.minhz">Min
+                                Hz</label>
                             <input type="range" id="tune-pulseMinFrequencyHz" min="5" max="150" step="1" tabindex="-1"
-                                aria-label="Minimum pulse frequency (Hz)">
+                                aria-label="Minimum pulse frequency (Hz)"
+                                data-i18n-aria-label="runmode.tuneassist.chassis.minhz.aria">
                             <input type="number" class="tune-value" id="out-pulseMinFrequencyHz" min="5" max="150"
                                 step="1" inputmode="numeric">
                         </div>
                         <div class="tune-row">
-                            <label for="out-pulseMaxFrequencyHz">Max Hz</label>
+                            <label for="out-pulseMaxFrequencyHz" data-i18n="runmode.tuneassist.chassis.maxhz">Max
+                                Hz</label>
                             <input type="range" id="tune-pulseMaxFrequencyHz" min="20" max="160" step="1" tabindex="-1"
-                                aria-label="Maximum pulse frequency (Hz)">
+                                aria-label="Maximum pulse frequency (Hz)"
+                                data-i18n-aria-label="runmode.tuneassist.chassis.maxhz.aria">
                             <input type="number" class="tune-value" id="out-pulseMaxFrequencyHz" min="20" max="160"
                                 step="1" inputmode="numeric">
                         </div>
                         <div class="tune-actions">
-                            <button type="button" class="tune-reset" data-tune-tab="chassis">Reset</button>
+                            <button type="button" class="tune-reset" data-tune-tab="chassis"
+                                data-i18n="runmode.tuneassist.tune.reset">Reset</button>
                             <button type="button" class="tune-commit" data-tune-tab="chassis"
-                                title="Write these values to the haptics section of the config file">Commit</button>
+                                title="Write these values to the haptics section of the config file"
+                                data-i18n-title="runmode.tuneassist.tune.commit.tooltip.haptics"
+                                data-i18n="runmode.tuneassist.tune.commit">Commit</button>
                         </div>
                     </div>
 
                     <div class="tune-pane" data-tune-pane="engine" hidden>
                         <div class="tune-row tune-gain-row">
-                            <label for="gainout-engine">Gain</label>
+                            <label for="gainout-engine" data-i18n="runmode.tuneassist.tune.gain">Gain</label>
                             <input type="range" id="gain-engine" min="-60" max="0" step="0.5" tabindex="-1"
-                                aria-label="Gain">
+                                aria-label="Gain" data-i18n-aria-label="runmode.tuneassist.tune.gain">
                             <input type="number" class="tune-value" id="gainout-engine" min="-60" max="0" step="0.5"
                                 inputmode="decimal">
                         </div>
@@ -1287,45 +1347,52 @@
                              resolved to, which is the entry a commit writes back to. -->
                         <div class="tune-profile" id="tune-engine-profile">Profile: —</div>
                         <div class="tune-row">
-                            <label for="out-primaryBalance">Primary bal</label>
+                            <label for="out-primaryBalance" data-i18n="runmode.tuneassist.engine.primarybal">Primary
+                                bal</label>
                             <input type="range" id="tune-primaryBalance" min="0" max="1" step="0.01" tabindex="-1"
-                                aria-label="Primary bal">
+                                aria-label="Primary bal" data-i18n-aria-label="runmode.tuneassist.engine.primarybal">
                             <input type="number" class="tune-value" id="out-primaryBalance" min="0" max="1" step="0.01"
                                 inputmode="decimal">
                         </div>
                         <div class="tune-row">
-                            <label for="out-secondaryBalance">Secondary bal</label>
+                            <label for="out-secondaryBalance"
+                                data-i18n="runmode.tuneassist.engine.secondarybal">Secondary bal</label>
                             <input type="range" id="tune-secondaryBalance" min="0" max="1" step="0.01" tabindex="-1"
-                                aria-label="Secondary bal">
+                                aria-label="Secondary bal"
+                                data-i18n-aria-label="runmode.tuneassist.engine.secondarybal">
                             <input type="number" class="tune-value" id="out-secondaryBalance" min="0" max="1"
                                 step="0.01" inputmode="decimal">
                         </div>
                         <div class="tune-row">
-                            <label for="out-engineGain">Gain</label>
+                            <label for="out-engineGain" data-i18n="runmode.tuneassist.tune.gain">Gain</label>
                             <input type="range" id="tune-engineGain" min="-24" max="0" step="0.25" tabindex="-1"
-                                aria-label="Gain">
+                                aria-label="Gain" data-i18n-aria-label="runmode.tuneassist.tune.gain">
                             <input type="number" class="tune-value" id="out-engineGain" min="-24" max="0" step="0.25"
                                 inputmode="decimal">
                         </div>
                         <div class="tune-row">
-                            <label for="out-pulseScale">Pulse scale</label>
+                            <label for="out-pulseScale" data-i18n="runmode.tuneassist.engine.pulsescale">Pulse
+                                scale</label>
                             <input type="range" id="tune-pulseScale" min="0" max="1" step="0.01" tabindex="-1"
-                                aria-label="Pulse scale">
+                                aria-label="Pulse scale" data-i18n-aria-label="runmode.tuneassist.engine.pulsescale">
                             <input type="number" class="tune-value" id="out-pulseScale" min="0" max="1" step="0.01"
                                 inputmode="decimal">
                         </div>
                         <div class="tune-actions">
-                            <button type="button" class="tune-reset" data-tune-tab="engine">Reset</button>
+                            <button type="button" class="tune-reset" data-tune-tab="engine"
+                                data-i18n="runmode.tuneassist.tune.reset">Reset</button>
                             <button type="button" class="tune-commit" data-tune-tab="engine"
-                                title="Write these values to this vehicle's engine profile in the config file">Commit</button>
+                                title="Write these values to this vehicle's engine profile in the config file"
+                                data-i18n-title="runmode.tuneassist.engine.commit.tooltip"
+                                data-i18n="runmode.tuneassist.tune.commit">Commit</button>
                         </div>
                     </div>
 
                     <div class="tune-pane" data-tune-pane="transmission" hidden>
                         <div class="tune-row tune-gain-row">
-                            <label for="gainout-transmission">Gain</label>
+                            <label for="gainout-transmission" data-i18n="runmode.tuneassist.tune.gain">Gain</label>
                             <input type="range" id="gain-transmission" min="-60" max="0" step="0.5" tabindex="-1"
-                                aria-label="Gain">
+                                aria-label="Gain" data-i18n-aria-label="runmode.tuneassist.tune.gain">
                             <input type="number" class="tune-value" id="gainout-transmission" min="-60" max="0"
                                 step="0.5" inputmode="decimal">
                         </div>
@@ -1334,31 +1401,38 @@
                              switch stays on the settings page: apart from the layer gain
                              above, this widget shapes the signal, as the Chassis tab does. -->
                         <div class="tune-row">
-                            <label for="out-transmissionJerkCompression">Shift curve</label>
+                            <label for="out-transmissionJerkCompression"
+                                data-i18n="runmode.tuneassist.transmission.shiftcurve">Shift curve</label>
                             <input type="range" id="tune-transmissionJerkCompression" min="0.5" max="99.5" step="0.5"
-                                tabindex="-1" aria-label="Shift curve">
+                                tabindex="-1" aria-label="Shift curve"
+                                data-i18n-aria-label="runmode.tuneassist.transmission.shiftcurve">
                             <input type="number" class="tune-value" id="out-transmissionJerkCompression" min="0.5"
                                 max="99.5" step="0.1" inputmode="decimal">
                         </div>
                         <div class="tune-row">
-                            <label for="out-transmissionStepBlend">Shift blend</label>
-                            <input type="range" id="tune-transmissionStepBlend" min="0" max="1" step="0.01" tabindex="-1"
-                                aria-label="Shift blend">
+                            <label for="out-transmissionStepBlend"
+                                data-i18n="runmode.tuneassist.transmission.shiftblend">Shift blend</label>
+                            <input type="range" id="tune-transmissionStepBlend" min="0" max="1" step="0.01"
+                                tabindex="-1" aria-label="Shift blend"
+                                data-i18n-aria-label="runmode.tuneassist.transmission.shiftblend">
                             <input type="number" class="tune-value" id="out-transmissionStepBlend" min="0" max="1"
                                 step="0.01" inputmode="decimal">
                         </div>
                         <div class="tune-actions">
-                            <button type="button" class="tune-reset" data-tune-tab="transmission">Reset</button>
+                            <button type="button" class="tune-reset" data-tune-tab="transmission"
+                                data-i18n="runmode.tuneassist.tune.reset">Reset</button>
                             <button type="button" class="tune-commit" data-tune-tab="transmission"
-                                title="Write these values to the haptics section of the config file">Commit</button>
+                                title="Write these values to the haptics section of the config file"
+                                data-i18n-title="runmode.tuneassist.tune.commit.tooltip.haptics"
+                                data-i18n="runmode.tuneassist.tune.commit">Commit</button>
                         </div>
                     </div>
 
                     <div class="tune-pane" data-tune-pane="texture" hidden>
                         <div class="tune-row tune-gain-row">
-                            <label for="gainout-texture">Gain</label>
+                            <label for="gainout-texture" data-i18n="runmode.tuneassist.tune.gain">Gain</label>
                             <input type="range" id="gain-texture" min="-60" max="0" step="0.5" tabindex="-1"
-                                aria-label="Gain">
+                                aria-label="Gain" data-i18n-aria-label="runmode.tuneassist.tune.gain">
                             <input type="number" class="tune-value" id="gainout-texture" min="-60" max="0" step="0.5"
                                 inputmode="decimal">
                         </div>
@@ -1369,44 +1443,50 @@
                              would also stand taller than the panel. -->
                         <div class="surface-grid">
                             <span></span>
-                            <span class="surface-head">Level</span>
-                            <span class="surface-head">Coarse</span>
-                            <label for="surf-tarmac-level">Tarmac</label>
+                            <span class="surface-head" data-i18n="runmode.tuneassist.road.level">Level</span>
+                            <span class="surface-head" data-i18n="runmode.tuneassist.road.coarse">Coarse</span>
+                            <label for="surf-tarmac-level"
+                                data-i18n="runmode.tuneassist.road.surface.tarmac">Tarmac</label>
                             <input type="number" class="tune-value" id="surf-tarmac-level" data-surface="tarmac"
                                 data-surface-field="level" min="0" max="2" step="0.05" inputmode="decimal">
                             <input type="number" class="tune-value" id="surf-tarmac-coarseness" data-surface="tarmac"
                                 data-surface-field="coarseness" min="0.1" max="2" step="0.05" inputmode="decimal">
-                            <label for="surf-concrete-level">Concrete</label>
+                            <label for="surf-concrete-level"
+                                data-i18n="runmode.tuneassist.road.surface.concrete">Concrete</label>
                             <input type="number" class="tune-value" id="surf-concrete-level" data-surface="concrete"
                                 data-surface-field="level" min="0" max="2" step="0.05" inputmode="decimal">
                             <input type="number" class="tune-value" id="surf-concrete-coarseness"
                                 data-surface="concrete" data-surface-field="coarseness" min="0.1" max="2" step="0.05"
                                 inputmode="decimal">
-                            <label for="surf-grass-level">Grass</label>
+                            <label for="surf-grass-level"
+                                data-i18n="runmode.tuneassist.road.surface.grass">Grass</label>
                             <input type="number" class="tune-value" id="surf-grass-level" data-surface="grass"
                                 data-surface-field="level" min="0" max="2" step="0.05" inputmode="decimal">
                             <input type="number" class="tune-value" id="surf-grass-coarseness" data-surface="grass"
                                 data-surface-field="coarseness" min="0.1" max="2" step="0.05" inputmode="decimal">
-                            <label for="surf-dirt-level">Dirt</label>
+                            <label for="surf-dirt-level" data-i18n="runmode.tuneassist.road.surface.dirt">Dirt</label>
                             <input type="number" class="tune-value" id="surf-dirt-level" data-surface="dirt"
                                 data-surface-field="level" min="0" max="2" step="0.05" inputmode="decimal">
                             <input type="number" class="tune-value" id="surf-dirt-coarseness" data-surface="dirt"
                                 data-surface-field="coarseness" min="0.1" max="2" step="0.05" inputmode="decimal">
-                            <label for="surf-sand-level">Sand</label>
+                            <label for="surf-sand-level" data-i18n="runmode.tuneassist.road.surface.sand">Sand</label>
                             <input type="number" class="tune-value" id="surf-sand-level" data-surface="sand"
                                 data-surface-field="level" min="0" max="2" step="0.05" inputmode="decimal">
                             <input type="number" class="tune-value" id="surf-sand-coarseness" data-surface="sand"
                                 data-surface-field="coarseness" min="0.1" max="2" step="0.05" inputmode="decimal">
-                            <label for="surf-snow-level">Snow</label>
+                            <label for="surf-snow-level" data-i18n="runmode.tuneassist.road.surface.snow">Snow</label>
                             <input type="number" class="tune-value" id="surf-snow-level" data-surface="snow"
                                 data-surface-field="level" min="0" max="2" step="0.05" inputmode="decimal">
                             <input type="number" class="tune-value" id="surf-snow-coarseness" data-surface="snow"
                                 data-surface-field="coarseness" min="0.1" max="2" step="0.05" inputmode="decimal">
                         </div>
                         <div class="tune-actions">
-                            <button type="button" class="tune-reset" data-tune-tab="texture">Reset</button>
+                            <button type="button" class="tune-reset" data-tune-tab="texture"
+                                data-i18n="runmode.tuneassist.tune.reset">Reset</button>
                             <button type="button" class="tune-commit" data-tune-tab="texture"
-                                title="Write the gain and the surface values to the config file">Commit</button>
+                                title="Write the gain and the surface values to the config file"
+                                data-i18n-title="runmode.tuneassist.road.commit.tooltip"
+                                data-i18n="runmode.tuneassist.tune.commit">Commit</button>
                         </div>
                     </div>
                 </div>
@@ -1414,6 +1494,110 @@
         </div>
 
         <script>
+            // Light-theme colours for the Chart.js axes and legends, which the
+            // charts configure with fixed dark-theme greys. A global plugin remaps
+            // them in place on every update, so every chart (including ones created
+            // later) follows the theme; themechange just triggers an update.
+            (function () {
+                if (typeof Chart === 'undefined') return;
+                const LIGHT_TEXT = { '#ccc': '#212529', '#aaa': '#495057', '#888': '#6c757d' };
+                const LIGHT_GRID = 'rgba(0,0,0,0.1)';
+                const DARK_GRID = 'rgba(255,255,255,0.06)';
+                const isLight = () => document.documentElement.getAttribute('data-bs-theme') === 'light';
+                const mapText = (c) => (isLight() ? (LIGHT_TEXT[c] || c) : c);
+                const mapGrid = (c) => (c === DARK_GRID && isLight() ? LIGHT_GRID : c);
+
+                Chart.register({
+                    id: 'simtezilo-theme',
+                    beforeUpdate(chart) {
+                        // Keep the dark-theme originals so switching back is lossless.
+                        const orig = chart.$themeOrig || (chart.$themeOrig = new Map());
+                        const remap = (obj, key, fn) => {
+                            if (!obj || typeof obj[key] !== 'string') return;
+                            const seen = orig.get(obj) || {};
+                            if (!(key in seen)) seen[key] = obj[key];
+                            orig.set(obj, seen);
+                            obj[key] = fn(seen[key]);
+                        };
+                        const opts = chart.options || {};
+                        Object.values(opts.scales || {}).forEach((sc) => {
+                            remap(sc.ticks, 'color', mapText);
+                            remap(sc.title, 'color', mapText);
+                            remap(sc.grid, 'color', mapGrid);
+                        });
+                        const legend = opts.plugins && opts.plugins.legend;
+                        if (legend) remap(legend.labels, 'color', mapText);
+                    }
+                });
+
+                document.addEventListener('themechange', () => {
+                    Object.values(Chart.instances).forEach((chart) => chart.update('none'));
+                });
+            })();
+            // Text built by this script. The markup's own text comes from data-i18n
+            // attributes (i18n.js); this covers strings assembled here. The English
+            // fallback keeps the page readable before the translations arrive. Templates
+            // use {name} placeholders, filled from vars.
+            function tr(key, fallback, vars) {
+                let text = (window.t && window.t(key)) || fallback;
+                for (const name of Object.keys(vars || {})) {
+                    text = text.replace('{' + name + '}', () => String(vars[name]));
+                }
+                return text;
+            }
+
+            // The same lookup, deferred until the text is drawn. The status overlay holds
+            // one of these, so a language change re-words the message already on screen.
+            function trLater(key, fallback, vars) {
+                return () => tr(key, fallback, vars);
+            }
+
+            // An Error whose message also carries its translation, for errorText().
+            function failure(key, fallback, vars) {
+                const err = new Error(tr(key, fallback, vars));
+                err.localized = trLater(key, fallback, vars);
+                return err;
+            }
+
+            function errorText(err) {
+                return err.localized || err.message;
+            }
+
+            // Chart text: axis titles and dataset labels, as [key, English fallback].
+            const CHART_TEXT = {
+                jerk: ['runmode.tuneassist.chart.jerk', 'Jerk (m/s³)'],
+                snap: ['runmode.tuneassist.chart.snap', 'Snap (m/s⁴)'],
+                pulseFreq: ['runmode.tuneassist.chart.pulsefreq', 'Pulse frequency (Hz)'],
+                pulseGain: ['runmode.tuneassist.chart.pulsegain', 'Pulse gain (dB)'],
+                time: ['runmode.tuneassist.chart.time', 'Time (%)'],
+                distance: ['runmode.tuneassist.chart.distance', 'Distance'],
+                speed: ['runmode.tuneassist.chart.speed', 'Speed (km/h)'],
+                frequency: ['runmode.tuneassist.chart.frequency', 'Frequency'],
+                gain: ['runmode.tuneassist.tune.gain', 'Gain'],
+            };
+
+            function chartText(name) {
+                const [key, fallback] = CHART_TEXT[name];
+                return tr(key, fallback);
+            }
+
+            // Legend names for the surfaces. The datasets keep the raw surface key as their
+            // label, because the key is what the colours and the hidden-surface set look up.
+            const SURFACE_TEXT = {
+                tarmac: ['runmode.tuneassist.road.surface.tarmac', 'Tarmac'],
+                concrete: ['runmode.tuneassist.road.surface.concrete', 'Concrete'],
+                grass: ['runmode.tuneassist.road.surface.grass', 'Grass'],
+                dirt: ['runmode.tuneassist.road.surface.dirt', 'Dirt'],
+                sand: ['runmode.tuneassist.road.surface.sand', 'Sand'],
+                snow: ['runmode.tuneassist.road.surface.snow', 'Snow'],
+                unknown: ['runmode.tuneassist.road.surface.unknown', 'Unknown'],
+            };
+
+            function surfaceText(surface) {
+                const entry = SURFACE_TEXT[surface];
+                return entry ? tr(entry[0], entry[1]) : surface;
+            }
+
             const surfaceColors = {
                 tarmac: { bg: 'rgba(54, 162, 235, 0.22)', border: 'rgba(54, 162, 235, 1)' },
                 concrete: { bg: 'rgba(153, 102, 255, 0.22)', border: 'rgba(153, 102, 255, 1)' },
@@ -1492,7 +1676,10 @@
 
             // Scale chase animation state
             const SCALE_LERP = 0.12;          // per-frame lerp factor (0–1, higher = faster)
-            const SCALE_SNAP_THRESHOLD = 0.5; // close-enough threshold to stop lerping
+            const SCALE_SNAP_DECADES = 0.002; // close-enough threshold to stop lerping, in log10 units
+            // The jerk/snap axes are logarithmic. The auto-fit shows at most this many decades
+            // below the largest value, so near-zero frames cannot stretch the axis.
+            const MOTION_LOG_DECADES = 5;
             let scaleChaseRaf = null;
             let displayedScales = null;       // { xMin, xMax, yMin, yMax } currently shown
             let targetScales = null;          // { xMin, xMax, yMin, yMax } we're chasing toward
@@ -1528,6 +1715,7 @@
                 return Chart.defaults.plugins.legend.labels.generateLabels(chart).map(item => {
                     const c = surfaceColors[item.text];
                     if (c) item.fillStyle = item.strokeStyle = c.border;
+                    item.text = surfaceText(item.text);
                     return item;
                 });
             }
@@ -1560,7 +1748,8 @@
             // (or a shared link) restores the same replay/lap/highlight/viewport/POI.
             function updateUrl() {
                 const params = new URLSearchParams();
-                const replay = document.getElementById('replay-select').value;
+                // A local source has no stable name: its upload id expires, so it stays out of the URL.
+                const replay = localSource ? '' : currentHostReplay;
                 const lap = document.getElementById('lap-select').value;
                 const highlight = document.getElementById('highlight-count').value;
                 if (replay) params.set('replay', replay);
@@ -1691,12 +1880,8 @@
                 const replayFiles = replaysJson.replays || [];
 
                 const replaySelectEl = document.getElementById('replay-select');
-                replayFiles.forEach(name => {
-                    const opt = document.createElement('option');
-                    opt.value = name;
-                    opt.textContent = name;
-                    replaySelectEl.appendChild(opt);
-                });
+                hostReplays = replayFiles;
+                renderReplayOptions();
 
                 // Restore the highlight from the URL before the first chart draw.
                 const highlightEl = document.getElementById('highlight-count');
@@ -1751,7 +1936,31 @@
                     };
                 }
 
-                replaySelectEl.addEventListener('change', () => loadReplay(replaySelectEl.value));
+                const localFileEl = document.getElementById('local-file-input');
+                // A button, not a select option: browsers block the picker after a native select menu.
+                document.getElementById('local-file-load').addEventListener('click', () => localFileEl.click());
+
+                replaySelectEl.addEventListener('change', async () => {
+                    const value = replaySelectEl.value;
+                    try {
+                        const entry = localEntries.find(e => e.value === value);
+                        if (entry) {
+                            await activateLocal(entry);
+                        } else {
+                            await loadReplay(value);
+                        }
+                    } catch (err) {
+                        showSourceError(errorText(err));
+                    } finally {
+                        renderReplayOptions();
+                    }
+                });
+
+                localFileEl.addEventListener('change', async () => {
+                    const file = localFileEl.files[0];
+                    localFileEl.value = '';   // lets the same file be picked again
+                    if (file) await switchToLocal(file);
+                });
 
                 document.getElementById('lap-select').addEventListener('change', (e) => selectLap(e.target.value));
 
@@ -1807,11 +2016,230 @@
                 }
             }
 
-            async function loadReplay(filename) {
-                const replaySelectEl = document.getElementById('replay-select');
-                replaySelectEl.disabled = true;
+            // ---------------------------------------------------------------------
+            // Local source. The user's own MP4, .gtr or .gtz. Only telemetry goes to the
+            // host, as gzip; an MP4 stays on the client and plays from an object URL.
+            // The page keeps the File so an expired upload can be sent again.
+            // ---------------------------------------------------------------------
+            let localSource = null;     // { file, kind, id, video } or null for a host replay
+            let videoObjectUrl = null;
+            let hostReplays = [];       // the file names the host listed
+            let localEntries = [];      // the local records loaded this page session, each with its select value
+            let localCounter = 0;
+            let lastHostReplay = '';    // the last host replay on screen
+            // The host replay being loaded or shown. The data fetches read this, not the
+            // select: a language change rebuilds the select in the middle of a load.
+            let currentHostReplay = '';
 
-                const resp = await fetch('/api/tuneassist/data?replay=' + encodeURIComponent(filename));
+            // The select value of the source on screen, or '' before the first load.
+            function shownValue() {
+                return localSource ? localSource.value : lastHostReplay;
+            }
+
+            // Builds the replay select from the host list and the local entries, and selects
+            // the source on screen. Also re-words its text when the language changes.
+            function renderReplayOptions() {
+                const selectEl = document.getElementById('replay-select');
+                const addOption = (parent, value, text, className) => {
+                    const opt = document.createElement('option');
+                    opt.value = value;
+                    opt.textContent = text;
+                    if (className) opt.className = className;
+                    parent.appendChild(opt);
+                    return opt;
+                };
+
+                selectEl.innerHTML = '';
+                let placeholder = null;
+                if (hostReplays.length > 0) {
+                    const group = document.createElement('optgroup');
+                    group.label = tr('runmode.tuneassist.toolbar.group.device', 'On device');
+                    hostReplays.forEach(name => addOption(group, name, name));
+                    selectEl.appendChild(group);
+                } else {
+                    placeholder = addOption(selectEl, '', tr('runmode.tuneassist.toolbar.nodevice', 'No replays on Simtezilo'));
+                    placeholder.disabled = true;
+                }
+
+                if (localEntries.length > 0) {
+                    // A disabled option stands in for a rule: <hr> in a select is not reliable.
+                    addOption(selectEl, '', '──────────').disabled = true;
+
+                    const group = document.createElement('optgroup');
+                    group.label = tr('runmode.tuneassist.toolbar.group.local', 'Local files');
+                    localEntries.forEach(entry => addOption(group, entry.value,
+                        tr('runmode.tuneassist.toolbar.localentry', '{name} (local)', { name: entry.file.name }), 'replay-local-entry'));
+                    selectEl.appendChild(group);
+                }
+
+                const shown = shownValue();
+                const match = Array.from(selectEl.options).find(o => !o.disabled && o.value === shown);
+                if (match) {
+                    match.selected = true;
+                } else if (placeholder) {
+                    placeholder.selected = true;
+                }
+            }
+
+            // Disables the select while a load is in progress. Calls nest (switchToLocal
+            // wraps loadSource), so only the outermost release enables.
+            let sourceBusyDepth = 0;
+            function setSourceBusy(busy) {
+                sourceBusyDepth = Math.max(0, sourceBusyDepth + (busy ? 1 : -1));
+                busy = sourceBusyDepth > 0;
+                if (!busy) clearStatus('source');
+                document.getElementById('replay-select').disabled = busy;
+                document.getElementById('local-file-load').disabled = busy;
+            }
+
+            // The query fields that name the replay for /data and /audio.
+            function sourceParams() {
+                return localSource ? { upload: localSource.id } : { replay: currentHostReplay };
+            }
+
+            // Identifies the source in cache keys, so a buffer for one is never used for another.
+            function sourceKey() {
+                return localSource ? 'upload:' + localSource.id : currentHostReplay;
+            }
+
+            function revokeVideoObjectUrl() {
+                if (videoObjectUrl) URL.revokeObjectURL(videoObjectUrl);
+                videoObjectUrl = null;
+            }
+
+            function gzipBody(stream) {
+                return new Response(stream.pipeThrough(new CompressionStream('gzip'))).blob();
+            }
+
+            function localKind(file) {
+                const m = /\.(mp4|gtr|gtz)$/i.exec(file.name);
+                return m ? m[1].toLowerCase() : null;
+            }
+
+            // Builds the gzip telemetry body for a file. video is null unless the file is an MP4.
+            async function buildUploadBody(file, kind) {
+                if (kind === 'gtz') return { body: file, video: null };   // already gzip
+                if (kind === 'gtr') return { body: await gzipBody(file.stream()), video: null };
+
+                showBusy(trLater('runmode.tuneassist.status.readingvideo', 'reading video index…'), { block: true });
+                const extracted = await extractVideoTelemetry(file);
+                return { body: await gzipBody(new Blob([extracted.packets]).stream()), video: extracted.video };
+            }
+
+            // Uploads the telemetry for file and returns { id, video }.
+            async function uploadLocal(file, kind) {
+                const { body, video } = await buildUploadBody(file, kind);
+
+                showBusy(trLater('runmode.tuneassist.status.uploading', 'uploading…'), { block: true });
+                const resp = await fetch('/api/tuneassist/upload', { method: 'POST', body });
+                if (!resp.ok) {
+                    const detail = (await resp.text()).trim();
+                    throw failure('runmode.tuneassist.status.uploadfailed', 'upload failed: {detail}', { detail: detail || resp.status });
+                }
+
+                const json = await resp.json();
+                return { id: json.id, video };
+            }
+
+            // Fetches a /data or /audio URL for the current source. A 404 on a local source
+            // means the host dropped the upload: send it again from the held File, retry once.
+            async function fetchSource(path, extra) {
+                const query = () => new URLSearchParams({ ...extra, ...sourceParams() }).toString();
+                const resp = await fetch(path + '?' + query());
+                if (resp.status !== 404 || !localSource) return resp;
+
+                const source = localSource;
+                const uploaded = await uploadLocal(source.file, source.kind);
+                if (localSource !== source) return resp;   // the user switched source meanwhile
+
+                source.id = uploaded.id;
+                return fetch(path + '?' + query());
+            }
+
+            // Makes record the local source. On failure the source that was on screen stays
+            // (loadSource changes nothing on screen before it succeeds).
+            async function activateLocal(record) {
+                const previous = localSource;
+                localSource = record;
+                try {
+                    await loadSource();
+                } catch (err) {
+                    localSource = previous;
+                    throw err;
+                }
+            }
+
+            // Loads a file the user picked. A file already in the list (same name, size and
+            // modified time) reuses its entry; a new one is uploaded and added once it loads.
+            async function switchToLocal(file) {
+                const kind = localKind(file);
+                if (!kind) {
+                    showSourceError(trLater('runmode.tuneassist.status.unsupported', 'unsupported file type: use .mp4, .gtr or .gtz'));
+                    return;
+                }
+
+                setSourceBusy(true);
+                showBusy(trLater('runmode.tuneassist.status.readingfile', 'reading file…'), { block: true });
+                try {
+                    let record = localEntries.find(e => e.file.name === file.name
+                        && e.file.size === file.size && e.file.lastModified === file.lastModified);
+                    const isNew = !record;
+                    if (isNew) {
+                        const uploaded = await uploadLocal(file, kind);
+                        record = { file, kind, id: uploaded.id, video: uploaded.video, value: 'local:' + (++localCounter) };
+                    }
+                    await activateLocal(record);
+                    if (isNew) localEntries.push(record);
+                } catch (err) {
+                    showSourceError(errorText(err));
+                } finally {
+                    renderReplayOptions();
+                    setSourceBusy(false);
+                }
+            }
+
+            // Picking a host replay drops the local source (its entry stays in the list).
+            async function loadReplay(filename) {
+                const previous = localSource;
+                const previousHost = currentHostReplay;
+                localSource = null;
+                currentHostReplay = filename;
+                document.getElementById('replay-select').value = filename;
+
+                try {
+                    await loadSource();
+                } catch (err) {
+                    localSource = previous;
+                    currentHostReplay = previousHost;
+                    throw err;
+                }
+                lastHostReplay = filename;
+            }
+
+            async function loadSource() {
+                setSourceBusy(true);
+                showBusy(trLater('runmode.tuneassist.status.loading', 'loading replay…'), { block: true });
+                try {
+                    await renderSource();
+                } finally {
+                    setSourceBusy(false);
+                }
+            }
+
+            // The map heading: the circuit's name, or a generic title when the replay has none.
+            let mapTitleName = '';
+            function renderMapTitle() {
+                document.getElementById('map-title').textContent =
+                    mapTitleName || tr('runmode.tuneassist.map.title', 'Circuit Map');
+            }
+
+            function allLapsText() {
+                return tr('runmode.tuneassist.toolbar.lap.all', 'All');
+            }
+
+            async function renderSource() {
+                const resp = await fetchSource('/api/tuneassist/data', {});
+                if (!resp.ok) throw failure('runmode.tuneassist.status.loadfailed', 'load failed: {detail}', { detail: resp.status });
                 const json = await resp.json();
 
                 lapData = json.data;
@@ -1819,7 +2247,8 @@
 
                 // Populate metadata panels
                 const meta = json.metadata || {};
-                document.getElementById('map-title').textContent = meta.circuitVariation || meta.circuitName || 'Circuit Map';
+                mapTitleName = meta.circuitVariation || meta.circuitName || '';
+                renderMapTitle();
                 document.getElementById('v-make').textContent = meta.vehicleMake || '—';
                 document.getElementById('v-model').textContent = meta.vehicleModel || '—';
                 document.getElementById('v-year').textContent = meta.vehicleYear || '—';
@@ -1827,14 +2256,15 @@
                 document.getElementById('v-drivetrain').textContent = meta.vehicleDrivetrain || '—';
                 applyEngineProfileMeta(meta.engineProfile);
 
-                setupVideo(meta, filename);
+                if (localSource) meta.video = localSource.video;   // the host knows nothing of a local video
+                setupVideo(meta, currentHostReplay);
 
                 buildAllLaps(json.laps);
 
                 // Rebuild lap dropdown. "All" leads the list and is the default.
                 const lapSelectEl = document.getElementById('lap-select');
                 lapSelectEl.innerHTML = '';
-                const lapOptions = [[ALL_LAPS_KEY, 'All'], ...json.laps.map(lap => [String(lap), String(lap)])];
+                const lapOptions = [[ALL_LAPS_KEY, allLapsText()], ...json.laps.map(lap => [String(lap), String(lap)])];
                 lapOptions.forEach(([value, label]) => {
                     const opt = document.createElement('option');
                     opt.value = value;
@@ -1857,8 +2287,6 @@
                     pendingView = null;
                     if (!urlLapMatched) pendingFrame = null;
                 }
-
-                replaySelectEl.disabled = false;
             }
 
             // Merge every lap into one whole-replay lap under ALL_LAPS_KEY. Coordinates are
@@ -1921,6 +2349,7 @@
                 poiDist = 0;
                 updateSelectionInfo();
 
+                matchLegendToHeadings();
                 if (!chart) {
                     createChart();
                 }
@@ -2639,6 +3068,19 @@
                 };
             }
 
+            // Size the Chart.js legends like the panel headings. The headings are in em, so
+            // read the rendered size. The Chart.js default of 12 px is larger than the headings.
+            // Make the colour boxes square at the text height. The default box is 40 px wide.
+            // A point-style legend sizes its markers from the font, so the circles keep their size.
+            function matchLegendToHeadings() {
+                const heading = document.querySelector('.chart-tab');
+                const px = heading ? parseFloat(getComputedStyle(heading).fontSize) : NaN;
+                const size = Number.isFinite(px) ? Math.floor(px) : 11;
+                Chart.defaults.plugins.legend.labels.font = { size };
+                Chart.defaults.plugins.legend.labels.boxWidth = size;
+                Chart.defaults.plugins.legend.labels.boxHeight = size;
+            }
+
             function createChart() {
                 const ctx = document.getElementById('chart').getContext('2d');
                 chart = new Chart(ctx, {
@@ -2646,7 +3088,7 @@
                     data: { datasets: [] },
                     plugins: [
                         frameIndexCache,
-                        crosshairReadout(d => `Jerk: ${d.x.toFixed(1)} m/s³   Snap: ${d.y.toFixed(1)} m/s⁴`)
+                        crosshairReadout(d => tr('runmode.tuneassist.chart.readout.jerksnap', 'Jerk: {jerk} m/s³   Snap: {snap} m/s⁴', { jerk: d.x.toFixed(1), snap: d.y.toFixed(1) }))
                     ],
                     options: {
                         animation: false,
@@ -2698,29 +3140,38 @@
                         },
                         scales: {
                             x: {
-                                title: { display: true, text: 'Jerk (m/s³)', color: '#aaa', font: { size: 14 } },
-                                ticks: {
-                                    color: '#888',
-                                    callback: function (value) {
-                                        return value.toLocaleString();
-                                    }
-                                },
+                                type: 'logarithmic',
+                                title: { display: true, text: chartText('jerk'), color: '#aaa', font: { size: 14 } },
+                                ticks: { color: '#888', autoSkip: false, callback: logTickLabel },
                                 grid: { color: 'rgba(255,255,255,0.06)' }
                             },
                             y: {
-                                title: { display: true, text: 'Snap (m/s⁴)', color: '#aaa', font: { size: 14 } },
-                                ticks: {
-                                    color: '#888',
-                                    callback: function (value) {
-                                        return value.toLocaleString();
-                                    }
-                                },
+                                type: 'logarithmic',
+                                title: { display: true, text: chartText('snap'), color: '#aaa', font: { size: 14 } },
+                                ticks: { color: '#888', autoSkip: false, callback: logTickLabel },
                                 grid: { color: 'rgba(255,255,255,0.06)' }
                             }
                         }
                     }
                 });
                 installScatterNav(chart, () => targetScales, applyScatterViewport);
+            }
+
+            // Label only the 1, 2 and 5 ticks of each decade on a log axis. The other ticks
+            // keep their grid line. The axis ends are not on the 1-2-5 grid during a chase,
+            // so they stay blank and the labels do not jitter.
+            function logTickLabel(value) {
+                if (!(value > 0)) return '';
+                const mantissa = value / Math.pow(10, Math.floor(Math.log10(value) + 1e-9));
+                const m = Math.round(mantissa * 1000) / 1000;
+                if (m !== 1 && m !== 2 && m !== 5) return '';
+                return value.toLocaleString();
+            }
+
+            // A log axis cannot show zero. Jerk and snap read zero for the first few frames
+            // of a replay, so those points are left off the motion plot.
+            function onMotionPlot(pt) {
+                return pt.x > 0 && pt.y > 0;
             }
 
             // Half-amplitude reference on the gain axis. -6 dB is half the 0 dB clamp, so
@@ -2752,7 +3203,7 @@
                     ctx.textAlign = 'right';
                     ctx.textBaseline = 'bottom';
                     ctx.fillStyle = HALF_AMPLITUDE_COLOR;
-                    ctx.fillText('50% strength', right, y - 3);
+                    ctx.fillText(tr('runmode.tuneassist.chart.halfstrength', '50% strength'), right, y - 3);
                     ctx.restore();
                 },
             };
@@ -2804,14 +3255,14 @@
                         },
                         scales: {
                             x: {
-                                title: { display: true, text: 'Pulse frequency (Hz)', color: '#aaa', font: { size: 14 } },
+                                title: { display: true, text: chartText('pulseFreq'), color: '#aaa', font: { size: 14 } },
                                 min: pulseAxisMinHz(),
                                 max: pulseAxisMaxHz(),
                                 ticks: { color: '#888' },
                                 grid: { color: 'rgba(255,255,255,0.06)' }
                             },
                             y: {
-                                title: { display: true, text: 'Pulse gain (dB)', color: '#aaa', font: { size: 14 } },
+                                title: { display: true, text: chartText('pulseGain'), color: '#aaa', font: { size: 14 } },
                                 min: GAIN_AXIS_FLOOR_DB,
                                 max: 0,
                                 // Ticks land on multiples of GAIN_STEP_DB. Chart.js drops whole
@@ -2824,7 +3275,7 @@
                     plugins: [
                         halfAmplitudeLine,
                         frameIndexCache,
-                        crosshairReadout(d => `Gain: ${d.y.toFixed(1)} dB   Freq: ${d.x.toFixed(1)} Hz`)
+                        crosshairReadout(d => tr('runmode.tuneassist.chart.readout.gainfreq', 'Gain: {gain} dB   Freq: {freq} Hz', { gain: d.y.toFixed(1), freq: d.x.toFixed(1) }))
                     ]
                 });
                 // The gain/frequency chart has no pan or zoom: its axes are fixed, so it only
@@ -2975,7 +3426,7 @@
                         datasets: [
                             {
                                 type: 'line',
-                                label: 'Frequency',
+                                label: chartText('frequency'),
                                 xAxisID: 'xFreq',
                                 data: [],
                                 borderColor: DISTRIBUTION_FREQ_COLOR,
@@ -2989,7 +3440,7 @@
                             },
                             {
                                 type: 'bar',
-                                label: 'Gain',
+                                label: chartText('gain'),
                                 xAxisID: 'xGain',
                                 data: [],
                                 backgroundColor: DISTRIBUTION_GAIN_COLOR,
@@ -3020,9 +3471,9 @@
                                         const step = isFreq ? hist.hzStep : hist.dbStep;
                                         const lo = item.parsed.x - step / 2;
                                         const range = isFreq
-                                            ? `${lo.toFixed(0)}–${Math.min(hist.hiHz, lo + step).toFixed(0)} Hz`
-                                            : `${lo.toFixed(0)} to ${(lo + step).toFixed(0)} dB`;
-                                        return `${range}: ${item.parsed.y.toFixed(1)}% of time`;
+                                            ? tr('runmode.tuneassist.chart.range.hz', '{lo}–{hi} Hz', { lo: lo.toFixed(0), hi: Math.min(hist.hiHz, lo + step).toFixed(0) })
+                                            : tr('runmode.tuneassist.chart.range.db', '{lo} to {hi} dB', { lo: lo.toFixed(0), hi: (lo + step).toFixed(0) });
+                                        return tr('runmode.tuneassist.chart.timeshare', '{range}: {pct}% of time', { range, pct: item.parsed.y.toFixed(1) });
                                     },
                                 },
                             },
@@ -3052,7 +3503,7 @@
                             y: {
                                 beginAtZero: true,
                                 grace: '5%',
-                                title: { display: true, text: 'Time (%)', color: '#aaa', font: { size: 14 } },
+                                title: { display: true, text: chartText('time'), color: '#aaa', font: { size: 14 } },
                                 ticks: { color: '#888' },
                                 grid: { color: 'rgba(255,255,255,0.06)' },
                             },
@@ -3162,6 +3613,8 @@
                 videoSeekRaf = null;
                 videoSeekFrame = null;
 
+                revokeVideoObjectUrl();
+
                 if (!videoInfo) {
                     panel.hidden = true;
                     el.removeAttribute('src');
@@ -3170,7 +3623,12 @@
                 }
 
                 panel.hidden = false;
-                el.src = '/api/tuneassist/video?replay=' + encodeURIComponent(replayName);
+                if (localSource) {
+                    videoObjectUrl = URL.createObjectURL(localSource.file);
+                    el.src = videoObjectUrl;
+                } else {
+                    el.src = '/api/tuneassist/video?replay=' + encodeURIComponent(replayName);
+                }
                 el.load();
             }
 
@@ -3437,7 +3895,7 @@
                         scales: {
                             x: {
                                 type: 'linear',
-                                title: { display: true, text: 'Distance', color: '#aaa', font: { size: 12 } },
+                                title: { display: true, text: chartText('distance'), color: '#aaa', font: { size: 12 } },
                                 ticks: {
                                     color: '#888',
                                     callback: (v) => v >= 1000 ? (v / 1000).toFixed(1) + ' km' : Math.round(v) + ' m',
@@ -3445,7 +3903,7 @@
                                 grid: { color: 'rgba(255,255,255,0.06)' },
                             },
                             y: {
-                                title: { display: true, text: 'Speed (km/h)', color: '#aaa', font: { size: 12 } },
+                                title: { display: true, text: chartText('speed'), color: '#aaa', font: { size: 12 } },
                                 ticks: { color: '#888' },
                                 grid: { color: 'rgba(255,255,255,0.06)' },
                                 beginAtZero: true,
@@ -3646,13 +4104,16 @@
                 return pt.y > GAIN_FLOOR_DB;
             }
 
-            function lerp(a, b, t) { return a + (b - a) * t; }
+            // Interpolate on a log axis: the same fraction of the distance in decades.
+            function lerpLog(a, b, t) { return a * Math.pow(b / a, t); }
+
+            function logClose(a, b) {
+                return Math.abs(Math.log10(a / b)) < SCALE_SNAP_DECADES;
+            }
 
             function scalesCloseEnough(a, b) {
-                return Math.abs(a.xMin - b.xMin) < SCALE_SNAP_THRESHOLD &&
-                    Math.abs(a.xMax - b.xMax) < SCALE_SNAP_THRESHOLD &&
-                    Math.abs(a.yMin - b.yMin) < SCALE_SNAP_THRESHOLD &&
-                    Math.abs(a.yMax - b.yMax) < SCALE_SNAP_THRESHOLD;
+                return logClose(a.xMin, b.xMin) && logClose(a.xMax, b.xMax) &&
+                    logClose(a.yMin, b.yMin) && logClose(a.yMax, b.yMax);
             }
 
             function startScaleChase() {
@@ -3670,10 +4131,10 @@
                         scaleChaseRaf = null;
                         return;
                     }
-                    displayedScales.xMin = lerp(displayedScales.xMin, targetScales.xMin, SCALE_LERP);
-                    displayedScales.xMax = lerp(displayedScales.xMax, targetScales.xMax, SCALE_LERP);
-                    displayedScales.yMin = lerp(displayedScales.yMin, targetScales.yMin, SCALE_LERP);
-                    displayedScales.yMax = lerp(displayedScales.yMax, targetScales.yMax, SCALE_LERP);
+                    displayedScales.xMin = lerpLog(displayedScales.xMin, targetScales.xMin, SCALE_LERP);
+                    displayedScales.xMax = lerpLog(displayedScales.xMax, targetScales.xMax, SCALE_LERP);
+                    displayedScales.yMin = lerpLog(displayedScales.yMin, targetScales.yMin, SCALE_LERP);
+                    displayedScales.yMax = lerpLog(displayedScales.yMax, targetScales.yMax, SCALE_LERP);
 
                     applyScalesToChart(displayedScales);
                     chart.update('none');
@@ -3682,40 +4143,40 @@
                 scaleChaseRaf = requestAnimationFrame(step);
             }
 
-            // Apply displayedScales to chart, rounding min/max to niceAxisStep precision to prevent
-            // label jitter from floating-point lerp values.
+            // Apply displayedScales to chart. The tick labels sit on the 1-2-5 grid, so the
+            // floating-point lerp values at the axis ends need no rounding.
             function applyScalesToChart(scales) {
-                const xStep = niceAxisStep(scales.xMax - scales.xMin || 1);
-                const yStep = niceAxisStep(scales.yMax - scales.yMin || 1);
-                chart.options.scales.x.min = Math.round(scales.xMin / xStep) * xStep;
-                chart.options.scales.x.max = Math.round(scales.xMax / xStep) * xStep;
-                chart.options.scales.y.min = Math.round(scales.yMin / yStep) * yStep;
-                chart.options.scales.y.max = Math.round(scales.yMax / yStep) * yStep;
+                chart.options.scales.x.min = scales.xMin;
+                chart.options.scales.x.max = scales.xMax;
+                chart.options.scales.y.min = scales.yMin;
+                chart.options.scales.y.max = scales.yMax;
             }
 
-            // Round to a "nice" number: 1, 2, 5, 10, 20, 50, 100, ...
-            function niceStep(range) {
-                const rough = Math.pow(10, Math.floor(Math.log10(range)));
-                const frac = range / rough;
-                if (frac <= 1.5) return rough;
-                if (frac <= 3.5) return rough * 2;
-                if (frac <= 7.5) return rough * 5;
-                return rough * 10;
+            // Round a positive value down, or up, to the 1-2-5 sequence: ..., 0.5, 1, 2, 5, 10, ...
+            function niceLogFloor(v) {
+                const p = Math.pow(10, Math.floor(Math.log10(v)));
+                const m = v / p;
+                if (m >= 5) return 5 * p;
+                if (m >= 2) return 2 * p;
+                return p;
             }
 
-            // A finer step for axis bounds: targets ~12 tick intervals so min/max
-            // hug the data rather than overshoot by a full order of magnitude.
-            function niceAxisStep(range) {
-                return niceStep(range / 12);
+            function niceLogCeil(v) {
+                const p = Math.pow(10, Math.floor(Math.log10(v)));
+                const m = v / p;
+                if (m <= 1) return p;
+                if (m <= 2) return 2 * p;
+                if (m <= 5) return 5 * p;
+                return 10 * p;
             }
 
-            function niceMinMax(dataMin, dataMax) {
-                const range = dataMax - dataMin || 1;
-                const step = niceAxisStep(range);
-                return {
-                    min: Math.floor(dataMin / step) * step,
-                    max: Math.ceil(dataMax / step) * step,
-                };
+            // Log-axis bounds for one axis. The floor stays within MOTION_LOG_DECADES of the
+            // top, so a few near-zero points cannot stretch the axis.
+            function niceLogMinMax(dataMin, dataMax) {
+                const max = niceLogCeil(dataMax);
+                const min = niceLogFloor(Math.max(dataMin, dataMax / Math.pow(10, MOTION_LOG_DECADES)));
+                if (min >= max) return { min: niceLogFloor(max / 10), max };
+                return { min, max };
             }
 
             // Compute nice bounds directly from data points — no Chart.js render needed
@@ -3723,15 +4184,16 @@
                 let xMin = Infinity, xMax = -Infinity, yMin = Infinity, yMax = -Infinity;
                 datasets.forEach(ds => {
                     ds.data.forEach(pt => {
+                        if (!onMotionPlot(pt)) return;
                         if (pt.x < xMin) xMin = pt.x;
                         if (pt.x > xMax) xMax = pt.x;
                         if (pt.y < yMin) yMin = pt.y;
                         if (pt.y > yMax) yMax = pt.y;
                     });
                 });
-                if (!isFinite(xMin)) { xMin = -1; xMax = 1; yMin = -1; yMax = 1; }
-                const xNice = niceMinMax(xMin, xMax);
-                const yNice = niceMinMax(yMin, yMax);
+                if (!isFinite(xMin)) { xMin = 1; xMax = 100; yMin = 1; yMax = 100; }
+                const xNice = niceLogMinMax(xMin, xMax);
+                const yNice = niceLogMinMax(yMin, yMax);
                 return { xMin: xNice.min, xMax: xNice.max, yMin: yNice.min, yMax: yNice.max };
             }
 
@@ -3746,11 +4208,23 @@
             // The viewport a wheel tick asks for on a scatter chart. `base` is the auto-fit
             // viewport: the zoom never leaves it, and a tick that reaches it returns null to
             // mean "back to auto-fit". The value under the cursor keeps its pixel.
+            // The jerk/snap axes are logarithmic, so the zoom and pan work in log10 units.
+            // The viewport each returns is in data units.
+            function logViewport(xMin, xSpan, yMin, ySpan) {
+                return {
+                    xMin: Math.pow(10, xMin), xMax: Math.pow(10, xMin + xSpan),
+                    yMin: Math.pow(10, yMin), yMax: Math.pow(10, yMin + ySpan),
+                };
+            }
+
             function wheelZoomViewport(c, event, base) {
                 const xs = c.scales.x, ys = c.scales.y;
-                const xSpanNow = xs.max - xs.min, ySpanNow = ys.max - ys.min;
-                const baseXSpan = base.xMax - base.xMin, baseYSpan = base.yMax - base.yMin;
-                if (xSpanNow <= 0 || ySpanNow <= 0 || baseXSpan <= 0 || baseYSpan <= 0) return null;
+                const xLo = Math.log10(xs.min), yLo = Math.log10(ys.min);
+                const bxLo = Math.log10(base.xMin), bxHi = Math.log10(base.xMax);
+                const byLo = Math.log10(base.yMin), byHi = Math.log10(base.yMax);
+                const xSpanNow = Math.log10(xs.max) - xLo, ySpanNow = Math.log10(ys.max) - yLo;
+                const baseXSpan = bxHi - bxLo, baseYSpan = byHi - byLo;
+                if (!(xSpanNow > 0 && ySpanNow > 0 && baseXSpan > 0 && baseYSpan > 0)) return null;
 
                 const f = event.deltaY < 0 ? 1 / SCATTER_ZOOM_STEP : SCATTER_ZOOM_STEP;
                 if (f > 1 && (xSpanNow * f >= baseXSpan || ySpanNow * f >= baseYSpan)) return null;
@@ -3759,12 +4233,12 @@
 
                 const rect = c.canvas.getBoundingClientRect();
                 const px = event.clientX - rect.left, py = event.clientY - rect.top;
-                const fx = (xs.getValueForPixel(px) - xs.min) / xSpanNow;
-                const fy = (ys.getValueForPixel(py) - ys.min) / ySpanNow;
+                const fx = (Math.log10(xs.getValueForPixel(px)) - xLo) / xSpanNow;
+                const fy = (Math.log10(ys.getValueForPixel(py)) - yLo) / ySpanNow;
 
-                const xMin = clampSpanStart(xs.min + (xSpanNow - xSpan) * fx, xSpan, base.xMin, base.xMax);
-                const yMin = clampSpanStart(ys.min + (ySpanNow - ySpan) * fy, ySpan, base.yMin, base.yMax);
-                return { xMin, xMax: xMin + xSpan, yMin, yMax: yMin + ySpan };
+                const xMin = clampSpanStart(xLo + (xSpanNow - xSpan) * fx, xSpan, bxLo, bxHi);
+                const yMin = clampSpanStart(yLo + (ySpanNow - ySpan) * fy, ySpan, byLo, byHi);
+                return logViewport(xMin, xSpan, yMin, ySpan);
             }
 
             // True when the pointer sits over the plotting area. A wheel outside it scrolls
@@ -3782,17 +4256,18 @@
             // follows the pointer, so the value window travels the other way.
             function dragPanViewport(c, dxPx, dyPx, base) {
                 const xs = c.scales.x, ys = c.scales.y;
-                const xSpan = xs.max - xs.min, ySpan = ys.max - ys.min;
+                const xLo = Math.log10(xs.min), yLo = Math.log10(ys.min);
+                const xSpan = Math.log10(xs.max) - xLo, ySpan = Math.log10(ys.max) - yLo;
                 const area = c.chartArea;
-                if (!area || xSpan <= 0 || ySpan <= 0) return null;
+                if (!area || !(xSpan > 0 && ySpan > 0)) return null;
                 const wPx = area.right - area.left, hPx = area.bottom - area.top;
                 if (wPx <= 0 || hPx <= 0) return null;
 
                 // The y pixel axis points down and the y value axis points up, so the y term
                 // takes the opposite sign to the x term.
-                const xMin = clampSpanStart(xs.min - dxPx * xSpan / wPx, xSpan, base.xMin, base.xMax);
-                const yMin = clampSpanStart(ys.min + dyPx * ySpan / hPx, ySpan, base.yMin, base.yMax);
-                return { xMin, xMax: xMin + xSpan, yMin, yMax: yMin + ySpan };
+                const xMin = clampSpanStart(xLo - dxPx * xSpan / wPx, xSpan, Math.log10(base.xMin), Math.log10(base.xMax));
+                const yMin = clampSpanStart(yLo + dyPx * ySpan / hPx, ySpan, Math.log10(base.yMin), Math.log10(base.yMax));
+                return logViewport(xMin, xSpan, yMin, ySpan);
             }
 
             // Wire scroll zoom and modifier-drag pan onto a scatter chart. `base` returns the
@@ -4165,7 +4640,7 @@
                         x: jerkOf(d), y: snapOf(d), dist: cumulativeDists[d.frame] ?? 0, frame: d.frame, surface: d.surface,
                     }))
                     : highlightSource;
-                const pts = src.filter(p => !hidden.has(p.surface));
+                const pts = src.filter(p => !hidden.has(p.surface) && onMotionPlot(p));
                 if (pts.length === 0) return;
 
                 chart.data.datasets.push({
@@ -4298,8 +4773,10 @@
                     x: jerkOf(d), y: snapOf(d), dist: cumulativeDists[d.frame] ?? 0, frame: d.frame, surface: d.surface,
                 }));
                 shownPoints.forEach(d => {
+                    const pt = { x: jerkOf(d), y: snapOf(d), dist: cumulativeDists[d.frame] ?? 0, frame: d.frame };
+                    if (!onMotionPlot(pt)) return;
                     if (!grouped[d.surface]) grouped[d.surface] = [];
-                    grouped[d.surface].push({ x: jerkOf(d), y: snapOf(d), dist: cumulativeDists[d.frame] ?? 0, frame: d.frame });
+                    grouped[d.surface].push(pt);
                 });
 
                 const existing = new Map(chart.data.datasets.map(ds => [ds.label, ds]));
@@ -4734,9 +5211,91 @@
                 return audioCtx;
             }
 
-            function setWaveStatus(text) {
-                document.getElementById('wave-status').textContent = text;
+            // Status overlay over the chart area. Busy states are keyed ('source' blocks and
+            // outranks 'render'), so one operation finishing never clears another's state.
+            // A notice expires on its own unless it is sticky; a later notice replaces an earlier
+            // one and its timer. A sticky notice stays until dismissed or until a new source load.
+            const statusBusy = {};            // key -> { text, block }
+            const STATUS_BUSY_ORDER = ['source', 'render'];
+            let statusNotice = null;          // { text, error, sticky, block }
+            let statusNoticeTimer = null;
+            const STATUS_NOTICE_MS = 4000;
+
+            function renderStatus() {
+                const overlay = document.getElementById('chart-status');
+                const pill = document.getElementById('chart-status-pill');
+                const busyKey = STATUS_BUSY_ORDER.find(k => statusBusy[k]);
+                const busy = busyKey ? statusBusy[busyKey] : null;
+                // Notices outrank only the non-blocking render pill, so a blocking load keeps its text.
+                const showingNotice = statusNotice && !(busy && busy.block);
+                const shown = showingNotice ? statusNotice : busy;
+                const blocking = !!((busy && busy.block) || (showingNotice && statusNotice.block));
+
+                overlay.hidden = !shown && !blocking;
+                overlay.classList.toggle('is-blocking', blocking);
+                pill.hidden = !shown;
+                pill.classList.toggle('is-error', !!(showingNotice && statusNotice.error));
+                document.getElementById('chart-status-spinner').hidden = !!showingNotice;
+                document.getElementById('chart-status-close').hidden = !(showingNotice && statusNotice.sticky);
+                const shownText = shown && typeof shown.text === 'function' ? shown.text() : (shown ? shown.text : '');
+                document.getElementById('chart-status-text').textContent = shownText;
             }
+
+            // Spinner and text. block dims the chart area and swallows input; the default
+            // keeps the controls live. block picks the key ('source' vs 'render') unless one is given.
+            function showBusy(text, { block = false, key = block ? 'source' : 'render' } = {}) {
+                statusBusy[key] = { text, block };
+                // A new source load replaces a sticky error from the last one.
+                if (block && statusNotice && statusNotice.sticky) {
+                    clearTimeout(statusNoticeTimer);
+                    statusNotice = null;
+                }
+                renderStatus();
+            }
+
+            // sticky keeps the notice until dismissed; block dims the chart area behind it.
+            function showNotice(text, { error = false, sticky = false, block = false } = {}) {
+                clearTimeout(statusNoticeTimer);
+                const notice = { text, error, sticky, block };
+                statusNotice = notice;
+                if (!sticky) {
+                    statusNoticeTimer = setTimeout(() => {
+                        if (statusNotice === notice) clearNotice();
+                    }, STATUS_NOTICE_MS);
+                }
+                renderStatus();
+            }
+
+            // A failed replay or local file load. It stays, over a dimmed chart area, until
+            // dismissed, so the user does not mistake the charts behind it for the new source.
+            function showSourceError(text) {
+                showNotice(text, { error: true, sticky: true, block: true });
+            }
+
+            function clearNotice() {
+                clearTimeout(statusNoticeTimer);
+                statusNotice = null;
+                renderStatus();
+            }
+
+            // With a key, clears that busy state alone. Without one, clears everything.
+            function clearStatus(key) {
+                if (key) {
+                    delete statusBusy[key];
+                    renderStatus();
+                    return;
+                }
+                for (const k of Object.keys(statusBusy)) delete statusBusy[k];
+                clearNotice();
+            }
+
+            document.getElementById('chart-status-pill').addEventListener('click', () => {
+                if (statusNotice) clearNotice();
+            });
+
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && statusNotice && statusNotice.sticky) clearNotice();
+            });
 
             function setPlayIcon() {
                 document.getElementById('wave-play').innerHTML = wavePlaying ? '&#10073;&#10073;' : '&#9654;';
@@ -4807,7 +5366,7 @@
             }
 
             function currentAudioKey() {
-                const replay = document.getElementById('replay-select').value;
+                const replay = sourceKey();
                 const { startFrame, endFrame } = getFrameRange();
                 return [replay, currentLapKey, startFrame, endFrame,
                     ...TUNE_KEYS.map(k => tuneValues[k]),
@@ -4859,10 +5418,10 @@
                 if (key === waveLastKey && waveBuffer) return;
                 waveLastKey = key;
 
-                const replay = document.getElementById('replay-select').value;
+                const replay = sourceKey();
                 const { startFrame, endFrame } = getFrameRange();
                 const params = new URLSearchParams({
-                    replay, lap: String(currentLapKey),
+                    ...sourceParams(), lap: String(currentLapKey),
                     from: String(startFrame), to: String(endFrame),
                 });
                 setTuneParams(params);
@@ -4880,12 +5439,12 @@
                 if (lanesStale) chassisParams.set('layer', 'all');
 
                 const seq = ++audioReqSeq;
-                setWaveStatus('rendering…');
+                showBusy(trLater('runmode.tuneassist.status.rendering', 'rendering…'));
 
                 try {
-                    const resp = await fetch('/api/tuneassist/audio?' + chassisParams.toString());
+                    const resp = await fetchSource('/api/tuneassist/audio', Object.fromEntries(chassisParams));
                     if (!resp.ok) {
-                        if (seq === audioReqSeq) renderFailed('no audio');
+                        if (seq === audioReqSeq) renderFailed(trLater('runmode.tuneassist.status.rendernoaudio', 'audio render failed: no audio'));
                         return;
                     }
                     const raw = await resp.arrayBuffer();
@@ -4958,9 +5517,9 @@
                         seekToFrame(frame);
                     }
 
-                    setWaveStatus('');
+                    clearStatus('render');
                 } catch (e) {
-                    if (seq === audioReqSeq) renderFailed('error');
+                    if (seq === audioReqSeq) renderFailed(trLater('runmode.tuneassist.status.renderfailed', 'audio render failed'));
                 }
             }
 
@@ -4968,7 +5527,8 @@
             // same values renders again instead of keeping the old buffer.
             function renderFailed(status) {
                 waveLastKey = '';
-                setWaveStatus(status);
+                clearStatus('render');
+                showNotice(status, { error: true });
             }
 
             // Apply the three lane buffers split from a layer=all render. A lane whose
@@ -6165,20 +6725,34 @@
             // replay's vehicle resolves to, and names the config entry a commit writes
             // back to. It runs on every replay load: leaving the previous vehicle's values
             // on the sliders would show one engine's profile while auditioning another.
-            function applyEngineProfileMeta(profile) {
+            // The label owns its text rather than carrying data-i18n, so a language change
+            // cannot overwrite the profile name with the markup's placeholder.
+            let engineProfileLoaded = false;
+            function renderEngineProfileLabel() {
                 const label = document.getElementById('tune-engine-profile');
+                if (engineProfileLoaded && !engineProfileKey) {
+                    label.textContent = tr('runmode.tuneassist.engine.profile.none', 'Profile: none for this vehicle');
+                    return;
+                }
+
+                label.textContent = tr('runmode.tuneassist.engine.profile', 'Profile: {name}', { name: engineProfileKey || '—' });
+            }
+
+            function applyEngineProfileMeta(profile) {
                 const pane = document.querySelector('#tune-widget [data-tune-pane="engine"]');
+
+                engineProfileLoaded = true;
 
                 if (!profile || !profile.key) {
                     engineProfileKey = '';
-                    label.textContent = 'Profile: none for this vehicle';
+                    renderEngineProfileLabel();
                     pane.classList.add('tune-pane-empty');
 
                     return;
                 }
 
                 engineProfileKey = profile.key;
-                label.textContent = 'Profile: ' + profile.key;
+                renderEngineProfileLabel();
                 pane.classList.remove('tune-pane-empty');
 
                 // The config field is `gain`; the slider key is `engineGain`, so that it
@@ -6271,12 +6845,11 @@
             // spinner/tick, rather than a status line of its own.
 
             async function commitTuning(button) {
-                const status = document.getElementById('wave-status');
                 const tab = button.dataset.tuneTab;
                 const payload = tuningPayloadFor(tab);
 
                 if (!payload) {
-                    status.textContent = 'Nothing to commit';
+                    showNotice(trLater('runmode.tuneassist.status.nothingtocommit', 'Nothing to commit'));
 
                     return;
                 }
@@ -6301,14 +6874,11 @@
                     // and a Reset both see them as the committed values.
                     TUNE_TABS[tab].forEach(k => { tuneDefaults[k] = tuneValues[k]; });
                     updateGainChart();
-                    status.textContent = 'Committed to config';
-                    setTimeout(() => {
-                        if (status.textContent === 'Committed to config') status.textContent = '';
-                    }, 3000);
+                    showNotice(trLater('runmode.tuneassist.status.committed', 'Committed to config'));
                 } catch (error) {
                     console.error('Failed to commit tuning:', error);
                     if (typeof window.showNavbarStatus === 'function') window.showNavbarStatus('error');
-                    status.textContent = 'Commit failed: ' + error.message;
+                    showNotice(trLater('runmode.tuneassist.status.commitfailed', 'Commit failed: {detail}', { detail: error.message }), { error: true });
                 } finally {
                     button.disabled = false;
                 }
@@ -6406,6 +6976,42 @@
                     box.value = tuneBoxText(k, tuneValues[k]);
                 });
             }
+
+            // Re-word the text this script owns. Markup text follows the language through
+            // data-i18n; these strings were built in code, so they are drawn again here.
+            function setAxisTitle(c, axis, name) {
+                if (c) c.options.scales[axis].title.text = chartText(name);
+            }
+
+            function refreshTranslatedText() {
+                renderReplayOptions();
+                renderMapTitle();
+                renderEngineProfileLabel();
+                renderStatus();
+
+                const allLaps = document.querySelector('#lap-select option[value="' + ALL_LAPS_KEY + '"]');
+                if (allLaps) allLaps.textContent = allLapsText();
+
+                setAxisTitle(chart, 'x', 'jerk');
+                setAxisTitle(chart, 'y', 'snap');
+                setAxisTitle(gainChart, 'x', 'pulseFreq');
+                setAxisTitle(gainChart, 'y', 'pulseGain');
+                setAxisTitle(distributionChart, 'y', 'time');
+                setAxisTitle(speedChart, 'x', 'distance');
+                setAxisTitle(speedChart, 'y', 'speed');
+                if (distributionChart) {
+                    const [freqDs, gainDs] = distributionChart.data.datasets;
+                    freqDs.label = chartText('frequency');
+                    gainDs.label = chartText('gain');
+                }
+
+                // The update also redraws the legends, which carry the surface names.
+                [chart, gainChart, distributionChart, speedChart].forEach(c => { if (c) c.update('none'); });
+            }
+
+            window.addEventListener('i18nLoaded', refreshTranslatedText);
+            window.addEventListener('i18nLanguageChanged', refreshTranslatedText);
+            if (typeof i18nLoaded !== 'undefined' && i18nLoaded) refreshTranslatedText();
 
             setupAudioUI();
             setupVideoUI();

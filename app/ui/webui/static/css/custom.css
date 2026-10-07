@@ -1,3 +1,24 @@
+/*
+ * Theme-aware fills for raised controls and number fields. The sable palette is a
+ * fixed dark grey in both themes, so these tokens keep the dark values for dark
+ * and swap to light greys for light.
+ */
+:root {
+    --sz-control-bg: var(--bs-sable-500);
+    --sz-control-hover-bg: var(--bs-sable-300);
+    --sz-field-bg: var(--bs-sable-700);
+    --sz-field-focus-bg: var(--bs-sable-600);
+    /* One height for every control in the tuning assistant's controls row. */
+    --sz-row-control-height: 26px;
+}
+
+[data-bs-theme="light"] {
+    --sz-control-bg: hsl(var(--bs-sable-hue), var(--bs-sable-saturation), 88%);
+    --sz-control-hover-bg: hsl(var(--bs-sable-hue), var(--bs-sable-saturation), 80%);
+    --sz-field-bg: var(--bs-body-bg);
+    --sz-field-focus-bg: var(--bs-body-bg);
+}
+
 /* Override Halfmoon switch styling */
 .form-switch .form-check-input {
     background-color: var(--bs-gray-600);
@@ -24,17 +45,17 @@
 .input-group .mute-toggle-btn,
 .input-group .mute-toggle-btn.btn-outline-danger,
 .input-group .mute-toggle-btn.btn-outline-success {
-    /* A step lighter than the input field's --bs-sable-700 (16%) fill so the
+    /* A step lighter than the input field's --sz-field-bg fill so the
        button reads as raised rather than blending into the field. */
-    background-color: var(--bs-sable-500);
-    border-color: var(--bs-sable-500);
+    background-color: var(--sz-control-bg);
+    border-color: var(--sz-control-bg);
 }
 
 .input-group .mute-toggle-btn:hover,
 .input-group .mute-toggle-btn.btn-outline-danger:hover,
 .input-group .mute-toggle-btn.btn-outline-success:hover {
-    background-color: var(--bs-sable-300);
-    border-color: var(--bs-sable-300);
+    background-color: var(--sz-control-hover-bg);
+    border-color: var(--sz-control-hover-bg);
 }
 
 .input-group .mute-toggle-btn.btn-outline-danger {
@@ -273,4 +294,162 @@
  */
 .drx-legend-swatch {
     background: rgb(255, 140, 0);
+}
+
+/* Local files in the tuning assistant's replay select. */
+#replay-select option.replay-local-entry {
+    font-style: italic;
+}
+
+/*
+ * The icon-only button beside the replay select. Show the bare icon, with no
+ * border or fill. Size the icon to the select's height. The icon has no text
+ * after it, so drop its trailing margin.
+ */
+#local-file-load {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: var(--sz-row-control-height);
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--bs-primary);
+    cursor: pointer;
+}
+
+#local-file-load:hover {
+    color: var(--bs-link-hover-color);
+}
+
+#local-file-load:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+/* Keep a focus ring for keyboard users only. */
+#local-file-load:focus-visible {
+    outline: 2px solid var(--bs-primary);
+    outline-offset: 2px;
+}
+
+#local-file-load .icon {
+    width: var(--sz-row-control-height);
+    height: var(--sz-row-control-height);
+    margin-right: 0;
+}
+
+/* Status overlay over the tuning assistant's chart area. The overlay lets input
+   through unless it is blocking; the pill always takes clicks so a notice can be
+   dismissed. */
+.chart-area {
+    position: relative;
+}
+
+.chart-status {
+    position: absolute;
+    inset: 0;
+    z-index: 10;
+    display: flex;
+    /* The chart area is taller than the viewport. The pill starts at the top and
+       sticks at the viewport middle, so it stays visible while the area is on screen. */
+    align-items: flex-start;
+    justify-content: center;
+    pointer-events: none;
+    border-radius: var(--bs-border-radius-lg);
+    animation: chart-status-fade 0.15s ease-out;
+}
+
+.chart-status[hidden],
+.chart-status-pill[hidden],
+.chart-status-pill [hidden] {
+    display: none;
+}
+
+.chart-status.is-blocking {
+    pointer-events: auto;
+    /* A dark scrim, not the body colour: the panels are near the body colour, so a
+       body-tinted wash barely shows. The blur marks the charts as unavailable. */
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(2px);
+    cursor: progress;
+}
+
+[data-bs-theme="light"] .chart-status.is-blocking {
+    background: rgba(var(--bs-body-bg-rgb), 0.7);
+}
+
+/* The spinner sits above the text, with no box. A soft text shadow keeps the text
+   legible over the charts when the area is not dimmed. */
+.chart-status-pill {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+    max-width: 90%;
+    padding: 1rem 1.5rem;
+    color: var(--bs-emphasis-color);
+    text-shadow: 0 0 6px var(--bs-body-bg), 0 0 2px var(--bs-body-bg);
+    font-size: 1.25rem;
+    text-align: center;
+    pointer-events: auto;
+    position: sticky;
+    top: calc(50vh - 3rem);
+    margin: 1rem 0;
+}
+
+.chart-status-pill .spinner-border {
+    width: 2.5rem;
+    height: 2.5rem;
+    border-width: 2px;
+}
+
+.chart-status-pill.is-error {
+    color: var(--bs-danger-text-emphasis);
+    cursor: pointer;
+}
+
+@keyframes chart-status-fade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .chart-status {
+        animation: none;
+    }
+}
+
+/* Theme selector in the navbar */
+.theme-icon {
+    display: inline-flex;
+    align-items: center;
+}
+
+#theme-dropdown-toggle {
+    background: none;
+    border: 0;
+}
+
+.theme-option {
+    width: 100%;
+}
+
+/* Dismiss button on a sticky status notice. Small, and inherits the pill's text colour. */
+/* In the top right corner, so the stacked layout keeps the text centred. */
+.chart-status-close {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    width: 0.6em;
+    height: 0.6em;
+    font-size: 0.65rem;
+}
+
+.chart-status-pill:has(.chart-status-close:not([hidden])) {
+    padding-right: 2rem;
+}
+
+[data-bs-theme="dark"] .chart-status-close {
+    filter: var(--bs-btn-close-white-filter);
 }

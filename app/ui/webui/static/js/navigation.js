@@ -1,4 +1,54 @@
 // Navigation component for Simtezilo Web UI
+
+// Theme selector support. The theme itself is managed by theme.js
+// (window.simtezilo.theme); this file only renders and wires the selector.
+const THEME_OPTIONS = [
+    { value: 'dark', labelKey: 'runmode.theme.dark', fallback: 'Dark' },
+    { value: 'light', labelKey: 'runmode.theme.light', fallback: 'Light' },
+    { value: 'system', labelKey: 'runmode.theme.system', fallback: 'System' }
+];
+
+const THEME_SVG_ATTRS = 'width="16" height="16" viewBox="0 0 16 16" fill="currentColor" focusable="false"';
+const THEME_ICONS = {
+    dark: `<svg ${THEME_SVG_ATTRS}><path d="M6 .278a.77.77 0 0 1 .08.858 7.2 7.2 0 0 0-.878 3.46c0 4.021 3.278 7.277 7.318 7.277q.792-.001 1.533-.16a.79.79 0 0 1 .81.316.73.73 0 0 1-.031.893A8.35 8.35 0 0 1 8.344 16C3.734 16 0 12.286 0 7.71 0 4.266 2.114 1.312 5.124.06A.75.75 0 0 1 6 .278"/></svg>`,
+    light: `<svg ${THEME_SVG_ATTRS}><path d="M8 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8M8 0a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-1 0v-2A.5.5 0 0 1 8 0m0 13a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-1 0v-2A.5.5 0 0 1 8 13m8-5a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1 0-1h2a.5.5 0 0 1 .5.5M3 8a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1 0-1h2A.5.5 0 0 1 3 8m10.657-5.657a.5.5 0 0 1 0 .707l-1.414 1.415a.5.5 0 1 1-.707-.708l1.414-1.414a.5.5 0 0 1 .707 0m-9.193 9.193a.5.5 0 0 1 0 .707L3.05 13.657a.5.5 0 0 1-.707-.707l1.414-1.414a.5.5 0 0 1 .707 0m9.193 2.121a.5.5 0 0 1-.707 0l-1.414-1.414a.5.5 0 0 1 .707-.707l1.414 1.414a.5.5 0 0 1 0 .707M4.464 4.465a.5.5 0 0 1-.707 0L2.343 3.05a.5.5 0 1 1 .707-.707l1.414 1.414a.5.5 0 0 1 0 .708"/></svg>`,
+    system: `<svg ${THEME_SVG_ATTRS}><path d="M8 15A7 7 0 1 0 8 1zm0 1A8 8 0 1 1 8 0a8 8 0 0 1 0 16"/></svg>`
+};
+const THEME_CHECK = `<svg ${THEME_SVG_ATTRS}><path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0"/></svg>`;
+
+// The "dark" logo has white lettering for dark backgrounds; the "light" one is for light backgrounds.
+function themeLogoSrc(effective) {
+    return effective === 'light' ? '/images/simtezilo-logo-light.svg' : '/images/simtezilo-logo-dark.svg';
+}
+
+function syncThemeUI() {
+    const api = window.simtezilo && window.simtezilo.theme;
+    if (!api) return;
+    const pref = api.get();
+
+    const logo = document.getElementById('navbar-logo');
+    if (logo) logo.src = themeLogoSrc(api.effective());
+
+    const toggleIcon = document.getElementById('theme-toggle-icon');
+    if (toggleIcon) toggleIcon.innerHTML = THEME_ICONS[pref] || THEME_ICONS.dark;
+
+    document.querySelectorAll('[data-theme-option]').forEach(btn => {
+        const isActive = btn.getAttribute('data-theme-option') === pref;
+        btn.classList.toggle('active', isActive);
+        btn.setAttribute('aria-pressed', String(isActive));
+        const check = btn.querySelector('.theme-check');
+        if (check) check.style.visibility = isActive ? 'visible' : 'hidden';
+    });
+}
+
+document.addEventListener('click', event => {
+    const btn = event.target.closest && event.target.closest('[data-theme-option]');
+    if (!btn) return;
+    const api = window.simtezilo && window.simtezilo.theme;
+    if (api) api.set(btn.getAttribute('data-theme-option'));
+});
+document.addEventListener('themechange', syncThemeUI);
+document.addEventListener('themepreferencechange', syncThemeUI);
 function createNavigation(currentPage) {
     // Build telemetry dropdown - conditionally include Developer page based on devToolsEnabled
     const telemetryDropdown = [
@@ -28,11 +78,14 @@ function createNavigation(currentPage) {
     const telemetryActive = telemetryDropdown.some(item => item.id === currentPage);
     const toolsActive = toolsDropdown.some(item => item.id === currentPage);
 
+    const themeApi = window.simtezilo && window.simtezilo.theme;
+    const themePref = themeApi ? themeApi.get() : 'dark';
+
     let navHTML = `
         <nav class="navbar navbar-expand-lg" style="background-color: var(--bs-content-bg); border-bottom: var(--bs-border-width) solid var(--bs-content-border-color);">
             <div class="container-fluid">
                 <a class="navbar-brand" href="/">
-                    <img src="/images/simtezilo-logo-dark.svg" alt="Simtezilo" height="32" class="d-inline-block align-text-top">
+                    <img id="navbar-logo" src="${themeLogoSrc(themeApi ? themeApi.effective() : 'dark')}" alt="Simtezilo" height="32" class="d-inline-block align-text-top">
                 </a>
                 <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar-collapse-1" aria-controls="navbar-collapse-1" aria-expanded="false" aria-label="Toggle navigation">
                     <span class="navbar-toggler-icon"></span>
@@ -118,7 +171,29 @@ function createNavigation(currentPage) {
                         </div>
                     </div>`;
 
+    // Theme selector at the far right (stays in the collapsed mobile menu too)
     navHTML += `
+                    <ul class="navbar-nav ms-lg-auto mb-2 mb-lg-0">
+                        <li class="nav-item dropdown">
+                            <button type="button" id="theme-dropdown-toggle" class="nav-link dropdown-toggle d-flex align-items-center gap-1" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Theme" title="Theme" data-i18n-aria-label="runmode.theme.title" data-i18n-title="runmode.theme.title">
+                                <span id="theme-toggle-icon" class="theme-icon" aria-hidden="true">${THEME_ICONS[themePref] || THEME_ICONS.dark}</span>
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-lg-end mt-lg-2 rounded-top-0" aria-label="Theme" data-i18n-aria-label="runmode.theme.title">`;
+
+    THEME_OPTIONS.forEach(opt => {
+        const isActive = opt.value === themePref;
+        navHTML += `
+                                <li><button type="button" class="dropdown-item theme-option d-flex align-items-center gap-2${isActive ? ' active' : ''}" data-theme-option="${opt.value}" aria-pressed="${isActive}">
+                                    <span class="theme-icon" aria-hidden="true">${THEME_ICONS[opt.value]}</span>
+                                    <span class="flex-grow-1" data-i18n="${opt.labelKey}">${opt.fallback}</span>
+                                    <span class="theme-check" aria-hidden="true" style="visibility: ${isActive ? 'visible' : 'hidden'};">${THEME_CHECK}</span>
+                                </button></li>`;
+    });
+
+    navHTML += `
+                            </ul>
+                        </li>
+                    </ul>
                 </div>
             </div>
         </nav>`;
