@@ -1065,13 +1065,11 @@ func (a *App) initialiseLocalPitRadioOutput() bool {
 func (a *App) initialiseDiscord(opts Options) {
 	token := a.config.GetDiscordToken()
 	guildID := a.config.GetDiscordGuildID()
-	channelID := a.config.GetDiscordChannelID()
 	voiceChannelID := a.config.GetDiscordVoiceChannelID()
 
-	hasTextConfig := token != "" && channelID != ""
 	hasVoiceConfig := token != "" && guildID != "" && voiceChannelID != ""
 
-	if !hasTextConfig && !hasVoiceConfig {
+	if !hasVoiceConfig {
 		a.log.Warn().
 			Str("component", "discord").
 			Msg("Pit Radio is enabled but Discord configuration is incomplete - Discord bot will not function")
@@ -1082,23 +1080,22 @@ func (a *App) initialiseDiscord(opts Options) {
 				Msg("Missing Discord bot token")
 		}
 
-		if channelID == "" && voiceChannelID == "" {
+		if guildID == "" {
 			a.log.Warn().
 				Str("component", "discord").
-				Msg("Missing Discord channel ID and voice channel ID")
+				Msg("Missing Discord guild ID")
 		}
 
-		if guildID == "" && voiceChannelID != "" {
+		if voiceChannelID == "" {
 			a.log.Warn().
 				Str("component", "discord").
-				Msg("Missing Discord guild ID (required for voice)")
+				Msg("Missing Discord voice channel ID")
 		}
 	}
 
 	discordBotConfig := discord.Config{
 		Enabled:        a.config.PitRadioEnabled(),
 		Token:          token,
-		ChannelID:      channelID,
 		VoiceChannelID: voiceChannelID,
 		GuildID:        guildID,
 		MessageGap:     time.Duration(a.config.GetPitRadioMessageSendIntervalMs()) * time.Millisecond,
