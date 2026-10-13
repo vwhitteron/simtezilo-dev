@@ -614,11 +614,6 @@
                             "description": "Discord guild (server) ID",
                             "default": ""
                         },
-                        "channelID": {
-                            "type": "string",
-                            "description": "Discord text channel ID",
-                            "default": ""
-                        },
                         "voiceChannelID": {
                             "type": "string",
                             "description": "Discord voice channel ID",

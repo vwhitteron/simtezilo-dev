@@ -349,8 +349,6 @@
         "runmode.settings.pitradio.audio.volume": "Volume",
         "runmode.settings.pitradio.discord.bottoken": "Bot Token",
         "runmode.settings.pitradio.discord.bottoken.placeholder": "Enter Discord bot token",
-        "runmode.settings.pitradio.discord.channelid": "Channel ID",
-        "runmode.settings.pitradio.discord.channelid.placeholder": "Text channel ID",
         "runmode.settings.pitradio.discord.guildid": "Guild ID",
         "runmode.settings.pitradio.discord.guildid.placeholder": "Discord server ID",
         "runmode.settings.pitradio.discord.title": "Discord",

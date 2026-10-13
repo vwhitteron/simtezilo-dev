@@ -310,8 +310,6 @@ const (
 	RunmodeSettingsPitradioAudioVolume                          Key = "runmode.settings.pitradio.audio.volume"
 	RunmodeSettingsPitradioDiscordBottoken                      Key = "runmode.settings.pitradio.discord.bottoken"
 	RunmodeSettingsPitradioDiscordBottokenPlaceholder           Key = "runmode.settings.pitradio.discord.bottoken.placeholder"
-	RunmodeSettingsPitradioDiscordChannelid                     Key = "runmode.settings.pitradio.discord.channelid"
-	RunmodeSettingsPitradioDiscordChannelidPlaceholder          Key = "runmode.settings.pitradio.discord.channelid.placeholder"
 	RunmodeSettingsPitradioDiscordGuildid                       Key = "runmode.settings.pitradio.discord.guildid"
 	RunmodeSettingsPitradioDiscordGuildidPlaceholder            Key = "runmode.settings.pitradio.discord.guildid.placeholder"
 	RunmodeSettingsPitradioDiscordTitle                         Key = "runmode.settings.pitradio.discord.title"

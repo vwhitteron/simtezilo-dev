@@ -2515,22 +2515,6 @@ func testDiscordGuildID(t *testing.T) {
 	assert.Equal(t, "guild-123", cfg.GetDiscordGuildID(), 0.001)
 }
 
-func testDiscordChannelID(t *testing.T) {
-	t.Parallel()
-
-	// Arrange
-	cfg := newTestConfig()
-
-	// Act & Assert - default is empty
-	assert.Empty(t, cfg.GetDiscordChannelID(), 0.001)
-
-	// Act - set new value
-	cfg.SetDiscordChannelID("channel-456")
-
-	// Assert
-	assert.Equal(t, "channel-456", cfg.GetDiscordChannelID(), 0.001)
-}
-
 func testDiscordVoiceChannelID(t *testing.T) {
 	t.Parallel()
 
@@ -2547,13 +2531,28 @@ func testDiscordVoiceChannelID(t *testing.T) {
 	assert.Equal(t, "voice-789", cfg.GetDiscordVoiceChannelID(), 0.001)
 }
 
+func testDiscordLegacyChannelID(t *testing.T) {
+	t.Parallel()
+
+	// Arrange
+	data := `{"pitRadio": {"discord": {"token": "tok", "guildID": "guild-1", "channelID": "legacy-text", "voiceChannelID": "voice-1"}}}`
+
+	// Act
+	cfg := newTestConfigFromJSON(data)
+
+	// Assert
+	assert.Equal(t, "tok", cfg.GetDiscordToken())
+	assert.Equal(t, "guild-1", cfg.GetDiscordGuildID())
+	assert.Equal(t, "voice-1", cfg.GetDiscordVoiceChannelID())
+}
+
 func TestDiscordSection(t *testing.T) {
 	t.Parallel()
 
 	t.Run("testDiscordToken", testDiscordToken)
 	t.Run("testDiscordGuildID", testDiscordGuildID)
-	t.Run("testDiscordChannelID", testDiscordChannelID)
 	t.Run("testDiscordVoiceChannelID", testDiscordVoiceChannelID)
+	t.Run("testDiscordLegacyChannelID", testDiscordLegacyChannelID)
 }
 
 // ****************************************************************************

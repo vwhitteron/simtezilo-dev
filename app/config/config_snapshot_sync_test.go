@@ -172,7 +172,6 @@ var snapshotMutators = map[string]func(cfg *Config){
 	// Discord section
 	"SetDiscordToken":          func(cfg *Config) { cfg.SetDiscordToken("test-token") },
 	"SetDiscordGuildID":        func(cfg *Config) { cfg.SetDiscordGuildID("test-guild") },
-	"SetDiscordChannelID":      func(cfg *Config) { cfg.SetDiscordChannelID("test-channel") },
 	"SetDiscordVoiceChannelID": func(cfg *Config) { cfg.SetDiscordVoiceChannelID("test-voice-channel") },
 
 	// Pit radio section

@@ -131,7 +131,6 @@ type app struct {
 type discord struct {
 	Token          string `json:"token"`
 	GuildID        string `json:"guildID"`        //nolint:tagliatelle // schema uses Go-style acronym
-	ChannelID      string `json:"channelID"`      //nolint:tagliatelle // schema uses Go-style acronym
 	VoiceChannelID string `json:"voiceChannelID"` //nolint:tagliatelle // schema uses Go-style acronym
 }
 
@@ -2727,24 +2726,6 @@ func (c *Config) SetDiscordGuildID(guildID string) {
 	defer c.mu.Unlock()
 
 	c.viper.PitRadio.Discord.GuildID = guildID
-
-	c.registerUpdate(true)
-}
-
-// GetDiscordChannelID returns the Discord text channel ID.
-func (c *Config) GetDiscordChannelID() string {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.viper.PitRadio.Discord.ChannelID
-}
-
-// SetDiscordChannelID sets the Discord text channel ID.
-func (c *Config) SetDiscordChannelID(channelID string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	c.viper.PitRadio.Discord.ChannelID = channelID
 
 	c.registerUpdate(true)
 }

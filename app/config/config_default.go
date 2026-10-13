@@ -129,7 +129,6 @@ func defaultConfig() *viperConfig {
 			Discord: &discord{
 				Token:          "",
 				GuildID:        "",
-				ChannelID:      "",
 				VoiceChannelID: "",
 			},
 			FuelMonitoring: &fuelMonitoring{

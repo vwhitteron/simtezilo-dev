@@ -349,8 +349,6 @@
         "runmode.settings.pitradio.audio.volume": "音量",
         "runmode.settings.pitradio.discord.bottoken": "ボットトークン",
         "runmode.settings.pitradio.discord.bottoken.placeholder": "Discordボットトークンを入力",
-        "runmode.settings.pitradio.discord.channelid": "チャンネルID",
-        "runmode.settings.pitradio.discord.channelid.placeholder": "テキストチャンネルID",
         "runmode.settings.pitradio.discord.guildid": "ギルドID",
         "runmode.settings.pitradio.discord.guildid.placeholder": "DiscordサーバーID",
         "runmode.settings.pitradio.discord.title": "Discord",

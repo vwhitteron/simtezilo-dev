@@ -111,7 +111,6 @@ func (h *configHandler) handleGetConfig(response http.ResponseWriter, _ *http.Re
 		"discord": map[string]any{
 			"token":          h.config.GetDiscordToken(),
 			"guildID":        h.config.GetDiscordGuildID(),
-			"channelID":      h.config.GetDiscordChannelID(),
 			"voiceChannelID": h.config.GetDiscordVoiceChannelID(),
 		},
 		"hardware": map[string]any{
@@ -179,7 +178,6 @@ func (h *configHandler) handleGetConfig(response http.ResponseWriter, _ *http.Re
 			"discord": map[string]any{
 				"token":          h.config.GetDiscordToken(),
 				"guildID":        h.config.GetDiscordGuildID(),
-				"channelID":      h.config.GetDiscordChannelID(),
 				"voiceChannelID": h.config.GetDiscordVoiceChannelID(),
 			},
 		},
@@ -963,14 +961,6 @@ func (h *configHandler) applyDiscordConfig(config map[string]any) []string {
 			h.config.SetDiscordGuildID(guildIDStr)
 		} else {
 			errors = append(errors, "invalid discord guild ID value")
-		}
-	}
-
-	if channelID, ok := config["channelID"]; ok {
-		if channelIDStr, ok := channelID.(string); ok {
-			h.config.SetDiscordChannelID(channelIDStr)
-		} else {
-			errors = append(errors, "invalid discord channel ID value")
 		}
 	}
 
