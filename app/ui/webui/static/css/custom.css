@@ -296,6 +296,24 @@
     background: rgb(255, 140, 0);
 }
 
+/* The replay group can shrink below the width of its longest replay name, so
+   the select and the upload button stay on screen on a narrow display. */
+.lap-row .replay-group {
+    min-width: 0;
+    max-width: 100%;
+}
+
+#replay-select {
+    flex: 0 1 auto;
+    min-width: 8rem;
+    max-width: 24rem;
+    text-overflow: ellipsis;
+}
+
+#local-file-load {
+    flex: none;
+}
+
 /* Local files in the tuning assistant's replay select. */
 #replay-select option.replay-local-entry {
     font-style: italic;
@@ -407,6 +425,62 @@
 .chart-status-pill.is-error {
     color: var(--bs-danger-text-emphasis);
     cursor: pointer;
+}
+
+/* Source picker over the tuning assistant's chart area. It shows until a replay
+   or a local file is on screen: handwritten notes with arrows up to the replay
+   select and the upload button. It sits under the status overlay, so a load
+   message covers it, and it lets input through to the empty charts. */
+.source-picker {
+    position: absolute;
+    inset: 0;
+    z-index: 9;
+    pointer-events: none;
+    color: var(--bs-warning);
+    background: rgba(0, 0, 0, 0.35);
+    border-radius: var(--bs-border-radius-lg);
+}
+
+[data-bs-theme="light"] .source-picker {
+    color: var(--bs-warning-text-emphasis);
+    background: rgba(var(--bs-body-bg-rgb), 0.6);
+}
+
+.source-picker[hidden],
+.source-picker-hint[hidden] {
+    display: none;
+}
+
+/* The arrow tips sit above the chart area, at the toolbar, so the SVG draws
+   outside its own box. */
+.source-picker-arrows {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+    /* A plain pen line of one width. */
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+/* System handwriting fonts only: the device can be offline, so no web font. */
+.source-picker-hint {
+    position: absolute;
+    max-width: 16rem;
+    margin: 0;
+    font-family: "Segoe Print", "Bradley Hand", "Chalkboard SE", "Comic Sans MS", cursive;
+    font-size: 1.4rem;
+    line-height: 1.2;
+    text-shadow: 0 0 6px var(--bs-body-bg), 0 0 2px var(--bs-body-bg);
+    transform: rotate(-3deg);
+}
+
+.source-picker-hint.is-upload {
+    transform: rotate(2deg);
 }
 
 /* Render spinner over one tuning assistant waveform. It lets pointer input through,

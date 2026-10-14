@@ -985,7 +985,7 @@
             <h1 data-i18n="runmode.tuneassist.title">Haptics Tuning Assistant</h1>
         </div>
         <div class="lap-row">
-            <div class="lap-group">
+            <div class="lap-group replay-group">
                 <label for="replay-select" data-i18n="runmode.tuneassist.toolbar.replay">Replay:</label>
                 <select id="replay-select"></select>
                 <button type="button" id="local-file-load"
@@ -1045,6 +1045,15 @@
             </div>
         </div>
         <div class="content-row chart-area">
+            <!-- Shown until a source is on screen. The page does not pick a replay for the user.
+                 Each note has an arrow to its toolbar control; layoutSourceHints draws them. -->
+            <div class="source-picker" id="source-picker" hidden>
+                <svg class="source-picker-arrows" id="source-picker-arrows" aria-hidden="true"></svg>
+                <p class="source-picker-hint" id="source-hint-device"
+                    data-i18n="runmode.tuneassist.picker.device">Load an on-device replay</p>
+                <p class="source-picker-hint is-upload" id="source-hint-upload"
+                    data-i18n="runmode.tuneassist.picker.upload">Upload a replay</p>
+            </div>
             <div class="chart-status" id="chart-status" hidden>
                 <div class="chart-status-pill" id="chart-status-pill" role="status" aria-live="polite">
                     <span class="spinner-border" id="chart-status-spinner" role="status" aria-hidden="true"></span>
@@ -1940,21 +1949,12 @@
                 // A button, not a select option: browsers block the picker after a native select menu.
                 document.getElementById('local-file-load').addEventListener('click', () => localFileEl.click());
 
-                replaySelectEl.addEventListener('change', async () => {
-                    const value = replaySelectEl.value;
-                    try {
-                        const entry = localEntries.find(e => e.value === value);
-                        if (entry) {
-                            await activateLocal(entry);
-                        } else {
-                            await loadReplay(value);
-                        }
-                    } catch (err) {
-                        showSourceError(errorText(err));
-                    } finally {
-                        renderReplayOptions();
-                    }
-                });
+                replaySelectEl.addEventListener('change', () => chooseSource(replaySelectEl.value));
+                // The hint arrows follow the toolbar and the notes, so they track a wrap,
+                // a resize and a language change.
+                const hintObserver = new ResizeObserver(() => layoutSourceHints());
+                ['source-picker', 'source-hint-device', 'source-hint-upload'].forEach(id => hintObserver.observe(document.getElementById(id)));
+                hintObserver.observe(document.querySelector('.lap-row'));
 
                 localFileEl.addEventListener('change', async () => {
                     const file = localFileEl.files[0];
@@ -2006,13 +2006,16 @@
 
                 initMapInteraction();
 
-                if (replayFiles.length > 0) {
-                    const replayParam = params.get('replay');
-                    const initialReplay = replayParam && replayFiles.includes(replayParam)
-                        ? replayParam
-                        : replayFiles[0];
-                    replaySelectEl.value = initialReplay;
-                    await loadReplay(initialReplay);
+                // Load only a replay that the URL names. Otherwise the source picker asks.
+                const replayParam = params.get('replay');
+                if (replayParam && replayFiles.includes(replayParam)) {
+                    replaySelectEl.value = replayParam;
+                    try {
+                        await loadReplay(replayParam);
+                    } catch (err) {
+                        showSourceError(errorText(err));
+                    }
+                    renderReplayOptions();
                 }
             }
 
@@ -2061,6 +2064,13 @@
                     placeholder.disabled = true;
                 }
 
+                // With nothing on screen, the select names no replay until the user picks one.
+                if (!shownValue() && !placeholder) {
+                    placeholder = addOption(selectEl, '', tr('runmode.tuneassist.toolbar.choose', 'Choose a replay…'));
+                    placeholder.disabled = true;
+                    selectEl.insertBefore(placeholder, selectEl.firstChild);
+                }
+
                 if (localEntries.length > 0) {
                     // A disabled option stands in for a rule: <hr> in a select is not reliable.
                     addOption(selectEl, '', '──────────').disabled = true;
@@ -2078,6 +2088,144 @@
                     match.selected = true;
                 } else if (placeholder) {
                     placeholder.selected = true;
+                }
+
+                renderSourcePicker();
+            }
+
+            // Shows the source picker while no source is on screen. The on-device note
+            // shows only when the host has replays. renderReplayOptions calls this, so it
+            // follows every source change and language change.
+            function renderSourcePicker() {
+                const picker = document.getElementById('source-picker');
+                picker.hidden = !!shownValue();
+                if (picker.hidden) return;
+
+                document.getElementById('source-hint-device').hidden = hostReplays.length === 0;
+                requestAnimationFrame(layoutSourceHints);
+            }
+
+            // Each source hint and the toolbar control its arrow points at. The device note
+            // sits under the select and the upload note to the right of the button, so the
+            // two arrows do not cross: the upload button is just right of the select.
+            const SOURCE_HINTS = [
+                { noteId: 'source-hint-device', targetId: 'replay-select', side: 'below', top: 96 },
+                { noteId: 'source-hint-upload', targetId: 'local-file-load', side: 'right', top: 44 },
+            ];
+
+            // A pen-drawn arrow from start to tip: one circular arc with a radius equal to
+            // the chord, which bends it by 60 degrees, and an open head of two short strokes.
+            // clockwise picks the side the arc bows to: clockwise on screen bows it to the
+            // left of its path, anticlockwise to the right.
+            function penArrow(start, tip, clockwise) {
+                const HEAD_LENGTH = 11;
+                const HEAD_SPREAD = 0.5;   // radians either side of the shaft
+
+                const chord = Math.hypot(tip[0] - start[0], tip[1] - start[1]);
+                const along = Math.atan2(tip[1] - start[1], tip[0] - start[0]);
+                // An arc whose radius equals its chord meets the end point 30 degrees off
+                // the chord, turned the same way as the arc.
+                const end = along + (clockwise ? 1 : -1) * Math.PI / 6;
+
+                const xy = q => q[0].toFixed(1) + ',' + q[1].toFixed(1);
+                const barb = a => [tip[0] - HEAD_LENGTH * Math.cos(end + a), tip[1] - HEAD_LENGTH * Math.sin(end + a)];
+                const r = chord.toFixed(1);
+
+                return `<path d="M${xy(start)} A${r},${r} 0 0 ${clockwise ? 1 : 0} ${xy(tip)}"/>`
+                    + `<path d="M${xy(barb(HEAD_SPREAD))} L${xy(tip)} L${xy(barb(-HEAD_SPREAD))}"/>`;
+            }
+
+            // Places each visible hint in the chart area and draws an arrow from it up to its
+            // control. The positions come from the live layout in chart-area pixels. The tips
+            // sit above the area, so the SVG draws outside its own box.
+            function layoutSourceHints() {
+                const picker = document.getElementById('source-picker');
+                if (picker.hidden) return;
+
+                const area = picker.getBoundingClientRect();
+                const arrows = [];
+                // The upload note keeps the same gap from the right edge as the device note
+                // keeps from the left edge, so a pushed upload note balances it. The device
+                // note comes first in SOURCE_HINTS, so its gap is known in time.
+                let edgeGap = 12;
+                for (const hint of SOURCE_HINTS) {
+                    const note = document.getElementById(hint.noteId);
+                    if (note.hidden) continue;
+
+                    const target = document.getElementById(hint.targetId).getBoundingClientRect();
+                    const tip = [target.left + target.width / 2 - area.left, target.bottom - area.top + 6];
+                    const noteW = note.offsetWidth;
+                    const noteH = note.offsetHeight;
+
+                    // The device note is centred a little left of its control, and its arrow
+                    // leaves the top of the note. The upload note sits to the right of its
+                    // control, and its arrow leaves the left side of the note.
+                    const wanted = hint.side === 'below' ? tip[0] - noteW / 2 - 40 : tip[0] + 56;
+                    const rightGap = hint.side === 'right' ? edgeGap : 12;
+                    const clampLeft = x => Math.max(12, Math.min(area.width - noteW - rightGap, x));
+                    let left = clampLeft(wanted);
+                    if (hint.side === 'below') edgeGap = Math.max(12, left);
+
+                    // On a narrow display the upload note has no room beside its control
+                    // and is pushed under it, so its arrow leaves the top of the note too.
+                    const beside = hint.side === 'right' && left >= wanted - 1;
+                    let start;
+                    if (beside) {
+                        start = [left - 10, hint.top + noteH / 2];
+                    } else if (hint.side === 'below') {
+                        start = [left + noteW * 0.62, hint.top - 8];
+                    } else {
+                        // The pushed upload note bows its arrow to the right, and the arc meets
+                        // its tip 30 degrees off the chord, so a start tan(30) of the rise left
+                        // of the tip makes it arrive going straight up. The arrow leaves a fixed
+                        // point on the note, and the note moves to put that point there, so the
+                        // note and its arrow move as one. Against the right edge the note stops,
+                        // and the arrow still leaves the same point on it.
+                        const ANCHOR = 0.6;
+                        const y = hint.top - 8;
+                        const ideal = tip[0] - (y - tip[1]) * Math.tan(Math.PI / 6);
+                        left = clampLeft(ideal - noteW * ANCHOR);
+                        start = [left + noteW * ANCHOR, y];
+                    }
+                    note.style.left = left + 'px';
+                    note.style.top = hint.top + 'px';
+                    arrows.push({ hint, start, tip, beside });
+                }
+
+                // Every arrow bows to the left, except the upload arrow on a narrow display.
+                // There its note sits under its control, on the right, so it bows to the
+                // right and the two arrows curve apart. The upload note shows the layout: it
+                // has no room beside its control only on a narrow display.
+                const narrow = arrows.some(a => a.hint.side === 'right' && !a.beside);
+
+                // On a narrow display the two notes stack, so the device note drops further
+                // to leave clear space under the upload note. Its arrow start drops with it.
+                const NARROW_EXTRA_GAP = 40;
+                if (narrow) {
+                    for (const a of arrows) {
+                        if (a.hint.side !== 'below') continue;
+
+                        document.getElementById(a.hint.noteId).style.top = (a.hint.top + NARROW_EXTRA_GAP) + 'px';
+                        a.start = [a.start[0], a.start[1] + NARROW_EXTRA_GAP];
+                    }
+                }
+                document.getElementById('source-picker-arrows').innerHTML =
+                    arrows.map(a => penArrow(a.start, a.tip, !(narrow && a.hint.side === 'right'))).join('');
+            }
+
+            // Loads the source named by a select or picker value: a local entry or a host replay.
+            async function chooseSource(value) {
+                try {
+                    const entry = localEntries.find(e => e.value === value);
+                    if (entry) {
+                        await activateLocal(entry);
+                    } else {
+                        await loadReplay(value);
+                    }
+                } catch (err) {
+                    showSourceError(errorText(err));
+                } finally {
+                    renderReplayOptions();
                 }
             }
 
