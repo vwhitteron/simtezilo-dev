@@ -258,16 +258,9 @@ func (w *WebUI) htmlRouterHandlerFunc() func(http.ResponseWriter, *http.Request)
 			return
 		}
 
-		response.Header().Set("Content-Type", "text/html; charset=utf-8")
+		webcommon.ServeEmbedded(response, request, "html/"+filename, "text/html; charset=utf-8", content)
 
-		length, err := response.Write(content)
-		if err != nil {
-			w.log.Error().Err(err).Int("bytes_written", length).Str("file", filename).Str("path", path).Msg("writing HTML response")
-
-			return
-		}
-
-		w.log.Debug().Str("file", filename).Str("path", path).Int("bytes_written", length).Msg("served HTML page")
+		w.log.Debug().Str("file", filename).Str("path", path).Msg("served HTML page")
 	}
 }
 
@@ -338,14 +331,7 @@ func (w *WebUI) staticFileHandlerFunc(fileType string) func(http.ResponseWriter,
 		}
 
 		contentType := getContentType(filename)
-		response.Header().Set("Content-Type", contentType)
-
-		length, err := response.Write(content)
-		if err != nil {
-			w.log.Error().Err(err).Int("bytes_written", length).Str("type", fileType).Msg("writing file")
-
-			return
-		}
+		webcommon.ServeEmbedded(response, request, filename, contentType, content)
 
 		w.log.Debug().Str("file", filename).Str("mime-type", contentType).Msg("static file served")
 	}

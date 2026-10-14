@@ -246,9 +246,8 @@ func (s *SetupMode) PlatformAction(ctx context.Context, action platform.Command,
 //go:embed html/index.html
 var indexHTML string
 
-func handleRoot(writer http.ResponseWriter, _ *http.Request) {
-	writer.Header().Set("Content-Type", "text/html; charset=utf-8")
-	fmt.Fprint(writer, indexHTML)
+func handleRoot(writer http.ResponseWriter, request *http.Request) {
+	webcommon.ServeEmbedded(writer, request, "setup/index.html", "text/html; charset=utf-8", []byte(indexHTML))
 }
 
 func handleStaticFiles(writer http.ResponseWriter, request *http.Request, logger *zerolog.Logger) {
@@ -275,15 +274,7 @@ func handleStaticFiles(writer http.ResponseWriter, request *http.Request, logger
 	}
 
 	contentType := getContentType(filename)
-	writer.Header().Set("Content-Type", contentType)
-	writer.Header().Set("Cache-Control", "public, max-age=31536000")
-
-	length, err := writer.Write(content)
-	if err != nil {
-		logger.Error().Err(err).Int("bytes_written", length).Msg("Error writing static file")
-
-		return
-	}
+	webcommon.ServeEmbedded(writer, request, "setup/"+filename, contentType, content)
 
 	logger.Debug().Str("file", filename).Str("mime-type", contentType).Msg("Served static file")
 }
