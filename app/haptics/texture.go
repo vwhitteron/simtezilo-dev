@@ -400,9 +400,11 @@ func textureRoughnessFactors(roughness float64, valid bool) (amplitude, cutoff f
 // ≈ output RMS at full speed, before the textureMaxAmplitude cap) and coarseness (a
 // multiplier on the speed-derived low-pass cutoff: <1 lowers the cutoff for a coarser
 // grain). The values come from haptics.surfaceRumble in the config, keyed by the
-// surface's lowercase name; the switch below is the fallback for a surface missing
-// from the config. Levels run near full scale so the rumble is loud at unity gain;
-// loose surfaces (grass, dirt) are louder and coarser than smooth tarmac, and the
+// surface's lowercase name, and are converted from its 0-100 settings to these
+// internal units by Gain and CutoffScale; the switch below is the fallback for a
+// surface missing from the config and is already in internal units. Levels run
+// near full scale so the rumble is loud at unity gain; loose surfaces (grass,
+// dirt) are louder and coarser than smooth tarmac, and the
 // loudest sit at/above 1.0 so they reach the amplitude cap. Unknown is treated as
 // tarmac. The fallback values are starting points to be trimmed on-car; the user
 // trims overall loudness with the texture channel gain.
@@ -415,7 +417,7 @@ func surfaceRumble(cfg *config.Config, surface models.SurfaceType) (level, coars
 	}
 
 	if rumble, ok := cfg.GetHapticsSurfaceRumble(lookup.String()); ok {
-		return rumble.Level, rumble.Coarseness
+		return rumble.Gain(), rumble.CutoffScale()
 	}
 
 	switch surface {

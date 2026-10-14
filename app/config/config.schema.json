@@ -12,7 +12,7 @@
             "type": "string",
             "description": "Schema version this configuration complies with",
             "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
-            "const": "1.1.0"
+            "const": "1.2.0"
         },
         "app": {
             "type": "object",
@@ -528,15 +528,15 @@
                         "properties": {
                             "level": {
                                 "type": "number",
-                                "description": "Loudness, approximately the output RMS at full speed before the amplitude cap",
+                                "description": "Loudness from 0 to 100; the internal gain is the value divided by 50",
                                 "minimum": 0,
-                                "maximum": 2
+                                "maximum": 100
                             },
                             "coarseness": {
                                 "type": "number",
-                                "description": "Multiplier on the speed-derived low-pass cutoff; below 1 gives a coarser grain",
-                                "minimum": 0.1,
-                                "maximum": 2
+                                "description": "Grain from 0 to 100; a higher value gives a coarser grain",
+                                "minimum": 0,
+                                "maximum": 100
                             }
                         }
                     }

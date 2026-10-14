@@ -58,7 +58,7 @@ func TestValidateJSONSchema_ValidConfig(t *testing.T) {
 	t.Parallel()
 
 	validJSON := `{
-		"schemaVersion": "1.1.0",
+		"schemaVersion": "1.2.0",
 		"app": {
 			"language": "en",
 			"logLevel": "info",
@@ -94,7 +94,7 @@ func TestValidateJSONSchema_InvalidLogLevel(t *testing.T) {
 	t.Parallel()
 
 	invalidJSON := `{
-		"schemaVersion": "1.1.0",
+		"schemaVersion": "1.2.0",
 		"app": {
 			"language": "en",
 			"logLevel": "invalid_level"
@@ -134,7 +134,7 @@ func TestValidateJSONSchema_InvalidWebUIPort(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			invalidJSON := `{"schemaVersion": "1.1.0", "app": {"webUIPort": ` + intToString(testCase.port) + `}}`
+			invalidJSON := `{"schemaVersion": "1.2.0", "app": {"webUIPort": ` + intToString(testCase.port) + `}}`
 			result := validateJSONSchema([]byte(invalidJSON))
 			assert.False(t, result.Valid, "expected invalid for port %d", testCase.port)
 		})
@@ -145,7 +145,7 @@ func TestValidateJSONSchema_InvalidHardwareModel(t *testing.T) {
 	t.Parallel()
 
 	invalidJSON := `{
-		"schemaVersion": "1.1.0",
+		"schemaVersion": "1.2.0",
 		"hardware": {
 			"model": "invalid_model"
 		}
@@ -160,7 +160,7 @@ func TestValidateJSONSchema_InvalidDisplayOrientation(t *testing.T) {
 	t.Parallel()
 
 	invalidJSON := `{
-		"schemaVersion": "1.1.0",
+		"schemaVersion": "1.2.0",
 		"hardware": {
 			"displayOrientation": 45
 		}
@@ -189,7 +189,7 @@ func TestValidateJSONSchema_SynthesizerGainOutOfRange(t *testing.T) {
 			t.Parallel()
 
 			invalidJSON := `{
-				"schemaVersion": "1.1.0",
+				"schemaVersion": "1.2.0",
 				"synthesizer": {
 					"` + testCase.field + `": ` + floatToString(testCase.value) + `
 				}
@@ -217,7 +217,7 @@ func TestValidateJSONSchema_SampleRateOutOfRange(t *testing.T) {
 			t.Parallel()
 
 			invalidJSON := `{
-				"schemaVersion": "1.1.0",
+				"schemaVersion": "1.2.0",
 				"synthesizer": {
 					"` + testCase.field + `": ` + intToString(testCase.value) + `
 				}
@@ -252,7 +252,7 @@ func TestValidateJSONSchema_HapticsOutOfRange(t *testing.T) {
 			t.Parallel()
 
 			invalidJSON := `{
-				"schemaVersion": "1.1.0",
+				"schemaVersion": "1.2.0",
 				"haptics": {
 					` + testCase.json + `
 				}
@@ -281,7 +281,7 @@ func TestValidateJSONSchema_FuelMonitoringNonNegative(t *testing.T) {
 			t.Parallel()
 
 			invalidJSON := `{
-				"schemaVersion": "1.1.0",
+				"schemaVersion": "1.2.0",
 				"pitRadio": {
 					"fuelMonitoring": {
 						"` + testCase.field + `": -1.0
@@ -312,7 +312,7 @@ func TestValidateJSONSchema_TyreMonitoringRanges(t *testing.T) {
 			t.Parallel()
 
 			invalidJSON := `{
-				"schemaVersion": "1.1.0",
+				"schemaVersion": "1.2.0",
 				"pitRadio": {
 					"tyreMonitoring": {
 						` + testCase.json + `
@@ -330,7 +330,7 @@ func TestValidateJSONSchema_EQBandsArrayLength(t *testing.T) {
 
 	// Test wrong number of channels
 	invalidJSON := `{
-		"schemaVersion": "1.1.0",
+		"schemaVersion": "1.2.0",
 		"synthesizer": {
 			"eqBands": [
 				[{"frequency": 20, "gain": 0, "q": 1}]
@@ -346,7 +346,7 @@ func TestValidateJSONSchema_EQBandFrequencyRange(t *testing.T) {
 	t.Parallel()
 
 	invalidJSON := `{
-		"schemaVersion": "1.1.0",
+		"schemaVersion": "1.2.0",
 		"synthesizer": {
 			"eqBands": [
 				[
@@ -510,7 +510,7 @@ func TestExtractValidationErrors(t *testing.T) {
 	t.Parallel()
 
 	validJSON := `{
-		"schemaVersion": "1.1.0",
+		"schemaVersion": "1.2.0",
 		"app": {
 			"logLevel": "invalid"
 		}
@@ -539,7 +539,7 @@ func TestValidateConfig_ValidJSON(t *testing.T) {
 
 	cfg := &Config{}
 	validJSON := `{
-		"schemaVersion": "1.1.0",
+		"schemaVersion": "1.2.0",
 		"app": {
 			"language": "en",
 			"logLevel": "info",
@@ -610,7 +610,7 @@ func TestUpgradeLegacyJSONLeavesCurrentConfig(t *testing.T) {
 	t.Parallel()
 
 	// Arrange
-	currentJSON := []byte(`{"schemaVersion": "1.1.0", "haptics": {"jerkCompression": 74.5}}`)
+	currentJSON := []byte(`{"schemaVersion": "1.2.0", "haptics": {"jerkCompression": 74.5}}`)
 
 	// Act
 	upgraded, err := upgradeLegacyJSON(currentJSON)
@@ -699,14 +699,14 @@ func TestNewFromJSONMissingSchemaVersionIsMigrated(t *testing.T) {
 	assert.InDelta(t, 25.0, cfg.viper.Haptics.DynamicTransmissionJerkCompression, 1e-9, "omitted dynamicTransmissionJerkCompression should keep the shipped default")
 }
 
-// TestNewFromJSONCurrentSchemaIsUnchanged checks that a 1.1.0 config already
+// TestNewFromJSONCurrentSchemaIsUnchanged checks that a 1.2.0 config already
 // holding new-direction values is left untouched by the viper load path.
 func TestNewFromJSONCurrentSchemaIsUnchanged(t *testing.T) {
 	t.Parallel()
 
 	// Arrange
 	currentJSON := `{
-		"schemaVersion": "1.1.0",
+		"schemaVersion": "1.2.0",
 		"haptics": {
 			"jerkCompression": 74.5,
 			"jerkCenter": 37.6,
@@ -746,7 +746,7 @@ func TestValidateConfig_SchemaViolation(t *testing.T) {
 
 	cfg := &Config{}
 	invalidJSON := `{
-		"schemaVersion": "1.1.0",
+		"schemaVersion": "1.2.0",
 		"app": {
 			"webUIPort": 100000
 		}
@@ -764,7 +764,7 @@ func TestConfig_Validate_Integration(t *testing.T) {
 
 	cfg := &Config{
 		viper: &viperConfig{
-			SchemaVersion: "1.1.0",
+			SchemaVersion: "1.2.0",
 			App: &app{
 				Language:  "en",
 				LogLevel:  "info",
@@ -826,7 +826,7 @@ func TestValidateJSONSchema_ValidHardwareModels(t *testing.T) {
 			t.Parallel()
 
 			validJSON := `{
-				"schemaVersion": "1.1.0",
+				"schemaVersion": "1.2.0",
 				"hardware": {
 					"model": "` + model + `"
 				}
@@ -847,7 +847,7 @@ func TestValidateJSONSchema_ValidLogLevels(t *testing.T) {
 			t.Parallel()
 
 			validJSON := `{
-				"schemaVersion": "1.1.0",
+				"schemaVersion": "1.2.0",
 				"app": {
 					"language": "en",
 					"logLevel": "` + level + `"
@@ -869,7 +869,7 @@ func TestValidateJSONSchema_ValidDisplayOrientations(t *testing.T) {
 			t.Parallel()
 
 			validJSON := `{
-				"schemaVersion": "1.1.0",
+				"schemaVersion": "1.2.0",
 				"hardware": {
 					"displayOrientation": ` + intToString(orientation) + `
 				}
@@ -900,7 +900,7 @@ func TestValidateJSONSchema_PitRadioMessageInterval(t *testing.T) {
 			t.Parallel()
 
 			jsonStr := `{
-				"schemaVersion": "1.1.0",
+				"schemaVersion": "1.2.0",
 				"pitRadio": {
 					"messageSendIntervalMs": ` + intToString(testCase.value) + `
 				}
@@ -930,7 +930,7 @@ func TestValidateJSONSchema_TelemetrySourceRequired(t *testing.T) {
 
 	// telemetry.source is required per schema
 	invalidJSON := `{
-		"schemaVersion": "1.1.0",
+		"schemaVersion": "1.2.0",
 		"telemetry": {}
 	}`
 
@@ -946,7 +946,7 @@ func TestCreateTempConfigFile(t *testing.T) {
 	configPath := filepath.Join(tempDir, "test_config.json")
 
 	validConfig := `{
-		"schemaVersion": "1.1.0",
+		"schemaVersion": "1.2.0",
 		"app": {
 			"language": "en",
 			"logLevel": "info",

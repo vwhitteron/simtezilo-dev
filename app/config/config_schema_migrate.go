@@ -7,10 +7,13 @@ import (
 )
 
 // Schema versions. legacySchemaVersion is the last version that stored the five
-// inverted haptics settings as integers in the old direction.
+// inverted haptics settings as integers in the old direction. invertedSchemaVersion
+// is the last version that stored the surfaceRumble level and coarseness in
+// internal units, rather than as 0 to 100 settings.
 const (
-	legacySchemaVersion  = "1.0.0"
-	currentSchemaVersion = "1.1.0"
+	legacySchemaVersion   = "1.0.0"
+	invertedSchemaVersion = "1.1.0"
+	currentSchemaVersion  = "1.2.0"
 )
 
 // legacyHapticsJerkCenterMin and legacyHapticsJerkCenterMax bound the
@@ -49,6 +52,23 @@ const (
 	legacyDefaultDynamicTransmissionJerkCompression = 750
 )
 
+// legacyDefaultSurfaceRumble returns the pre-1.2.0 shipped surfaceRumble defaults,
+// in the internal units those versions stored: level as a loudness from 0 to 2 and
+// coarseness as a low-pass cutoff multiplier from 0.1 to 2. baseConfigFor lays
+// them under a pre-1.2.0 file, so a surface the file omits keeps the sound it had
+// and is converted once. The current defaults (see defaultConfig) are tuned on
+// the new scale, so they can differ slightly from these values once converted.
+func legacyDefaultSurfaceRumble() map[string]SurfaceRumble {
+	return map[string]SurfaceRumble{
+		"tarmac":   {Level: 0.40, Coarseness: 1.00},
+		"concrete": {Level: 0.50, Coarseness: 0.95},
+		"grass":    {Level: 0.65, Coarseness: 0.85},
+		"dirt":     {Level: 0.85, Coarseness: 0.80},
+		"sand":     {Level: 0.30, Coarseness: 1.20},
+		"snow":     {Level: 0.60, Coarseness: 0.90},
+	}
+}
+
 // baseConfigFor returns the defaults a config file at schemaVersion should be
 // unmarshalled over. A file with no schemaVersion is one every current build
 // stamps on write, so its absence means the file predates schema versioning
@@ -59,10 +79,24 @@ const (
 // keeps its legacy value instead of being inverted a second time, and
 // migrateInvertedSettings still runs even though the file never named a
 // version.
+//
+// Any file below currentSchemaVersion, including a 1.1.0 one, also gets the
+// pre-1.2.0 surfaceRumble defaults, for the same reason: a surface the file
+// omits is converted by migrateSurfaceRumbleScale from its old default instead
+// of keeping the new default and being converted twice. Unmarshalling a file's
+// surfaceRumble map over this one merges by surface name.
 func baseConfigFor(schemaVersion string) *viperConfig {
 	base := defaultConfig()
 
-	if schemaVersion != "" && schemaVersion != legacySchemaVersion {
+	if schemaVersion != "" && schemaVersion != legacySchemaVersion && schemaVersion != invertedSchemaVersion {
+		return base
+	}
+
+	base.Haptics.SurfaceRumble = legacyDefaultSurfaceRumble()
+
+	if schemaVersion == invertedSchemaVersion {
+		base.SchemaVersion = invertedSchemaVersion
+
 		return base
 	}
 
@@ -109,6 +143,10 @@ func (c *Config) migrateSchema() {
 
 	// Invert and rescale the five haptics settings from a pre-1.1.0 schema.
 	c.migrateInvertedSettings()
+
+	// Rescale the surface rumble entries from a pre-1.2.0 schema. This runs after
+	// the inversion, which stamps 1.1.0, so a 1.0.0 config passes through both.
+	c.migrateSurfaceRumbleScale()
 }
 
 // migrateLegacyKeys copies any surviving key renamed since the v0.8.0 public
@@ -219,7 +257,7 @@ func (c *Config) migrateSnapMax() {
 //	v = clamp((1000 - o) / 10, hapticsSettingMin, hapticsSettingMax)
 //
 // This runs once, gated on SchemaVersion: a config at "1.0.0" is converted and
-// then stamped "1.1.0"; a config already at "1.1.0" or later is left
+// then stamped invertedSchemaVersion ("1.1.0"); a config already at "1.1.0" or later is left
 // untouched. Every loader lays a legacy file over baseConfigFor's
 // old-direction defaults and stamps its SchemaVersion to legacySchemaVersion
 // before this runs, so "" is not a version this method should see in
@@ -248,11 +286,44 @@ func (c *Config) migrateInvertedSettings() {
 		c.viper.Haptics.DynamicTransmissionJerkCompression = invert(c.viper.Haptics.DynamicTransmissionJerkCompression)
 	}
 
+	c.viper.SchemaVersion = invertedSchemaVersion
+}
+
+// migrateSurfaceRumbleScale converts every surfaceRumble entry from the internal
+// units of schema 1.1.0 and earlier to the 0 to 100 settings: level from a
+// loudness of 0 to 2, and coarseness from a low-pass cutoff multiplier of 0.1 to
+// 2 where lower was coarser, via
+//
+//	level      = clamp(round2(oldLevel * 50))
+//	coarseness = clamp(round2((2 - oldCoarseness) / 1.9 * 100))
+//
+// so a higher coarseness now means a coarser grain. It runs once, gated on
+// SchemaVersion: a config at "", "1.0.0" or "1.1.0" is converted and stamped
+// currentSchemaVersion; a config already at "1.2.0" or later is left untouched.
+// migrateInvertedSettings has stamped a 1.0.0 config "1.1.0" by the time this
+// runs.
+//
+// Caller must hold c.mu.
+func (c *Config) migrateSurfaceRumbleScale() {
+	switch c.viper.SchemaVersion {
+	case "", legacySchemaVersion, invertedSchemaVersion:
+	default:
+		return
+	}
+
+	for surface, rumble := range c.viper.Haptics.SurfaceRumble {
+		c.viper.Haptics.SurfaceRumble[surface] = SurfaceRumble{
+			Level:      roundSurfaceRumble(rumble.Level * surfaceRumbleLevelDivisor),
+			Coarseness: roundSurfaceRumble((surfaceRumbleCutoffMax - rumble.Coarseness) / surfaceRumbleCutoffSpan * surfaceRumbleMax),
+		}
+	}
+
 	c.viper.SchemaVersion = currentSchemaVersion
 }
 
 // upgradeLegacyJSON returns jsonData as loading it would leave it. A config at
-// legacySchemaVersion is laid over baseConfigFor's old-direction defaults and
+// legacySchemaVersion or invertedSchemaVersion is laid over baseConfigFor's
+// pre-current defaults and
 // put through migrateSchema, as finalise does, so an imported backup
 // validates against the current schema. Any other config, including one with
 // no schemaVersion, is returned unchanged so the schema still reports what is
@@ -267,7 +338,7 @@ func upgradeLegacyJSON(jsonData []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	if schemaVersion != legacySchemaVersion {
+	if schemaVersion != legacySchemaVersion && schemaVersion != invertedSchemaVersion {
 		return jsonData, nil
 	}
 

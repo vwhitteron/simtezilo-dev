@@ -1086,7 +1086,7 @@ func testHapticsInvertedSettingsMigrationAlreadyCurrent(t *testing.T) {
 
 	// Arrange - a 1.1.0 config already carrying setting values.
 	cfg := NewFromJSON([]byte(`{
-		"schemaVersion": "1.1.0",
+		"schemaVersion": "1.2.0",
 		"haptics": {
 			"jerkCompression": 74.5,
 			"jerkCenter": 37.6,

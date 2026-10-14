@@ -98,12 +98,12 @@ func defaultConfig() *viperConfig {
 				"k4":                  {PrimaryBalance: 0.75, SecondaryBalance: 0.800, Gain: +0.00, PulseScale: 0.10}, // Mazda 787B '91
 			},
 			SurfaceRumble: map[string]SurfaceRumble{
-				"tarmac":   {Level: 0.40, Coarseness: 1.00},
-				"concrete": {Level: 0.50, Coarseness: 0.95},
-				"grass":    {Level: 0.65, Coarseness: 0.85},
-				"dirt":     {Level: 0.85, Coarseness: 0.80},
-				"sand":     {Level: 0.30, Coarseness: 1.20},
-				"snow":     {Level: 0.60, Coarseness: 0.90},
+				"tarmac":   {Level: 20.00, Coarseness: 52.75},
+				"concrete": {Level: 25.00, Coarseness: 55.25},
+				"grass":    {Level: 32.50, Coarseness: 60.50},
+				"dirt":     {Level: 42.50, Coarseness: 63.25},
+				"sand":     {Level: 15.00, Coarseness: 42.00},
+				"snow":     {Level: 30.00, Coarseness: 57.00},
 			},
 		},
 		PitRadio: &pitRadio{

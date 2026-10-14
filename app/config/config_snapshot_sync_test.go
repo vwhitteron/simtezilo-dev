@@ -91,7 +91,7 @@ var snapshotMutators = map[string]func(cfg *Config){
 	"DecreaseHapticsPulseMaxAmplitude":           func(cfg *Config) { cfg.DecreaseHapticsPulseMaxAmplitude() },
 	"SetHapticsPulseMaxFrequencyHz":              func(cfg *Config) { cfg.SetHapticsPulseMaxFrequencyHz(120) },
 	"SetHapticsPulseMinFrequencyHz":              func(cfg *Config) { cfg.SetHapticsPulseMinFrequencyHz(20) },
-	"SetHapticsSurfaceRumble":                    func(cfg *Config) { cfg.SetHapticsSurfaceRumble("tarmac", SurfaceRumble{Level: 0.5, Coarseness: 0.9}) },
+	"SetHapticsSurfaceRumble":                    func(cfg *Config) { cfg.SetHapticsSurfaceRumble("tarmac", SurfaceRumble{Level: 25, Coarseness: 55}) },
 
 	// Synth section
 	"SetSynthDRXEnabled":                     func(cfg *Config) { cfg.SetSynthDRXEnabled(true) },

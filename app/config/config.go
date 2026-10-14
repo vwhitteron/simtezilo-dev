@@ -82,13 +82,51 @@ func stepDownSetting(value float64) float64 {
 	return clampSetting(roundSetting(stepped))
 }
 
-// SurfaceRumble is one road surface's texture character. Level is the loudness,
-// which is approximately the output RMS at full speed before the amplitude cap.
-// Coarseness multiplies the speed-derived low-pass cutoff, so a value below 1
-// lowers the cutoff and gives a coarser grain.
+// Surface rumble bounds and conversions. Level and Coarseness are user-facing
+// settings from surfaceRumbleMin to surfaceRumbleMax, stored to two decimal
+// places. Gain and CutoffScale convert them to the internal values the texture
+// generator uses.
+const (
+	surfaceRumbleMin = 0.0
+	surfaceRumbleMax = 100.0
+
+	// surfaceRumbleLevelDivisor maps a level setting onto gain: gain = level / 50,
+	// so the full 100 setting is a gain of 2.
+	surfaceRumbleLevelDivisor = 50.0
+
+	// surfaceRumbleCutoffMax and surfaceRumbleCutoffSpan give the low-pass cutoff
+	// multiplier: 2 at coarseness 0 (finest) falling by 1.9 to 0.1 at coarseness 100
+	// (coarsest).
+	surfaceRumbleCutoffMax  = 2.0
+	surfaceRumbleCutoffSpan = 1.9
+)
+
+// SurfaceRumble is one road surface's texture character, as two settings from 0 to
+// 100. Level is the loudness; Gain converts it to the internal gain, which is
+// approximately the output RMS at full speed before the amplitude cap. Coarseness
+// is the grain, where a higher value is coarser; CutoffScale converts it to the
+// multiplier on the speed-derived low-pass cutoff.
 type SurfaceRumble struct {
 	Level      float64 `json:"level"`
 	Coarseness float64 `json:"coarseness"`
+}
+
+// Gain returns the internal loudness for the level setting: level / 50.
+func (s SurfaceRumble) Gain() float64 {
+	return s.Level / surfaceRumbleLevelDivisor
+}
+
+// CutoffScale returns the internal low-pass cutoff multiplier for the coarseness
+// setting: 2 - 1.9 * coarseness / 100, so 0 is the finest grain (2.0) and 100 the
+// coarsest (0.1).
+func (s SurfaceRumble) CutoffScale() float64 {
+	return surfaceRumbleCutoffMax - surfaceRumbleCutoffSpan*s.Coarseness/surfaceRumbleMax
+}
+
+// roundSurfaceRumble rounds a surface rumble setting to two decimal places and
+// clamps it to the setting's bounds.
+func roundSurfaceRumble(value float64) float64 {
+	return math.Min(surfaceRumbleMax, math.Max(surfaceRumbleMin, math.Round(value*100)/100))
 }
 
 // Routing source keys identify the user-facing haptic sources that can be routed
@@ -3433,10 +3471,11 @@ func (c *Config) GetHapticsSurfaceRumble(surface string) (SurfaceRumble, bool) {
 	return rumble, ok
 }
 
-// SetHapticsSurfaceRumble sets one surface's rumble level and coarseness.
+// SetHapticsSurfaceRumble sets one surface's rumble level and coarseness, each
+// clamped to 0..100 and rounded to two decimal places.
 func (c *Config) SetHapticsSurfaceRumble(surface string, value SurfaceRumble) {
-	value.Level = math.Min(2.0, math.Max(0.0, value.Level))
-	value.Coarseness = math.Min(2.0, math.Max(0.1, value.Coarseness))
+	value.Level = roundSurfaceRumble(value.Level)
+	value.Coarseness = roundSurfaceRumble(value.Coarseness)
 
 	c.mu.Lock()
 

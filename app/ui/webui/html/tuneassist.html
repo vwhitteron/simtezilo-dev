@@ -1448,37 +1448,37 @@
                             <label for="surf-tarmac-level"
                                 data-i18n="runmode.tuneassist.road.surface.tarmac">Tarmac</label>
                             <input type="number" class="tune-value" id="surf-tarmac-level" data-surface="tarmac"
-                                data-surface-field="level" min="0" max="2" step="0.05" inputmode="decimal">
+                                data-surface-field="level" min="0" max="100" step="0.01" inputmode="decimal">
                             <input type="number" class="tune-value" id="surf-tarmac-coarseness" data-surface="tarmac"
-                                data-surface-field="coarseness" min="0.1" max="2" step="0.05" inputmode="decimal">
+                                data-surface-field="coarseness" min="0" max="100" step="0.01" inputmode="decimal">
                             <label for="surf-concrete-level"
                                 data-i18n="runmode.tuneassist.road.surface.concrete">Concrete</label>
                             <input type="number" class="tune-value" id="surf-concrete-level" data-surface="concrete"
-                                data-surface-field="level" min="0" max="2" step="0.05" inputmode="decimal">
+                                data-surface-field="level" min="0" max="100" step="0.01" inputmode="decimal">
                             <input type="number" class="tune-value" id="surf-concrete-coarseness"
-                                data-surface="concrete" data-surface-field="coarseness" min="0.1" max="2" step="0.05"
+                                data-surface="concrete" data-surface-field="coarseness" min="0" max="100" step="0.01"
                                 inputmode="decimal">
                             <label for="surf-grass-level"
                                 data-i18n="runmode.tuneassist.road.surface.grass">Grass</label>
                             <input type="number" class="tune-value" id="surf-grass-level" data-surface="grass"
-                                data-surface-field="level" min="0" max="2" step="0.05" inputmode="decimal">
+                                data-surface-field="level" min="0" max="100" step="0.01" inputmode="decimal">
                             <input type="number" class="tune-value" id="surf-grass-coarseness" data-surface="grass"
-                                data-surface-field="coarseness" min="0.1" max="2" step="0.05" inputmode="decimal">
+                                data-surface-field="coarseness" min="0" max="100" step="0.01" inputmode="decimal">
                             <label for="surf-dirt-level" data-i18n="runmode.tuneassist.road.surface.dirt">Dirt</label>
                             <input type="number" class="tune-value" id="surf-dirt-level" data-surface="dirt"
-                                data-surface-field="level" min="0" max="2" step="0.05" inputmode="decimal">
+                                data-surface-field="level" min="0" max="100" step="0.01" inputmode="decimal">
                             <input type="number" class="tune-value" id="surf-dirt-coarseness" data-surface="dirt"
-                                data-surface-field="coarseness" min="0.1" max="2" step="0.05" inputmode="decimal">
+                                data-surface-field="coarseness" min="0" max="100" step="0.01" inputmode="decimal">
                             <label for="surf-sand-level" data-i18n="runmode.tuneassist.road.surface.sand">Sand</label>
                             <input type="number" class="tune-value" id="surf-sand-level" data-surface="sand"
-                                data-surface-field="level" min="0" max="2" step="0.05" inputmode="decimal">
+                                data-surface-field="level" min="0" max="100" step="0.01" inputmode="decimal">
                             <input type="number" class="tune-value" id="surf-sand-coarseness" data-surface="sand"
-                                data-surface-field="coarseness" min="0.1" max="2" step="0.05" inputmode="decimal">
+                                data-surface-field="coarseness" min="0" max="100" step="0.01" inputmode="decimal">
                             <label for="surf-snow-level" data-i18n="runmode.tuneassist.road.surface.snow">Snow</label>
                             <input type="number" class="tune-value" id="surf-snow-level" data-surface="snow"
-                                data-surface-field="level" min="0" max="2" step="0.05" inputmode="decimal">
+                                data-surface-field="level" min="0" max="100" step="0.01" inputmode="decimal">
                             <input type="number" class="tune-value" id="surf-snow-coarseness" data-surface="snow"
-                                data-surface-field="coarseness" min="0.1" max="2" step="0.05" inputmode="decimal">
+                                data-surface-field="coarseness" min="0" max="100" step="0.01" inputmode="decimal">
                         </div>
                         <div class="tune-actions">
                             <button type="button" class="tune-reset" data-tune-tab="texture"
@@ -5046,7 +5046,8 @@
             const layerGainDefaults = { ...layerGains };
 
             // Per-surface road-texture character, as haptics.surfaceRumble holds it. Level
-            // is the surface's loudness and coarseness multiplies the noise cutoff. Unlike
+            // is the surface's loudness and coarseness its grain, each a setting from 0 to
+            // 100 with two decimals; a higher coarseness is a coarser grain. Unlike
             // the layer gain, these are applied by the render: a change re-renders the
             // section, which is why the controls are number boxes and not sliders.
             //
@@ -6489,11 +6490,11 @@
 
                         const raw = Number(box.value);
                         const value = box.value !== '' && Number.isFinite(raw)
-                            ? Math.min(hi, Math.max(lo, raw))
+                            ? Math.min(hi, Math.max(lo, Math.round(raw * 100) / 100))
                             : entry[field];
 
                         entry[field] = value;
-                        box.value = value;
+                        box.value = value.toFixed(2);
                         scheduleAudioRefresh();
                     });
 
@@ -7026,8 +7027,8 @@
                     const entry = surfaceRumble[surface];
                     if (!entry) continue;
 
-                    document.getElementById('surf-' + surface + '-level').value = entry.level;
-                    document.getElementById('surf-' + surface + '-coarseness').value = entry.coarseness;
+                    document.getElementById('surf-' + surface + '-level').value = entry.level.toFixed(2);
+                    document.getElementById('surf-' + surface + '-coarseness').value = entry.coarseness.toFixed(2);
                 }
             }
 

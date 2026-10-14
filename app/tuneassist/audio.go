@@ -306,9 +306,9 @@ const engineGainMinDB = -24.0
 var surfaceRumbleSurfaces = []string{"tarmac", "concrete", "grass", "dirt", "sand", "snow"} //nolint:gochecknoglobals // fixed lookup table, not mutated
 
 // surfaceRumbleParams reads the per-surface road-texture overrides off the query.
-// Each surface takes a <name>Level and <name>Coarseness pair; a surface is
-// overridden only when both are present and in range, so a partial pair leaves
-// the stored value alone.
+// Each surface takes a <name>Level and <name>Coarseness pair, both 0 to 100 as the
+// config holds them; a surface is overridden only when both are present and in
+// range, so a partial pair leaves the stored value alone.
 func surfaceRumbleParams(request *http.Request) map[string]config.SurfaceRumble {
 	query := request.URL.Query()
 
@@ -319,8 +319,8 @@ func surfaceRumbleParams(request *http.Request) map[string]config.SurfaceRumble 
 			continue
 		}
 
-		level := optionalFloatParam(request, surface+"Level", 0, 2)
-		coarseness := optionalFloatParam(request, surface+"Coarseness", 0.1, 2)
+		level := optionalFloatParam(request, surface+"Level", 0, 100)
+		coarseness := optionalFloatParam(request, surface+"Coarseness", 0, 100)
 
 		if level == nil || coarseness == nil {
 			continue
