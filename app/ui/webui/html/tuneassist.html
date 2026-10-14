@@ -3307,7 +3307,8 @@
             }
 
             // Write the frequency span and the locked gain bounds into the chart. The span
-            // follows the Min Hz and Max Hz settings of both tunes. Caller renders.
+            // runs from the lowest allowed Min Hz to the Max Hz settings of both tunes.
+            // Caller renders.
             function applyGainBounds() {
                 if (!gainChart) return;
                 const bounds = gainAutoBounds();
@@ -4035,10 +4036,12 @@
                 maxAmplitude: 'pulseMaxAmplitude',
             };
 
-            // The frequency axis span of the pulse plots. It covers the updated and the
-            // committed windows, so the compare toggle does not move the scale under the data.
+            // The frequency axis span of the pulse plots. It starts at the lowest Min Hz the
+            // number box allows (5 Hz, the config schema minimum), so Min Hz does not move
+            // the scale. It ends at the higher Max Hz of the updated and the committed
+            // windows, so the compare toggle does not move the scale under the data.
             function pulseAxisMinHz() {
-                return Math.min(tuneValues.pulseMinFrequencyHz, tuneDefaults.pulseMinFrequencyHz);
+                return Number(document.getElementById('out-pulseMinFrequencyHz').min);
             }
 
             function pulseAxisMaxHz() {
