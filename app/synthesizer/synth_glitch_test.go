@@ -378,7 +378,7 @@ func TestAdaptiveBuffer_UpstreamStarvation_Scenarios(t *testing.T) {
 
 	// The shipped low-latency config (silence-prefilled ring + a pull smaller than
 	// the default cushion) must eliminate both the startup burst and steady-state
-	// underruns. The cushion knob (see "shipped + 64ms cushion") remains available
+	// underruns. The cushion setting (see "shipped + 64ms cushion") remains available
 	// to add margin on real hardware.
 	if shippedResult.startupUnderruns != 0 || shippedResult.steadyUnderruns != 0 {
 		t.Fatalf("shipped fix still starves: startup=%d steady=%d underruns (expected 0/0)",

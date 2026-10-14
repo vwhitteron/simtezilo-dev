@@ -58,22 +58,21 @@ func (a *App) settingAction(setting languagedb.Key, action string) string {
 		languagedb.UIMenuSynthCalibrationSweepRange: a.handleCalibrationSweepRangeSetting,
 
 		// Haptics handlers
-		languagedb.UIMenuHapticsOutputMode:              a.handleOutputModeSetting,
-		languagedb.UIMenuHapticsJerkCurve:               a.handleJerkCurveSetting,
-		languagedb.UIMenuHapticsJerkPivot:               a.handleJerkPivotSetting,
-		languagedb.UIMenuHapticsJerkPivotGain:           a.handleJerkPivotGainSetting,
-		languagedb.UIMenuHapticsSnapCurve:               a.handleSnapCurveSetting,
-		languagedb.UIMenuHapticsSnapMax:                 a.handleSnapMaxSetting,
-		languagedb.UIMenuHapticsPulseMaxAmplitude:       a.handlePulseMaxAmplitudeSetting,
-		languagedb.UIMenuHapticsPulseMinFreq:            a.handlePulseMinFreqSetting,
-		languagedb.UIMenuHapticsPulseMaxFreq:            a.handlePulseMaxFreqSetting,
-		languagedb.UIMenuHapticsTransmissionFFBStrength: a.handletransmissionFFBStrengthSetting,
-		languagedb.UIMenuHapticsTransmissionJerkCurve:   a.handleTransmissionJerkCurveSetting,
-		languagedb.UIMenuHapticsTransmissionStepBlend:   a.handleTransmissionStepBlendSetting,
-		languagedb.UIMenuHapticsEnginePrimaryBalance:    a.handleEnginePrimaryBalanceSetting,
-		languagedb.UIMenuHapticsEngineSecondaryBalance:  a.handleEngineSecondaryBalanceSetting,
-		languagedb.UIMenuHapticsEnginePulseGain:         a.handleEnginePulseGainSetting,
-		languagedb.UIMenuHapticsEnginePulseScale:        a.handleEnginePulseScaleSetting,
+		languagedb.UIMenuHapticsOutputMode:                  a.handleOutputModeSetting,
+		languagedb.UIMenuHapticsJerkCompression:             a.handleJerkCompressionSetting,
+		languagedb.UIMenuHapticsJerkCenter:                  a.handleJerkCenterSetting,
+		languagedb.UIMenuHapticsSnapCompression:             a.handleSnapCompressionSetting,
+		languagedb.UIMenuHapticsSnapCenter:                  a.handleSnapCenterSetting,
+		languagedb.UIMenuHapticsPulseMaxAmplitude:           a.handlePulseMaxAmplitudeSetting,
+		languagedb.UIMenuHapticsPulseMinFreq:                a.handlePulseMinFreqSetting,
+		languagedb.UIMenuHapticsPulseMaxFreq:                a.handlePulseMaxFreqSetting,
+		languagedb.UIMenuHapticsTransmissionFFBStrength:     a.handletransmissionFFBStrengthSetting,
+		languagedb.UIMenuHapticsTransmissionJerkCompression: a.handleTransmissionJerkCompressionSetting,
+		languagedb.UIMenuHapticsTransmissionStepBlend:       a.handleTransmissionStepBlendSetting,
+		languagedb.UIMenuHapticsEnginePrimaryBalance:        a.handleEnginePrimaryBalanceSetting,
+		languagedb.UIMenuHapticsEngineSecondaryBalance:      a.handleEngineSecondaryBalanceSetting,
+		languagedb.UIMenuHapticsEnginePulseGain:             a.handleEnginePulseGainSetting,
+		languagedb.UIMenuHapticsEnginePulseScale:            a.handleEnginePulseScaleSetting,
 
 		// Wind Simulator handlers
 		languagedb.UIMenuFanEnable:          a.handleFanEnableSetting,
@@ -1062,79 +1061,64 @@ func (a *App) handleOutputModeSetting(action string) string {
 }
 
 // Haptics - Chassis Feedback handlers.
-func (a *App) handleJerkCurveSetting(action string) string {
-	var value int
-
-	switch action {
-	case "increase":
-		value = a.config.IncreaseHapticsJerkCurve()
-	case "decrease":
-		value = a.config.DecreaseHapticsJerkCurve()
-	default:
-		value = int(a.config.GethapticsJerkCurve())
-	}
-
-	return strconv.Itoa(value)
-}
-
-func (a *App) handleJerkPivotSetting(action string) string {
-	var value int
-
-	switch action {
-	case "increase":
-		value = a.config.IncreaseHapticsJerkPivot()
-	case "decrease":
-		value = a.config.DecreaseHapticsJerkPivot()
-	default:
-		value = a.config.GetHapticsJerkPivot()
-	}
-
-	return strconv.Itoa(value)
-}
-
-func (a *App) handleJerkPivotGainSetting(action string) string {
+func (a *App) handleJerkCompressionSetting(action string) string {
 	var value float64
 
 	switch action {
 	case "increase":
-		value = a.config.IncreaseHapticsJerkPivotGain()
+		value = a.config.IncreaseHapticsJerkCompression()
 	case "decrease":
-		value = a.config.DecreaseHapticsJerkPivotGain()
+		value = a.config.DecreaseHapticsJerkCompression()
 	default:
-		value = a.config.GetHapticsJerkPivotGain()
+		value = a.config.GethapticsJerkCompression()
 	}
 
-	return strconv.FormatFloat(value, 'f', 2, 64)
+	return strconv.FormatFloat(value, 'f', 1, 64)
 }
 
-func (a *App) handleSnapCurveSetting(action string) string {
-	var value int
+func (a *App) handleJerkCenterSetting(action string) string {
+	var value float64
 
 	switch action {
 	case "increase":
-		value = a.config.IncreaseHapticsSnapCurve()
+		value = a.config.IncreaseHapticsJerkCenter()
 	case "decrease":
-		value = a.config.DecreaseHapticsSnapCurve()
+		value = a.config.DecreaseHapticsJerkCenter()
 	default:
-		value = int(a.config.GetHapticsSnapCurve())
+		value = a.config.GetHapticsJerkCenter()
 	}
 
-	return strconv.Itoa(value)
+	return strconv.FormatFloat(value, 'f', 1, 64)
 }
 
-func (a *App) handleSnapMaxSetting(action string) string {
-	var value int
+func (a *App) handleSnapCompressionSetting(action string) string {
+	var value float64
 
 	switch action {
 	case "increase":
-		value = a.config.IncreaseHapticsSnapMax()
+		value = a.config.IncreaseHapticsSnapCompression()
 	case "decrease":
-		value = a.config.DecreaseHapticsSnapMax()
+		value = a.config.DecreaseHapticsSnapCompression()
 	default:
-		value = a.config.GetHapticsSnapMax()
+		value = a.config.GetHapticsSnapCompression()
 	}
 
-	return strconv.Itoa(value)
+	return strconv.FormatFloat(value, 'f', 1, 64)
+}
+
+func (a *App) handleSnapCenterSetting(action string) string {
+	var value float64
+
+	switch action {
+	case "increase":
+		value = a.config.IncreaseHapticsSnapCenter()
+	case "decrease":
+		value = a.config.DecreaseHapticsSnapCenter()
+	default:
+		value = a.config.GetHapticsSnapCenter()
+	}
+
+	return strconv.FormatFloat(value, 'f', 1, 64)
 }
 
 func (a *App) handlePulseMaxAmplitudeSetting(action string) string {
@@ -1197,19 +1181,19 @@ func (a *App) handletransmissionFFBStrengthSetting(action string) string {
 	return "Fixed"
 }
 
-func (a *App) handleTransmissionJerkCurveSetting(action string) string {
-	var value int
+func (a *App) handleTransmissionJerkCompressionSetting(action string) string {
+	var value float64
 
 	switch action {
 	case "increase":
-		value = a.config.IncreaseHapticsTransmissionJerkCurve()
+		value = a.config.IncreaseHapticsTransmissionJerkCompression()
 	case "decrease":
-		value = a.config.DecreaseHapticsTransmissionJerkCurve()
+		value = a.config.DecreaseHapticsTransmissionJerkCompression()
 	default:
-		value = int(a.config.GetHapticsTransmissionJerkCurve())
+		value = a.config.GetHapticsTransmissionJerkCompression()
 	}
 
-	return strconv.Itoa(value)
+	return strconv.FormatFloat(value, 'f', 1, 64)
 }
 
 func (a *App) handleTransmissionStepBlendSetting(action string) string {

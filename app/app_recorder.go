@@ -279,6 +279,7 @@ func (a *App) notifyRecordingEvent(event string) {
 			Text:        "recording " + event,
 			Audio:       dcaData,
 			NoCache:     false,
+			Priority:    true,
 		})
 		if err != nil {
 			a.log.Error().

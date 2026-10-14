@@ -23,6 +23,7 @@ type Message struct {
 	Accent      string      // Optional regional accent locale code
 	Audio       []byte      // Pre-generated audio data
 	NoCache     bool        // Disable caching of the result when true (typically for highly unique messages)
+	Priority    bool        // Bypass the rate limit (audio cues and user-triggered tests)
 }
 
 // PitRadio defines the interface for a service that can send text and voice messages.

@@ -23,7 +23,7 @@ func step(state *State, seq uint32, format string, calcTransJerk, calcTransSnap,
 	state.Current.SixDOFRotationCalc.Jerk = calcRotJerk
 	state.Current.SixDOFRotationCalc.Snap = calcRotSnap
 
-	state.resolveDerivatives()
+	state.resolveDerivatives(1.0 / 59.94)
 }
 
 // warm drives enough contiguous frames that the calculated chain is fully valid,

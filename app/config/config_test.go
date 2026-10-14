@@ -481,229 +481,214 @@ func testHapticsDynamicTransFeedbackEnabled(t *testing.T) {
 	assert.False(t, cfg.GethapticsDynamicTransFeedbackEnabled(), 0.001)
 }
 
-func testHapticsJerkCurveGetSet(t *testing.T) {
+func testHapticsJerkCompressionGetSet(t *testing.T) {
 	t.Parallel()
 
 	// Arrange
 	cfg := newTestConfig()
 
-	// Act & Assert - default is 190
-	assert.InDelta(t, 190, cfg.GethapticsJerkCurve(), 0.001)
+	// Act & Assert - default is 74.5
+	assert.InDelta(t, 74.5, cfg.GethapticsJerkCompression(), 0.001)
 
 	// Act - set new value
-	cfg.SetHapticsJerkCurve(300)
+	cfg.SetHapticsJerkCompression(30.0)
 
 	// Assert
-	assert.InDelta(t, 300, cfg.GethapticsJerkCurve(), 0.001)
+	assert.InDelta(t, 30.0, cfg.GethapticsJerkCompression(), 0.001)
 }
 
-func testHapticsJerkCurveClamping(t *testing.T) {
+func testHapticsJerkCompressionClamping(t *testing.T) {
 	t.Parallel()
 
 	// Arrange
 	cfg := newTestConfig()
 
-	// Act - set value below minimum (5)
-	cfg.SetHapticsJerkCurve(1)
+	// Act - set value below minimum (0.5)
+	cfg.SetHapticsJerkCompression(0.1)
 
-	// Assert - should be clamped to 5
-	assert.InDelta(t, 5, cfg.GethapticsJerkCurve(), 0.001)
+	// Assert - should be clamped to 0.5
+	assert.InDelta(t, 0.5, cfg.GethapticsJerkCompression(), 0.001)
 
-	// Act - set value above maximum (995)
-	cfg.SetHapticsJerkCurve(1000)
+	// Act - set value above maximum (99.5)
+	cfg.SetHapticsJerkCompression(150)
 
-	// Assert - should be clamped to 995
-	assert.InDelta(t, 995, cfg.GethapticsJerkCurve(), 0.001)
+	// Assert - should be clamped to 99.5
+	assert.InDelta(t, 99.5, cfg.GethapticsJerkCompression(), 0.001)
 }
 
-func testHapticsJerkCurveIncreaseDecrease(t *testing.T) {
+func testHapticsJerkCompressionIncreaseDecrease(t *testing.T) {
 	t.Parallel()
 
 	// Arrange
 	cfg := newTestConfig()
-	cfg.SetHapticsJerkCurve(100)
+	cfg.SetHapticsJerkCompression(50.0)
 
 	// Act - increase
-	result := cfg.IncreaseHapticsJerkCurve()
+	result := cfg.IncreaseHapticsJerkCompression()
 
 	// Assert
-	assert.InDelta(t, 105, result, 0.001)
-	assert.InDelta(t, 105, cfg.GethapticsJerkCurve(), 0.001)
+	assert.InDelta(t, 50.5, result, 0.001)
+	assert.InDelta(t, 50.5, cfg.GethapticsJerkCompression(), 0.001)
 
 	// Act - decrease
-	result = cfg.DecreaseHapticsJerkCurve()
+	result = cfg.DecreaseHapticsJerkCompression()
 
 	// Assert
-	assert.InDelta(t, 100, result, 0.001)
-	assert.InDelta(t, 100, cfg.GethapticsJerkCurve(), 0.001)
+	assert.InDelta(t, 50.0, result, 0.001)
+	assert.InDelta(t, 50.0, cfg.GethapticsJerkCompression(), 0.001)
 }
 
-func testHapticsJerkPivotGetSet(t *testing.T) {
+// testHapticsJerkExponent checks the exponent derived from the jerk
+// compression setting: 1 - v/100.
+func testHapticsJerkExponent(t *testing.T) {
+	t.Parallel()
+
+	// Arrange
+	cfg := newTestConfig()
+	cfg.SetHapticsJerkCompression(30.0)
+
+	// Act
+	exponent := cfg.GetHapticsJerkExponent()
+
+	// Assert
+	assert.InDelta(t, 0.70, exponent, 0.0001)
+}
+
+func testHapticsJerkCenterGetSet(t *testing.T) {
 	t.Parallel()
 
 	// Arrange
 	cfg := newTestConfig()
 
-	// Act & Assert - default is 601 m/s^3
-	assert.InDelta(t, 601, cfg.GetHapticsJerkPivot(), 0.001)
+	// Act & Assert - default is 37.6, naming a physical jerk of 624 m/s^3
+	assert.InDelta(t, 37.6, cfg.GetHapticsJerkCenter(), 0.001)
 
 	// Act - set new value
-	cfg.SetHapticsJerkPivot(1200)
+	cfg.SetHapticsJerkCenter(50.0)
 
 	// Assert
-	assert.InDelta(t, 1200, cfg.GetHapticsJerkPivot(), 0.001)
+	assert.InDelta(t, 50.0, cfg.GetHapticsJerkCenter(), 0.001)
 }
 
-func testHapticsJerkPivotClamping(t *testing.T) {
+func testHapticsJerkCenterClamping(t *testing.T) {
 	t.Parallel()
 
 	// Arrange
 	cfg := newTestConfig()
 
-	// Act - set value below minimum (1)
-	cfg.SetHapticsJerkPivot(0)
+	// Act - set value below minimum (0.5)
+	cfg.SetHapticsJerkCenter(0)
 
-	// Assert - should be clamped to 1
-	assert.InDelta(t, 1, cfg.GetHapticsJerkPivot(), 0.001)
+	// Assert - should be clamped to 0.5
+	assert.InDelta(t, 0.5, cfg.GetHapticsJerkCenter(), 0.001)
 
-	// Act - set value above maximum (20000)
-	cfg.SetHapticsJerkPivot(30000)
+	// Act - set value above maximum (99.5)
+	cfg.SetHapticsJerkCenter(150)
 
-	// Assert - should be clamped to 20000
-	assert.InDelta(t, 20000, cfg.GetHapticsJerkPivot(), 0.001)
+	// Assert - should be clamped to 99.5
+	assert.InDelta(t, 99.5, cfg.GetHapticsJerkCenter(), 0.001)
 }
 
-func testHapticsJerkPivotIncreaseDecrease(t *testing.T) {
+func testHapticsJerkCenterIncreaseDecrease(t *testing.T) {
 	t.Parallel()
 
 	// Arrange
 	cfg := newTestConfig()
-	cfg.SetHapticsJerkPivot(50)
+	cfg.SetHapticsJerkCenter(50.0)
 
 	// Act - increase
-	result := cfg.IncreaseHapticsJerkPivot()
+	result := cfg.IncreaseHapticsJerkCenter()
 
 	// Assert
-	assert.InDelta(t, 51, result, 0.001)
-	assert.InDelta(t, 51, cfg.GetHapticsJerkPivot(), 0.001)
+	assert.InDelta(t, 50.5, result, 0.001)
+	assert.InDelta(t, 50.5, cfg.GetHapticsJerkCenter(), 0.001)
 
 	// Act - decrease
-	result = cfg.DecreaseHapticsJerkPivot()
+	result = cfg.DecreaseHapticsJerkCenter()
 
 	// Assert
-	assert.InDelta(t, 50, result, 0.001)
-	assert.InDelta(t, 50, cfg.GetHapticsJerkPivot(), 0.001)
+	assert.InDelta(t, 50.0, result, 0.001)
+	assert.InDelta(t, 50.0, cfg.GetHapticsJerkCenter(), 0.001)
 }
 
-func testHapticsJerkPivotGainGetSet(t *testing.T) {
+// testHapticsJerkCenterStepOffGrid checks that increase and decrease move an
+// off-grid jerk center to the adjacent multiple of 0.5.
+func testHapticsJerkCenterStepOffGrid(t *testing.T) {
 	t.Parallel()
 
 	// Arrange
 	cfg := newTestConfig()
+	cfg.SetHapticsJerkCenter(37.6)
 
-	// Act & Assert - default is -3.0 dB
-	assert.InDelta(t, -3.0, cfg.GetHapticsJerkPivotGain(), 0.001)
-
-	// Act - set new value
-	cfg.SetHapticsJerkPivotGain(-6.5)
+	// Act - increase
+	result := cfg.IncreaseHapticsJerkCenter()
 
 	// Assert
-	assert.InDelta(t, -6.5, cfg.GetHapticsJerkPivotGain(), 0.001)
-}
-
-func testHapticsJerkPivotGainClamping(t *testing.T) {
-	t.Parallel()
+	assert.InDelta(t, 38.0, result, 0.001)
 
 	// Arrange
-	cfg := newTestConfig()
-
-	// Act - set value below minimum (-12.0)
-	cfg.SetHapticsJerkPivotGain(-20.0)
-
-	// Assert - should be clamped to -12.0
-	assert.InDelta(t, -12.0, cfg.GetHapticsJerkPivotGain(), 0.001)
-
-	// Act - set value above maximum (0)
-	cfg.SetHapticsJerkPivotGain(1.0)
-
-	// Assert - should be clamped to 0, which is a legal setting: it places the
-	// pivot at full scale, reproducing the jerkMax behaviour this pair replaced.
-	assert.InDelta(t, 0, cfg.GetHapticsJerkPivotGain(), 0.001)
-}
-
-func testHapticsJerkPivotGainIncreaseDecrease(t *testing.T) {
-	t.Parallel()
-
-	// Arrange
-	cfg := newTestConfig()
-	cfg.SetHapticsJerkPivotGain(-5.0)
-
-	// The step is the configured gain increment, as for every other gain control.
-	step := cfg.GetSynthGainIncrement()
-
-	// Act - increase by one step
-	result := cfg.IncreaseHapticsJerkPivotGain()
-
-	// Assert
-	assert.InDelta(t, -5.0+step, result, 0.0001)
-	assert.InDelta(t, -5.0+step, cfg.GetHapticsJerkPivotGain(), 0.0001)
+	cfg.SetHapticsJerkCenter(37.6)
 
 	// Act - decrease
-	result = cfg.DecreaseHapticsJerkPivotGain()
+	result = cfg.DecreaseHapticsJerkCenter()
 
-	// Assert - exactly back to -5.0, not -4.999...: stepping snaps to a hundredth
-	assert.InDelta(t, -5.0, result, 0.0001)
-	assert.InDelta(t, -5.0, cfg.GetHapticsJerkPivotGain(), 0.0001)
+	// Assert
+	assert.InDelta(t, 37.5, result, 0.001)
+
+	// Arrange - a value below the first multiple of 0.5 above the minimum
+	cfg.SetHapticsJerkCenter(0.6)
+
+	// Act - decrease
+	result = cfg.DecreaseHapticsJerkCenter()
+
+	// Assert - clamped to the minimum
+	assert.InDelta(t, 0.5, result, 0.001)
 }
 
-// testHapticsJerkScalePivotAnchor checks the defining property of the pivot
-// parameterisation: the pivot jerk sits at exactly the configured gain below full
-// scale, and stays there as the curve is reshaped around it.
-func testHapticsJerkScalePivotAnchor(t *testing.T) {
+// testHapticsJerkScaleCenterAnchor checks the defining property of the center
+// parameterisation: the jerk center sits at exactly the fixed hapticsJerkBiasDB
+// below full scale, and stays there as the curve is reshaped around it.
+func testHapticsJerkScaleCenterAnchor(t *testing.T) {
 	t.Parallel()
 
-	amplitudeAtPivot := func(cfg *Config) float64 {
-		pivot := float64(cfg.GetHapticsJerkPivot())
-		exponent := cfg.GethapticsJerkCurve() / 1000
+	amplitudeAtCenter := func(cfg *Config) float64 {
+		center := 1000 - 10*cfg.GetHapticsJerkCenter()
+		exponent := cfg.GetHapticsJerkExponent()
 
-		return cfg.GetHapticsJerkScale() * math.Pow(pivot, exponent)
+		return cfg.GetHapticsJerkScale() * math.Pow(center, exponent)
 	}
 
-	for _, curve := range []int{5, 190, 500, 995} {
+	for _, compression := range []float64{0.5, 20.5, 55.0, 99.5} {
 		cfg := newTestConfig()
-		cfg.SetHapticsJerkPivot(601)
-		cfg.SetHapticsJerkPivotGain(-3.0)
-		cfg.SetHapticsJerkCurve(curve)
+		cfg.SetHapticsJerkCenter(40.0)
+		cfg.SetHapticsJerkCompression(compression)
 
-		gotDB := 20 * math.Log10(amplitudeAtPivot(cfg))
-		assert.InDelta(t, -3.0, gotDB, 0.0001, "curve %d should leave the pivot at -3.0 dB", curve)
+		gotDB := 20 * math.Log10(amplitudeAtCenter(cfg))
+		assert.InDelta(t, hapticsJerkBiasDB, gotDB, 0.0001, "compression %v should leave the center at the fixed bias", compression)
 	}
-
-	// A gain of zero puts the pivot at full scale.
-	cfg := newTestConfig()
-	cfg.SetHapticsJerkPivot(3700)
-	cfg.SetHapticsJerkPivotGain(0.0)
-	assert.InDelta(t, 1.0, amplitudeAtPivot(cfg), 0.0001)
 }
 
 // testHapticsJerkMaxMigration checks that a config carrying the deprecated
-// jerkMax knob converts to the equivalent pivot and then clears the old field, so
-// the conversion cannot run twice.
+// jerkMax setting converts to the equivalent center and then clears the old
+// field, so the conversion cannot run twice. The center is computed and
+// clamped in old-integer semantics before migrateInvertedSettings converts it to
+// the new setting.
 func testHapticsJerkMaxMigration(t *testing.T) {
 	t.Parallel()
 
 	// Arrange - the shipped defaults, expressed the old way.
 	cfg := NewFromJSON([]byte(`{
 		"schemaVersion": "1.0.0",
-		"haptics": {"jerkCurve": 190, "jerkMax": 37}
+		"haptics": {"jerkCompression": 190, "jerkMax": 37}
 	}`), zerolog.Nop())
 
-	// Assert - jerkMax 37 at curve 190 is pivot 601 under the default -3.0 dB gain.
-	assert.Equal(t, 601, cfg.GetHapticsJerkPivot())
-	assert.InDelta(t, -3.0, cfg.GetHapticsJerkPivotGain(), 0.001)
+	// Assert - jerkMax 37 at curve 190 is center 601 under the fixed -3.0 dB
+	// bias, which inverts to setting 39.9.
+	assert.InDelta(t, 39.9, cfg.GetHapticsJerkCenter(), 0.001)
 
 	// Assert - the converted scale matches what jerkMax 37 produced before.
-	assert.InDelta(t, 1/math.Pow(3700, 0.19), cfg.GetHapticsJerkScale(), 0.0005)
+	biasLinear := math.Pow(10, hapticsJerkBiasDB/20)
+	assert.InDelta(t, biasLinear/math.Pow(601, 0.19), cfg.GetHapticsJerkScale(), 0.0005)
 
 	// Assert - the deprecated field is cleared, so a reload is a no-op.
 	cfg.mu.RLock()
@@ -712,18 +697,67 @@ func testHapticsJerkMaxMigration(t *testing.T) {
 	assert.Zero(t, cfg.viper.Haptics.JerkMax, "jerkMax should be cleared once migrated")
 }
 
-// testHapticsJerkMaxMigrationSkipped checks that a config already using the pivot
-// pair is left alone.
-func testHapticsJerkMaxMigrationSkipped(t *testing.T) {
+// testHapticsJerkLegacyKeyMigration checks that a config carrying the
+// v0.8.0 jerkCurve key migrates its value onto the renamed JerkCompression
+// field, is then inverted to the new setting, and clears the old key, so the
+// conversion cannot run twice.
+func testHapticsJerkLegacyKeyMigration(t *testing.T) {
 	t.Parallel()
 
+	// Arrange - the shipped defaults, expressed under the pre-rename key.
 	cfg := NewFromJSON([]byte(`{
 		"schemaVersion": "1.0.0",
-		"haptics": {"jerkCurve": 190, "jerkPivot": 1200, "jerkPivotGain": -6.5}
+		"haptics": {"jerkCurve": 255}
 	}`), zerolog.Nop())
 
-	assert.Equal(t, 1200, cfg.GetHapticsJerkPivot())
-	assert.InDelta(t, -6.5, cfg.GetHapticsJerkPivotGain(), 0.001)
+	// Assert - the new getter sees the migrated and inverted value.
+	assert.InDelta(t, 74.5, cfg.GethapticsJerkCompression(), 0.001)
+
+	// Assert - the deprecated field is cleared, so a reload is a no-op.
+	cfg.mu.RLock()
+	defer cfg.mu.RUnlock()
+
+	assert.Nil(t, cfg.viper.Haptics.JerkCurve, "jerkCurve should be cleared once migrated")
+}
+
+// testHapticsJerkLegacyKeyMigrationZeroGain checks that a legacy jerkCurve
+// of exactly 0 still migrates, distinguishing an explicit zero from an
+// absent key.
+func testHapticsJerkLegacyKeyMigrationZeroGain(t *testing.T) {
+	t.Parallel()
+
+	// Arrange
+	cfg := NewFromJSON([]byte(`{
+		"schemaVersion": "1.0.0",
+		"haptics": {"jerkCurve": 0}
+	}`), zerolog.Nop())
+
+	// Assert - the explicit zero migrates onto JerkCompression and then
+	// inverts to the maximum setting, rather than being treated as an absent
+	// key.
+	assert.InDelta(t, 99.5, cfg.GethapticsJerkCompression(), 0.001)
+
+	cfg.mu.RLock()
+	defer cfg.mu.RUnlock()
+
+	assert.Nil(t, cfg.viper.Haptics.JerkCurve, "jerkCurve should be cleared once migrated")
+}
+
+// testHapticsJerkLegacyKeyMigrationAbsent checks that when neither the old nor
+// the new jerk keys are present, a config carrying the shipped v1.0.0
+// defaults is left with the equivalent inverted setting.
+func testHapticsJerkLegacyKeyMigrationAbsent(t *testing.T) {
+	t.Parallel()
+
+	// Arrange - a 1.0.0 config carrying the old shipped default explicitly, as
+	// a real config written by the pre-1.1.0 app would.
+	cfg := NewFromJSON([]byte(`{
+		"schemaVersion": "1.0.0",
+		"haptics": {"jerkCenter": 624}
+	}`), zerolog.Nop())
+
+	// Assert - 624 inverts to 37.6.
+	assert.InDelta(t, 37.6, cfg.GetHapticsJerkCenter(), 0.001)
 }
 
 func testHapticsJerkScale(t *testing.T) {
@@ -753,118 +787,231 @@ func testHapticsReplayEnabledGetSet(t *testing.T) {
 	assert.True(t, cfg.GetHapticsReplayEnabled(), 0.001)
 }
 
-func testHapticsSnapCurveGetSet(t *testing.T) {
+func testHapticsSnapCompressionGetSet(t *testing.T) {
 	t.Parallel()
 
 	// Arrange
 	cfg := newTestConfig()
 
-	// Act & Assert - default is 310
-	assert.InDelta(t, 310, cfg.GetHapticsSnapCurve(), 0.001)
+	// Act & Assert - default is 59.0
+	assert.InDelta(t, 59.0, cfg.GetHapticsSnapCompression(), 0.001)
 
 	// Act - set new value
-	cfg.SetHapticsSnapCurve(400)
+	cfg.SetHapticsSnapCompression(60.0)
 
 	// Assert
-	assert.InDelta(t, 400, cfg.GetHapticsSnapCurve(), 0.001)
+	assert.InDelta(t, 60.0, cfg.GetHapticsSnapCompression(), 0.001)
 }
 
-func testHapticsSnapCurveClamping(t *testing.T) {
+func testHapticsSnapCompressionClamping(t *testing.T) {
 	t.Parallel()
 
 	// Arrange
 	cfg := newTestConfig()
 
-	// Act - set value below minimum (5)
-	cfg.SetHapticsSnapCurve(1)
+	// Act - set value below minimum (0.5)
+	cfg.SetHapticsSnapCompression(0.1)
 
-	// Assert - should be clamped to 5
-	assert.InDelta(t, 5, cfg.GetHapticsSnapCurve(), 0.001)
+	// Assert - should be clamped to 0.5
+	assert.InDelta(t, 0.5, cfg.GetHapticsSnapCompression(), 0.001)
 
-	// Act - set value above maximum (995)
-	cfg.SetHapticsSnapCurve(1000)
+	// Act - set value above maximum (99.5)
+	cfg.SetHapticsSnapCompression(150)
 
-	// Assert - should be clamped to 995
-	assert.InDelta(t, 995, cfg.GetHapticsSnapCurve(), 0.001)
+	// Assert - should be clamped to 99.5
+	assert.InDelta(t, 99.5, cfg.GetHapticsSnapCompression(), 0.001)
 }
 
-func testHapticsSnapCurveIncreaseDecrease(t *testing.T) {
+func testHapticsSnapCompressionIncreaseDecrease(t *testing.T) {
 	t.Parallel()
 
 	// Arrange
 	cfg := newTestConfig()
-	cfg.SetHapticsSnapCurve(200)
+	cfg.SetHapticsSnapCompression(20.0)
 
 	// Act - increase
-	result := cfg.IncreaseHapticsSnapCurve()
+	result := cfg.IncreaseHapticsSnapCompression()
 
 	// Assert
-	assert.InDelta(t, 205, result, 0.001)
-	assert.InDelta(t, 205, cfg.GetHapticsSnapCurve(), 0.001)
+	assert.InDelta(t, 20.5, result, 0.001)
+	assert.InDelta(t, 20.5, cfg.GetHapticsSnapCompression(), 0.001)
 
 	// Act - decrease
-	result = cfg.DecreaseHapticsSnapCurve()
+	result = cfg.DecreaseHapticsSnapCompression()
 
 	// Assert
-	assert.InDelta(t, 200, result, 0.001)
-	assert.InDelta(t, 200, cfg.GetHapticsSnapCurve(), 0.001)
+	assert.InDelta(t, 20.0, result, 0.001)
+	assert.InDelta(t, 20.0, cfg.GetHapticsSnapCompression(), 0.001)
 }
 
-func testHapticsSnapMaxGetSet(t *testing.T) {
+// testHapticsSnapExponent checks the exponent derived from the snap
+// compression setting: 1 - v/100.
+func testHapticsSnapExponent(t *testing.T) {
+	t.Parallel()
+
+	// Arrange
+	cfg := newTestConfig()
+	cfg.SetHapticsSnapCompression(20.0)
+
+	// Act
+	exponent := cfg.GetHapticsSnapExponent()
+
+	// Assert
+	assert.InDelta(t, 0.80, exponent, 0.0001)
+}
+
+func testHapticsSnapCenterGetSet(t *testing.T) {
 	t.Parallel()
 
 	// Arrange
 	cfg := newTestConfig()
 
-	// Act & Assert - default is 90
-	assert.InDelta(t, 90, cfg.GetHapticsSnapMax(), 0.001)
+	// Act & Assert - default is 64.7
+	assert.InDelta(t, 64.7, cfg.GetHapticsSnapCenter(), 0.001)
 
 	// Act - set new value
-	cfg.SetHapticsSnapMax(100)
+	cfg.SetHapticsSnapCenter(80.0)
 
 	// Assert
-	assert.InDelta(t, 100, cfg.GetHapticsSnapMax(), 0.001)
+	assert.InDelta(t, 80.0, cfg.GetHapticsSnapCenter(), 0.001)
 }
 
-func testHapticsSnapMaxClamping(t *testing.T) {
+func testHapticsSnapCenterClamping(t *testing.T) {
 	t.Parallel()
 
 	// Arrange
 	cfg := newTestConfig()
 
-	// Act - set value below minimum (1)
-	cfg.SetHapticsSnapMax(0)
+	// Act - set value below minimum (0.5)
+	cfg.SetHapticsSnapCenter(0)
 
-	// Assert - should be clamped to 1
-	assert.InDelta(t, 1, cfg.GetHapticsSnapMax(), 0.001)
+	// Assert - should be clamped to 0.5
+	assert.InDelta(t, 0.5, cfg.GetHapticsSnapCenter(), 0.001)
 
-	// Act - set value above maximum (200)
-	cfg.SetHapticsSnapMax(300)
+	// Act - set value above maximum (99.5)
+	cfg.SetHapticsSnapCenter(2000)
 
-	// Assert - should be clamped to 200
-	assert.InDelta(t, 200, cfg.GetHapticsSnapMax(), 0.001)
+	// Assert - should be clamped to 99.5
+	assert.InDelta(t, 99.5, cfg.GetHapticsSnapCenter(), 0.001)
 }
 
-func testHapticsSnapMaxIncreaseDecrease(t *testing.T) {
+func testHapticsSnapCenterIncreaseDecrease(t *testing.T) {
 	t.Parallel()
 
 	// Arrange
 	cfg := newTestConfig()
-	cfg.SetHapticsSnapMax(50)
+	cfg.SetHapticsSnapCenter(50.0)
 
 	// Act - increase
-	result := cfg.IncreaseHapticsSnapMax()
+	result := cfg.IncreaseHapticsSnapCenter()
 
 	// Assert
-	assert.InDelta(t, 51, result, 0.001)
-	assert.InDelta(t, 51, cfg.GetHapticsSnapMax(), 0.001)
+	assert.InDelta(t, 50.5, result, 0.001)
+	assert.InDelta(t, 50.5, cfg.GetHapticsSnapCenter(), 0.001)
 
 	// Act - decrease
-	result = cfg.DecreaseHapticsSnapMax()
+	result = cfg.DecreaseHapticsSnapCenter()
 
 	// Assert
-	assert.InDelta(t, 50, result, 0.001)
-	assert.InDelta(t, 50, cfg.GetHapticsSnapMax(), 0.001)
+	assert.InDelta(t, 50.0, result, 0.001)
+	assert.InDelta(t, 50.0, cfg.GetHapticsSnapCenter(), 0.001)
+}
+
+// testHapticsSnapScaleCenterAnchor checks the defining property of the center
+// parameterisation: at snap == (1000 - 10*snapCenter)*hapticsSnapCenterUnitMs4,
+// the pulse frequency sits at exactly the fixed hapticsSnapBiasHz, and stays
+// there as the curve is reshaped around it.
+func testHapticsSnapScaleCenterAnchor(t *testing.T) {
+	t.Parallel()
+
+	freqHzAtCenter := func(cfg *Config) float64 {
+		center := (1000 - 10*cfg.GetHapticsSnapCenter()) * hapticsSnapCenterUnitMs4
+		exponent := cfg.GetHapticsSnapExponent()
+
+		return cfg.GetHapticsSnapScale() * math.Pow(center, exponent)
+	}
+
+	for _, compression := range []float64{0.5, 20.5, 55.0, 99.5} {
+		cfg := newTestConfig()
+		cfg.SetHapticsSnapCenter(83.4)
+		cfg.SetHapticsSnapCompression(compression)
+
+		assert.InDelta(t, hapticsSnapBiasHz, freqHzAtCenter(cfg), 0.0001, "compression %v should leave the center at the bias frequency", compression)
+	}
+}
+
+// testHapticsSnapMaxMigration checks that a config carrying the deprecated
+// snapMax setting converts to the equivalent center and then clears the old
+// field, so the conversion cannot run twice. The center is computed and
+// clamped in old-integer semantics before migrateInvertedSettings converts it to
+// the new setting.
+func testHapticsSnapMaxMigration(t *testing.T) {
+	t.Parallel()
+
+	// Arrange - the shipped defaults, expressed the old way.
+	cfg := NewFromJSON([]byte(`{
+		"schemaVersion": "1.0.0",
+		"haptics": {"snapCompression": 190, "snapMax": 37}
+	}`), zerolog.Nop())
+
+	// Assert - snapMax 37 at curve 190 converts onto the fixed 30 Hz anchor
+	// under the test config's pulse limits (16 and 60 Hz).
+	assert.InDelta(t, 95.1, cfg.GetHapticsSnapCenter(), 0.001)
+
+	// Assert - the pulse frequency matches the old snapMax mapping,
+	// hzRange*(snap/snapMax)^exponent, to within the setting rounding.
+	for _, snap := range []float64{1e4, 5e4, 2e5} {
+		want := (60 - 16) * math.Pow(snap/37000, 0.19)
+		got := cfg.GetHapticsSnapScale() * math.Pow(snap, cfg.GetHapticsSnapExponent())
+
+		assert.InEpsilon(t, want, got, 0.02, "pulse frequency at snap %v should match the snapMax mapping", snap)
+	}
+
+	// Assert - the deprecated field is cleared, so a reload is a no-op.
+	cfg.mu.RLock()
+	defer cfg.mu.RUnlock()
+
+	assert.Zero(t, cfg.viper.Haptics.SnapMax, "snapMax should be cleared once migrated")
+}
+
+// testHapticsSnapLegacyKeyMigration checks that a config carrying the
+// v0.8.0 snapCurve key migrates its value onto the renamed SnapCompression
+// field, is then inverted to the new setting, and clears the old key, so the
+// conversion cannot run twice.
+func testHapticsSnapLegacyKeyMigration(t *testing.T) {
+	t.Parallel()
+
+	// Arrange - the shipped defaults, expressed under the pre-rename key.
+	cfg := NewFromJSON([]byte(`{
+		"schemaVersion": "1.0.0",
+		"haptics": {"snapCurve": 410}
+	}`), zerolog.Nop())
+
+	// Assert - the new getter sees the migrated and inverted value.
+	assert.InDelta(t, 59.0, cfg.GetHapticsSnapCompression(), 0.001)
+
+	// Assert - the deprecated field is cleared, so a reload is a no-op.
+	cfg.mu.RLock()
+	defer cfg.mu.RUnlock()
+
+	assert.Nil(t, cfg.viper.Haptics.SnapCurve, "snapCurve should be cleared once migrated")
+}
+
+// testHapticsSnapLegacyKeyMigrationAbsent checks that when neither the old nor
+// the new snap keys are present, a config carrying the shipped v1.0.0 default
+// is left with the equivalent inverted setting.
+func testHapticsSnapLegacyKeyMigrationAbsent(t *testing.T) {
+	t.Parallel()
+
+	// Arrange - a 1.0.0 config carrying the old shipped default explicitly, as
+	// a real config written by the pre-1.1.0 app would.
+	cfg := NewFromJSON([]byte(`{
+		"schemaVersion": "1.0.0",
+		"haptics": {"snapCenter": 629}
+	}`), zerolog.Nop())
+
+	// Assert - 629 inverts to 37.1.
+	assert.InDelta(t, 37.1, cfg.GetHapticsSnapCenter(), 0.001)
 }
 
 func testHapticsSnapScale(t *testing.T) {
@@ -878,30 +1025,121 @@ func testHapticsSnapScale(t *testing.T) {
 	assert.Greater(t, scale, 0.0)
 }
 
+// testHapticsInvertedSettingsMigration checks that a 1.0.0 config carrying the
+// five haptics settings in their old-integer direction is converted to the new
+// inverted setting on load, including clamping an out-of-range value and
+// leaving an explicitly-unset (zero) transmission value at zero so the
+// default fallback still applies, and that SchemaVersion is stamped to the current version.
+func testHapticsInvertedSettingsMigration(t *testing.T) {
+	t.Parallel()
+
+	// Arrange - a 1.0.0 config with an out-of-range jerkCenter and an
+	// explicitly zero transmission jerk compression (as a config written
+	// before that key existed would read).
+	cfg := NewFromJSON([]byte(`{
+		"schemaVersion": "1.0.0",
+		"haptics": {
+			"jerkCompression": 255,
+			"jerkCenter": 20000,
+			"snapCompression": 410,
+			"snapCenter": 629,
+			"dynamicTransmissionJerkCompression": 0
+		}
+	}`), zerolog.Nop())
+
+	// Assert - the four inverted settings land on the new value.
+	assert.InDelta(t, 74.5, cfg.GethapticsJerkCompression(), 0.001)
+	assert.InDelta(t, 0.5, cfg.GetHapticsJerkCenter(), 0.001, "an out-of-range jerkCenter should clamp to the setting minimum")
+	assert.InDelta(t, 59.0, cfg.GetHapticsSnapCompression(), 0.001)
+	assert.InDelta(t, 37.1, cfg.GetHapticsSnapCenter(), 0.001)
+
+	// Assert - the unset transmission value stays at zero, so the shipped
+	// default fallback still applies.
+	assert.InDelta(t, defaultTransmissionJerkCompression, cfg.GetHapticsTransmissionJerkCompression(), 0.001)
+
+	cfg.mu.RLock()
+	defer cfg.mu.RUnlock()
+
+	assert.Zero(t, cfg.viper.Haptics.DynamicTransmissionJerkCompression, "an unset transmission value should not be converted")
+	assert.Equal(t, currentSchemaVersion, cfg.viper.SchemaVersion, "the schema version should be stamped once migrated")
+}
+
+// testHapticsInvertedSettingsMigrationSetTransmission checks that a non-zero
+// transmission jerk compression value is inverted like the other four settings.
+func testHapticsInvertedSettingsMigrationSetTransmission(t *testing.T) {
+	t.Parallel()
+
+	// Arrange - a 1.0.0 config with an explicit transmission jerk compression.
+	cfg := NewFromJSON([]byte(`{
+		"schemaVersion": "1.0.0",
+		"haptics": {"dynamicTransmissionJerkCompression": 750}
+	}`), zerolog.Nop())
+
+	// Assert - 750 inverts to 25.0.
+	assert.InDelta(t, 25.0, cfg.GetHapticsTransmissionJerkCompression(), 0.001)
+}
+
+// testHapticsInvertedSettingsMigrationAlreadyCurrent checks that a config already
+// at schema 1.1.0 is left untouched: its setting values are not re-inverted.
+func testHapticsInvertedSettingsMigrationAlreadyCurrent(t *testing.T) {
+	t.Parallel()
+
+	// Arrange - a 1.1.0 config already carrying setting values.
+	cfg := NewFromJSON([]byte(`{
+		"schemaVersion": "1.2.0",
+		"haptics": {
+			"jerkCompression": 74.5,
+			"jerkCenter": 37.6,
+			"snapCompression": 59.0,
+			"snapCenter": 37.1
+		}
+	}`), zerolog.Nop())
+
+	// Assert - the values are unchanged.
+	assert.InDelta(t, 74.5, cfg.GethapticsJerkCompression(), 0.001)
+	assert.InDelta(t, 37.6, cfg.GetHapticsJerkCenter(), 0.001)
+	assert.InDelta(t, 59.0, cfg.GetHapticsSnapCompression(), 0.001)
+	assert.InDelta(t, 37.1, cfg.GetHapticsSnapCenter(), 0.001)
+
+	cfg.mu.RLock()
+	defer cfg.mu.RUnlock()
+
+	assert.Equal(t, currentSchemaVersion, cfg.viper.SchemaVersion)
+}
+
 func TestHapticsCoreSection(t *testing.T) {
 	t.Parallel()
 
 	t.Run("testHapticsDynamicTransFeedbackEnabled", testHapticsDynamicTransFeedbackEnabled)
-	t.Run("testHapticsJerkCurveGetSet", testHapticsJerkCurveGetSet)
-	t.Run("testHapticsJerkCurveClamping", testHapticsJerkCurveClamping)
-	t.Run("testHapticsJerkCurveIncreaseDecrease", testHapticsJerkCurveIncreaseDecrease)
-	t.Run("testHapticsJerkPivotGetSet", testHapticsJerkPivotGetSet)
-	t.Run("testHapticsJerkPivotClamping", testHapticsJerkPivotClamping)
-	t.Run("testHapticsJerkPivotIncreaseDecrease", testHapticsJerkPivotIncreaseDecrease)
-	t.Run("testHapticsJerkPivotGainGetSet", testHapticsJerkPivotGainGetSet)
-	t.Run("testHapticsJerkPivotGainClamping", testHapticsJerkPivotGainClamping)
-	t.Run("testHapticsJerkPivotGainIncreaseDecrease", testHapticsJerkPivotGainIncreaseDecrease)
-	t.Run("testHapticsJerkScalePivotAnchor", testHapticsJerkScalePivotAnchor)
+	t.Run("testHapticsInvertedSettingsMigration", testHapticsInvertedSettingsMigration)
+	t.Run("testHapticsInvertedSettingsMigrationSetTransmission", testHapticsInvertedSettingsMigrationSetTransmission)
+	t.Run("testHapticsInvertedSettingsMigrationAlreadyCurrent", testHapticsInvertedSettingsMigrationAlreadyCurrent)
+	t.Run("testHapticsJerkCompressionGetSet", testHapticsJerkCompressionGetSet)
+	t.Run("testHapticsJerkCompressionClamping", testHapticsJerkCompressionClamping)
+	t.Run("testHapticsJerkCompressionIncreaseDecrease", testHapticsJerkCompressionIncreaseDecrease)
+	t.Run("testHapticsJerkCenterGetSet", testHapticsJerkCenterGetSet)
+	t.Run("testHapticsJerkCenterClamping", testHapticsJerkCenterClamping)
+	t.Run("testHapticsJerkCenterIncreaseDecrease", testHapticsJerkCenterIncreaseDecrease)
+	t.Run("testHapticsJerkCenterStepOffGrid", testHapticsJerkCenterStepOffGrid)
+	t.Run("testHapticsJerkExponent", testHapticsJerkExponent)
+	t.Run("testHapticsJerkScaleCenterAnchor", testHapticsJerkScaleCenterAnchor)
 	t.Run("testHapticsJerkMaxMigration", testHapticsJerkMaxMigration)
-	t.Run("testHapticsJerkMaxMigrationSkipped", testHapticsJerkMaxMigrationSkipped)
+	t.Run("testHapticsJerkLegacyKeyMigration", testHapticsJerkLegacyKeyMigration)
+	t.Run("testHapticsJerkLegacyKeyMigrationZeroGain", testHapticsJerkLegacyKeyMigrationZeroGain)
+	t.Run("testHapticsJerkLegacyKeyMigrationAbsent", testHapticsJerkLegacyKeyMigrationAbsent)
 	t.Run("testHapticsJerkScale", testHapticsJerkScale)
 	t.Run("testHapticsReplayEnabledGetSet", testHapticsReplayEnabledGetSet)
-	t.Run("testHapticsSnapCurveGetSet", testHapticsSnapCurveGetSet)
-	t.Run("testHapticsSnapCurveClamping", testHapticsSnapCurveClamping)
-	t.Run("testHapticsSnapCurveIncreaseDecrease", testHapticsSnapCurveIncreaseDecrease)
-	t.Run("testHapticsSnapMaxGetSet", testHapticsSnapMaxGetSet)
-	t.Run("testHapticsSnapMaxClamping", testHapticsSnapMaxClamping)
-	t.Run("testHapticsSnapMaxIncreaseDecrease", testHapticsSnapMaxIncreaseDecrease)
+	t.Run("testHapticsSnapCompressionGetSet", testHapticsSnapCompressionGetSet)
+	t.Run("testHapticsSnapCompressionClamping", testHapticsSnapCompressionClamping)
+	t.Run("testHapticsSnapCompressionIncreaseDecrease", testHapticsSnapCompressionIncreaseDecrease)
+	t.Run("testHapticsSnapCenterGetSet", testHapticsSnapCenterGetSet)
+	t.Run("testHapticsSnapCenterClamping", testHapticsSnapCenterClamping)
+	t.Run("testHapticsSnapCenterIncreaseDecrease", testHapticsSnapCenterIncreaseDecrease)
+	t.Run("testHapticsSnapExponent", testHapticsSnapExponent)
+	t.Run("testHapticsSnapScaleCenterAnchor", testHapticsSnapScaleCenterAnchor)
+	t.Run("testHapticsSnapMaxMigration", testHapticsSnapMaxMigration)
+	t.Run("testHapticsSnapLegacyKeyMigration", testHapticsSnapLegacyKeyMigration)
+	t.Run("testHapticsSnapLegacyKeyMigrationAbsent", testHapticsSnapLegacyKeyMigrationAbsent)
 	t.Run("testHapticsSnapScale", testHapticsSnapScale)
 	t.Run("testSynthDRXEnabledGetSet", testSynthDRXEnabledGetSet)
 }
@@ -1004,11 +1242,9 @@ func testHapticsTextureDefaults(t *testing.T) {
 	cfg := newTestConfig()
 
 	// Act & Assert - road-texture layer defaults. The on/off control is the synth
-	// texture mute (default muted); these shape the signal.
-	assert.True(t, cfg.GetSynthTextureMute())
-	assert.InDelta(t, -3.00, cfg.GetSynthTextureGain(), 0.001)
-	assert.InDelta(t, 90, cfg.GetHapticsTextureMinHz(), 0.001)
-	assert.InDelta(t, 150, cfg.GetHapticsTextureMaxHz(), 0.001)
+	// texture mute (default unmuted); these shape the signal.
+	assert.False(t, cfg.GetSynthTextureMute())
+	assert.InDelta(t, -6.00, cfg.GetSynthTextureGain(), 0.001)
 }
 
 func testHapticsPulseMaxHzIncreaseDecrease(t *testing.T) {
@@ -1062,6 +1298,39 @@ func testHapticsPulseFrequencyRange(t *testing.T) {
 
 	// Act & Assert
 	assert.InDelta(t, 60, cfg.GetHapticePulseFrequencyHzRange(), 0.001)
+}
+
+// testHapticsPulseFrequencyRangeLeavesSnapScale checks that changing either
+// pulse frequency limit does not move the snap scale, so the snap center keeps
+// sitting at the fixed hapticsSnapBiasHz and the limits only clamp.
+func testHapticsPulseFrequencyRangeLeavesSnapScale(t *testing.T) {
+	t.Parallel()
+
+	freqHzAtCenter := func(cfg *Config) float64 {
+		center := (1000 - 10*cfg.GetHapticsSnapCenter()) * hapticsSnapCenterUnitMs4
+		exponent := cfg.GetHapticsSnapExponent()
+
+		return cfg.GetHapticsSnapScale() * math.Pow(center, exponent)
+	}
+
+	// Arrange
+	cfg := newTestConfig()
+	wantScale := cfg.GetHapticsSnapScale()
+
+	// Act - widen the pulse frequency span.
+	cfg.SetHapticsPulseMinFrequencyHz(20)
+	cfg.SetHapticsPulseMaxFrequencyHz(80)
+
+	// Assert
+	assert.InDelta(t, wantScale, cfg.GetHapticsSnapScale(), 1e-9)
+	assert.InDelta(t, hapticsSnapBiasHz, freqHzAtCenter(cfg), 0.0001)
+
+	// Act - narrow the maximum only.
+	cfg.SetHapticsPulseMaxFrequencyHz(50)
+
+	// Assert
+	assert.InDelta(t, wantScale, cfg.GetHapticsSnapScale(), 1e-9)
+	assert.InDelta(t, hapticsSnapBiasHz, freqHzAtCenter(cfg), 0.0001)
 }
 
 func testHapticsPulseMaxAmplitudeGetSet(t *testing.T) {
@@ -1158,6 +1427,43 @@ func testHapticsEngineProfileNotFound(t *testing.T) {
 
 	// Assert
 	assert.Nil(t, profile)
+}
+
+func testHapticsActiveEngineProfileEmpty(t *testing.T) {
+	t.Parallel()
+
+	// Arrange
+	cfg := newTestConfig()
+
+	// Act & Assert - no vehicle resolved a profile yet
+	assert.Empty(t, cfg.GetHapticsActiveEngineProfile())
+}
+
+func testHapticsActiveEngineProfileTracksResolved(t *testing.T) {
+	t.Parallel()
+
+	// Arrange
+	cfg := newTestConfig()
+
+	// Act - resolve a profile the way the engine generator does
+	cfg.GetHapticsEngineProfile("I4")
+
+	// Assert - the name is recorded in lower case for the web UI
+	assert.Equal(t, "i4", cfg.GetHapticsActiveEngineProfile())
+}
+
+func testHapticsActiveEngineProfileClearedOnMiss(t *testing.T) {
+	t.Parallel()
+
+	// Arrange
+	cfg := newTestConfig()
+	cfg.GetHapticsEngineProfile("i4")
+
+	// Act - a vehicle with no matching profile
+	cfg.GetHapticsEngineProfile("nonexistent")
+
+	// Assert
+	assert.Empty(t, cfg.GetHapticsActiveEngineProfile())
 }
 
 func testHapticsEnginePrimaryBalanceNoProfile(t *testing.T) {
@@ -1314,6 +1620,7 @@ func TestHapticsPulseAndEngineProfile(t *testing.T) {
 	t.Run("testHapticsPulseMaxHzIncreaseDecrease", testHapticsPulseMaxHzIncreaseDecrease)
 	t.Run("testHapticsPulseMaxHzClamping", testHapticsPulseMaxHzClamping)
 	t.Run("testHapticsPulseFrequencyRange", testHapticsPulseFrequencyRange)
+	t.Run("testHapticsPulseFrequencyRangeLeavesSnapScale", testHapticsPulseFrequencyRangeLeavesSnapScale)
 	t.Run("testHapticsPulseMaxAmplitudeGetSet", testHapticsPulseMaxAmplitudeGetSet)
 	t.Run("testHapticsPulseMaxAmplitudeIncreaseDecrease", testHapticsPulseMaxAmplitudeIncreaseDecrease)
 	t.Run("testHapticsPulseMaxAmplitudeClamping", testHapticsPulseMaxAmplitudeClamping)
@@ -1321,6 +1628,9 @@ func TestHapticsPulseAndEngineProfile(t *testing.T) {
 	t.Run("testHapticsTextureDefaults", testHapticsTextureDefaults)
 	t.Run("testHapticsEngineProfile", testHapticsEngineProfile)
 	t.Run("testHapticsEngineProfileNotFound", testHapticsEngineProfileNotFound)
+	t.Run("testHapticsActiveEngineProfileEmpty", testHapticsActiveEngineProfileEmpty)
+	t.Run("testHapticsActiveEngineProfileTracksResolved", testHapticsActiveEngineProfileTracksResolved)
+	t.Run("testHapticsActiveEngineProfileClearedOnMiss", testHapticsActiveEngineProfileClearedOnMiss)
 	t.Run("testHapticsEnginePrimaryBalanceNoProfile", testHapticsEnginePrimaryBalanceNoProfile)
 	t.Run("testHapticsEnginePrimaryBalanceWithProfile", testHapticsEnginePrimaryBalanceWithProfile)
 	t.Run("testHapticsEnginePrimaryBalanceIncreaseDecrease", testHapticsEnginePrimaryBalanceIncreaseDecrease)
@@ -2205,22 +2515,6 @@ func testDiscordGuildID(t *testing.T) {
 	assert.Equal(t, "guild-123", cfg.GetDiscordGuildID(), 0.001)
 }
 
-func testDiscordChannelID(t *testing.T) {
-	t.Parallel()
-
-	// Arrange
-	cfg := newTestConfig()
-
-	// Act & Assert - default is empty
-	assert.Empty(t, cfg.GetDiscordChannelID(), 0.001)
-
-	// Act - set new value
-	cfg.SetDiscordChannelID("channel-456")
-
-	// Assert
-	assert.Equal(t, "channel-456", cfg.GetDiscordChannelID(), 0.001)
-}
-
 func testDiscordVoiceChannelID(t *testing.T) {
 	t.Parallel()
 
@@ -2237,13 +2531,28 @@ func testDiscordVoiceChannelID(t *testing.T) {
 	assert.Equal(t, "voice-789", cfg.GetDiscordVoiceChannelID(), 0.001)
 }
 
+func testDiscordLegacyChannelID(t *testing.T) {
+	t.Parallel()
+
+	// Arrange
+	data := `{"pitRadio": {"discord": {"token": "tok", "guildID": "guild-1", "channelID": "legacy-text", "voiceChannelID": "voice-1"}}}`
+
+	// Act
+	cfg := newTestConfigFromJSON(data)
+
+	// Assert
+	assert.Equal(t, "tok", cfg.GetDiscordToken())
+	assert.Equal(t, "guild-1", cfg.GetDiscordGuildID())
+	assert.Equal(t, "voice-1", cfg.GetDiscordVoiceChannelID())
+}
+
 func TestDiscordSection(t *testing.T) {
 	t.Parallel()
 
 	t.Run("testDiscordToken", testDiscordToken)
 	t.Run("testDiscordGuildID", testDiscordGuildID)
-	t.Run("testDiscordChannelID", testDiscordChannelID)
 	t.Run("testDiscordVoiceChannelID", testDiscordVoiceChannelID)
+	t.Run("testDiscordLegacyChannelID", testDiscordLegacyChannelID)
 }
 
 // ****************************************************************************
@@ -2599,8 +2908,8 @@ func testSynthEngineGain(t *testing.T) {
 	// Arrange
 	cfg := newTestConfig()
 
-	// Act & Assert - default is -4.25
-	assert.InDelta(t, -4.25, cfg.GetSynthEngineGain(), 0.001)
+	// Act & Assert - default is -3.50
+	assert.InDelta(t, -3.50, cfg.GetSynthEngineGain(), 0.001)
 
 	// Act - set new value
 	cfg.SetSynthEngineGain(-10.0)

@@ -5,6 +5,7 @@ import (
 	"archive/zip"
 	"compress/gzip"
 	"context"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,6 +17,7 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
+	"github.com/vwhitteron/simtezilo-dev/app/timesync"
 )
 
 // UpdateStatus represents the current state of the updater.
@@ -173,6 +175,13 @@ func (c *Checker) CheckNow() (*UpdateInfo, error) {
 	defer c.mu.Unlock()
 
 	if err != nil {
+		if isClockSkewError(err) && timesync.Status() == timesync.StateUnsynced {
+			c.log.Warn().Err(err).Msg("System clock is not synchronised, deferring update check")
+			c.status = UpdateStatusIdle
+
+			return nil, nil
+		}
+
 		c.setError(err)
 		c.availableInfo = nil
 		c.log.Warn().Err(err).Msg("Failed to check for updates")
@@ -315,6 +324,17 @@ func (c *Checker) SetChannel(channel string) {
 func (c *Checker) setError(err error) {
 	c.status = UpdateStatusError
 	c.lastError = err
+}
+
+// isClockSkewError reports whether err is a certificate validity failure.
+// A stale system clock produces this error before NTP corrects the clock.
+func isClockSkewError(err error) bool {
+	var certErr x509.CertificateInvalidError
+	if errors.As(err, &certErr) {
+		return certErr.Reason == x509.Expired
+	}
+
+	return false
 }
 
 func (c *Checker) fetchUpdateManifest(baseURL, channel string) (*Manifest, error) {
@@ -474,6 +494,9 @@ func (c *Checker) setUpdateAvailable(manifest *Manifest, availableVer *Version, 
 // runPeriodicCheck runs the periodic update check loop.
 func (c *Checker) runPeriodicCheck(ctx context.Context) {
 	defer c.wg.Done()
+
+	// Wait for NTP to correct the clock. A stale clock fails TLS verification.
+	timesync.Wait(ctx, clockSyncTimeout, clockSyncPollInterval, c.log)
 
 	// Initial check after a short delay
 	initialDelay := time.NewTimer(initialCheckDelay)

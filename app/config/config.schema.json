@@ -12,7 +12,7 @@
             "type": "string",
             "description": "Schema version this configuration complies with",
             "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
-            "const": "1.0.0"
+            "const": "1.2.0"
         },
         "app": {
             "type": "object",
@@ -229,7 +229,7 @@
                 "textureMute": {
                     "type": "boolean",
                     "description": "Mute the continuous road-texture layer",
-                    "default": true
+                    "default": false
                 },
                 "textureGain": {
                     "type": "number",
@@ -410,47 +410,61 @@
                     "description": "Enable haptic replay",
                     "default": false
                 },
+                "jerkCompression": {
+                    "type": "number",
+                    "description": "Jerk response curve setting. Higher values give a more compressed (exponential) response.",
+                    "minimum": 0.5,
+                    "maximum": 99.5,
+                    "default": 74.5
+                },
                 "jerkCurve": {
                     "type": "integer",
-                    "description": "Jerk response curve",
+                    "description": "Deprecated: renamed to jerkCompression. A non-null value is copied across on load and then cleared.",
+                    "deprecated": true,
                     "minimum": 5,
-                    "maximum": 995,
-                    "default": 190
+                    "maximum": 995
                 },
-                "jerkPivot": {
-                    "type": "integer",
-                    "description": "Reference jerk value held at the pivot gain in m/s^3",
-                    "minimum": 1,
-                    "maximum": 20000,
-                    "default": 601
-                },
-                "jerkPivotGain": {
+                "jerkCenter": {
                     "type": "number",
-                    "description": "Amplitude at the pivot jerk in dB below full scale",
-                    "minimum": -12.0,
-                    "maximum": 0.0,
-                    "default": -3.0
+                    "description": "Reference jerk setting, held at -3 dB below full scale. The physical jerk it names, in m/s^3, is 1000 - 10*value; a lower setting names a higher jerk.",
+                    "minimum": 0.5,
+                    "maximum": 99.5,
+                    "default": 37.6
                 },
                 "jerkMax": {
                     "type": "integer",
-                    "description": "Deprecated: replaced by jerkPivot and jerkPivotGain. A non-zero value is converted on load and then cleared.",
+                    "description": "Deprecated: replaced by jerkCenter. A non-zero value is converted on load and then cleared.",
                     "deprecated": true,
                     "minimum": 0,
                     "maximum": 200
                 },
+                "snapCompression": {
+                    "type": "number",
+                    "description": "Snap response curve setting. Higher values give a more compressed (exponential) response.",
+                    "minimum": 0.5,
+                    "maximum": 99.5,
+                    "default": 59.0
+                },
                 "snapCurve": {
                     "type": "integer",
-                    "description": "Snap response curve",
+                    "description": "Deprecated: renamed to snapCompression. A non-null value is copied across on load and then cleared.",
+                    "deprecated": true,
                     "minimum": 5,
-                    "maximum": 995,
-                    "default": 310
+                    "maximum": 995
+                },
+                "snapCenter": {
+                    "type": "number",
+                    "description": "Reference snap setting, held at the pulse frequency halfway between the minimum and maximum pulse frequency. The physical snap it names, in m/s^4, is (1000 - 10*value) * 100; a lower setting names a higher snap.",
+                    "minimum": 0.5,
+                    "maximum": 99.5,
+                    "default": 37.1
                 },
                 "snapMax": {
                     "type": "integer",
-                    "description": "Maximum snap value",
-                    "minimum": 1,
-                    "maximum": 200,
-                    "default": 90
+                    "description": "Deprecated: replaced by snapCenter. A non-zero value is converted on load and then cleared.",
+                    "deprecated": true,
+                    "minimum": 0,
+                    "maximum": 200
                 },
                 "pulseMaxAmplitude": {
                     "type": "number",
@@ -473,31 +487,24 @@
                     "maximum": 200.0,
                     "default": 60.0
                 },
-                "textureMinFrequencyHz": {
-                    "type": "number",
-                    "description": "Lower edge of the road-texture noise band in Hz (brightness at low speed)",
-                    "minimum": 5.0,
-                    "maximum": 200.0,
-                    "default": 25.0
-                },
-                "textureMaxFrequencyHz": {
-                    "type": "number",
-                    "description": "Upper edge of the road-texture noise band in Hz (brightness at high speed)",
-                    "minimum": 5.0,
-                    "maximum": 200.0,
-                    "default": 45.0
-                },
                 "dynamicTransmissionFeedback": {
                     "type": "boolean",
                     "description": "Enable dynamic transmission feedback",
                     "default": true
                 },
+                "dynamicTransmissionJerkCompression": {
+                    "type": "number",
+                    "description": "Response curve setting applied to the driveline-driven gear shift magnitude. Higher values give a more compressed (exponential) response.",
+                    "minimum": 0.5,
+                    "maximum": 99.5,
+                    "default": 25.0
+                },
                 "dynamicTransmissionJerkCurve": {
                     "type": "integer",
-                    "description": "Response curve applied to the driveline-driven gear shift magnitude",
+                    "description": "Deprecated: renamed to dynamicTransmissionJerkCompression. A non-null value is copied across on load and then cleared.",
+                    "deprecated": true,
                     "minimum": 5,
-                    "maximum": 995,
-                    "default": 750
+                    "maximum": 995
                 },
                 "dynamicTransmissionStepBlend": {
                     "type": "number",
@@ -511,6 +518,27 @@
                     "description": "Engine haptic profiles keyed by engine type",
                     "additionalProperties": {
                         "$ref": "#/$defs/engineProfile"
+                    }
+                },
+                "surfaceRumble": {
+                    "type": "object",
+                    "description": "Road-texture character keyed by surface name",
+                    "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                            "level": {
+                                "type": "number",
+                                "description": "Loudness from 0 to 100; the internal gain is the value divided by 50",
+                                "minimum": 0,
+                                "maximum": 100
+                            },
+                            "coarseness": {
+                                "type": "number",
+                                "description": "Grain from 0 to 100; a higher value gives a coarser grain",
+                                "minimum": 0,
+                                "maximum": 100
+                            }
+                        }
                     }
                 }
             },
@@ -584,11 +612,6 @@
                         "guildID": {
                             "type": "string",
                             "description": "Discord guild (server) ID",
-                            "default": ""
-                        },
-                        "channelID": {
-                            "type": "string",
-                            "description": "Discord text channel ID",
                             "default": ""
                         },
                         "voiceChannelID": {

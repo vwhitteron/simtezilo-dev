@@ -9,20 +9,6 @@ window.channelDisplayLabel = window.channelDisplayLabel || function (ch, names) 
     return name + ' (' + (ch + 1) + ')';
 };
 
-// Haptics fields whose box holds a different unit from the config's stored form.
-// The curve exponents are shown as the raw thousandths the backend stores (5-995)
-// while the config keeps a float (0.005-0.995), so they are divided on the way in.
-// Everything else is sent as displayed.
-//
-// This lives in one place because there are two save paths (per-input auto-save and
-// the bulk Save button); when only one of them scaled, typing 310 into Snap Curve
-// stored 310000.
-const CONFIG_FIELDS_SCALED_BY_1000 = new Set([
-    'haptics.jerkCurve',
-    'haptics.snapCurve',
-    'haptics.dynamicTransmissionJerkCurve',
-]);
-
 // A checkbox marked data-config-invert shows the logical negation of the value it
 // is bound to, so a switch can be phrased as "enable the new behaviour" while the
 // config it writes stores the opposite ("use the legacy behaviour"). The negation
@@ -39,14 +25,6 @@ function checkboxToConfig(input) {
 // configToCheckbox maps a stored value to the checkbox's DOM state.
 function configToCheckbox(input, value) {
     return checkboxIsInverted(input) ? !value : Boolean(value);
-}
-
-function toConfigValue(configPath, value) {
-    if (typeof value !== 'number' || !CONFIG_FIELDS_SCALED_BY_1000.has(configPath)) {
-        return value;
-    }
-
-    return value / 1000.0;
 }
 
 // Settings page JavaScript functionality
@@ -76,6 +54,24 @@ class ConfigManager {
     formatDecimalValue(value) {
         const num = parseFloat(value) || 0;
         return num.toFixed(2);
+    }
+
+    // Format a value to the fixed decimal places in the data-decimals attribute.
+    formatFixedValue(input, value) {
+        const num = parseFloat(value) || 0;
+        return num.toFixed(parseInt(input.dataset.decimals, 10));
+    }
+
+    // Set an input's value and refresh the touch spinner clone of the input.
+    // A direct value assignment fires no event, so the clone stays blank without
+    // this notification.
+    setInputValue(input, value) {
+        if (!input) {
+            return;
+        }
+
+        input.value = value;
+        input.dispatchEvent(new Event('touchspinner:sync'));
     }
 
     async init() {
@@ -171,7 +167,7 @@ class ConfigManager {
     showRestartRequired() {
         const indicator = document.getElementById('restart-required-indicator');
         if (indicator) {
-            indicator.style.display = 'inline-block';
+            indicator.style.display = 'inline-flex';
         }
 
         // Update restart button to green
@@ -583,6 +579,9 @@ class ConfigManager {
                     if (input.classList.contains('decimal-input')) {
                         input.value = this.formatDecimalValue(input.value);
                     }
+                    if (input.dataset.decimals !== undefined) {
+                        this.setInputValue(input, this.formatFixedValue(input, input.value));
+                    }
                 });
 
                 // Also save on Enter key press
@@ -606,6 +605,9 @@ class ConfigManager {
                         }
                         if (input.classList.contains('decimal-input')) {
                             input.value = this.formatDecimalValue(input.value);
+                        }
+                        if (input.dataset.decimals !== undefined) {
+                            this.setInputValue(input, this.formatFixedValue(input, input.value));
                         }
                     });
                 }
@@ -650,8 +652,6 @@ class ConfigManager {
             if (isNaN(newValue)) {
                 newValue = 0;
             }
-
-            newValue = toConfigValue(configPath, newValue);
         } else {
             newValue = input.value;
         }
@@ -874,12 +874,15 @@ class ConfigManager {
                     input.checked = configToCheckbox(input, value);
                 } else if (input.classList.contains('gain-input')) {
                     // Format gain inputs with 2 decimal places and minus prefix
-                    input.value = this.formatGainValue(value);
+                    this.setInputValue(input, this.formatGainValue(value));
                 } else if (input.classList.contains('decimal-input')) {
                     // Format decimal inputs with 2 decimal places
-                    input.value = this.formatDecimalValue(value);
+                    this.setInputValue(input, this.formatDecimalValue(value));
+                } else if (input.dataset.decimals !== undefined) {
+                    // Format inputs to the decimal places in data-decimals
+                    this.setInputValue(input, this.formatFixedValue(input, value));
                 } else {
-                    input.value = value;
+                    this.setInputValue(input, value);
                     // Range sliders drive a separate value label via their oninput
                     // handler, which populateForm's direct assignment doesn't trigger;
                     // fire it so the label reflects the loaded value.
@@ -1021,7 +1024,7 @@ class ConfigManager {
     // selected; the mode only gates whether the inputs are editable.
     updateTransmissionDisabledState() {
         const dynamicRadio = document.getElementById('transmission-dynamic-radio');
-        const jerkCurveInput = document.getElementById('haptics-transmissionjerkcurve');
+        const jerkCompressionInput = document.getElementById('haptics-transmissionjerkcompression');
         const stepBlendInput = document.getElementById('haptics-transmissionstepblend');
 
         if (!dynamicRadio) {
@@ -1030,8 +1033,8 @@ class ConfigManager {
 
         const isDynamic = dynamicRadio.checked;
 
-        if (jerkCurveInput) {
-            jerkCurveInput.disabled = !isDynamic;
+        if (jerkCompressionInput) {
+            jerkCompressionInput.disabled = !isDynamic;
         }
         if (stepBlendInput) {
             stepBlendInput.disabled = !isDynamic;
@@ -1160,7 +1163,7 @@ class ConfigManager {
                 value = input.value;
             }
 
-            this.setNestedValue(formData, configPath, toConfigValue(configPath, value));
+            this.setNestedValue(formData, configPath, value);
         });
 
         return formData;
@@ -1758,11 +1761,13 @@ class ConfigManager {
             profileSelect.appendChild(option);
         });
 
-        // Auto-select first profile if available
+        // Select the profile the current vehicle resolved to. Fall back to the
+        // first profile when no vehicle resolved one yet.
+        const activeProfile = this.config.synthesizer.activeEngineProfile;
         if (sortedKeys.length > 0) {
-            const firstProfile = sortedKeys[0];
-            profileSelect.value = firstProfile;
-            this.loadEngineProfile(firstProfile, profiles[firstProfile]);
+            const selected = (activeProfile && profiles[activeProfile]) ? activeProfile : sortedKeys[0];
+            profileSelect.value = selected;
+            this.loadEngineProfile(selected, profiles[selected]);
             profileSettings.style.display = 'block';
             // Initialize touch spinners for engine profile fields
             if (typeof window.initTouchSpinners === 'function') {
@@ -1793,10 +1798,10 @@ class ConfigManager {
 
     // Load engine profile data into form
     loadEngineProfile(profileName, profile) {
-        document.getElementById('engine-primarybalance').value = this.formatDecimalValue(profile.primaryBalance);
-        document.getElementById('engine-secondarybalance').value = this.formatDecimalValue(profile.secondaryBalance);
-        document.getElementById('engine-gain').value = profile.gain;
-        document.getElementById('engine-pulsescale').value = this.formatDecimalValue(profile.pulseScale);
+        this.setInputValue(document.getElementById('engine-primarybalance'), this.formatDecimalValue(profile.primaryBalance));
+        this.setInputValue(document.getElementById('engine-secondarybalance'), this.formatDecimalValue(profile.secondaryBalance));
+        this.setInputValue(document.getElementById('engine-gain'), this.formatGainValue(profile.gain));
+        this.setInputValue(document.getElementById('engine-pulsescale'), this.formatDecimalValue(profile.pulseScale));
     }
 
     // Debounce save for engine profile
@@ -2587,8 +2592,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // Add tooltips for complex settings (if needed)
     const complexInputs = {
         'hardware-displayorientation': 'Display rotation for screens that are mounted in different orientations',
-        'haptics-jerkcurve': 'Controls the responsiveness curve for jerk feedback (higher = more responsive)',
-        'haptics-snapcurve': 'Controls the responsiveness curve for snap feedback (higher = more responsive)',
+        'haptics-jerkcompression': 'Controls the responsiveness curve for jerk feedback (higher = more responsive)',
+        'haptics-snapcompression': 'Controls the responsiveness curve for snap feedback (higher = more responsive)',
+        'haptics-snapcenter': 'Reference snap value, in units of 100 m/s^4, that the frequency response is calibrated against',
         'synth-mastergain': 'Overall volume level for all haptic feedback in decibels',
         'telemetry-source': 'UDP endpoint where telemetry data is received from the racing game'
     };

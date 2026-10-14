@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"math"
 	"net/http"
 	"os"
 	"strings"
@@ -112,7 +111,6 @@ func (h *configHandler) handleGetConfig(response http.ResponseWriter, _ *http.Re
 		"discord": map[string]any{
 			"token":          h.config.GetDiscordToken(),
 			"guildID":        h.config.GetDiscordGuildID(),
-			"channelID":      h.config.GetDiscordChannelID(),
 			"voiceChannelID": h.config.GetDiscordVoiceChannelID(),
 		},
 		"hardware": map[string]any{
@@ -131,19 +129,17 @@ func (h *configHandler) handleGetConfig(response http.ResponseWriter, _ *http.Re
 				"sampleRate": h.config.GetAudioHapticsSampleRate(),
 				"latencyMs":  h.config.GetAudioHapticsLatencyMs(),
 			},
-			"dynamicTransmissionFeedback":  h.config.GethapticsDynamicTransFeedbackEnabled(),
-			"dynamicTransmissionJerkCurve": h.config.GetHapticsTransmissionJerkCurve(),
-			"dynamicTransmissionStepBlend": h.config.GetHapticsTransmissionStepBlend(),
-			"jerkCurve":                    h.config.GethapticsJerkCurve(),
-			"jerkPivot":                    h.config.GetHapticsJerkPivot(),
-			"jerkPivotGain":                h.config.GetHapticsJerkPivotGain(),
-			"snapCurve":                    h.config.GetHapticsSnapCurve(),
-			"snapMax":                      h.config.GetHapticsSnapMax(),
-			"pulseMaxAmplitude":            h.config.GetHapticsPulseMaxAmplitude(),
-			"pulseMaxFrequencyHz":          h.config.GetHapticsPulseMaxHz(),
-			"pulseMinFrequencyHz":          h.config.GetHapticsPulseMinHz(),
-			"textureMinFrequencyHz":        h.config.GetHapticsTextureMinHz(),
-			"textureMaxFrequencyHz":        h.config.GetHapticsTextureMaxHz(),
+			"dynamicTransmissionFeedback":        h.config.GethapticsDynamicTransFeedbackEnabled(),
+			"dynamicTransmissionJerkCompression": h.config.GetHapticsTransmissionJerkCompression(),
+			"dynamicTransmissionStepBlend":       h.config.GetHapticsTransmissionStepBlend(),
+			"jerkCompression":                    h.config.GethapticsJerkCompression(),
+			"jerkCenter":                         h.config.GetHapticsJerkCenter(),
+			"snapCompression":                    h.config.GetHapticsSnapCompression(),
+			"snapCenter":                         h.config.GetHapticsSnapCenter(),
+			"pulseMaxAmplitude":                  h.config.GetHapticsPulseMaxAmplitude(),
+			"pulseMaxFrequencyHz":                h.config.GetHapticsPulseMaxHz(),
+			"pulseMinFrequencyHz":                h.config.GetHapticsPulseMinHz(),
+			"surfaceRumble":                      h.config.GetHapticsSurfaceRumbles(),
 		},
 		"pitRadio": map[string]any{
 			"enabled":               h.config.PitRadioEnabled(),
@@ -182,7 +178,6 @@ func (h *configHandler) handleGetConfig(response http.ResponseWriter, _ *http.Re
 			"discord": map[string]any{
 				"token":          h.config.GetDiscordToken(),
 				"guildID":        h.config.GetDiscordGuildID(),
-				"channelID":      h.config.GetDiscordChannelID(),
 				"voiceChannelID": h.config.GetDiscordVoiceChannelID(),
 			},
 		},
@@ -233,6 +228,7 @@ func (h *configHandler) handleGetConfig(response http.ResponseWriter, _ *http.Re
 			"engineGain":                h.config.GetSynthEngineGain(),
 			"gainIncrement":             h.config.GetSynthGainIncrement(),
 			"engineProfiles":            h.config.GetSynthEngineProfiles(),
+			"activeEngineProfile":       h.config.GetHapticsActiveEngineProfile(),
 			"enableEQ":                  h.config.GetSynthChannelsEqEnabled(),
 			"enableDrx":                 h.config.GetSynthDRXEnabled(),
 			"eq":                        h.config.GetSynthChannelsEq(),
@@ -753,30 +749,48 @@ func (h *configHandler) applyHapticsConfig(config map[string]any) []string {
 	var errors []string
 
 	errors = appendErr(errors, applyField(config, "dynamicTransmissionFeedback", "invalid dynamic transmission feedback value", h.config.SetHapticsDynamicTransFeedbackEnabled))
-	errors = appendErr(errors, applyField(config, "jerkCurve", "invalid jerk curve value", func(f float64) {
-		h.config.SetHapticsJerkCurve(int(math.Round(f * 1000.0)))
-	}))
-	errors = appendErr(errors, applyField(config, "jerkPivot", "invalid jerk pivot value", func(f float64) {
-		h.config.SetHapticsJerkPivot(int(f))
-	}))
-	errors = appendErr(errors, applyField(config, "jerkPivotGain", "invalid jerk pivot gain value", h.config.SetHapticsJerkPivotGain))
-	errors = appendErr(errors, applyField(config, "snapCurve", "invalid snap curve value", func(f float64) {
-		h.config.SetHapticsSnapCurve(int(math.Round(f * 1000.0)))
-	}))
-	errors = appendErr(errors, applyField(config, "snapMax", "invalid snap max value", func(f float64) {
-		h.config.SetHapticsSnapMax(int(f))
-	}))
-	errors = appendErr(errors, applyField(config, "dynamicTransmissionJerkCurve", "invalid transmission jerk curve value", func(f float64) {
-		h.config.SetHapticsTransmissionJerkCurve(int(math.Round(f * 1000.0)))
-	}))
+	errors = appendErr(errors, applyField(config, "jerkCompression", "invalid jerk compression value", h.config.SetHapticsJerkCompression))
+	errors = appendErr(errors, applyField(config, "jerkCenter", "invalid jerk center value", h.config.SetHapticsJerkCenter))
+	errors = appendErr(errors, applyField(config, "snapCompression", "invalid snap compression value", h.config.SetHapticsSnapCompression))
+	errors = appendErr(errors, applyField(config, "snapCenter", "invalid snap center value", h.config.SetHapticsSnapCenter))
+	errors = appendErr(errors, applyField(config, "dynamicTransmissionJerkCompression", "invalid transmission jerk compression value", h.config.SetHapticsTransmissionJerkCompression))
 	errors = appendErr(errors, applyField(config, "dynamicTransmissionStepBlend", "invalid transmission step blend value", h.config.SetHapticsTransmissionStepBlend))
 	errors = appendErr(errors, applyField(config, "pulseMaxAmplitude", "invalid pulse max amplitude value", h.config.SetHapticsPulseMaxAmplitude))
 	errors = appendErr(errors, applyField(config, "pulseMaxFrequencyHz", "invalid pulse max frequency value", h.config.SetHapticsPulseMaxFrequencyHz))
 	errors = appendErr(errors, applyField(config, "pulseMinFrequencyHz", "invalid pulse min frequency value", h.config.SetHapticsPulseMinFrequencyHz))
-	errors = appendErr(errors, applyField(config, "textureMinFrequencyHz", "invalid texture min frequency value", h.config.SetHapticsTextureMinFrequencyHz))
-	errors = appendErr(errors, applyField(config, "textureMaxFrequencyHz", "invalid texture max frequency value", h.config.SetHapticsTextureMaxFrequencyHz))
 	errors = appendErr(errors, applyField(config, "enableReplay", "invalid enable replay value", h.config.SetHapticsEnableReplay))
 	errors = append(errors, applySubMap(config, "output", "invalid haptics output configuration structure", h.applyHapticsOutputConfig)...)
+	errors = append(errors, applySubMap(config, "surfaceRumble", "invalid surface rumble configuration structure", h.applySurfaceRumble)...)
+
+	return errors
+}
+
+// applySurfaceRumble applies the per-surface road-texture overrides. Each key is a
+// surface name and each value is a map with level and coarseness. An entry with a
+// bad shape is reported and the other entries are still applied.
+func (h *configHandler) applySurfaceRumble(surfaces map[string]any) []string {
+	var errors []string
+
+	for surface, rumbleData := range surfaces {
+		rumbleMap, ok := rumbleData.(map[string]any)
+		if !ok {
+			errors = append(errors, "invalid surface rumble value for "+surface)
+
+			continue
+		}
+
+		rumble, _ := h.config.GetHapticsSurfaceRumble(surface)
+
+		if level, ok := rumbleMap["level"].(float64); ok {
+			rumble.Level = level
+		}
+
+		if coarseness, ok := rumbleMap["coarseness"].(float64); ok {
+			rumble.Coarseness = coarseness
+		}
+
+		h.config.SetHapticsSurfaceRumble(surface, rumble)
+	}
 
 	return errors
 }
@@ -947,14 +961,6 @@ func (h *configHandler) applyDiscordConfig(config map[string]any) []string {
 			h.config.SetDiscordGuildID(guildIDStr)
 		} else {
 			errors = append(errors, "invalid discord guild ID value")
-		}
-	}
-
-	if channelID, ok := config["channelID"]; ok {
-		if channelIDStr, ok := channelID.(string); ok {
-			h.config.SetDiscordChannelID(channelIDStr)
-		} else {
-			errors = append(errors, "invalid discord channel ID value")
 		}
 	}
 

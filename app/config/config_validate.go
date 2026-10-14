@@ -143,6 +143,15 @@ func (c *Config) ValidateConfig(jsonData []byte) ValidationResult {
 		}
 	}
 
+	// An older file is valid if loading it would upgrade it to the current schema.
+	jsonData, err = upgradeLegacyJSON(jsonData)
+	if err != nil {
+		addError(&result, "config", fmt.Sprintf("failed to upgrade config: %v", err))
+		result.Valid = false
+
+		return result
+	}
+
 	// Validate against JSON schema
 	schemaResult := validateJSONSchema(jsonData)
 	if !schemaResult.Valid {
@@ -271,15 +280,6 @@ func validateHapticsCustom(hap *haptics, result *ValidationResult) {
 	// Validate min < max for pulse frequency
 	if hap.PulseMinFrequencyHz >= hap.PulseMaxFrequencyHz {
 		addError(result, "haptics.pulseMinFrequencyHz", "pulseMinFrequencyHz must be less than pulseMaxFrequencyHz")
-	}
-
-	// Validate min < max for the texture frequency band, but only when the band is
-	// actually specified. A config that omits the texture settings unmarshals to
-	// zeroes here and picks up defaults on load, so an unset (0/0) band is not an
-	// error; schema bounds catch a single out-of-range value.
-	if hap.TextureMinFrequencyHz > 0 && hap.TextureMaxFrequencyHz > 0 &&
-		hap.TextureMinFrequencyHz >= hap.TextureMaxFrequencyHz {
-		addError(result, "haptics.textureMinFrequencyHz", "textureMinFrequencyHz must be less than textureMaxFrequencyHz")
 	}
 }
 

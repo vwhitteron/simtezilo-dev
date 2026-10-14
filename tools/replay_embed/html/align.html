@@ -1,0 +1,1784 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Replay Align</title>
+<link rel="stylesheet" href="/css/halfmoon.min.css">
+<link rel="stylesheet" href="/css/icons.css">
+<link rel="stylesheet" href="/css/custom.css">
+<style>
+  :root {
+    /* Canvas colours must be literal. Canvas cannot resolve var() references. */
+    --accent:      hsl(216, 100%, 62%);
+    --focus:       hsl(214.3, 12.3%, 44%);
+    --speed:       hsl(214.3, 12.3%, 84%);
+    --speed-fill:  hsla(214.3, 12.3%, 84%, 0.14);
+    --mark-lap:    hsl(271, 80%, 68%);
+    /* A large fill of --mark-lap reads brighter than a 7px swatch. Use a
+       darker step for the selected lap row. */
+    --mark-lap-fill: hsl(271, 56%, 56%);
+    --mark-up:     hsl(145, 52%, 52%);
+    --mark-down:   hsl(50, 93%, 58%);
+    --good:        hsl(145, 52%, 48%);
+    --danger:      hsl(0, 67.5%, 58%);
+    /* Halfmoon slate is hue 214.3 at 12.3%. Match sable-900, sable-700 and a
+       border step so a canvas blends into the panel it sits in. */
+    --bg2:    hsl(214.3, 12.3%, 14%);
+    --bg3:    hsl(214.3, 12.3%, 16%);
+    --border: hsl(214.3, 12.3%, 22%);
+    --shade:  rgba(0, 0, 0, 0.55);
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: var(--bs-body-bg);
+    color: var(--bs-body-color);
+    font: 12px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    overflow: hidden;
+  }
+  /* Sync reads grey when off and blue when on. */
+  #btnSync {
+    min-width: 92px;
+    padding: 6px 18px;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    background: var(--bs-sable-700);
+    border: 2px solid var(--bs-border-color);
+    color: var(--bs-secondary-color);
+  }
+  #btnSync:hover:not(:disabled) { border-color: var(--bs-secondary-color); color: var(--bs-body-color); }
+  #btnSync.active {
+    background: var(--bs-primary);
+    border-color: var(--bs-primary);
+    color: var(--bs-body-bg);
+    box-shadow: 0 0 0 3px rgba(77, 163, 255, 0.22);
+  }
+  #btnSync.active:hover { border-color: var(--bs-primary); color: var(--bs-body-bg); }
+  #app {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+  }
+  #fileBox {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .boxHead { display: flex; align-items: center; }
+  .boxHead .boxTitle { flex: 1 1 auto; }
+  .cogBtn {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    padding: 0 2px;
+    line-height: 1;
+    background: none;
+    border: none;
+    color: var(--bs-secondary-color);
+    cursor: pointer;
+  }
+  /* The icon inherits colour through fill="currentColor". */
+  .cogBtn svg { display: block; width: 18px; height: 18px; }
+  .cogBtn:hover { color: var(--bs-body-color); }
+  .fileField { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .fileField label { font-size: 11px; color: var(--bs-secondary-color); }
+  /* Colour and Save share a row so neither runs the full panel width. */
+  .fileRow { display: flex; align-items: flex-end; gap: 8px; margin-top: 2px; }
+  .fileRow .fileField { flex: 0 0 110px; }
+  #saveBtn { flex: 0 0 auto; min-width: 84px; }
+  #outputInput { flex: 1; min-width: 120px; }
+  #mainRow {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+  #videoPane {
+    flex: 1 1 auto;
+    background: #000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+    overflow: hidden;
+  }
+  #videoEl {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    background: #000;
+  }
+  #sidePane {
+    flex: 0 0 300px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    background: var(--bs-sable-900);
+    border-left: 1px solid var(--bs-border-color);
+    padding: 8px;
+    gap: 8px;
+    min-height: 0;
+  }
+  #mapBox {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  #mapCanvas {
+    display: block;
+    width: 100%;
+    height: 210px;
+    background: var(--bs-sable-700);
+  }
+  /* One look for every side panel box. */
+  .panel {
+    padding: 7px;
+    background: var(--bs-sable-700);
+    border: 1px solid var(--bs-border-color);
+    border-radius: 3px;
+  }
+  #telemetryBox {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  #readout {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 2px 8px;
+  }
+  #readout .k { color: var(--bs-secondary-color); }
+  #readout .v { text-align: right; }
+  #autoCut {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 110px;
+    gap: 6px;
+  }
+  .boxTitle {
+    flex-shrink: 0;
+    text-align: center;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--bs-secondary-color);
+  }
+  .padRow { flex-shrink: 0; display: flex; align-items: center; gap: 6px; font-size: 12px; }
+  .padRow label { color: var(--bs-secondary-color); }
+  .padRow #padInput { flex: 1 1 auto; min-width: 0; text-align: right; }
+  .padUnit { color: var(--bs-secondary-color); }
+  #lapListWrap {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+  }
+  #lapList { list-style: none; margin: 0; padding: 0; }
+  #lapList li {
+    display: flex;
+    justify-content: space-between;
+    padding: 3px 6px;
+    border-radius: 3px;
+    cursor: pointer;
+  }
+  #lapList li:hover { background: var(--bs-sable-500); }
+  #lapList li.current { background: var(--mark-lap-fill); color: #fff; }
+  #transport {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    padding: 6px 10px;
+    background: var(--bs-sable-900);
+    border-top: 1px solid var(--bs-border-color);
+    flex: 0 0 auto;
+  }
+  /* The playback cluster holds the middle column, so it stays centred no
+     matter how wide the controls beside it are. */
+  #transportMain {
+    grid-column: 2;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  /* Sync sits just past the cluster, not pinned to the far edge. */
+  #transportRight {
+    grid-column: 3;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    padding-left: 48px;
+    gap: 6px;
+  }
+  .transportBtn {
+    min-width: 54px;
+    padding: 7px 12px;
+    font-size: 14px;
+    line-height: 1.2;
+  }
+  #btnPlay { min-width: 68px; font-size: 17px; }
+  /* The head and the canvas form one track. No gap, and only the outer
+     corners are rounded, so the pair reads as a single strip. */
+  .lane {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: row;
+    align-items: stretch;
+    gap: 0;
+    padding: 3px 10px;
+  }
+  .trackHead {
+    flex: 0 0 196px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 5px 9px;
+    background: var(--bs-sable-700);
+    border: 1px solid var(--bs-border-color);
+    border-left-width: 3px;
+    border-right: none;
+    border-radius: 3px 0 0 3px;
+    cursor: pointer;
+    user-select: none;
+    overflow: hidden;
+  }
+  .lane.focused .trackHead {
+    border-left-color: var(--bs-primary);
+    background: var(--bs-sable-500);
+  }
+  .trackName {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--bs-secondary-color);
+  }
+  .lane.focused .trackName { color: var(--bs-body-color); }
+  .trackInfo {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    font-size: 11px;
+    line-height: 1.3;
+    color: var(--bs-secondary-color);
+  }
+  .trackInfo > div { display: flex; gap: 6px; }
+  .trackInfo .tk { flex: 0 0 42px; opacity: 0.65; }
+  .trackInfo .tv { color: var(--bs-body-color); }
+  /* Push the legend to the foot of the box. */
+  .legendRow { display: flex; gap: 8px; margin-top: auto; padding-top: 2px; }
+  .legend { display: inline-flex; align-items: center; gap: 3px; font-size: 10px; }
+  .legend i {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    border-radius: 1px;
+    font-style: normal;
+  }
+  .lane canvas {
+    display: block;
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 84px;
+    background: var(--bs-sable-900);
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0 3px 3px 0;
+  }
+  /* Mark the lane the arrow keys drive. Outline the whole track, not the
+     canvas alone, so the head and the canvas stay joined. */
+  .lane.focused .trackHead,
+  .lane.focused canvas {
+    border-top-color: var(--focus);
+    border-bottom-color: var(--focus);
+  }
+  .lane.focused canvas { border-right-color: var(--focus); }
+  #statusBar {
+    flex: 0 0 auto;
+    padding: 4px 10px;
+    background: var(--bs-sable-900);
+    border-top: 1px solid var(--bs-border-color);
+    color: var(--bs-secondary-color);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  #statusBar.error { color: var(--danger); }
+  .overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+  }
+  .overlay.show { display: flex; }
+  .modalBox {
+    width: 460px;
+    max-width: 90vw;
+    background: var(--bs-sable-900);
+    border: 1px solid var(--bs-border-color);
+    border-radius: 6px;
+    padding: 16px;
+  }
+  .modalBox h3 { margin: 0 0 10px; font-size: 13px; }
+  .modalBox .fileField { margin-bottom: 8px; }
+  .modalActions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+  #settingsError { color: var(--danger); min-height: 16px; }
+  #progressTrack {
+    height: 10px;
+    background: var(--bs-sable-700);
+    border-radius: 5px;
+    overflow: hidden;
+    border: 1px solid var(--bs-border-color);
+  }
+  #progressFill {
+    height: 100%;
+    width: 0%;
+    background: var(--bs-primary);
+  }
+  #modalStage { margin-top: 8px; color: var(--bs-secondary-color); }
+  #modalLog {
+    margin-top: 8px;
+    max-height: 160px;
+    overflow-y: auto;
+    background: var(--bs-body-bg);
+    border: 1px solid var(--bs-border-color);
+    border-radius: 3px;
+    padding: 6px;
+    display: none;
+  }
+  #modalActions { margin-top: 12px; text-align: right; }
+</style>
+</head>
+<body data-bs-theme="dark">
+<div id="app">
+  <div id="mainRow">
+    <div id="videoPane">
+      <video id="videoEl" playsinline></video>
+    </div>
+    <div id="sidePane">
+      <div id="fileBox" class="panel">
+        <div class="boxHead">
+          <div class="boxTitle">Files</div>
+          <button id="btnSettings" class="cogBtn" title="Configure directories">
+            <svg aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc. --><path fill="currentColor" d="M259.1 73.5C262.1 58.7 275.2 48 290.4 48L350.2 48C365.4 48 378.5 58.7 381.5 73.5L396 143.5C410.1 149.5 423.3 157.2 435.3 166.3L503.1 143.8C517.5 139 533.3 145 540.9 158.2L570.8 210C578.4 223.2 575.7 239.8 564.3 249.9L511 297.3C511.9 304.7 512.3 312.3 512.3 320C512.3 327.7 511.8 335.3 511 342.7L564.4 390.2C575.8 400.3 578.4 417 570.9 430.1L541 481.9C533.4 495 517.6 501.1 503.2 496.3L435.4 473.8C423.3 482.9 410.1 490.5 396.1 496.6L381.7 566.5C378.6 581.4 365.5 592 350.4 592L290.6 592C275.4 592 262.3 581.3 259.3 566.5L244.9 496.6C230.8 490.6 217.7 482.9 205.6 473.8L137.5 496.3C123.1 501.1 107.3 495.1 99.7 481.9L69.8 430.1C62.2 416.9 64.9 400.3 76.3 390.2L129.7 342.7C128.8 335.3 128.4 327.7 128.4 320C128.4 312.3 128.9 304.7 129.7 297.3L76.3 249.8C64.9 239.7 62.3 223 69.8 209.9L99.7 158.1C107.3 144.9 123.1 138.9 137.5 143.7L205.3 166.2C217.4 157.1 230.6 149.5 244.6 143.4L259.1 73.5zM320.3 400C364.5 399.8 400.2 363.9 400 319.7C399.8 275.5 363.9 239.8 319.7 240C275.5 240.2 239.8 276.1 240 320.3C240.2 364.5 276.1 400.2 320.3 400z"/></svg>
+          </button>
+        </div>
+        <div class="fileField">
+          <label for="videoSelect">Video</label>
+          <select id="videoSelect" class="form-select"></select>
+        </div>
+        <div class="fileField">
+          <label for="replaySelect">Replay</label>
+          <select id="replaySelect" class="form-select"></select>
+        </div>
+        <div class="fileField">
+          <label for="outputInput">Output</label>
+          <input id="outputInput" class="form-control font-monospace" type="text">
+        </div>
+        <div class="fileRow">
+          <div class="fileField">
+            <label for="colourSelect">Colour</label>
+            <select id="colourSelect" class="form-select">
+              <option value="sdr">SDR</option>
+              <option value="hdr">HDR</option>
+            </select>
+          </div>
+          <button id="saveBtn" class="btn btn-primary" disabled>Save</button>
+        </div>
+      </div>
+      <div id="mapBox" class="panel">
+        <div class="boxTitle">Circuit</div>
+        <canvas id="mapCanvas"></canvas>
+      </div>
+      <div id="telemetryBox" class="panel">
+        <div class="boxTitle">Telemetry</div>
+        <div id="readout">
+          <div class="k">Lap</div><div class="v font-monospace" id="roLap">-</div>
+          <div class="k">Speed</div><div class="v font-monospace" id="roSpeed">-</div>
+          <div class="k">RPM</div><div class="v font-monospace" id="roRpm">-</div>
+          <div class="k">Gear</div><div class="v font-monospace" id="roGear">-</div>
+        </div>
+      </div>
+      <div id="autoCut" class="panel">
+        <div class="boxTitle">Auto cut</div>
+        <div class="padRow">
+          <label for="padInput">Extend</label>
+          <input id="padInput" class="form-control font-monospace" type="number"
+                 step="0.1" min="0" max="60" value="3.0">
+          <span class="padUnit">s</span>
+        </div>
+        <div id="lapListWrap">
+          <ul id="lapList"></ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="transport">
+    <div id="transportMain">
+      <button id="btnJumpStart" class="btn btn-secondary transportBtn" title="Jump to start">&#9198;</button>
+      <button id="btnBack10" class="btn btn-secondary transportBtn" title="Back 10 frames">-10</button>
+      <button id="btnBack1" class="btn btn-secondary transportBtn" title="Back 1 frame">-1</button>
+      <button id="btnPlay" class="btn btn-secondary transportBtn" title="Play / pause">&#9654;</button>
+      <button id="btnFwd1" class="btn btn-secondary transportBtn" title="Forward 1 frame">+1</button>
+      <button id="btnFwd10" class="btn btn-secondary transportBtn" title="Forward 10 frames">+10</button>
+      <button id="btnJumpEnd" class="btn btn-secondary transportBtn" title="Jump to end">&#9197;</button>
+    </div>
+    <div id="transportRight">
+      <button id="btnSync" class="btn" title="Sync the two streams (Enter or l)">Sync</button>
+    </div>
+  </div>
+
+  <div class="lane focused" id="laneVideo">
+    <div class="trackHead" id="headVideo">
+      <div class="trackName">Video</div>
+      <div class="trackInfo font-monospace">
+        <div><span class="tk">Frame</span><span class="tv" id="roVidFrame">0 / 0</span></div>
+        <div><span class="tk">Time</span><span class="tv" id="roVidTime">0:00:00.00</span></div>
+        <div><span class="tk">Cut</span><span class="tv" id="roVidCut">0&ndash;0</span></div>
+      </div>
+    </div>
+    <canvas id="videoTimeline"></canvas>
+  </div>
+  <div class="lane" id="laneTel">
+    <div class="trackHead" id="headTel">
+      <div class="trackName">Telemetry</div>
+      <div class="trackInfo font-monospace">
+        <div><span class="tk">Frame</span><span class="tv" id="roTelFrame">0 / 0</span></div>
+        <div><span class="tk">Lap</span><span class="tv" id="roTelLap">-</span></div>
+        <div class="legendRow">
+          <span class="legend"><i style="background:var(--mark-lap)"></i>lap</span>
+          <span class="legend"><i style="background:var(--mark-up)"></i>gear+</span>
+          <span class="legend"><i style="background:var(--mark-down)"></i>gear-</span>
+        </div>
+      </div>
+    </div>
+    <canvas id="telTimeline"></canvas>
+  </div>
+
+  <div id="statusBar" class="small text-body-secondary">Loading&hellip;</div>
+</div>
+
+<div id="settingsOverlay" class="overlay">
+  <div class="modalBox card">
+    <h3>Directories</h3>
+    <div class="fileField">
+      <label for="setVideoDir">Video directory</label>
+      <input id="setVideoDir" class="form-control font-monospace" type="text">
+    </div>
+    <div class="fileField">
+      <label for="setReplayDir">Replay directory</label>
+      <input id="setReplayDir" class="form-control font-monospace" type="text">
+    </div>
+    <div class="fileField">
+      <label for="setOutputDir">Output directory</label>
+      <input id="setOutputDir" class="form-control font-monospace" type="text">
+    </div>
+    <div id="settingsError" class="small"></div>
+    <div class="modalActions">
+      <button id="settingsCancel" class="btn btn-secondary">Cancel</button>
+      <button id="settingsSave" class="btn btn-primary">Apply</button>
+    </div>
+  </div>
+</div>
+
+<div id="modalOverlay" class="overlay">
+  <div id="modalBox" class="modalBox card">
+    <h3 id="modalTitle">Exporting&hellip;</h3>
+    <div id="progressTrack"><div id="progressFill"></div></div>
+    <div id="modalStage" class="font-monospace">-</div>
+    <pre id="modalLog" class="font-monospace small"></pre>
+    <div id="modalActions">
+      <button id="modalClose" class="btn btn-sm btn-secondary" disabled>Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// ---- DOM references ----
+const videoSelect = document.getElementById('videoSelect');
+const replaySelect = document.getElementById('replaySelect');
+const outputInput = document.getElementById('outputInput');
+const colourSelect = document.getElementById('colourSelect');
+const saveBtn = document.getElementById('saveBtn');
+const videoEl = document.getElementById('videoEl');
+const mapCanvas = document.getElementById('mapCanvas');
+const roLap = document.getElementById('roLap');
+const roSpeed = document.getElementById('roSpeed');
+const roRpm = document.getElementById('roRpm');
+const roGear = document.getElementById('roGear');
+const roVidFrame = document.getElementById('roVidFrame');
+const roVidTime = document.getElementById('roVidTime');
+const roVidCut = document.getElementById('roVidCut');
+const roTelFrame = document.getElementById('roTelFrame');
+const roTelLap = document.getElementById('roTelLap');
+const lapList = document.getElementById('lapList');
+const padInput = document.getElementById('padInput');
+const btnSettings = document.getElementById('btnSettings');
+const settingsOverlay = document.getElementById('settingsOverlay');
+const setVideoDir = document.getElementById('setVideoDir');
+const setReplayDir = document.getElementById('setReplayDir');
+const setOutputDir = document.getElementById('setOutputDir');
+const settingsError = document.getElementById('settingsError');
+const settingsCancel = document.getElementById('settingsCancel');
+const settingsSave = document.getElementById('settingsSave');
+const btnJumpStart = document.getElementById('btnJumpStart');
+const btnBack10 = document.getElementById('btnBack10');
+const btnBack1 = document.getElementById('btnBack1');
+const btnPlay = document.getElementById('btnPlay');
+const btnFwd1 = document.getElementById('btnFwd1');
+const btnFwd10 = document.getElementById('btnFwd10');
+const btnJumpEnd = document.getElementById('btnJumpEnd');
+const btnSync = document.getElementById('btnSync');
+const videoTimeline = document.getElementById('videoTimeline');
+const telTimeline = document.getElementById('telTimeline');
+const laneVideo = document.getElementById('laneVideo');
+const laneTel = document.getElementById('laneTel');
+const headVideo = document.getElementById('headVideo');
+const headTel = document.getElementById('headTel');
+const statusBar = document.getElementById('statusBar');
+const modalOverlay = document.getElementById('modalOverlay');
+const modalTitle = document.getElementById('modalTitle');
+const progressFill = document.getElementById('progressFill');
+const modalStage = document.getElementById('modalStage');
+const modalLog = document.getElementById('modalLog');
+const modalClose = document.getElementById('modalClose');
+
+// ---- State ----
+let sources = null;
+let probe = null;      // video probe payload
+let tel = null;         // telemetry payload
+let byFrame = null;     // sequence frame -> packet index, hold-last filled
+let mapPoints = null;   // pre-projected [x,y] polyline points for the map
+let currentVideoName = '';
+let currentReplayName = '';
+let outputEdited = false;
+
+let F = 0;              // current video frame
+let T = 0;               // current telemetry sequence frame
+let offsetFrames = 0;
+let colourEdited = false;
+// selectedLap names the row chosen in Auto cut, or null when none is.
+let selectedLap = null;
+// activeLane names the timeline the arrow keys drive.
+let activeLane = 'video';
+// markers holds every lap start and gear change, sorted by sequence frame.
+let markers = [];
+// mapSizeKey records the canvas size the projection was built for.
+let mapSizeKey = '';
+// markerGutter is the clickable strip along the bottom of the telemetry lane.
+const markerGutter = 14;
+let cutStart = 0;
+let cutEnd = 0;
+// playLimit is the frame playback stops on. A run that starts inside the cut
+// stops on the out point. A run that starts after it plays to the video end.
+let playLimit = 0;
+let synced = false;
+let playing = false;
+
+let lastSetSeconds = -1;
+let pendingSeekF = null;
+let seekScheduled = false;
+
+let dragTarget = null;   // {canvas:'video'|'tel', part:'in'|'out'|'scrub'}
+
+let urlSaveTimer = null;
+let initParams = null;
+
+let exportES = null;
+
+// ---- Helpers ----
+
+function fetchJSON(url) {
+  return fetch(url).then(function(res) {
+    if (!res.ok) {
+      return res.text().then(function(text) {
+        throw new Error('HTTP ' + res.status + ' ' + url + (text ? ': ' + text : ''));
+      });
+    }
+    return res.json();
+  });
+}
+
+function setStatus(msg, isError) {
+  statusBar.textContent = msg;
+  statusBar.classList.toggle('error', !!isError);
+}
+
+function clamp(v, lo, hi) {
+  return Math.max(lo, Math.min(hi, v));
+}
+
+// Convert a video frame index to seconds.
+function frameToTime(f) {
+  if (!probe) return 0;
+  return f * probe.rateDen / probe.rateNum;
+}
+
+// Convert seconds to the nearest video frame index.
+function timeToFrame(sec) {
+  if (!probe) return 0;
+  return Math.round(sec * probe.rateNum / probe.rateDen);
+}
+
+// Format seconds as h:mm:ss.cc for the transport readout.
+function formatTime(sec) {
+  sec = Math.max(0, sec);
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = Math.floor(sec % 60);
+  const cc = Math.floor((sec - Math.floor(sec)) * 100);
+  return pad(h, 2) + ':' + pad(m, 2) + ':' + pad(s, 2) + '.' + pad(cc, 2);
+}
+
+// Format seconds as m:ss.mmm for lap durations.
+function formatLapDuration(sec) {
+  sec = Math.max(0, sec);
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  const ms = Math.floor((sec - Math.floor(sec)) * 1000);
+  return m + ':' + pad(s, 2) + '.' + pad(ms, 3);
+}
+
+function pad(n, w) {
+  let s = String(Math.trunc(n));
+  while (s.length < w) s = '0' + s;
+  return s;
+}
+
+function basename(name) {
+  const parts = name.split('.');
+  if (parts.length > 1) parts.pop();
+  return parts.join('.');
+}
+
+function packetForT(t) {
+  if (!byFrame || !tel) return -1;
+  const idx = clamp(t, 0, byFrame.length - 1);
+  return byFrame[idx];
+}
+
+// ---- Loading ----
+
+function init() {
+  initParams = new URLSearchParams(window.location.search);
+  setStatus('Loading sources…');
+  fetchJSON('/api/sources').then(function(data) {
+    sources = data;
+    populateSelects();
+    outputInput.value = defaultOutput();
+    setStatus('Ready.');
+
+    const wantVideo = initParams.get('video') || sources.videos[0] || '';
+    const wantReplay = initParams.get('replay') || sources.replays[0] || '';
+
+    const tasks = [];
+    if (wantVideo) {
+      videoSelect.value = wantVideo;
+      tasks.push(selectVideo(wantVideo));
+    }
+    if (wantReplay) {
+      replaySelect.value = wantReplay;
+      tasks.push(selectReplay(wantReplay));
+    }
+    Promise.all(tasks).then(applyInitialUrlState).catch(function() {
+      applyInitialUrlState();
+    });
+  }).catch(function(err) {
+    setStatus('Failed to load sources: ' + err.message, true);
+  });
+
+  wireEvents();
+  setupCanvas(videoTimeline);
+  setupCanvas(telTimeline);
+  setupCanvas(mapCanvas);
+  requestAnimationFrame(rafLoop);
+}
+
+function populateSelects() {
+  videoSelect.innerHTML = '';
+  sources.videos.forEach(function(name) {
+    const opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name;
+    videoSelect.appendChild(opt);
+  });
+  replaySelect.innerHTML = '';
+  sources.replays.forEach(function(name) {
+    const opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name;
+    replaySelect.appendChild(opt);
+  });
+}
+
+function defaultOutput() {
+  if (!sources) return '';
+  const name = currentVideoName || videoSelect.value || sources.videos[0] || 'output';
+  return basename(name) + '-gtv.mp4';
+}
+
+function applyInitialUrlState() {
+  const off = initParams.get('offset');
+  if (off !== null) offsetFrames = parseInt(off, 10) || 0;
+  const colour = params.get('colour');
+  if (colour === 'sdr' || colour === 'hdr') { colourSelect.value = colour; colourEdited = true; }
+  const pad = params.get('pad');
+  if (pad !== null && isFinite(parseFloat(pad))) { padInput.value = pad; normalisePad(); }
+  const inP = initParams.get('in');
+  const outP = initParams.get('out');
+  if (probe) {
+    cutStart = inP !== null ? clamp(parseInt(inP, 10) || 0, 0, probe.frames - 1) : cutStart;
+    cutEnd = outP !== null ? clamp(parseInt(outP, 10) || 0, 0, probe.frames - 1) : cutEnd;
+  }
+  synced = initParams.get('sync') === '1';
+  btnSync.classList.toggle('active', synced);
+  T = F + offsetFrames;
+  updateAll(false);
+}
+
+function selectVideo(name) {
+  setStatus('Loading video probe…');
+  return fetchJSON('/api/probe?video=' + encodeURIComponent(name)).then(function(data) {
+    probe = data;
+    currentVideoName = name;
+    videoEl.src = '/api/video?name=' + encodeURIComponent(name);
+    F = 0;
+    cutStart = 0;
+    cutEnd = probe.frames > 0 ? probe.frames - 1 : 0;
+    T = F + offsetFrames;
+    if (!outputEdited) outputInput.value = defaultOutput();
+    applyColourDefault();
+    updateAll();
+    setStatus('Video loaded: ' + name + describeSource());
+  }).catch(function(err) {
+    setStatus('Failed to load video: ' + err.message, true);
+  });
+}
+
+// applyColourDefault picks a colour mode this ffmpeg build can deliver.
+function applyColourDefault() {
+  if (colourEdited || !probe) return;
+  const hdrSource = probe.colorTransfer === 'smpte2084' || probe.colorTransfer === 'arib-std-b67';
+  colourSelect.value = (hdrSource && !probe.canToneMap) ? 'hdr' : 'sdr';
+}
+
+// describeSource summarises the conversion the export will perform.
+function describeSource() {
+  if (!probe) return '';
+  const parts = [probe.videoCodec, probe.width + 'x' + probe.height];
+  if (probe.cropBottom) parts.push('crop ' + probe.cropBottom);
+  if (probe.colorTransfer === 'smpte2084') {
+    parts.push(probe.canToneMap ? 'HDR10' : 'HDR10, no tone map available');
+  }
+  return ' \u2014 ' + parts.join(', ');
+}
+
+function selectReplay(name) {
+  setStatus('Loading telemetry…');
+  return fetchJSON('/api/telemetry?replay=' + encodeURIComponent(name)).then(function(data) {
+    tel = data;
+    currentReplayName = name;
+    buildByFrame();
+    buildMarkers();
+    computeMapProjection();
+    renderLapList();
+    T = F + offsetFrames;
+    updateAll();
+    setStatus('Telemetry loaded: ' + name);
+  }).catch(function(err) {
+    setStatus('Failed to load telemetry: ' + err.message, true);
+  });
+}
+
+// Build the sequence-frame -> packet-index lookup, holding the last value across gaps.
+function buildByFrame() {
+  byFrame = new Int32Array(Math.max(1, tel.span));
+  byFrame.fill(-1);
+  for (let i = 0; i < tel.frame.length; i++) {
+    const f = tel.frame[i];
+    if (f >= 0 && f < byFrame.length) byFrame[f] = i;
+  }
+  let last = 0;
+  for (let i = 0; i < byFrame.length; i++) {
+    if (byFrame[i] === -1) byFrame[i] = last;
+    else last = byFrame[i];
+  }
+}
+
+// buildMarkers collects lap starts and gear changes onto the sequence axis.
+// A gear change is the strongest visual cue for aligning picture to telemetry.
+function buildMarkers() {
+  markers = [];
+  if (!tel) return;
+
+  tel.laps.forEach(function(lap) {
+    markers.push({ frame: lap.from, kind: 'lap', label: String(lap.lap) });
+  });
+
+  // Ignore neutral and unknown, which the transformer reports as 0 or 15.
+  const real = function(g) { return g >= 1 && g <= 9; };
+
+  for (let i = 1; i < tel.gear.length; i++) {
+    const from = tel.gear[i - 1], to = tel.gear[i];
+    if (to === from || !real(from) || !real(to)) continue;
+    markers.push({
+      frame: tel.frame[i],
+      kind: to > from ? 'up' : 'down',
+      label: String(to)
+    });
+  }
+
+  markers.sort(function(a, b) { return a.frame - b.frame; });
+}
+
+// reportMarker names the marker that was picked, because ticks can collide.
+function reportMarker(mark) {
+  const what = mark.kind === 'lap'
+    ? 'lap ' + mark.label
+    : (mark.kind === 'up' ? 'upshift to ' : 'downshift to ') + mark.label;
+  setStatus('Snapped to ' + what + ' at telemetry frame ' + mark.frame);
+}
+
+// nearestMarker returns the marker closest to a pixel position.
+function nearestMarker(x, w) {
+  if (!tel || markers.length === 0) return null;
+  let best = null, bestDist = Infinity;
+  for (let i = 0; i < markers.length; i++) {
+    const dist = Math.abs(frameToX(markers[i].frame, w, tel.span) - x);
+    if (dist < bestDist) { bestDist = dist; best = markers[i]; }
+  }
+  return best;
+}
+
+function computeMapProjection() {
+  const xs = tel.x, zs = tel.z;
+  let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+  for (let i = 0; i < xs.length; i++) {
+    if (xs[i] < minX) minX = xs[i];
+    if (xs[i] > maxX) maxX = xs[i];
+    if (zs[i] < minZ) minZ = zs[i];
+    if (zs[i] > maxZ) maxZ = zs[i];
+  }
+  if (!isFinite(minX)) { minX = 0; maxX = 1; minZ = 0; maxZ = 1; }
+  const W = mapCanvas.clientWidth || 240;
+  const H = mapCanvas.clientHeight || 240;
+  const pad = 12;
+
+  mapSizeKey = W + 'x' + H;
+
+  const spanX = Math.max(1e-6, maxX - minX);
+  const spanZ = Math.max(1e-6, maxZ - minZ);
+  const scale = Math.min((W - 2 * pad) / spanX, (H - 2 * pad) / spanZ);
+  const offsetX = pad + ((W - 2 * pad) - spanX * scale) / 2;
+  const offsetZ = pad + ((H - 2 * pad) - spanZ * scale) / 2;
+  const toCanvas = function(x, z) {
+    return [offsetX + (x - minX) * scale, offsetZ + (z - minZ) * scale];
+  };
+  const stride = Math.max(1, Math.floor(xs.length / 4000));
+  mapPoints = [];
+  for (let i = 0; i < xs.length; i += stride) {
+    mapPoints.push(toCanvas(xs[i], zs[i]));
+  }
+  mapPoints.toCanvas = toCanvas;
+}
+
+// normalisePad rewrites the Extend field with one decimal place, so a step
+// through a whole number still shows the decimal.
+function normalisePad() {
+  const seconds = parseFloat(padInput.value);
+  if (!isFinite(seconds)) return;
+  padInput.value = clamp(seconds, 0, 60).toFixed(1);
+}
+
+// cutPadFrames converts the Auto cut extension into whole video frames.
+function cutPadFrames() {
+  if (!probe) return 0;
+  const seconds = parseFloat(padInput.value);
+  if (!isFinite(seconds) || seconds <= 0) return 0;
+
+  return Math.round(seconds * probe.rateNum / probe.rateDen);
+}
+
+// applyLapCut marks the cut around one lap, extended by the padding.
+function applyLapCut(lap) {
+  if (!probe) return;
+
+  const pad = cutPadFrames();
+
+  cutStart = clamp(lap.from - offsetFrames - pad, 0, probe.frames - 1);
+  cutEnd = clamp(lap.to - offsetFrames + pad, 0, probe.frames - 1);
+
+  // Park both heads on the cut start. Move them as a pair even when Sync is
+  // off, because the lap was mapped through the offset. The usual video move
+  // would rewrite the offset and undo the alignment.
+  videoEl.pause();
+  F = cutStart;
+  T = F + offsetFrames;
+  seekVideoExact(F);
+
+  // Remember the choice. The padded start sits inside the previous lap, so the
+  // head cannot say which row was picked.
+  selectedLap = lap.lap;
+
+  const seconds = pad * probe.rateDen / probe.rateNum;
+
+  setStatus('Cut set to lap ' + lap.lap + ' plus ' + seconds.toFixed(1) + ' s each side');
+  updateAll();
+}
+
+function renderLapList() {
+  lapList.innerHTML = '';
+  tel.laps.forEach(function(lap, idx) {
+    const li = document.createElement('li');
+    li.dataset.idx = String(idx);
+    const durSec = (lap.to - lap.from) / 60;
+    li.innerHTML = '<span>Lap ' + lap.lap + '</span><span class="font-monospace">' + formatLapDuration(durSec) + '</span>';
+    li.addEventListener('click', function() { applyLapCut(lap); });
+    lapList.appendChild(li);
+  });
+}
+
+// ---- Rendering ----
+
+function setupCanvas(canvas) {
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth || canvas.width;
+  const h = canvas.clientHeight || canvas.height;
+  canvas.width = Math.max(1, Math.round(w * dpr));
+  canvas.height = Math.max(1, Math.round(h * dpr));
+}
+
+function updateAll(persist) {
+  updateReadout();
+  drawVideoTimeline();
+  drawTelemetryTimeline();
+  drawMap();
+  highlightLapRow();
+  updateSaveEnabled();
+  if (persist !== false) persistURL();
+}
+
+function updateReadout() {
+  const total = probe ? probe.frames : 0;
+  roVidFrame.textContent = F + ' / ' + total;
+  roVidTime.textContent = formatTime(frameToTime(F));
+  roVidCut.textContent = cutStart + '–' + cutEnd;
+
+  roTelFrame.textContent = T + ' / ' + (tel ? tel.span : 0);
+
+  const pIdx = packetForT(T);
+  if (tel && pIdx >= 0) {
+    roLap.textContent = String(tel.lap[pIdx]);
+    const elapsed = runningLapTime(T);
+    roTelLap.textContent = elapsed === null
+      ? String(tel.lap[pIdx])
+      : String(tel.lap[pIdx]) + '  ' + formatLapDuration(elapsed);
+    roSpeed.textContent = tel.speed[pIdx].toFixed(1) + ' km/h';
+    roRpm.textContent = Math.round(tel.rpm[pIdx]).toString();
+    const g = tel.gear[pIdx];
+    roGear.textContent = g === 15 ? 'N' : String(g);
+  } else {
+    roLap.textContent = '-';
+    roTelLap.textContent = '-';
+    roSpeed.textContent = '-';
+    roRpm.textContent = '-';
+    roGear.textContent = '-';
+  }
+}
+
+// lapAtFrame returns the lap covering a sequence frame, or null.
+function lapAtFrame(frame) {
+  if (!tel) return null;
+  for (let i = 0; i < tel.laps.length; i++) {
+    const lap = tel.laps[i];
+    if (frame >= lap.from && frame <= lap.to) return lap;
+  }
+  return null;
+}
+
+// runningLapTime returns the elapsed time since the current lap started.
+// Telemetry runs at 60 Hz, and the sequence axis keeps dropped frames as
+// holes, so a frame count converts straight to elapsed time.
+function runningLapTime(frame) {
+  const lap = lapAtFrame(frame);
+  if (!lap) return null;
+  return (frame - lap.from) / 60;
+}
+
+function highlightLapRow() {
+  const items = lapList.children;
+  for (let i = 0; i < items.length; i++) {
+    const lap = tel.laps[i];
+    const mark = lap && (selectedLap !== null
+      ? lap.lap === selectedLap
+      : T >= lap.from && T <= lap.to);
+    items[i].classList.toggle('current', !!mark);
+  }
+}
+
+function updateSaveEnabled() {
+  saveBtn.disabled = !(probe && tel && cutEnd > cutStart);
+}
+
+function frameToX(f, w, total) {
+  if (total <= 0) return 0;
+  return (f / total) * w;
+}
+
+function xToFrame(px, w, total) {
+  if (total <= 0) return 0;
+  return clamp(Math.round((px / w) * total), 0, total - 1);
+}
+
+function drawVideoTimeline() {
+  const canvas = videoTimeline;
+  setupCanvas(canvas);
+  const dpr = window.devicePixelRatio || 1;
+  const ctx = canvas.getContext('2d');
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = getVar('--bg2');
+  ctx.fillRect(0, 0, w, h);
+  if (!probe) return;
+  const total = probe.frames;
+  ctx.fillStyle = getVar('--shade');
+  const xIn = frameToX(cutStart, w, total);
+  const xOut = frameToX(cutEnd, w, total);
+  ctx.fillRect(0, 0, xIn, h);
+  ctx.fillRect(xOut, 0, w - xOut, h);
+  drawMarker(ctx, xIn, h, getVar('--good'));
+  drawMarker(ctx, xOut, h, getVar('--danger'));
+  ctx.fillStyle = getVar('--accent');
+  const xp = frameToX(F, w, total);
+  ctx.fillRect(xp - 0.5, 0, 1, h);
+}
+
+function drawMarker(ctx, x, h, color) {
+  ctx.fillStyle = color;
+  ctx.fillRect(x - 1, 0, 2, h);
+  ctx.beginPath();
+  ctx.moveTo(x - 5, 0);
+  ctx.lineTo(x + 5, 0);
+  ctx.lineTo(x, 7);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function drawTelemetryTimeline() {
+  const canvas = telTimeline;
+  setupCanvas(canvas);
+  const dpr = window.devicePixelRatio || 1;
+  const ctx = canvas.getContext('2d');
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = getVar('--bg2');
+  ctx.fillRect(0, 0, w, h);
+  if (!tel) return;
+  const total = tel.span;
+  const plotH = Math.max(1, h - markerGutter);
+
+  // Speed sparkline, downsampled by taking the max per pixel bucket.
+  const step = Math.max(1, Math.ceil(total / w));
+  let maxSpeed = 0;
+  for (let i = 0; i < tel.speed.length; i++) if (tel.speed[i] > maxSpeed) maxSpeed = tel.speed[i];
+  if (maxSpeed <= 0) maxSpeed = 1;
+  // Collect one point per pixel column first, so the fill and the line agree.
+  const points = new Array(w);
+  for (let px = 0; px < w; px++) {
+    const fLo = Math.floor((px / w) * total);
+    const fHi = Math.min(total, fLo + step);
+    let best = 0;
+    for (let f = fLo; f < fHi; f += step > 8 ? Math.ceil(step / 8) : 1) {
+      const pIdx = byFrame[clamp(f, 0, byFrame.length - 1)];
+      if (pIdx >= 0 && tel.speed[pIdx] > best) best = tel.speed[pIdx];
+    }
+    points[px] = plotH - (best / maxSpeed) * plotH;
+  }
+
+  // A filled area reads as a graph, never as a border.
+  ctx.fillStyle = getVar('--speed-fill');
+  ctx.beginPath();
+  ctx.moveTo(0, plotH);
+  for (let px = 0; px < w; px++) ctx.lineTo(px, points[px]);
+  ctx.lineTo(w - 1, plotH);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.strokeStyle = getVar('--speed');
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let px = 0; px < w; px++) {
+    if (px === 0) ctx.moveTo(px, points[px]); else ctx.lineTo(px, points[px]);
+  }
+  ctx.stroke();
+
+  drawMarkers(ctx, w, h, plotH, total);
+
+  // Playhead.
+  ctx.fillStyle = getVar('--accent');
+  const xp = frameToX(T, w, total);
+  ctx.fillRect(xp - 0.5, 0, 1, h);
+}
+
+// drawMarkers paints the clickable marker strip below the sparkline.
+function drawMarkers(ctx, w, h, plotH, total) {
+  ctx.fillStyle = getVar('--bg3');
+  ctx.fillRect(0, plotH, w, h - plotH);
+  ctx.fillStyle = getVar('--border');
+  ctx.fillRect(0, plotH, w, 1);
+
+  const lapColour = getVar('--mark-lap');
+  const upColour = getVar('--mark-up');
+  const downColour = getVar('--mark-down');
+
+  // Draw gear ticks first so a lap line always stays readable over them.
+  markers.forEach(function(mark) {
+    if (mark.kind === 'lap') return;
+    ctx.fillStyle = mark.kind === 'up' ? upColour : downColour;
+    ctx.fillRect(frameToX(mark.frame, w, total), plotH + 2, 1, h - plotH - 3);
+  });
+
+  ctx.font = '9px ui-monospace, monospace';
+
+  markers.forEach(function(mark) {
+    if (mark.kind !== 'lap') return;
+    const x = frameToX(mark.frame, w, total);
+    ctx.fillStyle = lapColour;
+    ctx.fillRect(x, 0, 1, h);
+    ctx.fillText(mark.label, x + 2, 9);
+  });
+}
+
+function drawMap() {
+  const canvas = mapCanvas;
+  setupCanvas(canvas);
+  const dpr = window.devicePixelRatio || 1;
+  const ctx = canvas.getContext('2d');
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = getVar('--bg3');
+  ctx.fillRect(0, 0, w, h);
+
+  // The projection is built for one canvas size. Rebuild it after a resize.
+  if (tel && mapSizeKey !== w + 'x' + h) computeMapProjection();
+
+  if (!mapPoints || mapPoints.length === 0) return;
+  ctx.strokeStyle = '#555b64';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  mapPoints.forEach(function(pt, i) {
+    if (i === 0) ctx.moveTo(pt[0], pt[1]); else ctx.lineTo(pt[0], pt[1]);
+  });
+  ctx.stroke();
+
+  const pIdx = packetForT(T);
+  if (pIdx >= 0 && tel) {
+    const [cx, cy] = mapPoints.toCanvas(tel.x[pIdx], tel.z[pIdx]);
+    ctx.fillStyle = getVar('--accent');
+    ctx.beginPath();
+    ctx.arc(cx, cy, 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 4, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+}
+
+// Canvas needs a literal colour. Fall back when a token is missing or unresolved.
+function getVar(name, fallback) {
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  if (!value || value.indexOf('var(') !== -1) return fallback || '#888';
+  return value;
+}
+
+// ---- Scrub / drag ----
+
+// applyVideoMove keeps the pair in the relationship Sync dictates.
+// Synced, telemetry follows the video. Unsynced, the two heads move alone and
+// the offset simply becomes whatever the new gap is.
+function applyVideoMove() {
+  if (synced) {
+    T = F + offsetFrames;
+
+    return;
+  }
+
+  offsetFrames = T - F;
+}
+
+function onVideoTimelineScrub(newF) {
+  if (!probe) return;
+  F = clamp(newF, 0, probe.frames - 1);
+  applyVideoMove();
+  seekVideoTo(F);
+  updateAll();
+}
+
+function onTelemetryTimelineScrub(newT) {
+  if (!tel) return;
+  T = clamp(newT, 0, tel.span - 1);
+  if (synced && probe) {
+    F = clamp(T - offsetFrames, 0, probe.frames - 1);
+    T = F + offsetFrames;
+    seekVideoTo(F);
+  } else {
+    offsetFrames = T - F;
+  }
+  updateAll();
+}
+
+function setupDrag(canvas, kind) {
+  canvas.addEventListener('pointerdown', function(e) {
+    setLane(kind);
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const w = rect.width;
+    if (kind === 'tel' && y >= rect.height - markerGutter) {
+      // A press in the gutter snaps to markers instead of scrubbing freely.
+      dragTarget = { canvas: kind, part: 'marker' };
+    } else if (kind === 'video' && probe) {
+      const xIn = frameToX(cutStart, w, probe.frames);
+      const xOut = frameToX(cutEnd, w, probe.frames);
+      if (Math.abs(x - xIn) <= 6) dragTarget = { canvas: kind, part: 'in' };
+      else if (Math.abs(x - xOut) <= 6) dragTarget = { canvas: kind, part: 'out' };
+      else dragTarget = { canvas: kind, part: 'scrub' };
+    } else {
+      dragTarget = { canvas: kind, part: 'scrub' };
+    }
+
+    canvas.setPointerCapture(e.pointerId);
+    handleDragMove(canvas, x, w);
+  });
+  canvas.addEventListener('pointermove', function(e) {
+    if (!dragTarget || dragTarget.canvas !== kind) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    handleDragMove(canvas, x, rect.width);
+  });
+  // Show the gutter is clickable before the press happens.
+  canvas.addEventListener('pointermove', function(e) {
+    if (kind !== 'tel' || dragTarget) return;
+    const rect = canvas.getBoundingClientRect();
+    const inGutter = (e.clientY - rect.top) >= rect.height - markerGutter;
+    canvas.style.cursor = inGutter ? 'pointer' : 'default';
+  });
+  canvas.addEventListener('pointerup', function() { dragTarget = null; });
+  canvas.addEventListener('pointercancel', function() { dragTarget = null; });
+}
+
+function handleDragMove(canvas, x, w) {
+  if (!dragTarget) return;
+  if (dragTarget.canvas === 'video' && probe) {
+    const f = xToFrame(x, w, probe.frames);
+    if (dragTarget.part === 'in') cutStart = clamp(f, 0, cutEnd);
+    else if (dragTarget.part === 'out') cutEnd = clamp(f, cutStart, probe.frames - 1);
+    else onVideoTimelineScrub(f);
+    updateAll();
+  } else if (dragTarget.canvas === 'tel' && tel) {
+    if (dragTarget.part === 'marker') {
+      const mark = nearestMarker(x, w);
+      if (mark) {
+        onTelemetryTimelineScrub(mark.frame);
+        reportMarker(mark);
+      }
+      return;
+    }
+    onTelemetryTimelineScrub(xToFrame(x, w, tel.span));
+  }
+}
+
+// ---- Seeking ----
+
+function seekVideoTo(f) {
+  pendingSeekF = f;
+  if (seekScheduled) return;
+  seekScheduled = true;
+  requestAnimationFrame(function() {
+    seekScheduled = false;
+    if (pendingSeekF === null) return;
+    const t = frameToTime(pendingSeekF);
+    pendingSeekF = null;
+    lastSetSeconds = t;
+    videoEl.currentTime = t;
+  });
+}
+
+// Seek exactly to the centre of a frame, for precise stepping.
+function seekVideoExact(f) {
+  if (!probe) return;
+  const t = (f + 0.5) * probe.rateDen / probe.rateNum;
+  lastSetSeconds = t;
+  videoEl.currentTime = t;
+}
+
+videoEl.addEventListener('seeked', function() {
+  if (Math.abs(videoEl.currentTime - lastSetSeconds) < 0.002) return;
+  // The user scrubbed with native controls; adopt the new position.
+  F = timeToFrame(videoEl.currentTime);
+  applyVideoMove();
+  updateAll();
+});
+
+videoEl.addEventListener('play', function() {
+  playing = true;
+  btnPlay.innerHTML = '&#10074;&#10074;';
+  if (videoEl.requestVideoFrameCallback) videoEl.requestVideoFrameCallback(rvfcTick);
+});
+
+videoEl.addEventListener('pause', function() {
+  playing = false;
+  btnPlay.innerHTML = '&#9654;';
+});
+
+function rvfcTick(now, metadata) {
+  if (!playing) return;
+  F = timeToFrame(metadata.mediaTime);
+  if (F >= playLimit) {
+    F = playLimit;
+    videoEl.pause();
+    seekVideoExact(F);
+  }
+  applyVideoMove();
+  updateAll(false);
+  if (playing && videoEl.requestVideoFrameCallback) videoEl.requestVideoFrameCallback(rvfcTick);
+}
+
+function rafLoop() {
+  if (playing && !videoEl.requestVideoFrameCallback) {
+    F = timeToFrame(videoEl.currentTime);
+    if (F >= playLimit) {
+      F = playLimit;
+      videoEl.pause();
+      seekVideoExact(F);
+    }
+    applyVideoMove();
+    updateAll(false);
+  }
+  requestAnimationFrame(rafLoop);
+}
+
+function togglePlay() {
+  if (!probe) return;
+  if (videoEl.paused) {
+    // Playback stopped on the out point. Rewind to the in point so the next
+    // press replays the cut. A head parked elsewhere plays from where it is.
+    if (F === cutEnd) { F = cutStart; seekVideoExact(F); }
+    playLimit = F < cutEnd ? cutEnd : probe.frames - 1;
+    videoEl.play();
+  } else {
+    videoEl.pause();
+  }
+}
+
+function stepFrames(delta) {
+  if (!probe) return;
+  videoEl.pause();
+  F = clamp(F + delta, 0, probe.frames - 1);
+  seekVideoExact(F);
+  applyVideoMove();
+  updateAll();
+}
+
+function jumpTo(f) {
+  if (!probe) return;
+  videoEl.pause();
+  F = clamp(f, 0, probe.frames - 1);
+  seekVideoExact(F);
+  applyVideoMove();
+  updateAll();
+}
+
+function nudgeOffset(delta) {
+  offsetFrames += delta;
+  T = F + offsetFrames;
+  updateAll();
+}
+
+// setLane chooses which timeline the arrow keys drive.
+function setLane(name) {
+  activeLane = name === 'tel' ? 'tel' : 'video';
+  laneVideo.classList.toggle('focused', activeLane === 'video');
+  laneTel.classList.toggle('focused', activeLane === 'tel');
+}
+
+// stepTelemetry moves the telemetry playhead alone while Sync is off.
+// A synced pair must stay in step, so the video moves with it.
+function stepTelemetry(delta) {
+  if (!tel) return;
+  videoEl.pause();
+  if (synced) {
+    stepFrames(delta);
+    return;
+  }
+  const wanted = clamp(T + delta, 0, tel.span - 1);
+  offsetFrames = wanted - F;
+  T = wanted;
+  updateAll();
+}
+
+// stepActive moves whichever lane currently has focus.
+function stepActive(delta) {
+  if (activeLane === 'tel') stepTelemetry(delta);
+  else stepFrames(delta);
+}
+
+// jumpActiveStart sends the active lane to its first frame.
+function jumpActiveStart() {
+  if (activeLane === 'tel') {
+    if (tel) stepTelemetry(-T);
+    return;
+  }
+  jumpTo(0);
+}
+
+// jumpActiveEnd sends the active lane to its last frame.
+function jumpActiveEnd() {
+  if (activeLane === 'tel') {
+    if (tel) stepTelemetry(tel.span - 1 - T);
+    return;
+  }
+  if (probe) jumpTo(probe.frames - 1);
+}
+
+// stepSize returns the nudge distance for the held modifier keys.
+function stepSize(event) {
+  if (event.shiftKey) return 10;
+  if (event.altKey) {
+    if (activeLane === 'tel') return 60;
+    return probe ? Math.round(probe.rateNum / probe.rateDen) : 60;
+  }
+  return 1;
+}
+
+function toggleSync() {
+  synced = !synced;
+
+  // Capture the alignment on the way in, so Sync freezes what you can see.
+  if (synced) offsetFrames = T - F;
+
+  btnSync.classList.toggle('active', synced);
+  updateAll();
+}
+
+// ---- URL persistence ----
+
+function persistURL() {
+  clearTimeout(urlSaveTimer);
+  urlSaveTimer = setTimeout(function() {
+    const params = new URLSearchParams();
+    if (currentVideoName) params.set('video', currentVideoName);
+    if (currentReplayName) params.set('replay', currentReplayName);
+    params.set('offset', String(offsetFrames));
+    params.set('in', String(cutStart));
+    params.set('out', String(cutEnd));
+    params.set('sync', synced ? '1' : '0');
+    params.set('colour', colourSelect.value);
+    params.set('pad', padInput.value);
+    history.replaceState(null, '', '?' + params.toString());
+  }, 300);
+}
+
+// refreshSources reloads the file lists after a directory change.
+// Keep the current pick when it still exists, otherwise take the first entry.
+function refreshSources() {
+  return fetchJSON('/api/sources').then(function(data) {
+    sources = data;
+
+    const keepVideo = sources.videos.indexOf(currentVideoName) >= 0
+      ? currentVideoName : (sources.videos[0] || '');
+    const keepReplay = sources.replays.indexOf(currentReplayName) >= 0
+      ? currentReplayName : (sources.replays[0] || '');
+
+    populateSelects();
+    outputEdited = false;
+
+    const tasks = [];
+
+    if (keepVideo && keepVideo !== currentVideoName) {
+      videoSelect.value = keepVideo;
+      tasks.push(selectVideo(keepVideo));
+    } else {
+      videoSelect.value = keepVideo;
+      outputInput.value = defaultOutput();
+    }
+
+    if (keepReplay && keepReplay !== currentReplayName) {
+      replaySelect.value = keepReplay;
+      tasks.push(selectReplay(keepReplay));
+    } else {
+      replaySelect.value = keepReplay;
+    }
+
+    return Promise.all(tasks);
+  });
+}
+
+// ---- Settings ----
+
+// openSettings fills the dialog from the server and shows it.
+function openSettings() {
+  settingsError.textContent = '';
+
+  fetchJSON('/api/settings').then(function(data) {
+    setVideoDir.value = data.videoDir;
+    setReplayDir.value = data.replayDir;
+    setOutputDir.value = data.outputDir;
+    settingsOverlay.classList.add('show');
+    setVideoDir.focus();
+  }).catch(function(err) {
+    setStatus('Cannot read settings: ' + err.message, true);
+  });
+}
+
+// closeSettings hides the dialog without applying anything.
+function closeSettings() {
+  settingsOverlay.classList.remove('show');
+}
+
+// applySettings sends the directories, then reloads the file lists.
+function applySettings() {
+  settingsError.textContent = '';
+  settingsSave.disabled = true;
+
+  fetch('/api/settings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      videoDir: setVideoDir.value,
+      replayDir: setReplayDir.value,
+      outputDir: setOutputDir.value
+    })
+  }).then(function(res) {
+    return res.json().then(function(data) {
+      if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+
+      return data;
+    });
+  }).then(function() {
+    closeSettings();
+    setStatus('Directories updated');
+
+    return refreshSources();
+  }).catch(function(err) {
+    settingsError.textContent = err.message;
+  }).finally(function() {
+    settingsSave.disabled = false;
+  });
+}
+
+// ---- Save / export ----
+
+function startExport() {
+  if (!currentVideoName || !currentReplayName || !(cutEnd > cutStart)) return;
+  const body = {
+    video: currentVideoName,
+    replay: currentReplayName,
+    offsetFrames: offsetFrames,
+    cutStart: cutStart,
+    cutEnd: cutEnd,
+    output: outputInput.value,
+    mapMode: 'sequential',
+    colour: colourSelect.value
+  };
+  setStatus('Starting export…');
+  fetch('/api/export', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  }).then(function(res) {
+    if (res.status === 409) {
+      return res.json().then(function(data) { throw new Error(data.error || 'export already running'); });
+    }
+    if (!res.ok) {
+      return res.text().then(function(text) { throw new Error(text || ('HTTP ' + res.status)); });
+    }
+    return res.json();
+  }).then(function() {
+    openExportModal();
+  }).catch(function(err) {
+    setStatus('Export failed to start: ' + err.message, true);
+  });
+}
+
+function openExportModal() {
+  modalTitle.textContent = 'Exporting…';
+  progressFill.style.width = '0%';
+  modalStage.textContent = 'starting';
+  modalLog.style.display = 'none';
+  modalLog.textContent = '';
+  modalClose.disabled = true;
+  modalOverlay.classList.add('show');
+
+  if (exportES) exportES.close();
+  exportES = new EventSource('/api/export/progress');
+
+  exportES.addEventListener('progress', function(e) {
+    try {
+      const data = JSON.parse(e.data);
+      modalStage.textContent = data.stage + ': ' + data.frame + ' / ' + data.total;
+      const pct = data.total > 0 ? (data.frame / data.total) * 100 : 0;
+      progressFill.style.width = pct + '%';
+    } catch (err) { /* ignore malformed progress payload */ }
+  });
+
+  exportES.addEventListener('done', function(e) {
+    try {
+      const data = JSON.parse(e.data);
+      modalTitle.textContent = 'Done';
+      modalStage.textContent = 'Output: ' + data.output + ' (' + data.frames + ' frames)';
+      progressFill.style.width = '100%';
+    } catch (err) {
+      modalTitle.textContent = 'Done';
+    }
+    modalClose.disabled = false;
+    exportES.close();
+    exportES = null;
+    setStatus('Export complete.');
+  });
+
+  exportES.addEventListener('error', function(e) {
+    modalTitle.textContent = 'Export failed';
+    if (e.data) {
+      try {
+        const data = JSON.parse(e.data);
+        modalStage.textContent = data.message || 'Export failed.';
+        if (data.log && data.log.length) {
+          modalLog.style.display = 'block';
+          modalLog.textContent = data.log.join('\n');
+        }
+      } catch (err) {
+        modalStage.textContent = 'Export failed.';
+      }
+    } else {
+      modalStage.textContent = 'Connection to the export stream was lost.';
+    }
+    modalClose.disabled = false;
+    if (exportES) { exportES.close(); exportES = null; }
+    setStatus('Export failed.', true);
+  });
+}
+
+modalClose.addEventListener('click', function() {
+  modalOverlay.classList.remove('show');
+});
+
+// ---- Wiring ----
+
+function wireEvents() {
+  videoSelect.addEventListener('change', function() { selectVideo(videoSelect.value); });
+  replaySelect.addEventListener('change', function() { selectReplay(replaySelect.value); });
+  outputInput.addEventListener('input', function() { outputEdited = true; });
+  colourSelect.addEventListener('change', function() { colourEdited = true; persistURL(); });
+  padInput.addEventListener('change', function() { normalisePad(); persistURL(); });
+
+  btnSettings.addEventListener('click', openSettings);
+  settingsCancel.addEventListener('click', closeSettings);
+  settingsSave.addEventListener('click', applySettings);
+  settingsOverlay.addEventListener('click', function(e) {
+    if (e.target === settingsOverlay) closeSettings();
+  });
+  saveBtn.addEventListener('click', startExport);
+
+  btnJumpStart.addEventListener('click', jumpActiveStart);
+  btnJumpEnd.addEventListener('click', jumpActiveEnd);
+  btnBack10.addEventListener('click', function() { stepActive(-10); });
+  btnBack1.addEventListener('click', function() { stepActive(-1); });
+  btnFwd1.addEventListener('click', function() { stepActive(1); });
+  btnFwd10.addEventListener('click', function() { stepActive(10); });
+  btnPlay.addEventListener('click', togglePlay);
+
+  btnSync.addEventListener('click', toggleSync);
+
+  setupDrag(videoTimeline, 'video');
+  setupDrag(telTimeline, 'tel');
+
+  headVideo.addEventListener('click', function() { setLane('video'); updateAll(false); });
+  headTel.addEventListener('click', function() { setLane('tel'); updateAll(false); });
+
+  window.addEventListener('resize', function() { updateAll(false); });
+
+  document.addEventListener('keydown', function(e) {
+    const tag = document.activeElement && document.activeElement.tagName;
+    if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+
+    if (e.key === 'Escape' && settingsOverlay.classList.contains('show')) {
+      closeSettings();
+
+      return;
+    }
+    if (e.key === ' ') { e.preventDefault(); togglePlay(); return; }
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      setLane(activeLane === 'video' ? 'tel' : 'video');
+      return;
+    }
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      e.preventDefault();
+      const dir = e.key === 'ArrowRight' ? 1 : -1;
+      stepActive(dir * stepSize(e));
+      return;
+    }
+    // Up and down always drive telemetry, whichever lane has focus.
+    if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      const dir = e.key === 'ArrowUp' ? 1 : -1;
+      stepTelemetry(dir * (e.shiftKey ? 10 : 1));
+      return;
+    }
+    if (e.key === '[') { jumpTo(cutStart); return; }
+    if (e.key === ']') { jumpTo(cutEnd); return; }
+    if (e.key === 'l') { toggleSync(); return; }
+    if (e.key === 'Enter') {
+      // A focused button activates on Enter by itself. Do not toggle twice.
+      if (tag !== 'BUTTON') {
+        e.preventDefault();
+        toggleSync();
+      }
+
+      return;
+    }
+    if (e.key === ',') { nudgeOffset(-1); return; }
+    if (e.key === '.') { nudgeOffset(1); return; }
+  });
+}
+
+init();
+
+// TEMPORARY SELF TEST
+window.__t = [];
+function log(m){ window.__t.push(m); document.title = window.__t.join(' | '); }
+setTimeout(async function(){
+  try{
+    log('probe=' + (probe ? probe.frames : 'null'));
+    log('src=' + (videoEl.currentSrc ? 'set' : 'EMPTY'));
+    log('readyState=' + videoEl.readyState);
+    log('duration=' + videoEl.duration);
+    onVideoTimelineScrub(600);
+    log('F=' + F);
+    await new Promise(r => setTimeout(r, 1500));
+    log('afterScrub currentTime=' + videoEl.currentTime.toFixed(3));
+    log('expected=' + frameToTime(600).toFixed(3));
+  }catch(err){ log('ERR ' + err.message); }
+}, 4000);
+
+</script>
+</body>
+</html>

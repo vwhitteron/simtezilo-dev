@@ -1,6 +1,7 @@
 package tuneassist
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -8,6 +9,8 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/rs/zerolog"
 	"github.com/vwhitteron/simtezilo-dev/app/haptics"
@@ -20,24 +23,58 @@ type Options struct {
 	// per request rather than captured once, since the app's base directory can
 	// change at runtime.
 	ReplayDir func() string
+	// CacheDir returns the absolute path to the directory holding telemetry tracks
+	// extracted from videos. Evaluated per request, for the same reason as ReplayDir.
+	// Leaving it unset disables video sources rather than failing at construction.
+	CacheDir func() string
 }
 
 // Service serves the tuning assistant's HTTP API.
 type Service struct {
 	log       zerolog.Logger
 	replayDir func() string
+	cacheDir  func() string
 
 	tuningDefaults []byte
+
+	// heavy limits the tuning assistant to one data or audio job at a time, so the
+	// web UI and the live haptic loop keep the other cores (target is a 4-core
+	// Raspberry Pi Zero 2 W).
+	heavy chan struct{}
+
+	// cacheTTL is how long a cached .gtr copy may go unused. sweepTimer deletes
+	// expired copies one TTL after the last use, and sweepMu guards it.
+	cacheTTL   time.Duration
+	sweepMu    sync.Mutex
+	sweepTimer *time.Timer
 }
 
 // New creates a Service ready to be wired into the web UI's HTTP mux.
 func New(opts Options) *Service {
+	return newService(opts, cacheIdleTTL)
+}
+
+// newService is New with an explicit cache TTL. The TTL is fixed before the
+// start-up sweep can read it.
+func newService(opts Options, cacheTTL time.Duration) *Service {
+	cacheDir := opts.CacheDir
+	if cacheDir == nil {
+		cacheDir = func() string { return "" }
+	}
+
 	svc := &Service{
 		log:       opts.Log,
 		replayDir: opts.ReplayDir,
+		cacheDir:  cacheDir,
+		heavy:     make(chan struct{}, 1),
+		cacheTTL:  cacheTTL,
 	}
 
 	svc.tuningDefaults = buildTuningDefaults(opts.Log)
+
+	// Sweep once at start-up, so copies left by a previous run do not wait for
+	// the next use to expire.
+	svc.scheduleSweep(0)
 
 	return svc
 }
@@ -48,14 +85,26 @@ func New(opts Options) *Service {
 func buildTuningDefaults(log zerolog.Logger) []byte {
 	defaults := haptics.DefaultTuning()
 
-	// map[string]any rather than map[string]int: jerkPivotGain is a dB figure and
-	// carries a fractional part.
+	// Dereferenced here rather than marshalled as a pointer, so a nil would be a
+	// build error instead of a silent null in the payload the sliders read.
+	stepBlend := 0.0
+	if defaults.TransmissionStepBlend != nil {
+		stepBlend = *defaults.TransmissionStepBlend
+	}
+
 	defaultsJSON, err := json.Marshal(map[string]any{
-		"jerkCurve":     defaults.JerkCurve,
-		"jerkPivot":     defaults.JerkPivot,
-		"jerkPivotGain": defaults.JerkPivotGain,
-		"snapCurve":     defaults.SnapCurve,
-		"snapMax":       defaults.SnapMax,
+		"jerkCompression": defaults.JerkCompression,
+		"jerkCenter":      defaults.JerkCenter,
+		"snapCompression": defaults.SnapCompression,
+		"snapCenter":      defaults.SnapCenter,
+
+		"pulseMinFrequencyHz": defaults.PulseMinFrequencyHz,
+		"pulseMaxFrequencyHz": defaults.PulseMaxFrequencyHz,
+
+		"transmissionJerkCompression": defaults.TransmissionJerkCompression,
+		"transmissionStepBlend":       stepBlend,
+
+		"surfaceRumble": defaults.SurfaceRumble,
 
 		"pulseLimits": haptics.DefaultPulseLimits(),
 	})
@@ -66,6 +115,21 @@ func buildTuningDefaults(log zerolog.Logger) []byte {
 	}
 
 	return defaultsJSON
+}
+
+// errNoCacheDir reports a video source requested without a cache directory to
+// extract its telemetry track into.
+var errNoCacheDir = errors.New("no cache directory configured for video sources")
+
+// validPulseWindow reports whether a pulse frequency window supplied as a pair has
+// its minimum below its maximum. A half that is absent keeps its stored value, so a
+// lone half cannot be checked here and is accepted.
+func validPulseWindow(tuning haptics.Tuning) bool {
+	if tuning.PulseMinFrequencyHz <= 0 || tuning.PulseMaxFrequencyHz <= 0 {
+		return true
+	}
+
+	return tuning.PulseMinFrequencyHz < tuning.PulseMaxFrequencyHz
 }
 
 // validateReplayName rejects empty names, path traversal attempts, and names not
@@ -101,74 +165,133 @@ func (s *Service) HandleReplays(response http.ResponseWriter, _ *http.Request) {
 
 // HandleData returns the per-lap jerk/snap/map analysis for a replay.
 func (s *Service) HandleData(response http.ResponseWriter, request *http.Request) {
-	dir := s.replayDir()
-	replays := s.listReplays(dir)
+	name := requestSourceName(request)
 
-	filename := request.URL.Query().Get("replay")
+	release, err := s.acquire(request.Context())
+	if err != nil {
+		s.log.Debug().Err(err).Str("replay", name).Msg("acquiring heavy job slot")
 
-	status, valid := validateReplayName(filename, replays)
-	if !valid {
-		http.Error(response, "invalid or unknown replay filename", status)
+		return
+	}
+	defer release()
+
+	source, video, status, err := s.resolveRequestSource(request)
+	if err != nil {
+		s.respondSourceError(response, name, status, err)
 
 		return
 	}
 
-	replayData, err := buildLapResponse(request.Context(), dir, filename)
+	replayData, err := buildLapResponse(request.Context(), source, video)
 	if err != nil {
-		s.log.Error().Err(err).Str("replay", filename).Msg("building replay analysis")
+		s.log.Error().Err(err).Str("replay", name).Msg("building replay analysis")
 		http.Error(response, err.Error(), http.StatusInternalServerError)
 
 		return
 	}
 
-	// Encoded straight to the client rather than marshalled into a buffer first, so
-	// the payload is never held in full alongside the analysis it came from.
+	// json.Encoder.Encode still marshals replayData into its own internal buffer
+	// before writing it out; it just spares us a second buffer of our own.
 	response.Header().Set("Content-Type", "application/json")
 
 	err = json.NewEncoder(response).Encode(replayData)
 	if err != nil {
-		s.log.Error().Err(err).Str("replay", filename).Msg("encoding replay analysis")
+		s.log.Error().Err(err).Str("replay", name).Msg("encoding replay analysis")
 	}
 }
+
+// allLapsKey is the lap value that selects the whole replay instead of one lap.
+const allLapsKey = "all"
 
 // HandleAudio renders chassis audio for a lap section as a WAV. The render is done
 // per request and only the requested section is held, so nothing accumulates across
 // replay, lap, or tuning changes; the web UI caches the decoded buffer client-side.
-// Query: replay, lap, from, to (per-lap frame indices; to<0 => whole lap), and the
-// five tuning knobs jerkCurve/jerkPivot/jerkPivotGain/snapCurve/snapMax (0 =>
-// shipped default, except jerkPivotGain which uses 1 as its not-supplied sentinel
-// since 0 is a legal gain value).
+// Query: replay (or upload, the ID of a stored upload), lap, from, to (per-lap frame indices; to<0 => whole lap), and the
+// four tuning settings jerkCompression/jerkCenter/snapCompression/snapCenter, each a
+// decimal setting value (0 => shipped default), and the pulse frequency window
+// pulseMinFrequencyHz/pulseMaxFrequencyHz in Hz (0 => stored value; a window whose
+// minimum is not below its maximum is rejected). A lap of "all" spans the whole replay,
+// and from/to then index every frame of the replay in order. The bias each pair is
+// anchored to is a fixed constant and is not a query parameter.
+//
+// It also takes the transmission pair transmissionJerkCompression/transmissionStepBlend
+// (the blend is optional rather than sentinelled, since its whole range is legal),
+// and the engine profile as primaryBalance/secondaryBalance/engineGain/pulseScale.
+// The engine four are all-or-nothing: an absent parameter leaves the replay
+// vehicle's stored profile in place. Road-texture surfaces (tarmac, concrete, grass,
+// dirt, sand, snow) are each overridden by a <name>Level/<name>Coarseness pair; a
+// surface is overridden only when both of its parameters are present.
+//
+// The layer parameter selects chassis (the default), texture, transmission or
+// engine. A layer of "all" renders the four layers in one pass over the replay and
+// returns one WAV with a channel per layer, in allLayerNames order.
 func (s *Service) HandleAudio(response http.ResponseWriter, request *http.Request) {
-	dir := s.replayDir()
-	replays := s.listReplays(dir)
+	name := requestSourceName(request)
 
-	filename := request.URL.Query().Get("replay")
+	window := haptics.CaptureWindow{
+		Lap:       clampToInt16(parseIntParam(request, "lap", 0)),
+		AllLaps:   request.URL.Query().Get("lap") == allLapsKey,
+		FromFrame: parseIntParam(request, "from", 0),
+		ToFrame:   parseIntParam(request, "to", -1),
+	}
 
-	status, valid := validateReplayName(filename, replays)
-	if !valid {
-		http.Error(response, "invalid or unknown replay filename", status)
+	tuning := haptics.Tuning{
+		JerkCompression: parseFloatParam(request, "jerkCompression", 0),
+		JerkCenter:      parseFloatParam(request, "jerkCenter", 0),
+		SnapCompression: parseFloatParam(request, "snapCompression", 0),
+		SnapCenter:      parseFloatParam(request, "snapCenter", 0),
+
+		PulseMinFrequencyHz: parseFloatParam(request, "pulseMinFrequencyHz", 0),
+		PulseMaxFrequencyHz: parseFloatParam(request, "pulseMaxFrequencyHz", 0),
+
+		TransmissionJerkCompression: parseFloatParam(request, "transmissionJerkCompression", 0),
+		TransmissionStepBlend:       optionalFloatParam(request, "transmissionStepBlend", 0, 1),
+
+		SurfaceRumble: surfaceRumbleParams(request),
+
+		EngineProfile: engineProfileParam(request),
+	}
+
+	if !validPulseWindow(tuning) {
+		http.Error(response, "pulseMinFrequencyHz must be below pulseMaxFrequencyHz", http.StatusBadRequest)
 
 		return
 	}
 
-	lap := clampToInt16(parseIntParam(request, "lap", 0))
-	fromFrame := parseIntParam(request, "from", 0)
-	toFrame := parseIntParam(request, "to", -1)
-
-	tuning := haptics.Tuning{
-		JerkCurve: parseIntParam(request, "jerkCurve", 0),
-		JerkPivot: parseIntParam(request, "jerkPivot", 0),
-		// 0 dB is a legal gain value, so "not supplied" is signalled with 1,
-		// which falls outside the valid -12..0 dB range and is rejected by
-		// applyTuning's bounds check.
-		JerkPivotGain: parseFloatParam(request, "jerkPivotGain", 1),
-		SnapCurve:     parseIntParam(request, "snapCurve", 0),
-		SnapMax:       parseIntParam(request, "snapMax", 0),
-	}
-
 	unfiltered := request.URL.Query().Get("raw") == "1"
 
-	wav, err := renderSectionWAV(request.Context(), dir, filename, tuning, unfiltered, lap, fromFrame, toFrame)
+	layerName := request.URL.Query().Get("layer")
+
+	layers, known := captureLayers(layerName)
+	if !known && layerName != allLayersKey {
+		http.Error(response, "unknown haptic layer", http.StatusBadRequest)
+
+		return
+	}
+
+	release, err := s.acquire(request.Context())
+	if err != nil {
+		s.log.Debug().Err(err).Str("replay", name).Msg("acquiring heavy job slot")
+
+		return
+	}
+	defer release()
+
+	source, _, status, err := s.resolveRequestSource(request)
+	if err != nil {
+		s.respondSourceError(response, name, status, err)
+
+		return
+	}
+
+	var wav []byte
+
+	if layerName == allLayersKey {
+		wav, err = renderAllLayersWAV(request.Context(), source, tuning, unfiltered, window)
+	} else {
+		wav, err = renderWindowWAV(request.Context(), source, tuning, layers, unfiltered, window)
+	}
+
 	if err != nil {
 		if errors.Is(err, errNoAudio) {
 			http.Error(response, "no audio for requested lap/section", http.StatusNotFound)
@@ -176,7 +299,7 @@ func (s *Service) HandleAudio(response http.ResponseWriter, request *http.Reques
 			return
 		}
 
-		s.log.Error().Err(err).Str("replay", filename).Msg("rendering chassis audio")
+		s.log.Error().Err(err).Str("replay", name).Msg("rendering haptic audio")
 		http.Error(response, err.Error(), http.StatusInternalServerError)
 
 		return
@@ -194,9 +317,35 @@ func (s *Service) HandleTuningDefaults(response http.ResponseWriter, _ *http.Req
 	_, _ = response.Write(s.tuningDefaults)
 }
 
-// listReplays scans dir for .gtz/.gtr replay files, sorted by name. A missing or
-// unreadable directory yields an empty (not error) list, since the assistant should
-// simply show nothing rather than fail when no replays have been recorded yet.
+// respondSourceError answers a request whose replay or upload could not be resolved.
+// Only a server fault is logged, as a bad or unknown source is the caller's mistake.
+func (s *Service) respondSourceError(response http.ResponseWriter, name string, status int, err error) {
+	if status == http.StatusInternalServerError {
+		s.log.Error().Err(err).Str("replay", name).Msg("resolving replay source")
+	}
+
+	http.Error(response, err.Error(), status)
+}
+
+// acquire reserves the single heavy-job slot, blocking until it is free or ctx is
+// done. On success the returned release func must be called to free the slot; on
+// ctx expiry it returns a nil release func and ctx.Err().
+func (s *Service) acquire(ctx context.Context) (release func(), err error) {
+	select {
+	case s.heavy <- struct{}{}:
+		return func() { <-s.heavy }, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+// listReplays scans dir for replay sources, sorted by name. A missing or unreadable
+// directory yields an empty (not error) list, since the assistant should simply show
+// nothing rather than fail when no replays have been recorded yet.
+//
+// Videos are listed alongside plain recordings because a video carries its own
+// telemetry track and so is a replay source in its own right, not an attachment to
+// one. Everything downstream reaches its telemetry through resolveSource.
 func (s *Service) listReplays(dir string) []string {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -213,7 +362,7 @@ func (s *Service) listReplays(dir string) []string {
 		}
 
 		name := e.Name()
-		if strings.HasSuffix(name, ".gtz") || strings.HasSuffix(name, ".gtr") {
+		if strings.HasSuffix(name, ".gtz") || strings.HasSuffix(name, ".gtr") || isVideoName(name) {
 			replays = append(replays, name)
 		}
 	}

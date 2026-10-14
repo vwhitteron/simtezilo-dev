@@ -8,10 +8,14 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/vwhitteron/simtezilo-dev/app/codec"
 	"github.com/vwhitteron/simtezilo-dev/app/pitradio"
 )
+
+// requestTimeout bounds a TTS request so a stalled server cannot stall the queue worker.
+const requestTimeout = 10 * time.Second
 
 // TextToSpeech converts a given text message into speech audio data using Google Translate TTS.
 // It returns the audio data in MP3 format within an MPEG container.
@@ -44,7 +48,7 @@ func TextToSpeech(message pitradio.Message) (codec.MP3, error) {
 		return codec.MP3{}, fmt.Errorf("failed to create TTS request: %w", err)
 	}
 
-	client := &http.Client{}
+	client := &http.Client{Timeout: requestTimeout}
 
 	resp, err := client.Do(req)
 	if err != nil {

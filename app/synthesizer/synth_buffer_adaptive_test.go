@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/vwhitteron/simtezilo-dev/app/synthesizer"
 )
 
@@ -263,4 +264,37 @@ func TestAdaptiveBufferConcurrency(t *testing.T) {
 
 	// Should not panic or deadlock
 	t.Log("Concurrent test completed successfully")
+}
+
+// TestAdaptiveBufferLastUnderrun checks that the underrun timestamp tracks the
+// latest underrun during a run of them, and holds still once a full read ends it.
+func TestAdaptiveBufferLastUnderrun(t *testing.T) {
+	t.Parallel()
+
+	// Arrange
+	buffer := synthesizer.NewAdaptiveBuffer(time.Second, 1000)
+	dst := make([]float64, 100)
+
+	assert.True(t, buffer.HealthDetailed().LastUnderrun.IsZero())
+
+	// Act
+	buffer.Read(dst)
+	buffer.Read(dst)
+
+	during := buffer.HealthDetailed().LastUnderrun
+
+	buffer.Write(make([]float64, 200), 0, false)
+	buffer.Read(dst[:50])
+
+	ended := buffer.HealthDetailed().LastUnderrun
+
+	time.Sleep(5 * time.Millisecond)
+
+	later := buffer.HealthDetailed().LastUnderrun
+
+	// Assert
+	assert.Equal(t, 2, buffer.HealthDetailed().Underruns)
+	assert.WithinDuration(t, time.Now(), during, time.Second)
+	assert.False(t, ended.IsZero())
+	assert.Equal(t, ended, later, "a finished run must not keep reporting the current time")
 }

@@ -39,3 +39,12 @@ low level road noise typically felt through the pedals and floor pan.
 The processing requirements for the main bump signal should be reduced as only the chassis height and rotation is
 involved in the output signal computation. The secondary road noise signal can also be generated from a simple
 analysis of all for corners or choose to monitor only a single corner if it compute overhead becomes a concern.
+
+### 2026-08 update
+
+The reserved secondary road-noise signal now ships as the road-texture layer's roughness envelope: a ~200 ms
+sliding RMS of high-passed per-corner suspension velocity, averaged across the four corners, that modulates the
+layer's amplitude and cutoff. It deliberately does not supply the carrier, because telemetry at 59.94 Hz carries
+nothing usable above ~30 Hz while the texture band sits at 55-150 Hz. The "simple analysis of all four corners"
+this ADR anticipated is what shipped, and per-corner damping was not simulated, as the Context predicted would be
+impractical.

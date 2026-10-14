@@ -36,7 +36,6 @@ type gameState struct {
 	raceComplete           bool           // Flag to indicate if race is complete
 	current                raceState      // Race state at the current telemetry sequence
 	last                   raceState      // Race state at the last telemetry sequence
-	engine                 engineState    // Engine state for haptic generation
 	recorder               recordingState // Telemetry recording state
 	mainMenuFrameCount     int            // Counter for consecutive main menu frames
 	isInPostRaceMenu       bool           // Flag to indicate if game is in post-race menu with fixed telemetry values

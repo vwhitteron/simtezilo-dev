@@ -83,6 +83,15 @@ function applyTranslations() {
         }
     });
 
+    document.querySelectorAll('[data-i18n-title]').forEach(element => {
+        const key = element.getAttribute('data-i18n-title');
+        const translation = t(key);
+
+        if (translation) {
+            element.setAttribute('title', translation);
+        }
+    });
+
     document.querySelectorAll('[data-i18n-aria-label]').forEach(element => {
         const key = element.getAttribute('data-i18n-aria-label');
         const translation = t(key);

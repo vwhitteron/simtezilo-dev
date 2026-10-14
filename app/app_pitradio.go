@@ -66,6 +66,7 @@ func (a *App) sendPitRadioTest() error {
 		Lang:        a.i18n.LanguageCode(),
 		Accent:      a.config.GetAppAccent(),
 		NoCache:     true,
+		Priority:    true,
 	})
 }
 

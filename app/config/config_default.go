@@ -7,7 +7,7 @@ import profiles "github.com/vwhitteron/simtezilo-dev/app/haptics/profiles"
 func defaultConfig() *viperConfig {
 	return &viperConfig{
 		Schema:        "https://simtezilo.com/schemas/config/v1.0.0/config.schema.json",
-		SchemaVersion: "1.0.0",
+		SchemaVersion: currentSchemaVersion,
 		App: &app{
 			Language:     "en",
 			Accent:       "us",
@@ -41,26 +41,23 @@ func defaultConfig() *viperConfig {
 			Output: HapticsOutput{
 				Device:     "",
 				Channels:   2,
-				SampleRate: 32000,
+				SampleRate: 44100,
 				LatencyMs:  20,
 				CushionMs:  10,
 			},
-			EnableReplay:                 false,
-			DynamicTransmissionFeedback:  true,
-			DynamicTransmissionJerkCurve: defaultTransmissionJerkCurve,
-			DynamicTransmissionStepBlend: 0.5,
-			JerkCurve:                    190,
-			JerkPivot:                    601,
-			JerkPivotGain:                -3.0,
-			SnapCurve:                    310,
-			SnapMax:                      90,
-			PulseMaxAmplitude:            1,
-			PulseMaxFrequencyHz:          60,
-			PulseMinFrequencyHz:          16,
-			_pulseWidthMax:               0.5,
-			_pulseWidthMin:               0.1,
-			TextureMinFrequencyHz:        90,
-			TextureMaxFrequencyHz:        150,
+			EnableReplay:                       false,
+			DynamicTransmissionFeedback:        true,
+			DynamicTransmissionJerkCompression: defaultTransmissionJerkCompression,
+			DynamicTransmissionStepBlend:       0.5,
+			JerkCompression:                    74.5,
+			JerkCenter:                         37.6,
+			SnapCompression:                    59.0,
+			SnapCenter:                         64.7,
+			PulseMaxAmplitude:                  1,
+			PulseMaxFrequencyHz:                60,
+			PulseMinFrequencyHz:                16,
+			_pulseWidthMax:                     0.5,
+			_pulseWidthMin:                     0.1,
 			EngineProfiles: map[string]profiles.EngineProfile{
 				"s1":                  {PrimaryBalance: 0.15, SecondaryBalance: 0.250, Gain: +0.00, PulseScale: 1.00}, // Racing Kart 125 Shifter
 				"i2":                  {PrimaryBalance: 0.65, SecondaryBalance: 0.850, Gain: -0.75, PulseScale: 1.00}, // Fiat 500 F '68
@@ -100,6 +97,14 @@ func defaultConfig() *viperConfig {
 				"k2":                  {PrimaryBalance: 0.85, SecondaryBalance: 0.960, Gain: -0.75, PulseScale: 0.20}, // RE Amemiya FD3S RX-7
 				"k4":                  {PrimaryBalance: 0.75, SecondaryBalance: 0.800, Gain: +0.00, PulseScale: 0.10}, // Mazda 787B '91
 			},
+			SurfaceRumble: map[string]SurfaceRumble{
+				"tarmac":   {Level: 20.00, Coarseness: 52.75},
+				"concrete": {Level: 25.00, Coarseness: 55.25},
+				"grass":    {Level: 32.50, Coarseness: 60.50},
+				"dirt":     {Level: 42.50, Coarseness: 63.25},
+				"sand":     {Level: 15.00, Coarseness: 42.00},
+				"snow":     {Level: 30.00, Coarseness: 57.00},
+			},
 		},
 		PitRadio: &pitRadio{
 			Enabled: false,
@@ -107,7 +112,7 @@ func defaultConfig() *viperConfig {
 			Audio: PitRadioAudio{
 				Device:     "",
 				SampleRate: 48000,
-				Volume:     100,
+				Volume:     80,
 			},
 			MessageSendIntervalMs: 2000,
 			Notifications: &notifications{
@@ -124,7 +129,6 @@ func defaultConfig() *viperConfig {
 			Discord: &discord{
 				Token:          "",
 				GuildID:        "",
-				ChannelID:      "",
 				VoiceChannelID: "",
 			},
 			FuelMonitoring: &fuelMonitoring{
@@ -152,14 +156,14 @@ func defaultConfig() *viperConfig {
 			GainIncrement:             0.25,
 			ChassisMute:               false,
 			ChassisGain:               0.00,
-			TextureMute:               true,
-			TextureGain:               -3.00,
+			TextureMute:               false,
+			TextureGain:               -6.00,
 			TransmissionMute:          false,
 			TransmissionGain:          0.00,
 			TransmissionGainMinRace:   -4.50,
 			TransmissionGainMinStreet: -6.00,
 			EngineMute:                false,
-			EngineGain:                -4.25,
+			EngineGain:                -3.50,
 			EnableEq:                  []bool{false, false},
 			EnableDRX:                 false,
 			Routing: map[string][]bool{

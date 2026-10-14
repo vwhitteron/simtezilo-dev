@@ -270,13 +270,13 @@ run:
 ## run/debug: run the application locally with denug logging enabled
 .PHONY: run/debug
 run/debug:
-	@CGO_ENABLED=1 go run cmd/simtezilo/main.go -l debug -w=true
+	@CGO_ENABLED=1 go run cmd/simtezilo/main.go -l debug
 
 ## run/watch: run the application locally and reload on file changes
 .PHONY: run/watch
 run/watch:
 	go run github.com/air-verse/air@latest \
-		--build.cmd "make build" --build.bin "out/simtezilo-local" --build.args_bin "-w" --build.delay "100" \
+		--build.cmd "make build" --build.bin "out/simtezilo-local" --build.delay "100" \
 		--build.include_dir "app, cmd" \
 		--build.include_ext "go, html, js, png, svg" \
 		--build.include_file "simtezilo.conf" \

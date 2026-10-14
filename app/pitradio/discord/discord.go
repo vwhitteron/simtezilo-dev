@@ -27,8 +27,7 @@ type Config struct {
 	Enabled        bool                           // Indicates if the bot is enabled
 	Token          string                         // Discord bot token
 	GuildID        string                         // Discord guild ID
-	ChannelID      string                         // Optional Discord channel ID for text messages
-	VoiceChannelID string                         // Optional Discord voice channel ID for audio, requires GuildID
+	VoiceChannelID string                         // Discord voice channel ID for audio, requires GuildID
 	MessageGap     time.Duration                  // Delay between sending messages to avoid rate limiting
 	Cache          *cache.Cache                   // Cache manager for storing processed TTS audio
 	SampleBank     *synthesizer.EffectsSampleBank // Pre-generated audio samples
@@ -38,7 +37,7 @@ type Config struct {
 // Discord represents a Discord bot instance.
 type Discord struct {
 	enabled        bool                           // Indicates if the bot is enabled
-	channelID      string                         // Discord channel ID where messages will be sent
+	enabledMu      sync.RWMutex                   // Mutex to protect enabled after construction
 	voiceChannelID string                         // Discord voice channel ID for audio
 	guildID        string                         // Discord guild ID for voice connections
 	messageGap     time.Duration                  // Delay between sending messages to avoid rate limiting
@@ -47,7 +46,7 @@ type Discord struct {
 	session        *discordgo.Session             // Currently connected Discord session
 	voiceConn      *discordgo.VoiceConnection     // Voice connection for audio
 	voiceMu        sync.Mutex                     // Mutex to protect websocket writes to voice connection
-	queue          chan pitradio.Message          // Message queue for sending messages
+	queue          *pitradio.Queue                // Message queue for sending messages
 	log            zerolog.Logger                 // Logger instance for logging
 
 	// Lifecycle management
@@ -61,20 +60,16 @@ func New(config Config) (*Discord, error) {
 
 	bot := Discord{
 		enabled:        config.Enabled,
-		channelID:      config.ChannelID,
 		voiceChannelID: config.VoiceChannelID,
 		guildID:        config.GuildID,
 		messageGap:     config.MessageGap,
 		cache:          config.Cache,
 		sampleBank:     config.SampleBank,
-		queue:          make(chan pitradio.Message, 100),
+		queue:          pitradio.NewQueue(),
 		log:            config.Logger.With().Str("component", "discord").Logger(),
 		ctx:            ctx,
 		cancel:         cancel,
 	}
-
-	textEnabled := true
-	voiceEnabled := true
 
 	if config.Token == "" {
 		bot.enabled = false
@@ -84,16 +79,8 @@ func New(config Config) (*Discord, error) {
 			Msg("Discord bot disabled")
 	}
 
-	if config.ChannelID == "" {
-		textEnabled = false
-
-		bot.log.Info().
-			Str("reason", "channel ID not provided").
-			Msg("Discord text messaging disabled")
-	}
-
 	if config.GuildID == "" {
-		voiceEnabled = false
+		bot.enabled = false
 
 		bot.log.Info().
 			Str("reason", "voice guild ID not provided").
@@ -101,15 +88,11 @@ func New(config Config) (*Discord, error) {
 	}
 
 	if config.VoiceChannelID == "" {
-		voiceEnabled = false
+		bot.enabled = false
 
 		bot.log.Info().
 			Str("reason", "voice channel ID not provided").
 			Msg("Discord voice messaging disabled")
-	}
-
-	if !textEnabled && !voiceEnabled {
-		bot.enabled = false
 	}
 
 	if !bot.enabled {
@@ -135,7 +118,7 @@ func (d *Discord) BackgroundTask() {
 		case <-d.ctx.Done():
 			return
 		case <-ticker.C:
-			if !d.enabled {
+			if !d.isEnabled() {
 				return
 			}
 
@@ -157,7 +140,7 @@ func (d *Discord) Close() error {
 		return errors.New("discord session not initialized")
 	}
 
-	d.enabled = false
+	d.disable()
 
 	// Cancel context to stop background task
 	if d.cancel != nil {
@@ -179,18 +162,47 @@ func (d *Discord) Close() error {
 
 // Send sends a message to the Discord channel.
 func (d *Discord) Send(message pitradio.Message) error {
+	// Do not queue messages that no background task will dispatch.
+	if !d.isEnabled() {
+		return nil
+	}
+
 	if d.session == nil {
 		return errors.New("discord session not initialized")
 	}
 
-	d.queue <- message
+	err := d.queue.Push(message)
+	if errors.Is(err, pitradio.ErrRateLimited) {
+		d.log.Warn().
+			Str("text", message.Text).
+			Str("reason", "rate limit exceeded").
+			Msg("message dropped")
 
-	return nil
+		return nil
+	}
+
+	return err
+}
+
+// isEnabled reports whether the bot is enabled.
+func (d *Discord) isEnabled() bool {
+	d.enabledMu.RLock()
+	defer d.enabledMu.RUnlock()
+
+	return d.enabled
+}
+
+// disable marks the bot as disabled.
+func (d *Discord) disable() {
+	d.enabledMu.Lock()
+	defer d.enabledMu.Unlock()
+
+	d.enabled = false
 }
 
 // connect establishes a connection to the Discord WebSocket and joins the voice channel.
 func (d *Discord) connect() error {
-	if !d.enabled {
+	if !d.isEnabled() {
 		d.log.Info().
 			Str("reason", "bot not enabled").
 			Msg("Discord connection skipped")
@@ -226,7 +238,7 @@ func (d *Discord) handleReconnection() {
 		d.log.Error().
 			Err(err).
 			Str("result", "failure").
-			Msg("voice channel connect")
+			Msg("Voice channel connect")
 
 		// Use select to allow context cancellation during sleep
 		select {
@@ -242,7 +254,7 @@ func (d *Discord) handleReconnection() {
 
 	d.log.Info().
 		Str("result", "success").
-		Msg("voice channel connect")
+		Msg("Voice channel connect")
 
 	// connect anti-spam just in case
 	if d.messageGap < 1*time.Second {
@@ -273,6 +285,7 @@ func (d *Discord) sendTalkPermitTone() {
 		Text:        "talk permit tone",
 		Audio:       dcaData,
 		NoCache:     false,
+		Priority:    true,
 	})
 	if err != nil {
 		d.log.Error().
@@ -284,63 +297,47 @@ func (d *Discord) sendTalkPermitTone() {
 
 // MessageDispatcher processes the message queue and sends voice messages to Discord.
 func (d *Discord) dispatchMessages() {
-	select {
-	case message := <-d.queue:
-		if d.channelID != "" && message.MessageType == pitradio.TextMessage {
-			_, err := d.session.ChannelMessageSend(d.channelID, message.Text)
-			if err != nil {
-				d.log.Error().
-					Err(err).
-					Str("package", "discord").
-					Msg("send message to Discord channel")
-			}
+	message, ok := d.queue.Pop()
+	if !ok {
+		return
+	}
 
-			d.log.Debug().
-				Str("text", message.Text).
-				Str("type", "text").
-				Str("channel_id", d.channelID).
-				Msg("Discord send message")
-		}
+	if !d.isReady() {
+		return
+	}
 
-		if !d.isReady() {
-			return
-		}
+	var dcaData []byte
 
-		var dcaData []byte
+	if message.MessageType == pitradio.TextMessage {
+		var err error
 
-		if message.MessageType == pitradio.TextMessage {
-			var err error
-
-			dcaData, err = d.messageToDCA(message)
-			if err != nil {
-				d.log.Error().
-					Err(err).
-					Str("package", "discord").
-					Msg("generate TTS audio from message")
-
-				return
-			}
-		} else {
-			dcaData = message.Audio
-		}
-
-		err := d.voiceMessageSend(dcaData)
+		dcaData, err = d.messageToDCA(message)
 		if err != nil {
 			d.log.Error().
 				Err(err).
-				Msg("send DCA audio message to Discord channel")
+				Str("package", "discord").
+				Msg("generate TTS audio from message")
 
 			return
 		}
+	} else {
+		dcaData = message.Audio
+	}
 
-		d.log.Debug().
-			Str("text", message.Text).
-			Str("type", "audio").
-			Str("channel_id", d.voiceChannelID).
-			Msg("Discord send message")
-	default:
+	err := d.voiceMessageSend(dcaData)
+	if err != nil {
+		d.log.Error().
+			Err(err).
+			Msg("send DCA audio message to Discord channel")
+
 		return
 	}
+
+	d.log.Debug().
+		Str("text", message.Text).
+		Str("type", "audio").
+		Str("channel_id", d.voiceChannelID).
+		Msg("Discord send message")
 }
 
 // isConnected returns true if the bot is connected to Discord.

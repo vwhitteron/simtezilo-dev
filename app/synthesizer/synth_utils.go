@@ -183,3 +183,28 @@ func softKnee(x float64) float64 {
 func softCombine(a float64, b float64) float64 {
 	return softKnee(a + b)
 }
+
+// softKneeInverse recovers the linear sum that softKnee mapped to kneed. A stored
+// magnitude of 1 or more never came from the knee, so it is returned unchanged.
+func softKneeInverse(kneed float64) float64 {
+	magnitude := math.Abs(kneed)
+	if magnitude <= softKneeThreshold || magnitude >= 1.0 {
+		return kneed
+	}
+
+	headroom := 1.0 - softKneeThreshold
+	linear := softKneeThreshold - headroom*math.Log(1.0-(magnitude-softKneeThreshold)/headroom)
+
+	return math.Copysign(linear, kneed)
+}
+
+// softMix adds an input sample to a stored sample that is already soft-kneed.
+//
+// The knee must apply once to the whole linear sum. Kneeing the stored sample a
+// second time compresses it again at every overlapping write. A chassis pulse
+// outlives its 16.7 ms frame, so each frame re-kneed the in-flight tail. Above
+// the knee, that dropped the level in a step at every frame start: a 60 Hz
+// sawtooth that felt like a buzz on sustained peaks.
+func softMix(input float64, stored float64) float64 {
+	return softKnee(input + softKneeInverse(stored))
+}

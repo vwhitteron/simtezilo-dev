@@ -10,7 +10,7 @@ const IconHelper = {
         }
 
         try {
-            const response = await fetch(`/images/icons/${name}.svg?v=${Date.now()}`);
+            const response = await fetch(`/images/icons/${name}.svg`);
             if (!response.ok) {
                 console.error(`Failed to load icon: ${name}`);
                 return null;

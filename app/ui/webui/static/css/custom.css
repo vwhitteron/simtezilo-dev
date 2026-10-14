@@ -1,3 +1,24 @@
+/*
+ * Theme-aware fills for raised controls and number fields. The sable palette is a
+ * fixed dark grey in both themes, so these tokens keep the dark values for dark
+ * and swap to light greys for light.
+ */
+:root {
+    --sz-control-bg: var(--bs-sable-500);
+    --sz-control-hover-bg: var(--bs-sable-300);
+    --sz-field-bg: var(--bs-sable-700);
+    --sz-field-focus-bg: var(--bs-sable-600);
+    /* One height for every control in the tuning assistant's controls row. */
+    --sz-row-control-height: 26px;
+}
+
+[data-bs-theme="light"] {
+    --sz-control-bg: hsl(var(--bs-sable-hue), var(--bs-sable-saturation), 88%);
+    --sz-control-hover-bg: hsl(var(--bs-sable-hue), var(--bs-sable-saturation), 80%);
+    --sz-field-bg: var(--bs-body-bg);
+    --sz-field-focus-bg: var(--bs-body-bg);
+}
+
 /* Override Halfmoon switch styling */
 .form-switch .form-check-input {
     background-color: var(--bs-gray-600);
@@ -24,17 +45,17 @@
 .input-group .mute-toggle-btn,
 .input-group .mute-toggle-btn.btn-outline-danger,
 .input-group .mute-toggle-btn.btn-outline-success {
-    /* A step lighter than the input field's --bs-sable-700 (16%) fill so the
+    /* A step lighter than the input field's --sz-field-bg fill so the
        button reads as raised rather than blending into the field. */
-    background-color: var(--bs-sable-500);
-    border-color: var(--bs-sable-500);
+    background-color: var(--sz-control-bg);
+    border-color: var(--sz-control-bg);
 }
 
 .input-group .mute-toggle-btn:hover,
 .input-group .mute-toggle-btn.btn-outline-danger:hover,
 .input-group .mute-toggle-btn.btn-outline-success:hover {
-    background-color: var(--bs-sable-300);
-    border-color: var(--bs-sable-300);
+    background-color: var(--sz-control-hover-bg);
+    border-color: var(--sz-control-hover-bg);
 }
 
 .input-group .mute-toggle-btn.btn-outline-danger {
@@ -167,18 +188,28 @@
     outline: none;
 }
 
+/* Shared box for the navbar status indicators, so "No connection" and
+   "Restart Required" are the same height. The JS shows them as inline-flex. */
+.nav-status-box {
+    align-items: center;
+    gap: 0.4rem;
+    height: 2rem;
+    margin-right: 1rem;
+    padding: 0 0.6rem;
+    border-width: var(--bs-border-width);
+    border-style: solid;
+    border-radius: 0.375rem;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    line-height: 1;
+    white-space: nowrap;
+}
+
 /* Top-right "Server Unavailable" indicator, toggled by the health monitor in
    navigation.js when the backend stops responding. */
 .server-unavailable-indicator {
-    align-items: center;
-    gap: 0.4rem;
-    padding: 0.25rem 0.6rem;
-    border: var(--bs-border-width) solid var(--bs-warning);
-    border-radius: 0.375rem;
+    border-color: var(--bs-warning);
     color: var(--bs-warning);
-    font-size: 0.8125rem;
-    font-weight: 600;
-    white-space: nowrap;
     animation: server-unavailable-pulse 1.8s ease-in-out infinite;
 }
 
@@ -205,6 +236,7 @@
         animation: none;
     }
 }
+
 /*
  * Keep the shared navbar in view while the page scrolls. The nav is injected
  * into #navigation by navigation.js on every page, so this lives here rather
@@ -224,4 +256,315 @@
     top: 0;
     z-index: 1030;
     background: var(--bs-body-bg);
+}
+
+/*
+ * Help icon in a plot panel's tab strip. A click on the icon opens the panel
+ * below, which lists the plot's pointer gestures. Muted, so it reads as an
+ * aside beside the tabs rather than as another tab; it brightens on hover to
+ * invite the pointer. tuneassist.html places and sizes it; this rule only
+ * carries the colour.
+ */
+.plot-hint {
+    color: var(--bs-secondary-color, var(--bs-gray-600));
+}
+
+.plot-hint:hover,
+.plot-hint:focus-visible {
+    color: var(--bs-body-color);
+}
+
+/*
+ * Guidance panel the .plot-hint icon opens. A raised card over the plot: body
+ * background so the plot does not read through it, a hairline border and a soft
+ * shadow to lift it off the canvas. tuneassist.html places and sizes it.
+ */
+.plot-hint-popup {
+    border: 1px solid var(--bs-border-color, rgba(255, 255, 255, 0.15));
+    border-radius: var(--bs-border-radius, 6px);
+    background: var(--bs-body-bg);
+    color: var(--bs-body-color);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+}
+
+/*
+ * Plot well for the haptic waveform lanes. The trace spans the full canvas
+ * height at full scale, so the canvas edges are the ±1 limits. A lighter well
+ * than the panel makes those limits visible. A clipped or flat-topped peak
+ * then shows where it meets the edge.
+ */
+#wave-canvas,
+.wave-lane-canvas {
+    background: color-mix(in srgb, var(--bs-content-bg), #fff 3%);
+    border-radius: var(--bs-border-radius-sm, 4px);
+}
+/*
+ * DRX legend swatch in the chassis lane heading. It matches DRX_MARKER_COLOUR in
+ * tuneassist.html, which draws the DRX markers on the lane.
+ */
+.drx-legend-swatch {
+    background: rgb(255, 140, 0);
+}
+
+/* The replay group can shrink below the width of its longest replay name, so
+   the select and the upload button stay on screen on a narrow display. */
+.lap-row .replay-group {
+    min-width: 0;
+    max-width: 100%;
+}
+
+#replay-select {
+    flex: 0 1 auto;
+    min-width: 8rem;
+    max-width: 24rem;
+    text-overflow: ellipsis;
+}
+
+#local-file-load {
+    flex: none;
+}
+
+/* Local files in the tuning assistant's replay select. */
+#replay-select option.replay-local-entry {
+    font-style: italic;
+}
+
+/*
+ * The icon-only button beside the replay select. Show the bare icon, with no
+ * border or fill. Size the icon to the select's height. The icon has no text
+ * after it, so drop its trailing margin.
+ */
+#local-file-load {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: var(--sz-row-control-height);
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--bs-primary);
+    cursor: pointer;
+}
+
+#local-file-load:hover {
+    color: var(--bs-link-hover-color);
+}
+
+#local-file-load:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+/* Keep a focus ring for keyboard users only. */
+#local-file-load:focus-visible {
+    outline: 2px solid var(--bs-primary);
+    outline-offset: 2px;
+}
+
+#local-file-load .icon {
+    width: var(--sz-row-control-height);
+    height: var(--sz-row-control-height);
+    margin-right: 0;
+}
+
+/* Status overlay over the tuning assistant's chart area. The overlay lets input
+   through unless it is blocking; the pill always takes clicks so a notice can be
+   dismissed. */
+.chart-area {
+    position: relative;
+}
+
+.chart-status {
+    position: absolute;
+    inset: 0;
+    z-index: 10;
+    display: flex;
+    /* The chart area is taller than the viewport. The pill starts at the top and
+       sticks at the viewport middle, so it stays visible while the area is on screen. */
+    align-items: flex-start;
+    justify-content: center;
+    pointer-events: none;
+    border-radius: var(--bs-border-radius-lg);
+    animation: chart-status-fade 0.15s ease-out;
+}
+
+.chart-status[hidden],
+.chart-status-pill[hidden],
+.chart-status-pill [hidden] {
+    display: none;
+}
+
+.chart-status.is-blocking {
+    pointer-events: auto;
+    /* A dark scrim, not the body colour: the panels are near the body colour, so a
+       body-tinted wash barely shows. The blur marks the charts as unavailable. */
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(2px);
+    cursor: progress;
+}
+
+[data-bs-theme="light"] .chart-status.is-blocking {
+    background: rgba(var(--bs-body-bg-rgb), 0.7);
+}
+
+/* The spinner sits above the text, with no box. A soft text shadow keeps the text
+   legible over the charts when the area is not dimmed. */
+.chart-status-pill {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+    max-width: 90%;
+    padding: 1rem 1.5rem;
+    color: var(--bs-emphasis-color);
+    text-shadow: 0 0 6px var(--bs-body-bg), 0 0 2px var(--bs-body-bg);
+    font-size: 1.25rem;
+    text-align: center;
+    pointer-events: auto;
+    position: sticky;
+    top: calc(50vh - 3rem);
+    margin: 1rem 0;
+}
+
+.chart-status-pill .spinner-border {
+    width: 2.5rem;
+    height: 2.5rem;
+    border-width: 2px;
+}
+
+.chart-status-pill.is-error {
+    color: var(--bs-danger-text-emphasis);
+    cursor: pointer;
+}
+
+/* Source picker over the tuning assistant's chart area. It shows until a replay
+   or a local file is on screen: handwritten notes with arrows up to the replay
+   select and the upload button. It sits under the status overlay, so a load
+   message covers it, and it lets input through to the empty charts. */
+.source-picker {
+    position: absolute;
+    inset: 0;
+    z-index: 9;
+    pointer-events: none;
+    color: var(--bs-warning);
+    background: rgba(0, 0, 0, 0.35);
+    border-radius: var(--bs-border-radius-lg);
+}
+
+[data-bs-theme="light"] .source-picker {
+    color: var(--bs-warning-text-emphasis);
+    background: rgba(var(--bs-body-bg-rgb), 0.6);
+}
+
+.source-picker[hidden],
+.source-picker-hint[hidden] {
+    display: none;
+}
+
+/* The arrow tips sit above the chart area, at the toolbar, so the SVG draws
+   outside its own box. */
+.source-picker-arrows {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+    /* A plain pen line of one width. */
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+/* System handwriting fonts only: the device can be offline, so no web font. */
+.source-picker-hint {
+    position: absolute;
+    max-width: 16rem;
+    margin: 0;
+    font-family: "Segoe Print", "Bradley Hand", "Chalkboard SE", "Comic Sans MS", cursive;
+    font-size: 1.4rem;
+    line-height: 1.2;
+    text-shadow: 0 0 6px var(--bs-body-bg), 0 0 2px var(--bs-body-bg);
+    transform: rotate(-3deg);
+}
+
+.source-picker-hint.is-upload {
+    transform: rotate(2deg);
+}
+
+/* Render spinner over one tuning assistant waveform. It lets pointer input through,
+   so the waveform keeps its gestures while it renders. */
+.wave-busy {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    animation: chart-status-fade 0.15s ease-out;
+}
+
+.wave-busy[hidden] {
+    display: none;
+}
+
+.wave-busy .spinner-border {
+    width: 2rem;
+    height: 2rem;
+    border-width: 2px;
+    color: var(--bs-emphasis-color);
+}
+
+@keyframes chart-status-fade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .chart-status,
+    .wave-busy {
+        animation: none;
+    }
+}
+
+/* Theme selector in the navbar */
+.theme-icon {
+    display: inline-flex;
+    align-items: center;
+}
+
+/* The theme icons load from SVG files with no size of their own. */
+.theme-icon svg {
+    width: 16px;
+    height: 16px;
+    fill: currentColor;
+}
+
+#theme-dropdown-toggle {
+    background: none;
+    border: 0;
+}
+
+.theme-option {
+    width: 100%;
+}
+
+/* Dismiss button on a sticky status notice. Small, and inherits the pill's text colour. */
+/* In the top right corner, so the stacked layout keeps the text centred. */
+.chart-status-close {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    width: 0.6em;
+    height: 0.6em;
+    font-size: 0.65rem;
+}
+
+.chart-status-pill:has(.chart-status-close:not([hidden])) {
+    padding-right: 2rem;
+}
+
+[data-bs-theme="dark"] .chart-status-close {
+    filter: var(--bs-btn-close-white-filter);
 }

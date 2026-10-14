@@ -125,6 +125,9 @@ func New(opts Options) *WebUI {
 			ReplayDir: func() string {
 				return filepath.Join(opts.Config.GetAppBaseDir(), "data", "replays")
 			},
+			CacheDir: func() string {
+				return filepath.Join(opts.Config.GetAppBaseDir(), "data", "cache", "tuneassist")
+			},
 		}),
 	}
 
@@ -182,6 +185,8 @@ func (w *WebUI) GetHTTPHandler() http.Handler {
 	mux.HandleFunc("/api/tuneassist/data", w.devToolsGate(w.tuneAssist.HandleData))
 	mux.HandleFunc("/api/tuneassist/audio", w.devToolsGate(w.tuneAssist.HandleAudio))
 	mux.HandleFunc("/api/tuneassist/tuning-defaults", w.devToolsGate(w.tuneAssist.HandleTuningDefaults))
+	mux.HandleFunc("/api/tuneassist/upload", w.devToolsGate(w.tuneAssist.HandleUpload))
+	mux.HandleFunc("/api/tuneassist/video", w.devToolsGate(w.tuneAssist.HandleVideo))
 
 	if w.sysHandler.setupMode != nil && w.sysHandler.setupMode.IsAvailable() {
 		mux.HandleFunc("/api/system/factory-reset", w.sysHandler.handleFactoryReset)
@@ -253,16 +258,9 @@ func (w *WebUI) htmlRouterHandlerFunc() func(http.ResponseWriter, *http.Request)
 			return
 		}
 
-		response.Header().Set("Content-Type", "text/html; charset=utf-8")
+		webcommon.ServeEmbedded(response, request, "html/"+filename, "text/html; charset=utf-8", content)
 
-		length, err := response.Write(content)
-		if err != nil {
-			w.log.Error().Err(err).Int("bytes_written", length).Str("file", filename).Str("path", path).Msg("writing HTML response")
-
-			return
-		}
-
-		w.log.Debug().Str("file", filename).Str("path", path).Int("bytes_written", length).Msg("served HTML page")
+		w.log.Debug().Str("file", filename).Str("path", path).Msg("served HTML page")
 	}
 }
 
@@ -333,14 +331,7 @@ func (w *WebUI) staticFileHandlerFunc(fileType string) func(http.ResponseWriter,
 		}
 
 		contentType := getContentType(filename)
-		response.Header().Set("Content-Type", contentType)
-
-		length, err := response.Write(content)
-		if err != nil {
-			w.log.Error().Err(err).Int("bytes_written", length).Str("type", fileType).Msg("writing file")
-
-			return
-		}
+		webcommon.ServeEmbedded(response, request, filename, contentType, content)
 
 		w.log.Debug().Str("file", filename).Str("mime-type", contentType).Msg("static file served")
 	}

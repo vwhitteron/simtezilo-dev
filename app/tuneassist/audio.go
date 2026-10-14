@@ -7,10 +7,11 @@ import (
 	"errors"
 	"math"
 	"net/http"
-	"path/filepath"
 	"strconv"
 
+	"github.com/vwhitteron/simtezilo-dev/app/config"
 	"github.com/vwhitteron/simtezilo-dev/app/haptics"
+	"github.com/vwhitteron/simtezilo-dev/app/haptics/profiles"
 )
 
 // errNoAudio is returned by renderSectionWAV when the requested lap/section yields
@@ -28,7 +29,31 @@ const (
 	telemetryFrameRateHint = 60
 )
 
-// renderSectionWAV renders the chassis haptic stream for one lap section and returns
+// allLayersKey is the layer value that renders every layer into one multi-channel WAV.
+const allLayersKey = "all"
+
+// allLayerNames lists the layers of an allLayersKey render, in WAV channel order.
+var allLayerNames = []string{"chassis", "texture", "transmission", "engine"} //nolint:gochecknoglobals // fixed lookup table, not mutated
+
+// captureLayers maps a layer name from the web UI onto the capture's layer selector.
+// An unknown or absent name renders the chassis pulse, which is what the tool showed
+// before it offered a choice.
+func captureLayers(name string) (haptics.CaptureLayers, bool) {
+	switch name {
+	case "", "chassis":
+		return haptics.CaptureLayers{}, true
+	case "texture":
+		return haptics.CaptureLayers{NoChassis: true, Texture: true}, true
+	case "transmission":
+		return haptics.CaptureLayers{NoChassis: true, Transmission: true}, true
+	case "engine":
+		return haptics.CaptureLayers{NoChassis: true, Engine: true}, true
+	default:
+		return haptics.CaptureLayers{}, false
+	}
+}
+
+// renderSectionWAV renders one haptic layer for one lap section and returns
 // it as a 16-bit PCM WAV. Samples are converted to PCM as they are produced and only
 // the requested section is held in memory, so a long replay costs a section-sized
 // buffer rather than a whole-replay float64 capture.
@@ -36,19 +61,41 @@ const (
 // The buffer opens with header-sized padding and the PCM is written straight after
 // it, so the finished WAV is the buffer itself — the payload is never copied into a
 // second full-size slice just to prepend 44 bytes.
-func renderSectionWAV(ctx context.Context, dir, filename string, tuning haptics.Tuning, unfiltered bool, lap int16, fromFrame, toFrame int) ([]byte, error) {
-	source := "file://" + filepath.ToSlash(filepath.Join(dir, filename))
+func renderSectionWAV(
+	ctx context.Context,
+	source string,
+	tuning haptics.Tuning,
+	layers haptics.CaptureLayers,
+	unfiltered bool,
+	lap int16,
+	fromFrame, toFrame int,
+) ([]byte, error) {
+	window := haptics.CaptureWindow{Lap: lap, FromFrame: fromFrame, ToFrame: toFrame}
 
+	return renderWindowWAV(ctx, source, tuning, layers, unfiltered, window)
+}
+
+// renderWindowWAV renders one haptic layer over window and returns it as a WAV. It
+// is renderSectionWAV for any window, including one that spans the whole replay.
+func renderWindowWAV(
+	ctx context.Context,
+	source string,
+	tuning haptics.Tuning,
+	layers haptics.CaptureLayers,
+	unfiltered bool,
+	window haptics.CaptureWindow,
+) ([]byte, error) {
 	var wav bytes.Buffer
 
-	wav.Grow(wavHeaderLen + estimatePCMLen(fromFrame, toFrame))
+	wav.Grow(wavHeaderLen + estimatePCMLen(window.FromFrame, window.ToFrame))
 	wav.Write(make([]byte, wavHeaderLen))
 
 	capture, err := haptics.CaptureChassis(ctx, haptics.CaptureOptions{
 		Source:     source,
 		Tuning:     tuning,
+		Layers:     layers,
 		Unfiltered: unfiltered,
-		Window:     &haptics.CaptureWindow{Lap: lap, FromFrame: fromFrame, ToFrame: toFrame},
+		Window:     &window,
 		Sink:       func(samples []float64) { encodePCM(&wav, samples) },
 	})
 	if err != nil {
@@ -60,9 +107,78 @@ func renderSectionWAV(ctx context.Context, dir, filename string, tuning haptics.
 	}
 
 	out := wav.Bytes()
-	writeWAVHeader(out[:wavHeaderLen], len(out)-wavHeaderLen, capture.InternalRate)
+	writeWAVHeader(out[:wavHeaderLen], len(out)-wavHeaderLen, capture.InternalRate, 1)
 
 	return out, nil
+}
+
+// renderAllLayersWAV renders every layer in allLayerNames over window in one pass
+// over the replay. It returns one WAV with a channel per layer, in allLayerNames
+// order. Each channel is bit-identical to the renderWindowWAV output of its layer.
+func renderAllLayersWAV(
+	ctx context.Context,
+	source string,
+	tuning haptics.Tuning,
+	unfiltered bool,
+	window haptics.CaptureWindow,
+) ([]byte, error) {
+	layerSets := make([]haptics.CaptureLayers, len(allLayerNames))
+	channels := make([]bytes.Buffer, len(allLayerNames))
+
+	for index, name := range allLayerNames {
+		layerSets[index], _ = captureLayers(name)
+		channels[index].Grow(estimatePCMLen(window.FromFrame, window.ToFrame))
+	}
+
+	capture, err := haptics.CaptureMulti(ctx, haptics.CaptureMultiOptions{
+		Source:     source,
+		Tuning:     tuning,
+		Layers:     layerSets,
+		Unfiltered: unfiltered,
+		Window:     &window,
+		Sink:       func(layer int, samples []float64) { encodePCM(&channels[layer], samples) },
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	pcm := make([][]byte, len(channels))
+	for index := range channels {
+		pcm[index] = channels[index].Bytes()
+	}
+
+	wav := interleavePCM(pcm)
+	if len(wav) == wavHeaderLen {
+		return nil, errNoAudio
+	}
+
+	writeWAVHeader(wav[:wavHeaderLen], len(wav)-wavHeaderLen, capture.InternalRate, len(channels))
+
+	return wav, nil
+}
+
+// interleavePCM interleaves mono 16-bit PCM channels into one frame-ordered payload
+// behind wavHeaderLen bytes of header space. A channel shorter than the longest one
+// is padded with silence, so every WAV frame is complete.
+func interleavePCM(channels [][]byte) []byte {
+	const sampleLen = 2
+
+	frames := 0
+	for _, channel := range channels {
+		frames = max(frames, len(channel)/sampleLen)
+	}
+
+	frameLen := len(channels) * sampleLen
+	out := make([]byte, wavHeaderLen+frames*frameLen)
+
+	for index, channel := range channels {
+		for frame := range len(channel) / sampleLen {
+			at := wavHeaderLen + frame*frameLen + index*sampleLen
+			copy(out[at:at+sampleLen], channel[frame*sampleLen:])
+		}
+	}
+
+	return out
 }
 
 // estimatePCMLen sizes the render buffer up front so a long section does not walk up
@@ -98,13 +214,10 @@ func encodePCM(buf *bytes.Buffer, samples []float64) {
 }
 
 // writeWAVHeader fills buf (exactly wavHeaderLen bytes, sitting in front of the PCM
-// payload it describes) with the RIFF/WAVE header for dataLen bytes of 16-bit mono
-// PCM at sampleRate.
-func writeWAVHeader(buf []byte, dataLen, sampleRate int) {
-	const (
-		bitsPerSample = 16
-		numChannels   = 1
-	)
+// payload it describes) with the RIFF/WAVE header for dataLen bytes of 16-bit PCM
+// at sampleRate, with numChannels interleaved channels.
+func writeWAVHeader(buf []byte, dataLen, sampleRate, numChannels int) {
+	const bitsPerSample = 16
 
 	byteRate := sampleRate * numChannels * bitsPerSample / 8
 	blockAlign := numChannels * bitsPerSample / 8
@@ -116,11 +229,13 @@ func writeWAVHeader(buf []byte, dataLen, sampleRate int) {
 	copy(buf[12:16], "fmt ")
 	binary.LittleEndian.PutUint32(buf[16:20], 16) // fmt chunk size
 	binary.LittleEndian.PutUint16(buf[20:22], 1)  // PCM
-	binary.LittleEndian.PutUint16(buf[22:24], numChannels)
+	//nolint:gosec // numChannels is one per haptic layer, far below 2^16.
+	binary.LittleEndian.PutUint16(buf[22:24], uint16(numChannels))
 	//nolint:gosec // sampleRate is an audio rate, always well below 2^32.
 	binary.LittleEndian.PutUint32(buf[24:28], uint32(sampleRate))
 	//nolint:gosec // byteRate derives from sampleRate, always well below 2^32.
 	binary.LittleEndian.PutUint32(buf[28:32], uint32(byteRate))
+	//nolint:gosec // blockAlign is a few bytes per frame, far below 2^16.
 	binary.LittleEndian.PutUint16(buf[32:34], uint16(blockAlign))
 	binary.LittleEndian.PutUint16(buf[34:36], bitsPerSample)
 	copy(buf[36:40], "data")
@@ -157,6 +272,92 @@ func parseIntParam(req *http.Request, name string, def int) int {
 	}
 
 	return v
+}
+
+// engineProfileParam builds an engine profile override from the query, or returns
+// nil when the request carries no engine settings. All four fields travel together: a
+// profile is a set, and mixing supplied values with the shipped ones for the rest
+// would render a profile the user never chose.
+//
+// The sentinel is absence rather than a zero value. Every field has a legal zero, so
+// a "0 means unset" rule would make a fully-attenuated profile unreachable.
+func engineProfileParam(req *http.Request) *profiles.EngineProfile {
+	query := req.URL.Query()
+
+	fields := []string{"primaryBalance", "secondaryBalance", "engineGain", "pulseScale"}
+	for _, name := range fields {
+		if query.Get(name) == "" {
+			return nil
+		}
+	}
+
+	return &profiles.EngineProfile{
+		PrimaryBalance:   clampFloat(parseFloatParam(req, "primaryBalance", 1), 0, 1),
+		SecondaryBalance: clampFloat(parseFloatParam(req, "secondaryBalance", 1), 0, 1),
+		Gain:             clampFloat(parseFloatParam(req, "engineGain", 0), engineGainMinDB, 0),
+		PulseScale:       clampFloat(parseFloatParam(req, "pulseScale", 1), 0, 1),
+	}
+}
+
+// engineGainMinDB is the floor the config schema puts on an engine profile's gain.
+const engineGainMinDB = -24.0
+
+// surfaceRumbleSurfaces lists the surfaces the road-texture layer overrides.
+var surfaceRumbleSurfaces = []string{"tarmac", "concrete", "grass", "dirt", "sand", "snow"} //nolint:gochecknoglobals // fixed lookup table, not mutated
+
+// surfaceRumbleParams reads the per-surface road-texture overrides off the query.
+// Each surface takes a <name>Level and <name>Coarseness pair, both 0 to 100 as the
+// config holds them; a surface is overridden only when both are present and in
+// range, so a partial pair leaves the stored value alone.
+func surfaceRumbleParams(request *http.Request) map[string]config.SurfaceRumble {
+	query := request.URL.Query()
+
+	var overrides map[string]config.SurfaceRumble
+
+	for _, surface := range surfaceRumbleSurfaces {
+		if query.Get(surface+"Level") == "" || query.Get(surface+"Coarseness") == "" {
+			continue
+		}
+
+		level := optionalFloatParam(request, surface+"Level", 0, 100)
+		coarseness := optionalFloatParam(request, surface+"Coarseness", 0, 100)
+
+		if level == nil || coarseness == nil {
+			continue
+		}
+
+		if overrides == nil {
+			overrides = make(map[string]config.SurfaceRumble, len(surfaceRumbleSurfaces))
+		}
+
+		overrides[surface] = config.SurfaceRumble{Level: *level, Coarseness: *coarseness}
+	}
+
+	return overrides
+}
+
+// optionalFloatParam reads a float query parameter whose whole range is legal, so no
+// value is left over to mean "not supplied". An absent or unparseable parameter
+// yields nil; a present one is clamped into [minValue, maxValue].
+func optionalFloatParam(req *http.Request, name string, minValue, maxValue float64) *float64 {
+	raw := req.URL.Query().Get(name)
+	if raw == "" {
+		return nil
+	}
+
+	parsed, err := strconv.ParseFloat(raw, 64)
+	if err != nil {
+		return nil
+	}
+
+	value := clampFloat(parsed, minValue, maxValue)
+
+	return &value
+}
+
+// clampFloat bounds an untrusted query value into the range its config field accepts.
+func clampFloat(v, lo, hi float64) float64 {
+	return math.Min(hi, math.Max(lo, v))
 }
 
 // clampToInt16 bounds an untrusted query value (a client-supplied lap number) into

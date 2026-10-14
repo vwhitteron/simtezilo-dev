@@ -50,7 +50,7 @@ func Equalize(value float64, pulseWidth float64, channel int, cfg *config.Config
 // 0dB ceiling.
 //
 // Algorithm:
-//  1. Compute the desired boost from the unclamped jerk curve amplitude above 0dB
+//  1. Compute the desired boost from the unclamped jerk compression amplitude above 0dB
 //  2. Find the nearest EQ bucket to the original frequency with sufficient attenuation
 //  3. Set the digital amplitude so that device resonance produces the desired physical level
 //  4. Fall back to the deepest bucket if no bucket has enough attenuation, capping at
@@ -62,7 +62,7 @@ func Equalize(value float64, pulseWidth float64, channel int, cfg *config.Config
 //
 // Parameters:
 //   - pulseFrequencyHz: the original calculated pulse frequency
-//   - unclampedAmplitude: the jerk curve output before LimitMax clamping (absolute value)
+//   - unclampedAmplitude: the jerk compression output before LimitMax clamping (absolute value)
 //   - channel: output channel index
 //   - cfg: application configuration
 //

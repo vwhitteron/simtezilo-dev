@@ -4,6 +4,9 @@ import (
 	"math"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // halfSinePulse returns a self-terminating raised half-sine hump of the given
@@ -307,5 +310,58 @@ func TestMixModeNoDiscontinuities(t *testing.T) {
 			t.Fatalf("discontinuity at sample %d: step %v exceeds max legitimate step %v",
 				i, delta, maxLegitStep)
 		}
+	}
+}
+
+// TestMixModeKneesOnceOverStaggeredWrites is a regression guard for the chassis
+// buzz. Each frame mixes a new pulse over the in-flight tail of earlier ones.
+// The knee must apply once to the linear sum, not again at every write.
+func TestMixModeKneesOnceOverStaggeredWrites(t *testing.T) {
+	t.Parallel()
+
+	// Arrange - same-sign pulses that overlap well above the knee
+	const (
+		rate       = 1000
+		pulseLen   = 60
+		frameLen   = 20
+		pulseCount = 3
+		amplitude  = 0.6
+	)
+
+	buffer := NewAdaptiveBuffer(time.Second, rate)
+	buffer.Clear()
+
+	pulse := halfSinePulse(pulseLen, amplitude)
+	totalLen := (pulseCount-1)*frameLen + pulseLen
+
+	linearSum := make([]float64, totalLen)
+
+	for p := range pulseCount {
+		for i, sample := range pulse {
+			linearSum[p*frameLen+i] += sample
+		}
+	}
+
+	// Act - write one pulse per frame and drain one frame between writes
+	out := make([]float64, 0, totalLen)
+	frame := make([]float64, frameLen)
+
+	for range pulseCount - 1 {
+		buffer.Write(pulse, 0, false)
+		length := buffer.Read(frame)
+		out = append(out, frame[:length]...)
+	}
+
+	buffer.Write(pulse, 0, false)
+
+	tail := make([]float64, pulseLen)
+	length := buffer.Read(tail)
+	out = append(out, tail[:length]...)
+
+	// Assert - every sample is one knee of the linear sum
+	require.Len(t, out, totalLen)
+
+	for i, sample := range out {
+		assert.InDelta(t, softKnee(linearSum[i]), sample, 1e-9, "sample %d", i)
 	}
 }

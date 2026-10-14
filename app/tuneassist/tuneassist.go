@@ -6,10 +6,10 @@ package tuneassist
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"slices"
 	"strconv"
 
+	"github.com/vwhitteron/simtezilo-dev/app/haptics"
 	"github.com/vwhitteron/simtezilo-dev/app/kinematics"
 	"github.com/vwhitteron/simtezilo-dev/app/kinematics/vector"
 	"github.com/vwhitteron/simtezilo-dev/app/signal"
@@ -23,46 +23,48 @@ const (
 	framePeriod = 1.0 / sampleRate
 )
 
+// offTarmacSurfaces are the non-tarmac surfaces a sample can be labelled with, in
+// the order a label is picked when the four wheels straddle more than one of them.
+// The first label is the sample's primary surface, so the order runs from the
+// surface that dominates the feel to the one that least does.
+var offTarmacSurfaces = []gtmodels.SurfaceType{ //nolint:gochecknoglobals // fixed lookup table, not mutated
+	gtmodels.SurfaceTypeConcrete,
+	gtmodels.SurfaceTypeGrass,
+	gtmodels.SurfaceTypeDirt,
+	gtmodels.SurfaceTypeSand,
+	gtmodels.SurfaceTypeSnow,
+}
+
 // classifySurfaces returns the set of surface labels for a sample.
 // Tarmac requires all four wheels on tarmac.
-// Concrete and grass are reported when any wheel is on that surface.
+// Every other surface is reported when any wheel is on that surface.
 func classifySurfaces(s gtmodels.CornerSetGeneric[gtmodels.SurfaceType]) []string {
 	wheels := [4]gtmodels.SurfaceType{s.FrontLeft, s.FrontRight, s.RearLeft, s.RearRight}
 
 	allTarmac := true
-	hasConcrete := false
-	hasGrass := false
+	present := make(map[gtmodels.SurfaceType]bool, len(offTarmacSurfaces))
 
 	for _, wheelType := range wheels {
 		if wheelType != gtmodels.SurfaceTypeTarmac {
 			allTarmac = false
 		}
 
-		if wheelType == gtmodels.SurfaceTypeConcrete {
-			hasConcrete = true
-		}
-
-		if wheelType == gtmodels.SurfaceTypeGrass {
-			hasGrass = true
-		}
+		present[wheelType] = true
 	}
 
 	var labels []string
 
-	tarmac := gtmodels.SurfaceTypeTarmac
-	concrete := gtmodels.SurfaceTypeConcrete
-	grass := gtmodels.SurfaceTypeGrass
-
 	if allTarmac {
+		tarmac := gtmodels.SurfaceTypeTarmac
 		labels = append(labels, tarmac.String())
 	}
 
-	if hasConcrete {
-		labels = append(labels, concrete.String())
-	}
+	for _, surface := range offTarmacSurfaces {
+		if !present[surface] {
+			continue
+		}
 
-	if hasGrass {
-		labels = append(labels, grass.String())
+		labels = append(labels, surface.String())
 	}
 
 	return labels
@@ -92,16 +94,17 @@ type derivTracker struct {
 	samples      int
 }
 
-// update advances the chain by one frame and returns the current raw jerk and snap.
-// windowSeconds is the frame period. The returned values read zero until enough
-// samples have accumulated (jerk needs 3, snap needs 4) so the second derivative is
-// real rather than an artefact of differencing against the zero-initialised history;
-// the internal chain always uses the true values.
-func (d *derivTracker) update(vel gtmodels.Vector, windowSeconds float64) (jerk, snap float64) {
+// update advances the chain by one frame and returns the current raw accel, jerk,
+// and snap. windowSeconds is the frame period. The returned values read zero until
+// enough samples have accumulated (accel needs 2, jerk needs 3, snap needs 4) so
+// each derivative is real rather than an artefact of differencing against the
+// zero-initialised history; the internal chain always uses the true values.
+func (d *derivTracker) update(vel gtmodels.Vector, windowSeconds float64) (accel, jerk, snap float64) {
 	accelFactor := float32(1.0 / windowSeconds)
-	accel := vector.Scale(vector.Delta(vel, d.lastVel), accelFactor, accelFactor, accelFactor)
-	accelMag := vector.Magnitude(accel)
+	accelVec := vector.Scale(vector.Delta(vel, d.lastVel), accelFactor, accelFactor, accelFactor)
+	accelMag := vector.Magnitude(accelVec)
 
+	accel = accelMag
 	jerk = (accelMag - d.lastAccelMag) / windowSeconds
 	snap = (jerk - d.lastJerk) / windowSeconds
 
@@ -109,6 +112,10 @@ func (d *derivTracker) update(vel gtmodels.Vector, windowSeconds float64) (jerk,
 	d.lastAccelMag = accelMag
 	d.lastJerk = jerk
 	d.samples++
+
+	if d.samples < 2 {
+		accel = 0
+	}
 
 	if d.samples < 3 {
 		jerk = 0
@@ -118,7 +125,7 @@ func (d *derivTracker) update(vel gtmodels.Vector, windowSeconds float64) (jerk,
 		snap = 0
 	}
 
-	return jerk, snap
+	return accel, jerk, snap
 }
 
 type mapCoord struct {
@@ -129,6 +136,15 @@ type mapCoord struct {
 	Throttle float32 `json:"throttle"` // throttle input, percent 0-100
 	Brake    float32 `json:"brake"`    // brake input, percent 0-100
 	Seq      uint32  `json:"seq"`      // telemetry sequence ID (drop-aware frame offset)
+	// Accel is the acceleration magnitude in m/s², the larger of translation and
+	// wheel-scaled rotation, ungated (no nyquist gate), so spectra see the real
+	// motion band.
+	Accel float32 `json:"accel"`
+	// VideoFrame is the sample's position in the whole recording, counted over every
+	// packet the scan delivered. For a video source it is the index of the matching
+	// sample in the embedded telemetry track, which is what places this point on the
+	// video timeline. Frame (above) is per-lap and cannot serve that purpose.
+	VideoFrame int `json:"videoFrame"`
 }
 
 type metadata struct {
@@ -139,6 +155,23 @@ type metadata struct {
 	VehicleModel      string `json:"vehicleModel"`
 	VehicleCategory   string `json:"vehicleCategory"`
 	VehicleDrivetrain string `json:"vehicleDrivetrain"`
+	// EngineProfile is the engine haptic profile this replay's vehicle resolves to.
+	// The tuning assistant needs it to seed its engine controls and to name the
+	// haptics.engineProfiles entry a commit writes back to. It is nil when the
+	// vehicle matches no entry, which is also when the engine layer is silent.
+	EngineProfile *engineProfileMeta `json:"engineProfile,omitempty"`
+
+	// Video is set only when the analysis came from a video source.
+	Video *videoMeta `json:"video,omitempty"`
+}
+
+// engineProfileMeta is one engine profile plus the config key it was found under.
+type engineProfileMeta struct {
+	Key              string  `json:"key"`
+	PrimaryBalance   float64 `json:"primaryBalance"`
+	SecondaryBalance float64 `json:"secondaryBalance"`
+	Gain             float64 `json:"gain"`
+	PulseScale       float64 `json:"pulseScale"`
 }
 
 type lapAccumulator struct {
@@ -179,6 +212,11 @@ func collectAllLaps(ctx context.Context, source string) (map[int16][]dataPoint, 
 	// exactly as the processed path splits them.
 	var rawTrans, rawRot derivTracker
 
+	// Counts every packet the scan delivers, including those skipped below, so it
+	// stays aligned with the sample index of a video's telemetry track. Incrementing
+	// after the skip would silently shift the video by the length of the lead-in.
+	packetIndex := -1
+
 	for frame, frameErr := range client.Scan(ctx) {
 		if ctx.Err() != nil {
 			return nil, nil, metadata{}, ctx.Err()
@@ -188,12 +226,15 @@ func collectAllLaps(ctx context.Context, source string) (map[int16][]dataPoint, 
 			return nil, nil, metadata{}, fmt.Errorf("reading frame: %w", frameErr)
 		}
 
+		packetIndex++
+
 		if !frame.TelemetryStarted() {
 			continue
 		}
 
 		if !vehicleCaptured {
 			meta, dims = captureVehicleMeta(frame)
+			meta.EngineProfile = resolveEngineProfileMeta(client)
 			vehicleCaptured = true
 		}
 
@@ -204,7 +245,7 @@ func collectAllLaps(ctx context.Context, source string) (map[int16][]dataPoint, 
 		// on the current frame.
 		state.Update(framePeriod, dims, client)
 
-		accumulateFrame(accumulators, frame, dims, &state, &rawTrans, &rawRot)
+		accumulateFrame(accumulators, frame, dims, &state, &rawTrans, &rawRot, packetIndex)
 	}
 
 	// Resolve circuit from the last known coordinate
@@ -226,6 +267,24 @@ func collectAllLaps(ctx context.Context, source string) (map[int16][]dataPoint, 
 	}
 
 	return result, mapResult, meta, nil
+}
+
+// resolveEngineProfileMeta reports the engine profile the current vehicle resolves
+// to. An unmatched vehicle yields nil, so the web UI can disable its engine controls
+// rather than offer a commit to an empty key.
+func resolveEngineProfileMeta(client *gttelemetry.Client) *engineProfileMeta {
+	key, profile := haptics.ResolveEngineProfile(client)
+	if key == "" {
+		return nil
+	}
+
+	return &engineProfileMeta{
+		Key:              key,
+		PrimaryBalance:   profile.PrimaryBalance,
+		SecondaryBalance: profile.SecondaryBalance,
+		Gain:             profile.Gain,
+		PulseScale:       profile.PulseScale,
+	}
 }
 
 // captureVehicleMeta reads the vehicle metadata and derives its dimensions from a
@@ -281,6 +340,7 @@ func accumulateFrame(
 	dims vehicle.Dimensions,
 	state *kinematics.State,
 	rawTrans, rawRot *derivTracker,
+	packetIndex int,
 ) {
 	lap := frame.CurrentLap()
 
@@ -304,12 +364,28 @@ func accumulateFrame(
 	// uses it to cross-reference scatter points against the map/speed tracks.
 	frameIdx := len(acc.mapCoords)
 
+	// Raw: the same larger-of-trans/rot rule over the ungated chains. Rotation is
+	// scaled to metres at the wheels first, as the processed path does. Advanced
+	// before the map-coords append so its accel magnitude can be recorded there.
+	rawTransAccel, rawTransJerk, rawTransSnap := rawTrans.update(frame.VelocityVector(), framePeriod)
+	scaledAngVel := vector.Scale(
+		frame.AngularVelocityVector(),
+		dims.LongitudinalRadius, dims.LongitudinalRadius, dims.TransverseRadius,
+	)
+	rawRotAccel, rawRotJerk, rawRotSnap := rawRot.update(scaledAngVel, framePeriod)
+
+	jerkRawMag := signal.Abs(signal.LargestMagnitude(rawTransJerk, rawRotJerk))
+	snapRawMag := signal.Abs(signal.LargestMagnitude(rawTransSnap, rawRotSnap))
+
 	acc.mapCoords = append(acc.mapCoords, mapCoord{
 		X: pos.X, Z: pos.Z, Surface: primarySurface,
 		Speed:    frame.GroundSpeedMetresPerSecond(),
 		Throttle: frame.ThrottleInputPercent(),
 		Brake:    frame.BrakeInputPercent(),
 		Seq:      frame.SequenceID(),
+		Accel:    float32(max(rawTransAccel, rawRotAccel)),
+
+		VideoFrame: packetIndex,
 	})
 
 	// Processed: match calculateChassisHapticPulseAmplitude/Frequency — the larger
@@ -319,18 +395,6 @@ func accumulateFrame(
 		state.Current.ResolvedTransJerk, state.Current.ResolvedRotJerk))
 	snapMag := signal.Abs(signal.LargestMagnitude(
 		state.Current.ResolvedTransSnap, state.Current.ResolvedRotSnap))
-
-	// Raw: the same larger-of-trans/rot rule over the ungated chains. Rotation is
-	// scaled to metres at the wheels first, as the processed path does.
-	rawTransJerk, rawTransSnap := rawTrans.update(frame.VelocityVector(), framePeriod)
-	scaledAngVel := vector.Scale(
-		frame.AngularVelocityVector(),
-		dims.LongitudinalRadius, dims.LongitudinalRadius, dims.TransverseRadius,
-	)
-	rawRotJerk, rawRotSnap := rawRot.update(scaledAngVel, framePeriod)
-
-	jerkRawMag := signal.Abs(signal.LargestMagnitude(rawTransJerk, rawRotJerk))
-	snapRawMag := signal.Abs(signal.LargestMagnitude(rawTransSnap, rawRotSnap))
 
 	for _, label := range surfLabels {
 		acc.points = append(acc.points, dataPoint{
@@ -358,9 +422,7 @@ type lapResponse struct {
 // replay selection and switches laps client-side — so caching it would trade
 // permanent memory for a hit rate of roughly zero. The accumulated analysis lives
 // only until the response has been encoded.
-func buildLapResponse(ctx context.Context, dir, filename string) (lapResponse, error) {
-	source := "file://" + filepath.ToSlash(filepath.Join(dir, filename))
-
+func buildLapResponse(ctx context.Context, source string, video *videoMeta) (lapResponse, error) {
 	lapPoints, lapMaps, meta, err := collectAllLaps(ctx, source)
 	if err != nil {
 		return lapResponse{}, fmt.Errorf("loading replay: %w", err)
@@ -384,6 +446,8 @@ func buildLapResponse(ctx context.Context, dir, filename string) (lapResponse, e
 	for lap, coords := range lapMaps {
 		mapData[strconv.Itoa(int(lap))] = coords
 	}
+
+	meta.Video = video
 
 	return lapResponse{Laps: laps, Data: data, Map: mapData, Metadata: meta}, nil
 }

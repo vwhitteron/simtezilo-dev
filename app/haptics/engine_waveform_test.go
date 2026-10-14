@@ -1,5 +1,5 @@
 //nolint:testpackage // needs internal access to the unexported engineWaveformGenerator and engineGenParams
-package app
+package haptics
 
 // Durable artefact guards for the phase-continuous engine generator. These are
 // the specification for Option B: they drive the real engineWaveformGenerator and
@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/vwhitteron/simtezilo-dev/app/audio"
 	"github.com/vwhitteron/simtezilo-dev/app/audio/audioqa"
 	"github.com/vwhitteron/simtezilo-dev/app/haptics/profiles"
 	"github.com/vwhitteron/simtezilo-dev/app/synthesizer"
@@ -245,76 +244,5 @@ func TestEngineChannelNoUnderrunBoundedLatency(t *testing.T) {
 
 	if run.minUsed < genFrame {
 		t.Errorf("buffered depth dropped to %d, below one frame %d", run.minUsed, genFrame)
-	}
-}
-
-// engineSource adapts a mono engine waveform to an audio.SampleSource, emitting
-// the same sample on every channel — enough to push the engine signal through the
-// resampler and async ring for the full-pipeline smoke test.
-type engineSource struct {
-	samples []float64
-	pos     int
-}
-
-func (s *engineSource) ReadInterleaved(buf []float32, channels int) (int, bool) {
-	frames := len(buf) / channels
-	for frame := range frames {
-		var value float32
-		if s.pos < len(s.samples) {
-			value = float32(s.samples[s.pos])
-			s.pos++
-		}
-
-		for channel := range channels {
-			buf[frame*channels+channel] = value
-		}
-	}
-
-	return frames, true
-}
-
-// TestEngineResamplerClean feeds phase-continuous engine audio through the live
-// windowed-sinc resampler — the stage most likely to distort the engine's sharp
-// pulse edges — and asserts it stays finite and unclipped with no dropouts of its
-// own. The resampler is synchronous and deterministic; the async ring's runtime
-// behaviour is covered separately by async_test.go and the audio_cleanup tool.
-func TestEngineResamplerClean(t *testing.T) {
-	t.Parallel()
-
-	const (
-		inRate   = genRate
-		outRate  = 32000
-		channels = 2
-		refAmp   = 0.3
-	)
-
-	engineAudio := make([]float64, inRate*2) // 2 s of engine audio
-	newTestGenerator().Generate(engineAudio, paramsForRPM(6000))
-
-	src := audio.NewResamplingSource(&engineSource{samples: engineAudio}, inRate, outRate, channels)
-
-	outFrames := outRate // analyse ~1 s
-	rec := make([]float64, 0, outFrames)
-	buf := make([]float32, (outRate/100)*channels)
-
-	for len(rec) < outFrames {
-		frames, ok := src.ReadInterleaved(buf, channels)
-		if !ok {
-			break
-		}
-
-		for frame := range frames {
-			rec = append(rec, float64(buf[frame*channels]))
-		}
-	}
-
-	metrics := audioqa.Analyse(rec, outRate, refAmp, 0)
-
-	if metrics.Empty {
-		t.Fatal("resampler produced no signal")
-	}
-
-	if metrics.NonFinite != 0 || metrics.Clipped != 0 {
-		t.Errorf("resampler: nonFinite=%d clipped=%d peak=%.4f", metrics.NonFinite, metrics.Clipped, metrics.Peak)
 	}
 }

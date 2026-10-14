@@ -75,7 +75,7 @@ type Output struct {
 	sampleRateFn func() int
 	volumeFn     func() int
 	messageGap   time.Duration
-	queue        chan pitradio.Message
+	queue        *pitradio.Queue
 	log          zerolog.Logger
 	onSinkActive func(deviceName string, active bool)
 
@@ -127,7 +127,7 @@ func New(config Config) (*Output, error) {
 		sampleRateFn: config.SampleRateFn,
 		volumeFn:     config.VolumeFn,
 		messageGap:   config.MessageGap,
-		queue:        make(chan pitradio.Message, 100),
+		queue:        pitradio.NewQueue(),
 		log:          config.Logger.With().Str("component", "pitradio local").Logger(),
 		onSinkActive: config.OnSinkActive,
 		ctx:          ctx,
@@ -157,7 +157,12 @@ func (o *Output) BackgroundTask() {
 			return
 		case <-ticker.C:
 			o.ensureSink()
-		case msg := <-o.queue:
+		case <-o.queue.Ready():
+			msg, ok := o.queue.Pop()
+			if !ok {
+				continue
+			}
+
 			o.ensureSink()
 			o.playMessage(msg)
 
@@ -175,12 +180,17 @@ func (o *Output) BackgroundTask() {
 
 // Send enqueues a message for local playback.
 func (o *Output) Send(message pitradio.Message) error {
-	select {
-	case o.queue <- message:
+	err := o.queue.Push(message)
+	if errors.Is(err, pitradio.ErrRateLimited) {
+		o.log.Warn().
+			Str("text", message.Text).
+			Str("reason", "rate limit exceeded").
+			Msg("message dropped")
+
 		return nil
-	default:
-		return errors.New("local pit-radio queue full")
 	}
+
+	return err
 }
 
 // Close stops the background task and releases the backend. It waits for
