@@ -1005,7 +1005,7 @@
                     <option value="15">250 ms</option>
                     <option value="30">500 ms</option>
                     <option value="60">1 s</option>
-                    <option value="120">2 s</option>
+                    <option value="120" selected>2 s</option>
                     <option value="240">4 s</option>
                 </select>
             </div>
@@ -1014,7 +1014,7 @@
                 <label class="toggle-switch"
                     title="Show only the highlight window in every haptic waveform. They share one window, so the same moment stays at the same position in each lane."
                     data-i18n-title="runmode.tuneassist.toolbar.zoom.tooltip">
-                    <input type="checkbox" id="wave-zoom-toggle">
+                    <input type="checkbox" id="wave-zoom-toggle" checked>
                     <span class="slider"></span>
                 </label>
             </div>
@@ -1644,7 +1644,7 @@
             // x, and is shared by the trace and the hover/POI markers so they stay aligned.
             let speedWrapThreshold = null;
             let poiDist = 0;            // point-of-interest distance along lap (metres)
-            let highlightCount = 15;    // number of plotted points to emphasise near the POI
+            let highlightCount = 120;   // number of plotted points to emphasise near the POI
             let scatterHighlightOn = true;  // draw the window-period overlay on the scatter plots
             // Jerk/snap accessors. The plots always show the processed (live-path) fields.
             const jerkOf = (d) => d.jerk;
@@ -1775,7 +1775,7 @@
                 // Panel state. Both are emitted only when they differ from the state a
                 // fresh page starts in, so a default view keeps a short URL.
                 if (activePlot !== DEFAULT_PLOT) params.set('plot', activePlot);
-                if (laneZoomOn) params.set('wavezoom', '1');
+                if (!laneZoomOn) params.set('wavezoom', '0');
                 if (!scatterHighlightOn) params.set('pointhl', '0');
                 // Playhead position within the lap. Every follower — map point, scatter
                 // point, speed marker and the replay video — is driven from this frame,
@@ -1905,9 +1905,9 @@
                 showPlot(params.get('plot') || DEFAULT_PLOT);
 
                 const waveZoomEl = document.getElementById('wave-zoom-toggle');
-                if (params.get('wavezoom') === '1') {
-                    waveZoomEl.checked = true;
-                    laneZoomOn = true;
+                if (params.get('wavezoom') === '0') {
+                    waveZoomEl.checked = false;
+                    laneZoomOn = false;
                 }
 
                 const pointHlEl = document.getElementById('scatter-highlight-toggle');
@@ -5084,7 +5084,7 @@
             // The chassis lane is included, so its pointer mapping — scrub, click-to-seek
             // and hover — must convert through the window rather than treating its width
             // as the whole section. See fracAtPointer.
-            let laneZoomOn = false;
+            let laneZoomOn = true;
             let laneOffset = 0;
 
             // Frames the highlight box covers. The box is the emphasised scatter points,
