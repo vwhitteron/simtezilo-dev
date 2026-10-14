@@ -409,13 +409,37 @@
     cursor: pointer;
 }
 
+/* Render spinner over one tuning assistant waveform. It lets pointer input through,
+   so the waveform keeps its gestures while it renders. */
+.wave-busy {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    animation: chart-status-fade 0.15s ease-out;
+}
+
+.wave-busy[hidden] {
+    display: none;
+}
+
+.wave-busy .spinner-border {
+    width: 2rem;
+    height: 2rem;
+    border-width: 2px;
+    color: var(--bs-emphasis-color);
+}
+
 @keyframes chart-status-fade {
     from { opacity: 0; }
     to { opacity: 1; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .chart-status {
+    .chart-status,
+    .wave-busy {
         animation: none;
     }
 }

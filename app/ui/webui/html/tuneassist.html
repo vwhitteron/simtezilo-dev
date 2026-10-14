@@ -7,7 +7,7 @@
     <script src="/js/theme.js"></script>
     <link rel="stylesheet" href="/css/halfmoon.min.css">
     <link rel="stylesheet" href="/css/icons.css?v=3">
-    <link rel="stylesheet" href="/css/custom.css?v=3">
+    <link rel="stylesheet" href="/css/custom.css?v=4">
     <script>
         const currentPageId = 'tuneassist';
     </script>
@@ -5420,6 +5420,45 @@
                 return entry ? entry.level + ',' + entry.coarseness : '';
             }
 
+            // The values each waveform renders from. The chassis uses the shown tune, so
+            // the compare toggle changes it. The engine also depends on the engine profile.
+            const WAVE_LAYER_VALUES = {
+                chassis: () => TUNE_TABS.chassis.map(k => shownTune()[k]),
+                engine: () => [engineProfileKey, ...TUNE_TABS.engine.map(k => tuneValues[k])],
+                transmission: () => TUNE_TABS.transmission.map(k => tuneValues[k]),
+                texture: () => SURFACES.map(surfaceRumbleKey),
+            };
+
+            // layer -> render key of the waveform on screen.
+            const waveShownKeys = {};
+
+            function waveRenderKey(layer, sectionKey) {
+                return [sectionKey, ...WAVE_LAYER_VALUES[layer]()].join('|');
+            }
+
+            // Show a render spinner on the waveforms in layers and hide it on the others.
+            // The spinner is made the first time a waveform needs one.
+            function setWavesBusy(layers) {
+                const busy = new Set(layers);
+                const canvasIds = { chassis: 'wave-canvas' };
+                for (const lane of waveLanes) canvasIds[lane.layer] = lane.canvasId;
+
+                for (const [layer, canvasId] of Object.entries(canvasIds)) {
+                    const container = document.getElementById(canvasId).parentElement;
+                    let spinner = container.querySelector('.wave-busy');
+                    if (!spinner) {
+                        spinner = document.createElement('div');
+                        spinner.className = 'wave-busy';
+                        spinner.setAttribute('role', 'status');
+                        spinner.innerHTML = '<span class="spinner-border" aria-hidden="true"></span>';
+                        container.appendChild(spinner);
+                    }
+
+                    spinner.setAttribute('aria-label', tr('runmode.tuneassist.status.rendering', 'rendering…'));
+                    spinner.hidden = !busy.has(layer);
+                }
+            }
+
             let audioRefreshTimer = null;
             function scheduleAudioRefresh() {
                 clearTimeout(audioRefreshTimer);
@@ -5453,8 +5492,17 @@
                 const lanesStale = params.toString() !== waveLanesQuery;
                 if (lanesStale) chassisParams.set('layer', 'all');
 
+                // Spin only the waveforms whose values differ from the ones on screen. A
+                // layer=all render also returns unchanged lanes, so those do not spin.
+                const sectionKey = [replay, currentLapKey, startFrame, endFrame].join('|');
+                const renderKeys = { chassis: waveRenderKey('chassis', sectionKey) };
+                if (lanesStale) {
+                    for (const lane of waveLanes) renderKeys[lane.layer] = waveRenderKey(lane.layer, sectionKey);
+                }
+                const changed = Object.keys(renderKeys).filter(layer => renderKeys[layer] !== waveShownKeys[layer]);
+                setWavesBusy(changed.length > 0 ? changed : ['chassis']);
+
                 const seq = ++audioReqSeq;
-                showBusy(trLater('runmode.tuneassist.status.rendering', 'rendering…'));
 
                 // Cancel the render in flight. The server renders one job at a time, so
                 // stale renders would otherwise run in turn before this one starts.
@@ -5475,7 +5523,6 @@
                     // A re-render of the same section (a tuning or filter change) keeps the
                     // playhead, the follower and the lane window where they are. Only a new
                     // section starts again from its first frame.
-                    const sectionKey = [replay, currentLapKey, startFrame, endFrame].join('|');
                     const sameSection = waveBuffer != null && sectionKey === waveSectionKey;
                     // Read the position before stopPlayback: it does not store the offset.
                     const resumeSeconds = sameSection ? playheadSeconds() : 0;
@@ -5538,7 +5585,9 @@
                         seekToFrame(frame);
                     }
 
-                    clearStatus('render');
+                    // renderKeys holds the lanes only for a layer=all render, which applied them.
+                    Object.assign(waveShownKeys, renderKeys);
+                    setWavesBusy([]);
                 } catch (e) {
                     if (seq === audioReqSeq) renderFailed(trLater('runmode.tuneassist.status.renderfailed', 'audio render failed'));
                 }
@@ -5548,7 +5597,7 @@
             // same values renders again instead of keeping the old buffer.
             function renderFailed(status) {
                 waveLastKey = '';
-                clearStatus('render');
+                setWavesBusy([]);
                 showNotice(status, { error: true });
             }
 
