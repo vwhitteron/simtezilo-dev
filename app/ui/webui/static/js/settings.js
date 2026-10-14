@@ -167,7 +167,7 @@ class ConfigManager {
     showRestartRequired() {
         const indicator = document.getElementById('restart-required-indicator');
         if (indicator) {
-            indicator.style.display = 'inline-block';
+            indicator.style.display = 'inline-flex';
         }
 
         // Update restart button to green

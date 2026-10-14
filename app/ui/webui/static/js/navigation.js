@@ -168,13 +168,13 @@ function createNavigation(currentPage) {
     // backend stops responding, so the user knows the page is stale rather than
     // silently seeing frozen data.
     navHTML += `
-                        <div id="server-unavailable-indicator" class="server-unavailable-indicator" role="status" aria-live="polite" style="display: none; margin-right: 1rem;">
+                        <div id="server-unavailable-indicator" class="nav-status-box server-unavailable-indicator" role="status" aria-live="polite" style="display: none;">
                             <span id="server-unavailable-icon" class="icon" aria-hidden="true"></span>
                             <span data-i18n="runmode.status.serverunavailable">No connection</span>
                         </div>`;
 
     navHTML += `
-                        <button type="button" id="restart-required-indicator" class="btn btn-outline-danger btn-sm" style="font-weight: 600; white-space: nowrap; display: none; margin-right: 1rem;">
+                        <button type="button" id="restart-required-indicator" class="btn btn-outline-danger btn-sm nav-status-box" style="display: none;">
                             <span data-i18n="runmode.settings.restart.required">Restart Required</span>
                         </button>`;
 
@@ -191,7 +191,7 @@ function createNavigation(currentPage) {
 
     // Theme selector at the far right (stays in the collapsed mobile menu too)
     navHTML += `
-                    <ul class="navbar-nav ms-lg-auto mb-2 mb-lg-0">
+                    <ul class="navbar-nav mb-2 mb-lg-0">
                         <li class="nav-item dropdown">
                             <button type="button" id="theme-dropdown-toggle" class="nav-link dropdown-toggle d-flex align-items-center gap-1" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Theme" title="Theme" data-i18n-aria-label="runmode.theme.title" data-i18n-title="runmode.theme.title">
                                 <span id="theme-toggle-icon" class="theme-icon" aria-hidden="true"></span>
@@ -520,7 +520,7 @@ function initializeNavigation() {
                     if (status && status.restartRequired) {
                         const indicator = document.getElementById('restart-required-indicator');
                         if (indicator) {
-                            indicator.style.display = 'inline-block';
+                            indicator.style.display = 'inline-flex';
                         }
                     }
                 })
