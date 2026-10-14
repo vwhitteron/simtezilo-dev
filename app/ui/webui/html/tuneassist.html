@@ -1693,18 +1693,6 @@
             let displayedScales = null;       // { xMin, xMax, yMin, yMax } currently shown
             let targetScales = null;          // { xMin, xMax, yMin, yMax } we're chasing toward
 
-            // Scatter scroll zoom. A wheel tick scales both axes about the cursor, with the
-            // same factor and double-click reset the map uses. While a chart holds a zoom
-            // viewport its auto-fit path stays parked, so a retune keeps the zoomed view.
-            const SCATTER_ZOOM_STEP = 1.15;   // span factor per wheel tick
-            const SCATTER_MAX_ZOOM = 50;      // deepest zoom, as a multiple of the auto-fit span
-            let scatterZoom = null;           // jerk/snap viewport, or null for auto-fit
-            let scatterPanning = false;       // a modifier drag is moving a scatter viewport
-
-            // Shift is the scatter pan modifier. Held, it drags the view and keeps the press
-            // off the data: the selected point does not change.
-            function panHeld(e) { return e.shiftKey; }
-
             // Alt drags jerk and snap compression on the gain/frequency chart: vertical
             // motion changes JerkCompression, horizontal motion changes SnapCompression, both
             // at once. Alt also steps them from the wheel. It is the only compression modifier.
@@ -2514,8 +2502,6 @@
                 if (scaleChaseRaf) { cancelAnimationFrame(scaleChaseRaf); scaleChaseRaf = null; }
                 displayedScales = null;
                 targetScales = null;
-                scatterZoom = null;
-                scatterPanning = false;
                 gainDragMode = null;
                 updateChart();
                 drawMap(lapKey);
@@ -3243,9 +3229,6 @@
                         responsive: true,
                         maintainAspectRatio: false,
                         onHover: (_event, elements) => {
-                            // A pan drags the whole view past the pointer, so it must not
-                            // rewrite the hovered frame on the way.
-                            if (scatterPanning) return;
                             const frame = elements.length > 0
                                 ? (chart.data.datasets[elements[0].datasetIndex].data[elements[0].index].frame ?? null)
                                 : null;
@@ -3254,8 +3237,6 @@
                         },
                         onClick: (event, elements) => {
                             // Clicking a scatter point moves the POI to that point's lap position.
-                            // A click under the pan modifier ends a drag, so it selects nothing.
-                            if (panHeld(event.native || event)) return;
                             if (elements.length === 0) return;
                             const pt = chart.data.datasets[elements[0].datasetIndex].data[elements[0].index];
                             if (!pt || pt.frame == null) return;
@@ -3279,7 +3260,7 @@
                                     const visibleDatasets = chart.data.datasets.filter((_, i) => chart.isDatasetVisible(i));
                                     const niceBounds = computeNiceBounds(visibleDatasets);
                                     targetScales = { ...niceBounds };
-                                    if (!scatterZoom) startScaleChase();
+                                    startScaleChase();
                                     // Reflect visibility on the circuit map
                                     drawMap(currentLapKey);
                                 }
@@ -3302,7 +3283,6 @@
                         }
                     }
                 });
-                installScatterNav(chart, () => targetScales, applyScatterViewport);
             }
 
             // Label only the 1, 2 and 5 ticks of each decade on a log axis. The other ticks
@@ -4281,7 +4261,7 @@
             function startScaleChase() {
                 if (scaleChaseRaf) return; // already running
                 function step() {
-                    if (!displayedScales || !targetScales || scatterZoom) {
+                    if (!displayedScales || !targetScales) {
                         scaleChaseRaf = null;
                         return;
                     }
@@ -4359,50 +4339,6 @@
                 return { xMin: xNice.min, xMax: xNice.max, yMin: yNice.min, yMax: yNice.max };
             }
 
-            // Shift a span of `span` so it stays inside [loLimit, hiLimit]. The span is never
-            // wider than the limits, so the shift always fits.
-            function clampSpanStart(min, span, loLimit, hiLimit) {
-                if (min + span > hiLimit) min = hiLimit - span;
-                if (min < loLimit) min = loLimit;
-                return min;
-            }
-
-            // The viewport a wheel tick asks for on a scatter chart. `base` is the auto-fit
-            // viewport: the zoom never leaves it, and a tick that reaches it returns null to
-            // mean "back to auto-fit". The value under the cursor keeps its pixel.
-            // The jerk/snap axes are logarithmic, so the zoom and pan work in log10 units.
-            // The viewport each returns is in data units.
-            function logViewport(xMin, xSpan, yMin, ySpan) {
-                return {
-                    xMin: Math.pow(10, xMin), xMax: Math.pow(10, xMin + xSpan),
-                    yMin: Math.pow(10, yMin), yMax: Math.pow(10, yMin + ySpan),
-                };
-            }
-
-            function wheelZoomViewport(c, event, base) {
-                const xs = c.scales.x, ys = c.scales.y;
-                const xLo = Math.log10(xs.min), yLo = Math.log10(ys.min);
-                const bxLo = Math.log10(base.xMin), bxHi = Math.log10(base.xMax);
-                const byLo = Math.log10(base.yMin), byHi = Math.log10(base.yMax);
-                const xSpanNow = Math.log10(xs.max) - xLo, ySpanNow = Math.log10(ys.max) - yLo;
-                const baseXSpan = bxHi - bxLo, baseYSpan = byHi - byLo;
-                if (!(xSpanNow > 0 && ySpanNow > 0 && baseXSpan > 0 && baseYSpan > 0)) return null;
-
-                const f = event.deltaY < 0 ? 1 / SCATTER_ZOOM_STEP : SCATTER_ZOOM_STEP;
-                if (f > 1 && (xSpanNow * f >= baseXSpan || ySpanNow * f >= baseYSpan)) return null;
-                const xSpan = Math.max(xSpanNow * f, baseXSpan / SCATTER_MAX_ZOOM);
-                const ySpan = Math.max(ySpanNow * f, baseYSpan / SCATTER_MAX_ZOOM);
-
-                const rect = c.canvas.getBoundingClientRect();
-                const px = event.clientX - rect.left, py = event.clientY - rect.top;
-                const fx = (Math.log10(xs.getValueForPixel(px)) - xLo) / xSpanNow;
-                const fy = (Math.log10(ys.getValueForPixel(py)) - yLo) / ySpanNow;
-
-                const xMin = clampSpanStart(xLo + (xSpanNow - xSpan) * fx, xSpan, bxLo, bxHi);
-                const yMin = clampSpanStart(yLo + (ySpanNow - ySpan) * fy, ySpan, byLo, byHi);
-                return logViewport(xMin, xSpan, yMin, ySpan);
-            }
-
             // True when the pointer sits over the plotting area. A wheel outside it scrolls
             // the page as usual.
             function overChartArea(c, event) {
@@ -4411,79 +4347,6 @@
                 const a = c.chartArea;
                 if (!a) return false;
                 return px >= a.left && px <= a.right && py >= a.top && py <= a.bottom;
-            }
-
-            // The viewport after a drag of (dxPx, dyPx). The span holds, and the view stays
-            // inside the auto-fit bounds, so a drag at full zoom-out moves nothing. The data
-            // follows the pointer, so the value window travels the other way.
-            function dragPanViewport(c, dxPx, dyPx, base) {
-                const xs = c.scales.x, ys = c.scales.y;
-                const xLo = Math.log10(xs.min), yLo = Math.log10(ys.min);
-                const xSpan = Math.log10(xs.max) - xLo, ySpan = Math.log10(ys.max) - yLo;
-                const area = c.chartArea;
-                if (!area || !(xSpan > 0 && ySpan > 0)) return null;
-                const wPx = area.right - area.left, hPx = area.bottom - area.top;
-                if (wPx <= 0 || hPx <= 0) return null;
-
-                // The y pixel axis points down and the y value axis points up, so the y term
-                // takes the opposite sign to the x term.
-                const xMin = clampSpanStart(xLo - dxPx * xSpan / wPx, xSpan, Math.log10(base.xMin), Math.log10(base.xMax));
-                const yMin = clampSpanStart(yLo + dyPx * ySpan / hPx, ySpan, Math.log10(base.yMin), Math.log10(base.yMax));
-                return logViewport(xMin, xSpan, yMin, ySpan);
-            }
-
-            // Wire scroll zoom and modifier-drag pan onto a scatter chart. `base` returns the
-            // chart's auto-fit viewport. `apply` shows a viewport, or returns the chart to
-            // auto-fit when it is given null. `claimed` is optional: it reports an event that
-            // another handler owns. A claimed press never pans and a claimed wheel never zooms.
-            function installScatterNav(c, base, apply, claimed) {
-                const canvas = c.canvas;
-
-                canvas.addEventListener('wheel', (e) => {
-                    const bounds = base();
-                    if (!bounds || !overChartArea(c, e)) return;
-                    if (claimed && claimed(e)) return;
-                    e.preventDefault();
-                    apply(wheelZoomViewport(c, e, bounds));
-                }, { passive: false });
-
-                canvas.addEventListener('dblclick', () => apply(null));
-
-                // Client position of the last pan step, or null when no pan runs.
-                let panFrom = null;
-
-                canvas.addEventListener('mousedown', (e) => {
-                    if (!panHeld(e) || !overChartArea(c, e)) return;
-                    if (claimed && claimed(e)) return;
-                    panFrom = { x: e.clientX, y: e.clientY };
-                    scatterPanning = true;
-                    canvas.style.cursor = 'grabbing';
-                    e.preventDefault();   // no text selection while the drag runs
-                });
-
-                // Show the grab cursor while the modifier is held, so the pan is discoverable.
-                canvas.addEventListener('mousemove', (e) => {
-                    if (panFrom) return;
-                    if (claimed && claimed(e)) return;   // the owning handler writes the cursor
-                    canvas.style.cursor = panHeld(e) ? 'grab' : '';
-                });
-
-                window.addEventListener('mousemove', (e) => {
-                    if (!panFrom) return;
-                    const bounds = base();
-                    const next = bounds
-                        ? dragPanViewport(c, e.clientX - panFrom.x, e.clientY - panFrom.y, bounds)
-                        : null;
-                    panFrom = { x: e.clientX, y: e.clientY };
-                    if (next) apply(next);
-                });
-
-                window.addEventListener('mouseup', () => {
-                    if (!panFrom) return;
-                    panFrom = null;
-                    scatterPanning = false;
-                    canvas.style.cursor = '';
-                });
             }
 
             // One wheel notch, or one slider stop of a modifier drag, of curve change. It
@@ -4760,27 +4623,6 @@
                 }, { passive: false });
             }
 
-            // Show a viewport on the jerk/snap scatter, or return to the auto-fit bounds. The
-            // viewport becomes the displayed scales, so a reset lerps back through the chase.
-            function applyScatterViewport(next) {
-                if (!next) {
-                    if (!scatterZoom) return;
-                    scatterZoom = null;
-                    startScaleChase();
-                    return;
-                }
-                scatterZoom = next;
-                displayedScales = { ...next };
-                if (scaleChaseRaf) { cancelAnimationFrame(scaleChaseRaf); scaleChaseRaf = null; }
-                // Exact bounds, not the chase's nice-step rounding: the rounding stops label
-                // jitter during a lerp, and here it would cancel the zoom step.
-                chart.options.scales.x.min = next.xMin;
-                chart.options.scales.x.max = next.xMax;
-                chart.options.scales.y.min = next.yMin;
-                chart.options.scales.y.max = next.yMax;
-                chart.update('none');
-            }
-
             // Rebuild the "point of interest" overlay dataset from highlightSource, excluding any
             // surfaces currently hidden via the legend. Given a low `order` so it draws on top
             // (Chart.js paints datasets in reverse order). Each point keeps its surface colour with
@@ -4988,14 +4830,13 @@
                     displayedScales = { ...niceBounds };
                     targetScales = { ...niceBounds };
                 } else {
-                    // Set chase target; the animation loop will smoothly lerp toward it. A
-                    // scroll zoom holds the view, so only the target moves.
+                    // Set chase target; the animation loop will smoothly lerp toward it.
                     targetScales = { ...niceBounds };
-                    if (!scatterZoom) startScaleChase();
+                    startScaleChase();
                 }
 
                 // Apply current displayed scales and render once
-                if (!scatterZoom) applyScalesToChart(displayedScales);
+                applyScalesToChart(displayedScales);
                 chart.update('none');
 
                 if (fadeRaf) cancelAnimationFrame(fadeRaf);
