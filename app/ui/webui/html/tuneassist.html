@@ -2143,9 +2143,9 @@
 
             // Fetches a /data or /audio URL for the current source. A 404 on a local source
             // means the host dropped the upload: send it again from the held File, retry once.
-            async function fetchSource(path, extra) {
+            async function fetchSource(path, extra, init) {
                 const query = () => new URLSearchParams({ ...extra, ...sourceParams() }).toString();
-                const resp = await fetch(path + '?' + query());
+                const resp = await fetch(path + '?' + query(), init);
                 if (resp.status !== 404 || !localSource) return resp;
 
                 const source = localSource;
@@ -2153,7 +2153,7 @@
                 if (localSource !== source) return resp;   // the user switched source meanwhile
 
                 source.id = uploaded.id;
-                return fetch(path + '?' + query());
+                return fetch(path + '?' + query(), init);
             }
 
             // Makes record the local source. On failure the source that was on screen stays
@@ -4917,6 +4917,7 @@
             let waveSectionKey = '';      // replay|lap|from|to of the buffer on screen, without the tuning
             let waveRate = 1;             // transport speed, applied to the voices and the video
             let audioReqSeq = 0;          // guards against out-of-order fetch responses
+            let audioReqAbort = null;     // cancels the render in flight when a newer one starts
             let waveLanesQuery = null;    // query the lanes last rendered from; an unchanged query keeps the lanes as they are and skips the layer=all render
 
             // Read-only lanes for the other haptic layers. Each holds its own decoded
@@ -5455,8 +5456,14 @@
                 const seq = ++audioReqSeq;
                 showBusy(trLater('runmode.tuneassist.status.rendering', 'rendering…'));
 
+                // Cancel the render in flight. The server renders one job at a time, so
+                // stale renders would otherwise run in turn before this one starts.
+                if (audioReqAbort) audioReqAbort.abort();
+                const abort = new AbortController();
+                audioReqAbort = abort;
+
                 try {
-                    const resp = await fetchSource('/api/tuneassist/audio', Object.fromEntries(chassisParams));
+                    const resp = await fetchSource('/api/tuneassist/audio', Object.fromEntries(chassisParams), { signal: abort.signal });
                     if (!resp.ok) {
                         if (seq === audioReqSeq) renderFailed(trLater('runmode.tuneassist.status.rendernoaudio', 'audio render failed: no audio'));
                         return;
