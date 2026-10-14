@@ -450,6 +450,13 @@
     align-items: center;
 }
 
+/* The theme icons load from SVG files with no size of their own. */
+.theme-icon svg {
+    width: 16px;
+    height: 16px;
+    fill: currentColor;
+}
+
 #theme-dropdown-toggle {
     background: none;
     border: 0;
